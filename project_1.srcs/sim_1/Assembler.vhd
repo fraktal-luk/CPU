@@ -24,12 +24,21 @@ use IEEE.STD_LOGIC_1164.ALL;
 
 use std.textio.all;
 
+use work.BasicTypes.all;
+use work.ArchDefs.all;
+
+
 package Assembler is
 
 type GroupBuffer is array(0 to 4) of string(1 to 9);
 type ProgramBuffer is array(0 to 999) of GroupBuffer;
 
 function readSourceFile(name: string) return ProgramBuffer;
+
+function processProgram(p: ProgramBuffer) return boolean;
+
+    type TMP_StrArray is array(integer range <>) of string(1 to 10);
+    type TMP_WordArray is array(integer range <>) of Word;
 
 end Assembler;
 
@@ -67,7 +76,7 @@ begin
             exit;
         end if;
 
-        report ln.all;
+        --report ln.all;
 
         str := (others => cr);
         for i in 1 to 100 loop
@@ -86,7 +95,7 @@ begin
             str(i) := ch;
         end loop;  
         
-        report str;
+        --report str;
         
         -- We need to save the label (if any) of this line for branch reference, and produce hex value for instruction.
         -- The latter is not possible until we have all the labels, so it must be done in steps.
@@ -125,17 +134,91 @@ begin
 end function;
 
 
-function processInstruction(ar: GroupBuffer) return boolean is
+function matches(a, b: string) return boolean is
+    variable aLen, bLen: integer := 0;
 begin
-    -- if first element starts with $, it is a label
-    if ar(0)(0) = '$' then
-        
-    else
-        -- First elem must be opcode. Find it in opcode list list
-        -- ...
-        -- 
-        
+    aLen := a'length;
+    bLen := b'length;
+    if aLen > bLen then 
+        aLen := bLen;
     end if;
+    
+    for i in 1 to aLen loop
+        if a(i) /= b(i) then
+            return false;
+        end if;
+    end loop;
+    
+    return true;
+end function;
+
+
+function processInstruction(ar: GroupBuffer; labels: TMP_StrArray) return word is
+    variable mnem: ProcMnemonic;
+    variable res: word := (others => '0');
+begin
+
+    -- First elem must be opcode. Find it in opcode list list
+    -- ...
+    -- 
+        
+    -- ("or_r", "r1", "r2", "r3") -> (fmt655655, ext0, 1, 2, orR, 3)
+    -- Just use a "switch" with all mnemonics!
+    
+    -- Find a member of ProcMnemonic that matches the string (up to trailing non alnums) and return it
+    -- Then use the retur value as selector 
+    report "Which opcode?";
+
+    
+    mnem := undef;
+    for m in ProcMnemonic loop
+        if matches(ar(0), ProcMnemonic'image(m)) then
+            mnem := m;
+        end if;
+    end loop;    
+    
+    case mnem is
+        when and_i =>
+            
+        
+        when others => 
+            res := (others => 'U');
+    end case;
+    
+    return res;
+end function;
+
+function processProgram(p: ProgramBuffer) return boolean is
+    variable dummy: boolean;
+    variable labelIndex, insIndex: integer := 0; -- Actual number of instruction
+    variable labels: TMP_StrArray(0 to p'length-1) := (others => (others => cr));
+    variable commands: TMP_WordArray(0 to p'length-1) := (others => (others => '0')); -- TODO: fill with undefined!
+begin
+    for i in 0 to p'length-1 loop
+    
+        if p(i)(0)(1) = '$' then -- label
+           labels(labelIndex) := p(i)(0);            
+           labelIndex := labelIndex + 1;
+        elsif p(i)(0)(1) = cr then -- the line is empty
+           null;
+        else -- instruction
+           null; -- Wait until all labels are known 
+        end if;
+    end loop;
+    
+    for i in 0 to p'length-1 loop
+    
+        if p(i)(0)(1) = '$' then -- label
+           null;
+        elsif p(i)(0)(1) = cr then -- the line is empty
+           null;
+        else -- instruction        
+           commands(insIndex) := processInstruction(p(i), labels);
+           insIndex := insIndex + 1;
+        end if;
+    end loop;    
+    
+    return true;
 end function;
 
 

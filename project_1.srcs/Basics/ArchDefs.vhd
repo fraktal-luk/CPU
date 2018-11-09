@@ -44,6 +44,41 @@ type RegNameArray is array (natural range <>) of RegName;
 type QuintetArray is array (natural range <>) of slv5;
 
 
+type ProcMnemonic is ( -- one word instruction names, distinguishing different arg combinations
+    --set, mov, clr, -- pseudoinstructions
+
+    and_i, and_r,
+    or_i, or_r,
+    xor_i, xor_r,
+    
+    add_i, add_r,
+           sub_r,
+    
+    shl_i, shl_r, -- direction defined by sift value, not opcode 
+    shr_i, shr_r, --   
+    
+    mul_u, mul_s,
+    div_u, div_s,
+    
+    
+    ldi_i, ldi_r, -- int
+    sti_i, sti_r,
+    
+    ldf_i, ldf_r, -- float
+    stf_i, stf_r, 
+    
+    lds, -- load sys
+    
+    sts, -- store sys
+    
+    jz_i, jz_r, jnz_i, jnz_r,
+    ja, jl, -- jump always, jump link
+    
+    sys, -- system operation
+    
+    undef
+);
+
 -- 2^6 possible values
 type ProcOpcode is (
 							andI,

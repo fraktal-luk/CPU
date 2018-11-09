@@ -165,6 +165,7 @@ BEGIN
 	
    -- Stimulus process
    stim_proc: process
+       variable dummy: boolean; 
    begin		
       -- hold reset state for 100 ns.
       --wait for 100 ns;	
@@ -172,6 +173,8 @@ BEGIN
       prog <= readSourceFile("C:\Users\frakt_000\Desktop\src.txt");
 
       wait for clk_period*10;
+            report "tttttt";
+      dummy :=  processProgram(prog);
 
       -- insert stimulus here 
 
