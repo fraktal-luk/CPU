@@ -112,6 +112,7 @@ ARCHITECTURE Behavior OF CoreTB IS
  
 	--for uut: Core use entity work.Core(Behavioral);
 	signal prog: ProgramBuffer;
+	signal machineCode: WordArray(0 to prog'length-1);
 BEGIN
  
 	-- Instantiate the Unit Under Test (UUT)
@@ -165,7 +166,7 @@ BEGIN
 	
    -- Stimulus process
    stim_proc: process
-       variable dummy: boolean; 
+       variable dummy: boolean;
    begin		
       -- hold reset state for 100 ns.
       --wait for 100 ns;	
@@ -173,8 +174,8 @@ BEGIN
       prog <= readSourceFile("C:\Users\frakt_000\Desktop\src.txt");
 
       wait for clk_period*10;
-            report "tttttt";
-      dummy :=  processProgram(prog);
+
+      machineCode <= processProgram(prog);
 
       -- insert stimulus here 
 

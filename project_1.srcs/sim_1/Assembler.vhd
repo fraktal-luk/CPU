@@ -30,15 +30,14 @@ use work.ArchDefs.all;
 
 package Assembler is
 
-type GroupBuffer is array(0 to 4) of string(1 to 9);
+type GroupBuffer is array(0 to 4) of string(1 to 10);
 type ProgramBuffer is array(0 to 999) of GroupBuffer;
 
 function readSourceFile(name: string) return ProgramBuffer;
 
-function processProgram(p: ProgramBuffer) return boolean;
+function processProgram(p: ProgramBuffer) return WordArray;
 
     type TMP_StrArray is array(integer range <>) of string(1 to 10);
-    type TMP_WordArray is array(integer range <>) of Word;
 
 end Assembler;
 
@@ -153,9 +152,24 @@ begin
 end function;
 
 
+function findLabel(s: string; labels: TMP_StrArray) return integer is
+begin
+    for i in labels'range loop
+        if matches(s, labels(i)) then
+            return i;
+        end if;
+    end loop;
+    
+    return -1;
+end function;
+
+
 function processInstruction(ar: GroupBuffer; labels: TMP_StrArray) return word is
     variable mnem: ProcMnemonic;
     variable res: word := (others => '0');
+    variable vals: --WordArray(0 to ar'length-1) := (others => (others => '0'));
+                    IntArray(0 to ar'length-1) := (others => 0);
+    variable x: integer := 0;
 begin
 
     -- First elem must be opcode. Find it in opcode list list
@@ -167,7 +181,7 @@ begin
     
     -- Find a member of ProcMnemonic that matches the string (up to trailing non alnums) and return it
     -- Then use the retur value as selector 
-    report "Which opcode?";
+    --report "Which opcode?";
 
     
     mnem := undef;
@@ -177,48 +191,150 @@ begin
         end if;
     end loop;    
     
+    -- Convert other arg to numbers
+    for i in 1 to ar'length-1 loop
+        if ar(i)(1) = '$' then
+            -- Label!
+            x := 4*(findLabel(ar(i), labels) - i); -- branch offset
+            
+        elsif ar(i)(1) = 'r' then 
+            -- register
+            x := integer'value(ar(i)(2 to ar(i)'length)); -- ignore 'r'
+        elsif not isAlphanum(ar(i)(1)) then
+            x := -1;
+        else
+            -- Hope it's a number 
+            x := integer'value(ar(i));
+        end if;
+        
+        vals(i) := x;--i2slv(x, 32);
+        
+        --        report integer'image(x);
+    end loop;
+    
+
     case mnem is
         when and_i =>
-            
+            res := ins655H(andI, vals(1), vals(2), vals(3));
+        when or_i =>
+            res := ins655H(orI, vals(1), vals(2), vals(3));
+        when xor_i =>
+                --res := ins655H(xorI, vals(1), vals(2), vals(3));
+        when add_i =>
+            res := ins655H(addI, vals(1), vals(2), vals(3));
+        --when sub_i =>
+        --        res := ins655H(subI, vals(1), vals(2), vals(3));
+
+        when and_r =>
+            res := ins655655(ext0, vals(1), vals(2), andR, vals(3), 0);
+        when or_r =>
+            res := ins655655(ext0, vals(1), vals(2), orR, vals(3), 0);
+        when xor_r =>
+                --res := ins655H(xorI, vals(1), vals(2), vals(3));
+        when add_r =>
+            res := ins655655(ext0, vals(1), vals(2), addR, vals(3), 0);
+        when sub_r =>
+            res := ins655655(ext0, vals(1), vals(2), subR, vals(3), 0);
+                       
+        when shl_i =>
+            res := ins6556X(ext0, vals(1), vals(2), shlC, vals(3));
+        when sha_i =>
+            res := ins6556X(ext0, vals(1), vals(2), shlC, vals(3));
+        when mul =>
+            res := ins655655(ext0, vals(1), vals(2), muls, vals(3), 0);
+        when ldi_i => 
+            res := ins6556X(ext1, vals(1), vals(2), load, vals(3));
+        when sti_i =>
+            res := ins6556X(ext1, vals(1), vals(2), store, vals(3));
         
+        when ldf_i =>
+            res := ins6556X(ext1, vals(1), vals(2), loadFP, vals(3));
+        
+        when stf_i =>
+            res := ins6556X(ext1, vals(1), vals(2), storeFP, vals(3));
+        
+        
+        when lds =>
+            res := ins6556X(ext2, vals(1), vals(2), mfc, vals(3));
+
+        when sts =>
+            res := ins6556X(ext2, vals(1), vals(2), mtc, vals(3));
+
+
+        when jz_i =>
+            res := ins65J(jz, vals(1), vals(2));
+            
+        when jz_r =>
+            res := ins655655(ext1, vals(1), vals(2), jzR, vals(3), 0);
+            
+        when jnz_i =>
+            res := ins65J(jz, vals(1), vals(2));
+            
+        when jnz_r =>
+            res := ins655655(ext1, vals(1), vals(2), jnzR, vals(3), 0);
+            
+        when ja =>
+            res := ins6L(j, vals(1));
+            
+        when jl =>
+            res := ins65J(j, vals(1), vals(2));
+            
+            
+        when sys =>
+            if matches(ar(1), "halt") then
+               res := ins655655(ext2, 0, 0, halt, 0, 0);
+            elsif matches(ar(1), "reti") then
+               res := ins655655(ext2, 0, 0, retI, 0, 0);
+            elsif matches(ar(1), "rete") then
+               res := ins655655(ext2, 0, 0, retE, 0, 0);
+            elsif matches(ar(1), "sync") then
+               res := ins655655(ext2, 0, 0, sync, 0, 0);            
+            elsif matches(ar(1), "replay") then
+               res := ins655655(ext2, 0, 0, replay, 0, 0);            
+            elsif matches(ar(1), "error") then
+               res := ins655655(ext2, 0, 0, error, 0, 0);            
+            else
+               res := ins6L(undef, 0);            
+            end if;
+                          
         when others => 
-            res := (others => 'U');
+            res := ins6L(undef, 0);
     end case;
     
     return res;
 end function;
 
-function processProgram(p: ProgramBuffer) return boolean is
+function processProgram(p: ProgramBuffer) return WordArray is
     variable dummy: boolean;
-    variable labelIndex, insIndex: integer := 0; -- Actual number of instruction
+    variable insIndex, j: integer := 0; -- Actual number of instruction
     variable labels: TMP_StrArray(0 to p'length-1) := (others => (others => cr));
-    variable commands: TMP_WordArray(0 to p'length-1) := (others => (others => '0')); -- TODO: fill with undefined!
+    variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
+    variable commands: WordArray(0 to p'length-1) := (others => (others => '0')); -- TODO: fill with undefined!
 begin
     for i in 0 to p'length-1 loop
     
         if p(i)(0)(1) = '$' then -- label
-           labels(labelIndex) := p(i)(0);            
-           labelIndex := labelIndex + 1;
+           labels(insIndex) := p(i)(0);            
         elsif p(i)(0)(1) = cr then -- the line is empty
            null;
         else -- instruction
-           null; -- Wait until all labels are known 
+           pSqueezed(insIndex) := p(i);
+           insIndex := insIndex + 1;  
         end if;
     end loop;
     
     for i in 0 to p'length-1 loop
-    
-        if p(i)(0)(1) = '$' then -- label
+        if pSqueezed(i)(0)(1) = '$' then -- label
            null;
-        elsif p(i)(0)(1) = cr then -- the line is empty
+        elsif pSqueezed(i)(0)(1) = cr then -- the line is empty
            null;
         else -- instruction        
-           commands(insIndex) := processInstruction(p(i), labels);
-           insIndex := insIndex + 1;
+           commands(i) := processInstruction(pSqueezed(i), labels);
+           --j := j + 1;
         end if;
     end loop;    
     
-    return true;
+    return commands;
 end function;
 
 

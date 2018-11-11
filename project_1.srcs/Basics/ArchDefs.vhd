@@ -45,7 +45,7 @@ type QuintetArray is array (natural range <>) of slv5;
 
 
 type ProcMnemonic is ( -- one word instruction names, distinguishing different arg combinations
-    --set, mov, clr, -- pseudoinstructions
+    --set, mov, clr, nop, -- pseudoinstructions
 
     and_i, and_r,
     or_i, or_r,
@@ -55,9 +55,9 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
            sub_r,
     
     shl_i, shl_r, -- direction defined by sift value, not opcode 
-    shr_i, shr_r, --   
+    sha_i, sha_r, --   
     
-    mul_u, mul_s,
+    mul, mulh_s, mulh_u,
     div_u, div_s,
     
     
