@@ -32,6 +32,9 @@ use work.ProgramCode.all;
 
 use work.Assembler.all;
 
+    use work.DecodingDev.all;
+    use work.TmpDecoding2.all;
+    use work.InstructionState.all;
 
 ENTITY CoreTB IS
 END CoreTB;
@@ -167,6 +170,7 @@ BEGIN
    -- Stimulus process
    stim_proc: process
        variable dummy: boolean;
+       variable decBits, decIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
    begin		
       -- hold reset state for 100 ns.
       --wait for 100 ns;	
@@ -177,7 +181,13 @@ BEGIN
 
       machineCode <= processProgram(prog);
 
-      -- insert stimulus here 
+      wait for clk_period*10;
+
+            for i in 0 to 10 loop
+                decBits.bits := machineCode(i);
+                decIns := decodeInstruction(decBits);
+                --report insText(decIns);
+            end loop;
 
       wait;
    end process;

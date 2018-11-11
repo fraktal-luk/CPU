@@ -164,11 +164,11 @@ begin
 end function;
 
 
-function processInstruction(ar: GroupBuffer; labels: TMP_StrArray) return word is
+function processInstruction(ar: GroupBuffer; num: integer; labels: TMP_StrArray) return word is
     variable mnem: ProcMnemonic;
     variable res: word := (others => '0');
     variable vals: --WordArray(0 to ar'length-1) := (others => (others => '0'));
-                    IntArray(0 to ar'length-1) := (others => 0);
+                    IntArray(0 to ar'length-1) := (others => -1);
     variable x: integer := 0;
 begin
 
@@ -195,16 +195,18 @@ begin
     for i in 1 to ar'length-1 loop
         if ar(i)(1) = '$' then
             -- Label!
-            x := 4*(findLabel(ar(i), labels) - i); -- branch offset
+            x := 4*(findLabel(ar(i), labels) - num); -- branch offset
             
         elsif ar(i)(1) = 'r' then 
             -- register
             x := integer'value(ar(i)(2 to ar(i)'length)); -- ignore 'r'
         elsif not isAlphanum(ar(i)(1)) then
             x := -1;
-        else
+        elsif ar(i)(1) >= '0' and ar(i)(1) <= '9' then
             -- Hope it's a number 
             x := integer'value(ar(i));
+        else
+            x := -1;
         end if;
         
         vals(i) := x;--i2slv(x, 32);
@@ -309,7 +311,7 @@ function processProgram(p: ProgramBuffer) return WordArray is
     variable insIndex, j: integer := 0; -- Actual number of instruction
     variable labels: TMP_StrArray(0 to p'length-1) := (others => (others => cr));
     variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
-    variable commands: WordArray(0 to p'length-1) := (others => (others => '0')); -- TODO: fill with undefined!
+    variable commands: WordArray(0 to p'length-1) := (others => ins6L(undef, -1)); -- TODO: fill with undefined!
 begin
     for i in 0 to p'length-1 loop
     
@@ -329,7 +331,7 @@ begin
         elsif pSqueezed(i)(0)(1) = cr then -- the line is empty
            null;
         else -- instruction        
-           commands(i) := processInstruction(pSqueezed(i), labels);
+           commands(i) := processInstruction(pSqueezed(i), i, labels);
            --j := j + 1;
         end if;
     end loop;    
