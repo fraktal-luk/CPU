@@ -181,7 +181,7 @@ package TmpDecoding2 is
 							(others => Int));	
 				
 			constant fmtShiftImm: ArgFormatStruct :=		
-					((d0=>qa, d1=>none, s0=>qb, s1=>none, s2=>none, c0=>none, c1=>none), imm10, '0', '0', '0',
+					((d0=>qa, d1=>none, s0=>qb, s1=>none, s2=>none, c0=>none, c1=>none), imm10, '1', '0', '0',
 							(others => Int));
 			
 			constant fmtNoArgs: ArgFormatStruct :=		
@@ -212,8 +212,8 @@ package TmpDecoding2 is
 				11=> (ext0, mulu, Mac, mulU, fmtReg3),
 
 				12 => (ext0, shlC,  Alu,  logicShl,	fmtShiftImm),
-				13 => (ext0, shrlC, Alu,  logicShrl,fmtShiftImm),
-				14 => (ext0, shraC, Alu,  arithShra,fmtShiftImm), 
+				--13 => (ext0, shrlC, Alu,  logicShrl,fmtShiftImm),
+				14 => (ext0, shaC, Alu,  arithSha, fmtShiftImm),
 
 				15=> (ext2, mfc,	System, sysMFC, fmtMFC_TEMP),
 				16=> (ext2, mtc, 	System, sysMTC, fmtMTC_TEMP),		

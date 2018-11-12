@@ -112,8 +112,8 @@ type ProcOpcont is ( -- ALU functions
 							orR,
 							
 							shlC,
-							shrlC,
-							shraC,
+							--shrlC,
+							shaC,
 							
 							addR,
 							subR,

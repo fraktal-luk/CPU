@@ -52,6 +52,28 @@ begin
     return res;
 end function;
 
+function w2hex(w: Word) return string is
+    constant letters: string(1 to 16) := "0123456789abcdef";
+    variable res: string(1 to 8) := (others => '0');
+begin
+    for i in 7 downto 0 loop
+        res(8-i) := letters(slv2u(w(4*i+3 downto 4*i)) + 1);
+    end loop;
+    return res;
+end function;
+
+function strExt(str: string; n: positive) return string is 
+    variable res: string(1 to n) := (others => ' ');
+begin
+    for i in 1 to str'length loop
+        if i > n then
+            exit;
+        end if;
+        res(i) := str(i);
+    end loop;
+    return res;
+end function;
+
 function insText(ins: InstructionState) return string is
     variable dest, src0, src1, src2: string(1 to 3) := (others => '*');
 begin
@@ -72,11 +94,11 @@ begin
         src1(1) := 'r';
     end if;
     
-    return ExecFunc'image(ins.operation.func) & "  " &
+    return strExt(ExecFunc'image(ins.operation.func), 9) & "  " &
      dest & ", " &
      src0 & ", " &
      src1 & ", #" &
-     integer'image(slv2s(ins.constantArgs.imm));    
+     w2hex(ins.constantArgs.imm);    
     
     --return "";
 end function;

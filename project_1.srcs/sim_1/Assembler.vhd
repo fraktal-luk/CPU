@@ -114,7 +114,7 @@ begin
                 end loop;
                 
                 blockStart := ind - 1;
-                while isAlphanum(str(ind)) loop -- and not tab nor cr!
+                while isAlphanum(str(ind)) or str(ind) = '-' loop -- and not tab nor cr!
                     -- Copy to current group
                     words(grp)(ind - blockStart) := str(ind); -- May overflow the word, but nvm                 
                     ind := ind + 1;
@@ -197,9 +197,11 @@ begin
             -- Label!
             x := 4*(findLabel(ar(i), labels) - num); -- branch offset
             
-        elsif ar(i)(1) = 'r' then 
+        elsif ar(i)(1) = 'r' and ar(i)(2) >= '0' and ar(i)(2) <= '9' then
             -- register
             x := integer'value(ar(i)(2 to ar(i)'length)); -- ignore 'r'
+        elsif ar(i)(1) = '-' then
+            x := -integer'value(ar(i)(2 to ar(i)'length)); 
         elsif not isAlphanum(ar(i)(1)) then
             x := -1;
         elsif ar(i)(1) >= '0' and ar(i)(1) <= '9' then
@@ -241,7 +243,7 @@ begin
         when shl_i =>
             res := ins6556X(ext0, vals(1), vals(2), shlC, vals(3));
         when sha_i =>
-            res := ins6556X(ext0, vals(1), vals(2), shlC, vals(3));
+            res := ins6556X(ext0, vals(1), vals(2), shaC, vals(3));
         when mul =>
             res := ins655655(ext0, vals(1), vals(2), muls, vals(3), 0);
         when ldi_i => 
@@ -279,7 +281,7 @@ begin
             res := ins6L(j, vals(1));
             
         when jl =>
-            res := ins65J(j, vals(1), vals(2));
+            res := ins65J(jl, vals(1), vals(2));
             
             
         when sys =>

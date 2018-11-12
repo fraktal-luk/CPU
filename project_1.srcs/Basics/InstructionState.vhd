@@ -30,8 +30,8 @@ package InstructionState is
 type ExecUnit is (General, ALU, MAC, Divide, Jump, Memory, System );
 type ExecFunc is (unknown,
 
-						arithAdd, arithSub, arithShra,
-						logicAnd, logicOr, logicShl, logicShrl,
+						arithAdd, arithSub, arithSha,
+						logicAnd, logicOr, logicShl,
 						
 						mulS, mulU, 
 					

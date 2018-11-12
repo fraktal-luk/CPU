@@ -183,10 +183,10 @@ BEGIN
 
       wait for clk_period*10;
 
-            for i in 0 to 10 loop
+            for i in 0 to 20 loop
                 decBits.bits := machineCode(i);
                 decIns := decodeInstruction(decBits);
-                --report insText(decIns);
+                report insText(decIns);
             end loop;
 
       wait;
