@@ -40,6 +40,8 @@ type ExecFunc is (unknown,
 						load, store,
 						
 						jump,
+						jumpZ,
+						jumpNZ,
 						
 						sysRetI, sysRetE,
 						sysHalt,

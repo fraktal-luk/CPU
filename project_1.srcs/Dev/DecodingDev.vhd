@@ -29,6 +29,32 @@ use work.InstructionState.all;
 
 package DecodingDev is
 
+-- DUMMY
+		type OpFieldStruct is record
+    opcode:            ProcOpcode;
+    opcont:             ProcOpcont;    
+    unit:        ExecUnit;
+    func:        ExecFunc;
+    --quintetSel:        QuintetSelect;
+    --quintetValues: QuintetValArray;
+    hasLeftImm:     std_logic;
+    leftImm:         word;
+    hasImm:             std_logic;
+    imm:                 word;
+    target:             word;
+end record;
+
+function getOpFields(w: word) return OpFieldStruct;
+
+	procedure ofsInfo(ofs: in OpFieldStruct;
+                        op: out BinomialOp;
+                        ci: out InstructionClassInfo;
+                        ca: out InstructionConstantArgs;
+                        va: out InstructionVirtualArgs;
+                        vda: out InstructionVirtualDestArgs);
+
+-----------------
+
 function insText(ins: InstructionState) return string;
 
 
@@ -36,6 +62,38 @@ end package;
 
 
 package body DecodingDev is
+
+        -- DUMMY
+		function getOpFields(w: word) return OpFieldStruct is
+			--variable num: integer;
+			--variable parts: InsFieldTableNewW;
+			variable ofs: OpFieldStruct;
+			--variable opcd: slv6; --ProcOpcode;
+			--variable opct: slv6; --ProcOpcont;
+			--variable match: InsDefNewW;			
+		begin
+
+
+			return ofs;
+		end function;
+
+	procedure ofsInfo(ofs: in OpFieldStruct;
+							op: out BinomialOp;
+							ci: out InstructionClassInfo;
+							ca: out InstructionConstantArgs;
+							va: out InstructionVirtualArgs;
+							vda: out InstructionVirtualDestArgs)
+	is		
+		variable num: integer;
+	begin		
+
+	end procedure;
+
+--------------------------
+
+
+
+
 
 function reg2txt(reg: std_logic_vector) return string is
     variable res: string(1 to 2);
@@ -94,6 +152,7 @@ begin
         src1(1) := 'r';
     end if;
     
+    -- Length 35
     return strExt(ExecFunc'image(ins.operation.func), 9) & "  " &
      dest & ", " &
      src0 & ", " &

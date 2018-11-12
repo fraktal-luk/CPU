@@ -79,7 +79,7 @@ package TmpDecoding2 is
 			hasImm: 			std_logic;
 			imm: 				word;
 			target: 			word;
-		end record;		
+		end record;	
 
 				type OpFieldStructW is record
 					opcode:			slv6;
@@ -167,18 +167,18 @@ package TmpDecoding2 is
 			constant fmtJumpLink: ArgFormatStruct := 
 					((d0=>qa, d1=>none, s0=>zero, s1=>none, s2=>none, c0=>none, c1=> none), imm21, '1', '0', '0',
 							(others => Int));					
-			constant fmtJumpCondZ: ArgFormatStruct := 
-					((d0=>zero, d1=>none, s0=>qa, s1=>none, s2=>none, c0=>none, c1=> zero), imm21, '1', '0', '0',
+			constant fmtJumpCond: ArgFormatStruct := 
+					((d0=>zero, d1=>none, s0=>qa, s1=>none, s2=>none, c0=>none, c1=> none), imm21, '1', '0', '0',
 							(others => Int));					
-			constant fmtJumpCondNZ: ArgFormatStruct := 
-					((d0=>zero, d1=>none, s0=>qa, s1=>none, s2=>none, c0=>none, c1=> one), imm21, '1', '0', '0',
+			--constant fmtJumpCondNZ: ArgFormatStruct := 
+			--		((d0=>zero, d1=>none, s0=>qa, s1=>none, s2=>none, c0=>none, c1=> one), imm21, '1', '0', '0',
+			--				(others => Int));					
+			constant fmtJumpR: ArgFormatStruct := 
+					((d0=>qa, d1=>none, s0=>qb, s1=>qc, s2=>none, c0=>none, c1=> none), none, '0', '0', '0',
 							(others => Int));					
-			constant fmtJumpRZ: ArgFormatStruct := 
-					((d0=>qa, d1=>none, s0=>qb, s1=>qc, s2=>none, c0=>none, c1=> zero), none, '0', '0', '0',
-							(others => Int));					
-			constant fmtJumpRNZ: ArgFormatStruct := 
-					((d0=>qa, d1=>none, s0=>qb, s1=>qc, s2=>none, c0=>none, c1=> one), none, '0', '0', '0',
-							(others => Int));	
+			--constant fmtJumpRNZ: ArgFormatStruct := 
+			--		((d0=>qa, d1=>none, s0=>qb, s1=>qc, s2=>none, c0=>none, c1=> one), none, '0', '0', '0',
+			--				(others => Int));	
 				
 			constant fmtShiftImm: ArgFormatStruct :=		
 					((d0=>qa, d1=>none, s0=>qb, s1=>none, s2=>none, c0=>none, c1=>none), imm10, '1', '0', '0',
@@ -205,8 +205,8 @@ package TmpDecoding2 is
 
 				6 => (j, 	none, Jump, jump, fmtJumpLong),
 				7 => (jl, 	none, Jump, jump,	fmtJumpLink),
-				8 => (jz, 	none, Jump, jump, fmtJumpCondZ),
-				9 => (jnz, 	none, Jump, jump, fmtJumpCondNZ),
+				8 => (jz, 	none, Jump, jumpZ, fmtJumpCond),
+				9 => (jnz, 	none, Jump, jumpNZ, fmtJumpCond),
 				
 				10=> (ext0, muls, Mac, mulS, fmtReg3),
 				11=> (ext0, mulu, Mac, mulU, fmtReg3),
@@ -223,8 +223,8 @@ package TmpDecoding2 is
 				19=> (ext0, andR, Alu, logicAnd, fmtReg2),
 				20=> (ext0, orR,  Alu, logicOr,  fmtReg2),
 					
-				21=> (ext1, jzR,  Jump, jump, fmtJumpRZ),
-				22=> (ext1, jnzR, Jump, jump, fmtJumpRNZ),
+				21=> (ext1, jzR,  Jump, jumpZ, fmtJumpR),
+				22=> (ext1, jnzR, Jump, jumpNZ, fmtJumpR),
 
 					23 => (ext1, loadFP,		Memory,load,	fmtLoadImmFP),
 					24 => (ext1, storeFP,	Memory,store,	fmtStoreImmFP),
