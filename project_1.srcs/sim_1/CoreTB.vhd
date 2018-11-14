@@ -33,7 +33,8 @@ use work.ProgramCode.all;
 use work.Assembler.all;
 
     use work.DecodingDev.all;
-    use work.TmpDecoding2.all;
+    --use work.TmpDecoding2.all;
+    use work.DecodingDev.all;
     use work.InstructionState.all;
 
 ENTITY CoreTB IS
@@ -185,7 +186,7 @@ BEGIN
 
             for i in 0 to 20 loop
                 decBits.bits := machineCode(i);
-                decIns := decodeInstruction(decBits);
+                decIns := decodeFromWord(decBits.bits);
                 report insText(decIns);
             end loop;
 

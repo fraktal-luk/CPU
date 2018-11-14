@@ -222,8 +222,8 @@ begin
 		when ext1 =>
 			return store;
 		when ext2 =>
-			return --rete;
-						mfc;
+			return retE;
+					--	mfc;
 		when others =>
 			return none; -- none corresponds ofc to those that have no opcont
 	end case;

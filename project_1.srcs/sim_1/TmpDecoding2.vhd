@@ -259,7 +259,7 @@ package TmpDecoding2 is
 									va: out InstructionVirtualArgs;
 									vda: out InstructionVirtualDestArgs);
 
-function decodeInstruction(inputState: InstructionState) return InstructionState;
+function decodeInstruction_OLD(inputState: InstructionState) return InstructionState;
 		
 end TmpDecoding2;
 
@@ -285,8 +285,8 @@ package body TmpDecoding2 is
 		
 		ca.immSel := ofs.hasImm;
 		ca.imm := ofs.imm;
-		ca.c0 := ofs.quintetValues(c0);
-		ca.c1 := ofs.quintetValues(c1);
+		--ca.c0 := ofs.quintetValues(c0);
+		--ca.c1 := ofs.quintetValues(c1);
 
 		op := BinomialOp'(ofs.unit, ofs.func); 					
 
@@ -545,11 +545,11 @@ begin
 			end if;
 
 			ci.branchCond := '0';
-			if 	 	(ins.operation.func = jump and ins.constantArgs.c1 = COND_NONE) then
-				null;
-			elsif (ins.operation.func = jump and ins.constantArgs.c1 /= COND_NONE) then 
-				ci.branchCond := '1';	
-			end if;
+			--if 	 	(ins.operation.func = jump and ins.constantArgs.c1 = COND_NONE) then
+			--	null;
+			--elsif (ins.operation.func = jump and ins.constantArgs.c1 /= COND_NONE) then 
+			--	ci.branchCond := '1';	
+			--end if;
 			
 		if ins.operation.unit = ALU or ins.operation.unit = Jump then
 			ci.pipeA := '1';
@@ -564,7 +564,7 @@ begin
 	return ci;
 end function;
 
-function decodeInstruction(inputState: InstructionState) return InstructionState is
+function decodeInstruction_OLD(inputState: InstructionState) return InstructionState is
 	variable res: InstructionState := inputState;
 	variable ofs: OpFieldStruct;
 	variable tmpVirtualArgs: InstructionVirtualArgs;

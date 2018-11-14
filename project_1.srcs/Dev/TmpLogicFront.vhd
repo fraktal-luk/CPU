@@ -23,16 +23,6 @@ use work.PipelineGeneral.all;
 
 use work.DecodingDev.all;
 
---use work.ProcHelpers.all;
-
---use work.ProcInstructionsNew.all;
---use work.NewPipelineData.all;
-
---use work.Decoding2.all;
-
---use work.TEMP_DEV.all;
---use work.GeneralPipeDev.all;
-
 
 package TmpLogicFront is
 
@@ -135,30 +125,15 @@ end function;
 
 function decodeInstruction(inputState: InstructionState) return InstructionState is
 	variable res: InstructionState := inputState;
-	variable ofs: OpFieldStruct;
+    variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
 	variable tmpVirtualArgs: InstructionVirtualArgs;
 	variable tmpVirtualDestArgs: InstructionVirtualDestArgs;
 begin
-	ofs := getOpFields(inputState.bits);
-	ofsInfo(ofs,
-					res.operation,
-					res.classInfo,
-					res.constantArgs,
-					tmpVirtualArgs,
-					tmpVirtualDestArgs);
+	decodedIns := decodeFromWord(inputState.bits);
 	
-		res.virtualArgSpec.intDestSel := tmpVirtualDestArgs.sel(0);
-		res.virtualArgSpec.floatDestSel := '0';
-		res.virtualArgSpec.dest := (others => '0');		
-		res.virtualArgSpec.dest(4 downto 0) := tmpVirtualDestArgs.d0;
-		res.virtualArgSpec.intArgSel := tmpVirtualArgs.sel;
-		res.virtualArgSpec.floatArgSel := (others => '0');
-		res.virtualArgSpec.args(0) := (others => '0');
-		res.virtualArgSpec.args(0)(4 downto 0) := tmpVirtualArgs.s0;
-		res.virtualArgSpec.args(1) := (others => '0');		
-		res.virtualArgSpec.args(1)(4 downto 0) := tmpVirtualArgs.s1;
-		res.virtualArgSpec.args(2) := (others => '0');
-		res.virtualArgSpec.args(2)(4 downto 0) := tmpVirtualArgs.s2;
+	res.operation := decodedIns.operation;
+	res.constantArgs := decodedIns.constantArgs;
+	res.virtualArgSpec := decodedIns.virtualArgSpec;
 	
 	res.classInfo := getInstructionClassInfo(res);	
 
@@ -184,7 +159,6 @@ begin
 		end if;
 		
 		res.controlInfo.squashed := '0';
-		res.target := ofs.target;
 	return res;
 end function;
 

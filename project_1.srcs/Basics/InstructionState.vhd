@@ -92,8 +92,8 @@ end record;
 type InstructionConstantArgs is record
 	immSel: std_logic;
 	imm: word;
-	c0: slv5;
-	c1: slv5;
+	--c0: slv5;
+	--c1: slv5;
 end record;
 
 type InstructionVirtualArgs is record
@@ -275,7 +275,7 @@ end function;
 
 function defaultConstantArgs return InstructionConstantArgs is
 begin
-	return InstructionConstantArgs'('0', (others=>'0'), "00000", "00000");
+	return InstructionConstantArgs'('0', (others=>'0'));
 end function;
 
 function defaultVirtualArgs return InstructionVirtualArgs is
