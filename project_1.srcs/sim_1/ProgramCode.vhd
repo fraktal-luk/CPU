@@ -29,7 +29,7 @@ use work.ArchDefs.all;
 
 package ProgramCode is
 
-		type WordMem is array (0 to 511 + 512) of word;
+		subtype WordMem is WordArray (0 to 511 + 512);
 		
 		constant insRET: word := ins655655(ext1, r0, r0, jzR, r31, 0); -- j to r31
 		constant insERROR: word := ins655655(ext2, 0, 0, error, 0, 0);		

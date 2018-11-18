@@ -23,6 +23,7 @@ library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 
 use work.BasicTypes.all;
+use work.Helpers.all;
 use work.ArchDefs.all;
 use work.CoreConfig.all;
 use work.InstructionState.all;
@@ -76,14 +77,24 @@ architecture Empty of Core is
     signal frontDataLastLiving: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal execEventSignal, lateEventSignal, lateEventSetPC: std_logic := '0';
+        signal iadrReg: Mword := X"ffffffb0";
 begin
-
+            pcSending <= '1';
+            
+            process (clk)
+            begin
+                if rising_edge(clk) then
+                    iadrReg <= addWord(iadrReg, X"00000010");
+                end if;
+            end process;
+            iadr <= iadrReg;
+            
 	UNIT_FRONT: entity work.UnitFront(Behavioral)
     port map(
         clk => clk, reset => '0', en => '0',
         
         iin => iin,
-        ivalid => ivalid,
+       -- ivalid => ivalid,
                     
         pcDataLiving => pcDataSig,
         pcSending => pcSending,    

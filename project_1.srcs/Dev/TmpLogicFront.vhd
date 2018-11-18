@@ -43,9 +43,7 @@ function getAnnotatedWords(fetchIns: InstructionState; fetchInsMulti: Instructio
 									 fetchBlock: HwordArray)
 return InstructionStateArray;
 
-function getFrontEventMulti(predictedAddress: Mword;
-							  ins: InstructionState; receiving: std_logic; valid: std_logic;
-							  hbuffAccepting: std_logic; fetchLine: WordArray(0 to FETCH_WIDTH-1))
+function getFrontEventMulti(predictedAddress: Mword; ins: InstructionState; fetchLine: WordArray(0 to FETCH_WIDTH-1))
 return InstructionSlotArray;
 
 
@@ -59,6 +57,8 @@ function countFullNonSkipped(insVec: InstructionSlotArray) return integer;
 function findEarlyTakenJump(ins: InstructionState; insVec: InstructionSlotArray) return InstructionState;
 
 function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
+
+function prepareForBQ(insVec: InstructionSlotArray; branchMask: std_logic_vector) return InstructionSlotArray;
 
 end TmpLogicFront;
 
@@ -238,8 +238,7 @@ begin
 end function;
 
 function getFrontEventMulti(predictedAddress: Mword;
-							  ins: InstructionState; receiving: std_logic; valid: std_logic;
-							  hbuffAccepting: std_logic; fetchLine: WordArray(0 to FETCH_WIDTH-1))
+							  ins: InstructionState; fetchLine: WordArray(0 to FETCH_WIDTH-1))
 return InstructionSlotArray is
 	variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	variable tempOffset, thisIP, tempTarget: Mword := (others => '0');
@@ -257,33 +256,34 @@ begin
 	-- Find which are before the start of fetch address
 	nSkippedIns := slv2u(predictedAddress(ALIGN_BITS-1 downto 0))/4;								
 			
-	for i in 0 to PIPE_WIDTH-1 loop
+	for i in 0 to FETCH_WIDTH-1 loop
 		full(i) := '1'; -- For skipping we use 'skipped' flag, not clearing 'full' 
 		if i < nSkippedIns then
 			res(i).ins.controlInfo.skipped := '1';
+			 full(i) := '0'; -- CAREFUL: trying to dispose of 'skipped' flag
 		end if;
 	end loop;
 
-	if (receiving and valid and hbuffAccepting) = '1' then
+	if true then --(receiving and valid and hbuffAccepting) = '1' then
 		-- Calculate target for each instruction, even if it's to be skipped
-		for i in 0 to PIPE_WIDTH-1 loop
+		for i in 0 to FETCH_WIDTH-1 loop
 			thisIP := ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);
 			
 			regularJump := '0';
 			longJump := '0';
 			regJump := '0';
 			
-			if 	fetchLine(i)(31 downto 25) = opcode2slv(jl) 
-				or fetchLine(i)(31 downto 25) = opcode2slv(jz) 
-				or fetchLine(i)(31 downto 25) = opcode2slv(jnz)
+			if 	fetchLine(i)(31 downto 26) = opcode2slv(jl) 
+				or fetchLine(i)(31 downto 26) = opcode2slv(jz) 
+				or fetchLine(i)(31 downto 26) = opcode2slv(jnz)
 			then
 				regularJump := '1';				
 				predictedTaken(i) := fetchLine(i)(20);		-- CAREFUL, TODO: temporary predicted taken iff backwards
-			elsif fetchLine(i)(31 downto 25) = opcode2slv(j) -- Long jump instruction
+			elsif fetchLine(i)(31 downto 26) = opcode2slv(j) -- Long jump instruction
 			then
 				longJump := '1';				
 				predictedTaken(i) := '1'; -- Long jump is unconditional (no space for register encoding!)
-			elsif  fetchLine(i)(31 downto 25) = opcode2slv(ext1) 
+			elsif  fetchLine(i)(31 downto 26) = opcode2slv(ext1) 
 				and (fetchLine(i)(15 downto 10) = opcont2slv(ext1, jzR)
 						or fetchLine(i)(15 downto 10) = opcont2slv(ext1, jnzR)) then
 				regJump := '1';
@@ -311,7 +311,7 @@ begin
 		end loop;
 		
 		-- Find if any branch predicted
-		for i in 0 to PIPE_WIDTH-1 loop
+		for i in 0 to FETCH_WIDTH-1 loop
 			fullOut(i) := full(i);
 			--res.data(i).bits := fetchBlock(2*i) & fetchBlock(2*i+1);
 			if full(i) = '1' and branchIns(i) = '1' and predictedTaken(i) = '1' then
@@ -339,7 +339,7 @@ begin
 			end if;
 		end loop;
 		
-		for i in 0 to PIPE_WIDTH-1 loop
+		for i in 0 to FETCH_WIDTH-1 loop
 			res(i).ins.bits := fetchLine(i);
 			res(i).ins.target := targets(i);
 			
@@ -350,7 +350,7 @@ begin
 	res(PIPE_WIDTH-1).ins.result := ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
 	res(PIPE_WIDTH-1).ins.result := addMwordBasic(res(PIPE_WIDTH-1).ins.result, PC_INC);
 	
-	for i in 0 to PIPE_WIDTH-1 loop
+	for i in 0 to FETCH_WIDTH-1 loop
 	   res(i).full := fullOut(i);
 	end loop;
 	return res;
@@ -404,6 +404,21 @@ begin
 		then
 			res(i) := '1';
 		end if;
+	end loop;
+	
+	return res;
+end function;
+
+function prepareForBQ(insVec: InstructionSlotArray; branchMask: std_logic_vector) return InstructionSlotArray is
+	variable res: InstructionSlotArray(insVec'range) := insVec;
+	variable result, target: Mword;
+begin
+	for i in insVec'range loop
+		target := insVec(i).ins.target;
+		result := insVec(i).ins.result;
+		res(i).ins := setStoredArg1(res(i).ins, target);
+		res(i).ins := setStoredArg2(res(i).ins, result);
+		res(i).full := branchMask(i) and insVec(i).full and not insVec(i).ins.controlInfo.skipped; 
 	end loop;
 	
 	return res;

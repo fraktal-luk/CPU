@@ -117,6 +117,8 @@ ARCHITECTURE Behavior OF CoreTB IS
 	--for uut: Core use entity work.Core(Behavioral);
 	signal prog: ProgramBuffer;
 	signal machineCode: WordArray(0 to prog'length-1);
+	
+    signal testProgram: WordMem;
 BEGIN
  
 	-- Instantiate the Unit Under Test (UUT)
@@ -176,13 +178,17 @@ BEGIN
       -- hold reset state for 100 ns.
       --wait for 100 ns;	
 
-      prog <= readSourceFile("C:\Users\frakt_000\Desktop\src.txt");
+      prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\src.txt");
 
-      wait for clk_period*10;
+      wait for clk_period;
 
       machineCode <= processProgram(prog);
 
-      wait for clk_period*10;
+      wait for clk_period;
+
+      testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+
+      wait for clk_period;
 
             for i in 0 to 20 loop
                 decBits.bits := machineCode(i);
@@ -235,8 +241,8 @@ BEGIN
 		variable baseIP: Mword := (others => '0');
 	begin
 		if rising_edge(clk) then
-			if en = '1' then -- TEMP! It shouldn't exist here
-					if iadrvalid = '1' then
+			--if en = '1' then -- TEMP! It shouldn't exist here
+			--		if iadrvalid = '1' then
 						assert iadr(31 downto 4) & "1111" /= X"ffffffff" 
 							report "Illegal address!" severity error;
 						
@@ -248,17 +254,17 @@ BEGIN
 						--				stalled content in fetch buffer!
 						baseIP := iadr and i2slv(-PIPE_WIDTH*4, MWORD_SIZE); -- Clearing low bits
 						for i in 0 to PIPE_WIDTH-1 loop
-							iin(i) <= testProg1 --Mem
+							iin(i) <= testProgram
 										(slv2u(baseIP(10 downto 2)) + i); -- CAREFUL! 2 low bits unused (32b memory) 									
 						end loop;
-					end if;
+					--end if;
 					
 					if iadrvalid = '1' and countOnes(iadr(iadr'high downto 12)) = 0 then
 						ivalid <= '1';					
 					else
 						ivalid <= '0';	
 					end if;			
-			end if;
+			--end if;
 		end if;	
 	end process;	
 

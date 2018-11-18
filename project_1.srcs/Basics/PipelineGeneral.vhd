@@ -38,6 +38,11 @@ function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionSt
 function setInstructionTarget(ins: InstructionState; target: Mword) return InstructionState;
 function setInstructionResult(ins: InstructionState; result: Mword) return InstructionState;
 
+        function getStoredArg1(ins: InstructionState) return Mword;
+        function getStoredArg2(ins: InstructionState) return Mword;
+        function setStoredArg1(ins: InstructionState; val: Mword) return InstructionState;
+        function setStoredArg2(ins: InstructionState; val: Mword) return InstructionState;
+
 function getAddressIncrement(ins: InstructionState) return Mword;
 
 function CMP_tagBefore(tagA, tagB: InsTag) return std_logic;
@@ -150,6 +155,31 @@ begin
 			
 	return res;
 end function;
+
+
+        function getStoredArg1(ins: InstructionState) return Mword is
+        begin
+            return ins.result;
+        end function;
+        
+        function getStoredArg2(ins: InstructionState) return Mword is
+        begin
+            return ins.target;
+        end function;
+        
+        function setStoredArg1(ins: InstructionState; val: Mword) return InstructionState is
+            variable res: InstructionState := ins;
+        begin
+            res.result := val;
+            return res;
+        end function;
+        
+        function setStoredArg2(ins: InstructionState; val: Mword) return InstructionState is
+            variable res: InstructionState := ins;
+        begin
+            res.target := val;
+            return res;
+        end function;
 
 
 end package body;
