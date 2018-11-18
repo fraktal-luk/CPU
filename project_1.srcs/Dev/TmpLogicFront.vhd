@@ -45,7 +45,7 @@ return InstructionStateArray;
 
 function getFrontEventMulti(predictedAddress: Mword;
 							  ins: InstructionState; receiving: std_logic; valid: std_logic;
-							  hbuffAccepting: std_logic; fetchBlock: HwordArray(0 to FETCH_BLOCK_SIZE-1))
+							  hbuffAccepting: std_logic; fetchLine: WordArray(0 to FETCH_WIDTH-1))
 return InstructionSlotArray;
 
 
@@ -239,7 +239,7 @@ end function;
 
 function getFrontEventMulti(predictedAddress: Mword;
 							  ins: InstructionState; receiving: std_logic; valid: std_logic;
-							  hbuffAccepting: std_logic; fetchBlock: HwordArray(0 to FETCH_BLOCK_SIZE-1))
+							  hbuffAccepting: std_logic; fetchLine: WordArray(0 to FETCH_WIDTH-1))
 return InstructionSlotArray is
 	variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	variable tempOffset, thisIP, tempTarget: Mword := (others => '0');
@@ -273,19 +273,19 @@ begin
 			longJump := '0';
 			regJump := '0';
 			
-			if 	fetchBlock(2*i)(15 downto 10) = opcode2slv(jl) 
-				or fetchBlock(2*i)(15 downto 10) = opcode2slv(jz) 
-				or fetchBlock(2*i)(15 downto 10) = opcode2slv(jnz)
+			if 	fetchLine(i)(31 downto 25) = opcode2slv(jl) 
+				or fetchLine(i)(31 downto 25) = opcode2slv(jz) 
+				or fetchLine(i)(31 downto 25) = opcode2slv(jnz)
 			then
 				regularJump := '1';				
-				predictedTaken(i) := fetchBlock(2*i)(4);		-- CAREFUL, TODO: temporary predicted taken iff backwards
-			elsif fetchBlock(2*i)(15 downto 10) = opcode2slv(j) -- Long jump instruction
+				predictedTaken(i) := fetchLine(i)(20);		-- CAREFUL, TODO: temporary predicted taken iff backwards
+			elsif fetchLine(i)(31 downto 25) = opcode2slv(j) -- Long jump instruction
 			then
 				longJump := '1';				
 				predictedTaken(i) := '1'; -- Long jump is unconditional (no space for register encoding!)
-			elsif  fetchBlock(2*i)(15 downto 10) = opcode2slv(ext1) 
-				and (fetchBlock(2*i + 1)(15 downto 10) = opcont2slv(ext1, jzR)
-						or fetchBlock(2*i + 1)(15 downto 10) = opcont2slv(ext1, jnzR)) then
+			elsif  fetchLine(i)(31 downto 25) = opcode2slv(ext1) 
+				and (fetchLine(i)(15 downto 10) = opcont2slv(ext1, jzR)
+						or fetchLine(i)(15 downto 10) = opcont2slv(ext1, jnzR)) then
 				regJump := '1';
 				predictedTaken(i) := '0'; -- TEMP: register jumps predicted not taken
 			end if;
@@ -293,11 +293,11 @@ begin
 			branchIns(i) := regularJump or longJump or regJump;
 			
 			if longJump = '1' then
-				tempOffset := (others => fetchBlock(2*i)(9));
-				tempOffset(25 downto 0) := fetchBlock(2*i)(9 downto 0) & fetchBlock(2*i + 1);
+				tempOffset := (others => fetchLine(i)(25));
+				tempOffset(25 downto 0) := fetchLine(i)(25 downto 0);
 			else --elsif regularJump = '1' then
-				tempOffset := (others => fetchBlock(2*i)(4));
-				tempOffset(20 downto 0) := fetchBlock(2*i)(4 downto 0) & fetchBlock(2*i + 1);				
+				tempOffset := (others => fetchLine(i)(20));
+				tempOffset(20 downto 0) := fetchLine(i)(20 downto 0);				
 			end if;
 
 			targets(i) := addMwordFaster(thisIP, tempOffset);
@@ -340,7 +340,7 @@ begin
 		end loop;
 		
 		for i in 0 to PIPE_WIDTH-1 loop
-			res(i).ins.bits := fetchBlock(2*i) & fetchBlock(2*i+1);
+			res(i).ins.bits := fetchLine(i);
 			res(i).ins.target := targets(i);
 			
 			res(i).ins.result := ins.ip;
