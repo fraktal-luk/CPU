@@ -58,6 +58,10 @@ function findEarlyTakenJump(ins: InstructionState; insVec: InstructionSlotArray)
 
 function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
 
+function getEarlyEvent(inputIns: Instructionstate; earlyBranchMultiDataInA: InstructionSlotArray;
+                       predictedAddress: Mword; fetchStall: std_logic)
+return InstructionState;
+	
 function prepareForBQ(insVec: InstructionSlotArray; branchMask: std_logic_vector) return InstructionSlotArray;
 
 end TmpLogicFront;
@@ -409,6 +413,22 @@ begin
 	return res;
 end function;
 
+function getEarlyEvent(inputIns: Instructionstate; earlyBranchMultiDataInA: InstructionSlotArray;
+                       predictedAddress: Mword; fetchStall: std_logic)
+return InstructionState is
+    variable res: InstructionState := inputIns;
+begin
+    if fetchStall = '1' then -- Need refetching
+        res.target := predictedAddress;
+        res.controlInfo.newEvent := '1';
+    else
+        res := findEarlyTakenJump(inputIns, earlyBranchMultiDataInA);
+        res.ip := predictedAddress;
+    end if;
+       
+    return res;
+end function;
+	
 function prepareForBQ(insVec: InstructionSlotArray; branchMask: std_logic_vector) return InstructionSlotArray is
 	variable res: InstructionSlotArray(insVec'range) := insVec;
 	variable result, target: Mword;

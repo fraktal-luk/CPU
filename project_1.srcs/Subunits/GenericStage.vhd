@@ -56,36 +56,44 @@ end GenericStage;
 
 
 architecture Behavioral of GenericStage is
-	signal flowDrive: FlowDriveSimple := (others=>'0');
-	signal flowResponse: FlowResponseSimple := (others=>'0');		
-	signal before: std_logic := '0';
+	--signal flowDrive: FlowDriveSimple := (others=>'0');
+	--signal flowResponse: FlowResponseSimple := (others=>'0');		
+	signal before, full, kill, living, sending: std_logic := '0';
 	signal stageData, stageDataNext: InstructionSlotArray(0 to WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 begin
 	stageDataNext <= stageArrayNext(stageData, stageDataIn,
-								flowResponse.living, flowResponse.sending, flowDrive.prevSending,
-								flowDrive.kill and USE_CLEAR);
+								living, sending, prevSending,
+								kill and USE_CLEAR);
 
 	PIPE_CLOCKED: process(clk) 
 	begin
 		if rising_edge(clk) then
 		  stageData <= stageDataNext;
+		  full <= (living and not sending) or prevSending;
 		end if;
 	end process;
 
-	SIMPLE_SLOT_LOGIC: entity work.SimpleSlotLogic port map(
-		clk => clk, reset => reset, en => en,
-		flowDrive => flowDrive,
-		flowResponse => flowResponse
-	);
+--	SIMPLE_SLOT_LOGIC: entity work.SimpleSlotLogic port map(
+--		clk => clk, reset => reset, en => en,
+--		flowDrive => flowDrive,
+--		flowResponse => flowResponse
+--	);
 
-	flowDrive.prevSending <= prevSending;
-	flowDrive.nextAccepting <= nextAccepting;
+	--flowDrive.prevSending <= prevSending;
+	--flowDrive.nextAccepting <= nextAccepting;
+
+    living <= full and not kill;
+    sending <= living and nextAccepting;
 
 	before <= (not COMPARE_TAG) or CMP_tagBefore(execCausing.tags.renameIndex, stageData(0).ins.tags.renameIndex);
-	flowDrive.kill <= (before and execEventSignal) or lateEventSignal;
+	kill <= (before and execEventSignal) or lateEventSignal;
+	
+	--flowDrive.kill <= kill;
 
-	acceptingOut <= flowResponse.accepting;		
-	sendingOut <= flowResponse.sending;
+	acceptingOut <= --flowResponse.accepting;
+	                not living or sending;	
+	sendingOut <= --flowResponse.sending;
+	               sending;
 	stageDataOut <= stageData;	
 end Behavioral;
 

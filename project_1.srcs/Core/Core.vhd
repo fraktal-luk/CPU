@@ -104,7 +104,7 @@ begin
         bpSending => bpSending,
         bpData => bpData,
     
-        renameAccepting => renameAccepting,            
+        renameAccepting => '1',--renameAccepting,            
         dataLastLiving => frontDataLastLiving,
         lastSending => frontLastSending,
         

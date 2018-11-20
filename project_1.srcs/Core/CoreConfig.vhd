@@ -34,7 +34,9 @@ constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');
 
 constant FETCH_WIDTH: positive := PIPE_WIDTH; 
 
-constant FETCH_BLOCK_SIZE: positive := PIPE_WIDTH*2; -- in halfwords
+--constant FETCH_BLOCK_SIZE: positive := PIPE_WIDTH*2; -- in halfwords
+
+constant IBUFFER_SIZE: positive := 2*FETCH_WIDTH;
 
 constant USE_LINE_PREDICTOR: boolean := true;
 

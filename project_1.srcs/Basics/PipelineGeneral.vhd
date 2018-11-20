@@ -48,6 +48,8 @@ function getAddressIncrement(ins: InstructionState) return Mword;
 function CMP_tagBefore(tagA, tagB: InsTag) return std_logic;
 function CMP_tagAfter(tagA, tagB: InsTag) return std_logic;
 
+function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector;
+
 function stageArrayNext(livingContent, newContent: InstructionSlotArray; full, sending, receiving, kill: std_logic)
 return InstructionSlotArray;
 
@@ -125,6 +127,15 @@ function CMP_tagAfter(tagA, tagB: InsTag) return std_logic is
 	variable wA, wB, wC: word := (others => '0');
 begin
 	return CMP_tagBefore(tagB, tagA);
+end function;
+
+function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to queueContent'length-1) := (others => '0');
+begin
+	for i in res'range loop
+		res(i) := queueContent(i).full;
+	end loop;
+	return res;
 end function;
 
 function stageArrayNext(livingContent, newContent: InstructionSlotArray; full, sending, receiving, kill: std_logic)
