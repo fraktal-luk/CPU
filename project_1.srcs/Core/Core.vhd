@@ -94,13 +94,12 @@ begin
         clk => clk, reset => '0', en => '0',
         
         iin => iin,
-       -- ivalid => ivalid,
                     
         pcDataLiving => pcDataSig,
         pcSending => pcSending,    
         frontAccepting => frontAccepting,
     
-        bpAccepting => bpAccepting,
+        bpAccepting => '1',--bpAccepting,
         bpSending => bpSending,
         bpData => bpData,
     

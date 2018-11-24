@@ -55,6 +55,10 @@ type ExecFunc is (unknown,
 
 constant TAG_SIZE: integer := 7 + LOG2_PIPE_WIDTH;
 subtype InsTag is std_logic_vector(TAG_SIZE-1 downto 0);
+
+constant INITIAL_GROUP_TAG: InsTag := (others => '0');
+constant INITIAL_GROUP_TAG_INC: InsTag := i2slv(PIPE_WIDTH, TAG_SIZE);
+
 type InsTagArray is array (integer range <>) of InsTag;
 
 

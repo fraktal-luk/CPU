@@ -71,6 +71,16 @@ type FlowResponseSimple is record
 	living: std_logic;	
 end record;
 
+function getTagHigh(tag: std_logic_vector) return std_logic_vector;
+function getTagLow(tag: std_logic_vector) return std_logic_vector;
+function getTagHighSN(tag: InsTag) return SmallNumber;
+function getTagLowSN(tag: InsTag) return SmallNumber;	
+function clearTagLow(tag: std_logic_vector) return std_logic_vector;	
+function clearTagHigh(tag: std_logic_vector) return std_logic_vector;	
+function alignAddress(adr: std_logic_vector) return std_logic_vector;
+function clearLowBits(vec: std_logic_vector; n: integer) return std_logic_vector;
+function getLowBits(vec: std_logic_vector; n: integer) return std_logic_vector;
+
 end package;
 
 
@@ -192,5 +202,73 @@ end function;
             return res;
         end function;
 
+
+function getTagHigh(tag: std_logic_vector) return std_logic_vector is
+	variable res: std_logic_vector(tag'high-LOG2_PIPE_WIDTH downto 0) := (others => '0');
+begin
+	res := tag(tag'high downto LOG2_PIPE_WIDTH);
+	return res;
+end function;
+
+function getTagLow(tag: std_logic_vector) return std_logic_vector is
+	variable res: std_logic_vector(LOG2_PIPE_WIDTH-1 downto 0) := (others => '0');
+begin
+	res := tag(LOG2_PIPE_WIDTH-1 downto 0);
+	return res;
+end function;
+
+function getTagHighSN(tag: InsTag) return SmallNumber is
+	variable res: SmallNumber := (others => '0');
+begin
+	res(TAG_SIZE-1-LOG2_PIPE_WIDTH downto 0) := tag(TAG_SIZE-1 downto LOG2_PIPE_WIDTH);
+	return res;
+end function;
+
+function getTagLowSN(tag: InsTag) return SmallNumber is
+	variable res: SmallNumber := (others => '0');
+begin
+	res(LOG2_PIPE_WIDTH-1 downto 0) := tag(LOG2_PIPE_WIDTH-1 downto 0);
+	return res;
+end function;
+
+
+function clearTagLow(tag: std_logic_vector) return std_logic_vector is
+	variable res: std_logic_vector(tag'high downto 0) := (others => '0');
+begin
+	res := tag;
+	res(LOG2_PIPE_WIDTH-1 downto 0) := (others => '0');
+	return res;
+end function;	
+
+function clearTagHigh(tag: std_logic_vector) return std_logic_vector is
+	variable res: std_logic_vector(tag'high downto 0) := (others => '0');
+begin
+	res := tag;
+	res(tag'high downto LOG2_PIPE_WIDTH) := (others => '0');
+	return res;
+end function;
+
+function alignAddress(adr: std_logic_vector) return std_logic_vector is
+	variable res: std_logic_vector(adr'high downto 0) := (others => '0');
+begin
+	res := adr;
+	res(ALIGN_BITS-1 downto 0) := (others => '0');
+	return res;
+end function;
+
+function clearLowBits(vec: std_logic_vector; n: integer) return std_logic_vector is
+	variable res: std_logic_vector(vec'high downto 0) := (others => '0');
+begin
+	res := vec;
+	res(n-1 downto 0) := (others => '0');
+	return res;
+end function;
+
+function getLowBits(vec: std_logic_vector; n: integer) return std_logic_vector is
+	variable res: std_logic_vector(n-1 downto 0) := (others => '0');
+begin
+	res(n-1 downto 0) := vec(n-1 downto 0);
+	return res;
+end function;
 
 end package body;
