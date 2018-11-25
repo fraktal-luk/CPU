@@ -69,7 +69,12 @@ begin
 	begin
 		if rising_edge(clk) then
 		  stageData <= stageDataNext;
-		  full <= (living and not sending) or prevSending;
+		  
+		  if ((living and not sending) or prevSending) = '1' then
+		      full <= '1';--(living and not sending) or prevSending;
+		  else
+		      full <= '0';
+		  end if;
 		end if;
 	end process;
 

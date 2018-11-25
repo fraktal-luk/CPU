@@ -90,7 +90,7 @@ begin
             --iadr <= iadrReg;
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
     port map (
-        clk => clk, reset => '0', en => '0',
+        clk => clk, reset => reset, en => '0',
         
         -- sys reg interface
         sysRegReadSel => (others => '0'),--sysRegReadSel,

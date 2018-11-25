@@ -103,12 +103,14 @@ begin
 		execCausing => DEFAULT_INSTRUCTION_STATE
 	);
 	
-    process(clk)
-    begin
-        if rising_edge(clk) then
-            fetchedLine0 <= iin;
-        end if;
-    end process;
+--    process(clk)
+--    begin
+--        if rising_edge(clk) then
+--            fetchedLine0 <= iin;
+--        end if;
+--    end process;
+	
+	fetchedLine0 <= iin;
 	
 	SUBUNIT_FETCH_1: entity work.GenericStage(Behavioral)
 	generic map(

@@ -144,7 +144,7 @@ architecture Behavioral of UnitSequencer is
     signal eventOccurred, killPC, ch0, ch1, eventCommitted, intCommitted, intSuppressed, 
                 lateEventSending: std_logic := '0';
         
-        signal intWaiting, addDbEvent, intAllow, intAck, dbtrapOn: std_logic := '0';
+        signal intWaiting, addDbEvent, intAllow, intAck, dbtrapOn, restartPC: std_logic := '0';
         
         signal stageDataRenameInA, stageDataRenameOutA, stageDataCommitInA, stageDataCommitOutA:
                         InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -226,12 +226,14 @@ begin
                                             frontEventSignal, frontCausing,
                                             pcNext);
                 
-       sendingToPC <= (running 
-                            or eventOccurred) and not killPC;
+       sendingToPC <= --(acceptingOutPC and 
+                            running
+                               or eventOccurred;      
+                      --      or eventOccurred) and not killPC;
             process(clk)
             begin
                 if rising_edge(clk) then
-                    if (eventOccurred and not killPC) = '1' then
+                    if (reset or restartPC) = '1' then
                         running <= '1';
                     elsif killPC = '1' then
                         running <= '0';
@@ -245,8 +247,8 @@ begin
                         
                 prevSending => sendingToPC,
         
-                nextAccepting => '1', -- CAREFUL: front should always accet - if can't, there will be refetch not stall
-                                             --               In multithreaded implementation it should be '1' for selected thread 
+                nextAccepting => running,
+                                         -- In multithreaded implementation it should be '1' for selected thread 
                 stageDataIn => stageDataToPC,
                 
                 acceptingOut => acceptingOutPC,

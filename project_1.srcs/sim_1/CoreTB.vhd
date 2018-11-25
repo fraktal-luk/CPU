@@ -161,6 +161,7 @@ BEGIN
    end process;
  
 	
+	reset <= '1' after 105 ns, '0' after 115 ns;
 	en <= '1' after 105 ns;
 	
 				memEn <= '1' after 300 ns;
@@ -175,8 +176,7 @@ BEGIN
        variable dummy: boolean;
        variable decBits, decIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
    begin		
-      -- hold reset state for 100 ns.
-      --wait for 100 ns;	
+	
 
       prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\src.txt");
 
