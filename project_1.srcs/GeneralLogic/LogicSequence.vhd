@@ -36,7 +36,7 @@ package LogicSequence is
 function getLinkInfo(ins: InstructionState; state: Mword) return InstructionState;
 
 
-function getLatePCData(commitCausing: InstructionState;
+function getLatePCData(commitCausing: InstructionState; int: std_logic;
 								currentState, linkExc, linkInt, stateExc, stateInt: Mword)
 return InstructionState;
 
@@ -59,8 +59,8 @@ function setInterrupt3(ins: InstructionState; intSignal, start: std_logic) retur
 function clearControlEvents(ins: InstructionState) return InstructionState;
 
 function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray;
-								 lastEffectiveIns,lateTargetIns: InstructionState;
-								 linkAddressInt, linkAddressExc: Mword;
+								 lastEffectiveIns, lateTargetIns: InstructionState;
+								 --linkAddressInt, linkAddressExc: Mword;
 								 --evtPhase1, intPhase1, start: std_logic)
 								 evtPhase2: std_logic)
 
@@ -68,6 +68,7 @@ return InstructionSlot;
 
 function getEffectiveMask(newContent: InstructionSlotArray) return std_logic_vector;
 
+function anyEvent(insVec: InstructionSlotArray) return std_logic;
 
 end LogicSequence;
 
@@ -112,19 +113,15 @@ begin
 end function;
 
 
-function getLatePCData(commitCausing: InstructionState;
+function getLatePCData(commitCausing: InstructionState; int: std_logic;
 								currentState, linkExc, linkInt, stateExc, stateInt: Mword)
 return InstructionState is
 	variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;-- content;
 	variable newPC: Mword := (others=>'0');
 	constant MINUS_4: Mword := i2slv(-4, MWORD_SIZE);
 begin	
-		if commitCausing.controlInfo.hasInterrupt = '1' then
-			if commitCausing.controlInfo.hasReset = '1' then
-				res.ip := (others => '0'); -- TEMP!			
-			else
-				res.ip := INT_BASE; -- TEMP!
-			end if;
+		if int = '1' then
+		  res.ip := INT_BASE; -- TEMP!
 			res.result := currentState or X"00000001";
 			res.result := res.result and X"fdffffff"; -- Clear dbtrap
 		elsif commitCausing.controlInfo.hasException = '1'
@@ -282,7 +279,7 @@ end function;
 
 function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray;
 								 lastEffectiveIns, lateTargetIns: InstructionState;
-								 linkAddressInt, linkAddressExc: Mword;
+								 --linkAddressInt, linkAddressExc: Mword;
 								 --evtPhase1, intPhase1, start: std_logic)
 								 evtPhase2: std_logic)
 return InstructionSlot is
@@ -390,5 +387,17 @@ end function;
 		end loop;
 		return res;
 	end function;
+
+    function anyEvent(insVec: InstructionSlotArray) return std_logic is
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            if insVec(i).ins.controlInfo.hasException = '1'
+				or insVec(i).ins.controlInfo.specialAction = '1'
+                or insVec(i).ins.controlInfo.dbtrap = '1' then
+                return '1';
+            end if;            
+        end loop;
+        return '0'; 
+    end function;
 
 end LogicSequence;
