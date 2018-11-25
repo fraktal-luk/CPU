@@ -284,7 +284,7 @@ function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV:
 								 evtPhase2: std_logic)
 return InstructionSlot is
 	variable res: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-	variable sdToCommit: InstructionSlotArray;
+	variable sdToCommit: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	variable insToLastEffective: InstructionState;
 	
 	variable effectiveVec, takenBranchVec, bqTakenBranchVec, differenceVec:

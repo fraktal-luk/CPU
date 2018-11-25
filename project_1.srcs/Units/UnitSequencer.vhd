@@ -101,9 +101,11 @@ entity UnitSequencer is
     newPhysSourcesIn: in PhysNameArray(0 to 3*PIPE_WIDTH-1);
     
     intAllowOut: out std_logic;
-    intAckOut: out std_logic;
     
-    start: in std_logic    -- TODO: change to reset interrupt
+    intAckOut: out std_logic;
+    intRejOut: out std_logic
+    
+    --start: in std_logic    -- TODO: change to reset interrupt
 );
 end UnitSequencer;
 
@@ -114,7 +116,7 @@ architecture Behavioral of UnitSequencer is
         signal pcNext, savedPC, savedState: Mword := (others => '0');
         
         signal stageDataOutPC: InstructionState := DEFAULT_INSTRUCTION_STATE;
-        signal sendingToPC, sendingOutPC, acceptingOutPC, sendingToLastEffective: std_logic := '0';
+        signal sendingToPC, sendingOutPC, acceptingOutPC, sendingToLastEffective, running: std_logic := '0';
         
     signal stageDataLateCausingOut: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
         
@@ -122,8 +124,8 @@ architecture Behavioral of UnitSequencer is
         
         signal execOrIntCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
         
-        --signal stageDataRenameIn: StageDataMulti := DEFAULT_STAGE_DATA_MULTI;
-        --signal stageDataOutRename: StageDataMulti := DEFAULT_STAGE_DATA_MULTI;
+        signal stageDataRenameIn: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+        signal stageDataOutRename: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
         signal sendingOutRename, acceptingOutRename, sendingToLateCausing, committingEvent: std_logic:= '0';     
         signal sendingToCommit, sendingOutCommit, acceptingOutCommit: std_logic := '0';
         signal stageDataToCommit, stageDataOutCommit: InstructionSlotArray(0 to PIPE_WIDTH-1)
@@ -139,7 +141,8 @@ architecture Behavioral of UnitSequencer is
 
         signal lateCausingSig, newLateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;                
                 
-    signal eventOccurred, killPC, ch0, ch1, eventCommitted, intCommitted, lateEventSending: std_logic := '0';
+    signal eventOccurred, killPC, ch0, ch1, eventCommitted, intCommitted, intSuppressed, 
+                lateEventSending: std_logic := '0';
         
         signal intWaiting, addDbEvent, intAllow, intAck, dbtrapOn: std_logic := '0';
         
@@ -169,6 +172,26 @@ architecture Behavioral of UnitSequencer is
             res.result := dummy.result; -- new 'currentState'
             return res;
         end function;
+        
+        function renameGroup(insVec: InstructionSlotArray;
+                                    newPhysSources: PhysNameArray;
+                                    newPhysDests: PhysNameArray;
+                                    renameCtr: InsTag;
+                                    renameGroupCtrNext: InsTag;
+                                    newPhysDestPointer: SmallNumber;
+                                    dbtrap: std_logic
+                                    ) return InstructionSlotArray is
+            variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+            variable reserveSelSig, takeVec: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
+            variable nToTake: integer := 0;
+            variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
+            variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
+        begin
+            -- DUMMY!            
+            
+            return res;
+        end function;
+        
         
             signal sysRegArray: MwordArray(0 to 31) := (0 => (others => '1'), others => (others => '0'));    
     
@@ -203,7 +226,19 @@ begin
                                             frontEventSignal, frontCausing,
                                             pcNext);
                 
-       sendingToPC <= (sendingOutPC or eventOccurred) and not killPC;
+       sendingToPC <= (running 
+                            or eventOccurred) and not killPC;
+            process(clk)
+            begin
+                if rising_edge(clk) then
+                    if (eventOccurred and not killPC) = '1' then
+                        running <= '1';
+                    elsif killPC = '1' then
+                        running <= '0';
+                    end if;
+                end if;
+            end process;
+        
         
             SUBUNIT_PC: entity work.GenericStage(Behavioral) port map(
                 clk => clk, reset => resetSig, en => enSig,
@@ -283,8 +318,8 @@ begin
         pcSending <= sendingOutPC;    
         
         -- Rename stage
-        --stageDataRenameIn <= renameGroup(frontDataLastLiving, newPhysSourcesIn, newPhysDestsIn, renameCtr,
-        --                                                    renameGroupCtrNext, newPhysDestPointerIn, dbtrapOn);
+        stageDataRenameInA <= renameGroup(frontDataLastLiving, newPhysSourcesIn, newPhysDestsIn, renameCtr,
+                                                            renameGroupCtrNext, newPhysDestPointerIn, dbtrapOn);
         --    stageDataRenameInA <= makeSlotArray(stageDataRenameIn.data, stageDataRenameIn.fullMask);
         
         SUBUNIT_RENAME: entity work.GenericStage(Behavioral)--Renaming)
@@ -428,17 +463,21 @@ begin
             if sendingToLateCausing = '1' then
                 eventCommitted <= '0';
                 intCommitted <= '0';
+                intSuppressed <= '0';
             end if;
             
             if committingEvent = '1' then
                 eventCommitted <= '1';
             end if;
-            
-                intCommitted <= '0'; -- ....
+            if (intSignal and not committingEvent) = '1' then
+                intCommitted <= '1';
+            elsif (intSignal and committingEvent) = '1' then
+                intSuppressed <= '1';
+            end if;
         end if;
     end process;
     
-    sendingToLateCausing <= eventCommitted and sbEmpty;
+    sendingToLateCausing <= (eventCommitted or intCommitted) and sbEmpty;
     
     newLateCausing <= getNewLateCausing(stageDataLastEffectiveOutA(0).ins, intCommitted,
                                         currentState, linkRegExc, linkRegInt, savedStateExc, savedStateInt);
@@ -475,8 +514,9 @@ begin
         end if;
     end process;
         
-        intAllowOut <= intAllow;
-        intAckOut <= intAck;
+        intAllowOut <= not eventCommitted and not lateEventSending;
+        intAckOut <= sendingToLateCausing and intCommitted;
+        intRejOut <= sendingToLateCausing and intSuppressed;
         
         renameAccepting <= acceptingOutRename and not renameLockState;
         renamedDataLiving <= stageDataRenameOutA;

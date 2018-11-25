@@ -79,16 +79,88 @@ architecture Empty of Core is
     signal execEventSignal, lateEventSignal, lateEventSetPC: std_logic := '0';
         signal iadrReg: Mword := X"ffffffb0";
 begin
-            pcSending <= '1';
+   --         pcSending <= '1';
             
-            process (clk)
-            begin
-                if rising_edge(clk) then
-                    iadrReg <= addWord(iadrReg, X"00000010");
-                end if;
-            end process;
-            iadr <= iadrReg;
-            
+--            process (clk)
+--            begin
+--                if rising_edge(clk) then
+--                    iadrReg <= addWord(iadrReg, X"00000010");
+--                end if;
+--            end process;
+            --iadr <= iadrReg;
+	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
+    port map (
+        clk => clk, reset => '0', en => '0',
+        
+        -- sys reg interface
+        sysRegReadSel => (others => '0'),--sysRegReadSel,
+        sysRegReadValue => open,--sysRegReadValue,    
+        sysStoreAllow => '0',--sysStoreAllow,
+        sysStoreAddress => (others => '0'),--sysStoreAddress,
+        sysStoreValue => (others => '0'),--sysStoreValue,
+
+        -- to front pipe
+        frontAccepting => frontAccepting,
+        pcDataLiving => pcDataSig,
+        pcSending => pcSending,
+        
+        intAllowOut => intallow,
+        intAckOut => intack,
+        intRejOut => open,--
+        -- Events in
+        intSignal => int0,
+        --start => int1,        
+        execEventSignal => execEventSignal,
+        execCausing => execCausing,
+        
+        frontEventSignal => frontEventSignal,
+        frontCausing => frontCausing,
+        
+        -- Events out
+        execOrIntEventSignalOut => open,--execOrIntEventSignal,
+        execOrIntCausingOut => open,--execOrIntCausing,
+        lateEventOut => lateEventSignal,
+        lateEventSetPC => lateEventSetPC,
+        lateCausing => lateCausing,
+        -- Data from front pipe interface        
+        renameAccepting => renameAccepting, -- to frontend
+        frontLastSending => frontLastSending,
+        frontDataLastLiving => frontDataLastLiving,
+
+        -- Interface from register mapping
+        newPhysDestsIn => (others => (others => '0')),--newPhysDests,
+        newPhysDestPointerIn => (others => '0'),--newPhysDestPointer,
+        newPhysSourcesIn => (others => (others => '0')),--newPhysSources,
+
+        -- Interface with IQ
+        iqAccepts => '1',--iqAccepts,
+        renamedDataLiving => open,--renamedDataLiving, -- !!!
+        renamedSending => open,--renamedSending,
+        
+        -- Interface from ROB
+        commitAccepting => open,--commitAccepting,
+        sendingFromROB => '0',--robSending,    
+        robDataLiving => (others => DEFAULT_INSTRUCTION_SLOT),--dataOutROB,
+
+        ---
+        dataFromBQV => (others => DEFAULT_INSTRUCTION_SLOT),--dataOutBQV,
+
+        sbSending => '0',--sbSending,
+        dataFromSB => DEFAULT_INSTRUCTION_STATE,--dataFromSB,
+        sbEmpty => '1',--sbEmpty,
+
+        -- Interface from committed stage
+        committedSending => open,--committedSending,
+        committedDataOut => open,--committedDataOut,
+        renameLockEndOut => open,--renameLockEnd,
+                
+        commitGroupCtrOut => open,--commitGroupCtrSig,
+        commitGroupCtrIncOut => open --commitGroupCtrIncSig
+    );
+        
+    iadr <= pcDataSig.ip;
+    iadrvalid <= pcSending;
+       
 	UNIT_FRONT: entity work.UnitFront(Behavioral)
     port map(
         clk => clk, reset => '0', en => '0',
