@@ -139,7 +139,9 @@ begin
         end if;
     end process;
 				
-	earlyBranchMultiDataInA <= getFrontEventMulti(predictedAddress, stageDataOutFetch1(0).ins, fetchedLine1);
+	earlyBranchMultiDataInA <=
+	           decodeMulti(
+	                getFrontEventMulti(predictedAddress, stageDataOutFetch1(0).ins, fetchedLine1));
 
 	SUBUNIT_EARLY_BRANCH_MULTI: entity work.GenericStage(Behavioral)
 	generic map(

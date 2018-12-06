@@ -37,8 +37,11 @@ constant FETCH_WIDTH: positive := PIPE_WIDTH;
 --constant FETCH_BLOCK_SIZE: positive := PIPE_WIDTH*2; -- in halfwords
 
 constant IBUFFER_SIZE: positive := 2*FETCH_WIDTH;
+constant ROB_SIZE: positive := 8; 
 
 constant USE_LINE_PREDICTOR: boolean := true;
+
+constant FREE_LIST_SIZE: positive := 64;
 
 end CoreConfig;
 

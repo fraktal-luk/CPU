@@ -74,20 +74,17 @@ architecture Empty of Core is
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
                 frontEventSignal: std_logic := '0';
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal frontDataLastLiving: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal frontDataLastLiving, renamedDataLiving, dataOutROB: 
+                InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    
+    signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
 
     signal execEventSignal, lateEventSignal, lateEventSetPC: std_logic := '0';
-        signal iadrReg: Mword := X"ffffffb0";
+    signal robSending, robAccepting, renamedSending, commitAccepting, iqAccepting: std_logic := '0';
+    --    signal iadrReg: Mword := X"ffffffb0";
+    signal commitGroupCtr, commitCtr: InsTag := (others => '0');
 begin
-   --         pcSending <= '1';
-            
---            process (clk)
---            begin
---                if rising_edge(clk) then
---                    iadrReg <= addWord(iadrReg, X"00000010");
---                end if;
---            end process;
-            --iadr <= iadrReg;
+
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
     port map (
         clk => clk, reset => reset, en => '0',
@@ -123,23 +120,23 @@ begin
         lateEventSetPC => lateEventSetPC,
         lateCausing => lateCausing,
         -- Data from front pipe interface        
-        renameAccepting => renameAccepting, -- to frontend
+ --       renameAccepting => open,--renameAccepting, -- to frontend
         frontLastSending => frontLastSending,
         frontDataLastLiving => frontDataLastLiving,
 
-        -- Interface from register mapping
-        newPhysDestsIn => (others => (others => '0')),--newPhysDests,
-        newPhysDestPointerIn => (others => '0'),--newPhysDestPointer,
-        newPhysSourcesIn => (others => (others => '0')),--newPhysSources,
+--        -- Interface from register mapping
+--        newPhysDestsIn => (others => (others => '0')),--newPhysDests,
+--        newPhysDestPointerIn => (others => '0'),--newPhysDestPointer,
+--        newPhysSourcesIn => (others => (others => '0')),--newPhysSources,
 
         -- Interface with IQ
-        iqAccepts => '1',--iqAccepts,
-        renamedDataLiving => open,--renamedDataLiving, -- !!!
-        renamedSending => open,--renamedSending,
+--        iqAccepts => iqAccepting,
+--        renamedDataLiving => open,--renamedDataLiving, -- !!!
+--        renamedSending => open,--renamedSending,
         
         -- Interface from ROB
-        commitAccepting => open,--commitAccepting,
-        sendingFromROB => '0',--robSending,    
+        commitAccepting => commitAccepting,
+        sendingFromROB => robSending,    
         robDataLiving => (others => DEFAULT_INSTRUCTION_SLOT),--dataOutROB,
 
         ---
@@ -154,9 +151,12 @@ begin
         committedDataOut => open,--committedDataOut,
         renameLockEndOut => open,--renameLockEnd,
                 
-        commitGroupCtrOut => open,--commitGroupCtrSig,
+        commitGroupCtrOut => commitGroupCtr,
+        commitCtrOut => commitCtr,
         commitGroupCtrIncOut => open --commitGroupCtrIncSig
     );
+        
+        iqAccepting <= robAccepting and '1'; -- TEMP 
         
     iadr <= pcDataSig.ip;
     iadrvalid <= pcSending;
@@ -175,7 +175,7 @@ begin
         bpSending => bpSending,
         bpData => bpData,
     
-        renameAccepting => '1',--renameAccepting,            
+        renameAccepting => renameAccepting,            
         dataLastLiving => frontDataLastLiving,
         lastSending => frontLastSending,
         
@@ -189,5 +189,50 @@ begin
         lateEventSignal => lateEventSignal,
         lateEventSetPC => lateEventSetPC
     );    
+    
+    REGISTER_MANAGER: entity work.UnitRegManager(Behavioral)
+    port map(
+        clk => clk,
+        renameAccepting => renameAccepting, -- to frontend
+        frontLastSending => frontLastSending,
+        frontDataLastLiving => frontDataLastLiving,
+        
+        renamedDataLiving => renamedDataLiving,
+        renamedSending => renamedSending,
+
+        robDataLiving => dataOutROB,
+        sendingFromROB => robSending,
+            
+        commitGroupCtr => commitGroupCtr,
+        commitCtr => commitCtr,
+		
+		execCausing => execCausing,
+        lateCausing => lateCausing,
+        
+        execEventSignal => execEventSignal,
+        lateEventSignal => lateEventSignal
+    );
+
+	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
+	port map(
+		clk => clk, reset => '0', en => '0',
+		
+		lateEventSignal => lateEventSignal,
+		--execEventSignal => execEventSignal,
+		--execCausing => execCausing,
+		
+		commitGroupCtr => commitGroupCtr,
+
+		execEndSigs1 => execOutputs1,
+		execEndSigs2 => execOutputs2,
+		
+		inputData => renamedDataLiving,
+		prevSending => renamedSending,
+		acceptingOut => robAccepting,
+		
+		nextAccepting => commitAccepting,
+		sendingOut => robSending, 
+		outputData => dataOutROB		
+	);
 
 end Empty;

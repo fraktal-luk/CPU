@@ -95,10 +95,8 @@ begin
 	
 	--flowDrive.kill <= kill;
 
-	acceptingOut <= --flowResponse.accepting;
-	                not living or sending;	
-	sendingOut <= --flowResponse.sending;
-	               sending;
+	acceptingOut <= nextAccepting or not living;	
+	sendingOut <= sending;
 	stageDataOut <= stageData;	
 end Behavioral;
 

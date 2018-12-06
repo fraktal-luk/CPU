@@ -65,12 +65,12 @@ entity UnitSequencer is
     -- Interface Rename <-> Front     
     frontDataLastLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1);
     frontLastSending: in std_logic;        
-    renameAccepting: out std_logic;        
+    --renameAccepting: out std_logic;        
     
     -- Interface from Rename with IQ    
-    iqAccepts: in std_logic;
-    renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
-    renamedSending: out std_logic;
+    --iqAccepts: in std_logic;
+    --renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+    --renamedSending: out std_logic;
 
     -- Interface with ROB
     commitAccepting: out std_logic;
@@ -88,17 +88,18 @@ entity UnitSequencer is
     sysStoreValue: in Mword;        
     
     -- Counter outputs
-    commitGroupCtrOut: out InsTag;        
+    commitGroupCtrOut: out InsTag;
     commitGroupCtrIncOut: out InsTag;
+    commitCtrOut: out InsTag;
     
     committedSending: out std_logic;
     committedDataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1);
 
     renameLockEndOut: out std_logic;
 
-    newPhysDestsIn: in PhysNameArray(0 to PIPE_WIDTH-1);
-    newPhysDestPointerIn: in SmallNumber;
-    newPhysSourcesIn: in PhysNameArray(0 to 3*PIPE_WIDTH-1);
+--    newPhysDestsIn: in PhysNameArray(0 to PIPE_WIDTH-1);
+--    newPhysDestPointerIn: in SmallNumber;
+--    newPhysSourcesIn: in PhysNameArray(0 to 3*PIPE_WIDTH-1);
     
     intAllowOut: out std_logic;
     
@@ -319,35 +320,35 @@ begin
         pcDataLiving <= stageDataOutPC;
         pcSending <= sendingOutPC;    
         
-        -- Rename stage
-        stageDataRenameInA <= renameGroup(frontDataLastLiving, newPhysSourcesIn, newPhysDestsIn, renameCtr,
-                                                            renameGroupCtrNext, newPhysDestPointerIn, dbtrapOn);
-        --    stageDataRenameInA <= makeSlotArray(stageDataRenameIn.data, stageDataRenameIn.fullMask);
+--        -- Rename stage
+--        stageDataRenameInA <= renameGroup(frontDataLastLiving, newPhysSourcesIn, newPhysDestsIn, renameCtr,
+--                                                            renameGroupCtrNext, newPhysDestPointerIn, dbtrapOn);
+--        --    stageDataRenameInA <= makeSlotArray(stageDataRenameIn.data, stageDataRenameIn.fullMask);
         
-        SUBUNIT_RENAME: entity work.GenericStage(Behavioral)--Renaming)
-        generic map(
-            USE_CLEAR => '0',
-            WIDTH => PIPE_WIDTH
-        )
-        port map(
-            clk => clk, reset => resetSig, en => enSig,
+--        SUBUNIT_RENAME: entity work.GenericStage(Behavioral)--Renaming)
+--        generic map(
+--            USE_CLEAR => '0',
+--            WIDTH => PIPE_WIDTH
+--        )
+--        port map(
+--            clk => clk, reset => resetSig, en => enSig,
             
-            -- Interface with front
-            prevSending => frontLastSending,    
-            stageDataIn => stageDataRenameInA,
+--            -- Interface with front
+--            prevSending => frontLastSending,    
+--            stageDataIn => stageDataRenameInA,
             
-            acceptingOut => acceptingOutRename,
+--            acceptingOut => acceptingOutRename,
             
-            -- Interface with IQ
-            nextAccepting => iqAccepts,
-            sendingOut => sendingOutRename,
-            stageDataOut => stageDataRenameOutA,
+--            -- Interface with IQ
+--            nextAccepting => iqAccepts,
+--            sendingOut => sendingOutRename,
+--            stageDataOut => stageDataRenameOutA,
             
-            -- Event interface
-            execEventSignal => '0',
-            lateEventSignal => '0',--evtPhase0 or execEventSignal, -- bcause Exec is always older than Rename     
-            execCausing => execCausing
-        );
+--            -- Event interface
+--            execEventSignal => '0',
+--            lateEventSignal => '0',--evtPhase0 or execEventSignal, -- bcause Exec is always older than Rename     
+--            execCausing => execCausing
+--        );
         
         COMMON_STATE: block
         begin
@@ -520,12 +521,14 @@ begin
         intAckOut <= sendingToLateCausing and intCommitted;
         intRejOut <= sendingToLateCausing and intSuppressed;
         
-        renameAccepting <= acceptingOutRename and not renameLockState;
-        renamedDataLiving <= stageDataRenameOutA;
-        renamedSending <= sendingOutRename;
+        --renameAccepting <= acceptingOutRename and not renameLockState;
+        --renamedDataLiving <= stageDataRenameOutA;
+        --renamedSending <= sendingOutRename;
         
         commitGroupCtrOut <= commitGroupCtr;
         commitGroupCtrIncOut <= commitGroupCtrInc;
+        
+        commitCtrOut <= commitCtr;
         
         renameLockEndOut <= renameLockEnd;
         commitAccepting <= not eventCommitted and not lateEventSending; -- Blocked while procesing event

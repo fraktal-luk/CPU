@@ -188,6 +188,8 @@ BEGIN
 
       testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
 
+            testProgram(512/4) <= ins6L(j, -512);-- TEMP!
+
       wait for clk_period;
 
             for i in 0 to 20 loop
