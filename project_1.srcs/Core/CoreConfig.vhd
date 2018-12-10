@@ -41,7 +41,12 @@ constant ROB_SIZE: positive := 8;
 
 constant USE_LINE_PREDICTOR: boolean := true;
 
-constant FREE_LIST_SIZE: positive := 64;
+-- TODO: move config info to general config file included in higher level definition files?
+constant PHYS_REG_BITS: natural := 6 + LOG2_PIPE_WIDTH;
+constant N_PHYSICAL_REGS: natural := 64 * PIPE_WIDTH;
+constant N_PHYS: natural := N_PHYSICAL_REGS;
+	
+constant FREE_LIST_SIZE: positive := N_PHYSICAL_REGS;
 
 end CoreConfig;
 

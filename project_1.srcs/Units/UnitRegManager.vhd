@@ -63,12 +63,13 @@ architecture Behavioral of UnitRegManager is
                 stageDataCommit: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, sendingCommit, renameLockState, renameLockEnd, renameLockRelease: std_logic := '0';
  
-    signal renameCtr, renameCtrNext: InsTag := (others => '1');
+    signal renameCtr, renameCtrNext: InsTag := INITIAL_RENAME_CTR;
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
 
     signal newPhysDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal newPhysDestPointer: SmallNumber := (others => '0');
     signal newPhysSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+
         
     function renameGroup(insVec: InstructionSlotArray;
                                 newPhysSources: PhysNameArray;
@@ -86,15 +87,63 @@ architecture Behavioral of UnitRegManager is
        	variable found: boolean := false;
     begin
         
-        -- TODO: assign physical registers!
+        -- Assign dest registers
+        for i in 0 to PIPE_WIDTH-1 loop
+            res(i).ins.physicalArgSpec.dest := newPhysDests(countOnes(takeVec)); -- how many used before
+            takeVec(i) := insVec(i).ins.virtualArgSpec.intDestSel;
+            res(i).ins.physicalArgSpec.args(0) := newPhysSources(0);
+            res(i).ins.physicalArgSpec.args(1) := newPhysSources(1);
+            res(i).ins.physicalArgSpec.args(2) := newPhysSources(2);
+        end loop;
+        
+        -- Overwrite sources depending on destinations of this group
+        for i in 0 to PIPE_WIDTH-1 loop
+            for j in PIPE_WIDTH-1 downto 0 loop
+                if j >= i then
+                    next;
+                end if;
+                
+                if res(i).ins.virtualArgSpec.args(0)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
+                    and res(i).ins.virtualArgSpec.intArgSel(0) = res(j).ins.virtualArgSpec.intDestSel
+                then
+                    res(i).ins.physicalArgSpec.args(0) := newPhysSources(j);                    
+                end if;
+            end loop;
+
+            for j in PIPE_WIDTH-1 downto 0 loop
+                if j >= i then
+                    next;
+                end if;
+                
+                if res(i).ins.virtualArgSpec.args(1)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
+                    and res(i).ins.virtualArgSpec.intArgSel(1) = res(j).ins.virtualArgSpec.intDestSel
+                then
+                    res(i).ins.physicalArgSpec.args(1) := newPhysSources(j);                    
+                end if;
+            end loop;
+            
+            for j in PIPE_WIDTH-1 downto 0 loop
+                if j >= i then
+                    next;
+                end if;
+                
+                if res(i).ins.virtualArgSpec.args(2)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
+                    and res(i).ins.virtualArgSpec.intArgSel(2) = res(j).ins.virtualArgSpec.intDestSel
+                then
+                    res(i).ins.physicalArgSpec.args(2) := newPhysSources(j);                    
+                end if;
+            end loop;                        
+
+        end loop;        
         
         
         -- Setting tags
         for i in 0 to PIPE_WIDTH-1 loop
             res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
             res(i).ins.tags.renameSeq := i2slv(slv2u(renameCtr) + i, TAG_SIZE);
-            res(i).ins.tags.intPointer := i2slv(slv2u(newPhysDestPointer) + i, SMALL_NUMBER_SIZE); 
-                                                -- TODO: don't increment intPointer on ops which use no destination!
+            res(i).ins.tags.intPointer := i2slv(slv2u(newPhysDestPointer) + countOnes(takeVec(0 to i-1)),
+                                                                SMALL_NUMBER_SIZE); 
+                                           -- Don't increment intPointer on ops which use no destination!
                                    -- TODO: FP pointer
         end loop;
 
@@ -162,13 +211,13 @@ begin
                                else i2slv(slv2u(renameGroupCtr) + PIPE_WIDTH, TAG_SIZE) when frontLastSending = '1'
                                else renameGroupCtr;
                                                                                                        
-            renameCtrNext <=  -- TODO: introduce commitIndex?
+            renameCtrNext <=  
                                     commitCtr when lateEventSignal = '1'
-                                        --else execCausing.tags.commitIndex when execEventSignal = '1'
-                                        else i2slv(slv2u(renameCtr) + countOnes(extractFullMask(stageDataRenameIn)),
+                               else execCausing.tags.renameSeq when execEventSignal = '1'
+                               else i2slv(slv2u(renameCtr) + countOnes(extractFullMask(stageDataRenameIn)),
                                                                                 TAG_SIZE)
                                                                              when frontLastSending = '1'
-                                        else renameCtr;
+                               else renameCtr;
         
             -- Re-allow renaming when everything from rename/exec is committed - reg map will be well defined now
             renameLockRelease <= '1' when commitGroupCtr = renameGroupCtr else '0';
@@ -218,4 +267,51 @@ begin
             execCausing => execCausing
         );
 
+   
+        INT_MAPPER: entity work.RegisterMapper
+        port map(
+            clk => clk, en => '0', reset => '0',
+            
+            rewind => renameLockEnd,    -- FROM SEQ
+            causingInstruction => DEFAULT_INSTRUCTION_STATE,
+            
+            sendingToReserve => frontLastSending,
+            stageDataToReserve => frontDataLastLiving,
+            newPhysDests => newPhysDests,    -- MAPPING (from FREE LIST)
+
+            sendingToCommit => sendingFromROB,
+            stageDataToCommit => robDataLiving,
+            physCommitDests_TMP => (others => (others => '0')), -- CAREFUL: useless input?
+            
+            prevNewPhysDests => open,
+            newPhysSources => newPhysSources,    -- TO SEQ
+            
+            prevStablePhysDests => open,--physStable,  -- FOR MAPPING (to FREE LIST)
+            stablePhysSources => open            
+        );
+        
+
+			INT_FREE_LIST: entity work.RegisterFreeList(Behavioral)
+			port map(
+				clk => clk,
+				reset => '0',
+				en => '0',
+				
+				rewind => '0',--execOrIntEventSignal,
+				causingPointer => (others => '0'),--execOrIntCausing.tags.intPointer,
+				
+				sendingToReserve => frontLastSending, 
+				takeAllow => frontLastSending,	-- FROM SEQ
+				auxTakeAllow => renameLockEnd,
+				stageDataToReserve => frontDataLastLiving,
+				
+				newPhysDests => newPhysDests,			-- TO SEQ
+				newPhysDestPointer => newPhysDestPointer, -- TO SEQ
+
+				sendingToRelease => sendingCommit,  -- FROM SEQ
+				stageDataToRelease => stageDataCommit,  -- FROM SEQ
+				
+				physStableDelayed => (others => (others => '0')) --physStableDelayed -- FOR MAPPING (from MAP)
+			);
+        
 end Behavioral;

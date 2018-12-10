@@ -81,6 +81,8 @@ function alignAddress(adr: std_logic_vector) return std_logic_vector;
 function clearLowBits(vec: std_logic_vector; n: integer) return std_logic_vector;
 function getLowBits(vec: std_logic_vector; n: integer) return std_logic_vector;
 
+function getExceptionMask(insVec: InstructionSlotArray) return std_logic_vector;
+
 end package;
 
 
@@ -270,5 +272,16 @@ begin
 	res(n-1 downto 0) := vec(n-1 downto 0);
 	return res;
 end function;
+
+
+function getExceptionMask(insVec: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(insVec'range) := (others=>'0');
+begin
+	for i in insVec'range loop
+		res(i) := insVec(i).ins.controlInfo.hasException;
+	end loop;			
+	return res;
+end function;
+
 
 end package body;

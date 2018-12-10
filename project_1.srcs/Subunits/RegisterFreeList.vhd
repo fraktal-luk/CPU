@@ -10,7 +10,7 @@ use work.InstructionState.all;
 use work.CoreConfig.all;
 
 use work.PipelineGeneral.all;
-
+use work.LogicRenaming.all;
 
 
 entity RegisterFreeList is
@@ -65,6 +65,8 @@ begin
     end loop;
     return res;
 end function;
+
+
 						
 begin
 
@@ -94,7 +96,7 @@ begin
 		freeListTakeAllow <= takeAllow; -- CMP: => ... or auxTakeAllow;
 							-- or auxTakeAllow; -- CAREFUL: for additional step in rewinding for complex implems
 		
-		--freeListTakeSel <= findWhichTakeReg(stageDataToReserve); -- CAREFUL: must agree with Sequencer signals
+		freeListTakeSel <= whichTakeReg(stageDataToReserve); -- CAREFUL: must agree with Sequencer signals
 		freeListPutAllow <= sendingToRelease;
 		-- Releasing a register every time (but not always prev stable!)
 		--freeListPutSel <= findWhichPutReg(stageDataToRelease);-- CAREFUL: this chooses which ops put anyth. at all
@@ -129,12 +131,12 @@ begin
 
 						-- pragma synthesis off
 							-- Check if list has enough free entries!
-							checkFreeList(indTake, indPut, nTaken, nPut);
-							logFreeList(indTake, indPut, nTaken, nPut,
-											listContent, freeListTakeSel,
-											physCommitFreedDelayed, freeListPutSel,
-											freeListTakeAllow, freeListPutAllow,
-											freeListRewind, freeListWriteTag);
+						--	checkFreeList(indTake, indPut, nTaken, nPut);
+						--	logFreeList(indTake, indPut, nTaken, nPut,
+						--					listContent, freeListTakeSel,
+						--					physCommitFreedDelayed, freeListPutSel,
+						--					freeListTakeAllow, freeListPutAllow,
+						--					freeListRewind, freeListWriteTag);
 						-- pragma synthesis on
 							
 						if freeListRewind = '1' then

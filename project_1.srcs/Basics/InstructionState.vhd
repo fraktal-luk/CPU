@@ -16,12 +16,6 @@ use work.ArchDefs.all;
 use work.CoreConfig.all;
 
 package InstructionState is
-
-
-	-- TODO: move config info to general config file included in higher level definition files?
-	constant PHYS_REG_BITS: natural := 6 + LOG2_PIPE_WIDTH;
-	constant N_PHYSICAL_REGS: natural := 64 * PIPE_WIDTH;
-	constant N_PHYS: natural := N_PHYSICAL_REGS;
 	
 	subtype PhysName is SmallNumber;
 	type PhysNameArray is array(natural range <>) of PhysName;
@@ -56,8 +50,9 @@ type ExecFunc is (unknown,
 constant TAG_SIZE: integer := 7 + LOG2_PIPE_WIDTH;
 subtype InsTag is std_logic_vector(TAG_SIZE-1 downto 0);
 
-constant INITIAL_GROUP_TAG: InsTag := (others => '0');
-constant INITIAL_GROUP_TAG_INC: InsTag := i2slv(PIPE_WIDTH, TAG_SIZE);
+constant INITIAL_RENAME_CTR: InsTag := i2slv(-1, TAG_SIZE);
+constant INITIAL_GROUP_TAG: InsTag := i2slv(-PIPE_WIDTH, TAG_SIZE);
+constant INITIAL_GROUP_TAG_INC: InsTag := i2slv(0, TAG_SIZE);
 
 type InsTagArray is array (integer range <>) of InsTag;
 

@@ -352,11 +352,11 @@ begin
         
         COMMON_STATE: block
         begin
-            renameGroupCtrNext <= nextCtr(renameGroupCtr, execOrIntEventSignal,
-                                                    execOrIntCausing.tags.renameIndex and i2slv(-PIPE_WIDTH, TAG_SIZE),
-                                                    frontLastSending, ALL_FULL);
-            renameCtrNext <= nextCtr(renameCtr, execOrIntEventSignal, execOrIntCausing.tags.renameSeq,
-                                             frontLastSending, extractFullMask(frontDataLastLiving));
+            --renameGroupCtrNext <= nextCtr(renameGroupCtr, execOrIntEventSignal,
+              --                                      execOrIntCausing.tags.renameIndex and i2slv(-PIPE_WIDTH, TAG_SIZE),
+             --                                       frontLastSending, ALL_FULL);
+            --renameCtrNext <= nextCtr(renameCtr, execOrIntEventSignal, execOrIntCausing.tags.renameSeq,
+            --                                 frontLastSending, extractFullMask(frontDataLastLiving));
             commitGroupCtrNext <= --nextCtr(commitGroupCtr, '0', (others => '0'), sendingToCommit, ALL_FULL);
                                             commitGroupCtrInc when sendingToCommit = '1' else commitGroupCtr;
             commitCtrNext <= nextCtr(commitCtr, '0', (others => '0'), sendingToCommit, effectiveMask);
@@ -380,9 +380,9 @@ begin
             COMMON_SYNCHRONOUS: process(clk)     
             begin
                 if rising_edge(clk) then
-                    renameCtr <= renameCtrNext;
+                    --renameCtr <= renameCtrNext;
                     commitCtr <= commitCtrNext;                    
-                    renameGroupCtr <= renameGroupCtrNext;
+                    --renameGroupCtr <= renameGroupCtrNext;
                     commitGroupCtr <= commitGroupCtrNext;
                     commitGroupCtrInc <= commitGroupCtrIncNext;
         

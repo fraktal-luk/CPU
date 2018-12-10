@@ -28,6 +28,7 @@ use work.InstructionState.all;
 use work.CoreConfig.all;
 
 use work.PipelineGeneral.all;
+use work.LogicRenaming.all;
 
 
 entity RegisterMapper is
@@ -82,21 +83,53 @@ architecture Behavioral of RegisterMapper is
 
     signal selectNewest: RegNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
-
-	signal	readNewest, writeCommit, writeReserve: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+    signal writeReserve: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+	signal	readNewest, writeCommit: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 	signal	readStable: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+	
+    function getVirtualArgs(insVec: InstructionSlotArray) return RegNameArray is
+        variable res: RegNameArray(0 to 3*insVec'length-1) := (others=>(others=>'0'));
+    begin
+        for i in insVec'range loop
+            res(3*i+0) := insVec(i).ins.virtualArgSpec.args(0)(4 downto 0);
+            res(3*i+1) := insVec(i).ins.virtualArgSpec.args(1)(4 downto 0);
+            res(3*i+2) := insVec(i).ins.virtualArgSpec.args(2)(4 downto 0);
+        end loop;
+        return res;
+    end function;
+
+    
+    function getVirtualDests(insVec: InstructionSlotArray) return RegNameArray is
+        variable res: RegNameArray(0 to insVec'length-1) := (others=>(others=>'0'));
+    begin
+        for i in insVec'range loop
+            res(i) := insVec(i).ins.virtualArgSpec.dest(4 downto 0);
+        end loop;
+        return res;
+    end function;
+    
+    function selectPhysDests(newDests: PhysNameArray; taking: std_logic_vector) return PhysNameArray is
+        variable res: PhysNameArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
+        variable num: natural := 0;
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            num := countOnes(taking(0 to i-1));
+            res(i) := newDests(num);
+        end loop;
+        return res;
+    end function;
 begin	
 
---	reserveMW(0 to WIDTH-1) <= gprReserveReq.sel;
---	commitMW(0 to WIDTH-1) <= gprCommitReq.sel;
+	reserve <= whichTakeReg(stageDataToReserve) and not findOverriddenDests(stageDataToReserve);
+--	commit <= gprCommitReq.sel;
 	
---	selectReserveMW(0 to WIDTH-1) <= gprReserveReq.index;
+	selectReserve <= getVirtualDests(stageDataToReserve);
 --	selectCommitMW(0 to WIDTH-1) <= gprCommitReq.index;
---	selectNewestMW(0 to 3*WIDTH-1) <= virtSources;
+	selectNewest <= getVirtualArgs(stageDataToReserve);
 --	selectStableMW(0 to WIDTH-1) <= virtCommitDests;
 	
---	writeReserveMW(0 to WIDTH-1) <= gprReserveReq.value;
---	writeCommitMW(0 to WIDTH-1) <= gprCommitReq.value;
+	writeReserve <= selectPhysDests(newPhysDests, reserve);
+--	writeCommit <= gprCommitReq.value;
 	
 --	newPhysSources <= readNewestMW(0 to 3*WIDTH-1); 
 --	prevStablePhysDests <= readStableMW(0 to WIDTH-1);
@@ -113,7 +146,7 @@ begin
 
 	-- Read
 	READ_NEWEST: for i in 0 to 3*PIPE_WIDTH-1 generate
-		readStable(i) <= stableMap(slv2u(selectStable(i)));
+		readNewest(i) <= newestMap(slv2u(selectNewest(i)));
 	end generate;
 
 	READ_STABLE: for i in 0 to PIPE_WIDTH-1 generate
