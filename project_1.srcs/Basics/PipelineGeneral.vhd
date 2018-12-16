@@ -34,6 +34,34 @@ use work.InstructionState.all;
 
 package PipelineGeneral is
 
+
+type ForwardingInfo is record
+	--writtenTags: PhysNameArray(0 to PIPE_WIDTH-1);
+		tags0: PhysNameArray(0 to 2);
+		tags1: PhysNameArray(0 to 2);
+		values0: MwordArray(0 to 2);
+		values1: MwordArray(0 to 2);
+		
+	--resultTags: PhysNameArray(0 to N_RES_TAGS-1);
+	nextResultTags: PhysNameArray(0 to 2);
+	nextTagsM2:	PhysNameArray(0 to 2);
+	--resultValues: MwordArray(0 to N_RES_TAGS-1);
+end record;
+
+constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
+	--writtenTags => (others => (others => '0')),
+		tags0 => (others => (others => '0')),
+		tags1 => (others => (others => '0')),
+		values0 => (others => (others => '0')),
+		values1 => (others => (others => '0')),
+		
+	--resultTags => (others => (others => '0')),
+	nextResultTags => (others => (others => '0')),
+	nextTagsM2 => (others => (others => '0'))
+	--resultValues => (others => (others => '0'))
+);
+
+
 function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionState;
 function setInstructionTarget(ins: InstructionState; target: Mword) return InstructionState;
 function setInstructionResult(ins: InstructionState; result: Mword) return InstructionState;
@@ -50,26 +78,38 @@ function CMP_tagAfter(tagA, tagB: InsTag) return std_logic;
 
 function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector;
 
+function extractFullMask(queueContent: SchedulerEntrySlotArray) return std_logic_vector;
+
+function extractData(queueContent: InstructionSlotArray) return InstructionStateArray;
+
+function extractData(queueContent: SchedulerEntrySlotArray) return InstructionStateArray;
+
+function killByTag(before, ei, int: std_logic) return std_logic;
+
+function getKillMask(content: InstructionStateArray; fullMask: std_logic_vector;
+							causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
+return std_logic_vector;
+
 function stageArrayNext(livingContent, newContent: InstructionSlotArray; full, sending, receiving, kill: std_logic)
 return InstructionSlotArray;
 
--- Flow control: input structure
-type FlowDriveSimple is record
-	lockAccept: std_logic;
-	lockSend: std_logic;
-	kill: std_logic;
-	prevSending: std_logic;
-	nextAccepting: std_logic;	
-end record;
+---- Flow control: input structure
+--type FlowDriveSimple is record
+--	lockAccept: std_logic;
+--	lockSend: std_logic;
+--	kill: std_logic;
+--	prevSending: std_logic;
+--	nextAccepting: std_logic;	
+--end record;
 
--- Flow control: output structure
-type FlowResponseSimple is record
-	accepting: std_logic;
-	sending: std_logic;
-	isNew: std_logic;
-	full: std_logic;
-	living: std_logic;	
-end record;
+---- Flow control: output structure
+--type FlowResponseSimple is record
+--	accepting: std_logic;
+--	sending: std_logic;
+--	isNew: std_logic;
+--	full: std_logic;
+--	living: std_logic;	
+--end record;
 
 function getTagHigh(tag: std_logic_vector) return std_logic_vector;
 function getTagLow(tag: std_logic_vector) return std_logic_vector;
@@ -146,6 +186,52 @@ function extractFullMask(queueContent: InstructionSlotArray) return std_logic_ve
 begin
 	for i in res'range loop
 		res(i) := queueContent(i).full;
+	end loop;
+	return res;
+end function;
+
+function extractFullMask(queueContent: SchedulerEntrySlotArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to queueContent'length-1) := (others => '0');
+begin
+	for i in res'range loop
+		res(i) := queueContent(i).full;
+	end loop;
+	return res;
+end function;
+
+function extractData(queueContent: InstructionSlotArray) return InstructionStateArray is
+	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => defaultInstructionState);
+begin
+	for i in res'range loop
+		res(i) := queueContent(i).ins;
+	end loop;
+	return res;
+end function;
+
+
+function extractData(queueContent: SchedulerEntrySlotArray) return InstructionStateArray is
+	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => defaultInstructionState);
+begin
+	for i in res'range loop
+		res(i) := queueContent(i).ins;
+	end loop;
+	return res;
+end function;
+
+	function killByTag(before, ei, int: std_logic) return std_logic is
+	begin
+		return (before and ei) or int;
+	end function;
+
+function getKillMask(content: InstructionStateArray; fullMask: std_logic_vector;
+							causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
+return std_logic_vector is
+	variable res: std_logic_vector(0 to fullMask'length-1);
+	variable diff: SmallNumber := (others => '0');
+begin
+	for i in 0 to fullMask'length-1 loop
+		res(i) := killByTag(CMP_tagBefore(causing.tags.renameIndex, content(i).tags.renameIndex),
+									execEventSig, lateEventSig) and fullMask(i);
 	end loop;
 	return res;
 end function;

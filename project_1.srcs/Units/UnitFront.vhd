@@ -9,7 +9,7 @@ use work.ArchDefs.all;
 use work.InstructionState.all;
 use work.CoreConfig.all;
 use work.PipelineGeneral.all;
-use work.TmpLogicFront.all;
+use work.LogicFront.all;
 
 
 entity UnitFront is

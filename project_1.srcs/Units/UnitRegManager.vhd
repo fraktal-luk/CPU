@@ -70,7 +70,8 @@ architecture Behavioral of UnitRegManager is
     signal newPhysDestPointer: SmallNumber := (others => '0');
     signal newPhysSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
-        
+    signal causingPtr: SmallNumber := (others => '0');
+       
     function renameGroup(insVec: InstructionSlotArray;
                                 newPhysSources: PhysNameArray;
                                 newPhysDests: PhysNameArray;
@@ -291,14 +292,17 @@ begin
         );
         
 
+            causingPtr <=    lateCausing.tags.intPointer when lateEventSignal = '1'
+                        else execCausing.tags.intPointer;
+
 			INT_FREE_LIST: entity work.RegisterFreeList(Behavioral)
 			port map(
 				clk => clk,
 				reset => '0',
 				en => '0',
 				
-				rewind => '0',--execOrIntEventSignal,
-				causingPointer => (others => '0'),--execOrIntCausing.tags.intPointer,
+				rewind => eventSig,
+				causingPointer => causingPtr,
 				
 				sendingToReserve => frontLastSending, 
 				takeAllow => frontLastSending,	-- FROM SEQ

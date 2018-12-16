@@ -231,6 +231,29 @@ constant DEFAULT_INS_SLOT: InstructionSlot := ('0', defaultInstructionState);
 type InstructionSlotArray is array(integer range <>) of InstructionSlot;
 
 
+type SchedulerState is record
+	argValues: InstructionArgValues;
+end record;
+
+constant DEFAULT_SCHEDULER_STATE: SchedulerState := (argValues => DEFAULT_ARG_VALUES);
+constant DEFAULT_SCHED_STATE: SchedulerState := (argValues => DEFAULT_ARG_VALUES);
+																				
+type SchedulerEntrySlot is record
+	full: std_logic;
+	ins: InstructionState;
+	state: SchedulerState;
+end record;
+
+constant DEFAULT_SCHEDULER_ENTRY_SLOT: SchedulerEntrySlot := (full => '0',
+																				ins => DEFAULT_INS_STATE,
+																				state => DEFAULT_SCHEDULER_STATE);
+constant DEFAULT_SCH_ENTRY_SLOT: SchedulerEntrySlot := (full => '0',
+																				ins => DEFAULT_INS_STATE,
+																				state => DEFAULT_SCHEDULER_STATE);
+
+type SchedulerEntrySlotArray is array(integer range <>) of SchedulerEntrySlot;
+
+
 end InstructionState;
 
 

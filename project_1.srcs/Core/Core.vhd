@@ -218,8 +218,6 @@ begin
 		clk => clk, reset => '0', en => '0',
 		
 		lateEventSignal => lateEventSignal,
-		--execEventSignal => execEventSignal,
-		--execCausing => execCausing,
 		
 		commitGroupCtr => commitGroupCtr,
 
@@ -234,5 +232,12 @@ begin
 		sendingOut => robSending, 
 		outputData => dataOutROB		
 	);
+
+
+    TEMP_EXEC: block
+    begin
+        
+    end block;
+
 
 end Empty;
