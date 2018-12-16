@@ -34,7 +34,14 @@ use work.PipelineGeneral.all;
 
 package LogicRenaming is
 
+
+    function getVirtualArgs(insVec: InstructionSlotArray) return RegNameArray;    
+    function getVirtualDests(insVec: InstructionSlotArray) return RegNameArray;
+    function getPhysicalArgs(insVec: InstructionSlotArray) return PhysNameArray;
+    function getPhysicalDests(insVec: InstructionSlotArray) return PhysNameArray;
+
 function whichTakeReg(insVec: InstructionSlotArray) return std_logic_vector;
+function whichPutReg(insVec: InstructionSlotArray) return std_logic_vector;
 
 function findOverriddenDests(insVec: InstructionSlotArray) return std_logic_vector;
 
@@ -43,11 +50,65 @@ end package;
 
 package body LogicRenaming is
 
+	
+    function getVirtualArgs(insVec: InstructionSlotArray) return RegNameArray is
+        variable res: RegNameArray(0 to 3*insVec'length-1) := (others=>(others=>'0'));
+    begin
+        for i in insVec'range loop
+            res(3*i+0) := insVec(i).ins.virtualArgSpec.args(0)(4 downto 0);
+            res(3*i+1) := insVec(i).ins.virtualArgSpec.args(1)(4 downto 0);
+            res(3*i+2) := insVec(i).ins.virtualArgSpec.args(2)(4 downto 0);
+        end loop;
+        return res;
+    end function;
+
+    
+    function getVirtualDests(insVec: InstructionSlotArray) return RegNameArray is
+        variable res: RegNameArray(0 to insVec'length-1) := (others=>(others=>'0'));
+    begin
+        for i in insVec'range loop
+            res(i) := insVec(i).ins.virtualArgSpec.dest(4 downto 0);
+        end loop;
+        return res;
+    end function;
+    
+    function getPhysicalArgs(insVec: InstructionSlotArray) return PhysNameArray is
+        variable res: PhysNameArray(0 to 3*insVec'length-1) := (others=>(others=>'0'));
+    begin
+        for i in insVec'range loop
+            res(3*i+0) := insVec(i).ins.physicalArgSpec.args(0);
+            res(3*i+1) := insVec(i).ins.physicalArgSpec.args(1);
+            res(3*i+2) := insVec(i).ins.physicalArgSpec.args(2);
+        end loop;
+        return res;
+    end function;
+
+    
+    function getPhysicalDests(insVec: InstructionSlotArray) return PhysNameArray is
+        variable res: PhysNameArray(0 to insVec'length-1) := (others=>(others=>'0'));
+    begin
+        for i in insVec'range loop
+            res(i) := insVec(i).ins.physicalArgSpec.dest;
+        end loop;
+        return res;
+    end function;
+
+
 function whichTakeReg(insVec: InstructionSlotArray) return std_logic_vector is
     variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
         res(i) := insVec(i).ins.virtualArgSpec.intDestSel and insVec(i).full;        
+    end loop;
+    return res;
+end function;
+
+function whichPutReg(insVec: InstructionSlotArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := insVec(i).ins.virtualArgSpec.intDestSel and 
+            (insVec(i).full );-- or insVec(i).ins.controlInfo.squashed and FREE_LIST_COARSE_REWIND);     
     end loop;
     return res;
 end function;

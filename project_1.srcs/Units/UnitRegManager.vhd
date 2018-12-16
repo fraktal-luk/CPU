@@ -66,7 +66,7 @@ architecture Behavioral of UnitRegManager is
     signal renameCtr, renameCtrNext: InsTag := INITIAL_RENAME_CTR;
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
 
-    signal newPhysDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+    signal newPhysDests, physStable: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal newPhysDestPointer: SmallNumber := (others => '0');
     signal newPhysSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
@@ -148,9 +148,9 @@ architecture Behavioral of UnitRegManager is
         end loop;
 
         -- Setting 'complete' for ops not using Exec resources
-        for i in 0 to PIPE_WIDTH-1 loop                                   
-		    res(i).ins.controlInfo.completed := not res(i).ins.classInfo.mainCluster;
-            res(i).ins.controlInfo.completed2 := not res(i).ins.classInfo.secCluster;
+        for i in 0 to PIPE_WIDTH-1 loop        -- TEMP!                           
+		    res(i).ins.controlInfo.completed := '1'; --not res(i).ins.classInfo.mainCluster;
+            res(i).ins.controlInfo.completed2 := '1'; --not res(i).ins.classInfo.secCluster;
         end loop;
                 
         -- If found special instruction or exception, kill next ones
@@ -286,7 +286,7 @@ begin
             prevNewPhysDests => open,
             newPhysSources => newPhysSources,    -- TO SEQ
             
-            prevStablePhysDests => open,--physStable,  -- FOR MAPPING (to FREE LIST)
+            prevStablePhysDests => physStable,  -- FOR MAPPING (to FREE LIST)
             stablePhysSources => open            
         );
         
@@ -311,7 +311,7 @@ begin
 				sendingToRelease => sendingCommit,  -- FROM SEQ
 				stageDataToRelease => stageDataCommit,  -- FROM SEQ
 				
-				physStableDelayed => (others => (others => '0')) --physStableDelayed -- FOR MAPPING (from MAP)
+				physStableDelayed => physStable -- FOR MAPPING (from MAP)
 			);
         
 end Behavioral;

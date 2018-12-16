@@ -163,6 +163,10 @@ architecture Implem of InstructionBuffer is
                 res(i).ins := newContent(slv2u(sel)).ins;
             end if;
             
+            -- No events before decoding; newEvent flag set for branches must be cleared.
+            --  Meanwhile, branch taken/not taken state must be retained
+            res(i).ins.controlInfo.newEvent := '0';
+            
             fillMask(i) := '0';
             for k in 0 to 3 loop -- Further beyond end requires more ful inputs to be filled:
                 --                            !! equiv to remainingMask(-1-k), where '1' for k < 0

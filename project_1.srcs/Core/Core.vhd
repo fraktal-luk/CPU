@@ -137,7 +137,7 @@ begin
         -- Interface from ROB
         commitAccepting => commitAccepting,
         sendingFromROB => robSending,    
-        robDataLiving => (others => DEFAULT_INSTRUCTION_SLOT),--dataOutROB,
+        robDataLiving => dataOutROB,
 
         ---
         dataFromBQV => (others => DEFAULT_INSTRUCTION_SLOT),--dataOutBQV,

@@ -54,7 +54,7 @@ return InstructionSlotArray;
 
 function isHalt(ins: InstructionState) return std_logic;
 
-function setInterrupt3(ins: InstructionState; intSignal, start: std_logic) return InstructionState;
+--function setInterrupt3(ins: InstructionState; intSignal, start: std_logic) return InstructionState;
 
 function clearControlEvents(ins: InstructionState) return InstructionState;
 
@@ -227,17 +227,17 @@ end function;
 		end if;
 	end function;
 
-function setInterrupt3(ins: InstructionState; intSignal, start: std_logic) return InstructionState is
-	variable res: InstructionState := ins;
-begin
-	res.controlInfo.hasInterrupt := intSignal;-- or start;
-	res.controlInfo.hasReset := intSignal and start;
-	-- CAREFUL: needed because updating link info must have either interrupt or exception
-	if res.controlInfo.hasInterrupt = '1' then
-		res.controlInfo.hasException := '0';
-	end if;
-	return res;
-end function;
+--function setInterrupt3(ins: InstructionState; intSignal, start: std_logic) return InstructionState is
+--	variable res: InstructionState := ins;
+--begin
+--	res.controlInfo.hasInterrupt := intSignal;-- or start;
+--	res.controlInfo.hasReset := intSignal and start;
+--	-- CAREFUL: needed because updating link info must have either interrupt or exception
+--	if res.controlInfo.hasInterrupt = '1' then
+--		res.controlInfo.hasException := '0';
+--	end if;
+--	return res;
+--end function;
 
 function clearControlEvents(ins: InstructionState) return InstructionState is
 	variable res: InstructionState := ins;

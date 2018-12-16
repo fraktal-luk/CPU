@@ -75,15 +75,14 @@ begin
 										else physCommitDestsDelayed(i);
 		end generate;
 
-		--physCommitDestsDelayed <= getPhysicalDests(stageDataToRelease);
+		physCommitDestsDelayed <= getPhysicalDests(stageDataToRelease);
 		
 		-- CAREFUL: excluding overridden dests here means that we don't bypass phys names when getting
 		--				physStableDelayed! >> Related code in top module
---		stableUpdateSelDelayed <= -- NOTE: putting *previous stable* register if: full, has dest, not excpetion.
---							  getPhysicalDestMask(stageDataToRelease) 
---					and	  stageDataToRelease.fullMask  
---					and not getExceptionMask(stageDataToRelease)
---					and not findOverriddenDests(stageDataToRelease); -- CAREFUL: and must not be overridden!
+		stableUpdateSelDelayed <= -- NOTE: putting *previous stable* register if: full, has dest, not excpetion.
+                                    freeListPutSel
+					and not getExceptionMask(stageDataToRelease)
+					and not findOverriddenDests(stageDataToRelease); -- CAREFUL: and must not be overridden!
 										  -- NOTE: if those conditions are not satisfied, putting the allocated reg
 
 		-- CAREFUL! Because there's a delay of 1 cycle to read FreeList, we need to do reading
@@ -99,7 +98,7 @@ begin
 		freeListTakeSel <= whichTakeReg(stageDataToReserve); -- CAREFUL: must agree with Sequencer signals
 		freeListPutAllow <= sendingToRelease;
 		-- Releasing a register every time (but not always prev stable!)
-		--freeListPutSel <= findWhichPutReg(stageDataToRelease);-- CAREFUL: this chooses which ops put anyth. at all
+		freeListPutSel <= whichPutReg(stageDataToRelease);-- CAREFUL: this chooses which ops put anyth. at all
 		freeListRewind <= rewind;
 		
 		

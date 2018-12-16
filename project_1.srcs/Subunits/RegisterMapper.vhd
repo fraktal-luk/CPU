@@ -77,36 +77,16 @@ architecture Behavioral of RegisterMapper is
 		return res;
 	end function;
     
-    signal reserve, commit: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+    signal reserve, reserveNotOv, commit, commitNotOv: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     signal selectReserve, selectCommit, selectStable
             : RegNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal selectNewest: RegNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
-    signal writeReserve: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-	signal	readNewest, writeCommit: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+    signal writeReserve, writeCommit: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+	signal	readNewest: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 	signal	readStable: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-	
-    function getVirtualArgs(insVec: InstructionSlotArray) return RegNameArray is
-        variable res: RegNameArray(0 to 3*insVec'length-1) := (others=>(others=>'0'));
-    begin
-        for i in insVec'range loop
-            res(3*i+0) := insVec(i).ins.virtualArgSpec.args(0)(4 downto 0);
-            res(3*i+1) := insVec(i).ins.virtualArgSpec.args(1)(4 downto 0);
-            res(3*i+2) := insVec(i).ins.virtualArgSpec.args(2)(4 downto 0);
-        end loop;
-        return res;
-    end function;
 
-    
-    function getVirtualDests(insVec: InstructionSlotArray) return RegNameArray is
-        variable res: RegNameArray(0 to insVec'length-1) := (others=>(others=>'0'));
-    begin
-        for i in insVec'range loop
-            res(i) := insVec(i).ins.virtualArgSpec.dest(4 downto 0);
-        end loop;
-        return res;
-    end function;
     
     function selectPhysDests(newDests: PhysNameArray; taking: std_logic_vector) return PhysNameArray is
         variable res: PhysNameArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
@@ -120,28 +100,21 @@ architecture Behavioral of RegisterMapper is
     end function;
 begin	
 
-	reserve <= whichTakeReg(stageDataToReserve) and not findOverriddenDests(stageDataToReserve);
---	commit <= gprCommitReq.sel;
+	reserve <= whichTakeReg(stageDataToReserve);
+	reserveNotOv <= reserve and not findOverriddenDests(stageDataToReserve);
+	commit <= whichPutReg(stageDataToCommit);
+	commitNotOv <= commit and not findOverriddenDests(stageDataToCommit);
 	
 	selectReserve <= getVirtualDests(stageDataToReserve);
---	selectCommitMW(0 to WIDTH-1) <= gprCommitReq.index;
+	selectCommit <= getVirtualDests(stageDataToCommit);
 	selectNewest <= getVirtualArgs(stageDataToReserve);
---	selectStableMW(0 to WIDTH-1) <= virtCommitDests;
+	selectStable <= getVirtualDests(stageDataToCommit);
 	
 	writeReserve <= selectPhysDests(newPhysDests, reserve);
---	writeCommit <= gprCommitReq.value;
+	writeCommit <= getPhysicalDests(stageDataToCommit);
 	
---	newPhysSources <= readNewestMW(0 to 3*WIDTH-1); 
---	prevStablePhysDests <= readStableMW(0 to WIDTH-1);
-
---		virtSources <= getVirtualArgs(stageDataToReserve);
---		virtDests <= getVirtualDests(stageDataToReserve); -- // UNUSED?
-			
---		gprReserveReq <= getRegMapRequest(stageDataToReserve, newPhysDests);	
---		gprCommitReq <= getRegMapRequest(stageDataToCommit, physCommitDests);
-
---		virtCommitDests <= getVirtualDests(stageDataToCommit);
---		physCommitDests <= getPhysicalDests(stageDataToCommit);
+	newPhysSources <= readNewest; 
+	prevStablePhysDests <= readStable;
 
 
 	-- Read
@@ -152,7 +125,8 @@ begin
 	READ_STABLE: for i in 0 to PIPE_WIDTH-1 generate
 		readStable(i) <= stableMap(slv2u(selectStable(i)));
 	end generate;
-			
+	
+	-- Write	
 	SYNCHRONOUS: process(clk)
 	begin
 		if rising_edge(clk) then
@@ -164,7 +138,7 @@ begin
 			-- Write
 			if sendingToReserve = '1' and rewind = '0' then
 				for i in 0 to PIPE_WIDTH-1 loop
-					if reserve(i) = '1' then
+					if reserveNotOv(i) = '1' then
 						newestMap(slv2u(selectReserve(i))) <= writeReserve(i);
 							assert isNonzero(writeReserve(i)) = '1' report "Mapping a speculative register to p0!";
 					end if;
@@ -173,12 +147,14 @@ begin
 
 			if sendingToCommit = '1' then -- and rewind = '0' then -- block when rewinding??		
 				for i in 0 to PIPE_WIDTH-1 loop
-					if commit(i) = '1' then
+					if commitNotOv(i) = '1' then
 						stableMap(slv2u(selectCommit(i))) <= writeCommit(i);
 							assert isNonzero(writeCommit(i)) = '1' report "Mapping a stable register to p0!";						
 					end if;
 				end loop;	
 			end if;
+			
+			prevStablePhysDests <= readStable;
 		end if;
 	end process;
 end Behavioral;
