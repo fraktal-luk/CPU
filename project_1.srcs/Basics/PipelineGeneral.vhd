@@ -62,6 +62,10 @@ constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
 );
 
 
+function compactMask(vec: std_logic_vector) return std_logic_vector;
+function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector;
+
+
 function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionState;
 function setInstructionTarget(ins: InstructionState; target: Mword) return InstructionState;
 function setInstructionResult(ins: InstructionState; result: Mword) return InstructionState;
@@ -123,11 +127,72 @@ function getLowBits(vec: std_logic_vector; n: integer) return std_logic_vector;
 
 function getExceptionMask(insVec: InstructionSlotArray) return std_logic_vector;
 
+function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector) return SchedulerEntrySlotArray;
+
+function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
+
+function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
+
 end package;
 
 
 
 package body PipelineGeneral is
+
+   function compactMask(vec: std_logic_vector) return std_logic_vector is
+        variable res: std_logic_vector(0 to 3) := (others => '0');
+    begin
+        case vec is
+            when "0000" =>
+                res := "0000";
+            when "1111" =>
+                res := "1111";
+            when "1000" | "0100" | "0010" | "0001" =>
+                res := "1000";
+            when "0111" | "1011" | "1101" | "1110" =>
+                res := "1110";
+            when others =>
+                res := "1100";
+        end case;
+        
+        return res;
+    end function;
+
+    function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector is
+        variable res: std_logic_vector(1 downto 0) := "00";
+        variable m6: std_logic_vector(0 to 5) := mr & mi;
+        variable n0: integer := 0;
+    begin
+        n0 := 6 - countOnes(m6);
+        case m6 is
+            --when "111000" =>
+            --    res := "11";
+            when "111001" => 
+                res := "10";
+            when "111010" => 
+                res := "01";
+            when "111100" | "111101" | "111110" | "111111" => 
+                res := "00";
+     
+            --when "110000" => 
+            --    res := "11";
+            --when "110001" | "110010" => 
+            --    res := "11";
+            when "110011" | "110101" => 
+                res := "10";
+            when "110110" | "110111" =>
+                res := "01";
+
+            when "100111" => 
+                res := "10";
+
+            when others =>
+                res := "11";
+        end case;
+        return res;
+    end function;
+
+
 
 function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionState is
 	variable res: InstructionState := ins;
@@ -367,6 +432,62 @@ begin
 		res(i) := insVec(i).ins.controlInfo.hasException;
 	end loop;			
 	return res;
+end function;
+
+	function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector) return SchedulerEntrySlotArray is
+		variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	begin
+		for i in 0 to PIPE_WIDTH-1 loop
+			res(i).ins := insArr(i);
+			res(i).full := fullMask(i);
+
+			-- Set state markers: "zero" bit
+			res(i).state.argValues.zero(0) := not isNonzero(res(i).ins.virtualArgSpec.args(0)(4 downto 0));
+			res(i).state.argValues.zero(1) := not isNonzero(res(i).ins.virtualArgSpec.args(1)(4 downto 0));
+			res(i).state.argValues.zero(2) := not isNonzero(res(i).ins.virtualArgSpec.args(2)(4 downto 0));
+
+			-- Set 'missing' flags for non-const arguments
+			res(i).state.argValues.missing := res(i).ins.physicalArgSpec.intArgSel and not res(i).state.argValues.zero;
+			
+			-- Handle possible immediate arg
+			if res(i).ins.constantArgs.immSel = '1' then
+				res(i).state.argValues.missing(1) := '0';
+				res(i).state.argValues.immediate := '1';
+				res(i).state.argValues.zero(1) := '0';
+			end if;
+
+			res(i).ins.ip := (others => '0');			
+			res(i).ins.target := (others => '0');
+			res(i).ins.result := (others => '0');
+			res(i).ins.bits := (others => '0');
+
+		end loop;
+		return res;
+	end function;
+
+function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+	for i in 0 to PIPE_WIDTH-1 loop
+		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
+			and 	insVec(i).ins.classInfo.--branchCond = '1'
+			                                 branchIns = '1'
+		then
+			res(i) := '1';
+		end if;
+	end loop;
+	
+	return res;
+end function;
+
+function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray is
+    variable res: InstructionSlotArray(insVec'range) := insVec;
+begin
+    for i in res'range loop
+        res(i).full := mask(i);
+    end loop;
+    
+    return res;
 end function;
 
 

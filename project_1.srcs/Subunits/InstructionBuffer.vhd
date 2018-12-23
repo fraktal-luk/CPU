@@ -39,7 +39,7 @@ use work.CoreConfig.all;
 
 use work.PipelineGeneral.all;
 
-use work.TmpLogicFront.all;
+use work.LogicFront.all;
 
 
 entity InstructionBuffer is
@@ -66,60 +66,6 @@ architecture Implem of InstructionBuffer is
 	
 	signal queueData, queueDataNext: InstructionSlotArray(0 to IBUFFER_SIZE-1)
 								:= (others => DEFAULT_INSTRUCTION_SLOT);
-
-    function compactMask(vec: std_logic_vector) return std_logic_vector is
-        variable res: std_logic_vector(0 to 3) := (others => '0');
-    begin
-        case vec is
-            when "0000" =>
-                res := "0000";
-            when "1111" =>
-                res := "1111";
-            when "1000" | "0100" | "0010" | "0001" =>
-                res := "1000";
-            when "0111" | "1011" | "1101" | "1110" =>
-                res := "1110";
-            when others =>
-                res := "1100";
-        end case;
-        
-        return res;
-    end function;
-
-    function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector is
-        variable res: std_logic_vector(1 downto 0) := "00";
-        variable m6: std_logic_vector(0 to 5) := mr & mi;
-        variable n0: integer := 0;
-    begin
-        n0 := 6 - countOnes(m6);
-        case m6 is
-            --when "111000" =>
-            --    res := "11";
-            when "111001" => 
-                res := "10";
-            when "111010" => 
-                res := "01";
-            when "111100" | "111101" | "111110" | "111111" => 
-                res := "00";
-     
-            --when "110000" => 
-            --    res := "11";
-            --when "110001" | "110010" => 
-            --    res := "11";
-            when "110011" | "110101" => 
-                res := "10";
-            when "110110" | "110111" =>
-                res := "01";
-
-            when "100111" => 
-                res := "10";
-
-            when others =>
-                res := "11";
-        end case;
-        return res;
-    end function;
-
 
     function bufferDataNext(content: InstructionSlotArray; newContent: InstructionSlotArray;
                             nextAccepting, prevSending, kill: std_logic)
@@ -198,23 +144,5 @@ begin
             queueData <= queueDataNext;
 		end if;
 	end process;	
-
----------------------------------
-
-    n0 <= (others => DEFAULT_INSTRUCTION_SLOT);
-    n1 <= (('1',DEFAULT_INSTRUCTION_STATE),
-                 DEFAULT_INSTRUCTION_SLOT, DEFAULT_INSTRUCTION_SLOT, DEFAULT_INSTRUCTION_SLOT);
-        t1 <= bufferDataNext(t0, n1,
-                                    '0', '1', '0');
- 
-     n2 <= (('1',DEFAULT_INSTRUCTION_STATE),
-       ('1',DEFAULT_INSTRUCTION_STATE), ('1',DEFAULT_INSTRUCTION_STATE), ('1',DEFAULT_INSTRUCTION_STATE));
-    t2 <= bufferDataNext(t1, n2,
-                                                                '1', '1', '0');
-    n3 <= (('0',DEFAULT_INSTRUCTION_STATE),
-          ('0',DEFAULT_INSTRUCTION_STATE), ('1',DEFAULT_INSTRUCTION_STATE), ('1',DEFAULT_INSTRUCTION_STATE));    
-    
-    t3 <= bufferDataNext(t1, n3,
-                                          '1', '1', '0');
 
 end Implem;

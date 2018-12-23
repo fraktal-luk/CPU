@@ -56,8 +56,6 @@ function countFullNonSkipped(insVec: InstructionSlotArray) return integer;
 
 function findEarlyTakenJump(ins: InstructionState; insVec: InstructionSlotArray) return InstructionState;
 
-function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
-
 function getEarlyEvent(inputIns: Instructionstate; earlyBranchMultiDataInA: InstructionSlotArray;
                        predictedAddress: Mword; fetchStall: std_logic)
 return InstructionState;
@@ -399,19 +397,6 @@ begin
 	return res;
 end function;
 
-function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-begin
-	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
-			and 	insVec(i).ins.classInfo.branchCond = '1'
-		then
-			res(i) := '1';
-		end if;
-	end loop;
-	
-	return res;
-end function;
 
 function getEarlyEvent(inputIns: Instructionstate; earlyBranchMultiDataInA: InstructionSlotArray;
                        predictedAddress: Mword; fetchStall: std_logic)
@@ -428,7 +413,7 @@ begin
        
     return res;
 end function;
-	
+
 function prepareForBQ(insVec: InstructionSlotArray; branchMask: std_logic_vector) return InstructionSlotArray is
 	variable res: InstructionSlotArray(insVec'range) := insVec;
 	variable result, target: Mword;

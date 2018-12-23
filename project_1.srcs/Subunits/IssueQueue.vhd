@@ -50,7 +50,7 @@ entity IssueQueue is
 		fni: ForwardingInfo;
 		readyRegFlags: in std_logic_vector(0 to 3*PIPE_WIDTH-1);
 		
-		acceptingVec: out std_logic_vector(0 to PIPE_WIDTH-1);
+		--acceptingVec: out std_logic_vector(0 to PIPE_WIDTH-1);
 		acceptingOut: out std_logic;
 		
 		anyReady: out std_logic;
@@ -212,7 +212,7 @@ begin
 
 	
 	killMask <= getKillMask(queueData, fullMask, execCausing, execEventSignal, lateEventSignal); 
-	acceptingVec <= not fullMask(IQ_SIZE-PIPE_WIDTH to IQ_SIZE-1);
+	--acceptingVec <= not fullMask(IQ_SIZE-PIPE_WIDTH to IQ_SIZE-1);
 	acceptingOut <= not isNonzero(fullMask(IQ_SIZE-PIPE_WIDTH to IQ_SIZE-1)); 
 	
 	anyReadyLive <= isNonzero(readyMaskLive);

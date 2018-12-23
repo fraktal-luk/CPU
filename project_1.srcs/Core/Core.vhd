@@ -28,6 +28,8 @@ use work.ArchDefs.all;
 use work.CoreConfig.all;
 use work.InstructionState.all;
 
+use work.PipelineGeneral.all;
+
 
 entity Core is
     Port ( clk : in  STD_LOGIC;
@@ -69,12 +71,12 @@ entity Core is
 end Core;
 
 
-architecture Empty of Core is
+architecture Behavioral of Core is
     signal pcDataSig, frontCausing, execCausing, lateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
                 frontEventSignal: std_logic := '0';
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal frontDataLastLiving, renamedDataLiving, dataOutROB: 
+    signal frontDataLastLiving, renamedDataLiving, dataOutROB, renamedDataToBQ: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     
     signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
@@ -235,9 +237,102 @@ begin
 
 
     TEMP_EXEC: block
+        signal dataToIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
     begin
-        
+        dataToIQ <= getSchedData(extractData(dataOutROB), extractFullMask(dataOutROB));
+    
+		IQUEUE: entity work.IssueQueue(Behavioral)--UnitIQ
+        generic map(
+            IQ_SIZE => 8 --IQ_SIZES(4)
+        )
+        port map(
+            clk => clk, reset => '0', en => '0',
+    
+            --acceptingVec => open,--iqAcceptingVecArr(i),
+            acceptingOut => open,--iqAcceptingArr(4),
+            prevSendingOK => robSending,
+            --newData => dataToQueuesArr(i),
+                newArr => dataToIQ,--,schArrays(4),
+            fni => DEFAULT_FORWARDING_INFO,--fni,
+            readyRegFlags => (others => '0'),--readyRegFlags,
+            nextAccepting => '1',--issueAcceptingArr(4),
+            execCausing => execCausing,
+            lateEventSignal => lateEventSignal,
+            execEventSignal => execEventSignal,
+            anyReady => open,--iqReadyArr(4),
+            schedulerOut => open,--iqOutputArr(4),
+            sending => open --iqSending(4)
+        );
+ 
+        ISSUE_STAGE: entity work.IssueStage
+ 	    generic map(USE_IMM => true)
+        port map(
+            clk => '0',
+            reset => '0',
+            en => '0',
+    
+            prevSending => '0',
+            nextAccepting => '0',
+    
+            input => DEFAULT_SCH_ENTRY_SLOT,
+            
+            acceptingOut => open,
+            output => open,
+            
+            execEventSignal => execEventSignal,
+            lateEventSignal => lateEventSignal,
+            execCausing => execCausing,
+            
+                fni => DEFAULT_FORWARDING_INFO,
+            
+            --resultTags: in PhysNameArray(0 to N_RES_TAGS-1);
+            --resultVals: in MwordArray(0 to N_RES_TAGS-1);
+            regValues => (others => (others => '0'))     
+        );
+      
     end block;
 
 
-end Empty;
+    renamedDataToBQ <= setFullMask(renamedDataLiving, getBranchMask(renamedDataLiving));
+
+    BRANCH_QUEUE: entity work.BranchQueue
+	generic map(
+		QUEUE_SIZE => 8
+	)
+	port map(
+		clk => clk,
+		reset => '0',
+		en => '0',
+
+		acceptingOut => open,
+			almostFull => open,
+		
+		acceptingBr => open,
+		
+		prevSending => renamedSending,
+			prevSendingBr => bpSending,
+		dataIn => renamedDataToBQ,
+			dataInBr => bpData,
+
+		--storeAddressInput: in InstructionSlot;
+		--storeValueInput: in InstructionSlot;
+		--compareAddressInput: in InstructionSlot;
+
+		selectedDataOutput => open,
+
+		committing => '0',
+		groupCtrInc => (others => '0'),
+
+		lateEventSignal => '0',
+		execEventSignal => '0',
+		execCausing => execCausing,
+		
+		nextAccepting => '0',		
+		sendingSQOut => open,
+		dataOutV => open,
+		
+			committedOutput => open,
+			committedEmpty => open
+	);
+
+end Behavioral;

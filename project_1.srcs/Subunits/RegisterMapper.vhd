@@ -114,7 +114,7 @@ begin
 	writeCommit <= getPhysicalDests(stageDataToCommit);
 	
 	newPhysSources <= readNewest; 
-	prevStablePhysDests <= readStable;
+	--prevStablePhysDests <= readStable;
 
 
 	-- Read
