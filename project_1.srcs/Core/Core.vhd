@@ -74,9 +74,9 @@ end Core;
 architecture Behavioral of Core is
     signal pcDataSig, frontCausing, execCausing, lateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
-                frontEventSignal: std_logic := '0';
+                frontEventSignal, bqAccepting, bqSending: std_logic := '0';
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal frontDataLastLiving, renamedDataLiving, dataOutROB, renamedDataToBQ: 
+    signal frontDataLastLiving, renamedDataLiving, dataOutROB, renamedDataToBQ, bqData: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     
     signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
@@ -84,7 +84,7 @@ architecture Behavioral of Core is
     signal execEventSignal, lateEventSignal, lateEventSetPC: std_logic := '0';
     signal robSending, robAccepting, renamedSending, commitAccepting, iqAccepting: std_logic := '0';
     --    signal iadrReg: Mword := X"ffffffb0";
-    signal commitGroupCtr, commitCtr: InsTag := (others => '0');
+    signal commitGroupCtr, commitCtr, commitGroupCtrInc: InsTag := (others => '0');
 begin
 
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
@@ -142,7 +142,7 @@ begin
         robDataLiving => dataOutROB,
 
         ---
-        dataFromBQV => (others => DEFAULT_INSTRUCTION_SLOT),--dataOutBQV,
+        dataFromBQV => bqData,
 
         sbSending => '0',--sbSending,
         dataFromSB => DEFAULT_INSTRUCTION_STATE,--dataFromSB,
@@ -155,7 +155,7 @@ begin
                 
         commitGroupCtrOut => commitGroupCtr,
         commitCtrOut => commitCtr,
-        commitGroupCtrIncOut => open --commitGroupCtrIncSig
+        commitGroupCtrIncOut => commitGroupCtrInc
     );
         
         iqAccepting <= robAccepting and '1'; -- TEMP 
@@ -173,7 +173,7 @@ begin
         pcSending => pcSending,    
         frontAccepting => frontAccepting,
     
-        bpAccepting => '1',--bpAccepting,
+        bpAccepting => bqAccepting,--bpAccepting,
         bpSending => bpSending,
         bpData => bpData,
     
@@ -307,12 +307,12 @@ begin
 		acceptingOut => open,
 			almostFull => open,
 		
-		acceptingBr => open,
+		acceptingBr => bqAccepting,
 		
 		prevSending => renamedSending,
-			prevSendingBr => bpSending,
+	    prevSendingBr => bpSending,
 		dataIn => renamedDataToBQ,
-			dataInBr => bpData,
+		dataInBr => bpData,
 
 		--storeAddressInput: in InstructionSlot;
 		--storeValueInput: in InstructionSlot;
@@ -320,16 +320,16 @@ begin
 
 		selectedDataOutput => open,
 
-		committing => '0',
-		groupCtrInc => (others => '0'),
+		committing => robSending, -- When ROB is sending so is BQ if it has corresponding branches
+		groupCtrInc => commitGroupCtrInc,
 
-		lateEventSignal => '0',
-		execEventSignal => '0',
+		lateEventSignal => lateEventSignal,
+		execEventSignal => execEventSignal,
 		execCausing => execCausing,
 		
-		nextAccepting => '0',		
-		sendingSQOut => open,
-		dataOutV => open,
+		nextAccepting => commitAccepting,		
+		sendingSQOut => bqSending,
+		dataOutV => bqData,
 		
 			committedOutput => open,
 			committedEmpty => open

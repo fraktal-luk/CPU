@@ -293,7 +293,7 @@ return InstructionSlot is
 	variable ind: std_logic_vector(LOG2_PIPE_WIDTH-1 downto 0) := (others => '0');
 	variable targetInc: Mword := (others => '0');
 begin
-	sdToCommit := recreateGroup(robDataLiving, dataFromBQV, lastEffectiveIns.target);	
+	sdToCommit := recreateGroup(robDataLiving, dataFromBQV, lastEffectiveIns.target);
 	insToLastEffective := getLastEffective(sdToCommit);
 	
 --	lateTargetIns := getLatePCData(setInterrupt3(lastEffectiveIns, intPhase1, start),

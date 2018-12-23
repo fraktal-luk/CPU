@@ -92,7 +92,9 @@ architecture Behavioral of BranchQueue is
 	signal compareAddressIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
 	
 	signal numPrevBr: SmallNumber := (others => '0');
-	signal pStart, pTagged, pAll, causingPtr: SmallNumber := (others => '0');
+	signal pStart, pTagged, pAll, causingPtr, pAcc: SmallNumber := (others => '0');
+	
+	signal dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	
 	constant PTR_MASK_SN: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
 	
@@ -143,7 +145,7 @@ architecture Behavioral of BranchQueue is
                         remv := "1000";                                                                                       
                end case;
            end if;
-                        report integer'image(slv2u(remv));
+           --             report integer'image(slv2u(remv));
            --remv := remainingMaskExt(i+1 to i+3);
            
            res(i) := '0';
@@ -156,6 +158,104 @@ architecture Behavioral of BranchQueue is
 	   return res;
 	end function;
 	
+	function getSendingMask(content: InstructionStateArray; mask: std_logic_vector;
+	                tag: InsTag) return std_logic_vector is
+	   variable res: std_logic_vector(0 to content'length-1) := (others => '0');
+	begin
+	   for i in 0 to QUEUE_SIZE-1 loop
+           if getTagHighSN(content(i).tags.renameIndex) = getTagHighSN(tag) then
+             res(i) := mask(i);
+           end if; 
+       end loop;
+	   return res;
+	end function;
+
+    function getNewContentBr(content: InstructionStateArray; dataIn, dataInBr: InstructionSlotArray;
+				                prevSending, prevSendingBr: std_logic;
+				                inputMask, inputMaskBr: std_logic_vector;
+				                pTagged, pAll: SmallNumber
+				                )
+											--storeAddressInput.full, storeValueInput.full,
+											--storeAddressInput.ins, storeValueInput.ins);	
+    return InstructionStateArray is
+        variable res: InstructionStateArray(0 to QUEUE_SIZE-1) := content;
+        variable sel: natural range 0 to 3 := 0;
+        variable diff: SmallNumber := (others => '0');
+	    variable remv: std_logic_vector(0 to 2) := "000";
+	    variable compMask, compMaskBr: std_logic_vector(0 to 3) := "0000";
+	    variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
+	    variable imBr: std_logic_vector(0 to QUEUE_SIZE-1) := inputMaskBr;	    
+    begin
+        compMask := compactMask(extractFullMask(dataIn));
+        compMaskBr := compactMask(extractFullMask(dataInBr));
+
+        for i in 0 to QUEUE_SIZE-1 loop
+           diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;
+           --sel := slv2u(diff(1 downto 0));
+           
+           case diff(1 downto 0) is
+               when "00" =>
+                    remv := "111";
+               when "01" =>
+                    remv := "110";
+               when "10" =>
+                    remv := "100";
+               when others =>
+                    remv := "000";                                                                                       
+           end case;
+           
+           sel := slv2u(getSelector(remv, compMask(0 to 2)));
+           if im(i) = '1' then
+               res(i).tags := dataIn(sel).ins.tags;
+               res(i).operation := dataIn(sel).ins.operation;
+           end if;
+        end loop;
+
+        for i in 0 to QUEUE_SIZE-1 loop
+           diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pAll) and PTR_MASK_SN;
+           --sel := slv2u(diff(1 downto 0));
+           
+           case diff(1 downto 0) is
+               when "00" =>
+                    remv := "111";
+               when "01" =>
+                    remv := "110";
+               when "10" =>
+                    remv := "100";
+               when others =>
+                    remv := "000";                                                                                       
+           end case;
+           
+           sel := slv2u(getSelector(remv, compMaskBr(0 to 2))); 
+           if imBr(i) = '1' then
+               res(i) := dataInBr(sel).ins; 
+           end if;
+        end loop;
+
+        return res;
+    end function;
+    
+    function getWindow(content: InstructionStateArray; mask: std_logic_vector;
+                        p: SmallNumber; n: natural)
+    return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to n-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+        variable pContent, pWindow: natural := 0;
+    begin
+        pContent := slv2u(p);
+        pWindow := 0;
+        
+        for i in 0 to n-1 loop
+            pContent := slv2u(p) + i;
+            if pContent >= content'length then
+                pContent := pContent - content'length;
+            end if;
+            res(i).ins := content(pContent);
+            res(i).full := mask(pContent);
+        end loop;
+        
+        return res;
+    end function;
+    
 begin
 	--	compareAddressIns <= storeAddressInput.ins;
 
@@ -163,9 +263,11 @@ begin
     causingPtr <= getCausingPtr(content, execCausing);
     
 	-- in shifting queue this would be shfited by nSend
---	sendingMask <= getQueueSendingMask(qs0, QUEUE_SIZE, bufferDrive.nextAccepting);
-	killMask <= getKillMask(content, fullMask, execCausing, execEventSignal, lateEventSignal);
-	livingMask <= fullMask and not killMask;			
+	sendingMask <= getSendingMask(content, taggedLivingMask, groupCtrInc)
+	                       when committing = '1' else (others => '0');
+	killMask <= getKillMask(content, taggedMask, execCausing, execEventSignal, lateEventSignal);
+	livingMask <= fullMask when (lateEventSignal = '0' and execEventSignal = '0') 
+	         else taggedLivingMask;	
     taggedLivingMask <= taggedMask and not killMask;
 				
     inputMask <= getInputMask(taggedMask, extractFullMask(dataIn), prevSending, pTagged);				
@@ -174,14 +276,15 @@ begin
 	fullMaskNext <= (livingMask and not sendingMask) or inputMaskBr;
 	taggedMaskNext <= (taggedLivingMask and not sendingMask) or inputMask;
 	
---	contentNext <=
---				getNewContentBr(content, dataIn, dataInBr,
---				                prevSending, prevSendingBr,
---				                fullMask, taggedMask,
---											storeAddressInput.full, storeValueInput.full,
---											storeAddressInput.ins, storeValueInput.ins);
+	contentNext <=
+				getNewContentBr(content, dataIn, dataInBr,
+				                prevSending, prevSendingBr,
+				                inputMask, inputMaskBr,
+				                pTagged, pAll);--,
+											--storeAddressInput.full, storeValueInput.full,
+											--storeAddressInput.ins, storeValueInput.ins);
 
-	
+	dataOutSig <= getWindow(content, taggedLivingMask, pStart, PIPE_WIDTH);
 --	sqOutData <= TMP_sendingData;
 
 --		cmpMask <=	compareAddress(TMP_content, fullOrCommMask, compareAddressIns) when MODE = store
@@ -201,8 +304,9 @@ begin
 			
 			selectedDataOutputSig <= selectedDataSlot;--(selectedSendingSig, selectedData);
 
-            if isSending = '1' then  -- TODO: + nSending
-                pStart <= addSN(pStart, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+            if isSending = '1' then
+                pStart <= addSN(pStart,
+                             i2slv(countOnes(extractFullMask(dataOutSig)), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
             end if;
             
             if lateEventSignal = '1' then
@@ -223,15 +327,14 @@ begin
 		end if;
 	end process;
 
+	isSending <= nextAccepting and dataOutSig(0).full;
+	dataOutV <= dataOutSig;
 
-	isSending <= '0';
-	--dataOutV <= sqOutData;
-	--	dataOutV.data <= TMP_content(0 to 3);
-	--	dataOutV.fullMask <= TMP_mask(0 to 3);
-	
-	acceptingOut <= '1'; -- TMP
+	acceptingOut <= '1';
 
-	acceptingBr <=  '1'; -- TMP
+    -- Accept when 4 free slot exist
+    pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+	acceptingBr <= not fullMask(slv2u(pAcc));
 
 	
 	sendingSQOut <= isSending;
