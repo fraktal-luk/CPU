@@ -49,8 +49,8 @@ entity BranchQueue is
 			dataInBr: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 
 		--storeAddressInput: in InstructionSlot;
-		--storeValueInput: in InstructionSlot;
-		--compareAddressInput: in InstructionSlot;
+		storeValueInput: in InstructionSlot;
+		compareAddressInput: in InstructionSlot;
 
 		selectedDataOutput: out InstructionSlot;
 
@@ -173,7 +173,8 @@ architecture Behavioral of BranchQueue is
     function getNewContentBr(content: InstructionStateArray; dataIn, dataInBr: InstructionSlotArray;
 				                prevSending, prevSendingBr: std_logic;
 				                inputMask, inputMaskBr: std_logic_vector;
-				                pTagged, pAll: SmallNumber
+				                pTagged, pAll: SmallNumber;
+				                storeValueInput: InstructionSlot
 				                )
 											--storeAddressInput.full, storeValueInput.full,
 											--storeAddressInput.ins, storeValueInput.ins);	
@@ -232,6 +233,15 @@ architecture Behavioral of BranchQueue is
            end if;
         end loop;
 
+        -- Update target after branch execution
+        for i in 0 to QUEUE_SIZE-1 loop
+           if content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
+               and storeValueInput.full = '1'
+           then
+               res(i).target := storeValueInput.ins.target;
+           end if;            
+        end loop;
+
         return res;
     end function;
     
@@ -256,6 +266,22 @@ architecture Behavioral of BranchQueue is
         return res;
     end function;
     
+    function selectDataSlot(content: InstructionStateArray; taggedMask: std_logic_vector;
+                            compareAddressInput: InstructionSlot)
+    return InstructionSlot is 
+        variable res: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;    
+    begin
+        for i in 0 to QUEUE_SIZE-1 loop 
+            res.ins := content(i);
+            if content(i).tags.renameIndex = compareAddressInput.ins.tags.renameIndex
+                and compareAddressInput.full = '1' and taggedMask(i) = '1'
+            then
+                res.full := '1';
+                exit;
+            end if;
+        end loop;
+        return res;
+    end function;
 begin
 	--	compareAddressIns <= storeAddressInput.ins;
 
@@ -279,8 +305,9 @@ begin
 	contentNext <=
 				getNewContentBr(content, dataIn, dataInBr,
 				                prevSending, prevSendingBr,
-				                inputMask, inputMaskBr,
-				                pTagged, pAll);--,
+				                inputMask, inputMaskBr,				             
+				                pTagged, pAll,
+				                storeValueInput);--,
 											--storeAddressInput.full, storeValueInput.full,
 											--storeAddressInput.ins, storeValueInput.ins);
 
@@ -293,6 +320,7 @@ begin
 --		matchedSlot <= findMatching(makeSlotArray(content, mask), compareAddressInput.ins);
 
 --	selectedDataSlot <= (isNonzero(matchedSlot) and compareAddressInput.full, chooseIns(TMP_content, matchedSlot));
+	selectedDataSlot <= selectDataSlot(content, taggedMask, compareAddressInput);
 	
 	process (clk)
 	begin

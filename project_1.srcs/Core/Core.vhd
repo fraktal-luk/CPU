@@ -78,11 +78,12 @@ architecture Behavioral of Core is
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal frontDataLastLiving, renamedDataLiving, dataOutROB, renamedDataToBQ, bqData: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal bqCompare, bqSelected, bqUpdate: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
 
-    signal execEventSignal, lateEventSignal, lateEventSetPC: std_logic := '0';
-    signal robSending, robAccepting, renamedSending, commitAccepting, iqAccepting: std_logic := '0';
+    signal execEventSignal, lateEventSignal, lateEventSetPC, sendingBranchIns: std_logic := '0';
+    signal robSending, robAccepting, renamedSending, commitAccepting, iqAccepting, iqAcceptingA: std_logic := '0';
     --    signal iadrReg: Mword := X"ffffffb0";
     signal commitGroupCtr, commitCtr, commitGroupCtrInc: InsTag := (others => '0');
 begin
@@ -237,9 +238,16 @@ begin
 
 
     TEMP_EXEC: block
-        signal dataToIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+        signal dataToIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1)
+                            := (others => DEFAULT_SCH_ENTRY_SLOT);
+        signal dataToAlu, dataToBranch, dataOutAlu, dataOutAluDelay, dataToIntRF: InstructionSlotArray(0 to 0)
+                                            := (others => DEFAULT_INSTRUCTION_SLOT);
+        signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+        signal dataToIssue, dataToExec: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+        signal sendingToIssue, sendingAlu, sendingToIntRF, sendingBranch: std_logic := '0';
+        signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
     begin
-        dataToIQ <= getSchedData(extractData(dataOutROB), extractFullMask(dataOutROB));
+        dataToIQ <= getSchedData(extractData(renamedDataLiving), getAluMask(renamedDataLiving));
     
 		IQUEUE: entity work.IssueQueue(Behavioral)--UnitIQ
         generic map(
@@ -249,8 +257,8 @@ begin
             clk => clk, reset => '0', en => '0',
     
             --acceptingVec => open,--iqAcceptingVecArr(i),
-            acceptingOut => open,--iqAcceptingArr(4),
-            prevSendingOK => robSending,
+            acceptingOut => iqAcceptingA,--iqAcceptingArr(4),
+            prevSendingOK => renamedSending,
             --newData => dataToQueuesArr(i),
                 newArr => dataToIQ,--,schArrays(4),
             fni => DEFAULT_FORWARDING_INFO,--fni,
@@ -260,24 +268,24 @@ begin
             lateEventSignal => lateEventSignal,
             execEventSignal => execEventSignal,
             anyReady => open,--iqReadyArr(4),
-            schedulerOut => open,--iqOutputArr(4),
-            sending => open --iqSending(4)
+            schedulerOut => dataToIssue,
+            sending => sendingToIssue
         );
  
         ISSUE_STAGE: entity work.IssueStage
  	    generic map(USE_IMM => true)
         port map(
-            clk => '0',
+            clk => clk,
             reset => '0',
             en => '0',
     
-            prevSending => '0',
-            nextAccepting => '0',
+            prevSending => sendingToIssue,
+            nextAccepting => '1',
     
-            input => DEFAULT_SCH_ENTRY_SLOT,
+            input => dataToIssue,
             
             acceptingOut => open,
-            output => open,
+            output => dataToExec,
             
             execEventSignal => execEventSignal,
             lateEventSignal => lateEventSignal,
@@ -290,10 +298,114 @@ begin
             regValues => (others => (others => '0'))     
         );
       
+        dataToAlu(0) <= (dataToExec.full, 
+                       work.LogicExec.executeAlu(dataToExec.ins, dataToExec.state, bqSelected.ins));
+
+      
+            SUBPIPE_A: entity work.GenericStage(Behavioral)
+            generic map(
+                COMPARE_TAG => '1'
+            )
+            port map(
+                clk => clk, reset => '0', en => '0',
+                
+                prevSending => dataToAlu(0).full,
+                nextAccepting => '1',
+                
+                stageDataIn => dataToAlu,
+                acceptingOut => open,
+                sendingOut => sendingAlu,
+                stageDataOut => dataOutAlu,
+                
+                execEventSignal => '0',--execEventSignal,
+                lateEventSignal => lateEventSignal,
+                execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
+            );      
+      
+		branchData <=  
+		        work.LogicExec.basicBranch(setInstructionTarget(dataToExec.ins, 
+		                                                          dataToExec.ins.constantArgs.imm),
+                                         dataToExec.state, bqSelected.ins, bqSelected.full);                    
+            
+            dataToBranch(0) <= (dataToExec.full and 
+                                          work.LogicExec.isBranch(dataToExec.ins), branchData);
+            sendingBranchIns <= dataToBranch(0).full;
+            
+            --dataD0 <= outputDataD2(0).ins;
+                bqCompare <= (sendingBranchIns, dataToExec.ins);
+            
+            SUBPIPE_D: entity work.GenericStage(Behavioral)
+            generic map(
+                COMPARE_TAG => '1'
+            )
+            port map(
+                clk => clk, reset => '0', en => '0',
+                
+                prevSending => dataToBranch(0).full,
+                nextAccepting => '1',
+                
+                stageDataIn(0) => dataToBranch(0),
+                acceptingOut => open,
+                sendingOut => sendingBranch,
+                stageDataOut(0) => dataFromBranch,
+                execEventSignal => '0',--execEventSignal,
+                lateEventSignal => lateEventSignal,
+                execCausing => DEFAULT_INSTRUCTION_STATE-- execCausing                    
+            );
+            
+            bqUpdate <= dataFromBranch;  
+            
+            
+            SUBPIPE_A_DELAY: entity work.GenericStage(Behavioral)
+            generic map(
+                COMPARE_TAG => '1'
+            )
+            port map(
+                clk => clk, reset => '0', en => '0',
+                
+                prevSending => sendingAlu,
+                nextAccepting => '1',
+                
+                stageDataIn => dataOutAlu,
+                acceptingOut => open,
+                sendingOut => open,
+                stageDataOut => dataOutAluDelay,
+                
+                execEventSignal => '0',--execEventSignal,
+                lateEventSignal => '0',
+                execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
+            );             
+            
+            -- TEMP: just for subpipe A
+            INT_WRITE_QUEUE: entity work.GenericStage(Behavioral)
+            generic map(
+                COMPARE_TAG => '1'
+            )
+            port map(
+                clk => clk, reset => '0', en => '0',
+                
+                prevSending => sendingAlu,
+                nextAccepting => '1',
+                
+                stageDataIn => dataOutAlu,
+                acceptingOut => open,
+                sendingOut => sendingToIntRF,
+                stageDataOut => dataToIntRF,
+                
+                execEventSignal => '0',--execEventSignal,
+                lateEventSignal => '0',
+                execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
+            ); 
+            
+     
+         execOutputs1(0) <= (sendingAlu, dataOutAlu(0).ins);
+         execOutputs2(0) <= (sendingBranch, dataFromBranch.ins);
     end block;
 
 
     renamedDataToBQ <= setFullMask(renamedDataLiving, getBranchMask(renamedDataLiving));
+
+
 
     BRANCH_QUEUE: entity work.BranchQueue
 	generic map(
@@ -315,10 +427,10 @@ begin
 		dataInBr => bpData,
 
 		--storeAddressInput: in InstructionSlot;
-		--storeValueInput: in InstructionSlot;
-		--compareAddressInput: in InstructionSlot;
+		storeValueInput => bqUpdate,
+		compareAddressInput => bqCompare,
 
-		selectedDataOutput => open,
+		selectedDataOutput => bqSelected,
 
 		committing => robSending, -- When ROB is sending so is BQ if it has corresponding branches
 		groupCtrInc => commitGroupCtrInc,

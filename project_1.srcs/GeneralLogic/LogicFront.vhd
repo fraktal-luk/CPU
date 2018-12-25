@@ -419,10 +419,10 @@ function prepareForBQ(insVec: InstructionSlotArray; branchMask: std_logic_vector
 	variable result, target: Mword;
 begin
 	for i in insVec'range loop
-		target := insVec(i).ins.target;
-		result := insVec(i).ins.result;
-		res(i).ins := setStoredArg1(res(i).ins, target);
-		res(i).ins := setStoredArg2(res(i).ins, result);
+		--target := insVec(i).ins.target;
+		--result := insVec(i).ins.result;
+		--res(i).ins := setStoredArg1(res(i).ins, target);
+		--res(i).ins := setStoredArg2(res(i).ins, result);
 		res(i).full := branchMask(i) and insVec(i).full and not insVec(i).ins.controlInfo.skipped; 
 	end loop;
 	

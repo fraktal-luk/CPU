@@ -199,7 +199,7 @@ begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if bqGroup(i).full = '1' then
 			ind := slv2u(getTagLow(bqGroup(i).ins.tags.renameIndex));
-			targets(ind) := getStoredArg1(bqGroup(i).ins);
+			targets(ind) := bqGroup(i).ins.target;
 		end if;
 	end loop;
 
@@ -338,7 +338,7 @@ begin
 														--and effectiveVec(slv2u(ind)) = '1' then
 				if dataFromBQV(i).ins.controlInfo.hasBranch = '1' then
 					bqTakenBranchVec(i) := '1';
-					branchTarget := getStoredArg1(dataFromBQV(i).ins);
+					branchTarget := dataFromBQV(i).ins.target;
 				end if;
 			else
 				exit;

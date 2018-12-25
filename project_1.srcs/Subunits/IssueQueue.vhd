@@ -190,7 +190,7 @@ begin
 
 		newContent <= newArr;
 
-		queueContentNext <= iqContentNext(queueContentUpdated,
+		queueContentNext <= iqContentNext2(queueContentUpdated,
 														newContent,
 														stayMask,
 														fullMask,

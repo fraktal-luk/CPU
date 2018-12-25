@@ -42,6 +42,15 @@ function iqContentNext(queueContent: SchedulerEntrySlotArray; inputDataS: Schedu
 								 prevSendingOK: std_logic)
 return SchedulerEntrySlotArray;
 
+function iqContentNext2(queueContent: SchedulerEntrySlotArray; inputDataS: SchedulerEntrySlotArray;
+								 stayMask, fullMask, livingMask
+								 : std_logic_vector;
+								 sendPossible, sends: std_logic;
+								 nextAccepting: std_logic;
+								 living: integer;
+								 prevSendingOK: std_logic)
+return SchedulerEntrySlotArray;
+
 function extractReadyMaskNew(entryVec: SchedulerEntrySlotArray) return std_logic_vector;
 
 
@@ -465,6 +474,140 @@ begin
 	return res;
 end function;
 
+
+
+function iqContentNext2(queueContent: SchedulerEntrySlotArray; inputDataS: SchedulerEntrySlotArray;
+								 stayMask, fullMask, livingMask
+								 : std_logic_vector;
+								 sendPossible, sends: std_logic;
+								 nextAccepting: std_logic;
+								 living: integer;
+								 prevSendingOK: std_logic)
+return SchedulerEntrySlotArray is
+	constant QUEUE_SIZE: natural := queueContent'length;
+	variable res: SchedulerEntrySlotArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT); 	
+	variable queueDataS: SchedulerEntrySlotArray(0 to QUEUE_SIZE-1) := queueContent;
+	--variable dataNew: StageDataMulti := inputData;
+	variable newMask: std_logic_vector(0 to PIPE_WIDTH-1) := extractFullMask(inputDataS);--inputData.fullMask;--
+	variable compMask: std_logic_vector(0 to PIPE_WIDTH-1) := compactMask(newMask);
+	variable dataNewDataS: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := inputDataS;
+	
+	variable iqDataNextS: SchedulerEntrySlotArray(0 to QUEUE_SIZE - 1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	variable iqFullMaskNext: std_logic_vector(0 to QUEUE_SIZE - 1) :=	(others => '0');
+    variable iqRemainingMaskSh: std_logic_vector(0 to QUEUE_SIZE + 4 - 1) := (others => '0');
+
+	variable xVecS: SchedulerEntrySlotArray(0 to QUEUE_SIZE + PIPE_WIDTH - 1);
+	variable yVecS: SchedulerEntrySlotArray(0 to QUEUE_SIZE + PIPE_WIDTH - 1);
+	variable yMask: std_logic_vector(0 to QUEUE_SIZE + PIPE_WIDTH-1)	:= (others => '0');
+	variable fullMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := fullMask;
+	variable livingMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := livingMask;
+	variable fillMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');	
+	variable nAfterSending: integer := living;
+	variable shiftNum: integer := 0;
+	variable remv: std_logic_vector(0 to 2) := "000";
+	variable sel: std_logic_vector(1 downto 0) := "00";		
+begin
+	-- Important, new instrucitons in queue must be marked!	
+	for i in 0 to PIPE_WIDTH-1 loop
+		dataNewDataS(i).state.argValues.newInQueue := '1';
+	end loop;
+
+	xVecS := queueDataS & dataNewDataS;
+	xVecS(QUEUE_SIZE) := xVecS(QUEUE_SIZE-1);
+	for i in 0 to QUEUE_SIZE + PIPE_WIDTH - 1 loop
+		xVecS(i).state.argValues.newInQueue := '0';
+	end loop;
+		
+	for k in 0 to yVecS'right loop
+		yVecS(k) := dataNewDataS(k mod PIPE_WIDTH);
+	end loop;	
+
+	for k in 0 to PIPE_WIDTH-1 loop
+		yMask(k) := newMask(k); -- not wrapping mod k to enable simple copying to new fullMask
+	end loop;
+
+	if sends = '1' then
+		nAfterSending := nAfterSending-1;
+	end if;
+
+	for i in 0 to QUEUE_SIZE-2 loop
+		if livingMask(i) = '0' or (livingMask(i+1) = '0' and sends = '1') then
+			livingMaskSh(i) := '0';
+		else
+			livingMaskSh(i) := '1';
+		end if;
+	end loop;
+	
+	if livingMask(QUEUE_SIZE-1) = '0' or sends = '1' then
+		livingMaskSh(QUEUE_SIZE-1) := '0';
+	else
+		livingMaskSh(QUEUE_SIZE-1) := '1';
+	end if;
+
+	for i in 0 to QUEUE_SIZE-2 loop
+		if fullMask(i) = '0' or (fullMask(i+1) = '0' and sendPossible = '1') then
+			fullMaskSh(i) := '0';
+		else
+			fullMaskSh(i) := '1';
+		end if;
+	end loop;
+	
+	if fullMask(QUEUE_SIZE-1) = '0' or sendPossible = '1' then
+		fullMaskSh(QUEUE_SIZE-1) := '0';
+	else
+		fullMaskSh(QUEUE_SIZE-1) := '1';
+	end if;
+
+
+--	if nAfterSending < 0 then
+--		nAfterSending := 0;
+--	elsif nAfterSending > yVecS'length then	
+--		nAfterSending := yVecS'length;
+--	end if;
+--
+--	shiftNum := nAfterSending;
+	shiftNum := countOnes(fullMaskSh); -- CAREFUL: this seems to reduce some logic
+
+	-- CAREFUL, TODO:	solve the issue with HDLCompiler:1827
+	yVecS(shiftNum to yVecS'length - 1) := yVecS(0 to yVecS'length - 1 - shiftNum);
+	yMask(shiftNum to yVecS'length - 1) := yMask(0 to yVecS'length - 1 - shiftNum);
+
+	-- Now assign from x or y
+	iqRemainingMaskSh(0 to 3) := (others => '1');
+	iqRemainingMaskSh(4 to QUEUE_SIZE + 4 - 1) := fullMaskSh;
+	iqDataNextS := queueDataS;
+	for i in 0 to QUEUE_SIZE-1 loop
+		remv := iqRemainingMaskSh(i+1 to i+3);	                   
+	    
+        fillMask(i) := '0';
+        for k in 0 to 3 loop -- Further beyond end requires more ful inputs to be filled:
+            --                            !! equiv to remainingMask(-1-k), where '1' for k < 0
+            fillMask(i) := fillMask(i) or (iqRemainingMaskSh(i + 3-k) and compMask(k));
+        end loop;
+	      
+		iqFullMaskNext(i) := livingMaskSh(i) or (fillMask(i) and prevSendingOK);
+		if --yMask(i) = '0' then -- 
+			fullMaskSh(i) = '1' then -- From x	
+			if stayMask(i) = '1' then
+				iqDataNextS(i) := xVecS(i);
+			else
+				iqDataNextS(i) := xVecS(i + 1);
+			end if;
+		else -- From y
+		    sel := getSelector(remv, newMask(0 to 2));    
+			iqDataNextS(i) := inputDataS(slv2u(sel));--yVecS(i);
+		end if;
+	end loop;
+
+	-- Fill output array
+	for i in 0 to res'right loop
+		res(i).full := iqFullMaskNext(i);
+		res(i).ins := iqDataNextS(i).ins;
+		res(i).state := iqDataNextS(i).state;
+	end loop;
+
+	return res;
+end function;
 
 
 function updateForWaitingFNI(ins: InstructionState; st: SchedulerState;
