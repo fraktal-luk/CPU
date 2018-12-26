@@ -569,8 +569,8 @@ begin
 	shiftNum := countOnes(fullMaskSh); -- CAREFUL: this seems to reduce some logic
 
 	-- CAREFUL, TODO:	solve the issue with HDLCompiler:1827
-	yVecS(shiftNum to yVecS'length - 1) := yVecS(0 to yVecS'length - 1 - shiftNum);
-	yMask(shiftNum to yVecS'length - 1) := yMask(0 to yVecS'length - 1 - shiftNum);
+	--yVecS(shiftNum to yVecS'length - 1) := yVecS(0 to yVecS'length - 1 - shiftNum);
+	--yMask(shiftNum to yVecS'length - 1) := yMask(0 to yVecS'length - 1 - shiftNum);
 
 	-- Now assign from x or y
 	iqRemainingMaskSh(0 to 3) := (others => '1');

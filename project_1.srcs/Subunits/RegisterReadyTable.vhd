@@ -10,6 +10,7 @@ use work.InstructionState.all;
 use work.CoreConfig.all;
 
 use work.PipelineGeneral.all;
+use work.LogicRenaming.all;
 
 
 entity RegisterReadyTable is
@@ -59,10 +60,12 @@ begin
 end function;	
 begin
 		readyTableClearAllow <= sendingToReserve; -- for ready table
-		--readyTableClearSel <= getDestMask(stageDataToReserve);	-- for ready table		
+		readyTableClearSel <= (others => '1'); -- No need to prevent free yet-unallocated regs from clearing!	
 		
 		--altMask <= getArrayDestMask(writingData, writingMask);
 		--altDests <= getArrayPhysicalDests(writingData);
+		
+		      --newPhysDests <= getPhysicalDests(stageDataReserved);
 		
 		IMPL: block
 			signal content: std_logic_vector(0 to N_PHYSICAL_REGS-1) := (0 to 31 => '1', others => '0');

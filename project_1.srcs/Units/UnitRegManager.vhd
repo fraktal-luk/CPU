@@ -43,6 +43,8 @@ port(
     renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     renamedSending: out std_logic;
     
+    newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
+    
     robDataLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1);
     sendingFromROB: in std_logic;
    
@@ -321,4 +323,5 @@ begin
 				physStableDelayed => physStable -- FOR MAPPING (from MAP)
 			);
         
+        newPhysDestsOut <= newPhysDests;
 end Behavioral;

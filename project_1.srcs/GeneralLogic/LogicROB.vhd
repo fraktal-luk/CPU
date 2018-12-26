@@ -106,12 +106,15 @@ end function;
         end if;
         
 	    for k in 0 to PIPE_WIDTH-1 loop
-            if slv2u(il) = k then
-				if res(k).full = '1' then
+	       
+	       if eventFound then
+	    		if res(k).full = '1' then
                     res(k).ins.controlInfo.squashed := '1';
                 end if;
                 res(k).full := '0';
-                
+	       end if;
+	    
+            if slv2u(il) = k then                
                 if execResult.ins.controlInfo.hasBranch = '1' then
                     res(k).ins.controlInfo.newEvent := '1'; --- !!!
                     res(k).ins.controlInfo.hasBranch := '1';
@@ -125,9 +128,9 @@ end function;
                 end if;
                 
                 if num = 1 then
-                    res(k).ins.controlInfo.completed := '1';
-                else
                     res(k).ins.controlInfo.completed2 := '1';
+                else
+                    res(k).ins.controlInfo.completed := '1';
                 end if;                                
             end if;
         end loop;

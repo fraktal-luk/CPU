@@ -142,8 +142,9 @@ package body PipelineGeneral is
 
    function compactMask(vec: std_logic_vector) return std_logic_vector is
         variable res: std_logic_vector(0 to 3) := (others => '0');
+        variable vec4: std_logic_vector(0 to 3) := vec;
     begin
-        case vec is
+        case vec4 is
             when "0000" =>
                 res := "0000";
             when "1111" =>
@@ -355,7 +356,9 @@ end function;
             res.target := val;
             return res;
         end function;
-
+        
+        
+        
 
 function getTagHigh(tag: std_logic_vector) return std_logic_vector is
 	variable res: std_logic_vector(tag'high-LOG2_PIPE_WIDTH downto 0) := (others => '0');

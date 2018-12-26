@@ -337,9 +337,9 @@ begin
 			if dataFromBQV(i).full = '1' then -- 
 														--and effectiveVec(slv2u(ind)) = '1' then
 				if dataFromBQV(i).ins.controlInfo.hasBranch = '1' then
-					bqTakenBranchVec(i) := '1';
+					bqTakenBranchVec(slv2u(ind)) := '1';
 					branchTarget := dataFromBQV(i).ins.target;
-				end if;
+				end if;				
 			else
 				exit;
 			end if;
@@ -355,7 +355,6 @@ begin
 		end loop;
 		-- CAREFUL: works only for 32b instructions
 		targetInc(LOG2_PIPE_WIDTH + 2 downto 2) := i2slv(countOnes(differenceVec), LOG2_PIPE_WIDTH+1);
-		
 		res.ins.target := addMwordFaster(branchTarget, targetInc);
 	end if; 
 	

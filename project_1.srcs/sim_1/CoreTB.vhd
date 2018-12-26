@@ -178,7 +178,8 @@ BEGIN
    begin		
 	
 
-      prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\src.txt");
+      --prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\src.txt");
+      prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\alu.txt");
 
       wait for clk_period;
 

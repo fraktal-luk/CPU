@@ -76,7 +76,7 @@ architecture Behavioral of BranchQueue is
 
 	signal content, contentNext: InstructionStateArray(0 to QUEUE_SIZE-1)
 															:= (others => DEFAULT_INSTRUCTION_STATE);
-	signal fullMask, taggedMask, killMask, livingMask, sendingMask, inputMask, inputMaskBr,
+	signal fullMask, taggedMask, killMask, livingMask, frontMask, sendingMask, inputMask, inputMaskBr,
 			 fullMaskNext, taggedMaskNext: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0'); 
 
 
@@ -289,8 +289,9 @@ begin
     causingPtr <= getCausingPtr(content, execCausing);
     
 	-- in shifting queue this would be shfited by nSend
-	sendingMask <= getSendingMask(content, taggedLivingMask, groupCtrInc)
-	                       when committing = '1' else (others => '0');
+	frontMask <= getSendingMask(content, taggedLivingMask, groupCtrInc);
+	sendingMask <= frontMask when committing = '1' else (others => '0');
+
 	killMask <= getKillMask(content, taggedMask, execCausing, execEventSignal, lateEventSignal);
 	livingMask <= fullMask when (lateEventSignal = '0' and execEventSignal = '0') 
 	         else taggedLivingMask;	
@@ -311,7 +312,7 @@ begin
 											--storeAddressInput.full, storeValueInput.full,
 											--storeAddressInput.ins, storeValueInput.ins);
 
-	dataOutSig <= getWindow(content, taggedLivingMask, pStart, PIPE_WIDTH);
+	dataOutSig <= getWindow(content, frontMask, pStart, PIPE_WIDTH);
 --	sqOutData <= TMP_sendingData;
 
 --		cmpMask <=	compareAddress(TMP_content, fullOrCommMask, compareAddressIns) when MODE = store
@@ -355,7 +356,7 @@ begin
 		end if;
 	end process;
 
-	isSending <= nextAccepting and dataOutSig(0).full;
+	isSending <= committing and dataOutSig(0).full;
 	dataOutV <= dataOutSig;
 
 	acceptingOut <= '1';

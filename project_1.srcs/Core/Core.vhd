@@ -86,6 +86,7 @@ architecture Behavioral of Core is
     signal robSending, robAccepting, renamedSending, commitAccepting, iqAccepting, iqAcceptingA: std_logic := '0';
     --    signal iadrReg: Mword := X"ffffffb0";
     signal commitGroupCtr, commitCtr, commitGroupCtrInc: InsTag := (others => '0');
+    signal newPhysDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 begin
 
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
@@ -205,6 +206,8 @@ begin
 
         robDataLiving => dataOutROB,
         sendingFromROB => robSending,
+        
+        newPhysDestsOut => newPhysDests,
             
         commitGroupCtr => commitGroupCtr,
         commitCtr => commitCtr,
@@ -246,6 +249,9 @@ begin
         signal dataToIssue, dataToExec: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
         signal sendingToIssue, sendingAlu, sendingToIntRF, sendingBranch: std_logic := '0';
         signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
+        signal regsSelA: PhysNameArray(0 to 2) := (others => (others => '0'));
+        signal regValsA, regValsB, regValsC, regValsD: MwordArray(0 to 2) := (others => (others => '0'));
+        signal readyRegFlags, readyRegFlagsNext: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
     begin
         dataToIQ <= getSchedData(extractData(renamedDataLiving), getAluMask(renamedDataLiving));
     
@@ -295,7 +301,7 @@ begin
             
             --resultTags: in PhysNameArray(0 to N_RES_TAGS-1);
             --resultVals: in MwordArray(0 to N_RES_TAGS-1);
-            regValues => (others => (others => '0'))     
+            regValues => regValsA --(others => (others => '0'))     
         );
       
         dataToAlu(0) <= (dataToExec.full, 
@@ -353,6 +359,8 @@ begin
                 execCausing => DEFAULT_INSTRUCTION_STATE-- execCausing                    
             );
             
+            execEventSignal <= dataFromBranch.ins.controlInfo.newEvent and sendingBranch;
+            execCausing <= dataFromBranch.ins;
             bqUpdate <= dataFromBranch;  
             
             
@@ -397,11 +405,60 @@ begin
                 execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
             ); 
             
-     
+  
          execOutputs1(0) <= (sendingAlu, dataOutAlu(0).ins);
          execOutputs2(0) <= (sendingBranch, dataFromBranch.ins);
+         
+         
+         regsSelA <= --getPhysicalSources(iqOutputArr(0).ins);
+                    work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToIssue.ins)));
+		 INT_REG_FILE: entity work.RegFile(Behavioral)
+         generic map(WIDTH => 4, WRITE_WIDTH => 1)
+         port map(
+             clk => clk, reset => '0', en => '0',
+                 
+             writeAllow => '1',
+             writeInput => dataToIntRF,
+ 
+             readAllowVec => (others => '1'), -- TEMP!
+             
+             selectRead(0 to 2) => regsSelA,--(others => (others => '0')),
+             selectRead(3 to 5) => (others => (others => '0')),
+             selectRead(6 to 8) => (others => (others => '0')),
+             selectRead(9 to 11) => (others => (others => '0')),
+             
+             readValues(0 to 2) => regValsA,--open,
+             readValues(3 to 5) => regValsB,
+             readValues(6 to 8) => regValsC,                        
+             readValues(9 to 11) => regValsD            
+         );
+         
+         INT_READY_TABLE: entity work.RegisterReadyTable(Behavioral)
+         generic map(
+             WRITE_WIDTH => 1
+         )
+         port map(
+             clk => clk, reset => '0', en => '0', 
+             
+             sendingToReserve => frontLastSending,
+             stageDataToReserve => frontDataLastLiving,
+                 
+             newPhysDests => newPhysDests,    -- FOR MAPPING
+             stageDataReserved => renamedDataLiving, --stageDataOutRename,
+                 
+             -- TODO: change to ins slot based
+             writingMask(0) => sendingToIntRF,
+             writingData(0) => dataToIntRF(0).ins,
+             readyRegFlagsNext => readyRegFlagsNext -- FOR IQs
+         );
+         
+         process(clk)
+         begin
+            if rising_edge(clk) then
+                readyRegFlags <= readyRegFlagsNext;
+            end if;
+         end process;
     end block;
-
 
     renamedDataToBQ <= setFullMask(renamedDataLiving, getBranchMask(renamedDataLiving));
 
