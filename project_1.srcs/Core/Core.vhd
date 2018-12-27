@@ -160,7 +160,6 @@ begin
         commitGroupCtrIncOut => commitGroupCtrInc
     );
         
-        iqAccepting <= robAccepting and '1'; -- TEMP 
         
     iadr <= pcDataSig.ip;
     iadrvalid <= pcSending;
@@ -179,7 +178,7 @@ begin
         bpSending => bpSending,
         bpData => bpData,
     
-        renameAccepting => renameAccepting,            
+        renameAccepting => iqAccepting,            
         dataLastLiving => frontDataLastLiving,
         lastSending => frontLastSending,
         
@@ -219,6 +218,12 @@ begin
         lateEventSignal => lateEventSignal
     );
 
+    -- CAREFUL, TODO: this must block renaming of a group if there will be no place for it in IQs the next cycle;
+    --                Because stalling at Rename is illegal, sending to Rename has to depend on free slots 
+    --                after accounting for current group at Rename that will use some resources!  
+    iqAccepting <= robAccepting and renameAccepting and iqAcceptingA;
+
+
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(
 		clk => clk, reset => '0', en => '0',
@@ -252,6 +257,8 @@ begin
         signal regsSelA: PhysNameArray(0 to 2) := (others => (others => '0'));
         signal regValsA, regValsB, regValsC, regValsD: MwordArray(0 to 2) := (others => (others => '0'));
         signal readyRegFlags, readyRegFlagsNext: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+        
+        signal fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
     begin
         dataToIQ <= getSchedData(extractData(renamedDataLiving), getAluMask(renamedDataLiving));
     
@@ -267,7 +274,7 @@ begin
             prevSendingOK => renamedSending,
             --newData => dataToQueuesArr(i),
                 newArr => dataToIQ,--,schArrays(4),
-            fni => DEFAULT_FORWARDING_INFO,--fni,
+            fni => fni,
             readyRegFlags => readyRegFlags,
             nextAccepting => '1',--issueAcceptingArr(4),
             execCausing => execCausing,
@@ -297,7 +304,7 @@ begin
             lateEventSignal => lateEventSignal,
             execCausing => execCausing,
             
-                fni => DEFAULT_FORWARDING_INFO,
+                fni => fni,
             
             --resultTags: in PhysNameArray(0 to N_RES_TAGS-1);
             --resultVals: in MwordArray(0 to N_RES_TAGS-1);
@@ -412,6 +419,18 @@ begin
          
          regsSelA <= --getPhysicalSources(iqOutputArr(0).ins);
                     work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToIssue.ins)));
+           
+          -- Forwarding network
+		  fni.nextResultTags <= (0 => dataToExec.ins.physicalArgSpec.dest, others => (others => '0'));        
+		  fni.nextTagsM2 <= (others => (others => '0'));
+          fni.tags0 <= (execOutputs1(0).ins.physicalArgSpec.dest, -- ALU
+                             execOutputs1(1).ins.physicalArgSpec.dest, execOutputs1(2).ins.physicalArgSpec.dest);
+          fni.tags1 <= (0 => dataOutAluDelay(0).ins.physicalArgSpec.dest, others => (others => '0'));
+          fni.values0 <= (execOutputs1(0).ins.result, -- ALU
+                             execOutputs1(1).ins.result, execOutputs1(2).ins.result);
+          fni.values1 <= (0 => dataOutAluDelay(0).ins.result, others => (others => '0'));                 
+                    
+                    
 		 INT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(WIDTH => 4, WRITE_WIDTH => 1)
          port map(
