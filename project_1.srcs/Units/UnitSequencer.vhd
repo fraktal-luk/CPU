@@ -361,9 +361,11 @@ begin
                                             commitGroupCtrInc when sendingToCommit = '1' else commitGroupCtr;
             commitCtrNext <= nextCtr(commitCtr, '0', (others => '0'), sendingToCommit, effectiveMask);
         
-            commitGroupCtrInc <= i2slv(slv2u(commitGroupCtr) + PIPE_WIDTH, TAG_SIZE);
+            --commitGroupCtrInc <= i2slv(slv2u(commitGroupCtr) + PIPE_WIDTH, TAG_SIZE);
         
-            commitGroupCtrIncNext <= nextCtr(commitGroupCtrInc, '0', (others => '0'), sendingToCommit, ALL_FULL);
+            commitGroupCtrIncNext <= i2slv(slv2u(commitGroupCtrInc) + PIPE_WIDTH, TAG_SIZE)
+                                        when sendingToCommit = '1' else commitGroupCtrInc;
+                    --nextCtr(commitGroupCtrInc, '0', (others => '0'), sendingToCommit, ALL_FULL);
         
             -- Re-allow renaming when everything from rename/exec is committed - reg map will be well defined now
             renameLockRelease <= '1' when commitGroupCtr = renameGroupCtr else '0';

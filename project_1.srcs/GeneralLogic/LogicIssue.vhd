@@ -595,7 +595,7 @@ begin
 			end if;
 		else -- From y
 		    sel := getSelector(remv, newMask(0 to 2));    
-			iqDataNextS(i) := inputDataS(slv2u(sel));--yVecS(i);
+			iqDataNextS(i) := dataNewDataS(slv2u(sel));--yVecS(i);
 		end if;
 	end loop;
 
