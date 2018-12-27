@@ -115,7 +115,7 @@ package body LogicExec is
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
 		variable targetEqual: std_logic := '0';
 	begin		
-		res.operation := (General, Unknown);
+		--res.operation := (General, Unknown);
 	
 		-- TODO: cases to handle
 		-- jr taken		: if not taken goto return, if taken and not equal goto reg, if taken and equal ok 

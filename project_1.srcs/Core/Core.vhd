@@ -268,7 +268,7 @@ begin
             --newData => dataToQueuesArr(i),
                 newArr => dataToIQ,--,schArrays(4),
             fni => DEFAULT_FORWARDING_INFO,--fni,
-            readyRegFlags => (others => '0'),--readyRegFlags,
+            readyRegFlags => readyRegFlags,
             nextAccepting => '1',--issueAcceptingArr(4),
             execCausing => execCausing,
             lateEventSignal => lateEventSignal,

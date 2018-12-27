@@ -94,9 +94,9 @@ architecture Behavioral of UnitRegManager is
         for i in 0 to PIPE_WIDTH-1 loop
             res(i).ins.physicalArgSpec.dest := newPhysDests(countOnes(takeVec)); -- how many used before
             takeVec(i) := insVec(i).ins.virtualArgSpec.intDestSel;
-            res(i).ins.physicalArgSpec.args(0) := newPhysSources(0);
-            res(i).ins.physicalArgSpec.args(1) := newPhysSources(1);
-            res(i).ins.physicalArgSpec.args(2) := newPhysSources(2);
+            res(i).ins.physicalArgSpec.args(0) := newPhysSources(3*i+0);
+            res(i).ins.physicalArgSpec.args(1) := newPhysSources(3*i+1);
+            res(i).ins.physicalArgSpec.args(2) := newPhysSources(3*i+2);
             
             res(i).ins.physicalArgSpec.intArgSel := res(i).ins.virtualArgSpec.intArgSel;
             res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
@@ -112,7 +112,7 @@ architecture Behavioral of UnitRegManager is
                 if res(i).ins.virtualArgSpec.args(0)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
                     and res(i).ins.virtualArgSpec.intArgSel(0) = res(j).ins.virtualArgSpec.intDestSel
                 then
-                    res(i).ins.physicalArgSpec.args(0) := newPhysSources(j);                    
+                    res(i).ins.physicalArgSpec.args(0) := newPhysDests(j);                    
                 end if;
             end loop;
 
@@ -124,7 +124,7 @@ architecture Behavioral of UnitRegManager is
                 if res(i).ins.virtualArgSpec.args(1)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
                     and res(i).ins.virtualArgSpec.intArgSel(1) = res(j).ins.virtualArgSpec.intDestSel
                 then
-                    res(i).ins.physicalArgSpec.args(1) := newPhysSources(j);                    
+                    res(i).ins.physicalArgSpec.args(1) := newPhysDests(j);                    
                 end if;
             end loop;
             
@@ -136,7 +136,7 @@ architecture Behavioral of UnitRegManager is
                 if res(i).ins.virtualArgSpec.args(2)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
                     and res(i).ins.virtualArgSpec.intArgSel(2) = res(j).ins.virtualArgSpec.intDestSel
                 then
-                    res(i).ins.physicalArgSpec.args(2) := newPhysSources(j);                    
+                    res(i).ins.physicalArgSpec.args(2) := newPhysDests(j);                    
                 end if;
             end loop;                        
 

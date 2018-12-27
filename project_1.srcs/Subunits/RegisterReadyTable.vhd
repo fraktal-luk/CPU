@@ -62,8 +62,8 @@ begin
 		readyTableClearAllow <= sendingToReserve; -- for ready table
 		readyTableClearSel <= (others => '1'); -- No need to prevent free yet-unallocated regs from clearing!	
 		
-		--altMask <= getArrayDestMask(writingData, writingMask);
-		--altDests <= getArrayPhysicalDests(writingData);
+		altMask(0) <= writingMask(0);-- <= getArrayDestMask(writingData, writingMask);
+		altDests(0) <= writingData(0).physicalArgSpec.dest;-- <= getArrayPhysicalDests(writingData);
 		
 		      --newPhysDests <= getPhysicalDests(stageDataReserved);
 		
