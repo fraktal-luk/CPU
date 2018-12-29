@@ -205,7 +205,7 @@ architecture Behavioral of BranchQueue is
                     remv := "000";                                                                                       
            end case;
            
-           sel := slv2u(getSelector(remv, compMask(0 to 2)));
+           sel := slv2u(getSelector(remv, extractFullMask(dataIn)(0 to 2)));
            if im(i) = '1' then
                res(i).tags := dataIn(sel).ins.tags;
                res(i).operation := dataIn(sel).ins.operation;
@@ -227,7 +227,7 @@ architecture Behavioral of BranchQueue is
                     remv := "000";                                                                                       
            end case;
            
-           sel := slv2u(getSelector(remv, compMaskBr(0 to 2))); 
+           sel := slv2u(getSelector(remv, extractFullMask(dataInBr)(0 to 2))); 
            if imBr(i) = '1' then
                res(i) := dataInBr(sel).ins; 
            end if;

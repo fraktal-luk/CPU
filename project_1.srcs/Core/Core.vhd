@@ -246,7 +246,7 @@ begin
 
 
     TEMP_EXEC: block
-        signal dataToIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1)
+        signal schedData, dataToIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1)
                             := (others => DEFAULT_SCH_ENTRY_SLOT);
         signal dataToAlu, dataToBranch, dataOutAlu, dataOutAluDelay, dataToIntRF: InstructionSlotArray(0 to 0)
                                             := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -260,7 +260,9 @@ begin
         
         signal fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
     begin
-        dataToIQ <= getSchedData(extractData(renamedDataLiving), getAluMask(renamedDataLiving));
+        schedData <= getSchedData(extractData(renamedDataLiving), getAluMask(renamedDataLiving));
+    
+        dataToIQ <= work.LogicIssue.updateForWaitingArrayNewFNI(schedData, readyRegFlags xor readyRegFlags, fni);
     
 		IQUEUE: entity work.IssueQueue(Behavioral)--UnitIQ
         generic map(

@@ -42,6 +42,7 @@ type ExecFunc is (unknown,
 						sysSync, sysReplay,
 						sysMTC, sysMFC, -- move to/from control
 						sysError,
+						sysCall,
 						
 						sysUndef
 						);	

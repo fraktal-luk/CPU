@@ -197,7 +197,7 @@ begin
             prevSending => frontLastSending,    
             stageDataIn => stageDataRenameIn,
             
-            acceptingOut => renameAccepting,
+            acceptingOut => open,
             
             -- Interface with IQ
             nextAccepting => '1',
@@ -213,7 +213,7 @@ begin
 
             renameGroupCtrNext <= 
                                     commitGroupCtr when lateEventSignal = '1'
-                               else execCausing.tags.renameIndex when execEventSignal = '1'
+                               else clearTagLow(execCausing.tags.renameIndex) when execEventSignal = '1'
                                else i2slv(slv2u(renameGroupCtr) + PIPE_WIDTH, TAG_SIZE) when frontLastSending = '1'
                                else renameGroupCtr;
                                                                                                        
@@ -324,4 +324,5 @@ begin
 			);
         
         newPhysDestsOut <= newPhysDests;
+        renameAccepting <= not renameLockState;
 end Behavioral;

@@ -149,6 +149,8 @@ begin
 				elsif commitCausing.operation.func = sysRetE then
 					res.result := stateExc;
 					res.ip := linkExc;
+			    elsif commitCausing.operation.func = sysCall then
+                    res.ip := EXC_BASE; -- TEMP			    
 				end if;
 		end if;		
 	

@@ -115,13 +115,14 @@ end function;
 
 
 function findOverriddenDests(insVec: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(insVec'range) := (others=>'0');
+	variable res: std_logic_vector(insVec'range) := (others => '0');
 	variable em: std_logic_vector(insVec'range) := (others => '0');
 begin
 	em := getExceptionMask(insVec);
 	for i in insVec'range loop
 		for j in insVec'range loop
 			if 		j > i and insVec(j).full = '1' and em(j) = '0' -- CAREFUL: if exception, doesn't write
+			    and insVec(j).ins.virtualArgSpec.intDestSel = '1' -- Overrides only if really uses a destination!
 				and insVec(i).ins.virtualArgSpec.dest(4 downto 0) = insVec(j).ins.virtualArgSpec.dest(4 downto 0)
 			then				
 				res(i) := '1';

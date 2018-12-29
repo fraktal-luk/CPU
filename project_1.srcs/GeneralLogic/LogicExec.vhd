@@ -101,6 +101,8 @@ package body LogicExec is
 			return '1';
 		elsif op.func = jumpNZ and isZero = '0' then
 			return '1';
+		elsif op.func = jumpZ and isZero = '1' then
+		    return '1';
 		else
 			return '0';
 		end if;	
@@ -137,7 +139,7 @@ package body LogicExec is
 			res.controlInfo.hasReturn := '1';						
 			res.controlInfo.newEvent := '1';
 			--res.controlInfo.hasEvent := '1';
-				trueTarget := getStoredArg2(queueData);
+				trueTarget := queueData.result;--getStoredArg2(queueData);
 		elsif res.controlInfo.hasBranch = '0' and branchTaken = '1' then				
 			res.controlInfo.hasReturn := '0';
 			--res.controlInfo.newBranch := '1';
@@ -147,19 +149,20 @@ package body LogicExec is
 			if ins.constantArgs.immSel = '0' then -- if branch reg			
 				trueTarget := st.argValues.arg1;
 			else
-				trueTarget := getStoredArg1(queueData);
+				trueTarget := queueData.target;--getStoredArg1(queueData);
 			end if;
 		elsif res.controlInfo.hasBranch = '0' and branchTaken = '0' then
 			
 			trueTarget := getStoredArg2(queueData);
 		else -- taken -> taken
 			if ins.constantArgs.immSel = '0' then -- if branch reg
-				if getStoredArg1(queueData) /= st.argValues.arg1 then
+				if --getStoredArg1(queueData) /= st.argValues.arg1 then
+				   queueData.target /= st.argValues.arg1 then
 					res.controlInfo.newEvent := '1';	-- Need to correct the target!				
 				end if;
 				trueTarget := st.argValues.arg1; -- reg destination
 			else
-				trueTarget := getStoredArg1(queueData);				
+				trueTarget := queueData.target;--getStoredArg1(queueData);				
 			end if;
 		end if;
 
@@ -167,7 +170,7 @@ package body LogicExec is
 							trueTarget;
 		-- Return address
 		res.result := --linkAddress;
-							getStoredArg2(queueData);
+							queueData.result;--getStoredArg2(queueData);
 							
 		return res;
 	end function;

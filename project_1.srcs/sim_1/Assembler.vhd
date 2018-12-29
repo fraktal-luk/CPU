@@ -272,7 +272,7 @@ begin
             res := ins655655(ext1, vals(1), vals(2), jzR, vals(3), 0);
             
         when jnz_i =>
-            res := ins65J(jz, vals(1), vals(2));
+            res := ins65J(jnz, vals(1), vals(2));
             
         when jnz_r =>
             res := ins655655(ext1, vals(1), vals(2), jnzR, vals(3), 0);
@@ -296,7 +296,9 @@ begin
             elsif matches(ar(1), "replay") then
                res := ins655655(ext2, 0, 0, replay, 0, 0);            
             elsif matches(ar(1), "error") then
-               res := ins655655(ext2, 0, 0, error, 0, 0);            
+               res := ins655655(ext2, 0, 0, error, 0, 0);
+            elsif matches(ar(1), "call") then
+                  res := ins655655(ext2, 0, 0, call, 0, 0);                          
             else
                res := ins6L(undef, 0);            
             end if;

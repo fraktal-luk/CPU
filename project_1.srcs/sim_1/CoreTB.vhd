@@ -179,7 +179,8 @@ BEGIN
 	
 
       --prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\src.txt");
-      prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\alu.txt");
+      --prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\alu.txt");
+      prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\loop.txt");
 
       wait for clk_period;
 
@@ -211,7 +212,7 @@ BEGIN
 							--	+ 20 ns;  -- 
 							--	+ 100 ns; -- after excpetion handler commits first instruction
 		wait until rising_edge(clk);
-		int0a <= '1';
+		--int0a <= '1';
 		wait until rising_edge(clk);
 		int0a <= '0';
 		wait;	

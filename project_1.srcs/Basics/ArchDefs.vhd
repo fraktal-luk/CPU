@@ -143,6 +143,7 @@ type ProcOpcont is ( -- ALU functions
 							sync,
 							replay,
 							error,
+							call,
 							
 							mfc,
 							mtc,
@@ -151,19 +152,20 @@ type ProcOpcont is ( -- ALU functions
 							
 							);
 
-type ConditionType is (unknown, zero, nonzero, always); --??
+--type ConditionType is (unknown, zero, nonzero, always); --??
 
 type ExceptionType is (none, unknown, 
 							restrictedInstruction, undefinedInstruction,
 							dataCacheMiss,		illegalAccess,
+							sysCall,
 							tlbMiss,
 							integerOverflow,	integerDivisionBy0
 						);
 						
-type InterruptType is (none, unknown,
-							reset, systemCheck,
-							int0, int1, int2
-							);
+--type InterruptType is (none, unknown,
+--							reset, systemCheck,
+--							int0, int1, int2
+--							);
 
 
 constant EXC_BASE: Mword := X"00000100"; -- TODO: enable 64b
