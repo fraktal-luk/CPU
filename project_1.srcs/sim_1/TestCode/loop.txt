@@ -9,7 +9,7 @@ $loop
 
 $check
     add_i r5, r2, -27
-    jz_i  r5, $error
+    jnz_i  r5, $error
 	sys call
 $error
     sys error

@@ -79,11 +79,11 @@ constant FMT_FP3    : InstructionFormat := ('0', '0', '0', '0', "000",  '1', "11
 constant FMT_FLOAD  : InstructionFormat := ('0', '1', '0', '0', "110",  '1', "000",  '1');
 constant FMT_ISTORE : InstructionFormat := ('0', '0', '1', '0', "111",  '0', "000",  '1');
 constant FMT_FSTORE : InstructionFormat := ('0', '0', '1', '0', "110",  '0', "001",  '1');
-constant FMT_JL     : InstructionFormat := ('0', '0', '0', '1', "000",  '0', "000",  '0'); -- Jump link
-constant FMT_JC     : InstructionFormat := ('1', '0', '0', '0', "100",  '0', "000",  '0'); -- Jump cond
+constant FMT_JL     : InstructionFormat := ('0', '1', '0', '1', "000",  '0', "000",  '0'); -- Jump link
+constant FMT_JC     : InstructionFormat := ('1', '1', '0', '0', "100",  '0', "000",  '0'); -- Jump cond
 constant FMT_SSTORE : InstructionFormat := ('0', '0', '1', '0', "000",  '0', "000",  '0'); -- mtc
 
-constant FMT_JA     : InstructionFormat := FMT_DEFAULT; -- Jump long
+constant FMT_JA     : InstructionFormat := ('0', '1', '0', '0', "000",  '0', "000",  '0'); -- Jump long
 constant FMT_ILOAD  : InstructionFormat := FMT_IMM;
 constant FMT_JR     : InstructionFormat := FMT_INT3;  -- Jump reg
 constant FMT_SLOAD  : InstructionFormat := FMT_SHIFT; -- mfc
@@ -139,6 +139,7 @@ type InsDefArray is array (natural range <>) of InsDef;
 				28 => (ext2, sync,	System, sysSync,	 FMT_DEFAULT),
 				29 => (ext2, replay, System, sysReplay, FMT_DEFAULT),
 				30 => (ext2, error,  System, sysError, FMT_DEFAULT),
+				31 => (ext2, call,  System, sysCall, FMT_DEFAULT),
 				
 				others => (ext2, undef, System, sysUndef, FMT_DEFAULT)
 				);
@@ -191,6 +192,8 @@ begin
     end if;
 
     -- Find in table
+    operation := (System, sysUndef);
+    fmt := FMT_DEFAULT;
     for i in DECODE_TABLE'range loop
         if opcode = DECODE_TABLE(i).opcd and
            (not haveOpcont or opcont = DECODE_TABLE(i).opct)

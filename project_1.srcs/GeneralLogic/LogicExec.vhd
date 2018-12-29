@@ -140,7 +140,7 @@ package body LogicExec is
 			res.controlInfo.newEvent := '1';
 			--res.controlInfo.hasEvent := '1';
 				trueTarget := queueData.result;--getStoredArg2(queueData);
-		elsif res.controlInfo.hasBranch = '0' and branchTaken = '1' then				
+		elsif res.controlInfo.hasBranch = '0' and branchTaken = '1' then	
 			res.controlInfo.hasReturn := '0';
 			--res.controlInfo.newBranch := '1';
 			res.controlInfo.hasBranch := '1';						
@@ -153,12 +153,13 @@ package body LogicExec is
 			end if;
 		elsif res.controlInfo.hasBranch = '0' and branchTaken = '0' then
 			
-			trueTarget := getStoredArg2(queueData);
+			trueTarget := --getStoredArg2(queueData);
+			             queueData.result;
 		else -- taken -> taken
 			if ins.constantArgs.immSel = '0' then -- if branch reg
 				if --getStoredArg1(queueData) /= st.argValues.arg1 then
 				   queueData.target /= st.argValues.arg1 then
-					res.controlInfo.newEvent := '1';	-- Need to correct the target!				
+					res.controlInfo.newEvent := '1';	-- Need to correct the target!	
 				end if;
 				trueTarget := st.argValues.arg1; -- reg destination
 			else
