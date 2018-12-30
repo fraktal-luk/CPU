@@ -188,6 +188,7 @@ function recreateGroup(insVec: InstructionSlotArray; bqGroup: InstructionSlotArr
 							  ) return InstructionSlotArray is
 	variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	variable targets: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+	variable confBr: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 	variable ind: integer := 0;
 	variable prevTrg: Mword := (others => '0');
 begin
@@ -204,11 +205,12 @@ begin
 		if bqGroup(i).full = '1' then
 			ind := slv2u(getTagLow(bqGroup(i).ins.tags.renameIndex));
 			targets(ind) := bqGroup(i).ins.target;
+			confBr(ind) := '1';
 		end if;
 	end loop;
 
 	for i in 0 to PIPE_WIDTH-1 loop
-		if insVec(i).ins.controlInfo.hasBranch = '1' then
+		if confBr(i) = '1' then--insVec(i).ins.controlInfo.confirmedBranch = '1' then
 			null;
 		else
 			targets(i) := addMwordBasic(prevTrg, getAddressIncrement(insVec(i).ins));
@@ -313,7 +315,7 @@ begin
 		for i in robDataLiving'range loop		
 			if robDataLiving(i).full = '1' then
 				effectiveVec(i) := '1';
-				if robDataLiving(i).ins.controlInfo.hasBranch = '1' then
+				if robDataLiving(i).ins.controlInfo.confirmedBranch = '1' then
 					takenBranchVec(i) := '1'; -- Taken branches don't need to finish the group, unlike special events! 
 				end if;
 			else
@@ -340,7 +342,7 @@ begin
 			-- But if not effective, BQ entry would've be killed, so no need to check
 			if dataFromBQV(i).full = '1' then -- 
 														--and effectiveVec(slv2u(ind)) = '1' then
-				if dataFromBQV(i).ins.controlInfo.hasBranch = '1' then
+				if dataFromBQV(i).ins.controlInfo.confirmedBranch = '1' then
 					bqTakenBranchVec(slv2u(ind)) := '1';
 					branchTarget := dataFromBQV(i).ins.target;
 				end if;				
@@ -392,11 +394,13 @@ end function;
 	end function;
 
     function anyEvent(insVec: InstructionSlotArray) return std_logic is
+        variable effectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := getEffectiveMask(insVec);
     begin
         for i in 0 to PIPE_WIDTH-1 loop
-            if insVec(i).ins.controlInfo.hasException = '1'
+            if (effectiveMask(i) = '1') and
+              (     insVec(i).ins.controlInfo.hasException = '1'
 				or insVec(i).ins.controlInfo.specialAction = '1'
-                or insVec(i).ins.controlInfo.dbtrap = '1' then
+                or insVec(i).ins.controlInfo.dbtrap = '1') then
                 return '1';
             end if;            
         end loop;

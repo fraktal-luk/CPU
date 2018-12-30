@@ -180,7 +180,7 @@ BEGIN
 
       --prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\src.txt");
       --prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\alu.txt");
-      prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\loop.txt");
+      prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\loop2.txt");
 
       wait for clk_period;
 

@@ -146,7 +146,7 @@ architecture Behavioral of ReorderBuffer is
 	
 	signal startPtr, endPtr, causingPtr: SmallNumber := (others => '0');
 begin
-	
+	execEvent <= execEndSigs2(0).full and execEndSigs2(0).ins.controlInfo.newEvent;
 	causingPtr <= getTagHighSN(execEndSigs2(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
 	
 	contentNext <= getNextRobContent(content, inputData,

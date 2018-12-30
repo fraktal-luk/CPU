@@ -62,7 +62,7 @@ begin
 		readyTableClearAllow <= sendingToReserve; -- for ready table
 		readyTableClearSel <= (others => '1'); -- No need to prevent free yet-unallocated regs from clearing!	
 		
-		altMask(0) <= writingMask(0);-- <= getArrayDestMask(writingData, writingMask);
+		altMask(0) <= writingMask(0) and writingData(0).physicalArgSpec.intDestSel;
 		altDests(0) <= writingData(0).physicalArgSpec.dest;-- <= getArrayPhysicalDests(writingData);
 		
 		      --newPhysDests <= getPhysicalDests(stageDataReserved);
@@ -72,14 +72,7 @@ begin
 		begin
 				SYNCHRONOUS: process(clk)
 				begin
-					if rising_edge(clk) then
-						for i in 0 to altMask'length-1 loop
-							if altMask(i) = '1' then
-								-- set 
-								content(slv2u(altDests(i))) <= '1';
-							end if;
-						end loop;	
-							
+					if rising_edge(clk) then							
 						if readyTableClearAllow = '1' then							
 							for i in 0 to PIPE_WIDTH-1 loop								
 								if readyTableClearSel(i) = '1' then
@@ -87,7 +80,14 @@ begin
 									content(slv2u(newPhysDests(i))) <= '0';						
 								end if;
 							end loop;
-						end if;			
+						end if;
+						
+						for i in 0 to altMask'length-1 loop
+                            if altMask(i) = '1' then
+                                -- set 
+                                content(slv2u(altDests(i))) <= '1';
+                            end if;
+                        end loop;								
 					end if;
 				end process;
 				

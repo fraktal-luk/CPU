@@ -171,6 +171,7 @@ architecture Behavioral of BranchQueue is
 	end function;
 
     function getNewContentBr(content: InstructionStateArray; dataIn, dataInBr: InstructionSlotArray;
+                                taggedMask, fullMask: std_logic_vector;
 				                prevSending, prevSendingBr: std_logic;
 				                inputMask, inputMaskBr: std_logic_vector;
 				                pTagged, pAll: SmallNumber;
@@ -229,16 +230,23 @@ architecture Behavioral of BranchQueue is
            
            sel := slv2u(getSelector(remv, extractFullMask(dataInBr)(0 to 2))); 
            if imBr(i) = '1' then
-               res(i) := dataInBr(sel).ins; 
+               res(i) := dataInBr(sel).ins;
+               
+               --     report "Selected: " & integer'image(sel) &
+               --         "R,T:  " & integer'image(slv2u(res(i).result)) &
+               --              ", " &      integer'image(slv2u(res(i).target));
            end if;
         end loop;
 
         -- Update target after branch execution
         for i in 0 to QUEUE_SIZE-1 loop
-           if content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
+           if taggedMask(i) = '1' -- !! Prevent instruction with r.i. = 0 form updating untagged entries! 
+               and content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
                and storeValueInput.full = '1'
            then
+               --         report "But updating trget";
                res(i).target := storeValueInput.ins.target;
+               res(i).controlInfo.confirmedBranch := storeValueInput.ins.controlInfo.confirmedBranch;
            end if;            
         end loop;
 
@@ -305,6 +313,7 @@ begin
 	
 	contentNext <=
 				getNewContentBr(content, dataIn, dataInBr,
+				                taggedMask, fullMask,
 				                prevSending, prevSendingBr,
 				                inputMask, inputMaskBr,				             
 				                pTagged, pAll,

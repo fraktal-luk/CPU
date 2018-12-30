@@ -115,9 +115,9 @@ end function;
 	       end if;
 	    
             if slv2u(il) = k then                
-                if execResult.ins.controlInfo.hasBranch = '1' then
+                if execResult.ins.controlInfo.confirmedBranch = '1' then
                     res(k).ins.controlInfo.newEvent := '1'; --- !!!
-                    res(k).ins.controlInfo.hasBranch := '1';
+                    res(k).ins.controlInfo.confirmedBranch := '1';
                     eventFound := true;
                 end if;
                                                      

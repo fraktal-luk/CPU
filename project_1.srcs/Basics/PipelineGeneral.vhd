@@ -444,7 +444,10 @@ end function;
 		for i in 0 to PIPE_WIDTH-1 loop
 			res(i).ins := insArr(i);
 			res(i).full := fullMask(i);
-
+            
+            -- CAREFUL
+            res(i).state.argValues.origSlot := i2slv(i, 2); -- So we know which 'readyRegs' slots to use in IQ!
+            
 			-- Set state markers: "zero" bit
 			res(i).state.argValues.zero(0) := not isNonzero(res(i).ins.virtualArgSpec.args(0)(4 downto 0));
 			res(i).state.argValues.zero(1) := not isNonzero(res(i).ins.virtualArgSpec.args(1)(4 downto 0));

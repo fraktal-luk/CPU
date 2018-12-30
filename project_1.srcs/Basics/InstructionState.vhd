@@ -74,8 +74,10 @@ type InstructionControlInfo is record
 	hasException: std_logic;
 	hasBranch: std_logic;
 	hasReturn: std_logic;
-		specialAction: std_logic;
-		dbtrap: std_logic;
+	   frontBranch: std_logic;
+	   confirmedBranch: std_logic;
+	specialAction: std_logic;
+	dbtrap: std_logic;
 	exceptionCode: SmallNumber; -- Set when exception occurs, remains cause exception can be only 1 per op
 end record;
 
@@ -142,6 +144,7 @@ end record;
 
 type InstructionArgValues is record
 	newInQueue: std_logic;
+	origSlot: std_logic_vector(0 to 1);
 	immediate: std_logic;
 	zero: std_logic_vector(0 to 2);
 	--readyBefore: std_logic_vector(0 to 2);
@@ -274,9 +277,11 @@ begin
 													hasReset => '0',
 												hasException => '0',
 												hasBranch => '0',
-												hasReturn => '0',												
-													specialAction => '0',
-													dbtrap => '0',
+												hasReturn => '0',
+												    frontBranch => '0',
+                                                    confirmedBranch => '0',												    											
+												specialAction => '0',
+												dbtrap => '0',
 												exceptionCode => (others=>'0')
 												);
 end function;
@@ -325,6 +330,7 @@ end function;
 function defaultArgValues return InstructionArgValues is
 begin
 	return (newInQueue => '0',
+	        origSlot => "00", -- TODO: remove, redundant
 			  immediate => '0',
 			  zero => (others => '0'),
 			  --readyBefore => (others=>'0'),

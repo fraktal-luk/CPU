@@ -198,7 +198,8 @@ begin
 		res(i).ins.bits := content(i).bits;--(15 downto 0) & content(2*i+1).bits(15 downto 0);
 		res(i).ins.ip := content(i).ip;
 		res(i).ins.controlInfo.squashed := content(i).controlInfo.squashed;
-		res(i).ins.controlInfo.hasBranch := content(i).controlInfo.hasBranch;			
+		res(i).ins.controlInfo.hasBranch := content(i).controlInfo.hasBranch;
+		res(i).ins.controlInfo.frontBranch := content(i).controlInfo.frontBranch;
 	end loop;
 
 	return res;
@@ -234,6 +235,7 @@ begin
 
 	for i in 0 to PIPE_WIDTH-1 loop
 		res(i).controlInfo.hasBranch := fetchInsMulti(i).ins.controlInfo.hasBranch;
+		res(i).controlInfo.frontBranch := fetchInsMulti(i).ins.controlInfo.frontBranch;		
 		res(i).target := fetchInsMulti(i).ins.target;
 	end loop;
 	
@@ -246,7 +248,7 @@ return InstructionSlotArray is
 	variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	variable tempOffset, thisIP, tempTarget: Mword := (others => '0');
 	variable targets: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-	variable fullOut, full, branchIns, predictedTaken: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+	variable fullOut, full, branchIns, predictedTaken, uncondJump: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 	variable nSkippedIns: integer := 0;
 	variable regularJump, longJump, regJump: std_logic := '0';
 begin
@@ -276,14 +278,19 @@ begin
 			longJump := '0';
 			regJump := '0';
 			
-			if 	fetchLine(i)(31 downto 26) = opcode2slv(jl) 
-				or fetchLine(i)(31 downto 26) = opcode2slv(jz) 
+			if 	fetchLine(i)(31 downto 26) = opcode2slv(jl) then
+				regularJump := '1';				
+                predictedTaken(i) := fetchLine(i)(20);        -- CAREFUL, TODO: temporary predicted taken iff backwards
+                uncondJump(i) := '1';		    
+			elsif
+				 fetchLine(i)(31 downto 26) = opcode2slv(jz) 
 				or fetchLine(i)(31 downto 26) = opcode2slv(jnz)
 			then
 				regularJump := '1';				
 				predictedTaken(i) := fetchLine(i)(20);		-- CAREFUL, TODO: temporary predicted taken iff backwards
 			elsif fetchLine(i)(31 downto 26) = opcode2slv(j) -- Long jump instruction
 			then
+			    uncondJump(i) := '1';
 				longJump := '1';				
 				predictedTaken(i) := '1'; -- Long jump is unconditional (no space for register encoding!)
 			elsif  fetchLine(i)(31 downto 26) = opcode2slv(ext1) 
@@ -318,16 +325,23 @@ begin
 			fullOut(i) := full(i);
 			--res.data(i).bits := fetchBlock(2*i) & fetchBlock(2*i+1);
 			if full(i) = '1' and branchIns(i) = '1' and predictedTaken(i) = '1' then
+			    if uncondJump(i) = '1' then
+					res(i).ins.controlInfo.confirmedBranch := '1';	-- CAREFUL: setting it here, so that if implementation
+					                                                --     treats is as NOP in Exec, it still gets this flag		       
+			    end if; 
+			    
 				-- Here check if the next line from line predictor agress with the target predicted now.
 				--	If so, don't cause the event but set invalidation mask that next line will use.
 				if targets(i)(MWORD_SIZE-1 downto ALIGN_BITS) = ins.target(MWORD_SIZE-1 downto ALIGN_BITS) then					
 					-- CAREFUL: Remeber that it actually is treated as a branch, otherwise would be done 
 					--				again at Exec!
 					res(i).ins.controlInfo.hasBranch := '1';
+					res(i).ins.controlInfo.frontBranch := '1';
 				else
 					-- Raise event
 					res(i).ins.controlInfo.newEvent := '1';
 					res(i).ins.controlInfo.hasBranch := '1';
+					res(i).ins.controlInfo.frontBranch := '1';					
 					--res.data(i).target := targets(i);
 				end if;
 				
@@ -335,6 +349,7 @@ begin
 				if not USE_LINE_PREDICTOR then
 					res(i).ins.controlInfo.newEvent := '1';
 					res(i).ins.controlInfo.hasBranch := '1';
+					res(i).ins.controlInfo.frontBranch := '1';					
 					--res.data(i).target := targets(i);
 				end if;
 
@@ -390,6 +405,7 @@ begin
 		then
 			res.controlInfo.newEvent := '1';
 			res.controlInfo.hasBranch := '1';
+			res.controlInfo.frontBranch := '1';			
 			res.target  := insVec(i).ins.target;
 			exit;
 		end if;

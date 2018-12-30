@@ -133,25 +133,26 @@ package body LogicExec is
 
 		branchTaken := resolveBranchCondition(st.argValues, ins.operation);
 
-		if res.controlInfo.hasBranch = '1' and branchTaken = '0' then
+		if res.controlInfo.frontBranch = '1' and branchTaken = '0' then
 			res.controlInfo.hasBranch := '0';
 			--res.controlInfo.newReturn := '1';
 			res.controlInfo.hasReturn := '1';						
 			res.controlInfo.newEvent := '1';
 			--res.controlInfo.hasEvent := '1';
 				trueTarget := queueData.result;--getStoredArg2(queueData);
-		elsif res.controlInfo.hasBranch = '0' and branchTaken = '1' then	
+		elsif res.controlInfo.frontBranch = '0' and branchTaken = '1' then	
 			res.controlInfo.hasReturn := '0';
 			--res.controlInfo.newBranch := '1';
 			res.controlInfo.hasBranch := '1';						
 			res.controlInfo.newEvent := '1';
+			res.controlInfo.confirmedBranch := '1';			
 			--res.controlInfo.hasEvent := '1';
 			if ins.constantArgs.immSel = '0' then -- if branch reg			
 				trueTarget := st.argValues.arg1;
 			else
 				trueTarget := queueData.target;--getStoredArg1(queueData);
 			end if;
-		elsif res.controlInfo.hasBranch = '0' and branchTaken = '0' then
+		elsif res.controlInfo.frontBranch = '0' and branchTaken = '0' then
 			
 			trueTarget := --getStoredArg2(queueData);
 			             queueData.result;
@@ -165,6 +166,7 @@ package body LogicExec is
 			else
 				trueTarget := queueData.target;--getStoredArg1(queueData);				
 			end if;
+			res.controlInfo.confirmedBranch := '1';			
 		end if;
 
 		res.target := --ins.argValues.arg1;
