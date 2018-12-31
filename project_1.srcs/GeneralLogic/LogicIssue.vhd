@@ -24,7 +24,7 @@ use work.PipelineGeneral.all;
 package LogicIssue is
 
 function getDispatchArgValues(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo;
-											--resultTags: PhysNameArray; vals: MwordArray;
+											prevSending: std_logic;
 											USE_IMM: boolean)
 return SchedulerEntrySlot;
 
@@ -179,7 +179,7 @@ begin
 			if progress then
 				res.argLocsPhase(i) := "00000011";		
 			else
-				report "Slot wakeup can be used only for waiting ops!" severity error;
+				report "Slow wakeup can be used only for waiting ops!" severity error;
 				res.argLocsPhase(i) := "00000011";				
 			end if;
 		end if;
@@ -233,7 +233,7 @@ end function;
 
 
 function getDispatchArgValues(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo;
-											--resultTags: PhysNameArray; vals: MwordArray;
+											prevSending: std_logic;
 											USE_IMM: boolean)
 return SchedulerEntrySlot is
 	variable res: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
@@ -266,6 +266,10 @@ begin
 --			locs(2) := i2slv(i, SMALL_NUMBER_SIZE);
 --		end if;
 --	end loop;
+
+    if prevSending = '0' or ins.physicalArgSpec.intDestSel = '0' then
+        res.ins.physicalArgSpec.dest := (others => '0'); -- Don't allow false notifications of args
+    end if;
 
 	res.state.argValues.readyNow := ready;
 	res.state.argValues.locs := locs;
@@ -329,6 +333,11 @@ begin
 	--res.state.argValues.arg0 := carg0;
 	--res.state.argValues.arg1 := carg1;
 	--res.state.argValues.arg2 := carg2;
+--	       if res.ins.tags.renameIndex(7 downto 0) = X"0c" then
+--	           report "This instruction.";
+--	           report std_logic'image(res.state.argValues.argLocsPhase(0)(1)) & std_logic'image(res.state.argValues.argLocsPhase(0)(0));
+--	       end if;
+	
 	
 		if res.state.argValues.argLocsPhase(0)(1 downto 0) = "11" then--and res.state.argValues.zero(0) = '0' then
 			res.state.argValues.arg0 := vals(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
@@ -785,6 +794,8 @@ begin
 		rrf := (others => '0');
 	end if;
 
+
+		readyBefore := not res.state.argValues.missing;
 
 		-- Update arg tracking
 		res.state.argValues := updateArgLocs(res.state.argValues,

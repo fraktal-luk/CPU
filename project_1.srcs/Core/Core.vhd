@@ -83,7 +83,9 @@ architecture Behavioral of Core is
     signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
 
     signal execEventSignal, lateEventSignal, lateEventSetPC, sendingBranchIns: std_logic := '0';
-    signal robSending, robAccepting, renamedSending, commitAccepting, iqAccepting, iqAcceptingA: std_logic := '0';
+    signal robSending, robAccepting, renamedSending, commitAccepting, 
+                iqAccepting, iqAcceptingA,
+                robAcceptingMore, iqAcceptingMoreA: std_logic := '0';
     --    signal iadrReg: Mword := X"ffffffb0";
     signal commitGroupCtr, commitCtr, commitGroupCtrInc: InsTag := (others => '0');
     signal newPhysDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -221,7 +223,12 @@ begin
     -- CAREFUL, TODO: this must block renaming of a group if there will be no place for it in IQs the next cycle;
     --                Because stalling at Rename is illegal, sending to Rename has to depend on free slots 
     --                after accounting for current group at Rename that will use some resources!  
-    iqAccepting <= robAccepting and renameAccepting and iqAcceptingA;
+    iqAccepting <= 
+      (robAccepting and renameAccepting and iqAcceptingA)
+          or (    robAcceptingMore 
+              and renameAccepting
+              and not isNonzero(extractFullMask(renamedDataLiving)) 
+              and iqAcceptingMoreA);
 
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
@@ -238,6 +245,7 @@ begin
 		inputData => renamedDataLiving,
 		prevSending => renamedSending,
 		acceptingOut => robAccepting,
+		acceptingMore => robAcceptingMore,
 		
 		nextAccepting => commitAccepting,
 		sendingOut => robSending, 
@@ -273,6 +281,7 @@ begin
     
             --acceptingVec => open,--iqAcceptingVecArr(i),
             acceptingOut => iqAcceptingA,--iqAcceptingArr(4),
+            acceptingMore => iqAcceptingMoreA,
             prevSendingOK => renamedSending,
             --newData => dataToQueuesArr(i),
                 newArr => dataToIQ,--,schArrays(4),

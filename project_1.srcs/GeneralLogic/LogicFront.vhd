@@ -259,7 +259,7 @@ begin
 	
 	-- CAREFUL: Only without hword instructions now!
 	-- Find which are before the start of fetch address
-	nSkippedIns := slv2u(predictedAddress(ALIGN_BITS-1 downto 0))/4;								
+	nSkippedIns := slv2u(predictedAddress(ALIGN_BITS-1 downto 2));								
 			
 	for i in 0 to FETCH_WIDTH-1 loop
 		full(i) := '1'; -- For skipping we use 'skipped' flag, not clearing 'full' 

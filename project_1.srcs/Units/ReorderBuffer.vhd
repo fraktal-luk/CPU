@@ -60,6 +60,7 @@ entity ReorderBuffer is
 		inputData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		prevSending: in std_logic;
 		acceptingOut: out std_logic;
+		acceptingMore: out std_logic;
 		
 		nextAccepting: in std_logic;
 		sendingOut: out std_logic; 
@@ -144,7 +145,9 @@ architecture Behavioral of ReorderBuffer is
 	   return res;
 	end function;
 	
-	signal startPtr, endPtr, causingPtr: SmallNumber := (others => '0');
+	signal startPtr, endPtr, acmPtr, 
+	       causingPtr: SmallNumber := (others => '0');
+	
 begin
 	execEvent <= execEndSigs2(0).full and execEndSigs2(0).ins.controlInfo.newEvent;
 	causingPtr <= getTagHighSN(execEndSigs2(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
@@ -177,6 +180,8 @@ begin
 	isSending <= groupCompleted(content(slv2u(startPtr)).ops) and content(slv2u(startPtr)).full and nextAccepting;
 
 	acceptingOut <= not content(slv2u(endPtr)).full; -- When a free place exists
+    acmPtr <= subSN(endPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+    acceptingMore <= not content(slv2u(acmPtr)).full;
 								
 	outputData <= content(slv2u(startPtr)).ops;
 

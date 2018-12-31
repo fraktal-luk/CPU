@@ -73,7 +73,7 @@ architecture Alternative of IssueStage is
 begin
 
 	inputDataWithArgs <= getDispatchArgValues(input.ins, input.state, fni,-- resultTags, resultVals,
-															USE_IMM);
+														prevSending, USE_IMM);
 	
 	stageDataIn <= (prevSending, inputDataWithArgs.ins);
 	

@@ -171,7 +171,7 @@ package body PipelineGeneral is
             --    res := "11";
             when "111001" => 
                 res := "10";
-            when "111010" => 
+            when "111010" | "111011" => 
                 res := "01";
             when "111100" | "111101" | "111110" | "111111" => 
                 res := "00";
