@@ -144,7 +144,8 @@ begin
 						or res.operation.func = sysSync or res.operation.func = sysReplay
 						or res.operation.func = sysError
 						or res.operation.func = sysHalt
-						or res.operation.func = sysCall) then 		
+						or res.operation.func = sysCall
+						or res.operation.func = sysSend ) then 		
 					res.controlInfo.specialAction := '1';
 					
 						-- CAREFUL: Those ops don't get issued, they are handled at retirement

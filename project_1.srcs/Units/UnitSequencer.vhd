@@ -104,8 +104,10 @@ entity UnitSequencer is
     intAllowOut: out std_logic;
     
     intAckOut: out std_logic;
-    intRejOut: out std_logic
+    intRejOut: out std_logic;
     
+    doneSig: out std_logic; -- Debug outputs
+    failSig: out std_logic
     --start: in std_logic    -- TODO: change to reset interrupt
 );
 end UnitSequencer;
@@ -536,4 +538,13 @@ begin
         commitAccepting <= not eventCommitted and not lateEventSending; -- Blocked while procesing event
         committedSending <= sendingOutCommit;
         committedDataOut <= stageDataCommitOutA;
+        
+        doneSig <= 
+             '1' when eventCommitted  = '1' and stageDataLastEffectiveOutA(0).ins.operation.func = sysSend
+        else '0';
+
+        failSig <= 
+             '1' when eventCommitted  = '1' and stageDataLastEffectiveOutA(0).ins.operation.func = sysError
+        else '0';
+                
 end Behavioral;

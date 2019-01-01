@@ -21,6 +21,7 @@
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
+use std.textio.all;
 
 use work.BasicTypes.all;	
 use work.ArchDefs.all;	
@@ -119,6 +120,7 @@ ARCHITECTURE Behavior OF CoreTB IS
 	signal machineCode: WordArray(0 to prog'length-1);
 	
     signal testProgram: WordMem;
+    signal testToDo, testDone, testFail: std_logic := '0';
 BEGIN
  
 	-- Instantiate the Unit Under Test (UUT)
@@ -164,19 +166,75 @@ BEGIN
 	reset <= '1' after 105 ns, '0' after 115 ns;
 	en <= '1' after 105 ns;
 	
-				memEn <= '1' after 300 ns;
+				--memEn <= '1' after 300 ns;
 				
-				filladr <= X"0000000c";
+				--filladr <= X"0000000c";
 				--fillready <= '1' after 320 ns, '0' after 330 ns;
 	
 	int0 <= int0a or int0b;
 	
+	testDone <= oaux(0);
+	testFail <= oaux(1);
+	
    -- Stimulus process
    stim_proc: process
        variable dummy: boolean;
+       variable progB: ProgramBuffer;
        variable decBits, decIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
+       variable testName: line;
+       file testFile: text open read_mode is "C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\test_names.txt";
+       
    begin		
+	  wait for 110 ns;
+	  --reset <= '1';
+	  --wait until rising_edge(clk);
+	  --reset <= '0';
 	
+	  loop
+	      testName := null;	  
+	      readline(testFile, testName);
+	      if testName = null then -- testName'length = 0 then
+	          exit;
+	      end if;
+	      report "Now to run: " & testName.all;
+	      --testName := ...;
+	      progB := readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\" & testName.all & ".txt");
+          machineCode <= processProgram(progB);
+          
+          wait until rising_edge(clk);
+          
+          testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+          testProgram(512/4) <= ins6L(j, -512);-- TEMP! 
+          testProgram(256/4) <= ins655655(ext1, 0, 0, send, 0, 0);
+          testProgram(256/4 + 1) <= ins6L(j, -4); -- indle loop
+          
+                   
+          --wait until rising_edge(clk);         
+          testToDo <= '1';
+          int0b <= '1';
+          wait until rising_edge(clk);
+          testToDo <= '0';
+          int0b <= '0';
+          report "Waiting for completion...";
+
+          loop
+              wait until rising_edge(clk);
+                  if testDone = '1' then
+                      report "Test done";
+                      exit;
+                  end if;
+                  
+                  if testFail = '1' then
+                      report "Test fail";                      
+                      exit;
+                  end if;                  
+          end loop;
+            
+          wait until rising_edge(clk);
+	  end loop;
+	  
+	  report "All tests done!";
+	  wait;
 
       --prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\src.txt");
       --prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\alu.txt");
@@ -197,7 +255,7 @@ BEGIN
             for i in 0 to 20 loop
                 decBits.bits := machineCode(i);
                 decIns := decodeFromWord(decBits.bits);
-                report insText(decIns);
+                --report insText(decIns);
             end loop;
 
       wait;
@@ -224,18 +282,18 @@ BEGIN
 	begin		
 		wait for 100 ns;
 		wait until rising_edge(clk);
-		int0b <= '1';
-		int1 <= '1';
+		--int0b <= '1';
+		--int1 <= '1';
 		wait until rising_edge(clk);
-		int0b <= '0';
-		wait until rising_edge(clk);
-		wait until rising_edge(clk);
+		--int0b <= '0';
 		wait until rising_edge(clk);
 		wait until rising_edge(clk);
 		wait until rising_edge(clk);
 		wait until rising_edge(clk);
 		wait until rising_edge(clk);
-		int1 <= '0';
+		wait until rising_edge(clk);
+		wait until rising_edge(clk);
+		--int1 <= '0';
 		wait;
 		
 	end process;
@@ -247,8 +305,8 @@ BEGIN
 		if rising_edge(clk) then
 			--if en = '1' then -- TEMP! It shouldn't exist here
 			--		if iadrvalid = '1' then
-						assert iadr(31 downto 4) & "1111" /= X"ffffffff" 
-							report "Illegal address!" severity error;
+--						assert iadr(31 downto 4) & "1111" /= X"ffffffff" 
+--							report "Illegal address!" severity error;
 						
 												
 						-- CAREFUL! don't fetch if adr not valid, cause it may ovewrite previous, valid fetch block.
@@ -277,15 +335,15 @@ BEGIN
 	begin
 		if rising_edge(clk) then
 			if en = '1' then
-				if dwrite = '1' then
-					assert doutadr /= X"000000ff" 
-						report "Store to address 255 - illegal!" severity error;
-				end if;
+--				if dwrite = '1' then
+--					assert doutadr /= X"000000ff" 
+--						report "Store to address 255 - illegal!" severity error;
+--				end if;
 			
 				-- TODO: define effective address exact size
 			
 				-- Reading
-				memReadDone <= dread and memEn;
+				memReadDone <= dread;
 				memReadDonePrev <= memReadDone;
 				memReadValue <= dataMem(slv2u(dadr(MWORD_SIZE-1 downto 2))) ;-- CAREFUL: pseudo-byte addressing 
 				memReadValuePrev <= memReadValue;	

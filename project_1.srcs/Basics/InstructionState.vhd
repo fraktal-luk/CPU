@@ -43,6 +43,7 @@ type ExecFunc is (unknown,
 						sysMTC, sysMFC, -- move to/from control
 						sysError,
 						sysCall,
+						sysSend,
 						
 						sysUndef
 						);	

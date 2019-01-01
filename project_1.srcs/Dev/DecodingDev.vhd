@@ -98,7 +98,7 @@ end record;
 
 type InsDefArray is array (natural range <>) of InsDef;
 
-		constant DECODE_TABLE: InsDefArray(0 to 31) := (
+		constant DECODE_TABLE: InsDefArray(0 to 40) := (
 				0 => (andI, none, Alu, logicAnd, FMT_IMM),
 				1 => (orI,  none, Alu, logicOr,  FMT_IMM),
 				2 => (addI, none, Alu, arithAdd, FMT_IMM),
@@ -140,6 +140,7 @@ type InsDefArray is array (natural range <>) of InsDef;
 				29 => (ext2, replay, System, sysReplay, FMT_DEFAULT),
 				30 => (ext2, error,  System, sysError, FMT_DEFAULT),
 				31 => (ext2, call,  System, sysCall, FMT_DEFAULT),
+				32 => (ext2, call,  System, sysSend, FMT_DEFAULT),
 				
 				others => (ext2, undef, System, sysUndef, FMT_DEFAULT)
 				);

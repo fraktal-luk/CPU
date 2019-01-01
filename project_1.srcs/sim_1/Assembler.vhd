@@ -298,7 +298,9 @@ begin
             elsif matches(ar(1), "error") then
                res := ins655655(ext2, 0, 0, error, 0, 0);
             elsif matches(ar(1), "call") then
-                  res := ins655655(ext2, 0, 0, call, 0, 0);                          
+                  res := ins655655(ext2, 0, 0, call, 0, 0);
+            elsif matches(ar(1), "send") then
+                  res := ins655655(ext2, 0, 0, send, 0, 0);                                            
             else
                res := ins6L(undef, 0);            
             end if;

@@ -144,6 +144,7 @@ type ProcOpcont is ( -- ALU functions
 							replay,
 							error,
 							call,
+							send,
 							
 							mfc,
 							mtc,

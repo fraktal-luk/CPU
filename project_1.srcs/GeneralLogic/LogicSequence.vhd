@@ -151,7 +151,7 @@ begin
 					res.ip := linkExc;
 				elsif commitCausing.operation.func = sysError then
 				    res.ip := EXC_BASE;
-			    elsif commitCausing.operation.func = sysCall then
+			    elsif commitCausing.operation.func = sysCall or commitCausing.operation.func = sysSend then
                     res.ip := EXC_BASE; -- TEMP			    
 				end if;
 		end if;		

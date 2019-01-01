@@ -159,7 +159,10 @@ begin
                 
         commitGroupCtrOut => commitGroupCtr,
         commitCtrOut => commitCtr,
-        commitGroupCtrIncOut => commitGroupCtrInc
+        commitGroupCtrIncOut => commitGroupCtrInc,
+        
+        doneSig => oaux(0),
+        failSig => oaux(1)
     );
         
         
