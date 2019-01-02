@@ -170,6 +170,7 @@ type ExceptionType is (none, unknown,
 
 
 constant EXC_BASE: Mword := X"00000100"; -- TODO: enable 64b
+constant CALL_BASE: Mword := X"00000180"; -- TODO: enable 64b
 constant INT_BASE: Mword := X"00000200"; -- TODO: enable 64b
 
 

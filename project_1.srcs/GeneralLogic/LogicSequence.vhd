@@ -136,7 +136,8 @@ begin
 				res.result := res.result and X"fdffffff";	-- Clear dbtrap
 		elsif commitCausing.controlInfo.specialAction = '1' then
 					res.result := currentState;
-				if commitCausing.operation.func = sysSync then
+				if commitCausing.operation.func = sysSync 
+				    or commitCausing.operation.func = sysSend then
 					res.ip := commitCausing.target;
 				elsif commitCausing.operation.func = sysReplay then
 					res.ip := --commitCausing.ip;
@@ -151,8 +152,8 @@ begin
 					res.ip := linkExc;
 				elsif commitCausing.operation.func = sysError then
 				    res.ip := EXC_BASE;
-			    elsif commitCausing.operation.func = sysCall or commitCausing.operation.func = sysSend then
-                    res.ip := EXC_BASE; -- TEMP			    
+			    elsif commitCausing.operation.func = sysCall then
+                    res.ip := CALL_BASE; -- TEMP			    
 				end if;
 		end if;		
 	

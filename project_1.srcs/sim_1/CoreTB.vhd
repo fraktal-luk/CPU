@@ -205,9 +205,8 @@ BEGIN
           
           testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
           testProgram(512/4) <= ins6L(j, -512);-- TEMP! 
-          testProgram(256/4) <= ins655655(ext1, 0, 0, send, 0, 0);
-          testProgram(256/4 + 1) <= ins6L(j, -4); -- indle loop
-          
+          testProgram(384/4) <= ins655655(ext2, 0, 0, send, 0, 0);
+          testProgram(384/4 + 1) <= ins6L(j, 0); -- idle loop          
                    
           --wait until rising_edge(clk);         
           testToDo <= '1';

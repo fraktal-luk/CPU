@@ -331,7 +331,7 @@ begin
 					                                                --     treats is as NOP in Exec, it still gets this flag		       
 			    end if; 
 			    
-				-- Here check if the next line from line predictor agress with the target predicted now.
+				-- Here check if the next line from line predictor agrees with the target predicted now.
 				--	If so, don't cause the event but set invalidation mask that next line will use.
 				if targets(i)(MWORD_SIZE-1 downto ALIGN_BITS) = ins.target(MWORD_SIZE-1 downto ALIGN_BITS) then					
 					-- CAREFUL: Remeber that it actually is treated as a branch, otherwise would be done 
@@ -402,13 +402,15 @@ function findEarlyTakenJump(ins: InstructionState; insVec: InstructionSlotArray)
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
-			and 	insVec(i).ins.controlInfo.newEvent = '1'
+			--and 	insVec(i).ins.controlInfo.newEvent = '1'
 		then
-			res.controlInfo.newEvent := '1';
-			res.controlInfo.hasBranch := '1';
-			res.controlInfo.frontBranch := '1';			
-			res.target  := insVec(i).ins.target;
-			exit;
+		    if insVec(i).ins.controlInfo.frontBranch = '1' then
+		        res.controlInfo.newEvent := insVec(i).ins.controlInfo.newEvent; -- CAREFUL: event only if needs redirection
+		        res.controlInfo.hasBranch := '1';
+                res.controlInfo.frontBranch := '1';
+                res.target  := insVec(i).ins.target; -- Correcting target within fetch line is still needed even if no redirection!
+                exit;		       
+		    end if;		    
 		end if;
 	end loop;
 	

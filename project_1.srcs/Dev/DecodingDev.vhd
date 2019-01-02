@@ -22,6 +22,7 @@ library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 
 use work.BasicTypes.all;
+use work.Helpers.all;
 use work.ArchDefs.all;
 
 use work.InstructionState.all;
@@ -140,7 +141,7 @@ type InsDefArray is array (natural range <>) of InsDef;
 				29 => (ext2, replay, System, sysReplay, FMT_DEFAULT),
 				30 => (ext2, error,  System, sysError, FMT_DEFAULT),
 				31 => (ext2, call,  System, sysCall, FMT_DEFAULT),
-				32 => (ext2, call,  System, sysSend, FMT_DEFAULT),
+				32 => (ext2, send,  System, sysSend, FMT_DEFAULT),
 				
 				others => (ext2, undef, System, sysUndef, FMT_DEFAULT)
 				);
@@ -201,6 +202,7 @@ begin
         then
            operation := (DECODE_TABLE(i).unit, DECODE_TABLE(i).func);
            fmt := DECODE_TABLE(i).fmt;
+           exit;
         end if;
     end loop;    
     
@@ -209,7 +211,7 @@ begin
     
     -- assign register definitions
     res.virtualArgSpec.dest := parts.qa;
-    if fmt.intDestSel = '1' then
+    if fmt.intDestSel = '1' and isNonzero(res.virtualArgSpec.dest) = '1' then
         res.virtualArgSpec.intDestSel := '1';
     elsif fmt.fpDestSel = '1' then
         res.virtualArgSpec.floatDestSel := '1';

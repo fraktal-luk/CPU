@@ -317,7 +317,7 @@ function processProgram(p: ProgramBuffer) return WordArray is
     variable insIndex, j: integer := 0; -- Actual number of instruction
     variable labels: TMP_StrArray(0 to p'length-1) := (others => (others => cr));
     variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
-    variable commands: WordArray(0 to p'length-1) := (others => ins6L(undef, -1)); -- TODO: fill with undefined!
+    variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext1, 0, 0, error, 0, 0));
 begin
     for i in 0 to p'length-1 loop
     
