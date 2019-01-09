@@ -214,7 +214,7 @@ begin
 		end if;
 	end process;
 	
-	sendingToBuffer <= sendingOutFetch1 and bufferAccepting;
+	sendingToBuffer <= sendingOutFetch1 and not fetchStall;
 	
 	SUBUNIT_IBUFFER: entity work.InstructionBuffer(Implem)
 	port map(

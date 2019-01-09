@@ -112,7 +112,8 @@ architecture Behavioral of UnitRegManager is
                 if res(i).ins.virtualArgSpec.args(0)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
                     and res(i).ins.virtualArgSpec.intArgSel(0) = res(j).ins.virtualArgSpec.intDestSel
                 then
-                    res(i).ins.physicalArgSpec.args(0) := newPhysDests(j);                    
+                    res(i).ins.physicalArgSpec.args(0) := res(j).ins.physicalArgSpec.dest;
+                    exit;                   
                 end if;
             end loop;
 
@@ -124,7 +125,8 @@ architecture Behavioral of UnitRegManager is
                 if res(i).ins.virtualArgSpec.args(1)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
                     and res(i).ins.virtualArgSpec.intArgSel(1) = res(j).ins.virtualArgSpec.intDestSel
                 then
-                    res(i).ins.physicalArgSpec.args(1) := newPhysDests(j);                    
+                    res(i).ins.physicalArgSpec.args(1) := res(j).ins.physicalArgSpec.dest;
+                    exit;                 
                 end if;
             end loop;
             
@@ -136,7 +138,8 @@ architecture Behavioral of UnitRegManager is
                 if res(i).ins.virtualArgSpec.args(2)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
                     and res(i).ins.virtualArgSpec.intArgSel(2) = res(j).ins.virtualArgSpec.intDestSel
                 then
-                    res(i).ins.physicalArgSpec.args(2) := newPhysDests(j);                    
+                    res(i).ins.physicalArgSpec.args(2) := res(j).ins.physicalArgSpec.dest;
+                    exit;                  
                 end if;
             end loop;                        
 
@@ -147,7 +150,7 @@ architecture Behavioral of UnitRegManager is
         for i in 0 to PIPE_WIDTH-1 loop
             res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
             res(i).ins.tags.renameSeq := i2slv(slv2u(renameCtr) + i, TAG_SIZE);
-            res(i).ins.tags.intPointer := i2slv(slv2u(newPhysDestPointer) + countOnes(takeVec(0 to i-1)),
+            res(i).ins.tags.intPointer := i2slv(slv2u(newPhysDestPointer) + countOnes(takeVec(0 to i)),
                                                                 SMALL_NUMBER_SIZE); 
                                            -- Don't increment intPointer on ops which use no destination!
                                    -- TODO: FP pointer

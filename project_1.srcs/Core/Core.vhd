@@ -227,12 +227,10 @@ begin
     --                Because stalling at Rename is illegal, sending to Rename has to depend on free slots 
     --                after accounting for current group at Rename that will use some resources!  
     iqAccepting <= 
-      (robAccepting and renameAccepting and iqAcceptingA)
-          or (    robAcceptingMore 
-              and renameAccepting
-              and not isNonzero(extractFullMask(renamedDataLiving)) 
-              and iqAcceptingMoreA);
-
+    (not isNonzero(extractFullMask(renamedDataLiving))
+        and robAccepting and iqAcceptingA and renameAccepting)
+    or (robAcceptingMore and iqAcceptingMoreA and renameAccepting);
+               
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(

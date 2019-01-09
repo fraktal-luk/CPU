@@ -270,7 +270,7 @@ package body LogicExec is
 		-- Most positive byte count is 3, giving 3*8 + 7 = 31
 		
 		resultExt := addMwordFasterExt(arg0, argAddSub, carryIn);	
-		linkAdr := getStoredArg2(queueData);
+		linkAdr := queueData.result;
 
 --		if ins.operation.func = jump then
 --			result := linkAdr;

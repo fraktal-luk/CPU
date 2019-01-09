@@ -195,7 +195,10 @@ BEGIN
 	      readline(testFile, testName);
 	      if testName = null then -- testName'length = 0 then
 	          exit;
+	      elsif testName(1) = ';' then
+	          next;
 	      end if;
+
 	      report "Now to run: " & testName.all;
 	      --testName := ...;
 	      progB := readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\" & testName.all & ".txt");
@@ -224,8 +227,9 @@ BEGIN
                   end if;
                   
                   if testFail = '1' then
-                      report "Test fail";                      
-                      exit;
+                      report "TEST FAIL: " & testName.all;
+                      
+                      wait;                     
                   end if;                  
           end loop;
             
