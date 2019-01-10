@@ -299,7 +299,7 @@ package body LogicExec is
 					result := arg0 and arg1;				
 				when logicOr =>
 					result := arg0 or arg1;
-				when jump => 
+				when jump | jumpZ | jumpNZ => 
 					result := linkAdr;
 				when others => 
 					result := shiftedBytes(31 + shL downto shL);

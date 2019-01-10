@@ -448,7 +448,7 @@ begin
          port map(
              clk => clk, reset => '0', en => '0',
                  
-             writeAllow => '1',
+             writeAllow => sendingToIntRF,
              writeInput => dataToIntRF,
  
              readAllowVec => (others => '1'), -- TEMP!

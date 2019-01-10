@@ -86,7 +86,7 @@ constant FMT_SSTORE : InstructionFormat := ('0', '0', '1', '0', "000",  '0', "00
 
 constant FMT_JA     : InstructionFormat := ('0', '1', '0', '0', "000",  '0', "000",  '0'); -- Jump long
 constant FMT_ILOAD  : InstructionFormat := FMT_IMM;
-constant FMT_JR     : InstructionFormat := FMT_INT3;  -- Jump reg
+constant FMT_JR     : InstructionFormat := FMT_INT2;  -- Jump reg
 constant FMT_SLOAD  : InstructionFormat := FMT_SHIFT; -- mfc
 
 type InsDef is record
