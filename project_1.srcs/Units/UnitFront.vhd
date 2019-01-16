@@ -54,18 +54,14 @@ architecture Behavioral of UnitFront is
     signal stageDataInFetch1: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal stageDataInFetch0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-        signal dummyBP0, dummyBP1: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0'); -- Resuts from BP 
+    signal dummyBP0, dummyBP1: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0'); -- Resuts from BP 
 	signal sendingOutFetch0, sendingOutFetch1, sendingOutBuffer: std_logic := '0';	
 	signal acceptingOutFetch0, acceptingOutFetch1, bufferAccepting: std_logic := '0';
 	signal earlyBranchSending, earlyBranchMultiSending: std_logic := '0';
 	
 	signal fetchedLine0, fetchedLine1: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0')); 
-	
-	signal stallCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
-
-	signal frontBranchEvent, killAll, killAllOrFront, frontKill, stallEventSig: std_logic := '0';
+	signal frontBranchEvent, killAll, killAllOrFront, frontKill: std_logic := '0';
 	signal sendingToEarlyBranch, sendingToBuffer, fetchStall: std_logic := '0'; 
-	signal pcSendingDelayed0, pcSendingDelayed1, pcSendingDelayedFinal: std_logic := '0';
 	
 	signal frontCausingSig, earlyBranchIn, earlyBranchDataOut: InstructionState := DEFAULT_INSTRUCTION_STATE;
 	signal predictedAddress: Mword := (others => '0');
@@ -102,13 +98,7 @@ begin
 		lateEventSignal => killAll,
 		execCausing => DEFAULT_INSTRUCTION_STATE
 	);
-	
---    process(clk)
---    begin
---        if rising_edge(clk) then
---            fetchedLine0 <= iin;
---        end if;
---    end process;
+
 	
 	fetchedLine0 <= iin;
 	

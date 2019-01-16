@@ -75,10 +75,10 @@ architecture Implem of InstructionBuffer is
         variable fullMask, fillMask, remainingMask, nextMask: std_logic_vector(0 to LEN-1) := (others => '0');
         variable remainingMaskExt: std_logic_vector(0 to LEN + 3) := (others => '0');
         variable inputMask, inputMaskComp: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
-        variable sel: std_logic_vector(1 downto 0) := "00";
+        --variable sel: std_logic_vector(1 downto 0) := "00";
         --variable remainingMaskM1, remainingMaskM2, remainingMaskM3, remainingMaskM4,
         --            rM3, rM2, rM1: std_logic := '0';
-        variable remv: std_logic_vector(0 to 2) := "000"; 
+        --variable remv: std_logic_vector(0 to 2) := "000"; 
     begin
         fullMask := extractFullMask(content);
         inputMask := extractFullMask(newContent);
@@ -86,19 +86,19 @@ architecture Implem of InstructionBuffer is
         inputMaskComp := compactMask(inputMask);
         
         if nextAccepting = '1' then -- sending; shift mask by 4
-            --remainingMask(0 to LEN-5) := fullMask(4 to LEN-1);
             remainingMaskExt(0 to LEN - 1) := fullMask;
             remainingMaskExt(0 to 3) := (others => '1');
         else
-            --remainingMask := fullMask;
             remainingMaskExt(4 to LEN + 3) := fullMask;
             remainingMaskExt(0 to 3) := (others => '1');
         end if;
         
         for i in 0 to LEN-1 loop
               
-            remv := remainingMaskExt(i+1 to i+3);
-            sel := getSelector(remv, inputMask(0 to 2));
+            --remv := remainingMaskExt(i+1 to i+3);
+            --sel := getSelector(remv, inputMask(0 to 2));
+                -- elemNew := getNewElem(newContent, inputMask(0 to 2), remainingMaskExt(i+1 to i+3));
+            
             if remainingMaskExt(i + 4) = '1' then  -- !! equivalent to remainingMask(i), where '1' for i < 0    
                 if nextAccepting = '1' and i + 4 < LEN then
                     res(i).ins := content(i+4).ins;
@@ -106,7 +106,8 @@ architecture Implem of InstructionBuffer is
                     res(i).ins := content(i).ins;
                 end if;
             else
-                res(i).ins := newContent(slv2u(sel)).ins;
+                --res(i).ins := newContent(slv2u(sel)).ins;
+                    res(i) := getNewElem(remainingMaskExt(i+1 to i+3), newContent);
             end if;
             
             -- No events before decoding; newEvent flag set for branches must be cleared.
@@ -126,9 +127,7 @@ architecture Implem of InstructionBuffer is
         
         return res;
     end function;
-    
-    signal t0, t1,t2, t3, t4, t5: InstructionSlotArray(0 to IBUFFER_SIZE-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal n0, n1, n2, n3: InstructionSlotArray(0 to 3);
+
 begin
     
     queueDataNext <= bufferDataNext(queueData, stageDataIn, nextAccepting, prevSending, execEventSignal);

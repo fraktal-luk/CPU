@@ -48,7 +48,6 @@ entity BranchQueue is
 		dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 			dataInBr: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 
-		--storeAddressInput: in InstructionSlot;
 		storeValueInput: in InstructionSlot;
 		compareAddressInput: in InstructionSlot;
 
@@ -63,10 +62,7 @@ entity BranchQueue is
 		
 		nextAccepting: in std_logic;		
 		sendingSQOut: out std_logic;
-		dataOutV: out InstructionSlotArray(0 to PIPE_WIDTH-1);
-		
-			committedOutput: out InstructionSlot;
-			committedEmpty: out std_logic
+		dataOutV: out InstructionSlotArray(0 to PIPE_WIDTH-1)
 	);
 end BranchQueue;
 
@@ -77,21 +73,13 @@ architecture Behavioral of BranchQueue is
 	signal content, contentNext: InstructionStateArray(0 to QUEUE_SIZE-1)
 															:= (others => DEFAULT_INSTRUCTION_STATE);
 	signal fullMask, taggedMask, killMask, livingMask, frontMask, sendingMask, inputMask, inputMaskBr,
-			 fullMaskNext, taggedMaskNext: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0'); 
-
-
-	signal contentView, contentNextView:
-					InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INSTRUCTION_STATE);
-	signal maskView, liveMaskView, maskNextView: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+			 fullMaskNext, taggedMaskNext: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 	
-	signal cmpMask, taggedLivingMask, matchedSlot: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+	signal taggedLivingMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
 	signal selectedDataSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	signal selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 
-	signal compareAddressIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
-	
-	signal numPrevBr: SmallNumber := (others => '0');
 	signal pStart, pTagged, pAll, causingPtr, pAcc: SmallNumber := (others => '0');
 	
 	signal dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -177,19 +165,18 @@ architecture Behavioral of BranchQueue is
 				                pTagged, pAll: SmallNumber;
 				                storeValueInput: InstructionSlot
 				                )
-											--storeAddressInput.full, storeValueInput.full,
-											--storeAddressInput.ins, storeValueInput.ins);	
     return InstructionStateArray is
         variable res: InstructionStateArray(0 to QUEUE_SIZE-1) := content;
-        variable sel: natural range 0 to 3 := 0;
+        variable slot: InstructionSlot;
+        --variable sel: natural range 0 to 3 := 0;
         variable diff: SmallNumber := (others => '0');
 	    variable remv: std_logic_vector(0 to 2) := "000";
-	    variable compMask, compMaskBr: std_logic_vector(0 to 3) := "0000";
+	    --variable compMask, compMaskBr: std_logic_vector(0 to 3) := "0000";
 	    variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
 	    variable imBr: std_logic_vector(0 to QUEUE_SIZE-1) := inputMaskBr;	    
     begin
-        compMask := compactMask(extractFullMask(dataIn));
-        compMaskBr := compactMask(extractFullMask(dataInBr));
+        --compMask := compactMask(extractFullMask(dataIn));
+        --compMaskBr := compactMask(extractFullMask(dataInBr));
 
         for i in 0 to QUEUE_SIZE-1 loop
            diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;
@@ -206,10 +193,13 @@ architecture Behavioral of BranchQueue is
                     remv := "000";                                                                                       
            end case;
            
-           sel := slv2u(getSelector(remv, extractFullMask(dataIn)(0 to 2)));
+           --sel := slv2u(getSelector(remv, extractFullMask(dataIn)(0 to 2)));
            if im(i) = '1' then
-               res(i).tags := dataIn(sel).ins.tags;
-               res(i).operation := dataIn(sel).ins.operation;
+               --res(i).tags := dataIn(sel).ins.tags;
+               --res(i).operation := dataIn(sel).ins.operation;
+                    slot := getNewElem(remv, dataIn);           
+                    res(i).tags := slot.ins.tags;
+                    res(i).operation := slot.ins.operation;               
            end if;
         end loop;
 
@@ -228,13 +218,11 @@ architecture Behavioral of BranchQueue is
                     remv := "000";                                                                                       
            end case;
            
-           sel := slv2u(getSelector(remv, extractFullMask(dataInBr)(0 to 2))); 
+           --sel := slv2u(getSelector(remv, extractFullMask(dataInBr)(0 to 2))); 
            if imBr(i) = '1' then
-               res(i) := dataInBr(sel).ins;
-               
-               --     report "Selected: " & integer'image(sel) &
-               --         "R,T:  " & integer'image(slv2u(res(i).result)) &
-               --              ", " &      integer'image(slv2u(res(i).target));
+               --res(i) := dataInBr(sel).ins;
+                    slot := getNewElem(remv, dataInBr);
+                    res(i) := slot.ins;
            end if;
         end loop;
 
@@ -244,7 +232,6 @@ architecture Behavioral of BranchQueue is
                and content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
                and storeValueInput.full = '1'
            then
-               --         report "But updating trget";
                res(i).target := storeValueInput.ins.target;
                res(i).controlInfo.confirmedBranch := storeValueInput.ins.controlInfo.confirmedBranch;
            end if;            
@@ -291,8 +278,6 @@ architecture Behavioral of BranchQueue is
         return res;
     end function;
 begin
-	--	compareAddressIns <= storeAddressInput.ins;
-
 
     causingPtr <= getCausingPtr(content, execCausing);
     
@@ -317,19 +302,9 @@ begin
 				                prevSending, prevSendingBr,
 				                inputMask, inputMaskBr,				             
 				                pTagged, pAll,
-				                storeValueInput);--,
-											--storeAddressInput.full, storeValueInput.full,
-											--storeAddressInput.ins, storeValueInput.ins);
-
+				                storeValueInput);
+				                
 	dataOutSig <= getWindow(content, frontMask, pStart, PIPE_WIDTH);
---	sqOutData <= TMP_sendingData;
-
---		cmpMask <=	compareAddress(TMP_content, fullOrCommMask, compareAddressIns) when MODE = store
---				else	compareAddress(TMP_content, TMP_mask, compareAddressIns);
---		-- TEMP selection of hit checking mechanism 
---		matchedSlot <= findMatching(makeSlotArray(content, mask), compareAddressInput.ins);
-
---	selectedDataSlot <= (isNonzero(matchedSlot) and compareAddressInput.full, chooseIns(TMP_content, matchedSlot));
 	selectedDataSlot <= selectDataSlot(content, taggedMask, compareAddressInput);
 	
 	process (clk)
@@ -374,7 +349,6 @@ begin
     pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
 	acceptingBr <= not fullMask(slv2u(pAcc));
 
-	
 	sendingSQOut <= isSending;
 
 	selectedDataOutput <= selectedDataSlot;

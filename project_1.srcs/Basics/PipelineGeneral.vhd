@@ -65,6 +65,10 @@ constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
 function compactMask(vec: std_logic_vector) return std_logic_vector;
 function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector;
 
+function getNewElem(remv: std_logic_vector; newContent: InstructionSlotArray) return InstructionSlot;
+function getNewElemSch(remv: std_logic_vector; newContent: SchedulerEntrySlotArray)
+return SchedulerEntrySlot;
+
 
 function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionState;
 function setInstructionTarget(ins: InstructionState; target: Mword) return InstructionState;
@@ -97,23 +101,6 @@ return std_logic_vector;
 function stageArrayNext(livingContent, newContent: InstructionSlotArray; full, sending, receiving, kill: std_logic)
 return InstructionSlotArray;
 
----- Flow control: input structure
---type FlowDriveSimple is record
---	lockAccept: std_logic;
---	lockSend: std_logic;
---	kill: std_logic;
---	prevSending: std_logic;
---	nextAccepting: std_logic;	
---end record;
-
----- Flow control: output structure
---type FlowResponseSimple is record
---	accepting: std_logic;
---	sending: std_logic;
---	isNew: std_logic;
---	full: std_logic;
---	living: std_logic;	
---end record;
 
 function getTagHigh(tag: std_logic_vector) return std_logic_vector;
 function getTagLow(tag: std_logic_vector) return std_logic_vector;
@@ -140,61 +127,84 @@ end package;
 
 package body PipelineGeneral is
 
-   function compactMask(vec: std_logic_vector) return std_logic_vector is
-        variable res: std_logic_vector(0 to 3) := (others => '0');
-        variable vec4: std_logic_vector(0 to 3) := vec;
-    begin
-        case vec4 is
-            when "0000" =>
-                res := "0000";
-            when "1111" =>
-                res := "1111";
-            when "1000" | "0100" | "0010" | "0001" =>
-                res := "1000";
-            when "0111" | "1011" | "1101" | "1110" =>
-                res := "1110";
-            when others =>
-                res := "1100";
-        end case;
-        
-        return res;
-    end function;
+function compactMask(vec: std_logic_vector) return std_logic_vector is
+    variable res: std_logic_vector(0 to 3) := (others => '0');
+    variable vec4: std_logic_vector(0 to 3) := vec;
+begin
+    case vec4 is
+        when "0000" =>
+            res := "0000";
+        when "1111" =>
+            res := "1111";
+        when "1000" | "0100" | "0010" | "0001" =>
+            res := "1000";
+        when "0111" | "1011" | "1101" | "1110" =>
+            res := "1110";
+        when others =>
+            res := "1100";
+    end case;
+    
+    return res;
+end function;
 
-    function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector is
-        variable res: std_logic_vector(1 downto 0) := "00";
-        variable m6: std_logic_vector(0 to 5) := mr & mi;
-        variable n0: integer := 0;
-    begin
-        n0 := 6 - countOnes(m6);
-        case m6 is
-            --when "111000" =>
-            --    res := "11";
-            when "111001" => 
-                res := "10";
-            when "111010" | "111011" => 
-                res := "01";
-            when "111100" | "111101" | "111110" | "111111" => 
-                res := "00";
-     
-            --when "110000" => 
-            --    res := "11";
-            --when "110001" | "110010" => 
-            --    res := "11";
-            when "110011" | "110101" => 
-                res := "10";
-            when "110110" | "110111" =>
-                res := "01";
+function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector is
+    variable res: std_logic_vector(1 downto 0) := "00";
+    variable m6: std_logic_vector(0 to 5) := mr & mi;
+    variable n0: integer := 0;
+begin
+    n0 := 6 - countOnes(m6);
+    case m6 is
+        --when "111000" =>
+        --    res := "11";
+        when "111001" => 
+            res := "10";
+        when "111010" | "111011" => 
+            res := "01";
+        when "111100" | "111101" | "111110" | "111111" => 
+            res := "00";
+ 
+        --when "110000" => 
+        --    res := "11";
+        --when "110001" | "110010" => 
+        --    res := "11";
+        when "110011" | "110101" => 
+            res := "10";
+        when "110110" | "110111" =>
+            res := "01";
 
-            when "100111" => 
-                res := "10";
+        when "100111" => 
+            res := "10";
 
-            when others =>
-                res := "11";
-        end case;
-        return res;
-    end function;
+        when others =>
+            res := "11";
+    end case;
+    return res;
+end function;
 
+function getNewElem(remv: std_logic_vector; newContent: InstructionSlotArray) return InstructionSlot is
+    variable res: InstructionSlot := newContent(0);
+    variable inputMask: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
+    variable sel: std_logic_vector(1 downto 0) := "00";
+    variable remVec: std_logic_vector(0 to 2) := remv;               
+begin
+    inputMask := extractFullMask(newContent);
+    sel := getSelector(remVec, inputMask(0 to 2));
+    res := newContent(slv2u(sel));        
+    return res;    
+end function;
 
+function getNewElemSch(remv: std_logic_vector; newContent: SchedulerEntrySlotArray)
+return SchedulerEntrySlot is
+    variable res: SchedulerEntrySlot := newContent(0);
+    variable inputMask: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
+    variable sel: std_logic_vector(1 downto 0) := "00";
+    variable remVec: std_logic_vector(0 to 2) := remv;               
+begin
+    inputMask := extractFullMask(newContent);
+    sel := getSelector(remVec, inputMask(0 to 2));
+    res := newContent(slv2u(sel));        
+    return res;    
+end function;
 
 function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionState is
 	variable res: InstructionState := ins;

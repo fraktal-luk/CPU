@@ -72,7 +72,7 @@ end ReorderBuffer;
 
 
 architecture Behavioral of ReorderBuffer is
-	signal fullMask, TMP_mask, TMP_ckEnForInput, TMP_sendingMask, TMP_killMask, TMP_livingMask, TMP_maskNext:
+	signal fullMask: --, TMP_mask, TMP_ckEnForInput, TMP_sendingMask, TMP_killMask, TMP_livingMask, TMP_maskNext:
 				std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
 
     signal content, contentNext: ReorderBufferArray := DEFAULT_ROB_ARRAY;
@@ -80,12 +80,12 @@ architecture Behavioral of ReorderBuffer is
 	signal isSending: std_logic := '0';
 	signal execEvent: std_logic := '0'; -- depends on input in slot referring to branch ops
 		
-	signal numKilled: SmallNumber := (others => '0');
+	--signal numKilled: SmallNumber := (others => '0');
 
-		signal execEnds: InstructionStateArray(0 to 3) := (others => DEFAULT_INSTRUCTION_STATE);
-		signal execReady: std_logic_vector(0 to 3) := (others => '0');
-		signal execEnds2: InstructionStateArray(0 to 3) := (others => DEFAULT_INSTRUCTION_STATE);
-		signal execReady2: std_logic_vector(0 to 3) := (others => '0');
+	--	signal execEnds: InstructionStateArray(0 to 3) := (others => DEFAULT_INSTRUCTION_STATE);
+	--	signal execReady: std_logic_vector(0 to 3) := (others => '0');
+	--	signal execEnds2: InstructionStateArray(0 to 3) := (others => DEFAULT_INSTRUCTION_STATE);
+	--	signal execReady2: std_logic_vector(0 to 3) := (others => '0');
 	
             constant ROB_HAS_RESET: std_logic := '0';
             constant ROB_HAS_EN: std_logic := '0';

@@ -134,7 +134,7 @@ package body LogicExec is
 		branchTaken := resolveBranchCondition(st.argValues, ins.operation);
 
 		if res.controlInfo.frontBranch = '1' and branchTaken = '0' then
-			res.controlInfo.hasBranch := '0';
+			--res.controlInfo.hasBranch := '0';
 			--res.controlInfo.newReturn := '1';
 			res.controlInfo.hasReturn := '1';						
 			res.controlInfo.newEvent := '1';
@@ -143,7 +143,7 @@ package body LogicExec is
 		elsif res.controlInfo.frontBranch = '0' and branchTaken = '1' then	
 			res.controlInfo.hasReturn := '0';
 			--res.controlInfo.newBranch := '1';
-			res.controlInfo.hasBranch := '1';						
+			--res.controlInfo.hasBranch := '1';						
 			res.controlInfo.newEvent := '1';
 			res.controlInfo.confirmedBranch := '1';			
 			--res.controlInfo.hasEvent := '1';

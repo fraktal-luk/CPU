@@ -73,7 +73,7 @@ type InstructionControlInfo is record
 		hasReset: std_logic;
 	hasInterrupt: std_logic;
 	hasException: std_logic;
-	hasBranch: std_logic;
+	--hasBranch: std_logic;
 	hasReturn: std_logic;
 	   frontBranch: std_logic;
 	   confirmedBranch: std_logic;
@@ -277,7 +277,7 @@ begin
 												hasInterrupt => '0',
 													hasReset => '0',
 												hasException => '0',
-												hasBranch => '0',
+												--hasBranch => '0',
 												hasReturn => '0',
 												    frontBranch => '0',
                                                     confirmedBranch => '0',												    											

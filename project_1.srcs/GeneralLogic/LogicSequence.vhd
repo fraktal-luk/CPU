@@ -23,18 +23,7 @@ use work.PipelineGeneral.all;
 
 package LogicSequence is
 
-	function getNextPC(pc: Mword; jumpPC: Mword; jump: std_logic) return Mword;
-
-		-- group:  revTag = causing.groupTag and i2slv(-PIPE_WIDTH, SMALL_NUMBER_SIZE), mask = all ones
-		-- sequential: revTag = causing.numberTag, mask = new group's fullMask		
-		function nextCtr(ctr: InsTag; rewind: std_logic; revTag: InsTag;
-									 allow: std_logic; mask: std_logic_vector) 
-		return InsTag;
-		
-		constant ALL_FULL: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '1');
-
-function getLinkInfo(ins: InstructionState; state: Mword) return InstructionState;
-
+function getNextPC(pc: Mword; jumpPC: Mword; jump: std_logic) return Mword;
 
 function getLatePCData(commitCausing: InstructionState; int: std_logic; intType: std_logic_vector;
 								currentState, linkExc, linkInt, stateExc, stateInt: Mword)
@@ -52,16 +41,10 @@ function recreateGroup(insVec: InstructionSlotArray; bqGroup: InstructionSlotArr
 return InstructionSlotArray;
 
 
-function isHalt(ins: InstructionState) return std_logic;
-
---function setInterrupt3(ins: InstructionState; intSignal, start: std_logic) return InstructionState;
-
 function clearControlEvents(ins: InstructionState) return InstructionState;
 
 function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray;
 								 lastEffectiveIns, lateTargetIns: InstructionState;
-								 --linkAddressInt, linkAddressExc: Mword;
-								 --evtPhase1, intPhase1, start: std_logic)
 								 evtPhase2: std_logic)
 
 return InstructionSlot;
@@ -69,6 +52,8 @@ return InstructionSlot;
 function getEffectiveMask(newContent: InstructionSlotArray) return std_logic_vector;
 
 function anyEvent(insVec: InstructionSlotArray) return std_logic;
+
+function hasSyncEvent(ins: InstructionState) return std_logic; 
 
 end LogicSequence;
 
@@ -88,38 +73,16 @@ begin
 	return res;
 end function;
 
--- group:  revTag = causing.groupTag and i2slv(-PIPE_WIDTH, SMALL_NUMBER_SIZE), mask = all ones
--- sequential: revTag = causing.numberTag, mask = new group's fullMask		
-function nextCtr(ctr: InsTag; rewind: std_logic; revTag: InsTag;
-							 allow: std_logic; mask: std_logic_vector) 
-return InsTag is
-begin
-	if rewind = '1' then
-		return revTag;
-	elsif allow = '1' then
-		return i2slv(slv2u(ctr) + countOnes(mask), TAG_SIZE);
-	else
-		return ctr;
-	end if;
-end function;
-
-
-function getLinkInfo(ins: InstructionState; state: Mword) return InstructionState is
-	variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
-begin
-	res.ip := ins.target;
-	res.result := state;
-	return res;
-end function;
-
 
 function getLatePCData(commitCausing: InstructionState; int: std_logic; intType: std_logic_vector;
 								currentState, linkExc, linkInt, stateExc, stateInt: Mword)
 return InstructionState is
-	variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;-- content;
+	variable res: InstructionState := commitCausing;-- DEFAULT_INSTRUCTION_STATE;-- content;
 	variable newPC: Mword := (others=>'0');
 	constant MINUS_4: Mword := i2slv(-4, MWORD_SIZE);
-begin	
+begin
+    
+    res.controlInfo.hasInterrupt := int;
 		if int = '1' then
 		  if intType = "01" then
 		        res.ip := X"00000280";
@@ -160,7 +123,8 @@ begin
                     res.ip := CALL_BASE; -- TEMP			    
 				end if;
 		end if;		
-	
+	   
+	   res.target := res.ip;
 	return res;
 end function;
 
@@ -186,6 +150,61 @@ begin
 
 	return res;
 end function;
+
+
+function clearControlEvents(ins: InstructionState) return InstructionState is
+	variable res: InstructionState := ins;
+begin
+	res.controlInfo.newEvent := '0';
+	res.controlInfo.hasInterrupt := '0';
+	res.controlInfo.hasException := '0';	
+	res.controlInfo.specialAction := '0';
+	return res;
+end function;
+
+
+	function getLastEffective(newContent: InstructionSlotArray) return InstructionState is
+		variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
+	begin
+		-- Seeking from right side cause we need the last one 
+		for i in newContent'range loop
+			-- Count only full instructions
+			if newContent(i).full = '1' then
+				res := newContent(i).ins;
+			else
+				exit;
+			end if;
+			
+			-- If this one has an event, following ones don't count
+			if hasSyncEvent(newContent(i).ins) = '1' then
+				res.controlInfo.newEvent := '1'; -- Announce that event is to happen now!
+				exit;
+			end if;			
+		end loop;
+		
+		return res;
+	end function;
+
+	function getEffectiveMask(newContent: InstructionSlotArray) return std_logic_vector is
+		variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+	begin
+		-- Seeking from right side cause we need the last one 
+		for i in newContent'range loop
+			if newContent(i).full = '1' then -- Count only full instructions
+				res(i) := '1';
+			else
+				exit;
+			end if;
+			
+			-- CAREFUL, TODO: what if there's a branch (or branch correction) and valid path after it??
+			-- If this one has an event, following ones don't count
+			if hasSyncEvent(newContent(i).ins) = '1' then
+				exit;
+			end if;
+			
+		end loop;
+		return res;
+	end function;
 
 -- Unifies content of ROB slot with BQ, others queues etc. to restore full state needed at Commit
 function recreateGroup(insVec: InstructionSlotArray; bqGroup: InstructionSlotArray;
@@ -228,70 +247,8 @@ begin
 	return res;
 end function;
 
-
-	function isHalt(ins: InstructionState) return std_logic is
-	begin
-		if ins.operation.func = sysHalt then
-			return '1';
-		else
-			return '0';
-		end if;
-	end function;
-
---function setInterrupt3(ins: InstructionState; intSignal, start: std_logic) return InstructionState is
---	variable res: InstructionState := ins;
---begin
---	res.controlInfo.hasInterrupt := intSignal;-- or start;
---	res.controlInfo.hasReset := intSignal and start;
---	-- CAREFUL: needed because updating link info must have either interrupt or exception
---	if res.controlInfo.hasInterrupt = '1' then
---		res.controlInfo.hasException := '0';
---	end if;
---	return res;
---end function;
-
-function clearControlEvents(ins: InstructionState) return InstructionState is
-	variable res: InstructionState := ins;
-begin
-	res.controlInfo.newEvent := '0';
-	res.controlInfo.hasInterrupt := '0';
-	res.controlInfo.hasException := '0';	
-	res.controlInfo.specialAction := '0';
-	return res;
-end function;
-
-
-	function getLastEffective(newContent: InstructionSlotArray) return InstructionState is
-		variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
-	begin
-		-- Seeking from right side cause we need the last one 
-		for i in newContent'range loop
-			-- Count only full instructions
-			if newContent(i).full = '1' then
-				res := newContent(i).ins;
-			else
-				exit;
-			end if;
-			
-			-- If this one has an event, following ones don't count
-			if 	newContent(i).ins.controlInfo.hasException = '1'
-				or newContent(i).ins.controlInfo.specialAction = '1'	-- CAREFUL! This also breaks flow!
-				or newContent(i).ins.controlInfo.dbtrap = '1'
-			then
-				res.controlInfo.newEvent := '1'; -- Announce that event is to happen now!
-				exit;
-			end if;
-			
-		end loop;
-		
-		return res;
-	end function;
-
-
 function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray;
 								 lastEffectiveIns, lateTargetIns: InstructionState;
-								 --linkAddressInt, linkAddressExc: Mword;
-								 --evtPhase1, intPhase1, start: std_logic)
 								 evtPhase2: std_logic)
 return InstructionSlot is
 	variable res: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -304,16 +261,12 @@ return InstructionSlot is
 	variable ind: std_logic_vector(LOG2_PIPE_WIDTH-1 downto 0) := (others => '0');
 	variable targetInc: Mword := (others => '0');
 begin
-	sdToCommit := recreateGroup(robDataLiving, dataFromBQV, lastEffectiveIns.target);
+	sdToCommit := robDataLiving;
 	insToLastEffective := getLastEffective(sdToCommit);
 	
---	lateTargetIns := getLatePCData(setInterrupt3(lastEffectiveIns, intPhase1, start),
---							(others => '0'), linkAddressExc, linkAddressInt, (others => '0'), (others => '0'));
-	
 	if evtPhase2 = '1' then
-		res := ('1', lateTargetIns);--clearControlEvents(setInstructionTarget(lastEffectiveIns, lateTargetIns.ip)));
+		res := ('1', lateTargetIns);
 	else
-	--if true then
 		res := (sendingToCommit, insToLastEffective);
 
 		-- Find taken jumps in ROB entry and last effective index
@@ -328,11 +281,7 @@ begin
 			end if;
 			
 			-- If this one has an event, following ones don't count
-			if 	robDataLiving(i).ins.controlInfo.hasException = '1'
-				or robDataLiving(i).ins.controlInfo.specialAction = '1'	-- CAREFUL! This also breaks flow!
-				or robDataLiving(i).ins.controlInfo.dbtrap = '1'
-			then
-				--res.controlInfo.newEvent := '1'; -- Announce that event is to happen now!
+			if hasSyncEvent(robDataLiving(i).ins) = '1' then
 				exit;
 			end if;
 			
@@ -340,13 +289,12 @@ begin
 		
 		-- Find taken jumps in BQ group and select last as target
 		branchTarget := lastEffectiveIns.target;
-							--	getStoredArg1(dataFromBQV.data(0));
+        -- Now last effective and taken target from BQ
 		for i in 0 to PIPE_WIDTH-1 loop
 			ind := dataFromBQV(i).ins.tags.renameIndex(LOG2_PIPE_WIDTH-1 downto 0);
 			-- Corresponding ROB entry musu be effective effective, otherwise branch doesn't happen!
 			-- But if not effective, BQ entry would've be killed, so no need to check
-			if dataFromBQV(i).full = '1' then -- 
-														--and effectiveVec(slv2u(ind)) = '1' then
+			if dataFromBQV(i).full = '1' then
 				if dataFromBQV(i).ins.controlInfo.confirmedBranch = '1' then
 					bqTakenBranchVec(slv2u(ind)) := '1';
 					branchTarget := dataFromBQV(i).ins.target;
@@ -372,44 +320,21 @@ begin
 	return res;
 end function;
 
-
-
-	function getEffectiveMask(newContent: InstructionSlotArray) return std_logic_vector is
-		variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-	begin
-		-- Seeking from right side cause we need the last one 
-		for i in newContent'range loop
-			if newContent(i).full = '1' then -- Count only full instructions
-				res(i) := '1';
-			else
-				exit;
-			end if;
-			
-			-- CAREFUL, TODO: what if there's a branch (or branch correction) and valid path after it??
-			-- If this one has an event, following ones don't count
-			if 	newContent(i).ins.controlInfo.hasException = '1'
-				or newContent(i).ins.controlInfo.specialAction = '1'
-				or newContent(i).ins.controlInfo.dbtrap = '1'
-			then
-				exit;
-			end if;
-			
-		end loop;
-		return res;
-	end function;
-
     function anyEvent(insVec: InstructionSlotArray) return std_logic is
         variable effectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := getEffectiveMask(insVec);
     begin
         for i in 0 to PIPE_WIDTH-1 loop
-            if (effectiveMask(i) = '1') and
-              (     insVec(i).ins.controlInfo.hasException = '1'
-				or insVec(i).ins.controlInfo.specialAction = '1'
-                or insVec(i).ins.controlInfo.dbtrap = '1') then
+            if (effectiveMask(i) = '1') and hasSyncEvent(insVec(i).ins) = '1' then
                 return '1';
             end if;            
         end loop;
         return '0'; 
     end function;
+
+function hasSyncEvent(ins: InstructionState) return std_logic is
+begin
+    return  ins.controlInfo.hasException or ins.controlInfo.specialAction or ins.controlInfo.dbtrap; 
+end function;
+
 
 end LogicSequence;

@@ -50,7 +50,6 @@ entity IssueQueue is
 		fni: ForwardingInfo;
 		readyRegFlags: in std_logic_vector(0 to 3*PIPE_WIDTH-1);
 		
-		--acceptingVec: out std_logic_vector(0 to PIPE_WIDTH-1);
 		acceptingMore: out std_logic;
 		acceptingOut: out std_logic;
 		
@@ -62,33 +61,16 @@ end IssueQueue;
 
 
 architecture Behavioral of IssueQueue is
-	signal queueData: InstructionStateArray(0 to IQ_SIZE-1)  := (others=>defaultInstructionState);
-	signal queueDataNext: InstructionStateArray(0 to IQ_SIZE-1) -- For view
-								:= (others=>defaultInstructionState);		
-	signal fullMask, fullMaskNext, killMask, livingMask, readyMask, readyMaskLive, stayMask:
-				std_logic_vector(0 to IQ_SIZE-1) := (others=>'0');	
+	signal queueData: InstructionStateArray(0 to IQ_SIZE-1)  := (others => DEFAULT_INSTRUCTION_STATE);
+	signal fullMask, fullMaskNext, killMask, livingMask, readyMask, readyMaskLive, stayMask: std_logic_vector(0 to IQ_SIZE-1) := (others=>'0');	
 
-	signal inputIndices: SmallNumberArray(0 to IQ_SIZE-1) := (others => (others => '0'));
-								
-	--signal flowDriveQ: FlowDriveBuffer := (killAll => '0', lockAccept => '0', lockSend => '0', others=>(others=>'0'));
-	--signal flowResponseQ: FlowResponseBuffer := (others => (others=> '0'));
-
-	signal queueContent, queueContentNext: SchedulerEntrySlotArray(0 to IQ_SIZE-1)
-				:= (others => DEFAULT_SCH_ENTRY_SLOT);
-	signal queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1)
-																													:= (others => DEFAULT_SCH_ENTRY_SLOT);
-	signal newContent, newContent_T: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	signal queueContent, queueContentNext: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	signal queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	signal newContent, newSchedData: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 				
-	signal newSchedData: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-				
-	--signal newDataU: StageDataMulti := DEFAULT_STAGE_DATA_MULTI;												
 	signal anyReadyFull, anyReadyLive, sends, sendPossible: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
-	
-	--signal TMP_sendingWin: StageDataMulti := DEFAULT_STAGE_DATA_MULTI;
-	
-	--signal qs0, qs1: TMP_queueState := TMP_defaultQueueState;
-	
+
 	-- Select item at first '1', or the last one if all zeros
 	function prioSelect(elems: SchedulerEntrySlotArray; selVec: std_logic_vector) return SchedulerEntrySlot is
 		variable ind, ind0, ind1: std_logic_vector(2 downto 0) := "000";
@@ -151,69 +133,41 @@ architecture Behavioral of IssueQueue is
 
 			signal ch0, ch1, ch2: std_logic := '0';
 begin
-	--flowDriveQ.prevSending <= num2flow(countOnes(extractFullMask(newArr))) when prevSendingOK = '1' else (others => '0');
-	--flowDriveQ.kill <= num2flow(countOnes(killMask));
-	--flowDriveQ.nextAccepting <=  num2flow(1) when sends = '1' else num2flow(0);															
 
 	QUEUE_SYNCHRONOUS: process(clk) 	
 	begin
-		if rising_edge(clk) then
-			--qs0 <= qs1;
-		
+		if rising_edge(clk) then		
 			queueContent <= queueContentNext;
-
-			--logBuffer(queueData, fullMask, livingMask, flowResponseQ);
-			--checkIQ(queueData, fullMask, queueDataNext, fullMaskNext, dispatchDataNew.ins,
-			--															sends, flowDriveQ, flowResponseQ);
 		end if;
 	end process;	
-	
-	--	qs1 <= TMP_change_Shifting(qs0,
-	--										flowDriveQ.nextAccepting,
-	--										flowDriveQ.prevSending,
-	--										fullMask, killMask,
-	--										execEventSignal or execCausing.controlInfo.hasInterrupt);
-		
-	--sendingMask <= getFirstOne(readyMask and livingMask) when nextAccepting = '1' else	(others => '0');
 
 	livingMask <= fullMask and not killMask;
 
-		fullMask <= extractFullMask(queueContent);
-		queueData <= extractData(queueContent);
-			
-	--fullMaskNext <= extractFullMask(queueContentNext);
-	--queueDataNext <= extractData(queueContentNext);	
+	fullMask <= extractFullMask(queueContent);
+    queueData <= extractData(queueContent);
+
 	sends <= anyReadyLive and nextAccepting;
 	sendPossible <= anyReadyFull and nextAccepting; -- Includes ops that would send but are killed
 	
 	dispatchDataNew <= TMP_clearDestIfEmpty(prioSelect(queueContentUpdatedSel, readyMask), sends);
-		stayMask <= TMP_setUntil(readyMask, nextAccepting);
+	stayMask <= TMP_setUntil(readyMask, nextAccepting);
 
-		newContent <= newArr;
+    newContent <= newArr;
 
-		queueContentNext <= iqContentNext2(queueContentUpdated,
-														newContent,
-														stayMask,
-														fullMask,
-														livingMask,
-														sendPossible,
-														sends,
-														nextAccepting,
-														countOnes(livingMask),--binFlowNum(flowResponseQ.living),
-														--binFlowNum(flowResponseQ.sending),
-														--binFlowNum(flowDriveQ.prevSending),
-														prevSendingOK);
+	queueContentNext <= iqContentNext(queueContentUpdated, newContent,
+									  stayMask, fullMask, livingMask,
+									  sendPossible, sends,
+									  prevSendingOK);
 					
 	-- TODO: below could be optimized because some code is shared (comparators!)
-		queueContentUpdated <= updateForWaitingArrayFNI(queueContent, readyRegFlags, fni);
-		queueContentUpdatedSel <= updateForSelectionArrayFNI(queueContent, readyRegFlags, fni);
+	queueContentUpdated <= updateForWaitingArrayFNI(queueContent, readyRegFlags, fni);
+	queueContentUpdatedSel <= updateForSelectionArrayFNI(queueContent, readyRegFlags, fni);
 
 	readyMask <= extractReadyMaskNew(queueContentUpdatedSel) and fullMask;	
 	readyMaskLive <= readyMask and livingMask;
 
 	
 	killMask <= getKillMask(queueData, fullMask, execCausing, execEventSignal, lateEventSignal); 
-	--acceptingVec <= not fullMask(IQ_SIZE-PIPE_WIDTH to IQ_SIZE-1);
 	acceptingOut <= not isNonzero(fullMask(IQ_SIZE-PIPE_WIDTH to IQ_SIZE-1)); 
 	acceptingMore <= not isNonzero(fullMask(IQ_SIZE-2*PIPE_WIDTH to IQ_SIZE-PIPE_WIDTH-1));
 	

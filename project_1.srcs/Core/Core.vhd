@@ -118,7 +118,6 @@ begin
         -- Events in
         intSignal => intSignal,
         intType => intType,
-        --start => int1,        
         execEventSignal => execEventSignal,
         execCausing => execCausing,
         
@@ -126,26 +125,15 @@ begin
         frontCausing => frontCausing,
         
         -- Events out
-        execOrIntEventSignalOut => open,--execOrIntEventSignal,
-        execOrIntCausingOut => open,--execOrIntCausing,
+        --execOrIntEventSignalOut => open,--execOrIntEventSignal,
+        --execOrIntCausingOut => open,--execOrIntCausing,
         lateEventOut => lateEventSignal,
         lateEventSetPC => lateEventSetPC,
         lateCausing => lateCausing,
         -- Data from front pipe interface        
- --       renameAccepting => open,--renameAccepting, -- to frontend
         frontLastSending => frontLastSending,
         frontDataLastLiving => frontDataLastLiving,
 
---        -- Interface from register mapping
---        newPhysDestsIn => (others => (others => '0')),--newPhysDests,
---        newPhysDestPointerIn => (others => '0'),--newPhysDestPointer,
---        newPhysSourcesIn => (others => (others => '0')),--newPhysSources,
-
-        -- Interface with IQ
---        iqAccepts => iqAccepting,
---        renamedDataLiving => open,--renamedDataLiving, -- !!!
---        renamedSending => open,--renamedSending,
-        
         -- Interface from ROB
         commitAccepting => commitAccepting,
         sendingFromROB => robSending,    
@@ -159,9 +147,9 @@ begin
         sbEmpty => '1',--sbEmpty,
 
         -- Interface from committed stage
-        committedSending => open,--committedSending,
-        committedDataOut => open,--committedDataOut,
-        renameLockEndOut => open,--renameLockEnd,
+        --committedSending => open,--committedSending,
+        --committedDataOut => open,--committedDataOut,
+        --renameLockEndOut => open,--renameLockEnd,
                 
         commitGroupCtrOut => commitGroupCtr,
         commitCtrOut => commitCtr,
@@ -535,10 +523,10 @@ begin
 		
 		nextAccepting => commitAccepting,		
 		sendingSQOut => bqSending,
-		dataOutV => bqData,
+		dataOutV => bqData
 		
-			committedOutput => open,
-			committedEmpty => open
+		--	committedOutput => open,
+		--	committedEmpty => open
 	);
 
 end Behavioral;
