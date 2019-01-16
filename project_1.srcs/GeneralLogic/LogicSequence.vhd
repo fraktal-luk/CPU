@@ -36,7 +36,7 @@ package LogicSequence is
 function getLinkInfo(ins: InstructionState; state: Mword) return InstructionState;
 
 
-function getLatePCData(commitCausing: InstructionState; int: std_logic;
+function getLatePCData(commitCausing: InstructionState; int: std_logic; intType: std_logic_vector;
 								currentState, linkExc, linkInt, stateExc, stateInt: Mword)
 return InstructionState;
 
@@ -113,7 +113,7 @@ begin
 end function;
 
 
-function getLatePCData(commitCausing: InstructionState; int: std_logic;
+function getLatePCData(commitCausing: InstructionState; int: std_logic; intType: std_logic_vector;
 								currentState, linkExc, linkInt, stateExc, stateInt: Mword)
 return InstructionState is
 	variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;-- content;
@@ -121,7 +121,11 @@ return InstructionState is
 	constant MINUS_4: Mword := i2slv(-4, MWORD_SIZE);
 begin	
 		if int = '1' then
-		  res.ip := INT_BASE; -- TEMP!
+		  if intType = "01" then
+		        res.ip := X"00000280";
+		  else
+		        res.ip := INT_BASE; -- TEMP!
+		  end if;
 			res.result := currentState or X"00000001";
 			res.result := res.result and X"fdffffff"; -- Clear dbtrap
 		elsif commitCausing.controlInfo.hasException = '1'

@@ -45,6 +45,8 @@ entity UnitSequencer is
 
     -- Event/state interface                        
     intSignal: in std_logic;
+    intType: in std_logic_vector(0 to 1);
+    
     execEventSignal: in std_logic;
     execCausing: in InstructionState;        
     
@@ -155,10 +157,12 @@ architecture Behavioral of UnitSequencer is
     signal stageDataToPC, tmpPcOutA, stageDataLastEffectiveInA, stageDataLastEffectiveOutA, stageDataLateCausingIn:
                         InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
         
+    signal intTypeCommitted: std_logic_vector(0 to 1) := (others => '0');
+        
         constant HAS_RESET_SEQ: std_logic := '0';
         constant HAS_EN_SEQ: std_logic := '0';
         
-        function getNewLateCausing(ins: InstructionState; int: std_logic;
+        function getNewLateCausing(ins: InstructionState; int: std_logic; intType: std_logic_vector;
                                    currentState,
                                    linkRegExc, linkRegInt,
                                    savedStateExc, savedStateInt: Mword 
@@ -166,7 +170,7 @@ architecture Behavioral of UnitSequencer is
             variable res: InstructionState := ins;
                 variable dummy: InstructionState := DEFAULT_INSTRUCTION_STATE;
         begin
-            dummy := getLatePCData(ins, int,
+            dummy := getLatePCData(ins, int, intType,
                                                                 currentState,
                                                                 linkRegExc, linkRegInt,
                                                                 savedStateExc, savedStateInt);
@@ -268,8 +272,10 @@ begin
         
         pcNext <= getNextPC(stageDataOutPC.ip, (others => '0'), '0');
 
-        excInfoUpdate <= lateEventSending and not stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
-        intInfoUpdate <= lateEventSending and stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;     
+        excInfoUpdate <= lateEventSending 
+                                        and (stageDataLateCausingOut(0).ins.controlInfo.hasException or bool2std(stageDataLateCausingOut(0).ins.operation = (System, sysCall)))
+                                        and not stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
+        intInfoUpdate <= lateEventSending and stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
         ----------------------------------------------------------------------
         
         SYS_REGS: block
@@ -478,6 +484,7 @@ begin
             end if;
             if (intSignal and not committingEvent) = '1' then
                 intCommitted <= '1';
+                intTypeCommitted <= intType;
             elsif (intSignal and committingEvent) = '1' then
                 intSuppressed <= '1';
             end if;
@@ -486,7 +493,7 @@ begin
     
     sendingToLateCausing <= (eventCommitted or intCommitted) and sbEmpty;
     
-    newLateCausing <= getNewLateCausing(stageDataLastEffectiveOutA(0).ins, intCommitted,
+    newLateCausing <= getNewLateCausing(stageDataLastEffectiveOutA(0).ins, intCommitted, intTypeCommitted,
                                         currentState, linkRegExc, linkRegInt, savedStateExc, savedStateInt);
     
     stageDataLateCausingIn(0) <= (sendingToLateCausing, newLateCausing);

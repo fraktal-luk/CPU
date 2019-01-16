@@ -89,7 +89,12 @@ architecture Behavioral of Core is
     --    signal iadrReg: Mword := X"ffffffb0";
     signal commitGroupCtr, commitCtr, commitGroupCtrInc: InsTag := (others => '0');
     signal newPhysDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+    signal intSignal: std_logic := '0';
+    signal intType: std_logic_vector(0 to 1) := (others => '0');
 begin
+
+    intSignal <= int0 or int1;
+    intType <= (int0, int1);
 
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
     port map (
@@ -111,7 +116,8 @@ begin
         intAckOut => intack,
         intRejOut => open,--
         -- Events in
-        intSignal => int0,
+        intSignal => intSignal,
+        intType => intType,
         --start => int1,        
         execEventSignal => execEventSignal,
         execCausing => execCausing,

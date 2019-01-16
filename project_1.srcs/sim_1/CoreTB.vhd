@@ -186,10 +186,7 @@ BEGIN
        
    begin		
 	  wait for 110 ns;
-	  --reset <= '1';
-	  --wait until rising_edge(clk);
-	  --reset <= '0';
-	
+
 	  loop
 	      testName := null;	  
 	      readline(testFile, testName);
@@ -236,30 +233,128 @@ BEGIN
           wait until rising_edge(clk);
 	  end loop;
 	  
-	  report "All tests done!";
-	  wait;
+	  report "All suite done!";
+	  --wait;
 
-      --prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\src.txt");
-      --prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\alu.txt");
-      prog <= readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\loop2.txt");
+      wait until rising_edge(clk);
+      
+      report "Run exception tests";
+          testProgram(0) <= ins655655(ext2, 0, 0, error, 0, 0);
+          testProgram(1) <= ins6L(j, 0);
+          
+          wait until rising_edge(clk);
 
-      wait for clk_period;
+          testToDo <= '1';
+          int0b <= '1';
+          wait until rising_edge(clk);
+          testToDo <= '0';
+          int0b <= '0';
+          report "Waiting for completion...";
+     
+        wait until rising_edge(clk);
 
-      machineCode <= processProgram(prog);
+          loop
+              wait until rising_edge(clk);
+                  if testDone = '1' then
+                      report "Success signal when error expected!";
+                      wait;
+                  end if;
+                  
+                  if testFail = '1' then
+                      report "Error signal confirmed correctly";
+                      exit;                     
+                  end if;                  
+          end loop;     
 
-      wait for clk_period;
+        wait until rising_edge(clk);
 
-      testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+        report "Now test exception return";
 
-            testProgram(512/4) <= ins6L(j, -512);-- TEMP!
+	  progB := readSourceFile
+	  ("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\" & "events" & ".txt" );
+      machineCode <= processProgram(progB);
+      wait until rising_edge(clk);
 
-      wait for clk_period;
+          
+          testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+          testProgram(512/4) <= ins6L(j, -512);-- TEMP!        
+          
+          testProgram(384/4) <= ins655H(addI, r20, r0, 55);
+          testProgram(384/4 + 1) <= ins655655(ext2, 0, 0, retE, 0, 0);
+          
+          --wait until rising_edge(clk);         
+          testToDo <= '1';
+          int0b <= '1';
+          wait until rising_edge(clk);
+          testToDo <= '0';
+          int0b <= '0';
+          report "Waiting for completion...";
 
-            for i in 0 to 20 loop
-                decBits.bits := machineCode(i);
-                decIns := decodeFromWord(decBits.bits);
-                --report insText(decIns);
-            end loop;
+
+      wait until rising_edge(clk);
+ 
+     loop
+        wait until rising_edge(clk);
+              if testDone = '1' then
+                  report "Test done";
+                  exit;
+              end if;
+              
+              if testFail = '1' then
+                  report "TEST FAIL: " & "events";
+                  
+                  wait;                     
+              end if;                  
+      end loop;      
+
+       report "Now test interrupts";
+
+	  progB := readSourceFile
+	  ("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\" & "events2" & ".txt" );
+      machineCode <= processProgram(progB);
+      wait until rising_edge(clk);
+
+          
+          testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+          testProgram(512/4) <= ins6L(j, -512);-- TEMP!        
+          
+          testProgram(384/4) <= ins655H(addI, r20, r0, 55);
+          testProgram(384/4 + 1) <= ins655655(ext2, 0, 0, retE, 0, 0);
+          
+          testProgram(640/4) <= ins655H(addI, r0, r0, 0); -- NOP
+          testProgram(640/4 + 1) <= ins655655(ext2, 0, 0, retI, 0, 0);          
+          
+          --wait until rising_edge(clk);         
+          testToDo <= '1';
+          int0b <= '1';
+          wait until rising_edge(clk);
+          testToDo <= '0';
+          int0b <= '0';
+          report "Waiting for completion...";
+
+
+      wait until rising_edge(clk);
+        -- After x cycles send interrupt
+        wait for 19 * 10 ns;
+       wait until rising_edge(clk);        
+            int1 <= '1';
+      wait until rising_edge(clk);
+            int1 <= '0';        
+            
+ 
+     loop
+        wait until rising_edge(clk);
+              if testDone = '1' then
+                  report "Test done";
+                  exit;
+              end if;
+              
+              if testFail = '1' then
+                  report "TEST FAIL: " & "events2";
+                  
+                  wait;                     
+              end if;                  
+      end loop;      
 
       wait;
    end process;
