@@ -70,11 +70,12 @@ type InstructionControlInfo is record
 	completed: std_logic;
 		completed2: std_logic;
 	newEvent: std_logic; -- True if any new event appears
-		hasReset: std_logic;
+	--	hasReset: std_logic;
 	hasInterrupt: std_logic;
 	hasException: std_logic;
 	--hasBranch: std_logic;
-	hasReturn: std_logic;
+	--hasReturn: std_logic;
+	   refetch: std_logic;
 	   frontBranch: std_logic;
 	   confirmedBranch: std_logic;
 	specialAction: std_logic;
@@ -86,7 +87,7 @@ type InstructionClassInfo is record
 	short: std_logic;
 		mainCluster: std_logic;
 		secCluster: std_logic;
-	branchCond: std_logic;
+	--branchCond: std_logic;
 	
 	pipeA, pipeB, pipeC, load, store, branchIns: std_logic;
 end record;
@@ -275,10 +276,11 @@ begin
 													completed2 => '0',
 												newEvent => '0',
 												hasInterrupt => '0',
-													hasReset => '0',
+												--	hasReset => '0',
 												hasException => '0',
 												--hasBranch => '0',
-												hasReturn => '0',
+												--hasReturn => '0',
+												    refetch => '0',
 												    frontBranch => '0',
                                                     confirmedBranch => '0',												    											
 												specialAction => '0',
@@ -292,7 +294,7 @@ begin
 	return InstructionClassInfo'( short => '0',
 											mainCluster => '0',
 											secCluster => '0',
-											branchCond => '0',
+											--branchCond => '0',
 											pipeA => '0',
 											pipeB => '0',
 											pipeC => '0',

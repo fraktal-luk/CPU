@@ -487,8 +487,7 @@ function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector is
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
-			and 	insVec(i).ins.classInfo.--branchCond = '1'
-			                                 branchIns = '1'
+			and 	insVec(i).ins.classInfo.branchIns = '1'
 		then
 			res(i) := '1';
 		end if;

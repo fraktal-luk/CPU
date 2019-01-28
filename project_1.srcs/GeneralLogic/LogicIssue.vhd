@@ -588,7 +588,7 @@ begin
 
 	res.ins.controlInfo.newEvent := '0';
 	res.ins.controlInfo.hasInterrupt := '0';
-	res.ins.controlInfo.hasReturn := '0';		
+	--res.ins.controlInfo.hasReturn := '0';		
 	res.ins.controlInfo.exceptionCode := (others => '0');
 
 	return res;

@@ -92,12 +92,12 @@ begin
 				ci.secCluster := '0';
 			end if;
 
-			ci.branchCond := '0';
-			if 	ins.operation.func = jump then
-				null;
-			elsif ins.operation.func = jumpZ or ins.operation.func = jumpNZ then 
-				ci.branchCond := '1';	
-			end if;
+--			ci.branchCond := '0';
+--			if 	ins.operation.func = jump then
+--				null;
+--			elsif ins.operation.func = jumpZ or ins.operation.func = jumpNZ then 
+--				ci.branchCond := '1';	
+--			end if;
 			
 		if ins.operation.unit = ALU or ins.operation.unit = Jump then
 			ci.pipeA := '1';
@@ -223,17 +223,12 @@ function getFrontEventMulti(predictedAddress: Mword;
 							  ins: InstructionState; fetchLine: WordArray(0 to FETCH_WIDTH-1))
 return InstructionSlotArray is
 	variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-	variable tempOffset, thisIP, tempTarget: Mword := (others => '0');
+	variable tempOffset: Mword := (others => '0');
 	variable targets: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 	variable fullOut, full, branchIns, predictedTaken, uncondJump: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 	variable nSkippedIns: integer := 0;
 	variable regularJump, longJump, regJump: std_logic := '0';
 begin
-	-- receiving, valid, accepting	-> good
-	-- receiving, valid, not accepting -> refetch
-	-- receiving, invalid, accepting -> error, will cause exception, but handled later, from decode on
-	-- receiving, invalid, not accepting -> refetch??
-	
 	-- CAREFUL: Only without hword instructions now!
 	-- Find which are before the start of fetch address
 	nSkippedIns := slv2u(predictedAddress(ALIGN_BITS-1 downto 2));								
@@ -244,19 +239,24 @@ begin
 			res(i).ins.controlInfo.skipped := '1';
 			full(i) := '0'; -- CAREFUL: trying to dispose of 'skipped' flag
 		end if;
+		
+        res(i).ins.bits := fetchLine(i);
+        res(i).ins.ip := ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);        
+        res(i).ins.result := ins.ip;
+        res(i).ins.result(ALIGN_BITS-1 downto 0) := i2slv((i+1)*4, ALIGN_BITS); -- CAREFUL: not for short ins
 	end loop;
+	res(PIPE_WIDTH-1).ins.result := ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
+	res(PIPE_WIDTH-1).ins.result := addMwordBasic(res(PIPE_WIDTH-1).ins.result, PC_INC);
 
     -- Calculate target for each instruction, even if it's to be skipped
-    for i in 0 to FETCH_WIDTH-1 loop
-        thisIP := ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);
-        
+    for i in 0 to FETCH_WIDTH-1 loop        
         regularJump := '0';
         longJump := '0';
         regJump := '0';
         
         if 	fetchLine(i)(31 downto 26) = opcode2slv(jl) then
             regularJump := '1';				
-            predictedTaken(i) := fetchLine(i)(20);        -- CAREFUL, TODO: temporary predicted taken iff backwards
+            predictedTaken(i) := '1';       -- CAREFUL, TODO: temporary predicted taken iff backwards
             uncondJump(i) := '1';		    
         elsif
              fetchLine(i)(31 downto 26) = opcode2slv(jz) 
@@ -286,9 +286,9 @@ begin
             tempOffset(20 downto 0) := fetchLine(i)(20 downto 0);				
         end if;
 
-        targets(i) := addMwordFaster(thisIP, tempOffset);
+        res(i).ins.target := addMwordFaster(res(i).ins.ip, tempOffset);
 
-        res(i).ins.classInfo.branchCond := branchIns(i); -- Mark as ins of type branch
+        --res(i).ins.classInfo.branchCond := branchIns(i); -- Mark as ins of type branch
         
         -- Now applying the skip!
         if res(i).ins.controlInfo.skipped = '1' then
@@ -307,7 +307,8 @@ begin
             
             -- Here check if the next line from line predictor agrees with the target predicted now.
             --	If so, don't cause the event but set invalidation mask that next line will use.
-            if targets(i)(MWORD_SIZE-1 downto ALIGN_BITS) = ins.target(MWORD_SIZE-1 downto ALIGN_BITS) then					
+            if res(i).ins.target(MWORD_SIZE-1 downto ALIGN_BITS) = ins.target(MWORD_SIZE-1 downto ALIGN_BITS)
+            then					
                 -- CAREFUL: Remeber that it actually is treated as a branch, otherwise would be done 
                 --				again at Exec!
                 res(i).ins.controlInfo.frontBranch := '1';
@@ -325,17 +326,7 @@ begin
             exit;
         end if;
     end loop;
-    
-    for i in 0 to FETCH_WIDTH-1 loop
-        res(i).ins.bits := fetchLine(i);
-        res(i).ins.target := targets(i);
-        
-        res(i).ins.result := ins.ip;
-        res(i).ins.result(ALIGN_BITS-1 downto 0) := i2slv((i+1)*4, ALIGN_BITS); -- CAREFUL: not for short ins
-    end loop;
-	res(PIPE_WIDTH-1).ins.result := ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
-	res(PIPE_WIDTH-1).ins.result := addMwordBasic(res(PIPE_WIDTH-1).ins.result, PC_INC);
-	
+
 	for i in 0 to FETCH_WIDTH-1 loop
 	   res(i).full := fullOut(i);
 	end loop;
@@ -367,6 +358,7 @@ begin
     if fetchStall = '1' then -- Need refetching
         res.target := predictedAddress;
         res.controlInfo.newEvent := '1';
+        res.controlInfo.refetch := '1';
     else
         res := findEarlyTakenJump(inputIns, earlyBranchMultiDataInA);
         res.ip := predictedAddress;
