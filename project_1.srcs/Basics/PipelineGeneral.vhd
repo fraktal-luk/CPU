@@ -117,6 +117,8 @@ function getExceptionMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector) return SchedulerEntrySlotArray;
 
 function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
@@ -488,6 +490,34 @@ begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
 			and 	insVec(i).ins.classInfo.branchIns = '1'
+		then
+			res(i) := '1';
+		end if;
+	end loop;
+	
+	return res;
+end function;
+
+function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+	for i in 0 to PIPE_WIDTH-1 loop
+		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
+			and (insVec(i).ins.operation = (Memory, load) or insVec(i).ins.operation = (System, sysMfc))
+		then
+			res(i) := '1';
+		end if;
+	end loop;
+	
+	return res;
+end function;
+
+function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+	for i in 0 to PIPE_WIDTH-1 loop
+		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
+			and (insVec(i).ins.operation = (Memory, store) or insVec(i).ins.operation = (System, sysMtc))
 		then
 			res(i) := '1';
 		end if;

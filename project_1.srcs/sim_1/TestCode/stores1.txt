@@ -1,0 +1,15 @@
+$start
+    add_r r0, r0,r0				;
+	jz_i	  r10, $check
+	sti_i r5, r0, 12
+	sti_i r5, r0, 16
+	
+	
+$check
+
+	sys call			;
+$error
+    sys error
+
+
+ 

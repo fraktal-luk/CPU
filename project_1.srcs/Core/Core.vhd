@@ -30,6 +30,7 @@ use work.InstructionState.all;
 
 use work.PipelineGeneral.all;
 
+use work.Arith.all;
 
 entity Core is
     Port ( clk : in  STD_LOGIC;
@@ -74,9 +75,9 @@ end Core;
 architecture Behavioral of Core is
     signal pcDataSig, frontCausing, execCausing, lateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
-                frontEventSignal, bqAccepting, bqSending: std_logic := '0';
+                frontEventSignal, bqAccepting, bqSending, acceptingSQ, almostFullSQ: std_logic := '0';
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal frontDataLastLiving, renamedDataLiving, dataOutROB, renamedDataToBQ, bqData: 
+    signal frontDataLastLiving, renamedDataLiving, dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal bqCompare, bqSelected, bqUpdate: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
@@ -84,8 +85,8 @@ architecture Behavioral of Core is
 
     signal execEventSignal, lateEventSignal, lateEventSetPC, sendingBranchIns: std_logic := '0';
     signal robSending, robAccepting, renamedSending, commitAccepting, 
-                iqAccepting, iqAcceptingA,
-                robAcceptingMore, iqAcceptingMoreA: std_logic := '0';
+                iqAccepting, iqAcceptingA, iqAcceptingC,
+                robAcceptingMore, iqAcceptingMoreA, iqAcceptingMoreC: std_logic := '0';
     --    signal iadrReg: Mword := X"ffffffb0";
     signal commitGroupCtr, commitCtr, commitGroupCtrInc: InsTag := (others => '0');
     signal newPhysDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -222,8 +223,8 @@ begin
     --                after accounting for current group at Rename that will use some resources!  
     iqAccepting <= 
     (not isNonzero(extractFullMask(renamedDataLiving))
-        and robAccepting and iqAcceptingA and renameAccepting)
-    or (robAcceptingMore and iqAcceptingMoreA and renameAccepting);
+        and robAccepting and iqAcceptingA and renameAccepting and acceptingSQ)
+    or (robAcceptingMore and iqAcceptingMoreA and not almostFullSQ and renameAccepting);
                
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
@@ -249,25 +250,88 @@ begin
 
 
     TEMP_EXEC: block
-        signal schedData, dataToIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1)
+        signal schedDataAlu, schedDataMem, dataToIQ, dataToAluIQ, dataToMemIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1)
                             := (others => DEFAULT_SCH_ENTRY_SLOT);
-        signal dataToAlu, dataToBranch, dataOutAlu, dataOutAluDelay, dataToIntRF: InstructionSlotArray(0 to 0)
+        signal dataToAlu, dataToBranch, dataToAgu, dataOutAlu, dataOutAgu, dataOutAluDelay, dataOutMem, dataInMem0, dataOutMem0, dataOutMem1, 
+                dataInMem1,
+                dataOutMemDelay, dataToIntRF: InstructionSlotArray(0 to 0)
                                             := (others => DEFAULT_INSTRUCTION_SLOT);
-        signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-        signal dataToIssue, dataToExec: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
-        signal sendingToIssue, sendingAlu, sendingToIntRF, sendingBranch: std_logic := '0';
-        signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
-        signal regsSelA: PhysNameArray(0 to 2) := (others => (others => '0'));
+        signal dataFromBranch, lsData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+        signal dataToIssueAlu, dataToExecAlu, dataToIssueMem, dataToExecMem: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+        signal sendingToIssueAlu, sendingAlu, sendingAgu, sendingToIssueMem, sendingMem, sendingMem0, sendingMem1, sendingToIntRF, sendingBranch, sendingFromDLQ, sendingToAgu: std_logic := '0';
+        signal branchData, dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
+        signal regsSelA, regsSelC: PhysNameArray(0 to 2) := (others => (others => '0'));
         signal regValsA, regValsB, regValsC, regValsD: MwordArray(0 to 2) := (others => (others => '0'));
         signal readyRegFlags, readyRegFlagsNext: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
         
+        signal memMask: std_logic_vector(0 to PIPE_WIDTH-1):= (others => '0');
+        
         signal fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
+
+	    signal addressingData: InstructionState := DEFAULT_INSTRUCTION_STATE;
+        signal sendingAddressing: std_logic := '0';
+        
+        
+	    function calcEffectiveAddress(ins: InstructionState; st: SchedulerState;
+                                                fromDLQ: std_logic; dlqData: InstructionState)
+        return InstructionState is
+        begin
+            if fromDLQ = '1' then
+                return dlqData;
+            else
+                return setInstructionTarget(ins, addMwordFaster(st.argValues.arg0, st.argValues.arg1));
+            end if;
+        end function;
+        
+        
+        function setAddressCompleted(ins: InstructionState; state: std_logic) return InstructionState is
+            variable res: InstructionState := ins;
+        begin
+            res.controlInfo.completed := state;
+            return res;
+        end function;
+        
+        function setDataCompleted(ins: InstructionState; state: std_logic) return InstructionState is
+            variable res: InstructionState := ins;
+        begin
+            res.controlInfo.completed2 := state;
+            return res;
+        end function;
+        
+	    function getLSResultData(ins: InstructionState;
+                                          memLoadReady: std_logic; memLoadValue: Mword;
+                                          sysLoadReady: std_logic; sysLoadValue: Mword;
+                                          storeForwardSending: std_logic; storeForwardIns: InstructionState
+                                            ) return InstructionState is
+            variable res: InstructionState := ins;
+        begin
+            -- TODO: remember about miss/hit status and reason of miss if relevant!
+            if storeForwardSending = '1' then
+                res.controlInfo.completed2 := storeForwardIns.controlInfo.completed2; -- := setDataCompleted(res, getDataCompleted(storeForwardIns));
+                res.result := storeForwardIns.result;
+            elsif res.operation.func = sysMfc then
+                res := setDataCompleted(res, sysLoadReady);
+                res.result := sysLoadValue;        
+            elsif res.operation.func = load then 
+                res := setDataCompleted(res, memLoadReady);
+                res.result := memLoadValue;
+            else -- is store or sys reg write?
+                res := setDataCompleted(res, '1'); -- TEMP!
+                    res.result := memLoadValue; -- Unneeded, to reduce logic
+            end if;
+            
+            return res;
+        end function;
     begin
-        schedData <= getSchedData(extractData(renamedDataLiving), getAluMask(renamedDataLiving));
+        schedDataAlu <= getSchedData(extractData(renamedDataLiving), getAluMask(renamedDataLiving));
+        memMask <=  getStoreMask(renamedDataLiving) or getLoadMask(renamedDataLiving);
+        schedDataMem <= getSchedData(extractData(renamedDataLiving), memMask); -- or getLoadMask(.. ) !!
     
-        dataToIQ <= work.LogicIssue.updateForWaitingArrayNewFNI(schedData, readyRegFlags xor readyRegFlags, fni);
+        dataToAluIQ <= work.LogicIssue.updateForWaitingArrayNewFNI(schedDataAlu, readyRegFlags xor readyRegFlags, fni);
+        dataToMemIQ <= work.LogicIssue.updateForWaitingArrayNewFNI(schedDataMem, readyRegFlags xor readyRegFlags, fni);
+
     
-		IQUEUE: entity work.IssueQueue(Behavioral)--UnitIQ
+		IQUEUE_ALU: entity work.IssueQueue(Behavioral)--UnitIQ
         generic map(
             IQ_SIZE => 8 --IQ_SIZES(4)
         )
@@ -279,7 +343,7 @@ begin
             acceptingMore => iqAcceptingMoreA,
             prevSendingOK => renamedSending,
             --newData => dataToQueuesArr(i),
-                newArr => dataToIQ,--,schArrays(4),
+                newArr => dataToAluIQ,--,schArrays(4),
             fni => fni,
             readyRegFlags => readyRegFlags,
             nextAccepting => '1',--issueAcceptingArr(4),
@@ -287,24 +351,24 @@ begin
             lateEventSignal => lateEventSignal,
             execEventSignal => execEventSignal,
             anyReady => open,--iqReadyArr(4),
-            schedulerOut => dataToIssue,
-            sending => sendingToIssue
+            schedulerOut => dataToIssueAlu,
+            sending => sendingToIssueAlu
         );
  
-        ISSUE_STAGE: entity work.IssueStage
+        ISSUE_STAGE_ALU: entity work.IssueStage
  	    generic map(USE_IMM => true)
         port map(
             clk => clk,
             reset => '0',
             en => '0',
     
-            prevSending => sendingToIssue,
+            prevSending => sendingToIssueAlu,
             nextAccepting => '1',
     
-            input => dataToIssue,
+            input => dataToIssueAlu,
             
             acceptingOut => open,
-            output => dataToExec,
+            output => dataToExecAlu,
             
             execEventSignal => execEventSignal,
             lateEventSignal => lateEventSignal,
@@ -317,13 +381,13 @@ begin
             regValues => regValsA --(others => (others => '0'))     
         );
       
-        dataToAlu(0) <= (dataToExec.full, 
-                       work.LogicExec.executeAlu(dataToExec.ins, dataToExec.state, bqSelected.ins));
+        dataToAlu(0) <= (dataToExecAlu.full, 
+                       work.LogicExec.executeAlu(dataToExecAlu.ins, dataToExecAlu.state, bqSelected.ins));
 
       
             SUBPIPE_A: entity work.GenericStage(Behavioral)
             generic map(
-                COMPARE_TAG => '1'
+                COMPARE_TAG => '0'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -342,20 +406,20 @@ begin
             );      
       
 		branchData <=  
-		        work.LogicExec.basicBranch(setInstructionTarget(dataToExec.ins, 
-		                                                          dataToExec.ins.constantArgs.imm),
-                                         dataToExec.state, bqSelected.ins, bqSelected.full);                    
+		        work.LogicExec.basicBranch(setInstructionTarget(dataToExecAlu.ins, 
+		                                                          dataToExecAlu.ins.constantArgs.imm),
+                                         dataToExecAlu.state, bqSelected.ins, bqSelected.full);                    
             
-            dataToBranch(0) <= (dataToExec.full and 
-                                          work.LogicExec.isBranch(dataToExec.ins), branchData);
+            dataToBranch(0) <= (dataToExecAlu.full and 
+                                          work.LogicExec.isBranch(dataToExecAlu.ins), branchData);
             sendingBranchIns <= dataToBranch(0).full;
             
             --dataD0 <= outputDataD2(0).ins;
-                bqCompare <= (sendingBranchIns, dataToExec.ins);
+                bqCompare <= (sendingBranchIns, dataToExecAlu.ins);
             
             SUBPIPE_D: entity work.GenericStage(Behavioral)
             generic map(
-                COMPARE_TAG => '1'
+                COMPARE_TAG => '0'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -376,6 +440,147 @@ begin
             execCausing <= dataFromBranch.ins;
             bqUpdate <= dataFromBranch;  
             
+           --------------------------------------------------------------------------------------- 
+		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
+           generic map(
+               IQ_SIZE => 8 --IQ_SIZES(4)
+           )
+           port map(
+               clk => clk, reset => '0', en => '0',
+       
+               --acceptingVec => open,--iqAcceptingVecArr(i),
+               acceptingOut => iqAcceptingC,--iqAcceptingArr(4),
+               acceptingMore => iqAcceptingMoreC,
+               prevSendingOK => renamedSending,
+               --newData => dataToQueuesArr(i),
+                   newArr => dataToMemIQ,--,schArrays(4),
+               fni => fni,
+               readyRegFlags => readyRegFlags,
+               nextAccepting => '1',--issueAcceptingArr(4),
+               execCausing => execCausing,
+               lateEventSignal => lateEventSignal,
+               execEventSignal => execEventSignal,
+               anyReady => open,--iqReadyArr(4),
+               schedulerOut => dataToIssueMem,
+               sending => sendingToIssueMem
+           );
+    
+           ISSUE_STAGE_MEM: entity work.IssueStage
+            generic map(USE_IMM => true)
+           port map(
+               clk => clk,
+               reset => '0',
+               en => '0',
+       
+               prevSending => sendingToIssueMem,
+               nextAccepting => '1',
+       
+               input => dataToIssueMem,
+               
+               acceptingOut => open,
+               output => dataToExecMem,
+               
+               execEventSignal => execEventSignal,
+               lateEventSignal => lateEventSignal,
+               execCausing => execCausing,
+               
+                   fni => fni,
+               
+               --resultTags: in PhysNameArray(0 to N_RES_TAGS-1);
+               --resultVals: in MwordArray(0 to N_RES_TAGS-1);
+               regValues => regValsC --(others => (others => '0'))     
+           );
+                      
+            sendingToAgu <= dataToExecMem.full or sendingFromDLQ;
+            
+                    sendingFromDLQ <= '0';          -- TEMP!
+                    dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
+
+	       dataToAgu(0) <= (dataToExecMem.full or sendingFromDLQ,
+                                       calcEffectiveAddress(dataToExecMem.ins, dataToExecMem.state, sendingFromDLQ, dataFromDLQ));
+       
+           STAGE_AGU: entity work.GenericStage(Behavioral)
+           generic map(
+               COMPARE_TAG => '1'
+           )
+           port map(
+               clk => clk, reset => reset, en => en,
+       
+               prevSending => sendingToAgu,
+               nextAccepting => '1',
+               
+               stageDataIn => dataToAgu,
+               acceptingOut => open,
+               sendingOut => sendingAgu,
+               stageDataOut => dataOutAgu,
+               
+               execEventSignal => execEventSignal,
+               lateEventSignal => lateEventSignal,
+               execCausing => execCausing
+           );
+
+	       lsData <= (sendingAgu, setDataCompleted(setAddressCompleted(dataOutAgu(0).ins, '0'), '0'));
+           
+           dataInMem0(0).full <= lsData.full;
+           dataInMem0(0).ins <= --lsData;
+                            getLSResultData(lsData.ins, --memLoadReady, memLoadValue,
+                                                    '0', (others => '0'),
+                                                  --sendingFromSysReg, sysLoadVal, sqSelectedOutput.full, sqSelectedOutput.ins);
+                                                  '0', (others => '0'), '0', DEFAULT_INSTRUCTION_STATE);          
+
+           -- TLB lookup, Dcache access
+	       STAGE_MEM0: entity work.GenericStage(Behavioral)
+           generic map(
+               COMPARE_TAG => '1'
+           )
+           port map(
+               clk => clk, reset => reset, en => en,
+               
+               prevSending => sendingMem,
+               nextAccepting => '1',
+               
+               stageDataIn => dataInMem0,
+               acceptingOut => open,
+               sendingOut => sendingMem0,
+               stageDataOut => dataOutMem0,--dataAfterMemA,
+               
+               execEventSignal => execEventSignal,
+               lateEventSignal => lateEventSignal,
+               execCausing => execCausing                
+           );
+           
+
+	       sendingAddressing <= sendingMem0; -- After translation
+	       addressingData	<= dataOutMem0(0).ins;
+	
+	       -- TEMP: setting address always completed (simulating TLB always hitting)
+	       dataInMem1(0) <= (sendingMem0, setAddressCompleted(dataOutMem0(0).ins, '1'));
+	       
+           -- Source selection and verification
+	       STAGE_MEM1: entity work.GenericStage(Behavioral)
+           generic map(
+               COMPARE_TAG => '1'
+           )
+           port map(
+               clk => clk, reset => reset, en => en,
+               
+               prevSending => sendingMem0,
+               nextAccepting => '1',
+               
+               stageDataIn => dataInMem1,
+               acceptingOut => open,
+               sendingOut => sendingMem1,
+               stageDataOut => dataOutMem1,--dataAfterMemA,
+               
+               execEventSignal => execEventSignal,
+               lateEventSignal => lateEventSignal,
+               execCausing => execCausing                
+           );
+           
+           
+           
+            
+           --------------------------------------------------------------------------------------- 
             
             SUBPIPE_A_DELAY: entity work.GenericStage(Behavioral)
             generic map(
@@ -396,7 +601,27 @@ begin
                 lateEventSignal => '0',
                 execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
             );             
-            
+
+            SUBPIPE_C_DELAY: entity work.GenericStage(Behavioral)
+            generic map(
+                COMPARE_TAG => '1'
+            )
+            port map(
+                clk => clk, reset => '0', en => '0',
+                
+                prevSending => sendingMem1,
+                nextAccepting => '1',
+                
+                stageDataIn => dataOutMem1,
+                acceptingOut => open,
+                sendingOut => open,
+                stageDataOut => dataOutMemDelay,
+                
+                execEventSignal => '0',--execEventSignal,
+                lateEventSignal => '0',
+                execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
+            ); 
+                        
             -- TEMP: just for subpipe A
             INT_WRITE_QUEUE: entity work.GenericStage(Behavioral)
             generic map(
@@ -424,10 +649,10 @@ begin
          
          
          regsSelA <= --getPhysicalSources(iqOutputArr(0).ins);
-                    work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToIssue.ins)));
+                    work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToIssueAlu.ins)));
            
           -- Forwarding network
-		  fni.nextResultTags <= (0 => dataToExec.ins.physicalArgSpec.dest, others => (others => '0'));        
+		  fni.nextResultTags <= (0 => dataToExecAlu.ins.physicalArgSpec.dest, others => (others => '0'));        
 		  fni.nextTagsM2 <= (others => (others => '0'));
           fni.tags0 <= (execOutputs1(0).ins.physicalArgSpec.dest, -- ALU
                              execOutputs1(1).ins.physicalArgSpec.dest, execOutputs1(2).ins.physicalArgSpec.dest);
@@ -487,6 +712,7 @@ begin
 
     renamedDataToBQ <= setFullMask(renamedDataLiving, getBranchMask(renamedDataLiving));
 
+        renamedDataToSQ <= setFullMask(renamedDataLiving, getStoreMask(renamedDataLiving));
 
 
     BRANCH_QUEUE: entity work.BranchQueue
@@ -527,6 +753,39 @@ begin
 		
 		--	committedOutput => open,
 		--	committedEmpty => open
+	);
+
+    STORE_QUEUE: entity work.StoreQueue
+	generic map(
+		QUEUE_SIZE => 8
+	)
+	port map(
+		clk => clk,
+		reset => '0',
+		en => '0',
+
+		acceptingOut => acceptingSQ,
+			almostFull => almostFullSQ,
+				
+		prevSending => renamedSending,
+		dataIn => renamedDataToSQ, -- !!!!!
+
+		storeValueInput => DEFAULT_INSTRUCTION_SLOT,--bqUpdate, -- !!!!!
+		compareAddressInput => DEFAULT_INSTRUCTION_SLOT,--bqCompare, -- !!!!!
+
+		selectedDataOutput => open,
+
+		committing => robSending,
+		groupCtrInc => commitGroupCtrInc,
+
+		lateEventSignal => lateEventSignal,
+		execEventSignal => execEventSignal,
+		execCausing => execCausing,
+		
+		nextAccepting => commitAccepting,		
+		sendingSQOut => open,
+		dataOutV => open
+
 	);
 
 end Behavioral;
