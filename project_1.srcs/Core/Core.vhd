@@ -92,6 +92,9 @@ architecture Behavioral of Core is
     signal newPhysDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal intSignal: std_logic := '0';
     signal intType: std_logic_vector(0 to 1) := (others => '0');
+    
+    signal sbSending, sbEmpty: std_logic := '0';
+    signal dataFromSB: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
 begin
 
     intSignal <= int0 or int1;
@@ -145,7 +148,7 @@ begin
 
         sbSending => '0',--sbSending,
         dataFromSB => DEFAULT_INSTRUCTION_STATE,--dataFromSB,
-        sbEmpty => '1',--sbEmpty,
+        sbEmpty => sbEmpty,
 
         -- Interface from committed stage
         --committedSending => open,--committedSending,
@@ -223,7 +226,7 @@ begin
     --                after accounting for current group at Rename that will use some resources!  
     iqAccepting <= 
     (not isNonzero(extractFullMask(renamedDataLiving))
-        and robAccepting and iqAcceptingA and renameAccepting and acceptingSQ)
+        and robAccepting and iqAcceptingA and acceptingSQ and renameAccepting)
     or (robAcceptingMore and iqAcceptingMoreA and not almostFullSQ and renameAccepting);
                
 
@@ -254,7 +257,7 @@ begin
                             := (others => DEFAULT_SCH_ENTRY_SLOT);
         signal dataToAlu, dataToBranch, dataToAgu, dataOutAlu, dataOutAgu, dataOutAluDelay, dataOutMem, dataInMem0, dataOutMem0, dataOutMem1, 
                 dataInMem1,
-                dataOutMemDelay, dataToIntRF: InstructionSlotArray(0 to 0)
+                dataOutMemDelay, dataToIntRF, dataToIntWriteQueue: InstructionSlotArray(0 to 0)
                                             := (others => DEFAULT_INSTRUCTION_SLOT);
         signal dataFromBranch, lsData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
         signal dataToIssueAlu, dataToExecAlu, dataToIssueMem, dataToExecMem: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
@@ -269,8 +272,8 @@ begin
         signal fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 
 	    signal addressingData: InstructionState := DEFAULT_INSTRUCTION_STATE;
-        signal sendingAddressing: std_logic := '0';
-        
+        signal sendingAddressing, memSubpipeSent, lockIssueA, allowIssueA, sendingToIntWriteQueue, memLoadReady: std_logic := '0';
+        signal memLoadValue: Mword := (others => '0');
         
 	    function calcEffectiveAddress(ins: InstructionState; st: SchedulerState;
                                                 fromDLQ: std_logic; dlqData: InstructionState)
@@ -346,7 +349,7 @@ begin
                 newArr => dataToAluIQ,--,schArrays(4),
             fni => fni,
             readyRegFlags => readyRegFlags,
-            nextAccepting => '1',--issueAcceptingArr(4),
+            nextAccepting => allowIssueA,--issueAcceptingArr(4),
             execCausing => execCausing,
             lateEventSignal => lateEventSignal,
             execEventSignal => execEventSignal,
@@ -523,8 +526,7 @@ begin
            
            dataInMem0(0).full <= lsData.full;
            dataInMem0(0).ins <= --lsData;
-                            getLSResultData(lsData.ins, --memLoadReady, memLoadValue,
-                                                    '0', (others => '0'),
+                            getLSResultData(lsData.ins, memLoadReady, memLoadValue,
                                                   --sendingFromSysReg, sysLoadVal, sqSelectedOutput.full, sqSelectedOutput.ins);
                                                   '0', (others => '0'), '0', DEFAULT_INSTRUCTION_STATE);          
 
@@ -536,7 +538,7 @@ begin
            port map(
                clk => clk, reset => reset, en => en,
                
-               prevSending => sendingMem,
+               prevSending => sendingAgu,
                nextAccepting => '1',
                
                stageDataIn => dataInMem0,
@@ -554,7 +556,7 @@ begin
 	       addressingData	<= dataOutMem0(0).ins;
 	
 	       -- TEMP: setting address always completed (simulating TLB always hitting)
-	       dataInMem1(0) <= (sendingMem0, setAddressCompleted(dataOutMem0(0).ins, '1'));
+	       dataInMem1(0) <= (sendingMem0, setAddressCompleted(dataOutMem0(0).ins, '1')); -- TODO: make 'full' dependent on mem hit!
 	       
            -- Source selection and verification
 	       STAGE_MEM1: entity work.GenericStage(Behavioral)
@@ -577,6 +579,11 @@ begin
                execCausing => execCausing                
            );
            
+           -- TEMP mem interface    
+		   dread <= '1';
+           dadr <= dataOutAgu(0).ins.result;
+           memLoadReady <= dvalid;              
+           memLoadValue <= din;      
            
            
             
@@ -621,8 +628,24 @@ begin
                 lateEventSignal => '0',
                 execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
             ); 
-                        
-            -- TEMP: just for subpipe A
+            
+                  
+            -- TEMP:
+            SCHED_BLOCK: process(clk)
+            begin
+                if rising_edge(clk) then
+                    assert (sendingAlu and sendingMem1) = '0' report "Int write queue conflict!" severity error;
+                    memSubpipeSent <= sendingToAgu;
+                end if;
+            end process;
+            
+            lockIssueA <= memSubpipeSent;
+            allowIssueA <= not lockIssueA;
+            -----
+            
+            sendingToIntWriteQueue <= sendingAlu or sendingMem1;
+            dataToIntWriteQueue <= dataOutMem1 when sendingMem1 = '1' else dataOutAlu;
+            
             INT_WRITE_QUEUE: entity work.GenericStage(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
@@ -630,10 +653,10 @@ begin
             port map(
                 clk => clk, reset => '0', en => '0',
                 
-                prevSending => sendingAlu,
+                prevSending => sendingToIntWriteQueue,
                 nextAccepting => '1',
                 
-                stageDataIn => dataOutAlu,
+                stageDataIn => dataToIntWriteQueue,
                 acceptingOut => open,
                 sendingOut => sendingToIntRF,
                 stageDataOut => dataToIntRF,
@@ -645,6 +668,8 @@ begin
             
   
          execOutputs1(0) <= (sendingAlu, dataOutAlu(0).ins);
+             execOutputs1(2) <= (sendingMem1, dataOutMem1(0).ins); -- TODO: include mem hit in 'full' flag!
+
          execOutputs2(0) <= (sendingBranch, dataFromBranch.ins);
          
          
@@ -652,14 +677,14 @@ begin
                     work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToIssueAlu.ins)));
            
           -- Forwarding network
-		  fni.nextResultTags <= (0 => dataToExecAlu.ins.physicalArgSpec.dest, others => (others => '0'));        
-		  fni.nextTagsM2 <= (others => (others => '0'));
+		  fni.nextResultTags <= (0 => dataToExecAlu.ins.physicalArgSpec.dest, 2 => dataOutMem0(0).ins.physicalArgSpec.dest, others => (others => '0'));        
+		  fni.nextTagsM2 <= (2 => dataOutAgu(0).ins.physicalArgSpec.dest, others => (others => '0'));
           fni.tags0 <= (execOutputs1(0).ins.physicalArgSpec.dest, -- ALU
                              execOutputs1(1).ins.physicalArgSpec.dest, execOutputs1(2).ins.physicalArgSpec.dest);
-          fni.tags1 <= (0 => dataOutAluDelay(0).ins.physicalArgSpec.dest, others => (others => '0'));
+          fni.tags1 <= (0 => dataOutAluDelay(0).ins.physicalArgSpec.dest, 2 => dataOutMemDelay(0).ins.physicalArgSpec.dest, others => (others => '0'));
           fni.values0 <= (execOutputs1(0).ins.result, -- ALU
                              execOutputs1(1).ins.result, execOutputs1(2).ins.result);
-          fni.values1 <= (0 => dataOutAluDelay(0).ins.result, others => (others => '0'));                 
+          fni.values1 <= (0 => dataOutAluDelay(0).ins.result, 2 => dataOutMemDelay(0).ins.result, others => (others => '0'));                 
                     
                     
 		 INT_REG_FILE: entity work.RegFile(Behavioral)
@@ -784,8 +809,35 @@ begin
 		
 		nextAccepting => commitAccepting,		
 		sendingSQOut => open,
-		dataOutV => open
+		dataOutV => open,
 
+        committedEmpty => sbEmpty,
+        committedSending => sbSending,
+        committedDataOut => dataFromSB
 	);
 
+
+-----------------------------------------
+----- Mem signals -----------------------
+	MEMORY_INTERFACE: block
+		signal sysStoreAddressW: Mword := (others => '0');
+	begin
+		--memStoreAddress <= dataFromSB(0).ins.target;
+		--memStoreValue <= dataFromSB(0).ins.result;
+		--memStoreAllow <= sbSending and dataFromSB(0).ins.operation = (Memory, store);
+				
+		--sysStoreAllow <= sbSending and isSysRegWrite(dataFromSB);
+
+		--sysStoreAddressW <= getStoredArg1(dataFromSB);
+		--sysStoreAddress <= sysStoreAddressW(4 downto 0);
+		--sysStoreValue <= getStoredArg2(dataFromSB);			
+
+		--dadr <= dataFromSB(0).ins.target;
+		doutadr <= dataFromSB(0).ins.target;
+		--dread <= memLoadAllow;
+		dwrite <= sbSending and bool2std(dataFromSB(0).ins.operation = (Memory, store));
+		dout <= dataFromSB(0).ins.result;
+
+	end block;
+	
 end Behavioral;

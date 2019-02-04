@@ -62,7 +62,11 @@ entity StoreQueue is
 		
 		nextAccepting: in std_logic;		
 		sendingSQOut: out std_logic;
-		dataOutV: out InstructionSlotArray(0 to PIPE_WIDTH-1)
+		dataOutV: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+		
+		committedEmpty: out std_logic;
+		committedSending: out std_logic;
+		committedDataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1)
 	);
 end StoreQueue;
 
@@ -80,7 +84,7 @@ architecture Behavioral of StoreQueue is
 	signal selectedDataSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	signal selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 
-	signal pDrain, pStart, pTagged, pAll, causingPtr, pAcc: SmallNumber := (others => '0');
+	signal pDrain, pStart, pTagged, pAll, causingPtr, pAcc, pAccMore: SmallNumber := (others => '0');
 	
 	signal dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	signal dataDrainSig: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -164,7 +168,7 @@ architecture Behavioral of StoreQueue is
 				                prevSending: std_logic;
 				                inputMask: std_logic_vector;
 				                pTagged: SmallNumber;
-				                storeValueInput: InstructionSlot
+				                storeValueInput, storeAddressInput: InstructionSlot
 				                )
     return InstructionStateArray is
         variable res: InstructionStateArray(0 to QUEUE_SIZE-1) := content;
@@ -204,15 +208,23 @@ architecture Behavioral of StoreQueue is
            end if;
         end loop;
 
-        -- Update target after branch execution
+        -- Update target after mem execution
         for i in 0 to QUEUE_SIZE-1 loop
            if taggedMask(i) = '1' -- !! Prevent instruction with r.i. = 0 form updating untagged entries! 
                and content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
                and storeValueInput.full = '1'
            then
-               --res(i).target := storeValueInput.ins.target;
-               --res(i).controlInfo.confirmedBranch := storeValueInput.ins.controlInfo.confirmedBranch;
-           end if;            
+               res(i).controlInfo.completed := '1'; -- address completed
+               res(i).target := storeValueInput.ins.result;
+           end if;
+           
+           if taggedMask(i) = '1' -- !! Prevent instruction with r.i. = 0 form updating untagged entries! 
+               and content(i).tags.renameIndex = storeAddressInput.ins.tags.renameIndex
+               and storeAddressInput.full = '1'
+           then
+               res(i).controlInfo.completed2 := '1'; -- data completed           
+               res(i).result := storeValueInput.ins.result;
+           end if;                      
         end loop;
 
         return res;
@@ -284,7 +296,10 @@ begin
 				                prevSending,
 				                inputMask,				             
 				                pTagged,
-				                storeValueInput);
+				                storeValueInput,
+				                (compareAddressInput.full 
+				                            and (bool2std(compareAddressInput.ins.operation = (Memory, store)) or bool2std(compareAddressInput.ins.operation = (System, sysMtc))), 
+				                                    compareAddressInput.ins));
 
 	dataDrainSig <= getWindow(content, drainMask, pDrain, 1);				                
 	dataOutSig <= getWindow(content, frontMask, pStart, PIPE_WIDTH);
@@ -332,14 +347,18 @@ begin
 	isSending <= committing and dataOutSig(0).full;
 	dataOutV <= dataOutSig;
 
-	acceptingOut <= '1';
-
     -- Accept when 4 free slot exist
     pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-	--acceptingBr <= not fullMask(slv2u(pAcc));
+    pAccMore <= subSN(pStart, i2slv(8, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+    
+	acceptingOut <= not fullMask(slv2u(pAcc));
+	almostFull <= fullMask(slv2u(pAccMore)); -- TODO: more efficient full/almost full management (whole Core level)
 
 	sendingSQOut <= isSending;
 
 	selectedDataOutput <= selectedDataSlot;
-	almostFull <= '0';
+	
+	committedEmpty <= not isNonzero(committedMask);
+	committedSending <= isDraining;
+	committedDataOut <= (0 => dataDrainSig(0), others => DEFAULT_INSTRUCTION_SLOT);
 end Behavioral;

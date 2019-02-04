@@ -1,8 +1,8 @@
 $start
     add_r r0, r0,r0				;
-	jz_i	  r10, $check
-	sti_i r5, r0, 12
-	sti_i r5, r0, 16
+	jnz_i	  r10, $check
+	ldi_i r5, r0, 40  ; sti_i r5, r0, 12
+	ldi_i r6, r0, 48  ;sti_i r5, r0, 16
 	
 	
 $check
