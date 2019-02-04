@@ -215,7 +215,7 @@ architecture Behavioral of StoreQueue is
                and storeValueInput.full = '1'
            then
                res(i).controlInfo.completed := '1'; -- address completed
-               res(i).target := storeValueInput.ins.result;
+               res(i).result := storeValueInput.ins.result;
            end if;
            
            if taggedMask(i) = '1' -- !! Prevent instruction with r.i. = 0 form updating untagged entries! 
@@ -223,7 +223,7 @@ architecture Behavioral of StoreQueue is
                and storeAddressInput.full = '1'
            then
                res(i).controlInfo.completed2 := '1'; -- data completed           
-               res(i).result := storeValueInput.ins.result;
+               res(i).target := storeAddressInput.ins.result;
            end if;                      
         end loop;
 
@@ -317,7 +317,7 @@ begin
 			selectedDataOutputSig <= selectedDataSlot;--(selectedSendingSig, selectedData);
 
             if isDraining = '1' then
-                pDrain <= addSN(pStart, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                pDrain <= addSN(pDrain, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
             end if;
             
             if isSending = '1' then

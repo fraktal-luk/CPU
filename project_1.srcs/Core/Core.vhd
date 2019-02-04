@@ -79,14 +79,14 @@ architecture Behavioral of Core is
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal frontDataLastLiving, renamedDataLiving, dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal bqCompare, bqSelected, bqUpdate: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+    signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
 
     signal execEventSignal, lateEventSignal, lateEventSetPC, sendingBranchIns: std_logic := '0';
     signal robSending, robAccepting, renamedSending, commitAccepting, 
-                iqAccepting, iqAcceptingA, iqAcceptingC,
-                robAcceptingMore, iqAcceptingMoreA, iqAcceptingMoreC: std_logic := '0';
+                iqAccepting, iqAcceptingA, iqAcceptingC, iqAcceptingE,
+                robAcceptingMore, iqAcceptingMoreA, iqAcceptingMoreC, iqAcceptingMoreE: std_logic := '0';
     --    signal iadrReg: Mword := X"ffffffb0";
     signal commitGroupCtr, commitCtr, commitGroupCtrInc: InsTag := (others => '0');
     signal newPhysDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -253,23 +253,24 @@ begin
 
 
     TEMP_EXEC: block
-        signal schedDataAlu, schedDataMem, dataToIQ, dataToAluIQ, dataToMemIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1)
+        signal schedDataAlu, schedDataMem, schedDataStoreValue, dataToIQ, dataToAluIQ, dataToMemIQ, dataToStoreValueIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1)
                             := (others => DEFAULT_SCH_ENTRY_SLOT);
         signal dataToAlu, dataToBranch, dataToAgu, dataOutAlu, dataOutAgu, dataOutAluDelay, dataOutMem, dataInMem0, dataOutMem0, dataOutMem1, 
-                dataInMem1,
+                dataInMem1, dataToStoreValue,
                 dataOutMemDelay, dataToIntRF, dataToIntWriteQueue: InstructionSlotArray(0 to 0)
                                             := (others => DEFAULT_INSTRUCTION_SLOT);
         signal dataFromBranch, lsData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-        signal dataToIssueAlu, dataToExecAlu, dataToIssueMem, dataToExecMem: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
-        signal sendingToIssueAlu, sendingAlu, sendingAgu, sendingToIssueMem, sendingMem, sendingMem0, sendingMem1, sendingToIntRF, sendingBranch, sendingFromDLQ, sendingToAgu: std_logic := '0';
+        signal dataToIssueAlu, dataToExecAlu, dataToIssueMem, dataToExecMem, dataToIssueStoreValue, dataToRegReadStoreValue, dataToExecStoreValue: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+        signal sendingToIssueAlu, sendingAlu, sendingAgu, sendingToIssueMem, sendingMem, sendingMem0, sendingMem1, sendingToIntRF, sendingBranch, sendingFromDLQ, sendingToAgu,
+                sendingToIssueStoreValue, sendingToRegReadStoreValue, sendingStoreValue: std_logic := '0';
         signal branchData, dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
-        signal regsSelA, regsSelC: PhysNameArray(0 to 2) := (others => (others => '0'));
-        signal regValsA, regValsB, regValsC, regValsD: MwordArray(0 to 2) := (others => (others => '0'));
+        signal regsSelA, regsSelC, regsSelD: PhysNameArray(0 to 2) := (others => (others => '0'));
+        signal regValsA, regValsB, regValsC, regValsD, regValsE: MwordArray(0 to 2) := (others => (others => '0'));
         signal readyRegFlags, readyRegFlagsNext: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
         
         signal memMask: std_logic_vector(0 to PIPE_WIDTH-1):= (others => '0');
         
-        signal fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
+        signal fni, fniSV, fniEmpty, fniStoreValueRegs: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 
 	    signal addressingData: InstructionState := DEFAULT_INSTRUCTION_STATE;
         signal sendingAddressing, memSubpipeSent, lockIssueA, allowIssueA, sendingToIntWriteQueue, memLoadReady: std_logic := '0';
@@ -278,11 +279,13 @@ begin
 	    function calcEffectiveAddress(ins: InstructionState; st: SchedulerState;
                                                 fromDLQ: std_logic; dlqData: InstructionState)
         return InstructionState is
+            variable res: InstructionState := ins;
         begin
             if fromDLQ = '1' then
                 return dlqData;
             else
-                return setInstructionTarget(ins, addMwordFaster(st.argValues.arg0, st.argValues.arg1));
+                res.result := addMwordFaster(st.argValues.arg0, st.argValues.arg1);
+                return res;
             end if;
         end function;
         
@@ -325,14 +328,51 @@ begin
             
             return res;
         end function;
+        
+        function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray is
+            variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i).virtualArgSpec.intDestSel := '0';
+                res(i).virtualArgSpec.intArgSel(0) := res(i).virtualArgSpec.intArgSel(2);
+                res(i).virtualArgSpec.intArgSel(2) := '0';
+                res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
+                res(i).virtualArgSpec.args(2) := (others => '0');
+                
+                res(i).physicalArgSpec.intDestSel := '0';
+                res(i).physicalArgSpec.intArgSel(0) := res(i).physicalArgSpec.intArgSel(2);
+                res(i).physicalArgSpec.intArgSel(2) := '0';
+                res(i).physicalArgSpec.args(0) := res(i).physicalArgSpec.args(2);
+                res(i).physicalArgSpec.args(2) := (others => '0');                                                
+            end loop;
+            
+            return res;
+        end function;
+        
+        function removeArg2(insVec: InstructionStateArray) return InstructionStateArray is
+            variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i).virtualArgSpec.intArgSel(2) := '0';
+                res(i).virtualArgSpec.args(2) := (others => '0');
+                
+                res(i).physicalArgSpec.intArgSel(2) := '0';
+                res(i).physicalArgSpec.args(2) := (others => '0');                                                
+            end loop;
+            
+            return res;
+        end function;
     begin
         schedDataAlu <= getSchedData(extractData(renamedDataLiving), getAluMask(renamedDataLiving));
         memMask <=  getStoreMask(renamedDataLiving) or getLoadMask(renamedDataLiving);
-        schedDataMem <= getSchedData(extractData(renamedDataLiving), memMask); -- or getLoadMask(.. ) !!
+        schedDataMem <= getSchedData(removeArg2(extractData(renamedDataLiving)), memMask);
+                                        --  prepareForStoreValueIQ - moves arg2 to arg0, removes arg2
+        schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLiving)), getStoreMask(renamedDataLiving));
     
         dataToAluIQ <= work.LogicIssue.updateForWaitingArrayNewFNI(schedDataAlu, readyRegFlags xor readyRegFlags, fni);
         dataToMemIQ <= work.LogicIssue.updateForWaitingArrayNewFNI(schedDataMem, readyRegFlags xor readyRegFlags, fni);
-
+        
+        dataToStoreValueIQ <= work.LogicIssue.updateForWaitingArrayNewFNI(schedDataStoreValue, readyRegFlags xor readyRegFlags, fniSV);
     
 		IQUEUE_ALU: entity work.IssueQueue(Behavioral)--UnitIQ
         generic map(
@@ -530,6 +570,8 @@ begin
                                                   --sendingFromSysReg, sysLoadVal, sqSelectedOutput.full, sqSelectedOutput.ins);
                                                   '0', (others => '0'), '0', DEFAULT_INSTRUCTION_STATE);          
 
+                    sqAddressInput <= lsData; -- TEMP!!
+
            -- TLB lookup, Dcache access
 	       STAGE_MEM0: entity work.GenericStage(Behavioral)
            generic map(
@@ -585,7 +627,86 @@ begin
            memLoadReady <= dvalid;              
            memLoadValue <= din;      
            
+
+
+        ------------------------
+		IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
+        generic map(
+            IQ_SIZE => 8 --IQ_SIZES(4)
+        )
+        port map(
+            clk => clk, reset => '0', en => '0',
+    
+            --acceptingVec => open,--iqAcceptingVecArr(i),
+            acceptingOut => iqAcceptingE,--iqAcceptingArr(4),
+            acceptingMore => iqAcceptingMoreE,
+            prevSendingOK => renamedSending,
+            --newData => dataToQueuesArr(i),
+                newArr => dataToStoreValueIQ,--,schArrays(4),
+            fni => fniSV,
+            readyRegFlags => readyRegFlags,
+            nextAccepting => '1',--issueAcceptingArr(4),
+            execCausing => execCausing,
+            lateEventSignal => lateEventSignal,
+            execEventSignal => execEventSignal,
+            anyReady => open,--iqReadyArr(4),
+            schedulerOut => dataToIssueStoreValue,
+            sending => sendingToIssueStoreValue
+        );
+ 
+        ISSUE_STAGE_SV: entity work.IssueStage
+ 	    generic map(USE_IMM => false)
+        port map(
+            clk => clk,
+            reset => '0',
+            en => '0',
+    
+            prevSending => sendingToIssueStoreValue,
+            nextAccepting => '1',
+    
+            input => dataToIssueStoreValue,
+            
+            acceptingOut => open,
+            output => dataToRegReadStoreValue,
+            
+            execEventSignal => execEventSignal,
+            lateEventSignal => lateEventSignal,
+            execCausing => execCausing,
+            
+                fni => fniEmpty,
+            
+            --resultTags: in PhysNameArray(0 to N_RES_TAGS-1);
+            --resultVals: in MwordArray(0 to N_RES_TAGS-1);
+            regValues => (others => (others => '0'))   
+        );
+
+        REG_READ_STAGE_SV: entity work.IssueStage
+ 	    generic map(USE_IMM => false)
+        port map(
+            clk => clk,
+            reset => '0',
+            en => '0',
+    
+            prevSending => dataToRegReadStoreValue.full,
+            nextAccepting => '1',
+    
+            input => dataToRegReadStoreValue,
+            
+            acceptingOut => open,
+            output => dataToExecStoreValue,
+            
+            execEventSignal => execEventSignal,
+            lateEventSignal => lateEventSignal,
+            execCausing => execCausing,
+            
+                fni => fniEmpty,
+            
+            --resultTags: in PhysNameArray(0 to N_RES_TAGS-1);
+            --resultVals: in MwordArray(0 to N_RES_TAGS-1);
+            regValues => regValsE     
+        );
            
+                sqValueInput <= (dataToExecStoreValue.full, setInstructionResult(dataToExecStoreValue.ins, dataToExecStoreValue.state.argValues.arg0)); -- TEMP!!
             
            --------------------------------------------------------------------------------------- 
             
@@ -671,11 +792,14 @@ begin
              execOutputs1(2) <= (sendingMem1, dataOutMem1(0).ins); -- TODO: include mem hit in 'full' flag!
 
          execOutputs2(0) <= (sendingBranch, dataFromBranch.ins);
+            execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins);
+
          
-         
-         regsSelA <= --getPhysicalSources(iqOutputArr(0).ins);
-                    work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToIssueAlu.ins)));
-           
+         regsSelA <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToIssueAlu.ins)));
+         regsSelC <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToIssueMem.ins)));        
+            -- TEMP!
+            regsSelD <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadStoreValue.ins)));
+          
           -- Forwarding network
 		  fni.nextResultTags <= (0 => dataToExecAlu.ins.physicalArgSpec.dest, 2 => dataOutMem0(0).ins.physicalArgSpec.dest, others => (others => '0'));        
 		  fni.nextTagsM2 <= (2 => dataOutAgu(0).ins.physicalArgSpec.dest, others => (others => '0'));
@@ -686,6 +810,8 @@ begin
                              execOutputs1(1).ins.result, execOutputs1(2).ins.result);
           fni.values1 <= (0 => dataOutAluDelay(0).ins.result, 2 => dataOutMemDelay(0).ins.result, others => (others => '0'));                 
                     
+                fniSV <= fni; -- TEMP!
+                
                     
 		 INT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(WIDTH => 4, WRITE_WIDTH => 1)
@@ -699,8 +825,8 @@ begin
              
              selectRead(0 to 2) => regsSelA,--(others => (others => '0')),
              selectRead(3 to 5) => (others => (others => '0')),
-             selectRead(6 to 8) => (others => (others => '0')),
-             selectRead(9 to 11) => (others => (others => '0')),
+             selectRead(6 to 8) => regsSelC,
+             selectRead(9 to 11) => regsSelD,
              
              readValues(0 to 2) => regValsA,--open,
              readValues(3 to 5) => regValsB,
@@ -795,9 +921,11 @@ begin
 		prevSending => renamedSending,
 		dataIn => renamedDataToSQ, -- !!!!!
 
-		storeValueInput => DEFAULT_INSTRUCTION_SLOT,--bqUpdate, -- !!!!!
-		compareAddressInput => DEFAULT_INSTRUCTION_SLOT,--bqCompare, -- !!!!!
-
+		storeValueInput => --DEFAULT_INSTRUCTION_SLOT,--bqUpdate, -- !!!!!
+		                     sqValueInput, 
+		compareAddressInput => --DEFAULT_INSTRUCTION_SLOT,--bqCompare, -- !!!!!
+                              sqAddressInput,
+                            
 		selectedDataOutput => open,
 
 		committing => robSending,
