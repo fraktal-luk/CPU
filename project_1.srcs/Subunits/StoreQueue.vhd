@@ -351,8 +351,8 @@ begin
     pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
     pAccMore <= subSN(pStart, i2slv(8, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
     
-	acceptingOut <= not fullMask(slv2u(pAcc));
-	almostFull <= fullMask(slv2u(pAccMore)); -- TODO: more efficient full/almost full management (whole Core level)
+	acceptingOut <= not fullMask(slv2u(pAcc)) and not committedMask(slv2u(pAcc));
+	almostFull <= fullMask(slv2u(pAccMore)) or committedMask(slv2u(pAcc)); -- TODO: more efficient full/almost full management (whole Core level)
 
 	sendingSQOut <= isSending;
 

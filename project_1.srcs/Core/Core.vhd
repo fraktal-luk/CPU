@@ -266,11 +266,11 @@ begin
         signal branchData, dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
         signal regsSelA, regsSelC, regsSelD: PhysNameArray(0 to 2) := (others => (others => '0'));
         signal regValsA, regValsB, regValsC, regValsD, regValsE: MwordArray(0 to 2) := (others => (others => '0'));
-        signal readyRegFlags, readyRegFlagsNext: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+        signal readyRegFlags, readyRegFlagsNext, readyRegFlagsSV: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
         
         signal memMask: std_logic_vector(0 to PIPE_WIDTH-1):= (others => '0');
         
-        signal fni, fniSV, fniEmpty, fniStoreValueRegs: ForwardingInfo := DEFAULT_FORWARDING_INFO;
+        signal fni, fniSV, fniNewSV, fniEmpty, fniStoreValueRegs: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 
 	    signal addressingData: InstructionState := DEFAULT_INSTRUCTION_STATE;
         signal sendingAddressing, memSubpipeSent, lockIssueA, allowIssueA, sendingToIntWriteQueue, memLoadReady: std_logic := '0';
@@ -333,12 +333,14 @@ begin
             variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
         begin
             for i in 0 to PIPE_WIDTH-1 loop
+                res(i).constantArgs.immSel := '0';
+                
                 res(i).virtualArgSpec.intDestSel := '0';
                 res(i).virtualArgSpec.intArgSel(0) := res(i).virtualArgSpec.intArgSel(2);
                 res(i).virtualArgSpec.intArgSel(2) := '0';
                 res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
                 res(i).virtualArgSpec.args(2) := (others => '0');
-                
+                                
                 res(i).physicalArgSpec.intDestSel := '0';
                 res(i).physicalArgSpec.intArgSel(0) := res(i).physicalArgSpec.intArgSel(2);
                 res(i).physicalArgSpec.intArgSel(2) := '0';
@@ -372,7 +374,7 @@ begin
         dataToAluIQ <= work.LogicIssue.updateForWaitingArrayNewFNI(schedDataAlu, readyRegFlags xor readyRegFlags, fni);
         dataToMemIQ <= work.LogicIssue.updateForWaitingArrayNewFNI(schedDataMem, readyRegFlags xor readyRegFlags, fni);
         
-        dataToStoreValueIQ <= work.LogicIssue.updateForWaitingArrayNewFNI(schedDataStoreValue, readyRegFlags xor readyRegFlags, fniSV);
+        dataToStoreValueIQ <= work.LogicIssue.updateForWaitingArrayNewFNI(schedDataStoreValue, readyRegFlags xor readyRegFlags, fniNewSV);
     
 		IQUEUE_ALU: entity work.IssueQueue(Behavioral)--UnitIQ
         generic map(
@@ -630,6 +632,8 @@ begin
 
 
         ------------------------
+            readyRegFlagsSV <= (readyRegFlags(2), '0', '0', readyRegFlags(5), '0', '0', readyRegFlags(8), '0', '0', readyRegFlags(11), '0', '0');
+        
 		IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
         generic map(
             IQ_SIZE => 8 --IQ_SIZES(4)
@@ -644,7 +648,7 @@ begin
             --newData => dataToQueuesArr(i),
                 newArr => dataToStoreValueIQ,--,schArrays(4),
             fni => fniSV,
-            readyRegFlags => readyRegFlags,
+            readyRegFlags => readyRegFlagsSV,
             nextAccepting => '1',--issueAcceptingArr(4),
             execCausing => execCausing,
             lateEventSignal => lateEventSignal,
@@ -810,7 +814,12 @@ begin
                              execOutputs1(1).ins.result, execOutputs1(2).ins.result);
           fni.values1 <= (0 => dataOutAluDelay(0).ins.result, 2 => dataOutMemDelay(0).ins.result, others => (others => '0'));                 
                     
-                fniSV <= fni; -- TEMP!
+                --fniSV <= fni; -- TEMP!
+                fniNewSV.tags0 <= fni.tags0;
+                fniNewSV.tags1 <= fni.tags1;
+                
+                fniSV.tags1 <= fni.tags1;
+                
                 
                     
 		 INT_REG_FILE: entity work.RegFile(Behavioral)
