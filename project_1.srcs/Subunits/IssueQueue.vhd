@@ -48,6 +48,8 @@ entity IssueQueue is
 		execEventSignal: in std_logic;
 		execCausing: in InstructionState;
 		fni: ForwardingInfo;
+		waitingFM: ForwardingMap;
+		selectionFM: ForwardingMap; 
 		readyRegFlags: in std_logic_vector(0 to 3*PIPE_WIDTH-1);
 		
 		acceptingMore: out std_logic;
@@ -173,8 +175,10 @@ begin
 									  prevSendingOK);
 					
 	-- TODO: below could be optimized because some code is shared (comparators!)
-	queueContentUpdated <= updateForWaitingArrayFNI(queueContent, readyRegFlags, fni);
-	queueContentUpdatedSel <= updateForSelectionArrayFNI(queueContent, readyRegFlags, fni);
+	queueContentUpdated <= --updateForWaitingArrayFNI(queueContent, readyRegFlags, fni);
+	                       updateSchedulerArray(queueContent, readyRegFlags, fni, waitingFM, true);
+	queueContentUpdatedSel <= --updateForSelectionArrayFNI(queueContent, readyRegFlags, fni);
+	                       updateSchedulerArray(queueContent, readyRegFlags, fni, selectionFM, false);
 
 	readyMask <= extractReadyMaskNew(queueContentUpdatedSel) and fullMask;	
 	readyMaskLive <= readyMask and livingMask;

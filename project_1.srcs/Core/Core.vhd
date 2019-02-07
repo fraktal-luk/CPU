@@ -276,6 +276,30 @@ begin
         signal sendingAddressing, memSubpipeSent, lockIssueA, allowIssueA, sendingToIntWriteQueue, memLoadReady: std_logic := '0';
         signal memLoadValue: Mword := (others => '0');
         
+        constant WAITING_FN_MAP: ForwardingMap := (
+            maskRR => "110",   -- arg2 is unused   
+            maskR1 => "000",  
+            maskR0 => "000",
+            maskM1 => "101",
+            maskM2 => "010"
+        );        
+
+        constant ENQUEUE_FN_MAP: ForwardingMap := (
+            maskRR => "000",      
+            maskR1 => "111",  
+            maskR0 => "111",
+            maskM1 => "111",
+            maskM2 => "011"
+        );
+
+        constant SELECTION_FN_MAP: ForwardingMap := (
+            maskRR => "110",   -- arg2 is unused   
+            maskR1 => "000",  
+            maskR0 => "000",
+            maskM1 => "100",
+            maskM2 => "000"
+        ); 
+        
 	    function calcEffectiveAddress(ins: InstructionState; st: SchedulerState;
                                                 fromDLQ: std_logic; dlqData: InstructionState)
         return InstructionState is
@@ -371,10 +395,12 @@ begin
                                         --  prepareForStoreValueIQ - moves arg2 to arg0, removes arg2
         schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLiving)), getStoreMask(renamedDataLiving));
     
-        dataToAluIQ <= work.LogicIssue.updateForWaitingArrayNewFNI(schedDataAlu, readyRegFlags xor readyRegFlags, fni);
-        dataToMemIQ <= work.LogicIssue.updateForWaitingArrayNewFNI(schedDataMem, readyRegFlags xor readyRegFlags, fni);
-        
-        dataToStoreValueIQ <= work.LogicIssue.updateForWaitingArrayNewFNI(schedDataStoreValue, readyRegFlags xor readyRegFlags, fniNewSV);
+        dataToAluIQ <= work.LogicIssue.--updateForWaitingArrayNewFNI(schedDataAlu, readyRegFlags xor readyRegFlags, fni);
+                                        updateSchedulerArray(schedDataAlu, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);
+        dataToMemIQ <= work.LogicIssue.--updateForWaitingArrayNewFNI(schedDataMem, readyRegFlags xor readyRegFlags, fni);
+                                        updateSchedulerArray(schedDataMem, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);        
+        dataToStoreValueIQ <= work.LogicIssue.--updateForWaitingArrayNewFNI(schedDataStoreValue, readyRegFlags xor readyRegFlags, fniNewSV);
+                                        updateSchedulerArray(schedDataStoreValue, readyRegFlags xor readyRegFlags, fniNewSV, ENQUEUE_FN_MAP, true);
     
 		IQUEUE_ALU: entity work.IssueQueue(Behavioral)--UnitIQ
         generic map(
@@ -390,6 +416,8 @@ begin
             --newData => dataToQueuesArr(i),
                 newArr => dataToAluIQ,--,schArrays(4),
             fni => fni,
+            waitingFM => WAITING_FN_MAP,
+            selectionFM => SELECTION_FN_MAP,
             readyRegFlags => readyRegFlags,
             nextAccepting => allowIssueA,--issueAcceptingArr(4),
             execCausing => execCausing,
@@ -500,6 +528,8 @@ begin
                --newData => dataToQueuesArr(i),
                    newArr => dataToMemIQ,--,schArrays(4),
                fni => fni,
+               waitingFM => WAITING_FN_MAP,
+               selectionFM => SELECTION_FN_MAP,
                readyRegFlags => readyRegFlags,
                nextAccepting => '1',--issueAcceptingArr(4),
                execCausing => execCausing,
@@ -648,6 +678,8 @@ begin
             --newData => dataToQueuesArr(i),
                 newArr => dataToStoreValueIQ,--,schArrays(4),
             fni => fniSV,
+            waitingFM => DEFAULT_FORWARDING_MAP,
+            selectionFM => DEFAULT_FORWARDING_MAP,            
             readyRegFlags => readyRegFlagsSV,
             nextAccepting => '1',--issueAcceptingArr(4),
             execCausing => execCausing,

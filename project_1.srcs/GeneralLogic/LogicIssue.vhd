@@ -41,20 +41,6 @@ return SchedulerEntrySlotArray;
 function extractReadyMaskNew(entryVec: SchedulerEntrySlotArray) return std_logic_vector;
 
 
-function updateForWaitingArrayFNI(insArray: SchedulerEntrySlotArray; readyRegFlags: std_logic_vector;
-									fni: ForwardingInfo)--; isNew: std_logic)
-return SchedulerEntrySlotArray;
-
-function updateForWaitingArrayNewFNI(insArray: SchedulerEntrySlotArray; readyRegFlags: std_logic_vector;
-									fni: ForwardingInfo)--; isNew: std_logic)
-return SchedulerEntrySlotArray;
-
-
-function updateForSelectionArrayFNI(insArray: SchedulerEntrySlotArray; readyRegFlags: std_logic_vector;
-									fni: ForwardingInfo)
-return SchedulerEntrySlotArray;
-
-
 function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector;
 
 function findLoc2b(cmp: std_logic_vector) return SmallNumber;
@@ -65,6 +51,9 @@ function updateArgLocs(argValues: InstructionArgValues;
 							  progress: boolean)
 return InstructionArgValues;
 
+function updateSchedulerArray(insArray: SchedulerEntrySlotArray; readyRegFlags: std_logic_vector;
+									fni: ForwardingInfo; fnm: ForwardingMap; progressLocs: boolean)
+return SchedulerEntrySlotArray;
 
 end LogicIssue;
 
@@ -401,68 +390,17 @@ begin
 end function;
 
 
-function updateForWaitingArrayFNI(insArray: SchedulerEntrySlotArray; readyRegFlags: std_logic_vector;
-									fni: ForwardingInfo)--; isNew: std_logic)
+function updateSchedulerArray(insArray: SchedulerEntrySlotArray; readyRegFlags: std_logic_vector;
+									fni: ForwardingInfo; fnm: ForwardingMap; progressLocs: boolean)
 return SchedulerEntrySlotArray is
 	variable res: SchedulerEntrySlotArray(0 to insArray'length-1);-- := insArray;
-	
-	constant fnm: ForwardingMap := (
-        maskRR => "110",   -- arg2 is unused   
-        maskR1 => "000",  
-        maskR0 => "000",
-        maskM1 => "101",
-        maskM2 => "010"
-    );
-begin
-	for i in insArray'range loop	
-		res(i) := --updateForWaitingFNI(insArray(i).ins, insArray(i).state, readyRegFlags, fni);
-		          updateSchedulerStateGeneric(insArray(i).ins, insArray(i).state, readyRegFlags, fni, fnm, true);
-	end loop;
-	return res;
-end function;
-
-
-function updateForWaitingArrayNewFNI(insArray: SchedulerEntrySlotArray; readyRegFlags: std_logic_vector;
-									fni: ForwardingInfo)--; isNew: std_logic)
-return SchedulerEntrySlotArray is
-	variable res: SchedulerEntrySlotArray(0 to insArray'length-1);-- := insArray;
-	
-	constant fnm: ForwardingMap := (
-        maskRR => "000",      
-        maskR1 => "111",  
-        maskR0 => "111",
-        maskM1 => "111",
-        maskM2 => "011"
-    );
-begin
-	for i in insArray'range loop	
-		res(i) := --updateForWaitingNewFNI(insArray(i).ins, insArray(i).state, readyRegFlags, fni);
-		          updateSchedulerStateGeneric(insArray(i).ins, insArray(i).state, readyRegFlags, fni, fnm, true);
-			res(i).full := (insArray(i).full);
-	end loop;
-	return res;
-end function;
-
-
-
-function updateForSelectionArrayFNI(insArray: SchedulerEntrySlotArray; readyRegFlags: std_logic_vector;
-									fni: ForwardingInfo)
-return SchedulerEntrySlotArray is
-	variable res: SchedulerEntrySlotArray(0 to insArray'length-1);-- := insArray;
-	
-	constant fnm: ForwardingMap := (
-        maskRR => "110",   -- arg2 is unused   
-        maskR1 => "000",  
-        maskR0 => "000",
-        maskM1 => "100",
-        maskM2 => "000"
-    );
 begin
 	for i in insArray'range loop
-		res(i) := --updateForSelectionFNI(insArray(i).ins, insArray(i).state, readyRegFlags, fni);
-		          updateSchedulerStateGeneric(insArray(i).ins, insArray(i).state, readyRegFlags, fni, fnm, false);
+		res(i) := updateSchedulerStateGeneric(insArray(i).ins, insArray(i).state, readyRegFlags, fni, fnm, progressLocs);
+	    res(i).full := (insArray(i).full);
 	end loop;	
 	return res;
 end function;
+
 
 end LogicIssue;
