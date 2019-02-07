@@ -178,45 +178,6 @@ begin
 	return res;
 end function;
 
-function selectUpdatedArg(avs: InstructionArgValues; ind: integer; immed: std_logic; def: Mword;
-								  vals: MwordArray; regValues: MwordArray)
-return Mword is
-	variable res: Mword := def;
-	variable selector: std_logic_vector(1 downto 0) := "00";
-	variable tbl: MwordArray(0 to 3) := (others => (others => '0'));
-begin
-
-	if	(avs.readyNext(ind) and not avs.zero(ind) and not immed) = '1' then
-		-- Use new value from Exec
-		res := vals(slv2u(avs.nextLocs(ind)));		
-		selector := avs.nextLocs(ind)(1 downto 0);
-	elsif (avs.readyNow(ind) and not avs.zero(ind)) = '1' then
-		res := def;
-		selector := "10";
-	else -- Use register value
-		res := regValues(ind);
-		selector := "11";
-	end if;
-
-	tbl(0) := vals(0);
-	tbl(1) := vals(1);
-	tbl(2) := def;
-	tbl(3) := regValues(ind);
-
-	case selector is
-		when "00" => 
-			res := tbl(0);
-		when "01" => 
-			res := tbl(1);
-		when "10" => 
-			res := tbl(2);
-		when others => 
-			res := tbl(3);
-	end case;
-
-	return res;
-end function;
-
 
 
 function getDispatchArgValues(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo;
@@ -237,7 +198,7 @@ begin
     end if;
 
 	res.state.argValues.readyNow := ready;
-	res.state.argValues.locs := locs;
+	--res.state.argValues.locs := locs;
 
 		if res.state.argValues.zero(0) = '1' then
 			res.state.argValues.arg0 := (others => '0');
@@ -418,7 +379,7 @@ begin
 	res.state.argValues.readyNext := nextReady;
 	
 	res.state.argValues.readyM2 := readyM2;
-	res.state.argValues.locsM2 := locsM2;
+	--res.state.argValues.locsM2 := locsM2;
 
 	-- 
 	if res.state.argValues.newInQueue = '1' then
@@ -433,16 +394,15 @@ begin
 
 		-- Update arg tracking
 		res.state.argValues := updateArgLocs(res.state.argValues,
-														readyBefore, rrf, Z3, Z3, nextReady, readyM2,
-																				ZZ3, ZZ3, locsM1, locsM2,
-														true);
+													readyBefore, rrf,	
+													Z3, Z3, nextReady, readyM2,
+													ZZ3, ZZ3, locsM1, locsM2,
+													true);
 
 	res.state.argValues.missing := res.state.argValues.missing and not rrf;
-
 	res.state.argValues.missing := res.state.argValues.missing and not nextReady;	
 	res.state.argValues.missing := res.state.argValues.missing and not readyM2;
 	
-	res.ins.ip := (others => '0');
 	return res;
 end function;
 
@@ -490,7 +450,7 @@ begin
 	res.state.argValues.readyNext := (others => '0');
 	
 	res.state.argValues.readyM2 := readyM2;
-	res.state.argValues.locsM2 := locsM2;
+	--res.state.argValues.locsM2 := locsM2;
 
 	-- 
 	if res.state.argValues.newInQueue = '1' then
@@ -504,9 +464,10 @@ begin
 
 		-- Update arg tracking
 		res.state.argValues := updateArgLocs(res.state.argValues,
-														readyBefore, rrf, readyR1, readyR0, nextReady, readyM2,
-																				locs1, locs0, nextLocs, locsM2,
-														true);
+												readyBefore, rrf,
+												readyR1, readyR0, nextReady,readyM2,
+												locs1, locs0, nextLocs, locsM2,
+												true);
 	
 	--res.state.argValues.missing := res.state.argValues.missing and not ready;
 	res.state.argValues.missing := res.state.argValues.missing and not readyR0;
@@ -535,8 +496,8 @@ begin
 	res.ins := ins;
 	res.state := st;
 	
-	nextLocs := st.argValues.locsM2; -- CAREFUL: a cycle has passed so those locs are now 1 cycle ahead
-	nextReady := st.argValues.readyM2;
+	--nextLocs := st.argValues.locsM2; -- CAREFUL: a cycle has passed so those locs are now 1 cycle ahead
+	--nextReady := st.argValues.readyM2;
 
 		cmp0toM1 := findRegTag(ins.physicalArgSpec.args(0), fni.nextResultTags);
 		cmp1toM1 := findRegTag(ins.physicalArgSpec.args(1), fni.nextResultTags);
@@ -564,32 +525,18 @@ begin
 
 		-- Update arg tracking
 		res.state.argValues := updateArgLocs(res.state.argValues,
-														readyBefore, rrf, Z3, Z3, nextReady, Z3,
-																				ZZ3, ZZ3, nextLocs, ZZ3,
+														readyBefore, rrf, 
+														
+														Z3, Z3, nextReady, Z3,
+														ZZ3, ZZ3, nextLocs, ZZ3,
 														false);
 														
 
 	res.state.argValues.missing := res.state.argValues.missing and not rrf;
-
-	
 	res.state.argValues.missing := res.state.argValues.missing and not nextReady;
 	
-	res.state.argValues.locs := locs;	
-	res.state.argValues.nextLocs := nextLocs;
-
-	-- Clear unused fields
-	res.ins.bits := (others => '0');
-	res.ins.result := (others => '0');
-	res.ins.target := (others => '0');		
---		
-	res.ins.controlInfo.completed := '0';
-	res.ins.controlInfo.completed2 := '0';
-	res.ins.ip := (others => '0');
-
-	res.ins.controlInfo.newEvent := '0';
-	res.ins.controlInfo.hasInterrupt := '0';
-	--res.ins.controlInfo.hasReturn := '0';		
-	res.ins.controlInfo.exceptionCode := (others => '0');
+	--res.state.argValues.locs := locs;	
+	--res.state.argValues.nextLocs := nextLocs;
 
 	return res;
 end function;

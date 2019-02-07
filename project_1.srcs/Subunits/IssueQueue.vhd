@@ -115,6 +115,19 @@ architecture Behavioral of IssueQueue is
 		if sends = '0' then
 			res.ins.physicalArgSpec.dest := (others => '0');
 		end if;
+		
+	    -- Clear unused fields
+        res.ins.bits := (others => '0');
+        res.ins.result := (others => '0');
+        res.ins.target := (others => '0');        
+
+        res.ins.controlInfo.completed := '0';
+        res.ins.controlInfo.completed2 := '0';
+        res.ins.ip := (others => '0');
+    
+        res.ins.controlInfo.newEvent := '0';
+        res.ins.controlInfo.hasInterrupt := '0';
+        res.ins.controlInfo.exceptionCode := (others => '0');		
 		return res;
 	end function;
 	
