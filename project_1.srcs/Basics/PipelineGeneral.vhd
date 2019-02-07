@@ -36,17 +36,22 @@ package PipelineGeneral is
 
 
 type ForwardingInfo is record
-	--writtenTags: PhysNameArray(0 to PIPE_WIDTH-1);
-		tags0: PhysNameArray(0 to 2);
-		tags1: PhysNameArray(0 to 2);
-		values0: MwordArray(0 to 2);
-		values1: MwordArray(0 to 2);
-		
-	--resultTags: PhysNameArray(0 to N_RES_TAGS-1);
+	tags0: PhysNameArray(0 to 2);
+	tags1: PhysNameArray(0 to 2);
+	values0: MwordArray(0 to 2);
+	values1: MwordArray(0 to 2);	
 	nextResultTags: PhysNameArray(0 to 2);
 	nextTagsM2:	PhysNameArray(0 to 2);
-	--resultValues: MwordArray(0 to N_RES_TAGS-1);
 end record;
+
+type ForwardingMap is record
+    maskRR: std_logic_vector(0 to 2);
+    maskR1: std_logic_vector(0 to 2);
+    maskR0: std_logic_vector(0 to 2);
+    maskM1: std_logic_vector(0 to 2);
+    maskM2: std_logic_vector(0 to 2);
+end record;
+
 
 constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
 	--writtenTags => (others => (others => '0')),
@@ -59,6 +64,10 @@ constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
 	nextResultTags => (others => (others => '0')),
 	nextTagsM2 => (others => (others => '0'))
 	--resultValues => (others => (others => '0'))
+);
+
+constant DEFAULT_FORWARDING_MAP: ForwardingMap := (
+    others => (others => '0')
 );
 
 
