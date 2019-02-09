@@ -25,7 +25,7 @@ package LogicIssue is
 
 function getDispatchArgValues(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo;
 											prevSending: std_logic;
-											USE_IMM: boolean)
+											USE_IMM: boolean; REGS_ONLY: boolean)
 return SchedulerEntrySlot;
 
 function updateDispatchArgs(ins: InstructionState; st: SchedulerState; vals: MwordArray; regValues: MwordArray)
@@ -155,13 +155,15 @@ end function;
 
 function getDispatchArgValues(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo;
 											prevSending: std_logic;
-											USE_IMM: boolean)
+											USE_IMM: boolean; REGS_ONLY: boolean)
 return SchedulerEntrySlot is
 	variable res: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 	variable v0, v1: std_logic_vector(1 downto 0) := "00";
 	variable selected0, selected1: Mword := (others => '0');
 	variable ready: std_logic_vector(0 to 2) := (others=>'0');
 	variable locs: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
+	constant Z3: std_logic_vector(0 to 2) := (others => '0');
+	constant ZZ3: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
 begin
 	res.ins := ins;
 	res.state := st;
@@ -175,25 +177,43 @@ begin
 
 		if res.state.argValues.zero(0) = '1' then
 			res.state.argValues.arg0 := (others => '0');
+			res.state.argValues.stored(0) := '1';
 		elsif res.state.argValues.argLocsPhase(0)(1 downto 0) = "00" then
 			res.state.argValues.arg0 := fni.values0(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
+			res.state.argValues.stored(0) := '1';
 		else --elsif res.state.argValues.argPhase(1 downto 0) := "01" then
-			res.state.argValues.arg0 := fni.values1(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));			
+			res.state.argValues.arg0 := fni.values1(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
+			if res.state.argValues.argLocsPhase(0)(1 downto 0) = "01" then
+				res.state.argValues.stored(0) := '1';
+		    end if;
 		end if;
 
 
 	if res.state.argValues.immediate = '1' and USE_IMM then
 		res.state.argValues.arg1 := res.ins.constantArgs.imm;
 		res.state.argValues.arg1(31 downto 17) := (others => res.ins.constantArgs.imm(16)); -- 16b + addditional sign bit
+		res.state.argValues.stored(1) := '1';
 	else
 		if res.state.argValues.zero(1) = '1' then
 			res.state.argValues.arg1 := (others => '0');
+			res.state.argValues.stored(1) := '1';
 		elsif res.state.argValues.argLocsPhase(1)(1 downto 0) = "00" then
 			res.state.argValues.arg1 := fni.values0(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
+			res.state.argValues.stored(1) := '1';
 		else --elsif res.state.argValues.argPhase(1 downto 0) := "01" then
-			res.state.argValues.arg1 := fni.values1(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));			
+			res.state.argValues.arg1 := fni.values1(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
+			if res.state.argValues.argLocsPhase(1)(1 downto 0) = "01" then
+                res.state.argValues.stored(1) := '1';
+            end if;				
 		end if;
 	end if;
+
+    if REGS_ONLY then
+        res.state.argValues.stored := (others => '0');
+    end if;
+
+    ready := (others => '1');--not res.state.argValues.missing;
+    res.state.argValues := updateArgLocs(res.state.argValues, ready, Z3, Z3, Z3, Z3, Z3, ZZ3, ZZ3, ZZ3, ZZ3, true);
 
 	return res;
 end function;
@@ -214,15 +234,15 @@ begin
 	-- Clear 'missing' flag where readyNext indicates.
 	--res.state.argValues.missing := res.state.argValues.missing and not (res.state.argValues.readyNext and not res.state.argValues.zero);
 
-		if res.state.argValues.argLocsPhase(0)(1 downto 0) = "11" then--and res.state.argValues.zero(0) = '0' then
+		if res.state.argValues.argLocsPhase(0)(1 downto 0) = "00" and res.state.argValues.stored(0) = '0' then
 			res.state.argValues.arg0 := vals(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
-		elsif res.state.argValues.argLocsPhase(0)(1 downto 0) = "10" then
+		elsif res.state.argValues.argLocsPhase(0)(1 downto 0) = "10" and res.state.argValues.stored(0) = '0' then
 			res.state.argValues.arg0 := regValues(0);
 		end if;
 
-		if res.state.argValues.argLocsPhase(1)(1 downto 0) = "11" then--and res.state.argValues.zero(0) = '0' then
+		if res.state.argValues.argLocsPhase(1)(1 downto 0) = "00" and res.state.argValues.stored(1) = '0' then
 			res.state.argValues.arg1 := vals(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
-		elsif res.state.argValues.argLocsPhase(1)(1 downto 0) = "10" and res.state.argValues.immediate = '0' then
+		elsif res.state.argValues.argLocsPhase(1)(1 downto 0) = "10" and res.state.argValues.stored(1) = '0' then -- and res.state.argValues.immediate = '0' then
 			res.state.argValues.arg1 := regValues(1);
 		end if;
 	

@@ -1,4 +1,4 @@
-;stores1
+stores1
 loop2
 branches
 branches2

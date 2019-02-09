@@ -300,6 +300,22 @@ begin
             maskM2 => "000"
         ); 
         
+        constant ENQUEUE_FN_MAP_SV: ForwardingMap := (
+            maskRR => "000",      
+            maskR1 => "111",  
+            maskR0 => "111",
+            maskM1 => "000",
+            maskM2 => "000"
+        );
+
+        constant WAITING_FN_MAP_SV: ForwardingMap := (
+            maskRR => "110",   -- arg2 is unused   
+            maskR1 => "000",  
+            maskR0 => "111",
+            maskM1 => "000",
+            maskM2 => "000"
+        );  
+                
 	    function calcEffectiveAddress(ins: InstructionState; st: SchedulerState;
                                                 fromDLQ: std_logic; dlqData: InstructionState)
         return InstructionState is
@@ -400,7 +416,7 @@ begin
         dataToMemIQ <= work.LogicIssue.--updateForWaitingArrayNewFNI(schedDataMem, readyRegFlags xor readyRegFlags, fni);
                                         updateSchedulerArray(schedDataMem, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);        
         dataToStoreValueIQ <= work.LogicIssue.--updateForWaitingArrayNewFNI(schedDataStoreValue, readyRegFlags xor readyRegFlags, fniNewSV);
-                                        updateSchedulerArray(schedDataStoreValue, readyRegFlags xor readyRegFlags, fniNewSV, ENQUEUE_FN_MAP, true);
+                                        updateSchedulerArray(schedDataStoreValue, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP_SV, true);
     
 		IQUEUE_ALU: entity work.IssueQueue(Behavioral)--UnitIQ
         generic map(
@@ -677,9 +693,9 @@ begin
             prevSendingOK => renamedSending,
             --newData => dataToQueuesArr(i),
                 newArr => dataToStoreValueIQ,--,schArrays(4),
-            fni => fniSV,
-            waitingFM => DEFAULT_FORWARDING_MAP,
-            selectionFM => DEFAULT_FORWARDING_MAP,            
+            fni => fni,
+            waitingFM => WAITING_FN_MAP_SV,
+            selectionFM => DEFAULT_FORWARDING_MAP,      
             readyRegFlags => readyRegFlagsSV,
             nextAccepting => '1',--issueAcceptingArr(4),
             execCausing => execCausing,
@@ -691,7 +707,7 @@ begin
         );
  
         ISSUE_STAGE_SV: entity work.IssueStage
- 	    generic map(USE_IMM => false)
+ 	    generic map(USE_IMM => false, REGS_ONLY => true)
         port map(
             clk => clk,
             reset => '0',
@@ -717,7 +733,7 @@ begin
         );
 
         REG_READ_STAGE_SV: entity work.IssueStage
- 	    generic map(USE_IMM => false)
+ 	    generic map(USE_IMM => false, REGS_ONLY => true)
         port map(
             clk => clk,
             reset => '0',
@@ -739,7 +755,7 @@ begin
             
             --resultTags: in PhysNameArray(0 to N_RES_TAGS-1);
             --resultVals: in MwordArray(0 to N_RES_TAGS-1);
-            regValues => regValsE     
+            regValues => regValsD     
         );
            
                 sqValueInput <= (dataToExecStoreValue.full, setInstructionResult(dataToExecStoreValue.ins, dataToExecStoreValue.state.argValues.arg0)); -- TEMP!!

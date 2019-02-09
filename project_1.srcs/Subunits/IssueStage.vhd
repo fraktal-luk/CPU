@@ -32,7 +32,8 @@ use work.LogicIssue.all;
 
 
 entity IssueStage is
-	generic(USE_IMM: boolean := true);
+	generic(USE_IMM: boolean := true;
+	        REGS_ONLY: boolean := false);
 	port(
 		clk: in std_logic;
 		reset: in std_logic;
@@ -73,7 +74,8 @@ architecture Alternative of IssueStage is
 begin
 
 	inputDataWithArgs <= getDispatchArgValues(input.ins, input.state, fni,-- resultTags, resultVals,
-														prevSending, USE_IMM);
+														prevSending, USE_IMM,
+														REGS_ONLY);
 	
 	stageDataIn <= (prevSending, inputDataWithArgs.ins);
 	

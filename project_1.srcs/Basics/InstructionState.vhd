@@ -157,6 +157,7 @@ type InstructionArgValues is record
 	nextLocs: SmallNumberArray(0 to 2);
 	locsM2: SmallNumberArray(0 to 2);
 	missing: std_logic_vector(0 to 2);
+	stored:  std_logic_vector(0 to 2);
 	arg0: Mword;
 	arg1: Mword;
 	arg2: Mword;
@@ -344,6 +345,7 @@ begin
 			  nextLocs => (others => (others => '0')),
 			  locsM2 => (others => (others => '0')),
 			  missing => (others=>'0'),
+			  stored => (others => '0'),
 			  arg0 => (others=>'0'),
 			  arg1 => (others=>'0'),
 			  arg2 => (others=>'0'),
