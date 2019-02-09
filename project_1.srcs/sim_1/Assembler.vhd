@@ -247,15 +247,15 @@ begin
         when mul =>
             res := ins655655(ext0, vals(1), vals(2), muls, vals(3), 0);
         when ldi_i => 
-            res := ins6556X(ext1, vals(1), vals(2), load, vals(3));
+            res := ins655H(ld, vals(1), vals(2), vals(3));
         when sti_i =>
-            res := ins6556X(ext1, vals(1), vals(2), store, vals(3));
+            res := ins655H(st, vals(1), vals(2), vals(3));
         
         when ldf_i =>
-            res := ins6556X(ext1, vals(1), vals(2), loadFP, vals(3));
+            res := ins655H(ldf, vals(1), vals(2), vals(3));
         
         when stf_i =>
-            res := ins6556X(ext1, vals(1), vals(2), storeFP, vals(3));
+            res := ins655H(stf, vals(1), vals(2), vals(3));
         
         
         when lds =>

@@ -79,7 +79,7 @@ architecture Behavioral of Core is
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal frontDataLastLiving, renamedDataLiving, dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+    signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput, sqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
 
@@ -352,6 +352,8 @@ begin
             variable res: InstructionState := ins;
         begin
             -- TODO: remember about miss/hit status and reason of miss if relevant!
+                res := setAddressCompleted(res, '1'); -- TEMP
+            
             if storeForwardSending = '1' then
                 res.controlInfo.completed2 := storeForwardIns.controlInfo.completed2; -- := setDataCompleted(res, getDataCompleted(storeForwardIns));
                 res.result := storeForwardIns.result;
@@ -612,11 +614,13 @@ begin
 
 	       lsData <= (sendingAgu, setDataCompleted(setAddressCompleted(dataOutAgu(0).ins, '0'), '0'));
            
-           dataInMem0(0).full <= lsData.full;
-           dataInMem0(0).ins <= --lsData;
-                            getLSResultData(lsData.ins, memLoadReady, memLoadValue,
-                                                  --sendingFromSysReg, sysLoadVal, sqSelectedOutput.full, sqSelectedOutput.ins);
-                                                  '0', (others => '0'), '0', DEFAULT_INSTRUCTION_STATE);          
+           dataInMem0(0) <= lsData;
+           
+           --dataInMem0(0).full <= lsData.full;
+           --dataInMem0(0).ins <= --lsData;
+           --                getLSResultData(lsData.ins, memLoadReady, memLoadValue,
+           --                                       '0', (others => '0'),--sendingFromSysReg, sysLoadVal, 
+           --                                      sqSelectedOutput.full, sqSelectedOutput.ins);          
 
                     sqAddressInput <= lsData; -- TEMP!!
 
@@ -646,7 +650,14 @@ begin
 	       addressingData	<= dataOutMem0(0).ins;
 	
 	       -- TEMP: setting address always completed (simulating TLB always hitting)
-	       dataInMem1(0) <= (sendingMem0, setAddressCompleted(dataOutMem0(0).ins, '1')); -- TODO: make 'full' dependent on mem hit!
+	       --dataInMem1(0) <= (sendingMem0, setAddressCompleted(dataOutMem0(0).ins, '1')); -- TODO: make 'full' dependent on mem hit!
+
+           dataInMem1(0).full <= sendingMem0;
+           dataInMem1(0).ins <= --lsData;
+                            getLSResultData(dataOutMem0(0).ins, memLoadReady, memLoadValue,
+                                                  '0', (others => '0'),--sendingFromSysReg, sysLoadVal, 
+                                                  sqSelectedOutput.full, sqSelectedOutput.ins);          
+
 	       
            -- Source selection and verification
 	       STAGE_MEM1: entity work.GenericStage(Behavioral)
@@ -983,7 +994,7 @@ begin
 		compareAddressInput => --DEFAULT_INSTRUCTION_SLOT,--bqCompare, -- !!!!!
                               sqAddressInput,
                             
-		selectedDataOutput => open,
+		selectedDataOutput => sqSelectedOutput,
 
 		committing => robSending,
 		groupCtrInc => commitGroupCtrInc,

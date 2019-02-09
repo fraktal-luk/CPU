@@ -93,6 +93,12 @@ type ProcOpcode is (
 							j,
 							jl,
 							
+							ld,
+							st,
+							
+							ldf,
+							stf,
+							
 							ext0, -- E format: opcont is present and defines exact operation  
 							ext1,
 							ext2,

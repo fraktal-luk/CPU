@@ -79,7 +79,7 @@ architecture Behavioral of StoreQueue is
 	signal fullMask, taggedMask, killMask, livingMask, frontMask, drainMask, sendingMask, drainMaskNext, inputMask,
 			 committedMask, committedMaskNext, fullMaskNext, taggedMaskNext: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 	
-	signal taggedLivingMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+	signal taggedLivingMask, fullOrCommittedMask, matchedMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
 	signal selectedDataSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	signal selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -267,6 +267,82 @@ architecture Behavioral of StoreQueue is
         end loop;
         return res;
     end function;
+
+
+	function TMP_cmpTagsBefore(content: InstructionStateArray; tag: InsTag)
+	return std_logic_vector is
+		variable res: std_logic_vector(0 to content'length-1) := (others => '0');
+		variable diff: SmallNumber := (others => '0');
+	begin
+		for i in 0 to res'length-1 loop
+			res(i) := CMP_tagBefore(content(i).tags.renameIndex, tag); -- If grTag < tag then diff(high) = '1'
+		end loop;
+		return res;
+	end function;
+
+	function TMP_cmpTagsAfter(content: InstructionStateArray; tag: InsTag)
+	return std_logic_vector is
+		variable res: std_logic_vector(0 to content'length-1) := (others => '0');
+		variable diff: SmallNumber := (others => '0');
+	begin
+		for i in 0 to res'length-1 loop
+			res(i) := CMP_tagBefore(tag, content(i).tags.renameIndex); -- If grTag > tag then diff(high) = '1'
+		end loop;
+		return res;
+	end function;
+    
+		-- To find what to forward from StoreQueue
+    function findNewestMatch(content: InstructionStateArray;
+                                     cmpMask: std_logic_vector; pStart: SmallNumber;
+                                     ins: InstructionState)
+    return std_logic_vector is
+        constant LEN: integer := cmpMask'length;        
+        variable res, older, before: std_logic_vector(0 to LEN-1) := (others => '0');
+        variable indices, rawIndices: SmallNumberArray(0 to LEN-1) := (others => (others => '0'));
+        variable matchBefore: std_logic := '0';
+        
+        variable tmpVec: std_logic_vector(0 to LEN-1) := (others => '0');
+    begin
+        -- From qs we must check which are older than ins
+        --indices := getQueueIndicesFrom(LEN, pStart);
+        --rawIndices := getQueueIndicesFrom(LEN, (others => '0'));
+        older := TMP_cmpTagsBefore(content, ins.tags.renameIndex);
+        before := setToOnes(older, slv2u(pStart));
+        -- Use priority enc. to find last in the older ones. But they may be divided:
+        --        V  1 1 1 0 0 0 0 1 1 1 and cmp  V
+        --           0 1 0 0 0 0 0 1 0 1
+        -- and then there are 2 runs of bits and those at the enc must be ignored (r older than first run)
+        
+        -- If there's a match before pStart, it is younger than those at or after pStart
+        tmpVec := cmpMask and older and before;
+        matchBefore := isNonzero(tmpVec);
+        
+        if matchBefore = '1' then
+            -- Ignore those after
+            tmpVec := cmpMask and older and before;
+            res := invertVec(getFirstOne(invertVec(tmpVec)));
+        else
+            -- Don't ignore any matches
+            tmpVec := cmpMask and older;
+            res := invertVec(getFirstOne(invertVec(tmpVec)));
+        end if;
+        
+        return res;
+    end function;
+    
+    function selectWithMask(content: InstructionStateArray; mask: std_logic_vector; compareValid: std_logic) return InstructionSlot is
+        variable res: InstructionSlot := ('0', content(0));
+    begin
+        
+        for i in 0 to content'length-1 loop
+            if mask(i) = '1' then
+                res := (compareValid, content(i));
+                exit;
+            end if;
+        end loop;
+        
+        return res;
+    end function;   
 begin
 
     causingPtr <= getCausingPtr(content, execCausing);
@@ -286,6 +362,8 @@ begin
 	--fullMaskNext <= (livingMask and not sendingMask) or inputMaskBr;
 	taggedMaskNext <= (taggedLivingMask and not sendingMask) or inputMask;
 	committedMaskNext <= (committedMask or sendingMask) and not drainMask;
+	  
+	fullOrCommittedMask <= taggedMask or committedMask; 
 	   
 	   -- TODO: this won't work if the queue is allowed to become full of 'committed'. If it could, change to [set '1' on drainP when startP ~= drainP]
 	   drainMask <= committedMask and not (committedMask(QUEUE_SIZE-1) & committedMask(0 to QUEUE_SIZE-2)); -- First '1' bit of committedMask
@@ -303,11 +381,15 @@ begin
 
 	dataDrainSig <= getWindow(content, drainMask, pDrain, 1);				                
 	dataOutSig <= getWindow(content, frontMask, pStart, PIPE_WIDTH);
-	selectedDataSlot <= selectDataSlot(content, taggedMask, compareAddressInput);
+	
+	matchedMask <= findNewestMatch(content, fullOrCommittedMask, pStart, compareAddressInput.ins);
+	
+	selectedDataSlot <= selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (overlaping stores etc.)
+	                           --selectDataSlot(content, taggedMask, compareAddressInput);
 	
 	process (clk)
 	begin
-		if rising_edge(clk) then	
+		if rising_edge(clk) then
 --			TMP_mask <= TMP_maskNext;
             fullMask <= fullMaskNext;
             taggedMask <= taggedMaskNext;
@@ -356,7 +438,7 @@ begin
 
 	sendingSQOut <= isSending;
 
-	selectedDataOutput <= selectedDataSlot;
+	selectedDataOutput <= selectedDataOutputSig;
 	
 	committedEmpty <= not isNonzero(committedMask);
 	committedSending <= isDraining;

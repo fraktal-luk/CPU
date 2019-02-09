@@ -105,8 +105,8 @@ type InsDefArray is array (natural range <>) of InsDef;
 				2 => (addI, none, Alu, arithAdd, FMT_IMM),
 				3 => (subI, none, Alu, arithSub, FMT_IMM),
 				
-				4 => (ext1, load,	Memory,load,	FMT_IMM),
-				5 => (ext1, store,Memory,store,	FMT_ISTORE),
+				4 => (ld, none,	Memory,load,	FMT_IMM),
+				5 => (st, none,Memory,store,	FMT_ISTORE),
 
 				6 => (j, 	none, Jump, jump, FMT_JA),
 				7 => (jl, 	none, Jump, jump,	FMT_JL),
@@ -131,8 +131,8 @@ type InsDefArray is array (natural range <>) of InsDef;
 				21=> (ext1, jzR,  Jump, jumpZ, FMT_JR),
 				22=> (ext1, jnzR, Jump, jumpNZ, FMT_JR),
 
-			    23 => (ext1, loadFP,		Memory,load,	FMT_FLOAD),
-				24 => (ext1, storeFP,	Memory,store,	FMT_FSTORE),
+			    23 => (ldf, none,	Memory,load,	FMT_FLOAD),
+				24 => (stf, none,	Memory,store,	FMT_FSTORE),
 				
 				25 => (ext2, halt, System, sysHalt, FMT_DEFAULT),
 				26 => (ext2, retI, System, sysRetI, FMT_DEFAULT),
