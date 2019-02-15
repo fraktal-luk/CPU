@@ -1,0 +1,44 @@
+$start
+	sti_i r0, r0, 16
+	sti_i r0, r0, 20
+	sti_i r0, r0, 24
+	sti_i r0, r0, 28
+
+	sti_i r0, r0, 32
+	sti_i r0, r0, 36
+	sti_i r0, r0, 40
+	sti_i r0, r0, 44
+
+    ldi_i r8, r0, 16				;
+    ldi_i r9, r0, 16				
+    ldi_i r10, r0, 16				
+    ldi_i r11, r0, 16				
+	
+    ldi_i r12, r0, 16				
+    ldi_i r13, r0, 16				
+    ldi_i r14, r0, 16				
+    ldi_i r15, r0, 16				
+	
+	; repeat to fill LoadQueue
+    ldi_i r8, r0, 16				;
+    ldi_i r9, r0, 16				
+    ldi_i r10, r0, 16				
+    ldi_i r11, r0, 16				
+	
+    ldi_i r12, r0, 16				
+    ldi_i r13, r0, 16				
+    ldi_i r14, r0, 16				
+    ldi_i r15, r0, 16	
+	
+	; force delayed store to execute a younger load before it
+	;	from the same address
+	
+	
+$check
+
+	sys call			;
+$error
+    sys error
+
+
+ 

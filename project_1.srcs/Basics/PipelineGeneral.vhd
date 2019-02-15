@@ -132,6 +132,52 @@ function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
+function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray;
+function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
+
+
+        
+        constant WAITING_FN_MAP: ForwardingMap := (
+            maskRR => "110",   -- arg2 is unused   
+            maskR1 => "000",  
+            maskR0 => "000",
+            maskM1 => "101",
+            maskM2 => "010"
+        );        
+
+        constant ENQUEUE_FN_MAP: ForwardingMap := (
+            maskRR => "000",      
+            maskR1 => "111",  
+            maskR0 => "111",
+            maskM1 => "111",
+            maskM2 => "011"
+        );
+
+        constant SELECTION_FN_MAP: ForwardingMap := (
+            maskRR => "110",   -- arg2 is unused   
+            maskR1 => "000",  
+            maskR0 => "000",
+            maskM1 => "100",
+            maskM2 => "000"
+        ); 
+        
+        constant ENQUEUE_FN_MAP_SV: ForwardingMap := (
+            maskRR => "000",      
+            maskR1 => "111",  
+            maskR0 => "111",
+            maskM1 => "000",
+            maskM2 => "000"
+        );
+
+        constant WAITING_FN_MAP_SV: ForwardingMap := (
+            maskRR => "110",   -- arg2 is unused   
+            maskR1 => "000",  
+            maskR0 => "111",
+            maskM1 => "000",
+            maskM2 => "000"
+        );  
+
+  
 end package;
 
 
@@ -559,5 +605,40 @@ begin
     return res;
 end function;
 
+        function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray is
+            variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i).constantArgs.immSel := '0';
+                
+                res(i).virtualArgSpec.intDestSel := '0';
+                res(i).virtualArgSpec.intArgSel(0) := res(i).virtualArgSpec.intArgSel(2);
+                res(i).virtualArgSpec.intArgSel(2) := '0';
+                res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
+                res(i).virtualArgSpec.args(2) := (others => '0');
+                                
+                res(i).physicalArgSpec.intDestSel := '0';
+                res(i).physicalArgSpec.intArgSel(0) := res(i).physicalArgSpec.intArgSel(2);
+                res(i).physicalArgSpec.intArgSel(2) := '0';
+                res(i).physicalArgSpec.args(0) := res(i).physicalArgSpec.args(2);
+                res(i).physicalArgSpec.args(2) := (others => '0');                                                
+            end loop;
+            
+            return res;
+        end function;
+        
+        function removeArg2(insVec: InstructionStateArray) return InstructionStateArray is
+            variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i).virtualArgSpec.intArgSel(2) := '0';
+                res(i).virtualArgSpec.args(2) := (others => '0');
+                
+                res(i).physicalArgSpec.intArgSel(2) := '0';
+                res(i).physicalArgSpec.args(2) := (others => '0');                                                
+            end loop;
+            
+            return res;
+        end function;
 
 end package body;

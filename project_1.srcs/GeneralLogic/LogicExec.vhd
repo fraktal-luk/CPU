@@ -44,7 +44,21 @@ package LogicExec is
 	function isBranch(ins: InstructionState) return std_logic;
 
 	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState) return InstructionState;
-	
+
+                
+	    function calcEffectiveAddress(ins: InstructionState; st: SchedulerState;
+                                                fromDLQ: std_logic; dlqData: InstructionState)
+        return InstructionState;        
+        
+        function setAddressCompleted(ins: InstructionState; state: std_logic) return InstructionState;
+        
+        function setDataCompleted(ins: InstructionState; state: std_logic) return InstructionState;
+        
+	    function getLSResultData(ins: InstructionState;
+                                          memLoadReady: std_logic; memLoadValue: Mword;
+                                          sysLoadReady: std_logic; sysLoadValue: Mword;
+                                          storeForwardSending: std_logic; storeForwardIns: InstructionState
+                                            ) return InstructionState;	
 end LogicExec;
 
 
@@ -322,4 +336,59 @@ package body LogicExec is
 		return res;
 	end function;
 
+                
+	    function calcEffectiveAddress(ins: InstructionState; st: SchedulerState;
+                                                fromDLQ: std_logic; dlqData: InstructionState)
+        return InstructionState is
+            variable res: InstructionState := ins;
+        begin
+            if fromDLQ = '1' then
+                return dlqData;
+            else
+                res.result := addMwordFaster(st.argValues.arg0, st.argValues.arg1);
+                return res;
+            end if;
+        end function;
+        
+        
+        function setAddressCompleted(ins: InstructionState; state: std_logic) return InstructionState is
+            variable res: InstructionState := ins;
+        begin
+            res.controlInfo.completed := state;
+            return res;
+        end function;
+        
+        function setDataCompleted(ins: InstructionState; state: std_logic) return InstructionState is
+            variable res: InstructionState := ins;
+        begin
+            res.controlInfo.completed2 := state;
+            return res;
+        end function;
+        
+	    function getLSResultData(ins: InstructionState;
+                                          memLoadReady: std_logic; memLoadValue: Mword;
+                                          sysLoadReady: std_logic; sysLoadValue: Mword;
+                                          storeForwardSending: std_logic; storeForwardIns: InstructionState
+                                            ) return InstructionState is
+            variable res: InstructionState := ins;
+        begin
+            -- TODO: remember about miss/hit status and reason of miss if relevant!
+                res := setAddressCompleted(res, '1'); -- TEMP
+            
+            if storeForwardSending = '1' then
+                res.controlInfo.completed2 := storeForwardIns.controlInfo.completed2; -- := setDataCompleted(res, getDataCompleted(storeForwardIns));
+                res.result := storeForwardIns.result;
+            elsif res.operation.func = sysMfc then
+                res := setDataCompleted(res, sysLoadReady);
+                res.result := sysLoadValue;        
+            elsif res.operation.func = load then 
+                res := setDataCompleted(res, memLoadReady);
+                res.result := memLoadValue;
+            else -- is store or sys reg write?
+                res := setDataCompleted(res, '1'); -- TEMP!
+                    res.result := memLoadValue; -- Unneeded, to reduce logic
+            end if;
+            
+            return res;
+        end function;
 end LogicExec;

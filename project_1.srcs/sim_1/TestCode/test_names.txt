@@ -1,4 +1,5 @@
 stores1
+loads1
 ;loop2
 ;branches
 ;branches2

@@ -31,7 +31,8 @@ use work.PipelineGeneral.all;
 
 entity StoreQueue is
 	generic(
-		QUEUE_SIZE: integer := 8
+		QUEUE_SIZE: integer := 8;
+		IS_LOAD_QUEUE: boolean := false
 	);
 	port(
 		clk: in std_logic;
@@ -329,6 +330,46 @@ architecture Behavioral of StoreQueue is
         
         return res;
     end function;
+
+		-- To check what in the LoadQueue has an error
+		function findOldestMatch(content: InstructionStateArray;
+										 cmpMask: std_logic_vector; pStart: SmallNumber;
+										 ins: InstructionState)
+		return std_logic_vector is
+			constant LEN: integer := cmpMask'length;
+			variable res, newer, areAtOrAfter: std_logic_vector(0 to LEN-1) := (others => '0');
+			variable indices, rawIndices: SmallNumberArray(0 to LEN-1) := (others => (others => '0'));
+			variable matchAtOrAfter: std_logic := '0';
+			
+			variable tmpVec: std_logic_vector(0 to LEN-1) := (others => '0');
+		begin
+			-- From qs we must check which are newer than ins
+			--indices := getQueueIndicesFrom(LEN, pStart);
+			--rawIndices := getQueueIndicesFrom(LEN, (others => '0'));
+			newer := TMP_cmpTagsAfter(content, ins.tags.renameIndex);
+			areAtOrAfter := not setToOnes(newer, slv2u(pStart));
+			-- Use priority enc. to find first in the newer ones. But they may be divided:
+			--		V  1 1 1 0 0 0 0 1 1 1 and cmp  V
+			--		   0 1 0 0 0 0 0 1 0 1
+			-- and then there are 2 runs of bits and those at the enc must be ignored (r newer than first run)
+			
+			-- So, elems at the end are ignored when those conditions cooccur:
+			--		pStart > ins.groupTag and [match exists that match.groupTag < ins.groupTag]
+			tmpVec := cmpMask and newer and areAtOrAfter;
+			matchAtOrAfter := isNonzero(tmpVec);
+			
+			if matchAtOrAfter = '1' then
+				-- Ignore those before
+				tmpVec := cmpMask and newer and areAtOrAfter;
+				res := getFirstOne(tmpVec);
+			else
+				-- Don't ignore any matches
+				tmpVec := cmpMask and newer;
+				res := getFirstOne(tmpVec);
+			end if;
+			
+			return res;
+		end function;
     
     function selectWithMask(content: InstructionStateArray; mask: std_logic_vector; compareValid: std_logic) return InstructionSlot is
         variable res: InstructionSlot := ('0', content(0));
@@ -382,9 +423,11 @@ begin
 	dataDrainSig <= getWindow(content, drainMask, pDrain, 1);				                
 	dataOutSig <= getWindow(content, frontMask, pStart, PIPE_WIDTH);
 	
-	matchedMask <= findNewestMatch(content, fullOrCommittedMask, pStart, compareAddressInput.ins);
+	matchedMask <= findOldestMatch(content, taggedMask,          pStart, compareAddressInput.ins) when IS_LOAD_QUEUE 
+	                                                 -- TODO: above - not necessary to find oldest, each younger load can be "poisoned" and cause an event on Commit
+	         else  findNewestMatch(content, fullOrCommittedMask, pStart, compareAddressInput.ins);
 	
-	selectedDataSlot <= selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (overlaping stores etc.)
+	selectedDataSlot <= selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
 	                           --selectDataSlot(content, taggedMask, compareAddressInput);
 	
 	process (clk)
@@ -433,8 +476,8 @@ begin
     pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
     pAccMore <= subSN(pStart, i2slv(8, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
     
-	acceptingOut <= not fullMask(slv2u(pAcc)) and not committedMask(slv2u(pAcc));
-	almostFull <= fullMask(slv2u(pAccMore)) or committedMask(slv2u(pAcc)); -- TODO: more efficient full/almost full management (whole Core level)
+	acceptingOut <= not taggedMask(slv2u(pAcc)) and (not committedMask(slv2u(pAcc)) or bool2std(IS_LOAD_QUEUE));
+	almostFull <= taggedMask(slv2u(pAccMore)) or (committedMask(slv2u(pAcc)) and not bool2std(IS_LOAD_QUEUE)); -- TODO: more efficient full/almost full management (whole Core level)
 
 	sendingSQOut <= isSending;
 
