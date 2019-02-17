@@ -32,6 +32,10 @@ $start
 	
 	; force delayed store to execute a younger load before it
 	;	from the same address
+	ldi_i r20, r0, 16 ; load 0 to r20
+	sti_i r0,  r20, 0 ; use r20==0 as store address
+	ldi_i r21, r0,  0 ; load from 0 without waiting for previous store
+	add_i r0, r0, 0
 	
 	
 $check

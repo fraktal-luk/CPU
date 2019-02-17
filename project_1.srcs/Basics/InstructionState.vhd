@@ -80,6 +80,10 @@ type InstructionControlInfo is record
 	   confirmedBranch: std_logic;
 	specialAction: std_logic;
 	dbtrap: std_logic;
+	   orderViolation: std_logic;
+	   tlbMiss: std_logic;
+	   dataMiss: std_logic;
+	   sqMiss:    std_logic;
 	exceptionCode: SmallNumber; -- Set when exception occurs, remains cause exception can be only 1 per op
 end record;
 
@@ -286,6 +290,10 @@ begin
                                                     confirmedBranch => '0',												    											
 												specialAction => '0',
 												dbtrap => '0',
+												    orderViolation => '0',
+												    tlbMiss => '0',
+												    dataMiss => '0',
+												    sqMiss => '0',
 												exceptionCode => (others=>'0')
 												);
 end function;

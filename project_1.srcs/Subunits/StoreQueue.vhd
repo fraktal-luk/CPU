@@ -80,7 +80,7 @@ architecture Behavioral of StoreQueue is
 	signal fullMask, taggedMask, killMask, livingMask, frontMask, drainMask, sendingMask, drainMaskNext, inputMask,
 			 committedMask, committedMaskNext, fullMaskNext, taggedMaskNext: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 	
-	signal taggedLivingMask, fullOrCommittedMask, matchedMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+	signal taggedLivingMask, fullOrCommittedMask, matchedMask, newerLQ, olderSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
 	signal selectedDataSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	signal selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -169,7 +169,8 @@ architecture Behavioral of StoreQueue is
 				                prevSending: std_logic;
 				                inputMask: std_logic_vector;
 				                pTagged: SmallNumber;
-				                storeValueInput, storeAddressInput: InstructionSlot
+				                storeValueInput, storeAddressInput: InstructionSlot;
+				                isLQ: boolean; matchingNewerLoads: std_logic_vector
 				                )
     return InstructionStateArray is
         variable res: InstructionStateArray(0 to QUEUE_SIZE-1) := content;
@@ -179,11 +180,14 @@ architecture Behavioral of StoreQueue is
 	    variable remv: std_logic_vector(0 to 2) := "000";
 	    --variable compMask, compMaskBr: std_logic_vector(0 to 3) := "0000";
 	    variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
+	    constant isStoreOp: boolean := (storeAddressInput.ins.operation = (Memory, store) or storeAddressInput.ins.operation = (System, sysMtc));
+	    constant isLoadOp: boolean := (storeAddressInput.ins.operation = (Memory, load) or storeAddressInput.ins.operation = (System, sysMfc));
     begin
         --compMask := compactMask(extractFullMask(dataIn));
         --compMaskBr := compactMask(extractFullMask(dataInBr));
 
         for i in 0 to QUEUE_SIZE-1 loop
+        
            diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;
            --sel := slv2u(diff(1 downto 0));
            
@@ -205,7 +209,14 @@ architecture Behavioral of StoreQueue is
                     slot := getNewElem(remv, dataIn);
                     res(i) := slot.ins;          
                     res(i).tags := slot.ins.tags;
-                    res(i).operation := slot.ins.operation;               
+                    res(i).operation := slot.ins.operation;
+                    res(i).controlInfo.completed := '0';
+                    res(i).controlInfo.completed2 := '0';                                  
+           end if;
+           
+           -- Mark loads which break data dependence on older stores
+           if isLQ and matchingNewerLoads(i) = '1' then
+               res(i).controlInfo.orderViolation := '1';
            end if;
         end loop;
 
@@ -215,16 +226,18 @@ architecture Behavioral of StoreQueue is
                and content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
                and storeValueInput.full = '1'
            then
-               res(i).controlInfo.completed := '1'; -- address completed
+               res(i).controlInfo.completed2 := '1'; -- address completed
                res(i).result := storeValueInput.ins.result;
            end if;
            
            if taggedMask(i) = '1' -- !! Prevent instruction with r.i. = 0 form updating untagged entries! 
                and content(i).tags.renameIndex = storeAddressInput.ins.tags.renameIndex
                and storeAddressInput.full = '1'
+               and ((isStoreOp and not isLQ) or (isLoadOp and isLQ))
            then
-               res(i).controlInfo.completed2 := '1'; -- data completed           
+               res(i).controlInfo.completed := '1'; -- data completed           
                res(i).target := storeAddressInput.ins.result;
+                res(i).controlInfo.orderViolation := '0';
            end if;                      
         end loop;
 
@@ -292,9 +305,28 @@ architecture Behavioral of StoreQueue is
 		return res;
 	end function;
     
+    function whichDataCompleted(content: InstructionStateArray) return std_logic_vector is
+        variable res: std_logic_vector(0 to content'length-1) := (others => '0');
+    begin
+        for i in res'range loop
+            res(i) := content(i).controlInfo.completed2;
+        end loop;
+        return res;
+    end function;
+
+
+    function whichAddressCompleted(content: InstructionStateArray) return std_logic_vector is
+        variable res: std_logic_vector(0 to content'length-1) := (others => '0');
+    begin
+        for i in res'range loop
+            res(i) := content(i).controlInfo.completed;
+        end loop;
+        return res;
+    end function;
+    
 		-- To find what to forward from StoreQueue
     function findNewestMatch(content: InstructionStateArray;
-                                     cmpMask: std_logic_vector; pStart: SmallNumber;
+                                     olderSQ, cmpMask: std_logic_vector; pStart: SmallNumber;
                                      ins: InstructionState)
     return std_logic_vector is
         constant LEN: integer := cmpMask'length;        
@@ -307,7 +339,7 @@ architecture Behavioral of StoreQueue is
         -- From qs we must check which are older than ins
         --indices := getQueueIndicesFrom(LEN, pStart);
         --rawIndices := getQueueIndicesFrom(LEN, (others => '0'));
-        older := TMP_cmpTagsBefore(content, ins.tags.renameIndex);
+        older := olderSQ;-- TMP_cmpTagsBefore(content, ins.tags.renameIndex) and whichAddressCompleted(content); -- only those with known address
         before := setToOnes(older, slv2u(pStart));
         -- Use priority enc. to find last in the older ones. But they may be divided:
         --        V  1 1 1 0 0 0 0 1 1 1 and cmp  V
@@ -333,7 +365,7 @@ architecture Behavioral of StoreQueue is
 
 		-- To check what in the LoadQueue has an error
 		function findOldestMatch(content: InstructionStateArray;
-										 cmpMask: std_logic_vector; pStart: SmallNumber;
+										 newerLQ, cmpMask: std_logic_vector; pStart: SmallNumber;
 										 ins: InstructionState)
 		return std_logic_vector is
 			constant LEN: integer := cmpMask'length;
@@ -344,9 +376,7 @@ architecture Behavioral of StoreQueue is
 			variable tmpVec: std_logic_vector(0 to LEN-1) := (others => '0');
 		begin
 			-- From qs we must check which are newer than ins
-			--indices := getQueueIndicesFrom(LEN, pStart);
-			--rawIndices := getQueueIndicesFrom(LEN, (others => '0'));
-			newer := TMP_cmpTagsAfter(content, ins.tags.renameIndex);
+			newer := newerLQ;-- TMP_cmpTagsAfter(content, ins.tags.renameIndex) and whichAddressCompleted(content); -- Only those with known address 
 			areAtOrAfter := not setToOnes(newer, slv2u(pStart));
 			-- Use priority enc. to find first in the newer ones. But they may be divided:
 			--		V  1 1 1 0 0 0 0 1 1 1 and cmp  V
@@ -416,16 +446,21 @@ begin
 				                inputMask,				             
 				                pTagged,
 				                storeValueInput,
-				                (compareAddressInput.full 
-				                            and (bool2std(compareAddressInput.ins.operation = (Memory, store)) or bool2std(compareAddressInput.ins.operation = (System, sysMtc))), 
-				                                    compareAddressInput.ins));
+				                (compareAddressInput.full, compareAddressInput.ins),
+				                IS_LOAD_QUEUE, newerLQ
+				                                    );
 
 	dataDrainSig <= getWindow(content, drainMask, pDrain, 1);				                
 	dataOutSig <= getWindow(content, frontMask, pStart, PIPE_WIDTH);
+
+	newerLQ <= TMP_cmpTagsAfter(content, compareAddressInput.ins.tags.renameIndex) and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, store)
+	                   else (others => '0'); -- Only those with known address
+	olderSQ <= TMP_cmpTagsBefore(content, compareAddressInput.ins.tags.renameIndex) and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, load)
+	                   else (others => '0'); -- Only those with known address
 	
-	matchedMask <= findOldestMatch(content, taggedMask,          pStart, compareAddressInput.ins) when IS_LOAD_QUEUE 
+	matchedMask <= findOldestMatch(content, newerLQ, taggedMask,          pStart, compareAddressInput.ins) when IS_LOAD_QUEUE 
 	                                                 -- TODO: above - not necessary to find oldest, each younger load can be "poisoned" and cause an event on Commit
-	         else  findNewestMatch(content, fullOrCommittedMask, pStart, compareAddressInput.ins);
+	         else  findNewestMatch(content, olderSQ, fullOrCommittedMask, pStart, compareAddressInput.ins);
 	
 	selectedDataSlot <= selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
 	                           --selectDataSlot(content, taggedMask, compareAddressInput);
