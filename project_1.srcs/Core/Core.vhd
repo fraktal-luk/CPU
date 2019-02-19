@@ -487,7 +487,9 @@ begin
 	       addressingData	<= dataOutMem0(0).ins;
 
            dataInMem1(0).full <= sendingMem0;
-           dataInMem1(0).ins <= getLSResultData(dataOutMem0(0).ins, memLoadReady, memLoadValue,
+           dataInMem1(0).ins <= getLSResultData(dataOutMem0(0).ins,
+                                                  '1', (others => '0'),
+                                                  memLoadReady, memLoadValue,
                                                   '0', (others => '0'),--sendingFromSysReg, sysLoadVal, 
                                                   sqSelectedOutput.full, sqSelectedOutput.ins);	       
            -- Source selection and verification
@@ -781,7 +783,7 @@ begin
 		dataOutV => bqData
 	);
 
-    STORE_QUEUE: entity work.StoreQueue
+    STORE_QUEUE: entity work.StoreQueue(Behavioral)
 	generic map(
 		QUEUE_SIZE => 8
 	)
@@ -819,7 +821,7 @@ begin
 
 
 
-    LOAD_QUEUE: entity work.StoreQueue
+    LOAD_QUEUE: entity work.StoreQueue(Behavioral)
 	generic map(
 		QUEUE_SIZE => 8,
 		IS_LOAD_QUEUE => true

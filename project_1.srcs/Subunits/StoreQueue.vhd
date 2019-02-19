@@ -300,6 +300,7 @@ architecture Behavioral of StoreQueue is
 		variable diff: SmallNumber := (others => '0');
 	begin
 		for i in 0 to res'length-1 loop
+		    -- CAREFUL: correct function, args are swapped
 			res(i) := CMP_tagBefore(tag, content(i).tags.renameIndex); -- If grTag > tag then diff(high) = '1'
 		end loop;
 		return res;

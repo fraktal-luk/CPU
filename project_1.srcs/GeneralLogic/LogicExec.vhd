@@ -55,6 +55,7 @@ package LogicExec is
         function setDataCompleted(ins: InstructionState; state: std_logic) return InstructionState;
         
 	    function getLSResultData(ins: InstructionState;
+	                                      tlbReady: std_logic; tlbValue: Mword;
                                           memLoadReady: std_logic; memLoadValue: Mword;
                                           sysLoadReady: std_logic; sysLoadValue: Mword;
                                           storeForwardSending: std_logic; storeForwardIns: InstructionState
@@ -366,12 +367,39 @@ package body LogicExec is
         end function;
         
 	    function getLSResultData(ins: InstructionState;
+	                                      tlbReady: std_logic; tlbValue: Mword;	    
                                           memLoadReady: std_logic; memLoadValue: Mword;
                                           sysLoadReady: std_logic; sysLoadValue: Mword;
                                           storeForwardSending: std_logic; storeForwardIns: InstructionState
                                             ) return InstructionState is
             variable res: InstructionState := ins;
         begin
+            -- mfc/mtc?
+            -- tlb/access error?
+            -- tlb miss?
+            -- data miss?            
+            -- SQ forward miss?
+            -- SQ forward hit?            
+            -- else
+
+            -- So far TLB and tag misses are not implemented
+             if ins.operation = (System, sysMfc) or ins.operation = (System, sysMtc) then
+                 res.result := sysLoadValue;
+             elsif false then
+                -- TLB problems...
+             elsif memLoadReady = '0' then
+                 res.controlInfo.dataMiss := '1';
+             elsif storeForwardSending = '1' then
+                 res.result := storeForwardIns.result;
+                 if storeForwardIns.controlInfo.completed2 = '0' then
+                     res.controlInfo.sqMiss := '1';
+                 end if;
+             else
+                res.result := memLoadValue;
+             end if;
+            
+
+
             -- TODO: remember about miss/hit status and reason of miss if relevant!
                 res := setAddressCompleted(res, '1'); -- TEMP
             
