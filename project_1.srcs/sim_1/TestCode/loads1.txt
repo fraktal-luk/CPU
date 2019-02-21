@@ -1,43 +1,43 @@
 $start
-	sti_i r0, r0, 16
-	sti_i r0, r0, 20
-	sti_i r0, r0, 24
-	sti_i r0, r0, 28
+       sti_i r0, r0, 16
+       sti_i r0, r0, 20
+       sti_i r0, r0, 24
+       sti_i r0, r0, 28
 
-	sti_i r0, r0, 32
-	sti_i r0, r0, 36
-	sti_i r0, r0, 40
-	sti_i r0, r0, 44
+       sti_i r0, r0, 32
+       sti_i r0, r0, 36
+       sti_i r0, r0, 40
+       sti_i r0, r0, 44
 
-    ldi_i r8, r0, 16				;
-    ldi_i r9, r0, 16				
-    ldi_i r10, r0, 16				
-    ldi_i r11, r0, 16				
-	
-    ldi_i r12, r0, 16				
-    ldi_i r13, r0, 16				
-    ldi_i r14, r0, 16				
-    ldi_i r15, r0, 16				
-	
-	; repeat to fill LoadQueue
-    ldi_i r8, r0, 16				;
-    ldi_i r9, r0, 16				
-    ldi_i r10, r0, 16				
-    ldi_i r11, r0, 16				
-	
-    ldi_i r12, r0, 16				
-    ldi_i r13, r0, 16				
-    ldi_i r14, r0, 16				
-    ldi_i r15, r0, 16	
-	
-	; force delayed store to execute a younger load before it
-	;	from the same address
-	ldi_i r20, r0, 16 ; load 0 to r20
-	sti_i r0,  r20, 0 ; use r20==0 as store address
-	ldi_i r21, r0,  0 ; load from 0 without waiting for previous store
-	add_i r0, r0, 0
-	
-	
+    ldi_i r8, r0, 16                           ;
+    ldi_i r9, r0, 16
+    ldi_i r10, r0, 16
+    ldi_i r11, r0, 16
+
+    ldi_i r12, r0, 16
+    ldi_i r13, r0, 16
+    ldi_i r14, r0, 16
+    ldi_i r15, r0, 16
+
+       ; repeat to fill LoadQueue
+    ldi_i r8, r0, 16                           ;
+    ldi_i r9, r0, 16
+    ldi_i r10, r0, 16
+    ldi_i r11, r0, 16
+
+    ldi_i r12, r0, 16
+    ldi_i r13, r0, 16
+    ldi_i r14, r0, 16
+    ldi_i r15, r0, 16
+
+       ; force delayed store to execute a younger load before it
+       ;       from the same address
+       ldi_i r20, r0, 16 ; load 0 to r20
+       sti_i r0,  r20, 0 ; use r20==0 as store address
+       ldi_i r21, r0,  0 ; load from 0 without waiting for previous store
+       add_i r0, r0, 0
+
+
 $check
 
 	sys call			;
