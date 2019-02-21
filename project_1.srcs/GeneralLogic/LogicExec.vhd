@@ -403,19 +403,19 @@ package body LogicExec is
             -- TODO: remember about miss/hit status and reason of miss if relevant!
                 res := setAddressCompleted(res, '1'); -- TEMP
             
-            if storeForwardSending = '1' then
-                res.controlInfo.completed2 := storeForwardIns.controlInfo.completed2; -- := setDataCompleted(res, getDataCompleted(storeForwardIns));
-                res.result := storeForwardIns.result;
-            elsif res.operation.func = sysMfc then
-                res := setDataCompleted(res, sysLoadReady);
-                res.result := sysLoadValue;        
-            elsif res.operation.func = load then 
-                res := setDataCompleted(res, memLoadReady);
-                res.result := memLoadValue;
-            else -- is store or sys reg write?
-                res := setDataCompleted(res, '1'); -- TEMP!
-                    res.result := memLoadValue; -- Unneeded, to reduce logic
-            end if;
+--            if storeForwardSending = '1' then
+--                res.controlInfo.completed2 := storeForwardIns.controlInfo.completed2; -- := setDataCompleted(res, getDataCompleted(storeForwardIns));
+--                res.result := storeForwardIns.result;
+--            elsif res.operation.func = sysMfc then
+--                res := setDataCompleted(res, sysLoadReady);
+--                res.result := sysLoadValue;        
+--            elsif res.operation.func = load then 
+--                res := setDataCompleted(res, memLoadReady);
+--                res.result := memLoadValue;
+--            else -- is store or sys reg write?
+--                res := setDataCompleted(res, '1'); -- TEMP!
+--                    res.result := memLoadValue; -- Unneeded, to reduce logic
+--            end if;
             
             return res;
         end function;

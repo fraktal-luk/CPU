@@ -91,8 +91,10 @@ architecture Behavioral of Core is
     signal newPhysDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal intSignal: std_logic := '0';
     signal intType: std_logic_vector(0 to 1) := (others => '0');
+    signal sysStoreValue, sysRegReadValue: Mword := (others => '0');
+    signal sysStoreAddress, sysRegReadSel: slv5 := (others => '0');
     
-    signal sbSending, sbEmpty: std_logic := '0';
+    signal sbSending, sbEmpty, sysWrite, sysRegRead, sysRegSending: std_logic := '0';
     signal dataFromSB: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
 begin
 
@@ -104,11 +106,11 @@ begin
         clk => clk, reset => reset, en => '0',
         
         -- sys reg interface
-        sysRegReadSel => (others => '0'),--sysRegReadSel,
-        sysRegReadValue => open,--sysRegReadValue,    
-        sysStoreAllow => '0',--sysStoreAllow,
-        sysStoreAddress => (others => '0'),--sysStoreAddress,
-        sysStoreValue => (others => '0'),--sysStoreValue,
+        sysRegReadSel => sysRegReadSel,
+        sysRegReadValue => sysRegReadValue,    
+        sysStoreAllow => sysWrite,
+        sysStoreAddress => sysStoreAddress,
+        sysStoreValue => sysStoreValue,
 
         -- to front pipe
         frontAccepting => frontAccepting,
@@ -142,8 +144,8 @@ begin
         ---
         dataFromBQV => bqData,
 
-        sbSending => '0',--sbSending,
-        dataFromSB => DEFAULT_INSTRUCTION_STATE,--dataFromSB,
+        sbSending => sysWrite,
+        dataFromSB => dataFromSB(0).ins,
         sbEmpty => sbEmpty,
 
         commitGroupCtrOut => commitGroupCtr,
@@ -490,7 +492,7 @@ begin
            dataInMem1(0).ins <= getLSResultData(dataOutMem0(0).ins,
                                                   '1', (others => '0'),
                                                   memLoadReady, memLoadValue,
-                                                  '0', (others => '0'),--sendingFromSysReg, sysLoadVal, 
+                                                  sysRegSending, sysRegReadValue, 
                                                   sqSelectedOutput.full, sqSelectedOutput.ins);	       
            -- Source selection and verification
 	       STAGE_MEM1: entity work.GenericStage(Behavioral)
@@ -516,6 +518,9 @@ begin
            -- TEMP mem interface    
 		   dread <= '1';
            dadr <= dataOutAgu(0).ins.result;
+           sysRegReadSel <= dataOutAgu(0).ins.result(4 downto 0);
+           sysRegRead <= sendingAgu and bool2std(dataOutAgu(0).ins.operation = (System, sysMfc));
+           
            memLoadReady <= dvalid;              
            memLoadValue <= din;      
            
@@ -741,6 +746,8 @@ begin
                 readyRegFlags <= readyRegFlagsNext;
             end if;
          end process;
+         
+         sysRegSending <= sysRegRead;
     end block;
 
     renamedDataToBQ <= setFullMask(renamedDataLiving, getBranchMask(renamedDataLiving));
@@ -858,6 +865,10 @@ begin
         committedDataOut => open --dataFromSB
 	);
 
+
+    sysWrite <= sbSending and bool2std(dataFromSB(0).ins.operation = (System, sysMtc));
+    sysStoreAddress <= dataFromSB(0).ins.target(4 downto 0);
+    sysStoreValue <= dataFromSB(0).ins.result;
 
 -----------------------------------------
 ----- Mem signals -----------------------
