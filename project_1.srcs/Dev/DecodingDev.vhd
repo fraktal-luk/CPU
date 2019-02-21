@@ -82,7 +82,7 @@ constant FMT_ISTORE : InstructionFormat := ('0', '1', '1', '0', "111",  '0', "00
 constant FMT_FSTORE : InstructionFormat := ('0', '1', '1', '0', "110",  '0', "001",  '1');
 constant FMT_JL     : InstructionFormat := ('0', '1', '0', '1', "000",  '0', "000",  '0'); -- Jump link
 constant FMT_JC     : InstructionFormat := ('1', '1', '0', '0', "100",  '0', "000",  '0'); -- Jump cond
-constant FMT_SSTORE : InstructionFormat := ('0', '1', '1', '0', "010",  '0', "000",  '0'); -- mtc
+constant FMT_SSTORE : InstructionFormat := ('0', '1', '1', '0', "011",  '0', "000",  '0'); -- mtc
 
 constant FMT_JA     : InstructionFormat := ('0', '1', '0', '0', "000",  '0', "000",  '0'); -- Jump long
 constant FMT_ILOAD  : InstructionFormat := FMT_IMM;
