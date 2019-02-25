@@ -126,7 +126,16 @@ end function;
                     res(k).ins.controlInfo.hasException := '1';
                     eventFound := true;
                 end if;
-                
+
+                if execResult.ins.controlInfo.specialAction = '1' then
+                    res(k).ins.controlInfo.newEvent := '1'; --- !!!
+                    res(k).ins.controlInfo.specialAction := '1';
+                    
+                        res(k).ins.controlInfo.refetch := '1';
+                    
+                    eventFound := true;
+                end if;
+                                
                 if num = 1 then
                     res(k).ins.controlInfo.completed2 := '1';
                 else

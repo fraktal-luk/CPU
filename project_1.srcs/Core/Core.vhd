@@ -79,7 +79,7 @@ architecture Behavioral of Core is
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal frontDataLastLiving, renamedDataLiving, dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput, sqSelectedOutput, lqAddressInput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+    signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
 
@@ -493,7 +493,8 @@ begin
                                                   '1', (others => '0'),
                                                   memLoadReady, memLoadValue,
                                                   sysRegSending, sysRegReadValue, 
-                                                  sqSelectedOutput.full, sqSelectedOutput.ins);	       
+                                                  sqSelectedOutput.full, sqSelectedOutput.ins,
+                                                  lqSelectedOutput);	       
            -- Source selection and verification
 	       STAGE_MEM1: entity work.GenericStage(Behavioral)
            generic map(
@@ -847,7 +848,7 @@ begin
 		storeValueInput => DEFAULT_INSTRUCTION_SLOT, 
 		compareAddressInput => lqAddressInput,
                             
-		selectedDataOutput => open,--lqSelectedOutput,
+		selectedDataOutput => lqSelectedOutput,
 
 		committing => robSending,
 		groupCtrInc => commitGroupCtrInc,

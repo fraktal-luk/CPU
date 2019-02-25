@@ -58,7 +58,8 @@ package LogicExec is
 	                                      tlbReady: std_logic; tlbValue: Mword;
                                           memLoadReady: std_logic; memLoadValue: Mword;
                                           sysLoadReady: std_logic; sysLoadValue: Mword;
-                                          storeForwardSending: std_logic; storeForwardIns: InstructionState
+                                          storeForwardSending: std_logic; storeForwardIns: InstructionState;
+                                          lqSelectedOutput: InstructionSlot
                                             ) return InstructionState;	
 end LogicExec;
 
@@ -370,7 +371,8 @@ package body LogicExec is
 	                                      tlbReady: std_logic; tlbValue: Mword;	    
                                           memLoadReady: std_logic; memLoadValue: Mword;
                                           sysLoadReady: std_logic; sysLoadValue: Mword;
-                                          storeForwardSending: std_logic; storeForwardIns: InstructionState
+                                          storeForwardSending: std_logic; storeForwardIns: InstructionState;
+                                          lqSelectedOutput: InstructionSlot                                         
                                             ) return InstructionState is
             variable res: InstructionState := ins;
         begin
@@ -393,11 +395,18 @@ package body LogicExec is
                  res.result := storeForwardIns.result;
                  if storeForwardIns.controlInfo.completed2 = '0' then
                      res.controlInfo.sqMiss := '1';
+                          res.controlInfo.specialAction := '1';
                  end if;
              else
                 res.result := memLoadValue;
              end if;
-            
+           
+             
+             -- CAREFUL: store when newer load has been done - violation resolution when reissue is used
+             if ins.operation = (Memory, store) and lqSelectedOutput.full = '1' then
+                res.controlInfo.orderViolation := '1';
+                    res.controlInfo.specialAction := '1';
+             end if;
 
 
             -- TODO: remember about miss/hit status and reason of miss if relevant!

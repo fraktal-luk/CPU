@@ -106,7 +106,8 @@ begin
 				if commitCausing.operation.func = sysSync 
 				    or commitCausing.operation.func = sysSend then
 					res.ip := commitCausing.target;
-				elsif commitCausing.operation.func = sysReplay then
+				elsif commitCausing.operation.func = sysReplay -- then
+				    or commitCausing.controlInfo.refetch = '1' then
 					res.ip := --commitCausing.ip;
 							addMwordFaster(commitCausing.target, MINUS_4); -- CAREFUL: wouldn't work if branch or short
 				elsif commitCausing.operation.func = sysHalt then
