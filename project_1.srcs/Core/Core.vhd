@@ -91,10 +91,10 @@ architecture Behavioral of Core is
     signal newPhysDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal intSignal: std_logic := '0';
     signal intType: std_logic_vector(0 to 1) := (others => '0');
-    signal sysStoreValue, sysRegReadValue: Mword := (others => '0');
-    signal sysStoreAddress, sysRegReadSel: slv5 := (others => '0');
+    signal sysRegReadValue: Mword := (others => '0');
+    signal sysRegReadSel: slv5 := (others => '0');
     
-    signal sbSending, sbEmpty, sysWrite, sysRegRead, sysRegSending: std_logic := '0';
+    signal sbSending, sbEmpty, sysRegRead, sysRegSending: std_logic := '0';
     signal dataFromSB: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
 begin
 
@@ -107,10 +107,7 @@ begin
         
         -- sys reg interface
         sysRegReadSel => sysRegReadSel,
-        sysRegReadValue => sysRegReadValue,    
-        sysStoreAllow => sysWrite,
-        sysStoreAddress => sysStoreAddress,
-        sysStoreValue => sysStoreValue,
+        sysRegReadValue => sysRegReadValue,
 
         -- to front pipe
         frontAccepting => frontAccepting,
@@ -144,7 +141,7 @@ begin
         ---
         dataFromBQV => bqData,
 
-        sbSending => sysWrite,
+        sbSending => sbSending,
         dataFromSB => dataFromSB(0).ins,
         sbEmpty => sbEmpty,
 
@@ -774,10 +771,12 @@ begin
 		dataIn => renamedDataToBQ,
 		dataInBr => bpData,
 
+        --- interface with Int Exec
 		storeValueInput => bqUpdate,
 		compareAddressInput => bqCompare,
 
 		selectedDataOutput => bqSelected,
+        ----
 
 		committing => robSending, -- When ROB is sending so is BQ if it has corresponding branches
 		groupCtrInc => commitGroupCtrInc,
@@ -806,10 +805,12 @@ begin
 		prevSending => renamedSending,
 		dataIn => renamedDataToSQ, -- !!!!!
 
+        -- interface with Exec
 		storeValueInput => sqValueInput, 
 		compareAddressInput => sqAddressInput,
                             
 		selectedDataOutput => sqSelectedOutput,
+        ------------
 
 		committing => robSending,
 		groupCtrInc => commitGroupCtrInc,
@@ -845,10 +846,12 @@ begin
 		prevSending => renamedSending,
 		dataIn => renamedDataToLQ, -- !!!!!
 
+        -- interface with Exec
 		storeValueInput => DEFAULT_INSTRUCTION_SLOT, 
 		compareAddressInput => lqAddressInput,
                             
 		selectedDataOutput => lqSelectedOutput,
+        ----------------
 
 		committing => robSending,
 		groupCtrInc => commitGroupCtrInc,
@@ -865,11 +868,6 @@ begin
         committedSending => open,--sbSending,
         committedDataOut => open --dataFromSB
 	);
-
-
-    sysWrite <= sbSending and bool2std(dataFromSB(0).ins.operation = (System, sysMtc));
-    sysStoreAddress <= dataFromSB(0).ins.target(4 downto 0);
-    sysStoreValue <= dataFromSB(0).ins.result;
 
 -----------------------------------------
 ----- Mem signals -----------------------

@@ -74,11 +74,7 @@ entity UnitSequencer is
     
     dataFromSB: in InstructionState;
     sbEmpty: in std_logic;
-    sbSending: in std_logic;
-    
-    sysStoreAllow: in std_logic;
-    sysStoreAddress: in slv5; 
-    sysStoreValue: in Mword;        
+    sbSending: in std_logic;       
     
     -- Counter outputs
     commitGroupCtrOut: out InsTag;
@@ -117,6 +113,10 @@ architecture Behavioral of UnitSequencer is
                         InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal intTypeCommitted: std_logic_vector(0 to 1) := (others => '0');
+ 
+    signal sysStoreAllow: std_logic := '0';
+    signal sysStoreAddress: slv5 := (others => '0'); 
+    signal sysStoreValue: Mword := (others => '0'); 
         
         constant HAS_RESET_SEQ: std_logic := '0';
         constant HAS_EN_SEQ: std_logic := '0';
@@ -131,6 +131,11 @@ architecture Behavioral of UnitSequencer is
 begin     
         resetSig <= reset and HAS_RESET_SEQ;
         enSig <= en or not HAS_EN_SEQ;
+   
+   
+   sysStoreAllow <= sbSending and bool2std(dataFromSB.operation = (System, sysMtc));
+   sysStoreAddress <= dataFromSB.target(4 downto 0);
+   sysStoreValue <= dataFromSB.result;
    
             eventOccurred <= lateEventSending or execEventSignal or frontEventSignal;
             killPC <= '0';
