@@ -16,12 +16,6 @@ use work.ArchDefs.all;
 use work.CoreConfig.all;
 
 package InstructionState is
-
-
-	-- TODO: move config info to general config file included in higher level definition files?
-	constant PHYS_REG_BITS: natural := 6 + LOG2_PIPE_WIDTH;
-	constant N_PHYSICAL_REGS: natural := 64 * PIPE_WIDTH;
-	constant N_PHYS: natural := N_PHYSICAL_REGS;
 	
 	subtype PhysName is SmallNumber;
 	type PhysNameArray is array(natural range <>) of PhysName;
@@ -40,12 +34,16 @@ type ExecFunc is (unknown,
 						load, store,
 						
 						jump,
+						jumpZ,
+						jumpNZ,
 						
 						sysRetI, sysRetE,
 						sysHalt,
 						sysSync, sysReplay,
 						sysMTC, sysMFC, -- move to/from control
 						sysError,
+						sysCall,
+						sysSend,
 						
 						sysUndef
 						);	
@@ -53,6 +51,11 @@ type ExecFunc is (unknown,
 
 constant TAG_SIZE: integer := 7 + LOG2_PIPE_WIDTH;
 subtype InsTag is std_logic_vector(TAG_SIZE-1 downto 0);
+
+constant INITIAL_RENAME_CTR: InsTag := i2slv(-1, TAG_SIZE);
+constant INITIAL_GROUP_TAG: InsTag := i2slv(-PIPE_WIDTH, TAG_SIZE);
+constant INITIAL_GROUP_TAG_INC: InsTag := i2slv(0, TAG_SIZE);
+
 type InsTagArray is array (integer range <>) of InsTag;
 
 
@@ -67,13 +70,20 @@ type InstructionControlInfo is record
 	completed: std_logic;
 		completed2: std_logic;
 	newEvent: std_logic; -- True if any new event appears
-		hasReset: std_logic;
+	--	hasReset: std_logic;
 	hasInterrupt: std_logic;
 	hasException: std_logic;
-	hasBranch: std_logic;
-	hasReturn: std_logic;
-		specialAction: std_logic;
-		dbtrap: std_logic;
+	--hasBranch: std_logic;
+	--hasReturn: std_logic;
+	   refetch: std_logic;
+	   frontBranch: std_logic;
+	   confirmedBranch: std_logic;
+	specialAction: std_logic;
+	dbtrap: std_logic;
+	   orderViolation: std_logic;
+	   tlbMiss: std_logic;
+	   dataMiss: std_logic;
+	   sqMiss:    std_logic;
 	exceptionCode: SmallNumber; -- Set when exception occurs, remains cause exception can be only 1 per op
 end record;
 
@@ -81,7 +91,7 @@ type InstructionClassInfo is record
 	short: std_logic;
 		mainCluster: std_logic;
 		secCluster: std_logic;
-	branchCond: std_logic;
+	--branchCond: std_logic;
 	
 	pipeA, pipeB, pipeC, load, store, branchIns: std_logic;
 end record;
@@ -90,8 +100,8 @@ end record;
 type InstructionConstantArgs is record
 	immSel: std_logic;
 	imm: word;
-	c0: slv5;
-	c1: slv5;
+	--c0: slv5;
+	--c1: slv5;
 end record;
 
 type InstructionVirtualArgs is record
@@ -140,6 +150,7 @@ end record;
 
 type InstructionArgValues is record
 	newInQueue: std_logic;
+	origSlot: std_logic_vector(0 to 1);
 	immediate: std_logic;
 	zero: std_logic_vector(0 to 2);
 	--readyBefore: std_logic_vector(0 to 2);
@@ -150,6 +161,7 @@ type InstructionArgValues is record
 	nextLocs: SmallNumberArray(0 to 2);
 	locsM2: SmallNumberArray(0 to 2);
 	missing: std_logic_vector(0 to 2);
+	stored:  std_logic_vector(0 to 2);
 	arg0: Mword;
 	arg1: Mword;
 	arg2: Mword;
@@ -230,6 +242,29 @@ constant DEFAULT_INS_SLOT: InstructionSlot := ('0', defaultInstructionState);
 type InstructionSlotArray is array(integer range <>) of InstructionSlot;
 
 
+type SchedulerState is record
+	argValues: InstructionArgValues;
+end record;
+
+constant DEFAULT_SCHEDULER_STATE: SchedulerState := (argValues => DEFAULT_ARG_VALUES);
+constant DEFAULT_SCHED_STATE: SchedulerState := (argValues => DEFAULT_ARG_VALUES);
+																				
+type SchedulerEntrySlot is record
+	full: std_logic;
+	ins: InstructionState;
+	state: SchedulerState;
+end record;
+
+constant DEFAULT_SCHEDULER_ENTRY_SLOT: SchedulerEntrySlot := (full => '0',
+																				ins => DEFAULT_INS_STATE,
+																				state => DEFAULT_SCHEDULER_STATE);
+constant DEFAULT_SCH_ENTRY_SLOT: SchedulerEntrySlot := (full => '0',
+																				ins => DEFAULT_INS_STATE,
+																				state => DEFAULT_SCHEDULER_STATE);
+
+type SchedulerEntrySlotArray is array(integer range <>) of SchedulerEntrySlot;
+
+
 end InstructionState;
 
 
@@ -246,12 +281,19 @@ begin
 													completed2 => '0',
 												newEvent => '0',
 												hasInterrupt => '0',
-													hasReset => '0',
+												--	hasReset => '0',
 												hasException => '0',
-												hasBranch => '0',
-												hasReturn => '0',												
-													specialAction => '0',
-													dbtrap => '0',
+												--hasBranch => '0',
+												--hasReturn => '0',
+												    refetch => '0',
+												    frontBranch => '0',
+                                                    confirmedBranch => '0',												    											
+												specialAction => '0',
+												dbtrap => '0',
+												    orderViolation => '0',
+												    tlbMiss => '0',
+												    dataMiss => '0',
+												    sqMiss => '0',
 												exceptionCode => (others=>'0')
 												);
 end function;
@@ -261,7 +303,7 @@ begin
 	return InstructionClassInfo'( short => '0',
 											mainCluster => '0',
 											secCluster => '0',
-											branchCond => '0',
+											--branchCond => '0',
 											pipeA => '0',
 											pipeB => '0',
 											pipeC => '0',
@@ -273,7 +315,7 @@ end function;
 
 function defaultConstantArgs return InstructionConstantArgs is
 begin
-	return InstructionConstantArgs'('0', (others=>'0'), "00000", "00000");
+	return InstructionConstantArgs'('0', (others=>'0'));
 end function;
 
 function defaultVirtualArgs return InstructionVirtualArgs is
@@ -300,6 +342,7 @@ end function;
 function defaultArgValues return InstructionArgValues is
 begin
 	return (newInQueue => '0',
+	        origSlot => "00", -- TODO: remove, redundant
 			  immediate => '0',
 			  zero => (others => '0'),
 			  --readyBefore => (others=>'0'),
@@ -310,6 +353,7 @@ begin
 			  nextLocs => (others => (others => '0')),
 			  locsM2 => (others => (others => '0')),
 			  missing => (others=>'0'),
+			  stored => (others => '0'),
 			  arg0 => (others=>'0'),
 			  arg1 => (others=>'0'),
 			  arg2 => (others=>'0'),

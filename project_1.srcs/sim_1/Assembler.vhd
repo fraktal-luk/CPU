@@ -247,15 +247,15 @@ begin
         when mul =>
             res := ins655655(ext0, vals(1), vals(2), muls, vals(3), 0);
         when ldi_i => 
-            res := ins6556X(ext1, vals(1), vals(2), load, vals(3));
+            res := ins655H(ld, vals(1), vals(2), vals(3));
         when sti_i =>
-            res := ins6556X(ext1, vals(1), vals(2), store, vals(3));
+            res := ins655H(st, vals(1), vals(2), vals(3));
         
         when ldf_i =>
-            res := ins6556X(ext1, vals(1), vals(2), loadFP, vals(3));
+            res := ins655H(ldf, vals(1), vals(2), vals(3));
         
         when stf_i =>
-            res := ins6556X(ext1, vals(1), vals(2), storeFP, vals(3));
+            res := ins655H(stf, vals(1), vals(2), vals(3));
         
         
         when lds =>
@@ -272,7 +272,7 @@ begin
             res := ins655655(ext1, vals(1), vals(2), jzR, vals(3), 0);
             
         when jnz_i =>
-            res := ins65J(jz, vals(1), vals(2));
+            res := ins65J(jnz, vals(1), vals(2));
             
         when jnz_r =>
             res := ins655655(ext1, vals(1), vals(2), jnzR, vals(3), 0);
@@ -296,7 +296,11 @@ begin
             elsif matches(ar(1), "replay") then
                res := ins655655(ext2, 0, 0, replay, 0, 0);            
             elsif matches(ar(1), "error") then
-               res := ins655655(ext2, 0, 0, error, 0, 0);            
+               res := ins655655(ext2, 0, 0, error, 0, 0);
+            elsif matches(ar(1), "call") then
+                  res := ins655655(ext2, 0, 0, call, 0, 0);
+            elsif matches(ar(1), "send") then
+                  res := ins655655(ext2, 0, 0, send, 0, 0);                                            
             else
                res := ins6L(undef, 0);            
             end if;
@@ -313,7 +317,7 @@ function processProgram(p: ProgramBuffer) return WordArray is
     variable insIndex, j: integer := 0; -- Actual number of instruction
     variable labels: TMP_StrArray(0 to p'length-1) := (others => (others => cr));
     variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
-    variable commands: WordArray(0 to p'length-1) := (others => ins6L(undef, -1)); -- TODO: fill with undefined!
+    variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext1, 0, 0, error, 0, 0));
 begin
     for i in 0 to p'length-1 loop
     
