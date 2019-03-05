@@ -32,6 +32,9 @@ use work.LogicRenaming.all;
 
 
 entity RegisterMapper is
+    generic(
+        IS_FP: boolean := false
+    );
 	port(
 		clk: in std_logic;
 		reset: in std_logic;
@@ -100,10 +103,10 @@ architecture Behavioral of RegisterMapper is
     end function;
 begin	
 
-	reserve <= whichTakeReg(stageDataToReserve);
-	reserveNotOv <= reserve and not findOverriddenDests(stageDataToReserve);
-	commit <= whichPutReg(stageDataToCommit);
-	commitNotOv <= commit and not findOverriddenDests(stageDataToCommit);
+	reserve <= whichTakeReg(stageDataToReserve, IS_FP);
+	reserveNotOv <= reserve and not findOverriddenDests(stageDataToReserve, IS_FP);
+	commit <= whichPutReg(stageDataToCommit, IS_FP);
+	commitNotOv <= commit and not findOverriddenDests(stageDataToCommit, IS_FP);
 	
 	selectReserve <= getVirtualDests(stageDataToReserve);
 	selectCommit <= getVirtualDests(stageDataToCommit);

@@ -88,7 +88,7 @@ architecture Behavioral of Core is
                 iqAccepting, iqAcceptingA, iqAcceptingC, iqAcceptingE,
                 robAcceptingMore, iqAcceptingMoreA, iqAcceptingMoreC, iqAcceptingMoreE: std_logic := '0';
     signal commitGroupCtr, commitCtr, commitGroupCtrInc: InsTag := (others => '0');
-    signal newPhysDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+    signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal intSignal: std_logic := '0';
     signal intType: std_logic_vector(0 to 1) := (others => '0');
     signal sysRegReadValue: Mword := (others => '0');
@@ -194,12 +194,14 @@ begin
         frontDataLastLiving => frontDataLastLiving,
         
         renamedDataLiving => renamedDataLiving,
+        renamedDataLivingFloat => open,--renamedDataLiving,        
         renamedSending => renamedSending,
 
         robDataLiving => dataOutROB,
         sendingFromROB => robSending,
         
-        newPhysDestsOut => newPhysDests,
+        newPhysDestsOut => newIntDests,
+        newFloatDestsOut => newFloatDests,
             
         commitGroupCtr => commitGroupCtr,
         commitCtr => commitCtr,
@@ -729,7 +731,7 @@ begin
              sendingToReserve => frontLastSending,
              stageDataToReserve => frontDataLastLiving,
                  
-             newPhysDests => newPhysDests,    -- FOR MAPPING
+             newPhysDests => newIntDests,    -- FOR MAPPING
              stageDataReserved => renamedDataLiving, --stageDataOutRename,
                  
              -- TODO: change to ins slot based
@@ -737,11 +739,31 @@ begin
              writingData(0) => dataToIntRF(0).ins,
              readyRegFlagsNext => readyRegFlagsNext -- FOR IQs
          );
-         
+
+         FLOAT_READY_TABLE: entity work.RegisterReadyTable(Behavioral)
+         generic map(
+             WRITE_WIDTH => 1
+         )
+         port map(
+             clk => clk, reset => '0', en => '0', 
+             
+             sendingToReserve => frontLastSending,
+             stageDataToReserve => frontDataLastLiving,
+                 
+             newPhysDests => newFloatDests,    -- FOR MAPPING
+             stageDataReserved => renamedDataLiving, --stageDataOutRename,
+                 
+             -- TODO: use FP results
+             writingMask(0) => '0',--sendingToFloatRF,  
+             writingData(0) => DEFAULT_INSTRUCTION_STATE,--dataToFloatRF(0).ins,
+             readyRegFlagsNext => open--readyFloatRegFlagsNext -- FOR IQs
+         );
+                  
          process(clk)
          begin
             if rising_edge(clk) then
                 readyRegFlags <= readyRegFlagsNext;
+                -- TODO: ad float
             end if;
          end process;
          
