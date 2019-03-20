@@ -58,6 +58,8 @@ package body LogicFront is
 function getInstructionClassInfo(ins: InstructionState) return InstructionClassInfo is
 	variable ci: InstructionClassInfo := defaultClassInfo;
 begin
+        ci.fpRename := ins.classInfo.fpRename; -- Keep this info!
+        
 				-- Which clusters?
 				-- CAREFUL, TODO: make it more regular and clear!
 				ci.mainCluster := '1';

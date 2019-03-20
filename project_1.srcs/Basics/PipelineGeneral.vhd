@@ -533,13 +533,17 @@ end function;
 			res(i).ins := insArr(i);
 			res(i).full := fullMask(i);
             
-            -- CAREFUL
+            -- CAREFUL, UNNEEDED
             res(i).state.argValues.origSlot := i2slv(i, 2); -- So we know which 'readyRegs' slots to use in IQ!
             
+            -- CAREFUL, TODO: define precisely what 'zero' designation means
 			-- Set state markers: "zero" bit; only valid for Int args because FP doesn't use HW zero 
-			res(i).state.argValues.zero(0) := res(i).ins.physicalArgSpec.intArgSel(0) and not isNonzero(res(i).ins.virtualArgSpec.args(0)(4 downto 0));
-			res(i).state.argValues.zero(1) := res(i).ins.physicalArgSpec.intArgSel(1) and not isNonzero(res(i).ins.virtualArgSpec.args(1)(4 downto 0));
-			res(i).state.argValues.zero(2) := res(i).ins.physicalArgSpec.intArgSel(2) and not isNonzero(res(i).ins.virtualArgSpec.args(2)(4 downto 0));
+			res(i).state.argValues.zero(0) := (res(i).ins.physicalArgSpec.intArgSel(0) and not isNonzero(res(i).ins.virtualArgSpec.args(0)(4 downto 0)))
+			                                     or (not res(i).ins.physicalArgSpec.intArgSel(0) and not res(i).ins.physicalArgSpec.floatArgSel(0));
+			res(i).state.argValues.zero(1) := (res(i).ins.physicalArgSpec.intArgSel(1) and not isNonzero(res(i).ins.virtualArgSpec.args(1)(4 downto 0)))
+			                                     or (not res(i).ins.physicalArgSpec.intArgSel(1) and not res(i).ins.physicalArgSpec.floatArgSel(1));
+			res(i).state.argValues.zero(2) := (res(i).ins.physicalArgSpec.intArgSel(2) and not isNonzero(res(i).ins.virtualArgSpec.args(2)(4 downto 0)))
+			                                     or (not res(i).ins.physicalArgSpec.intArgSel(2) and not res(i).ins.physicalArgSpec.floatArgSel(2));
 
 			-- Set 'missing' flags for non-const arguments
 			res(i).state.argValues.missing := (res(i).ins.physicalArgSpec.intArgSel and not res(i).state.argValues.zero)

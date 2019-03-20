@@ -298,7 +298,15 @@ architecture Behavioral of UnitRegManager is
 --            then
 --                found := true;
 --            end if;
---        end loop;            
+--        end loop;
+
+        -- TODO: move this somewhere else?
+        for i in res'range loop
+            if res(i).ins.classInfo.fpRename = '0' then
+                res(i).full := '0';
+            end if;
+        end loop;
+            
         return res;
     end function;    
 begin
