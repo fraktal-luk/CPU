@@ -133,6 +133,10 @@ function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
 function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray;
+--function prepareForStoreValueIntFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray;
+function prepareForStoreValueFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray;
+
+
 function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
 
 
@@ -170,13 +174,30 @@ function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
         );
 
         constant WAITING_FN_MAP_SV: ForwardingMap := (
-            maskRR => "110",   -- arg2 is unused   
+            maskRR => "100",
             maskR1 => "000",  
             maskR0 => "111",
             maskM1 => "000",
             maskM2 => "000"
-        );  
+        );
 
+
+        -- FP store data
+        constant ENQUEUE_FN_MAP_FLOAT_SV: ForwardingMap := (
+            maskRR => "000",      
+            maskR1 => "111",  
+            maskR0 => "111",
+            maskM1 => "000",
+            maskM2 => "000"
+        );
+        
+        constant WAITING_FN_MAP_FLOAT_SV: ForwardingMap := (
+            maskRR => "100",   -- arg2 is unused   
+            maskR1 => "000",  
+            maskR0 => "111",
+            maskM1 => "000",
+            maskM2 => "000"
+        );
   
 end package;
 
@@ -515,13 +536,14 @@ end function;
             -- CAREFUL
             res(i).state.argValues.origSlot := i2slv(i, 2); -- So we know which 'readyRegs' slots to use in IQ!
             
-			-- Set state markers: "zero" bit
-			res(i).state.argValues.zero(0) := not isNonzero(res(i).ins.virtualArgSpec.args(0)(4 downto 0));
-			res(i).state.argValues.zero(1) := not isNonzero(res(i).ins.virtualArgSpec.args(1)(4 downto 0));
-			res(i).state.argValues.zero(2) := not isNonzero(res(i).ins.virtualArgSpec.args(2)(4 downto 0));
+			-- Set state markers: "zero" bit; only valid for Int args because FP doesn't use HW zero 
+			res(i).state.argValues.zero(0) := res(i).ins.physicalArgSpec.intArgSel(0) and not isNonzero(res(i).ins.virtualArgSpec.args(0)(4 downto 0));
+			res(i).state.argValues.zero(1) := res(i).ins.physicalArgSpec.intArgSel(1) and not isNonzero(res(i).ins.virtualArgSpec.args(1)(4 downto 0));
+			res(i).state.argValues.zero(2) := res(i).ins.physicalArgSpec.intArgSel(2) and not isNonzero(res(i).ins.virtualArgSpec.args(2)(4 downto 0));
 
 			-- Set 'missing' flags for non-const arguments
-			res(i).state.argValues.missing := res(i).ins.physicalArgSpec.intArgSel and not res(i).state.argValues.zero;
+			res(i).state.argValues.missing := (res(i).ins.physicalArgSpec.intArgSel and not res(i).state.argValues.zero)
+			                               or (res(i).ins.physicalArgSpec.floatArgSel);
 			
 			-- Handle possible immediate arg
 			if res(i).ins.constantArgs.immSel = '1' then
@@ -612,21 +634,107 @@ end function;
                 res(i).constantArgs.immSel := '0';
                 
                 res(i).virtualArgSpec.intDestSel := '0';
+                    res(i).virtualArgSpec.floatDestSel := '0';                
+                
                 res(i).virtualArgSpec.intArgSel(0) := res(i).virtualArgSpec.intArgSel(2);
-                res(i).virtualArgSpec.intArgSel(2) := '0';
+                res(i).virtualArgSpec.intArgSel(2) := '0';                
+                    res(i).virtualArgSpec.floatArgSel(0) := '0';--res(i).virtualArgSpec.floatArgSel(2);
+                    res(i).virtualArgSpec.floatArgSel(1) := '0';                                    
+                    res(i).virtualArgSpec.floatArgSel(2) := '0';                
+                
                 res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
                 res(i).virtualArgSpec.args(2) := (others => '0');
-                                
+
+
+                --res(i).constantArgs.immSel := '0';
+                
                 res(i).physicalArgSpec.intDestSel := '0';
+                    res(i).physicalArgSpec.floatDestSel := '0';                
+                
                 res(i).physicalArgSpec.intArgSel(0) := res(i).physicalArgSpec.intArgSel(2);
-                res(i).physicalArgSpec.intArgSel(2) := '0';
+                res(i).physicalArgSpec.intArgSel(2) := '0';                
+                    res(i).physicalArgSpec.floatArgSel(0) := '0';--res(i).virtualArgSpec.floatArgSel(2);
+                    res(i).physicalArgSpec.floatArgSel(1) := '0';                                    
+                    res(i).physicalArgSpec.floatArgSel(2) := '0';                
+                
                 res(i).physicalArgSpec.args(0) := res(i).physicalArgSpec.args(2);
-                res(i).physicalArgSpec.args(2) := (others => '0');                                                
+                res(i).physicalArgSpec.args(2) := (others => '0');                                              
             end loop;
             
             return res;
         end function;
+
+--        function prepareForStoreValueIntFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray is
+--            variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVecInt;
+--        begin
+--            for i in 0 to PIPE_WIDTH-1 loop
+--                res(i).constantArgs.immSel := '0';
+                
+--                res(i).virtualArgSpec.intDestSel := '0';
+--                    res(i).virtualArgSpec.floatDestSel := '0';                
+                
+--                res(i).virtualArgSpec.intArgSel(0) := res(i).virtualArgSpec.intArgSel(2);
+--                res(i).virtualArgSpec.intArgSel(2) := '0';                
+--                    res(i).virtualArgSpec.floatArgSel(0) := res(i).virtualArgSpec.floatArgSel(2);
+--                    res(i).virtualArgSpec.floatArgSel(2) := '0';                
+                
+--                if res(i).virtualArgSpec.floatArgSel(0) = '1' then
+--                    res(i).virtualArgSpec.args(0) := insVecFloat(i).virtualArgSpec.args(2);
+--                else
+--                    res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
+--                end if;
+--                res(i).virtualArgSpec.args(2) := (others => '0');
+                                              
+--            end loop;
+            
+--            return res;
+--        end function;
+
         
+        function prepareForStoreValueFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray is
+            variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVecInt;
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i).constantArgs.immSel := '0';
+                
+                res(i).virtualArgSpec.intDestSel := '0';
+                    res(i).virtualArgSpec.floatDestSel := '0';                
+                
+                res(i).virtualArgSpec.intArgSel(0) := '0';--res(i).virtualArgSpec.intArgSel(2);
+                res(i).virtualArgSpec.intArgSel(1) := '0';                
+                res(i).virtualArgSpec.intArgSel(2) := '0';                
+                    res(i).virtualArgSpec.floatArgSel(0) := res(i).virtualArgSpec.floatArgSel(2);
+                    res(i).virtualArgSpec.floatArgSel(2) := '0';                
+                
+                --if res(i).virtualArgSpec.floatArgSel(0) = '1' then
+                    res(i).virtualArgSpec.args(0) := insVecFloat(i).virtualArgSpec.args(2);
+                --else
+                --    res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
+                --end if;
+                res(i).virtualArgSpec.args(2) := (others => '0');
+
+
+                res(i).physicalArgSpec.intDestSel := '0';
+                    res(i).physicalArgSpec.floatDestSel := '0';                
+                
+                res(i).physicalArgSpec.intArgSel(0) := '0';--res(i).virtualArgSpec.intArgSel(2);
+                res(i).physicalArgSpec.intArgSel(1) := '0';                
+                res(i).physicalArgSpec.intArgSel(2) := '0';                
+                    res(i).physicalArgSpec.floatArgSel(0) := res(i).physicalArgSpec.floatArgSel(2);
+                    res(i).physicalArgSpec.floatArgSel(2) := '0';                
+                
+                --if res(i).virtualArgSpec.floatArgSel(0) = '1' then
+                    res(i).physicalArgSpec.args(0) := insVecFloat(i).physicalArgSpec.args(2);
+                --else
+                --    res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
+                --end if;
+                res(i).physicalArgSpec.args(2) := (others => '0');                                              
+            end loop;
+            
+            return res;
+        end function;
+
+
         function removeArg2(insVec: InstructionStateArray) return InstructionStateArray is
             variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
         begin

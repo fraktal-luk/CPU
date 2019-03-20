@@ -64,8 +64,8 @@ end UnitRegManager;
 
 architecture Behavioral of UnitRegManager is
     signal stageDataRenameIn, stageDataRenameInFloat,
-                stageDataCommit: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal eventSig, sendingCommit, renameLockState, renameLockEnd, renameLockRelease: std_logic := '0';
+                stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal eventSig, sendingCommitInt, sendingCommitFloat, renameLockState, renameLockEnd, renameLockRelease: std_logic := '0';
  
     signal renameCtr, renameCtrNext: InsTag := INITIAL_RENAME_CTR;
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
@@ -414,7 +414,7 @@ begin
                 end if;    
             end process;
 
-        SUBUNIT_COMMIT: entity work.GenericStage(Behavioral)
+        SUBUNIT_COMMIT_INT: entity work.GenericStage(Behavioral)
         generic map(
             WIDTH => PIPE_WIDTH
         )
@@ -428,8 +428,8 @@ begin
             
             -- Interface with hypothetical further stage
             nextAccepting => '1',
-            sendingOut => sendingCommit,
-            stageDataOut => stageDataCommit,
+            sendingOut => sendingCommitInt,
+            stageDataOut => stageDataCommitInt,
             
             -- Event interface
             execEventSignal => '0', -- CAREFUL: committed cannot be killed!
@@ -437,6 +437,28 @@ begin
             execCausing => execCausing
         );
          
+        SUBUNIT_COMMIT_FLOAT: entity work.GenericStage(Behavioral)
+        generic map(
+            WIDTH => PIPE_WIDTH
+        )
+        port map(
+            clk => clk, reset => '0', en => '0',
+            
+            -- Interface with CQ
+            prevSending => sendingFromROB,
+            stageDataIn => robDataLiving,
+            acceptingOut => open, -- unused but don't remove
+            
+            -- Interface with hypothetical further stage
+            nextAccepting => '1',
+            sendingOut => sendingCommitFloat,
+            stageDataOut => stageDataCommitFloat,
+            
+            -- Event interface
+            execEventSignal => '0', -- CAREFUL: committed cannot be killed!
+            lateEventSignal => '0',    
+            execCausing => execCausing
+        );
           
         INT_MAPPER: entity work.RegisterMapper
         port map(
@@ -505,8 +527,8 @@ begin
 				newPhysDests => newIntDests,			-- TO SEQ
 				newPhysDestPointer => newIntDestPointer, -- TO SEQ
 
-				sendingToRelease => sendingCommit,  -- FROM SEQ
-				stageDataToRelease => stageDataCommit,  -- FROM SEQ
+				sendingToRelease => sendingCommitInt,  -- FROM SEQ
+				stageDataToRelease => stageDataCommitInt,  -- FROM SEQ
 				
 				physStableDelayed => physStableInt -- FOR MAPPING (from MAP)
 			);
@@ -529,8 +551,8 @@ begin
 				newPhysDests => newFloatDests,			-- TO SEQ
 				newPhysDestPointer => newFloatDestPointer, -- TO SEQ
 
-				sendingToRelease => sendingCommit,  -- FROM SEQ
-				stageDataToRelease => stageDataCommit,  -- FROM SEQ
+				sendingToRelease => sendingCommitFloat,  -- FROM SEQ
+				stageDataToRelease => stageDataCommitFloat,  -- FROM SEQ
 				
 				physStableDelayed => physStableFloat -- FOR MAPPING (from MAP)
 			);
