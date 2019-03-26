@@ -1,0 +1,24 @@
+$start
+	add_i r1, r0, 55 
+	sti_i r1, r0, 16
+	
+	sys sync
+	
+	ldi_i r2, r0, 16
+	
+    ldf_i f1, r0, 16
+	
+    ldi_i r14, r0, 16
+    ldi_i r15, r0, 16
+
+	stf_i f0, r0, 16
+	
+	   
+$check
+
+	sys call			;
+$error
+    sys error
+
+
+ 

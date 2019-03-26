@@ -76,6 +76,9 @@ architecture Behavioral of RegisterMapper is
 	begin
 		for i in 0 to 31 loop
 			res(i) := i2slv(i, PhysName'length);
+			if IS_FP then
+			 res(i) := i2slv(i + 1, PhysName'length); -- CAREFUL: No reg 0 for FP
+			end if;
 		end loop;
 		return res;
 	end function;

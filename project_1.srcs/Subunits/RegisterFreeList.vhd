@@ -65,10 +65,23 @@ function initList return PhysNameArray is
 begin
     for i in 0 to N_PHYS - 32 - 1 loop
         res(i) := i2slv(32 + i, PhysName'length);
+        if IS_FP then
+            res(i) := i2slv(32 + i + 1, PhysName'length);
+            if i = N_PHYS - 32 - 1 then
+               res(i) := (others => '0'); -- CAREFUL: no reg 0 for FP, so 1 less on the list!
+            end if;
+        end if;
     end loop;
     return res;
 end function;
 
+-- TEMP: to reduce num regs by 1 in case of FP
+function FP_1 return integer is
+begin
+    if IS_FP then return 1;
+    else return 0;
+    end if;
+end function;
 
 						
 begin
@@ -110,7 +123,7 @@ begin
 		IMPL: block
 			signal listContent: PhysNameArray(0 to FREE_LIST_SIZE-1) := initList;
 			signal listPtrTake: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
-			signal listPtrPut: SmallNumber := i2slv(N_PHYS - 32, SMALL_NUMBER_SIZE);
+			signal listPtrPut: SmallNumber := i2slv(N_PHYS - 32 - FP_1, SMALL_NUMBER_SIZE);
 		begin
 			
 			freeListTakeNumTags(0) <= i2slv((slv2u(listPtrTake)) mod FREE_LIST_SIZE, SMALL_NUMBER_SIZE);

@@ -133,6 +133,7 @@ end record;
 			intDestSel: std_logic;
 			floatDestSel: std_logic;
 			dest: SmallNumber;
+			destAlt: SmallNumber;
 			intArgSel: std_logic_vector(0 to 2);
 			floatArgSel: std_logic_vector(0 to 2);
 			args: SmallNumberArray(0 to 2);
@@ -212,6 +213,7 @@ constant DEFAULT_ARG_SPEC: InstructionArgSpec := InstructionArgSpec'(
 			intDestSel => '0',
 			floatDestSel => '0',
 			dest => (others => '0'),
+			destAlt => (others => '0'),
 			intArgSel => (others => '0'),
 			floatArgSel => (others => '0'),
 			args => ((others => '0'), (others => '0'), (others => '0'))

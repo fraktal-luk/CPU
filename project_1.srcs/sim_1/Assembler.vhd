@@ -200,6 +200,9 @@ begin
         elsif ar(i)(1) = 'r' and ar(i)(2) >= '0' and ar(i)(2) <= '9' then
             -- register
             x := integer'value(ar(i)(2 to ar(i)'length)); -- ignore 'r'
+        elsif ar(i)(1) = 'f' and ar(i)(2) >= '0' and ar(i)(2) <= '9' then
+            -- register (FP)
+            x := integer'value(ar(i)(2 to ar(i)'length)); -- ignore 'f'			
         elsif ar(i)(1) = '-' then
             x := -integer'value(ar(i)(2 to ar(i)'length)); 
         elsif not isAlphanum(ar(i)(1)) then

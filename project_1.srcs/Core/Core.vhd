@@ -77,7 +77,7 @@ architecture Behavioral of Core is
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
                 frontEventSignal, bqAccepting, bqSending, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ: std_logic := '0';
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal frontDataLastLiving, renamedDataLiving, renamedDataLivingFloat, dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData: 
+    signal frontDataLastLiving, renamedDataLiving, renamedDataLivingFloat, renamedDataMerged, dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
@@ -96,6 +96,19 @@ architecture Behavioral of Core is
     
     signal sbSending, sbEmpty, sysRegRead, sysRegSending: std_logic := '0';
     signal dataFromSB: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
+    
+    function mergeDests(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := dataInt;
+    begin
+        for i in res'range loop
+            if dataFloat(i).ins.physicalArgSpec.floatDestSel = '1' then
+                --res(i).ins.physicalArgSpec.dest := dataFloat(i).ins.physicalArgSpec.dest;            
+                res(i).ins.physicalArgSpec.dest := dataFloat(i).ins.physicalArgSpec.dest;
+                res(i).ins.physicalArgSpec.floatDestSel := dataFloat(i).ins.physicalArgSpec.floatDestSel;
+            end if;
+        end loop;
+        return res;
+    end function; 
 begin
 
     intSignal <= int0 or int1;
@@ -220,7 +233,10 @@ begin
     (not isNonzero(extractFullMask(renamedDataLiving))
         and robAccepting and iqAcceptingA and acceptingSQ and acceptingLQ and renameAccepting)
     or (robAcceptingMore and iqAcceptingMoreA and not almostFullSQ and not almostFullLQ and renameAccepting);
-               
+    
+    
+    renamedDataMerged <= mergeDests(renamedDataLiving, renamedDataLivingFloat);
+    
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(
@@ -233,7 +249,7 @@ begin
 		execEndSigs1 => execOutputs1,
 		execEndSigs2 => execOutputs2,
 		
-		inputData => renamedDataLiving,
+		inputData => renamedDataMerged,
 		prevSending => renamedSending,
 		acceptingOut => robAccepting,
 		acceptingMore => robAcceptingMore,
@@ -247,7 +263,7 @@ begin
     TEMP_EXEC: block
         use work.LogicExec.all;
     
-        signal schedDataAlu, schedDataMem, schedDataStoreValue, schedDataStoreValueFloat,
+        signal schedDataAlu, schedDataMem, schedDataMemInt, schedDataMemFloat, schedDataStoreValue, schedDataStoreValueFloat,
                     dataToIQ, dataToAluIQ, dataToMemIQ, dataToStoreValueIQ, dataToStoreValueFloatIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1)
                             := (others => DEFAULT_SCH_ENTRY_SLOT);
         signal dataToAlu, dataToBranch, dataToAgu, dataOutAlu, dataOutAgu, dataOutAluDelay, dataOutMem, dataInMem0, dataOutMem0, dataOutMem1, dataOutMemFloat1,
@@ -267,7 +283,7 @@ begin
         signal regValsA, regValsB, regValsC, regValsD, regValsE, regValsFloatA, regValsFloatB, regValsFloatC, regValsFloatD: MwordArray(0 to 2) := (others => (others => '0'));
         signal readyRegFlags, readyRegFlagsNext, readyRegFlagsSV, readyFloatFlags, readyFloatFlagsNext, readyRegFlagsFloatSV: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
         
-        signal memMask: std_logic_vector(0 to PIPE_WIDTH-1):= (others => '0');
+        signal memMask, memMaskInt, memMaskFloat: std_logic_vector(0 to PIPE_WIDTH-1):= (others => '0');
         
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 
@@ -298,11 +314,54 @@ begin
                 end if;
             end loop;
             return res;
-        end function;        
+        end function;
+
+        function clearDestAlt(insArr: InstructionSlotArray) return InstructionSlotArray is
+            variable res: InstructionSlotArray(insArr'range) := insArr;
+        begin
+            for i in res'range loop
+                if res(i).ins.physicalArgSpec.floatDestSel = '0' then
+                   res(i).ins.physicalArgSpec.dest := (others => '0');
+                end if;
+            end loop;
+            return res;
+        end function;
+        
+        function changeDestToAlt(insArr: InstructionSlotArray) return InstructionSlotArray is
+            variable res: InstructionSlotArray(insArr'range) := insArr;
+        begin
+            for i in res'range loop
+                --if res(i).ins.physicalArgSpec.floatDestSel = '1' then
+                   res(i).ins.physicalArgSpec.dest := res(i).ins.physicalArgSpec.destAlt;
+                --end if;
+            end loop;
+            return res;
+        end function;
+                
+        function mergeSchedDataMem(schedDataMemInt: SchedulerEntrySlotArray; schedDataMemFloat: SchedulerEntrySlotArray) return SchedulerEntrySlotArray is
+            variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := schedDataMemInt;
+        begin
+            for i in res'range loop
+                if schedDataMemFloat(i).full = '1' then
+                    res(i).ins.virtualArgSpec.destAlt := schedDataMemFloat(i).ins.virtualArgSpec.dest;
+                    res(i).ins.virtualArgSpec.floatDestSel := schedDataMemFloat(i).ins.virtualArgSpec.floatDestSel;                    
+                    res(i).ins.physicalArgSpec.destAlt := schedDataMemFloat(i).ins.physicalArgSpec.dest;
+                    res(i).ins.physicalArgSpec.floatDestSel := schedDataMemFloat(i).ins.physicalArgSpec.floatDestSel;                    
+                end if;
+            end loop;
+            
+            return res;
+        end function;      
     begin
         schedDataAlu <= getSchedData(extractData(renamedDataLiving), getAluMask(renamedDataLiving));
-        memMask <=  getStoreMask(renamedDataLiving) or getLoadMask(renamedDataLiving);
-        schedDataMem <= getSchedData(removeArg2(extractData(renamedDataLiving)), memMask);
+        
+        memMaskInt <=  getStoreMask(renamedDataLiving) or getLoadMask(renamedDataLiving);
+        memMaskFloat <=  getStoreMask(renamedDataLivingFloat) or getLoadMask(renamedDataLivingFloat);        
+        memMask <= memMaskInt or memMaskFloat;
+        
+        schedDataMemInt <= getSchedData(removeArg2(extractData(renamedDataLiving)), memMaskInt);
+        schedDataMemFloat <= getSchedData(extractData(renamedDataLivingFloat), memMaskFloat);
+        schedDataMem <= mergeSchedDataMem(schedDataMemInt, schedDataMemFloat);
                                         --  prepareForStoreValueIQ - moves arg2 to arg0, removes arg2
         schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLiving)), getStoreMask(renamedDataLiving));
         --    schedDataStoreValue <= getSchedData(prepareForStoreValueIntFloatIQ(extractData(renamedDataLiving), extractData(renamedDataLivingFloat)), getStoreMask(renamedDataLiving));        
@@ -535,7 +594,7 @@ begin
                  sendingFloatLoad <= sendingMem0 and dataOutMem0(0).ins.physicalArgSpec.floatDestSel;
                           
                  dataInMemInt1 <= clearFloatDest(dataInMem1); -- with zeroed dest when load is FP
-                 dataInMemFloat1 <= clearIntDest(dataInMemFloat1); -- with zeroed dest when load is Int??
+                 dataInMemFloat1 <= changeDestToAlt(clearIntDest(dataInMem1)); -- with zeroed dest when load is Int??
                                                   	       
            -- Source selection and verification
 	       STAGE_MEM1: entity work.GenericStage(Behavioral)
@@ -859,9 +918,14 @@ begin
                 execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
             ); 
             
-  
+            
+            
+         -- TODO: add FP outputs!
          execOutputs1(0) <= (sendingAlu, dataOutAlu(0).ins);
-             execOutputs1(2) <= (sendingMem1, dataOutMem1(0).ins); -- TODO: include mem hit in 'full' flag!
+             execOutputs1(2).full <= (sendingMem1 or sendingMemFloat1);
+             execOutputs1(2).ins <= dataOutMemFloat1(0).ins when sendingMemFloat1 = '1' else dataOutMem1(0).ins;
+                            -- TODO: include mem hit in 'full' flag! Should merge some info from Float path??
+                            -- TODO: merge Int and Float stage into one (with dest + destAlt) to avoid unnecessary muxing
 
          execOutputs2(0) <= (sendingBranch, dataFromBranch.ins);
             execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins);
@@ -886,7 +950,15 @@ begin
                     
                 regsSelFloatD <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadFloatStoreValue.ins)));
 
+                -- NOTE: FP load path is 1 cycle longer, so different stages are involved here from those in Int datapath
+                fniFloat.nextResultTags <= (2 => dataOutMemFloat1(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!
+                fniFloat.nextTagsM2 <= (2 => dataOutMem0(0).ins.physicalArgSpec.destAlt, others => (others => '0')); -- TODO: check!                
+                fniFloat.tags0 <= (2 => dataOutMemFloatDelay(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!
+                fniFloat.tags1 <= (2 => dataOutMemFloatDelay2(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!
+                fniFloat.values0 <= (2 => dataOutMemFloatDelay(0).ins.result, others => (others => '0')); -- TODO: check!
+                fniFloat.values1 <= (2 => dataOutMemFloatDelay2(0).ins.result, others => (others => '0')); -- TODO: check!
                     
+
 		 INT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(WIDTH => 4, WRITE_WIDTH => 1)
          port map(
@@ -928,6 +1000,9 @@ begin
          );
 
 
+            sendingToFloatWriteQueue <= sendingMemFloat1; -- TEMP, TODO!
+            dataToFloatWriteQueue <= dataOutMemFloat1;
+            
             FLOAT_WRITE_QUEUE: entity work.GenericStage(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
