@@ -521,7 +521,8 @@ function getExceptionMask(insVec: InstructionSlotArray) return std_logic_vector 
 	variable res: std_logic_vector(insVec'range) := (others=>'0');
 begin
 	for i in insVec'range loop
-		res(i) := insVec(i).ins.controlInfo.hasException;
+		res(i) := insVec(i).ins.controlInfo.hasException
+		          or insVec(i).ins.controlInfo.specialAction; -- CAREFUL: what if special actions are allowed to write registers?
 	end loop;			
 	return res;
 end function;

@@ -210,7 +210,7 @@ architecture Behavioral of UnitRegManager is
         -- Assign dest registers
         for i in 0 to PIPE_WIDTH-1 loop
             if res(i).ins.virtualArgSpec.floatDestSel = '1' then
-                res(i).ins.physicalArgSpec.dest := newFloatDests(countOnes(takeVecInt)); -- how many used before
+                res(i).ins.physicalArgSpec.dest := newFloatDests(countOnes(takeVecFloat)); -- how many used before
             end if;
             --takeVecInt(i) := insVec(i).ins.virtualArgSpec.intDestSel;
             takeVecFloat(i) := insVec(i).ins.virtualArgSpec.floatDestSel;
@@ -500,7 +500,7 @@ begin
             
             sendingToReserve => frontLastSending,
             stageDataToReserve => frontDataLastLiving,
-            newPhysDests => newIntDests,    -- MAPPING (from FREE LIST)
+            newPhysDests => newFloatDests,    -- MAPPING (from FREE LIST)
 
             sendingToCommit => sendingFromROB,
             stageDataToCommit => robDataLiving,

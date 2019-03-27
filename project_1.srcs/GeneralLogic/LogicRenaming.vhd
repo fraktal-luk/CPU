@@ -110,6 +110,11 @@ begin
     for i in 0 to PIPE_WIDTH-1 loop
         res(i) := ((insVec(i).ins.virtualArgSpec.intDestSel and not bool2std(fp)) or (insVec(i).ins.virtualArgSpec.floatDestSel and bool2std(fp)))
              and (insVec(i).full );-- or insVec(i).ins.controlInfo.squashed and FREE_LIST_COARSE_REWIND);     
+    
+        --    if insVec(i).ins.controlInfo.hasException = '1'
+        --        or insVec(i).ins.controlInfo.specialAction = '1' then
+        --        res(i) := '0';
+        --    end if;
     end loop;
     return res;
 end function;

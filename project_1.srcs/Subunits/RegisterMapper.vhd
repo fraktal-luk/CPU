@@ -108,7 +108,7 @@ begin
 
 	reserve <= whichTakeReg(stageDataToReserve, IS_FP);
 	reserveNotOv <= reserve and not findOverriddenDests(stageDataToReserve, IS_FP);
-	commit <= whichPutReg(stageDataToCommit, IS_FP);
+	commit <= whichPutReg(stageDataToCommit, IS_FP) and not getExceptionMask(stageDataToCommit);
 	commitNotOv <= commit and not findOverriddenDests(stageDataToCommit, IS_FP);
 	
 	selectReserve <= getVirtualDests(stageDataToReserve);

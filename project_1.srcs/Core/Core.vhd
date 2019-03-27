@@ -1037,7 +1037,7 @@ begin
              selectRead(0 to 2) => (others => (others => '0')),
              selectRead(3 to 5) => (others => (others => '0')),
              selectRead(6 to 8) => (others => (others => '0')),--regsSelC,
-             selectRead(9 to 11) => (others => (others => '0')),--regsSelD,
+             selectRead(9 to 11) => regsSelFloatD,
              
              readValues(0 to 2) => regValsFloatA,--open,
              readValues(3 to 5) => regValsFloatB,
@@ -1056,11 +1056,11 @@ begin
              stageDataToReserve => frontDataLastLiving,
                  
              newPhysDests => newFloatDests,    -- FOR MAPPING
-             stageDataReserved => renamedDataLiving, --stageDataOutRename,
+             stageDataReserved => renamedDataLivingFloat, --stageDataOutRename,
                  
              -- TODO: use FP results
-             writingMask(0) => '0',--sendingToFloatRF,  
-             writingData(0) => DEFAULT_INSTRUCTION_STATE,--dataToFloatRF(0).ins,
+             writingMask(0) => sendingToFloatRF,  
+             writingData(0) => dataToFloatRF(0).ins,
              readyRegFlagsNext => readyFloatFlagsNext -- FOR IQs
          );
 
