@@ -103,7 +103,9 @@ begin
 	SAVE_SCH_STATE: process(clk)
 	begin
 		if rising_edge(clk) then
-			argState <= inputDataWithArgs.state; 
+		    if nextAccepting = '1' then -- CAREFUL: this is to enable stalling 
+			    argState <= inputDataWithArgs.state;
+			end if; 
 		end if;
 	end process;
 
@@ -115,7 +117,7 @@ begin
 	-- CAREFUL: this does nothing. To make it work:
 	--											nextAcceptingEffective <= nextAccepting and not lockSend
 	--lockSend <= BLOCK_ISSUE_WHEN_MISSING and isNonzero(dispatchDataUpdated.state.argValues.missing);
-	output <= (sendingOut, dispatchDataUpdated.ins, dispatchDataUpdated.state);
+	output <= (sendingOut, dispatchDataUpdated.ins, dispatchDataUpdated.state);	
 end Alternative;
 
 

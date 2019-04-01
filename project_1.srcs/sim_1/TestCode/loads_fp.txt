@@ -11,9 +11,43 @@ $start
 	sti_i r1, r0, 20 ; value = 55
 	ldf_i f5, r0, 20 ; forward from SQ
 
-	and_i r0, r0, 0 ;stf_i f5, r0, 24 ; using value bypassed from load before RF write	
+	stf_i f5, r0, 24 ; using value bypassed from load before RF write	
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+	add_i r0, r0, 0 ; nop 
+
+	; force completion of store and make a check
+	sys sync
 	
-	   
+	ldi_i r10, r0, 24
+	add_i r11, r10, -55
+	jnz_i r11, $error
+	
 $check
 
 	sys call			;

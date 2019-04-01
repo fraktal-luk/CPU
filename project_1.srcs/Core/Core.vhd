@@ -274,7 +274,7 @@ begin
                                             := (others => DEFAULT_INSTRUCTION_SLOT);
         signal dataFromBranch, lsData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
         signal dataToIssueAlu, dataToExecAlu, dataToIssueMem, dataToExecMem, dataToIssueStoreValue, dataToRegReadStoreValue, dataToExecStoreValue,
-                dataToIssueFloatStoreValue, dataToRegReadFloatStoreValue, dataToExecFloatStoreValue
+                dataToIssueFloatStoreValue, dataToRegReadFloatStoreValue, dataToExecIntStoreValue, dataToExecFloatStoreValue
         : SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
         signal sendingToIssueAlu, sendingAlu, sendingAgu, sendingToIssueMem, sendingMem, sendingMem0, sendingMem1, sendingToIntRF, sendingBranch, sendingFromDLQ, sendingToAgu,
                 sendingToIssueStoreValue, sendingToRegReadStoreValue, sendingStoreValue, sendingToIssueFloatStoreValue: std_logic := '0';
@@ -293,6 +293,9 @@ begin
         
         signal sendingIntLoad, sendingFloatLoad, sendingMemFloat1, sendingToFloatWriteQueue, sendingToFloatRF, sendingOutAluDelay, sendingOutMemDelay,
                     sendingOutMemFloatDelay, sendingOutMemFloatDelay2: std_logic := '0';
+         
+        signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, allowIssueStoreDataFP, allowIssueStageStoreDataFP: std_logic := '0';
+        signal intStoreMask, floatStoreMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
         
         function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray is
             variable res: InstructionSlotArray(insArr'range) := insArr;
@@ -363,15 +366,18 @@ begin
         schedDataMemFloat <= getSchedData(extractData(renamedDataLivingFloat), memMaskFloat);
         schedDataMem <= mergeSchedDataMem(schedDataMemInt, schedDataMemFloat);
                                         --  prepareForStoreValueIQ - moves arg2 to arg0, removes arg2
-        schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLiving)), getStoreMask(renamedDataLiving));
+        intStoreMask <= getStoreMask(renamedDataLiving) and not floatStoreMask;                                        
+        schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLiving)), intStoreMask);
         --    schedDataStoreValue <= getSchedData(prepareForStoreValueIntFloatIQ(extractData(renamedDataLiving), extractData(renamedDataLivingFloat)), getStoreMask(renamedDataLiving));        
         
         
         dataToAluIQ <= work.LogicIssue.updateSchedulerArray(schedDataAlu, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);
         dataToMemIQ <= work.LogicIssue.updateSchedulerArray(schedDataMem, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);        
         dataToStoreValueIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValue, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP_SV, true);
- 
-        schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLiving), extractData(renamedDataLivingFloat)), getStoreMask(renamedDataLivingFloat));       
+        
+        floatStoreMask <= getStoreMask(renamedDataLivingFloat);
+        
+        schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLiving), extractData(renamedDataLivingFloat)), floatStoreMask);       
         dataToStoreValueFloatIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValueFloat, readyFloatFlags xor readyFloatFlags, fniFloat, ENQUEUE_FN_MAP_FLOAT_SV, true);
         
         
@@ -667,7 +673,7 @@ begin
             waitingFM => WAITING_FN_MAP_SV,
             selectionFM => DEFAULT_FORWARDING_MAP,      
             readyRegFlags => readyRegFlagsSV,
-            nextAccepting => '1',--issueAcceptingArr(4),
+            nextAccepting => allowIssueStoreDataInt,--issueAcceptingArr(4),
             execCausing => execCausing,
             lateEventSignal => lateEventSignal,
             execEventSignal => execEventSignal,
@@ -711,7 +717,7 @@ begin
             input => dataToRegReadStoreValue,
             
             acceptingOut => open,
-            output => dataToExecStoreValue,
+            output => dataToExecIntStoreValue,
             
             execEventSignal => execEventSignal,
             lateEventSignal => lateEventSignal,
@@ -739,7 +745,7 @@ begin
             waitingFM => WAITING_FN_MAP_FLOAT_SV,
             selectionFM => DEFAULT_FORWARDING_MAP,      
             readyRegFlags => readyRegFlagsFloatSV,
-            nextAccepting => '1',--issueAcceptingArr(4),
+            nextAccepting => allowIssueStoreDataFP,--issueAcceptingArr(4),
             execCausing => execCausing,
             lateEventSignal => lateEventSignal,
             execEventSignal => execEventSignal,
@@ -756,7 +762,8 @@ begin
             en => '0',
     
             prevSending => sendingToIssueFloatStoreValue,
-            nextAccepting => '1',
+            nextAccepting => --'1',--
+                              allowIssueStageStoreDataFP,
     
             input => dataToIssueFloatStoreValue,
             
@@ -792,10 +799,30 @@ begin
             regValues => regValsFloatD     
         );
 
+        dataToExecStoreValue <= dataToExecFloatStoreValue when dataToExecFloatStoreValue.full = '1'
+                        else    dataToExecIntStoreValue;
+
            
          sqValueInput <= -- CAREFUL, TODO: This implies that integer StoreData op value is lost when Int and FP are issued simultaneously. This must be prevented by scheduler!
-                    (dataToExecFloatStoreValue.full, setInstructionResult(dataToExecFloatStoreValue.ins, dataToExecFloatStoreValue.state.argValues.arg2)) when dataToExecFloatStoreValue.full = '1' 
-            else    (dataToExecStoreValue.full, setInstructionResult(dataToExecStoreValue.ins, dataToExecStoreValue.state.argValues.arg0)); -- TEMP!!
+                    (dataToExecFloatStoreValue.full, setInstructionResult(dataToExecFloatStoreValue.ins, dataToExecFloatStoreValue.state.argValues.arg0)) when dataToExecFloatStoreValue.full = '1' 
+            else    (dataToExecIntStoreValue.full, setInstructionResult(dataToExecIntStoreValue.ins, dataToExecIntStoreValue.state.argValues.arg0)); -- TEMP!!
+         
+         -- StoreData issue control:
+         -- When Int and FP store data issue at the same time, the port conflict is resolved thus:
+         -- Both IQs are blocked for the next cycle, so combined issue rate is never higher that 1 per cycle
+         -- FP op is stalled for 1 cycle at IssueStage - no problems appear with scheduling because this subpipe has no wakeup observers and reads ags only form RF 
+         process (clk)
+         begin
+            if rising_edge(clk) then
+                issuedStoreDataInt <= sendingToIssueStoreValue;
+                issuedStoreDataFP <= sendingToIssueFloatStoreValue;
+            end if;
+         end process;
+         
+         allowIssueStageStoreDataFP <= allowIssueStoreDataInt; -- In this case happens to be equal
+         
+         allowIssueStoreDataInt <= not (issuedStoreDataInt and issuedStoreDataFP);
+         allowIssueStoreDataFP <= allowIssueStoreDataInt;
          
          -------------------------------------------  
             SUBPIPE_A_DELAY: entity work.GenericStage(Behavioral)
@@ -928,7 +955,7 @@ begin
                             -- TODO: merge Int and Float stage into one (with dest + destAlt) to avoid unnecessary muxing
 
          execOutputs2(0) <= (sendingBranch, dataFromBranch.ins);
-            execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins);
+            execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins); -- TODO: mux with FP op
 
          
          regsSelA <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToIssueAlu.ins)));
