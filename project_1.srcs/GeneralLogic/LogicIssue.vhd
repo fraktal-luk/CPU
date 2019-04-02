@@ -143,9 +143,9 @@ begin
 				res.argLocsPhase(i) := "00000011";				
 			end if;
 		end if;
-		
+
 		res.argLocsPhase(i)(7 downto 2) := "000000";
-		res.argLocsPipe(i)(7 downto 2) := "000000";		
+		res.argLocsPipe(i)(7 downto 2) := "000000";
 	end loop;
 
 	return res;
@@ -168,8 +168,12 @@ begin
 	res.ins := ins;
 	res.state := st;
 
-    if prevSending = '0' or ins.physicalArgSpec.intDestSel = '0' then
+    if prevSending = '0' or 
+        (ins.physicalArgSpec.intDestSel = '0'
+            and ins.physicalArgSpec.floatDestSel = '0') -- ???
+    then
         res.ins.physicalArgSpec.dest := (others => '0'); -- Don't allow false notifications of args
+        res.ins.physicalArgSpec.destAlt := (others => '0'); -- ??
     end if;
 
 	--res.state.argValues.readyNow := ready;
@@ -187,7 +191,6 @@ begin
 				res.state.argValues.stored(0) := '1';
 		    end if;
 		end if;
-
 
 	if res.state.argValues.immediate = '1' and USE_IMM then
 		res.state.argValues.arg1 := res.ins.constantArgs.imm;

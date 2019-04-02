@@ -31,6 +31,7 @@ use work.PipelineGeneral.all;
 
 entity RegFile is
 	generic(
+	    IS_FP: boolean := false;
 		WIDTH: natural := 1;
 		WRITE_WIDTH: natural := 1;
 		MAX_WIDTH: natural := 4		
@@ -79,7 +80,8 @@ begin
 		
 		--writeVec(0 to INTEGER_WRITE_WIDTH-1) <= 
 		--								getArrayDestMask(extractData(writeInput), extractFullMask(writeInput));
-		writeVec(0) <= writeInput(0).full and writeInput(0).ins.physicalArgSpec.intDestSel; -- CAREFUL: works only for integer								
+		writeVec(0) <= writeInput(0).full 
+		      and ((writeInput(0).ins.physicalArgSpec.intDestSel and not bool2std(IS_FP)) or (writeInput(0).ins.physicalArgSpec.floatDestSel and bool2std(IS_FP)));
 		--selectWrite(0 to INTEGER_WRITE_WIDTH-1) <= getArrayPhysicalDests(extractData(writeInput));
 		selectWrite(0) <= writeInput(0).ins.physicalArgSpec.dest;
 		--writeValues(0 to INTEGER_WRITE_WIDTH-1) <= getArrayResults(extractData(writeInput));

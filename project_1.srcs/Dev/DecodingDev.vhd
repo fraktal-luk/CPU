@@ -209,6 +209,9 @@ begin
     -- Convert to InstructionState
     res.operation := operation;
     
+    
+    res.classInfo.fpRename := fmt.fpDestSel or isNonzero(fmt.fpSrcSel);
+    
     -- assign register definitions
     res.virtualArgSpec.dest := parts.qa;
     if fmt.intDestSel = '1' and isNonzero(res.virtualArgSpec.dest) = '1' then

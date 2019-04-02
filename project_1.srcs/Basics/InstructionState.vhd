@@ -92,7 +92,7 @@ type InstructionClassInfo is record
 		mainCluster: std_logic;
 		secCluster: std_logic;
 	--branchCond: std_logic;
-	
+	fpRename: std_logic; -- true if instruction is routed to FP renamer (NOTE, CHECK: Int renamer is used for all ops, even those that don't go to any IQ)
 	pipeA, pipeB, pipeC, load, store, branchIns: std_logic;
 end record;
 
@@ -133,6 +133,7 @@ end record;
 			intDestSel: std_logic;
 			floatDestSel: std_logic;
 			dest: SmallNumber;
+			destAlt: SmallNumber;
 			intArgSel: std_logic_vector(0 to 2);
 			floatArgSel: std_logic_vector(0 to 2);
 			args: SmallNumberArray(0 to 2);
@@ -212,6 +213,7 @@ constant DEFAULT_ARG_SPEC: InstructionArgSpec := InstructionArgSpec'(
 			intDestSel => '0',
 			floatDestSel => '0',
 			dest => (others => '0'),
+			destAlt => (others => '0'),
 			intArgSel => (others => '0'),
 			floatArgSel => (others => '0'),
 			args => ((others => '0'), (others => '0'), (others => '0'))
@@ -304,6 +306,7 @@ begin
 											mainCluster => '0',
 											secCluster => '0',
 											--branchCond => '0',
+											fpRename => '0',
 											pipeA => '0',
 											pipeB => '0',
 											pipeC => '0',

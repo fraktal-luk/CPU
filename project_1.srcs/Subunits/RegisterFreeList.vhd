@@ -14,6 +14,9 @@ use work.LogicRenaming.all;
 
 
 entity RegisterFreeList is
+    generic(
+        IS_FP: boolean := false
+    );
 	port(
 		clk: in std_logic;
 		reset: in std_logic;
@@ -62,10 +65,23 @@ function initList return PhysNameArray is
 begin
     for i in 0 to N_PHYS - 32 - 1 loop
         res(i) := i2slv(32 + i, PhysName'length);
+        if IS_FP then
+            res(i) := i2slv(32 + i + 1, PhysName'length);
+            if i = N_PHYS - 32 - 1 then
+               res(i) := (others => '0'); -- CAREFUL: no reg 0 for FP, so 1 less on the list!
+            end if;
+        end if;
     end loop;
     return res;
 end function;
 
+-- TEMP: to reduce num regs by 1 in case of FP
+function FP_1 return integer is
+begin
+    if IS_FP then return 1;
+    else return 0;
+    end if;
+end function;
 
 						
 begin
@@ -82,7 +98,7 @@ begin
 		stableUpdateSelDelayed <= -- NOTE: putting *previous stable* register if: full, has dest, not excpetion.
                                     freeListPutSel
 					and not getExceptionMask(stageDataToRelease)
-					and not findOverriddenDests(stageDataToRelease); -- CAREFUL: and must not be overridden!
+					and not findOverriddenDests(stageDataToRelease, IS_FP); -- CAREFUL: and must not be overridden!
 										  -- NOTE: if those conditions are not satisfied, putting the allocated reg
 
 		-- CAREFUL! Because there's a delay of 1 cycle to read FreeList, we need to do reading
@@ -95,10 +111,10 @@ begin
 		freeListTakeAllow <= takeAllow; -- CMP: => ... or auxTakeAllow;
 							-- or auxTakeAllow; -- CAREFUL: for additional step in rewinding for complex implems
 		
-		freeListTakeSel <= whichTakeReg(stageDataToReserve); -- CAREFUL: must agree with Sequencer signals
+		freeListTakeSel <= whichTakeReg(stageDataToReserve, IS_FP); -- CAREFUL: must agree with Sequencer signals
 		freeListPutAllow <= sendingToRelease;
 		-- Releasing a register every time (but not always prev stable!)
-		freeListPutSel <= whichPutReg(stageDataToRelease);-- CAREFUL: this chooses which ops put anyth. at all
+		freeListPutSel <= whichPutReg(stageDataToRelease, IS_FP);-- CAREFUL: this chooses which ops put anyth. at all
 		freeListRewind <= rewind;
 		
 		
@@ -107,7 +123,7 @@ begin
 		IMPL: block
 			signal listContent: PhysNameArray(0 to FREE_LIST_SIZE-1) := initList;
 			signal listPtrTake: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
-			signal listPtrPut: SmallNumber := i2slv(N_PHYS - 32, SMALL_NUMBER_SIZE);
+			signal listPtrPut: SmallNumber := i2slv(N_PHYS - 32 - FP_1, SMALL_NUMBER_SIZE);
 		begin
 			
 			freeListTakeNumTags(0) <= i2slv((slv2u(listPtrTake)) mod FREE_LIST_SIZE, SMALL_NUMBER_SIZE);
