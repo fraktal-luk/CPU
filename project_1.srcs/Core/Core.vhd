@@ -282,7 +282,11 @@ begin
                                                                                     dataToExecStoreValue
                   : SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
                    
-        signal  dataInMem0, dataOutMem0, dataOutMem1, dataOutMemFloat1,
+        signal  dataInMem0, dataOutMem0, 
+                dataInMemInt0, dataOutMemInt0,
+                dataInMemFloat0, dataOutMemFloat0,
+                
+                dataOutMemInt1, dataOutMemFloat1,
                 dataInMem1, dataInMemInt1, dataInMemFloat1, dataToStoreValue,
                 
                 dataOutMemFloatDelay, dataOutMemFloatDelay2,
@@ -335,6 +339,13 @@ begin
             return res;
         end function;
 
+        function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot is
+            variable res: InstructionSlot := insS0;
+        begin
+            res.ins.physicalArgSpec.dest := insS0.ins.physicalArgSpec.dest or insS1.ins.physicalArgSpec.dest;
+            return res;
+        end function;
+
         function clearDestAlt(insArr: InstructionSlotArray) return InstructionSlotArray is
             variable res: InstructionSlotArray(insArr'range) := insArr;
         begin
@@ -345,26 +356,16 @@ begin
             end loop;
             return res;
         end function;
-        
-        function changeDestToAlt(insArr: InstructionSlotArray) return InstructionSlotArray is
-            variable res: InstructionSlotArray(insArr'range) := insArr;
-        begin
-            for i in res'range loop
-                --if res(i).ins.physicalArgSpec.floatDestSel = '1' then
-                   res(i).ins.physicalArgSpec.dest := res(i).ins.physicalArgSpec.destAlt;
-                --end if;
-            end loop;
-            return res;
-        end function;
-                
+
+        -- TODO: phys dest is assigned always to .dest field, .destAlt is deprecated   
         function mergeSchedDataMem(schedDataMemInt: SchedulerEntrySlotArray; schedDataMemFloat: SchedulerEntrySlotArray) return SchedulerEntrySlotArray is
             variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := schedDataMemInt;
         begin
             for i in res'range loop
                 if schedDataMemFloat(i).full = '1' then
-                    res(i).ins.virtualArgSpec.destAlt := schedDataMemFloat(i).ins.virtualArgSpec.dest;
+                    --res(i).ins.virtualArgSpec.destAlt := schedDataMemFloat(i).ins.virtualArgSpec.dest;
                     res(i).ins.virtualArgSpec.floatDestSel := schedDataMemFloat(i).ins.virtualArgSpec.floatDestSel;                    
-                    res(i).ins.physicalArgSpec.destAlt := schedDataMemFloat(i).ins.physicalArgSpec.dest;
+                    --res(i).ins.physicalArgSpec.destAlt := schedDataMemFloat(i).ins.physicalArgSpec.dest;
                     res(i).ins.physicalArgSpec.floatDestSel := schedDataMemFloat(i).ins.physicalArgSpec.floatDestSel;                    
                 end if;
             end loop;
@@ -579,6 +580,10 @@ begin
            sqAddressInput <= lsData; -- TEMP!!
            lqAddressInput <= lsData;
 
+           dataInMemInt0 <= clearFloatDest(dataInMem0);
+           dataInMemFloat0 <= clearIntDest(dataInMem0);
+
+
            -- TLB lookup, Dcache access
 	       STAGE_MEM0: entity work.GenericStage(Behavioral)
            generic map(
@@ -590,16 +595,38 @@ begin
                prevSending => sendingAgu,
                nextAccepting => '1',
                
-               stageDataIn => dataInMem0,
+               stageDataIn => dataInMemInt0,
                acceptingOut => open,
                sendingOut => sendingMem0,
-               stageDataOut => dataOutMem0,--dataAfterMemA,
+               stageDataOut => dataOutMemInt0,--dataAfterMemA,
                
                execEventSignal => execEventSignal,
                lateEventSignal => lateEventSignal,
                execCausing => execCausing                
            );
-           
+
+	       STAGE_MEM0_FLOAT: entity work.GenericStage(Behavioral)
+           generic map(
+               COMPARE_TAG => '1'
+           )
+           port map(
+               clk => clk, reset => reset, en => en,
+               
+               prevSending => sendingAgu,
+               nextAccepting => '1',
+               
+               stageDataIn => dataInMemFloat0,
+               acceptingOut => open,
+               sendingOut => open,
+               stageDataOut => dataOutMemFloat0,--dataAfterMemA,
+               
+               execEventSignal => execEventSignal,
+               lateEventSignal => lateEventSignal,
+               execCausing => execCausing                
+           );
+                      
+           dataOutMem0(0) <= mergePhysDests(dataOutMemInt0(0), dataOutMemFloat0(0)); -- [dest := Int.dest | Float.dest];
+                      
 	       sendingAddressing <= sendingMem0; -- After translation
 	       addressingData	<= dataOutMem0(0).ins;
 
@@ -615,7 +642,7 @@ begin
                  sendingFloatLoad <= sendingMem0 and dataOutMem0(0).ins.physicalArgSpec.floatDestSel;
                           
                  dataInMemInt1 <= clearFloatDest(dataInMem1); -- with zeroed dest when load is FP
-                 dataInMemFloat1 <= changeDestToAlt(clearIntDest(dataInMem1)); -- with zeroed dest when load is Int??
+                 dataInMemFloat1 <= clearIntDest(dataInMem1); -- with zeroed dest when load is Int??
                                                   	       
            -- Source selection and verification
 	       STAGE_MEM1: entity work.GenericStage(Behavioral)
@@ -625,13 +652,13 @@ begin
            port map(
                clk => clk, reset => reset, en => en,
                
-               prevSending => sendingIntLoad,-- sendingMem0,
+               prevSending => sendingMem0,-- sendingMem0,
                nextAccepting => '1',
                
                stageDataIn => dataInMemInt1,
                acceptingOut => open,
                sendingOut => sendingMem1,
-               stageDataOut => dataOutMem1,
+               stageDataOut => dataOutMemInt1,
                
                execEventSignal => execEventSignal,
                lateEventSignal => lateEventSignal,
@@ -646,7 +673,7 @@ begin
            port map(
                clk => clk, reset => reset, en => en,
                
-               prevSending => sendingFloatLoad,--sendingMem0,
+               prevSending => sendingMem0,--sendingMem0,
                nextAccepting => '1',
                
                stageDataIn => dataInMemFloat1,
@@ -881,7 +908,7 @@ begin
                 prevSending => sendingMem1,
                 nextAccepting => '1',
                 
-                stageDataIn => dataOutMem1,
+                stageDataIn => dataOutMemInt1,
                 acceptingOut => open,
                 sendingOut => sendingOutMemDelay,
                 stageDataOut => dataOutMemDelay,
@@ -949,7 +976,7 @@ begin
             -----
             
             sendingToIntWriteQueue <= sendingAlu or sendingMem1;
-            dataToIntWriteQueue <= dataOutMem1 when sendingMem1 = '1' else dataOutAlu;
+            dataToIntWriteQueue <= dataOutMemInt1 when sendingMem1 = '1' else dataOutAlu;
             
             INT_WRITE_QUEUE: entity work.GenericStage(Behavioral)
             generic map(
@@ -975,8 +1002,10 @@ begin
             
          -- TODO: add FP outputs!
          execOutputs1(0) <= (sendingAlu, dataOutAlu(0).ins);
-             execOutputs1(2).full <= (sendingMem1 or sendingMemFloat1);
-             execOutputs1(2).ins <= dataOutMemFloat1(0).ins when sendingMemFloat1 = '1' else dataOutMem1(0).ins;
+             --execOutputs1(2).full <= (sendingMem1 or sendingMemFloat1);
+             --execOutputs1(2).ins <= --dataOutMemFloat1(0).ins when sendingMemFloat1 = '1' else dataOutMem1(0).ins;
+                    execOutputs1(2) <= mergePhysDests(dataOutMemInt1(0), dataOutMemFloat1(0)); --  [dest := Int.dest | Float.dest];
+             
                             -- TODO: include mem hit in 'full' flag! Should merge some info from Float path??
                             -- TODO: merge Int and Float stage into one (with dest + destAlt) to avoid unnecessary muxing
 
@@ -993,7 +1022,7 @@ begin
 		  fni.nextResultTags <= (0 => dataToExecAlu.ins.physicalArgSpec.dest, 2 => dataOutMem0(0).ins.physicalArgSpec.dest, others => (others => '0'));        
 		  fni.nextTagsM2 <= (2 => dataOutAgu(0).ins.physicalArgSpec.dest, others => (others => '0'));
           fni.tags0 <= (execOutputs1(0).ins.physicalArgSpec.dest, -- ALU
-                             execOutputs1(1).ins.physicalArgSpec.dest, execOutputs1(2).ins.physicalArgSpec.dest);
+                             execOutputs1(1).ins.physicalArgSpec.dest, dataOutMemInt1(0).ins.physicalArgSpec.dest);
           fni.tags1 <= (0 => dataOutAluDelay(0).ins.physicalArgSpec.dest, 2 => dataOutMemDelay(0).ins.physicalArgSpec.dest, others => (others => '0'));
           fni.values0 <= (execOutputs1(0).ins.result, -- ALU
                              execOutputs1(1).ins.result, execOutputs1(2).ins.result);
@@ -1005,7 +1034,7 @@ begin
 
                 -- NOTE: FP load path is 1 cycle longer, so different stages are involved here from those in Int datapath
                 fniFloat.nextResultTags <= (2 => dataOutMemFloat1(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!
-                fniFloat.nextTagsM2 <= (2 => dataOutMem0(0).ins.physicalArgSpec.destAlt, others => (others => '0')); -- TODO: check!                
+                fniFloat.nextTagsM2 <= (2 => dataOutMemFloat0(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!                
                 fniFloat.tags0 <= (2 => dataOutMemFloatDelay(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!
                 fniFloat.tags1 <= (2 => dataOutMemFloatDelay2(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!
                 fniFloat.values0 <= (2 => dataOutMemFloatDelay(0).ins.result, others => (others => '0')); -- TODO: check!
