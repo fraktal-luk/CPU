@@ -75,8 +75,10 @@ architecture Behavioral of UnitRegManager is
     signal newIntSources, newFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal causingPtrInt, causingPtrFloat: SmallNumber := (others => '0');
-       
-    function renameGroup(insVec: InstructionSlotArray;
+    
+    signal renamedBase: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+
+    function renameGroupBase(insVec: InstructionSlotArray;
                                 newPhysSources: PhysNameArray;
                                 newIntDests: PhysNameArray;
                                 newFloatDests: PhysNameArray;                                
@@ -104,16 +106,161 @@ architecture Behavioral of UnitRegManager is
             takeVecInt(i) := insVec(i).ins.virtualArgSpec.intDestSel;
             takeVecFloat(i) := insVec(i).ins.virtualArgSpec.floatDestSel;
             
-            
-            res(i).ins.physicalArgSpec.args(0) := newPhysSources(3*i+0);
-            res(i).ins.physicalArgSpec.args(1) := newPhysSources(3*i+1);
-            res(i).ins.physicalArgSpec.args(2) := newPhysSources(3*i+2);
-            
             res(i).ins.physicalArgSpec.intArgSel := res(i).ins.virtualArgSpec.intArgSel;
             res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
-                res(i).ins.physicalArgSpec.floatArgSel := res(i).ins.virtualArgSpec.floatArgSel;
-                res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;            
+            res(i).ins.physicalArgSpec.floatArgSel := res(i).ins.virtualArgSpec.floatArgSel;
+            res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;
+                           
+            --res(i).ins.physicalArgSpec.args(0) := newPhysSources(3*i+0);
+            --res(i).ins.physicalArgSpec.args(1) := newPhysSources(3*i+1);
+            --res(i).ins.physicalArgSpec.args(2) := newPhysSources(3*i+2);      
         end loop;
+
+
+        -- Setting tags
+        for i in 0 to PIPE_WIDTH-1 loop
+            res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
+            res(i).ins.tags.renameSeq := i2slv(slv2u(renameCtr) + i, TAG_SIZE);
+            res(i).ins.tags.intPointer := i2slv(slv2u(newIntDestPointer) + countOnes(takeVecInt(0 to i)), SMALL_NUMBER_SIZE); 
+                                                                         -- Don't increment pointer on ops which use no destination!
+            res(i).ins.tags.floatPointer := i2slv(slv2u(newFloatDestPointer) + countOnes(takeVecFloat(0 to i)), SMALL_NUMBER_SIZE); 
+        end loop;
+
+        -- Setting 'complete' for ops not using Exec resources
+        for i in 0 to PIPE_WIDTH-1 loop        -- TEMP!                           
+		    res(i).ins.controlInfo.completed := not res(i).ins.classInfo.mainCluster;
+            res(i).ins.controlInfo.completed2 := not res(i).ins.classInfo.secCluster;
+        end loop;
+                
+        -- If found special instruction or exception, kill next ones
+        for i in 0 to PIPE_WIDTH-1 loop
+            if found then
+                res(i).full := '0';
+            end if;
+    
+            if     res(i).ins.controlInfo.specialAction = '1'
+                or res(i).ins.controlInfo.hasException = '1'
+                or res(i).ins.controlInfo.dbtrap = '1'
+            then
+                found := true;
+            end if;
+        end loop;
+        
+        
+--        -- Overwrite sources depending on destinations of this group
+--        for i in 0 to PIPE_WIDTH-1 loop
+--            for j in PIPE_WIDTH-1 downto 0 loop
+--                if j >= i then
+--                    next;
+--                end if;
+                
+--                if res(i).ins.virtualArgSpec.args(0)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0) -- name match
+--                    and res(i).ins.virtualArgSpec.intArgSel(0) = res(j).ins.virtualArgSpec.intDestSel -- intSel match
+--                then
+--                    res(i).ins.physicalArgSpec.args(0) := res(j).ins.physicalArgSpec.dest;
+--                    exit;                   
+--                end if;
+--            end loop;
+
+--            for j in PIPE_WIDTH-1 downto 0 loop
+--                if j >= i then
+--                    next;
+--                end if;
+                
+--                if res(i).ins.virtualArgSpec.args(1)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
+--                    and res(i).ins.virtualArgSpec.intArgSel(1) = res(j).ins.virtualArgSpec.intDestSel
+--                then
+--                    res(i).ins.physicalArgSpec.args(1) := res(j).ins.physicalArgSpec.dest;
+--                    exit;                 
+--                end if;
+--            end loop;
+            
+--            for j in PIPE_WIDTH-1 downto 0 loop
+--                if j >= i then
+--                    next;
+--                end if;
+                
+--                if res(i).ins.virtualArgSpec.args(2)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
+--                    and res(i).ins.virtualArgSpec.intArgSel(2) = res(j).ins.virtualArgSpec.intDestSel
+--                then
+--                    res(i).ins.physicalArgSpec.args(2) := res(j).ins.physicalArgSpec.dest;
+--                    exit;                  
+--                end if;
+--            end loop;                        
+
+--        end loop;        
+          
+        return res;
+    end function;
+       
+    function renameGroupInt(insVec: InstructionSlotArray;
+                                newPhysSources: PhysNameArray;
+                                newIntDests: PhysNameArray;
+                                newFloatDests: PhysNameArray;                                
+                                renameCtr: InsTag;
+                                renameGroupCtrNext: InsTag;
+                                newIntDestPointer: SmallNumber;
+                                newFloatDestPointer: SmallNumber;                                
+                                dbtrap: std_logic
+                                ) return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+        variable reserveSelSig, takeVecInt, takeVecFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
+        variable nToTake: integer := 0;
+        variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
+        variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
+       	variable found: boolean := false;
+    begin
+        
+        -- Assign dest registers
+        for i in 0 to PIPE_WIDTH-1 loop
+--            if res(i).ins.virtualArgSpec.floatDestSel = '1' then
+--                res(i).ins.physicalArgSpec.dest := newFloatDests(countOnes(takeVecFloat)); -- how many used before
+--            else
+--                res(i).ins.physicalArgSpec.dest := newIntDests(countOnes(takeVecInt)); -- how many used before
+--            end if;
+--            takeVecInt(i) := insVec(i).ins.virtualArgSpec.intDestSel;
+--            takeVecFloat(i) := insVec(i).ins.virtualArgSpec.floatDestSel;
+            
+--            res(i).ins.physicalArgSpec.intArgSel := res(i).ins.virtualArgSpec.intArgSel;
+--            res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
+--            res(i).ins.physicalArgSpec.floatArgSel := res(i).ins.virtualArgSpec.floatArgSel;
+--            res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;
+                           
+            res(i).ins.physicalArgSpec.args(0) := newPhysSources(3*i+0);
+            res(i).ins.physicalArgSpec.args(1) := newPhysSources(3*i+1);
+            res(i).ins.physicalArgSpec.args(2) := newPhysSources(3*i+2);      
+        end loop;
+
+
+--        -- Setting tags
+--        for i in 0 to PIPE_WIDTH-1 loop
+--            res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
+--            res(i).ins.tags.renameSeq := i2slv(slv2u(renameCtr) + i, TAG_SIZE);
+--            res(i).ins.tags.intPointer := i2slv(slv2u(newIntDestPointer) + countOnes(takeVecInt(0 to i)), SMALL_NUMBER_SIZE); 
+--                                                                         -- Don't increment pointer on ops which use no destination!
+--            res(i).ins.tags.floatPointer := i2slv(slv2u(newFloatDestPointer) + countOnes(takeVecFloat(0 to i)), SMALL_NUMBER_SIZE); 
+--        end loop;
+
+--        -- Setting 'complete' for ops not using Exec resources
+--        for i in 0 to PIPE_WIDTH-1 loop        -- TEMP!                           
+--		    res(i).ins.controlInfo.completed := not res(i).ins.classInfo.mainCluster;
+--            res(i).ins.controlInfo.completed2 := not res(i).ins.classInfo.secCluster;
+--        end loop;
+                
+--        -- If found special instruction or exception, kill next ones
+--        for i in 0 to PIPE_WIDTH-1 loop
+--            if found then
+--                res(i).full := '0';
+--            end if;
+    
+--            if     res(i).ins.controlInfo.specialAction = '1'
+--                or res(i).ins.controlInfo.hasException = '1'
+--                or res(i).ins.controlInfo.dbtrap = '1'
+--            then
+--                found := true;
+--            end if;
+--        end loop;
+        
         
         -- Overwrite sources depending on destinations of this group
         for i in 0 to PIPE_WIDTH-1 loop
@@ -157,36 +304,7 @@ architecture Behavioral of UnitRegManager is
             end loop;                        
 
         end loop;        
-        
-        
-        -- Setting tags
-        for i in 0 to PIPE_WIDTH-1 loop
-            res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
-            res(i).ins.tags.renameSeq := i2slv(slv2u(renameCtr) + i, TAG_SIZE);
-            res(i).ins.tags.intPointer := i2slv(slv2u(newIntDestPointer) + countOnes(takeVecInt(0 to i)), SMALL_NUMBER_SIZE); 
-                                                                         -- Don't increment pointer on ops which use no destination!
-            res(i).ins.tags.floatPointer := i2slv(slv2u(newFloatDestPointer) + countOnes(takeVecFloat(0 to i)), SMALL_NUMBER_SIZE); 
-        end loop;
-
-        -- Setting 'complete' for ops not using Exec resources
-        for i in 0 to PIPE_WIDTH-1 loop        -- TEMP!                           
-		    res(i).ins.controlInfo.completed := not res(i).ins.classInfo.mainCluster;
-            res(i).ins.controlInfo.completed2 := not res(i).ins.classInfo.secCluster;
-        end loop;
-                
-        -- If found special instruction or exception, kill next ones
-        for i in 0 to PIPE_WIDTH-1 loop
-            if found then
-                res(i).full := '0';
-            end if;
-    
-            if     res(i).ins.controlInfo.specialAction = '1'
-                or res(i).ins.controlInfo.hasException = '1'
-                or res(i).ins.controlInfo.dbtrap = '1'
-            then
-                found := true;
-            end if;
-        end loop;            
+          
         return res;
     end function;
     
@@ -209,11 +327,11 @@ architecture Behavioral of UnitRegManager is
         
         -- Assign dest registers
         for i in 0 to PIPE_WIDTH-1 loop
-            if res(i).ins.virtualArgSpec.floatDestSel = '1' then
-                res(i).ins.physicalArgSpec.dest := newFloatDests(countOnes(takeVecFloat)); -- how many used before
-            end if;
-            --takeVecInt(i) := insVec(i).ins.virtualArgSpec.intDestSel;
-            takeVecFloat(i) := insVec(i).ins.virtualArgSpec.floatDestSel;
+--            if res(i).ins.virtualArgSpec.floatDestSel = '1' then
+--                res(i).ins.physicalArgSpec.dest := newFloatDests(countOnes(takeVecFloat)); -- how many used before
+--            end if;
+--            --takeVecInt(i) := insVec(i).ins.virtualArgSpec.intDestSel;
+--            takeVecFloat(i) := insVec(i).ins.virtualArgSpec.floatDestSel;
             
             
             res(i).ins.physicalArgSpec.args(0) := newFloatSources(3*i+0);
@@ -222,8 +340,8 @@ architecture Behavioral of UnitRegManager is
             
             --res(i).ins.physicalArgSpec.intArgSel := res(i).ins.virtualArgSpec.intArgSel;
             --res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
-                res(i).ins.physicalArgSpec.floatArgSel := res(i).ins.virtualArgSpec.floatArgSel;
-                res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;            
+            --    res(i).ins.physicalArgSpec.floatArgSel := res(i).ins.virtualArgSpec.floatArgSel;
+            --    res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;            
         end loop;
         
         -- Overwrite sources depending on destinations of this group
@@ -271,14 +389,14 @@ architecture Behavioral of UnitRegManager is
         end loop;        
         
         
-        -- Setting tags
-        for i in 0 to PIPE_WIDTH-1 loop
-            res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
-            res(i).ins.tags.renameSeq := i2slv(slv2u(renameCtr) + i, TAG_SIZE);
-            --res(i).ins.tags.intPointer := i2slv(slv2u(newPhysDestPointer) + countOnes(takeVecInt(0 to i)), SMALL_NUMBER_SIZE); 
-                                                                         -- Don't increment pointer on ops which use no destination!
-            --res(i).ins.tags.floatPointer := i2slv(slv2u(newFloatDestPointer) + countOnes(takeVecFloat(0 to i)), SMALL_NUMBER_SIZE); 
-        end loop;
+--        -- Setting tags
+--        for i in 0 to PIPE_WIDTH-1 loop
+--            res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
+--            res(i).ins.tags.renameSeq := i2slv(slv2u(renameCtr) + i, TAG_SIZE);
+--            --res(i).ins.tags.intPointer := i2slv(slv2u(newPhysDestPointer) + countOnes(takeVecInt(0 to i)), SMALL_NUMBER_SIZE); 
+--                                                                         -- Don't increment pointer on ops which use no destination!
+--            --res(i).ins.tags.floatPointer := i2slv(slv2u(newFloatDestPointer) + countOnes(takeVecFloat(0 to i)), SMALL_NUMBER_SIZE); 
+--        end loop;
 
 --        -- Setting 'complete' for ops not using Exec resources
 --        for i in 0 to PIPE_WIDTH-1 loop        -- TEMP!                           
@@ -312,7 +430,7 @@ architecture Behavioral of UnitRegManager is
 begin
     eventSig <= execEventSignal or lateEventSignal;
 
-    stageDataRenameIn <= renameGroup(frontDataLastLiving,
+    renamedBase <= renameGroupBase(frontDataLastLiving,
                                                           newIntSources, 
                                                           newIntDests, 
                                                                 newFloatDests, -- TEMP! change to float dests
@@ -323,7 +441,18 @@ begin
                                                             '0' --dbtrapOn
                                                             );
 
-    stageDataRenameInFloat <= renameGroupFloat(frontDataLastLiving,
+    stageDataRenameIn <= renameGroupInt(renamedBase,
+                                                          newIntSources, 
+                                                          newIntDests, 
+                                                                newFloatDests, -- TEMP! change to float dests
+                                                            renameCtr,
+                                                            renameGroupCtrNext,
+                                                            newIntDestPointer,
+                                                            newFloatDestPointer,
+                                                            '0' --dbtrapOn
+                                                            );
+
+    stageDataRenameInFloat <= renameGroupFloat(renamedBase,
                                                           newFloatSources, -- TEMP! change to float 
                                                                 newFloatDests, -- TEMP! change to float dests
                                                             renameCtr,
