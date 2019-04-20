@@ -361,8 +361,8 @@ begin
 		cmp1toR0 := findRegTag(ins.physicalArgSpec.args(1), fni.tags0);
 		cmp0toR1 := findRegTag(ins.physicalArgSpec.args(0), fni.tags1);
 		cmp1toR1 := findRegTag(ins.physicalArgSpec.args(1), fni.tags1);
-		cmp0toM1 := findRegTag(ins.physicalArgSpec.args(0), fni.nextResultTags);
-        cmp1toM1 := findRegTag(ins.physicalArgSpec.args(1), fni.nextResultTags);
+		cmp0toM1 := findRegTag(ins.physicalArgSpec.args(0), fni.nextTagsM1);
+        cmp1toM1 := findRegTag(ins.physicalArgSpec.args(1), fni.nextTagsM1);
 		cmp0toM2 := findRegTag(ins.physicalArgSpec.args(0), fni.nextTagsM2);
         cmp1toM2 := findRegTag(ins.physicalArgSpec.args(1), fni.nextTagsM2);        
         		

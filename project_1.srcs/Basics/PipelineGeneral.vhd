@@ -40,7 +40,7 @@ type ForwardingInfo is record
 	tags1: PhysNameArray(0 to 2);
 	values0: MwordArray(0 to 2);
 	values1: MwordArray(0 to 2);	
-	nextResultTags: PhysNameArray(0 to 2);
+	nextTagsM1: PhysNameArray(0 to 2);
 	nextTagsM2:	PhysNameArray(0 to 2);
 end record;
 
@@ -61,7 +61,7 @@ constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
 		values1 => (others => (others => '0')),
 		
 	--resultTags => (others => (others => '0')),
-	nextResultTags => (others => (others => '0')),
+	nextTagsM1 => (others => (others => '0')),
 	nextTagsM2 => (others => (others => '0'))
 	--resultValues => (others => (others => '0'))
 );
@@ -198,7 +198,11 @@ function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
             maskM1 => "000",
             maskM2 => "000"
         );
-  
+
+        function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray;
+        function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray;
+        function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
+          
 end package;
 
 
@@ -755,4 +759,32 @@ end function;
             return res;
         end function;
 
+        function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray is
+            variable res: InstructionSlotArray(insArr'range) := insArr;
+        begin
+            for i in res'range loop
+                if res(i).ins.physicalArgSpec.floatDestSel = '1' then
+                   res(i).ins.physicalArgSpec.dest := (others => '0');
+                end if;
+            end loop;
+            return res;
+        end function;
+        
+        function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray is
+            variable res: InstructionSlotArray(insArr'range) := insArr;
+        begin
+            for i in res'range loop
+                if res(i).ins.physicalArgSpec.floatDestSel = '0' then
+                   res(i).ins.physicalArgSpec.dest := (others => '0');
+                end if;
+            end loop;
+            return res;
+        end function;
+
+        function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot is
+            variable res: InstructionSlot := insS0;
+        begin
+            res.ins.physicalArgSpec.dest := insS0.ins.physicalArgSpec.dest or insS1.ins.physicalArgSpec.dest;
+            return res;
+        end function;
 end package body;

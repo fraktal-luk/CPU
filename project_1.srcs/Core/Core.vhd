@@ -262,6 +262,16 @@ begin
 
     TEMP_EXEC: block
         use work.LogicExec.all;
+        -- Selection from IQ and state after Issue stage
+        signal slotSel0, slotIssue0, slotSel1, slotIssue1, slotSel2, slotIssue2, slotSel3, slotIssue3,
+                slotSel4, slotIssue4, slotSel5, slotIssue5, slotSel6, slotIssue6: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+        -- Exec stages
+        signal slot0_E0, slot0_E1, slot0_E2, slot1_E0, slot1_E1,slot1_E2, slot2_E0, slot2_E1, slot2_E2, slot3_E0, slot3_E1,slot3_E2, 
+                slot4_E0, slot4_E1, slot4_E2, slot5_E0, slot5_E1, slot5_E2: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+        -- Delay stages - after Exec
+        signal slot0_D0, slot0_D1, slot1_D0, slot1_D1, slot2_D0, slot2_D1, slot3_D0, slot3_D1, slot4_D0, slot4_D1, slot5_D0, slot5_D1:
+                            InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+                         
 
            signal schedDataAlu, dataToAluIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
            signal dataToAlu, dataToBranch, dataOutAlu, dataOutAluDelay: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -316,65 +326,8 @@ begin
          
         signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, allowIssueStoreDataFP, allowIssueStageStoreDataFP: std_logic := '0';
         signal intStoreMask, floatStoreMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        
-        function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray is
-            variable res: InstructionSlotArray(insArr'range) := insArr;
-        begin
-            for i in res'range loop
-                if res(i).ins.physicalArgSpec.floatDestSel = '1' then
-                   res(i).ins.physicalArgSpec.dest := (others => '0');
-                end if;
-            end loop;
-            return res;
-        end function;
-        
-        function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray is
-            variable res: InstructionSlotArray(insArr'range) := insArr;
-        begin
-            for i in res'range loop
-                if res(i).ins.physicalArgSpec.floatDestSel = '0' then
-                   res(i).ins.physicalArgSpec.dest := (others => '0');
-                end if;
-            end loop;
-            return res;
-        end function;
-
-        function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot is
-            variable res: InstructionSlot := insS0;
-        begin
-            res.ins.physicalArgSpec.dest := insS0.ins.physicalArgSpec.dest or insS1.ins.physicalArgSpec.dest;
-            return res;
-        end function;
-
-        function clearDestAlt(insArr: InstructionSlotArray) return InstructionSlotArray is
-            variable res: InstructionSlotArray(insArr'range) := insArr;
-        begin
-            for i in res'range loop
-                if res(i).ins.physicalArgSpec.floatDestSel = '0' then
-                   res(i).ins.physicalArgSpec.dest := (others => '0');
-                end if;
-            end loop;
-            return res;
-        end function;
-
-        -- TODO: phys dest is assigned always to .dest field, .destAlt is deprecated   
-        function mergeSchedDataMem(schedDataMemInt: SchedulerEntrySlotArray; schedDataMemFloat: SchedulerEntrySlotArray) return SchedulerEntrySlotArray is
-            variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := schedDataMemInt;
-        begin
-            for i in res'range loop
-                if schedDataMemFloat(i).full = '1' then
-                    --res(i).ins.virtualArgSpec.destAlt := schedDataMemFloat(i).ins.virtualArgSpec.dest;
-                    --res(i).ins.virtualArgSpec.floatDestSel := schedDataMemFloat(i).ins.virtualArgSpec.floatDestSel;                    
-                    --res(i).ins.physicalArgSpec.destAlt := schedDataMemFloat(i).ins.physicalArgSpec.dest;
-                    --res(i).ins.physicalArgSpec.floatDestSel := schedDataMemFloat(i).ins.physicalArgSpec.floatDestSel;                    
-                end if;
-            end loop;
-            
-            return res;
-        end function;      
+     
     begin
-        
-        
         
         SUBPIPE_ALU: block            
         begin
@@ -493,9 +446,7 @@ begin
            memMaskFloat <=  getStoreMask(renamedDataLivingFloat) or getLoadMask(renamedDataLivingFloat);        
            memMask <= memMaskInt or memMaskFloat;
             
-           schedDataMemInt <= getSchedData(removeArg2(extractData(renamedDataLiving)), memMaskInt);
-           schedDataMemFloat <= getSchedData(extractData(renamedDataLivingFloat), memMaskFloat);
-           schedDataMem <= mergeSchedDataMem(schedDataMemInt, schedDataMemFloat);
+           schedDataMem <= getSchedData(removeArg2(extractData(renamedDataLiving)), memMaskInt);
 
            dataToMemIQ <= work.LogicIssue.updateSchedulerArray(schedDataMem, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);        
 
@@ -1002,9 +953,7 @@ begin
             
          -- TODO: add FP outputs!
          execOutputs1(0) <= (sendingAlu, dataOutAlu(0).ins);
-             --execOutputs1(2).full <= (sendingMem1 or sendingMemFloat1);
-             --execOutputs1(2).ins <= --dataOutMemFloat1(0).ins when sendingMemFloat1 = '1' else dataOutMem1(0).ins;
-                    execOutputs1(2) <= mergePhysDests(dataOutMemInt1(0), dataOutMemFloat1(0)); --  [dest := Int.dest | Float.dest];
+         execOutputs1(2) <= mergePhysDests(dataOutMemInt1(0), dataOutMemFloat1(0)); --  [dest := Int.dest | Float.dest];
              
                             -- TODO: include mem hit in 'full' flag! Should merge some info from Float path??
                             -- TODO: merge Int and Float stage into one (with dest + destAlt) to avoid unnecessary muxing
@@ -1019,7 +968,7 @@ begin
             regsSelD <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadStoreValue.ins)));
           
           -- Forwarding network
-		  fni.nextResultTags <= (0 => dataToExecAlu.ins.physicalArgSpec.dest, 2 => dataOutMem0(0).ins.physicalArgSpec.dest, others => (others => '0'));        
+		  fni.nextTagsM1 <= (0 => dataToExecAlu.ins.physicalArgSpec.dest, 2 => dataOutMem0(0).ins.physicalArgSpec.dest, others => (others => '0'));        
 		  fni.nextTagsM2 <= (2 => dataOutAgu(0).ins.physicalArgSpec.dest, others => (others => '0'));
           fni.tags0 <= (execOutputs1(0).ins.physicalArgSpec.dest, -- ALU
                              execOutputs1(1).ins.physicalArgSpec.dest, dataOutMemInt1(0).ins.physicalArgSpec.dest);
@@ -1033,7 +982,7 @@ begin
                 regsSelFloatD <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadFloatStoreValue.ins)));
 
                 -- NOTE: FP load path is 1 cycle longer, so different stages are involved here from those in Int datapath
-                fniFloat.nextResultTags <= (2 => dataOutMemFloat1(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!
+                fniFloat.nextTagsM1 <= (2 => dataOutMemFloat1(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!
                 fniFloat.nextTagsM2 <= (2 => dataOutMemFloat0(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!                
                 fniFloat.tags0 <= (2 => dataOutMemFloatDelay(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!
                 fniFloat.tags1 <= (2 => dataOutMemFloatDelay2(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!
