@@ -237,6 +237,13 @@ begin
     
     renamedDataMerged <= mergeDests(renamedDataLiving, renamedDataLivingFloat);
     
+    RENAMED_VIEW: block
+        signal renamedIntText, renamedFloatText, renamedMergedText: InstructionTextArray(0 to PIPE_WIDTH-1);
+    begin
+        renamedIntText <= insSlotArrayText(renamedDataLiving);
+        renamedFloatText <= insSlotArrayText(renamedDataLivingFloat);
+        renamedMergedText <= insSlotArrayText(renamedDataMerged);
+    end block;
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(
@@ -299,14 +306,11 @@ begin
            signal schedDataAlu, dataToAluIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
            
            signal dataToAlu, dataToBranch: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
-           signal dataToIssueAlu, dataToExecAlu: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
-           signal sendingToIssueAlu, sendingAlu, sendingBranch: std_logic := '0';
+           signal sendingBranch: std_logic := '0';
 
-
-           signal schedDataMem, schedDataMemInt, schedDataMemFloat, dataToMemIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-           signal dataToAgu, dataOutMem, dataOutMemDelay: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT); 
-           --signal  slotIssueM0: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+           signal schedDataMem, dataToMemIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+           signal dataToAgu: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT); 
 
 
            signal schedDataStoreValue, dataToStoreValueIQ,
@@ -317,19 +321,15 @@ begin
                   : SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
                    
         signal  dataInMem0, dataOutMem0, 
-                dataInMemInt0, dataOutMemInt0,
-                dataInMemFloat0, dataOutMemFloat0,
-                
-                dataOutMemInt1, dataOutMemFloat1,
+                dataInMemInt0,
+                dataInMemFloat0,              
                 dataInMem1, dataInMemInt1, dataInMemFloat1, dataToStoreValue,
-                
-                dataOutMemFloatDelay, dataOutMemFloatDelay2,
                 dataToIntRF, dataToIntWriteQueue, dataToFloatWriteQueue, dataToFloatRF: InstructionSlotArray(0 to 0)
                                             := (others => DEFAULT_INSTRUCTION_SLOT);
         signal dataFromBranch, lsData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
         
 
-        signal sendingToAgu, sendingMem0, sendingMem1, sendingToIntRF, sendingFromDLQ,
+        signal sendingToAgu, sendingToIntRF, sendingFromDLQ,
                 sendingToIssueStoreValue, sendingToRegReadStoreValue, sendingStoreValue, sendingToIssueFloatStoreValue: std_logic := '0';
         signal branchData, dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
         signal regsSelA, regsSelC, regsSelD, regsSelFloatA, regsSelFloatC, regsSelFloatD: PhysNameArray(0 to 2) := (others => (others => '0'));
@@ -344,13 +344,10 @@ begin
         signal sendingAddressing, memSubpipeSent, lockIssueA, allowIssueA, sendingToIntWriteQueue, memLoadReady: std_logic := '0';
         signal memLoadValue: Mword := (others => '0');
         
-        signal sendingIntLoad, sendingFloatLoad, sendingMemFloat1,
-                sendingToFloatWriteQueue, sendingToFloatRF, sendingOutAluDelay, sendingOutMemDelay,
-                    sendingOutMemFloatDelay, sendingOutMemFloatDelay2: std_logic := '0';
+        signal sendingIntLoad, sendingFloatLoad, sendingToFloatWriteQueue, sendingToFloatRF: std_logic := '0';
          
         signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, allowIssueStoreDataFP, allowIssueStageStoreDataFP: std_logic := '0';
-        signal intStoreMask, floatStoreMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-     
+        signal intStoreMask, floatStoreMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');    
     begin
         
         SUBPIPE_ALU: block            
@@ -993,11 +990,9 @@ begin
           -- Forwarding network
 		  fni.nextTagsM1 <= (0 => slotIssueI0.ins.physicalArgSpec.dest, 2 => dataOutMem0(0).ins.physicalArgSpec.dest, others => (others => '0'));        
 		  fni.nextTagsM2 <= (2 => slotM0_E0(0).ins.physicalArgSpec.dest, others => (others => '0'));
-          fni.tags0 <= (execOutputs1(0).ins.physicalArgSpec.dest, -- ALU
-                             execOutputs1(1).ins.physicalArgSpec.dest, slotM0_E2i(0).ins.physicalArgSpec.dest);
+          fni.tags0 <= (execOutputs1(0).ins.physicalArgSpec.dest, execOutputs1(1).ins.physicalArgSpec.dest, slotM0_E2i(0).ins.physicalArgSpec.dest);
           fni.tags1 <= (0 => slotI0_D0(0).ins.physicalArgSpec.dest, 2 => slotM0_D0i(0).ins.physicalArgSpec.dest, others => (others => '0'));
-          fni.values0 <= (execOutputs1(0).ins.result, -- ALU
-                             execOutputs1(1).ins.result, execOutputs1(2).ins.result);
+          fni.values0 <= (execOutputs1(0).ins.result, execOutputs1(1).ins.result, execOutputs1(2).ins.result);
           fni.values1 <= (0 => slotI0_D0(0).ins.result, 2 => slotM0_D0i(0).ins.result, others => (others => '0'));                 
                 
                     
