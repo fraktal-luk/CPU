@@ -368,6 +368,15 @@ begin
         execCausing => DEFAULT_INSTRUCTION_STATE
     );
    
+    COMMITTED_VIEW: block
+       signal committedText: InstructionTextArray(0 to PIPE_WIDTH-1);
+       signal lastEffectiveText, lateCausingText: InstructionTextArray(0 to 0);
+    begin
+       committedText <= insSlotArrayText(stageDataCommitOutA);
+       lastEffectiveText <= insSlotArrayText(stageDataLastEffectiveOutA);
+       lateCausingText <= insSlotArrayText(stageDataLateCausingOut);
+    end block;
+   
     EVENT_LINK_INFO: process(clk)
     begin
         if rising_edge(clk) then

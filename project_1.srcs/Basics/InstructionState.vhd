@@ -663,6 +663,10 @@ begin
             -- BrP: T/N/-, Ref: Y/N, BrC: T/N,-, Exc: Y/N, Sp: Y/N
     if ins.controlInfo.refetch = '1' then
        controlStr(1 to 7) := "Refetch";
+    elsif ins.controlInfo.hasException = '1' then
+       controlStr(1 to 3) := "Exc";
+    elsif ins.controlInfo.orderViolation = '1' then
+          controlStr(1 to 3) := "Ord";       
     elsif ins.controlInfo.specialAction = '1' then
        controlStr(1 to 7) := "Special";   
     elsif ins.classInfo.branchIns = '1' then

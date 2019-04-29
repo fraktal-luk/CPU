@@ -266,6 +266,11 @@ begin
 		outputData => dataOutROB		
 	);
 
+    ROB_OUT_VIEW: block
+        signal robOutText: InstructionTextArray(0 to PIPE_WIDTH-1);
+    begin
+        robOutText <= insSlotArrayText(dataOutROB);
+    end block;
 
     TEMP_EXEC: block
         use work.LogicExec.all;
@@ -980,6 +985,15 @@ begin
 
          execOutputs2(0) <= (sendingBranch, dataFromBranch.ins);
             execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins); -- TODO: mux with FP op
+
+        
+         EXEC_OUTPUTS_VIEW: block
+             signal execOutputsText1, execOutputsText2: InstructionTextArray(0 to 3);
+         
+         begin
+            execOutputsText1 <= insSlotArrayText(execOutputs1);
+            execOutputsText2 <= insSlotArrayText(execOutputs2);            
+         end block;
 
          
          regsSelA <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotSelI0.ins)));
