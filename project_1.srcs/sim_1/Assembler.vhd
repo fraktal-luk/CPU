@@ -307,7 +307,13 @@ begin
             else
                res := ins6L(undef, 0);            
             end if;
-                          
+        
+		when mov_f =>
+			res := ins6556X(fop, vals(1), vals(2), fmov, 0);
+			
+		when or_f =>
+			res := ins655655(fop, vals(1), vals(2), fmov, vals(3), 0);
+		
         when others => 
             res := ins6L(undef, 0);
     end case;

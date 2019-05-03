@@ -60,6 +60,7 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
     mul, mulh_s, mulh_u,
     div_u, div_s,
     
+    mov_f, or_f,    -- Float operations
     
     ldi_i, ldi_r, -- int
     sti_i, sti_r,
@@ -102,6 +103,7 @@ type ProcOpcode is (
 							ext0, -- E format: opcont is present and defines exact operation  
 							ext1,
 							ext2,
+							fop, -- Float operations
 							
 							undef
 							);
@@ -154,6 +156,8 @@ type ProcOpcont is ( -- ALU functions
 							
 							mfc,
 							mtc,
+							
+							fmov,
 							
 							undef
 							
@@ -233,7 +237,8 @@ begin
 			return store;
 		when ext2 =>
 			return retE;
-					--	mfc;
+		when fop =>
+			return fmov;
 		when others =>
 			return none; -- none corresponds ofc to those that have no opcont
 	end case;
