@@ -158,6 +158,7 @@ type ProcOpcont is ( -- ALU functions
 							mtc,
 							
 							fmov,
+							forr,
 							
 							undef
 							
@@ -220,7 +221,7 @@ package body ArchDefs is
 function hasOpcont(op: ProcOpcode) return boolean is
 begin
 	case op is 
-		when ext0 | ext1 | ext2 =>
+		when ext0 | ext1 | ext2 | fop =>
 			return true;
 		when others => 
 			return false;

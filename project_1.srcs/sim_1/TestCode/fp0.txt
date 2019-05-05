@@ -1,0 +1,22 @@
+$start
+	;add_i r1, r0, 100
+	;sti_i r1, r0, 20
+	ldf_i f1, r0, 20
+	;ldf_i f0, r0, 20
+	
+	sys sync
+	add_i r0, r0, 0
+	add_i r0, r0, 0
+	add_i r0, r0, 0
+	
+	mov_f f10, f1
+	mov_f f11, f0
+	
+$check
+
+	sys call			;
+$error
+    sys error
+
+
+ 

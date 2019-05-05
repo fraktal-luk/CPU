@@ -45,7 +45,8 @@ package LogicExec is
 
 	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState) return InstructionState;
 
-                
+	function executeFpu(ins: InstructionState; st: SchedulerState) return InstructionState;
+
 	    function calcEffectiveAddress(ins: InstructionState; st: SchedulerState;
                                                 fromDLQ: std_logic; dlqData: InstructionState)
         return InstructionState;        
@@ -335,6 +336,21 @@ package body LogicExec is
 		
 		res.result := result;
 		
+		return res;
+	end function;
+
+
+	
+	function executeFpu(ins: InstructionState; st: SchedulerState) return InstructionState is
+       variable res: InstructionState := ins;
+	begin
+        if ins.operation.func = fpuOr then
+           res.result := st.argValues.arg0 or st.argValues.arg1;
+        elsif ins.operation.func = fpuMov then
+           res.result := st.argValues.arg0;
+        else
+           
+		end if;
 		return res;
 	end function;
 

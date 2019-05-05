@@ -130,6 +130,8 @@ function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
 
+function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector;
+
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
 function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray;
@@ -198,6 +200,32 @@ function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
             maskM1 => "000",
             maskM2 => "000"
         );
+
+        -- FP cluster
+        constant WAITING_FN_MAP_FLOAT: ForwardingMap := (
+            maskRR => "111",   
+            maskR1 => "000",  
+            maskR0 => "000",
+            maskM1 => "000",
+            maskM2 => "111"
+        );        
+
+        constant ENQUEUE_FN_MAP_FLOAT: ForwardingMap := (
+            maskRR => "000",      
+            maskR1 => "111",  
+            maskR0 => "111",
+            maskM1 => "111",
+            maskM2 => "111"
+        );
+
+        constant SELECTION_FN_MAP_FLOAT: ForwardingMap := (
+            maskRR => "111",
+            maskR1 => "000",  
+            maskR0 => "000",
+            maskM1 => "000",
+            maskM2 => "000"
+        );
+
 
         function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray;
         function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray;
@@ -626,6 +654,21 @@ begin
 	
 	return res;
 end function;
+
+function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+	for i in 0 to PIPE_WIDTH-1 loop
+		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
+			and (insVec(i).ins.operation.unit = FPU)
+		then
+			res(i) := '1';
+		end if;
+	end loop;
+	
+	return res;
+end function;
+
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray is
     variable res: InstructionSlotArray(insVec'range) := insVec;

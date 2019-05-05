@@ -21,7 +21,7 @@ package InstructionState is
 	type PhysNameArray is array(natural range <>) of PhysName;
 
 
-type ExecUnit is (General, ALU, MAC, Divide, Jump, Memory, System );
+type ExecUnit is (General, ALU, MAC, Divide, Jump, Memory, System, FPU );
 type ExecFunc is (unknown,
 
 						arithAdd, arithSub, arithSha,
@@ -44,6 +44,9 @@ type ExecFunc is (unknown,
 						sysError,
 						sysCall,
 						sysSend,
+						
+						fpuMov,
+						fpuOr,
 						
 						sysUndef
 						);	
