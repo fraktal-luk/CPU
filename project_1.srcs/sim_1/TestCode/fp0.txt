@@ -1,8 +1,8 @@
 $start
-	;add_i r1, r0, 100
-	;sti_i r1, r0, 20
+	add_i r1, r0, 100
+	sti_i r1, r0, 20
 	ldf_i f1, r0, 20
-	;ldf_i f0, r0, 20
+	ldf_i f0, r0, 20
 	
 	sys sync
 	add_i r0, r0, 0

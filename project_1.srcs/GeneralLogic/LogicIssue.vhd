@@ -382,7 +382,7 @@ begin
 
 		 nextReady := (isNonzero(cmp0toM1), isNonzero(cmp1toM1), '0');
 		 nextLocs := (findLoc2b(cmp0toM1), findLoc2b(cmp1toM1), (others => '0'));
-		 readyM2 := (isNonzero(cmp0toM2(1 to 1)), isNonzero(cmp1toM2(1 to 1)), '0');
+		 readyM2 := (isNonzero(cmp0toM2), isNonzero(cmp1toM2), '0');
 		 locsM2 := (findLoc2b(cmp0toM2), findLoc2b(cmp1toM2), (others => '0'));
 
 	if res.state.argValues.newInQueue = '1' then

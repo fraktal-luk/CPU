@@ -361,7 +361,8 @@ begin
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 
 	    signal addressingData: InstructionState := DEFAULT_INSTRUCTION_STATE;
-        signal sendingAddressing, memSubpipeSent, lockIssueI0, allowIssueI0, memLoadReady: std_logic := '0';
+        signal sendingAddressing, memSubpipeSent, fp0subpipeSelected, 
+                lockIssueI0, allowIssueI0, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady: std_logic := '0';
         signal memLoadValue: Mword := (others => '0'); -- MEM
         
         signal sendingToIntWriteQueue, sendingToFloatWriteQueue, sendingToIntRF, sendingToFloatRF: std_logic := '0';
@@ -872,7 +873,7 @@ begin
                 waitingFM => WAITING_FN_MAP_FLOAT,
                 selectionFM => SELECTION_FN_MAP_FLOAT,
                 readyRegFlags => readyFloatFlags,
-                nextAccepting => '1',--issueAcceptingArr(4),
+                nextAccepting => allowIssueF0,--'1',--issueAcceptingArr(4),
                 execCausing => execCausing,
                 lateEventSignal => lateEventSignal,
                 execEventSignal => execEventSignal,
@@ -1123,11 +1124,18 @@ begin
                 if rising_edge(clk) then
                     assert (sendingI0_E0 and sendingM0_E2i) = '0' report "Int write queue conflict!" severity error;
                     memSubpipeSent <= sendingToAgu;
+                    
+                    fp0subpipeSelected <= sendingSelF0;
                 end if;
             end process;
             
             lockIssueI0 <= memSubpipeSent;
             allowIssueI0 <= not lockIssueI0;
+            
+            -- TODO: issue locking for F0 subpipe - avoid WB collisions with FP load!
+            lockIssueF0 <= '0';
+            allowIssueF0 <= not lockIssueF0;
+            
             -----
             
             sendingToIntWriteQueue <= sendingI0_E0 or sendingM0_E2i;
@@ -1184,7 +1192,7 @@ begin
           
           -- Forwarding network
 		  fni.nextTagsM1 <= (0 => slotIssueI0.ins.physicalArgSpec.dest, 2 => dataOutMem0(0).ins.physicalArgSpec.dest, others => (others => '0'));        
-		  fni.nextTagsM2 <= (2 => slotM0_E0(0).ins.physicalArgSpec.dest, others => (others => '0'));
+		  fni.nextTagsM2 <= (                                           2 => slotM0_E0(0).ins.physicalArgSpec.dest, others => (others => '0'));
           fni.tags0 <= (execOutputs1(0).ins.physicalArgSpec.dest, execOutputs1(1).ins.physicalArgSpec.dest, slotM0_E2i(0).ins.physicalArgSpec.dest);
           fni.tags1 <= (0 => slotI0_D0(0).ins.physicalArgSpec.dest, 2 => slotM0_D0i(0).ins.physicalArgSpec.dest, others => (others => '0'));
           fni.values0 <= (execOutputs1(0).ins.result, execOutputs1(1).ins.result, execOutputs1(2).ins.result);
@@ -1244,8 +1252,8 @@ begin
          );
 
 
-            sendingToFloatWriteQueue <= sendingM0_E2f; -- TEMP, TODO!
-            dataToFloatWriteQueue <= slotM0_E2f;
+            sendingToFloatWriteQueue <= sendingM0_E2f or sendingF0_E2; -- TEMP, TODO!
+            dataToFloatWriteQueue <= slotM0_E2f when sendingM0_E2f = '1' else slotF0_E2;
             
             FLOAT_WRITE_QUEUE: entity work.GenericStage(Behavioral)
             generic map(
@@ -1291,7 +1299,7 @@ begin
          
          FLOAT_READY_TABLE: entity work.RegisterReadyTable(Behavioral)
          generic map(
-             WRITE_WIDTH => 1
+             IS_FP => true, WRITE_WIDTH => 1
          )
          port map(
              clk => clk, reset => '0', en => '0', 

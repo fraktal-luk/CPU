@@ -593,10 +593,10 @@ begin
     src1 := (others => '*');
     src2 := (others => '*');
     
-    dest(2 to 3) := reg2txt(ins.physicalArgSpec.dest);
-    src0(2 to 3) := reg2txt((ins.physicalArgSpec.args(0)));
-    src1(2 to 3) := reg2txt((ins.physicalArgSpec.args(1)));
-    src2(2 to 3) := reg2txt((ins.physicalArgSpec.args(2)));
+    dest(2 to 3) := physReg2txt(ins.physicalArgSpec.dest);
+    src0(2 to 3) := physReg2txt((ins.physicalArgSpec.args(0)));
+    src1(2 to 3) := physReg2txt((ins.physicalArgSpec.args(1)));
+    src2(2 to 3) := physReg2txt((ins.physicalArgSpec.args(2)));
     
     if ins.physicalArgSpec.intDestSel = '1' then
         dest(1) := 'r';

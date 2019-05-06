@@ -561,5 +561,6 @@ begin
 			);
 			        
         newPhysDestsOut <= newIntDests;
+        newFloatDestsOut <= newFloatDests; 
         renameAccepting <= not renameLockState;
 end Behavioral;
