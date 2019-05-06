@@ -526,6 +526,7 @@ function insText2(ins: InstructionState) return InstructionText is
     variable dest, src0, src1, src2: string(1 to 3) := (others => '*');
     variable tagStr, hexStr, virtStr, physStr, controlStr: string(1 to 40) := (others => nul);
     variable res: InstructionText;
+    variable hexTarget: string(1 to 8);
 begin
     -- Tag text
     tagStr(1 to 8) := w2hex(ins.tags.fetchCtr);
@@ -581,7 +582,7 @@ begin
     virtStr(10) := ' ';
     virtStr(11 to 13) := dest;
     virtStr(14 to 15) := ", ";
-    virtStr(16 to 28) := src0;
+    virtStr(16 to 18) := src0;
     virtStr(19 to 20) := ", ";
     virtStr(21 to 23) := src1;
     virtStr(24 to 25) := ", ";
@@ -673,8 +674,27 @@ begin
     elsif ins.controlInfo.specialAction = '1' then
        controlStr(1 to 7) := "Special";   
     elsif ins.classInfo.branchIns = '1' then
-       controlStr(1 to 16) := "Bf:" & std_logic'image(ins.controlInfo.frontBranch) & ',' & w2hex(ins.target) & ';';
-       controlStr(17 to 31) := "Bc:" & std_logic'image(ins.controlInfo.confirmedBranch) & ',' & w2hex(ins.target);
+       hexTarget := w2hex(ins.target);
+       controlStr(1 to 3) := "Bf:";
+       controlStr(4) := '0';
+       if ins.controlInfo.frontBranch = '1' then
+           controlStr(4) := '1';
+       end if;
+       controlStr(5) := ',';
+       controlStr(6 to 13) := hexTarget;
+       controlStr(14) := ';';
+
+       controlStr(15 to 17) := "Bc:";
+       controlStr(18) := '0';
+       if ins.controlInfo.confirmedBranch = '1' then
+           controlStr(18) := '1';
+       end if;
+       controlStr(19) := ',';
+       controlStr(20 to 27) := hexTarget;
+       --controlStr(28) := ';';
+    
+       --controlStr(1 to 16) := "Bf:" & std_logic'image(ins.controlInfo.frontBranch) & ',' & hexTarget & ';';
+       --controlStr(17 to 31) := "Bc:" & std_logic'image(ins.controlInfo.confirmedBranch) & ',' & hexTarget;
     end if;
     
     
