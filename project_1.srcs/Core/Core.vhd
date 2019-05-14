@@ -232,8 +232,8 @@ begin
     --                after accounting for current group at Rename that will use some resources!  
     iqAccepting <= 
     (not isNonzero(extractFullMask(renamedDataLiving))
-        and robAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingSF0 and acceptingSQ and acceptingLQ and renameAccepting)
-    or (robAcceptingMore and iqAcceptingMoreI0 and iqAcceptingMoreM0 and iqAcceptingMoreS0 and iqAcceptingMoreSF0 and not almostFullSQ and not almostFullLQ and renameAccepting);
+        and robAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0 and acceptingSQ and acceptingLQ and renameAccepting)
+    or (robAcceptingMore and iqAcceptingMoreI0 and iqAcceptingMoreM0 and iqAcceptingMoreS0 and iqAcceptingMoreF0 and iqAcceptingMoreSF0 and not almostFullSQ and not almostFullLQ and renameAccepting);
     
     
     renamedDataMerged <= mergeDests(renamedDataLiving, renamedDataLivingFloat);
@@ -883,7 +883,7 @@ begin
             );
 
                     ISSUE_STAGE_F0: entity work.IssueStage
-                    generic map(USE_IMM => false, REGS_ONLY => false)
+                    generic map(USE_IMM => false, REGS_ONLY => false, DELAY_ONLY => true)
                     port map(
                         clk => clk,
                         reset => '0',

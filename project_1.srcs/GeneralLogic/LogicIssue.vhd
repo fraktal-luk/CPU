@@ -25,7 +25,7 @@ package LogicIssue is
 
 function getDispatchArgValues(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo;
 											prevSending: std_logic;
-											USE_IMM: boolean; REGS_ONLY: boolean)
+											USE_IMM: boolean; REGS_ONLY, DELAY_ONLY: boolean)
 return SchedulerEntrySlot;
 
 function updateDispatchArgs(ins: InstructionState; st: SchedulerState; vals: MwordArray; regValues: MwordArray)
@@ -155,7 +155,7 @@ end function;
 
 function getDispatchArgValues(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo;
 											prevSending: std_logic;
-											USE_IMM: boolean; REGS_ONLY: boolean)
+											USE_IMM: boolean; REGS_ONLY, DELAY_ONLY: boolean)
 return SchedulerEntrySlot is
 	variable res: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 	variable v0, v1: std_logic_vector(1 downto 0) := "00";
@@ -211,7 +211,7 @@ begin
 		end if;
 	end if;
 
-    if REGS_ONLY then
+    if REGS_ONLY or DELAY_ONLY then
         res.state.argValues.stored := (others => '0');
     end if;
 
