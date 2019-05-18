@@ -227,9 +227,9 @@ begin
         lateEventSignal => lateEventSignal
     );
 
-    -- CAREFUL, TODO: this must block renaming of a group if there will be no place for it in IQs the next cycle;
-    --                Because stalling at Rename is illegal, sending to Rename has to depend on free slots 
-    --                after accounting for current group at Rename that will use some resources!  
+    -- CAREFUL: this must block renaming of a group if there will be no place for it in IQs the next cycle;
+    --          Because stalling at Rename is illegal, sending to Rename has to depend on free slots 
+    --          after accounting for current group at Rename that will use some resources!  
     iqAccepting <= 
     (not isNonzero(extractFullMask(renamedDataLiving))
         and robAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0 and acceptingSQ and acceptingLQ and renameAccepting)
@@ -491,9 +491,7 @@ begin
            memMask <= memMaskInt or memMaskFloat;
             
            schedDataM0 <= getSchedData(removeArg2(extractData(renamedDataLiving)), memMaskInt);
-
-           dataToQueueM0 <= work.LogicIssue.updateSchedulerArray(schedDataM0, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);        
-
+           dataToQueueM0 <= work.LogicIssue.updateSchedulerArray(schedDataM0, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);
                     
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
@@ -510,7 +508,7 @@ begin
                waitingFM => WAITING_FN_MAP,
                selectionFM => SELECTION_FN_MAP,
                readyRegFlags => readyRegFlags,
-               nextAccepting => '1',--issueAcceptingArr(4),
+               nextAccepting =>allowIssueM0,--issueAcceptingArr(4),
                execCausing => execCausing,
                lateEventSignal => lateEventSignal,
                execEventSignal => execEventSignal,
@@ -520,7 +518,7 @@ begin
            );
     
            ISSUE_STAGE_MEM: entity work.IssueStage
-            generic map(USE_IMM => true)
+           generic map(USE_IMM => true)
            port map(
                clk => clk,
                reset => '0',
@@ -991,7 +989,7 @@ begin
         end block;
         
            
-         sqValueInput <= -- CAREFUL, TODO: This implies that integer StoreData op value is lost when Int and FP are issued simultaneously. This must be prevented by scheduler!
+         sqValueInput <= -- CAREFUL: This implies that integer StoreData op value is lost when Int and FP are issued simultaneously. This must be prevented by scheduler!
                     (dataToExecFloatStoreValue.full, setInstructionResult(dataToExecFloatStoreValue.ins, dataToExecFloatStoreValue.state.argValues.arg0)) when dataToExecFloatStoreValue.full = '1' 
             else    (dataToExecIntStoreValue.full, setInstructionResult(dataToExecIntStoreValue.ins, dataToExecIntStoreValue.state.argValues.arg0)); -- TEMP!!
          
@@ -1133,6 +1131,9 @@ begin
             allowIssueI0 <= not lockIssueI0;
             
             -- TODO: issue locking for F0 subpipe - avoid WB collisions with FP load!
+            lockIssueM0 <= fp0subpipeSelected;
+            allowIssueM0 <= not lockIssueM0;
+            
             lockIssueF0 <= '0';
             allowIssueF0 <= not lockIssueF0;
             
@@ -1163,21 +1164,19 @@ begin
             
             
             
-         -- TODO: add FP outputs!
          execOutputs1(0) <= (sendingI0_E0, slotI0_E0(0).ins);
          execOutputs1(2) <= mergePhysDests(slotM0_E2i(0), slotM0_E2f(0)); --  [dest := Int.dest | Float.dest];
              
-            execOutputs1(3) <= (sendingF0_E2, slotF0_E2(0).ins);
+         execOutputs1(3) <= (sendingF0_E2, slotF0_E2(0).ins);
             
-                            -- TODO: include mem hit in 'full' flag! Should merge some info from Float path??
-                            -- TODO: merge Int and Float stage into one (with dest + destAlt) to avoid unnecessary muxing
+            -- TODO: include mem hit in 'full' flag! Should merge some info from Float path??
 
          execOutputs2(0) <= (sendingBranch, dataFromBranch.ins);
-            execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins); -- TODO: mux with FP op
+            execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins);
 
         
          EXEC_OUTPUTS_VIEW: block
-             signal execOutputsText1, execOutputsText2: InstructionTextArray(0 to 3);
+            signal execOutputsText1, execOutputsText2: InstructionTextArray(0 to 3);
          
          begin
             execOutputsText1 <= insSlotArrayText(execOutputs1);
@@ -1203,12 +1202,13 @@ begin
                 regsSelF0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueF0.ins)));
 
                 -- NOTE: FP load path is 1 cycle longer, so different stages are involved here from those in Int datapath
-                fniFloat.nextTagsM1 <= (0 => slotF0_E1(0).ins.physicalArgSpec.dest, 2 => slotM0_E2f(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!
-                fniFloat.nextTagsM2 <= (0 => slotF0_E0(0).ins.physicalArgSpec.dest, 2 => slotM0_E1f(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!                
-                fniFloat.tags0 <= (0 => slotF0_E2(0).ins.physicalArgSpec.dest, 2 => slotM0_D0f(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!
-                fniFloat.tags1 <= (0 => slotF0_D0(0).ins.physicalArgSpec.dest, 2 => slotM0_D1f(0).ins.physicalArgSpec.dest, others => (others => '0')); -- TODO: check!
-                fniFloat.values0 <= (0 => slotF0_E2(0).ins.result, 2 => slotM0_D0f(0).ins.result, others => (others => '0')); -- TODO: check!
-                fniFloat.values1 <= (0 => slotF0_D0(0).ins.result, 2 => slotM0_D1f(0).ins.result, others => (others => '0')); -- TODO: check!
+                --      TODO: CHECK
+                fniFloat.nextTagsM1 <= (0 => slotF0_E1(0).ins.physicalArgSpec.dest, 2 => slotM0_E2f(0).ins.physicalArgSpec.dest, others => (others => '0'));
+                fniFloat.nextTagsM2 <= (0 => slotF0_E0(0).ins.physicalArgSpec.dest, 2 => slotM0_E1f(0).ins.physicalArgSpec.dest, others => (others => '0'));               
+                fniFloat.tags0 <= (0 => slotF0_E2(0).ins.physicalArgSpec.dest, 2 => slotM0_D0f(0).ins.physicalArgSpec.dest, others => (others => '0'));
+                fniFloat.tags1 <= (0 => slotF0_D0(0).ins.physicalArgSpec.dest, 2 => slotM0_D1f(0).ins.physicalArgSpec.dest, others => (others => '0'));
+                fniFloat.values0 <= (0 => slotF0_E2(0).ins.result, 2 => slotM0_D0f(0).ins.result, others => (others => '0'));
+                fniFloat.values1 <= (0 => slotF0_D0(0).ins.result, 2 => slotM0_D1f(0).ins.result, others => (others => '0'));
                     
 
 		 INT_REG_FILE: entity work.RegFile(Behavioral)
@@ -1310,7 +1310,6 @@ begin
              newPhysDests => newFloatDests,    -- FOR MAPPING
              stageDataReserved => renamedDataLivingFloat, --stageDataOutRename,
                  
-             -- TODO: use FP results
              writingMask(0) => sendingToFloatRF,  
              writingData(0) => dataToFloatRF(0).ins,
              readyRegFlagsNext => readyFloatFlagsNext -- FOR IQs

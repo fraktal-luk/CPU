@@ -386,7 +386,7 @@ begin
 		 locsM2 := (findLoc2b(cmp0toM2), findLoc2b(cmp1toM2), (others => '0'));
 
 	if res.state.argValues.newInQueue = '1' then
-		tmp8 := "000000" & res.state.argValues.origSlot;
+		tmp8 := "000000" & ins.tags.renameIndex(1 downto 0);
 		rrf := readyRegFlags(3*slv2u(tmp8) to 3*slv2u(tmp8) + 2);
     else
         rrf := (others => '0');

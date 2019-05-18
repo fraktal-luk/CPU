@@ -197,7 +197,6 @@ end function;
 				exit;
 			end if;
 			
-			-- CAREFUL, TODO: what if there's a branch (or branch correction) and valid path after it??
 			-- If this one has an event, following ones don't count
 			if hasSyncEvent(newContent(i).ins) = '1' then
 				exit;

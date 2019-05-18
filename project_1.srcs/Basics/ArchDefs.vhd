@@ -179,10 +179,10 @@ type ExceptionType is (none, unknown,
 --							int0, int1, int2
 --							);
 
-
-constant EXC_BASE: Mword := X"00000100"; -- TODO: enable 64b
-constant CALL_BASE: Mword := X"00000180"; -- TODO: enable 64b
-constant INT_BASE: Mword := X"00000200"; -- TODO: enable 64b
+-- TODO: enable 64b
+constant EXC_BASE: Mword := X"00000100";
+constant CALL_BASE: Mword := X"00000180";
+constant INT_BASE: Mword := X"00000200";
 
 
 function hasOpcont(op: ProcOpcode) return boolean; 

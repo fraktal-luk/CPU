@@ -381,7 +381,7 @@ begin
     begin
         if rising_edge(clk) then
             if sendingToLateCausing = '1' then
-                savedPC <= stageDataLastEffectiveOutA(0).ins.target; -- TODO: PC rathe than target if not restartable
+                savedPC <= stageDataLastEffectiveOutA(0).ins.target; -- TODO: PC rather than target if not restartable?
                 savedState <= currentState;                
             end if;            
         end if;

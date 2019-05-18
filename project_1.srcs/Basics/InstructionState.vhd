@@ -155,10 +155,8 @@ end record;
 
 type InstructionArgValues is record
 	newInQueue: std_logic;
-	origSlot: std_logic_vector(0 to 1);
 	immediate: std_logic;
 	zero: std_logic_vector(0 to 2);
-	--readyBefore: std_logic_vector(0 to 2);
 	readyNow: std_logic_vector(0 to 2);
 	readyNext: std_logic_vector(0 to 2);
 	readyM2:	std_logic_vector(0 to 2);
@@ -366,7 +364,6 @@ end function;
 function defaultArgValues return InstructionArgValues is
 begin
 	return (newInQueue => '0',
-	        origSlot => "00", -- TODO: remove, redundant
 			  immediate => '0',
 			  zero => (others => '0'),
 			  --readyBefore => (others=>'0'),

@@ -72,13 +72,7 @@ begin
 				
 				if ins.operation.unit = Jump then
 					ci.branchIns := '1';
-				
 					ci.secCluster := '1';
-					-- TODO: remove this distinction because no longer used!
-					-- For branch with link main cluster for destination write
-					--if isNonzero(ins.virtualArgSpec.dest(4 downto 0)) = '0' then						
-					--	ci.mainCluster := '0';
-					--end if;
 				elsif ins.operation = (System, sysMtc) then
 					ci.store := '1';
 					ci.secCluster := '1';
