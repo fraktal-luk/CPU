@@ -114,11 +114,14 @@ end function;
                 res(k).full := '0';
 	       end if;
 	    
-            if slv2u(il) = k then                
+            if slv2u(il) = k then
+                if execResult.ins.controlInfo.newEvent = '1' then -- CAREFUL: branches corrected to not taken need this!
+                    eventFound := true;                    
+                end if;
+                        
                 if execResult.ins.controlInfo.confirmedBranch = '1' then
                     res(k).ins.controlInfo.newEvent := '1'; --- !!!
                     res(k).ins.controlInfo.confirmedBranch := '1';
-                    eventFound := true;
                 end if;
                                                      
                 if execResult.ins.controlInfo.hasException = '1' then

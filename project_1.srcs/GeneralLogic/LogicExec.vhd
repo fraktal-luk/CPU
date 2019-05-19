@@ -43,7 +43,7 @@ package LogicExec is
 
 	function isBranch(ins: InstructionState) return std_logic;
 
-	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState) return InstructionState;
+	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState; branchIns: InstructionState) return InstructionState;
 
 	function executeFpu(ins: InstructionState; st: SchedulerState) return InstructionState;
 
@@ -221,7 +221,7 @@ package body LogicExec is
 	end function;
 	
 	
-	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState)
+	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState; branchIns: InstructionState)
 	return InstructionState is
 		variable res: InstructionState := ins;
 		variable result, linkAdr: Mword := (others => '0');
@@ -306,6 +306,10 @@ package body LogicExec is
 			end if;
 		end if;
 
+			res.controlInfo.newEvent := '0';
+			res.controlInfo.hasException := '0';
+			res.controlInfo.exceptionCode := (others => '0'); -- ???	
+
 		if ins.operation.func = arithAdd or ins.operation.func = arithSub then
 			carry := resultExt(MWORD_SIZE); -- CAREFUL, with subtraction carry is different, keep in mind
 			result := resultExt(MWORD_SIZE-1 downto 0);					
@@ -318,21 +322,21 @@ package body LogicExec is
 					result := arg0 or arg1;
 				when jump | jumpZ | jumpNZ => 
 					result := linkAdr;
+					
+					res.controlInfo.newEvent := branchIns.controlInfo.newEvent;
+                    res.controlInfo.frontBranch := branchIns.controlInfo.frontBranch;
+                    res.controlInfo.confirmedBranch := branchIns.controlInfo.confirmedBranch;
+
 				when others => 
 					result := shiftedBytes(31 + shL downto shL);
 			end case;
 		end if;
-		
-			res.controlInfo.newEvent := '0';
-			res.controlInfo.hasException := '0';
-			res.controlInfo.exceptionCode := (others => '0'); -- ???		
-		
+
 		if ov = '1' then
 			res.controlInfo.newEvent := '1';
 			res.controlInfo.hasException := '1';
 			res.controlInfo.exceptionCode := (0 => '1', others => '0'); -- ???
-		end if;
-		--	res.controlInfo.exceptionCode := (0 => ov, others => '0'); -- ???
+		end if;      
 		
 		res.result := result;
 		

@@ -72,7 +72,7 @@ begin
 				
 				if ins.operation.unit = Jump then
 					ci.branchIns := '1';
-					ci.secCluster := '1';
+					--ci.secCluster := '1';
 				elsif ins.operation = (System, sysMtc) then
 					ci.store := '1';
 					ci.secCluster := '1';

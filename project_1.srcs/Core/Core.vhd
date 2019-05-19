@@ -424,7 +424,7 @@ begin
                 regValues => regValsI0 --(others => (others => '0'))     
             );
           
-            dataToAlu(0) <= (slotIssueI0.full, executeAlu(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins));
+            dataToAlu(0) <= (slotIssueI0.full, executeAlu(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins, branchData));
           
             STAGE_I0_E0: entity work.GenericStage(Behavioral)
             generic map(
@@ -1171,7 +1171,8 @@ begin
             
             -- TODO: include mem hit in 'full' flag! Should merge some info from Float path??
 
-         execOutputs2(0) <= (sendingBranch, dataFromBranch.ins);
+         --execOutputs2(0) <= (sendingBranch, dataFromBranch.ins);
+         
             execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins);
 
         
