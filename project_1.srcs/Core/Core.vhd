@@ -275,9 +275,6 @@ begin
 
     TEMP_EXEC: block
         use work.LogicExec.all;
-
-        signal intStoreMask, floatStoreMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');            
-        signal memMask, memMaskInt, memMaskFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
         
         -- Selection from IQ and state after Issue stage
         signal slotSelI0, slotIssueI0,
@@ -321,37 +318,33 @@ begin
                sendingM0_D0f, sendingM0_D1f,
                sendingF0_D0,  sendingF0_D1: std_logic := '0';                         
 
+           ----
            signal schedDataI0, dataToQueueI0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
            signal schedDataM0, dataToQueueM0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-           
-           signal dataToStoreValueIQ, dataToStoreValueFloatIQ,
-                  schedDataStoreValue, schedDataStoreValueFloat: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
                   
            signal schedDataF0, dataToQueueF0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 
-
-           signal sendingBranch: std_logic := '0'; -- Outside block!
-
-    
            signal dataToIssueStoreValue, dataToRegReadStoreValue, dataToExecIntStoreValue,
                   dataToIssueFloatStoreValue, dataToRegReadFloatStoreValue, dataToExecFloatStoreValue,
-                                                                                    dataToExecStoreValue
-                  : SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
-                   
-        signal  dataInMem0, -- Internal 
-                dataOutMem0,  -- Outside
-                dataInMemInt0, -- Internal
-                dataInMemFloat0, -- Internal    
-                dataInMem1, dataInMemInt1, dataInMemFloat1, -- Internal? 
-                dataToIntWriteQueue, dataToFloatWriteQueue, dataToIntRF, dataToFloatRF: InstructionSlotArray(0 to 0)
-                                            := (others => DEFAULT_INSTRUCTION_SLOT);
-        signal dataFromBranch, -- Outside 
-                lsData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT; -- Internal
+                  dataToExecStoreValue: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+        signal sendingToIssueStoreValue, sendingToRegReadStoreValue, sendingStoreValue, sendingToIssueFloatStoreValue: std_logic := '0';
+
+
+      ----==============----------
+           signal intStoreMask, floatStoreMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');            
+           signal memMask, memMaskInt, memMaskFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+
+
+           signal sendingBranch: std_logic := '0'; -- Internal
+                                  
+        signal  dataOutMem0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT); -- Outside
         
-        signal sendingToAgu, sendingFromDLQ, -- Outside block
-                sendingToIssueStoreValue, sendingToRegReadStoreValue, sendingStoreValue, sendingToIssueFloatStoreValue: std_logic := '0';
-        signal branchData, -- Internal 
-                dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
+        signal sendingToAgu, sendingFromDLQ: std_logic := '0'; -- Outside block
+        signal dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
+            signal memLoadValue: Mword := (others => '0'); -- MEM
+
+      ----==============----------
+    
         
         signal regsSelI0,           regsSelM0, regsSelS0, regsSelFloatA, regsSelFloatC, regsSelFS0, regsSelF0: PhysNameArray(0 to 2) := (others => (others => '0'));
         signal regValsI0, regValsB, regValsM0, regValsS0, regValsE, regValsFloatA, regValsFloatB, regValsFloatC, regValsFS0, regValsF0: MwordArray(0 to 2) := (others => (others => '0'));
@@ -359,21 +352,21 @@ begin
 
         
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
-
-	    signal addressingData: InstructionState := DEFAULT_INSTRUCTION_STATE;
-        signal sendingAddressing, memSubpipeSent, fp0subpipeSelected, 
-                lockIssueI0, allowIssueI0, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady: std_logic := '0';
-        signal memLoadValue: Mword := (others => '0'); -- MEM
-        
-        signal sendingToIntWriteQueue, sendingToFloatWriteQueue, sendingToIntRF, sendingToFloatRF: std_logic := '0';
-        
+           
         -- Issue control 
         signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, allowIssueStoreDataFP, allowIssueStageStoreDataFP: std_logic := '0';
-        
+        signal memSubpipeSent, fp0subpipeSelected, 
+                lockIssueI0, allowIssueI0, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady: std_logic := '0';
+                
+        signal sendingToIntWriteQueue, sendingToFloatWriteQueue, sendingToIntRF, sendingToFloatRF: std_logic := '0';
+        signal dataToIntWriteQueue, dataToFloatWriteQueue, dataToIntRF, dataToFloatRF: InstructionSlotArray(0 to 0)
+                                            := (others => DEFAULT_INSTRUCTION_SLOT);                              
     begin
         
         SUBPIPE_ALU: block
-           signal dataToAlu, dataToBranch: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                  
+           signal dataToAlu, dataToBranch: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);           
+           signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+           signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
         begin
             schedDataI0 <= getSchedData(extractData(renamedDataLiving), getAluMask(renamedDataLiving));
             dataToQueueI0 <= work.LogicIssue.updateSchedulerArray(schedDataI0, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);
@@ -446,9 +439,8 @@ begin
                 execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
             );      
           
-            branchData <= basicBranch(setInstructionTarget(slotIssueI0.ins, 
-                                                                      slotIssueI0.ins.constantArgs.imm),
-                                             slotIssueI0.state, bqSelected.ins, bqSelected.full);                    
+            branchData <= basicBranch(setInstructionTarget(slotIssueI0.ins, slotIssueI0.ins.constantArgs.imm),
+                                      slotIssueI0.state, bqSelected.ins, bqSelected.full);                    
             
             dataToBranch(0) <= (slotIssueI0.full and isBranch(slotIssueI0.ins), branchData);
             sendingBranchIns <= dataToBranch(0).full;
@@ -483,7 +475,7 @@ begin
             
         SUBPIPE_MEM: block
            signal sendingIntLoad, sendingFloatLoad: std_logic := '0';
-           signal dataToAgu: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT); -- Internal            
+           signal dataToAgu, dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                               
         begin
         
            memMaskInt <=  getStoreMask(renamedDataLiving) or getLoadMask(renamedDataLiving);
@@ -540,13 +532,11 @@ begin
                regValues => regValsM0 --(others => (others => '0'))     
            );
                       
-            sendingToAgu <= slotIssueM0.full or sendingFromDLQ;
-            
-                    sendingFromDLQ <= '0';          -- TEMP!
-                    dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
-
-	       dataToAgu(0) <= (slotIssueM0.full or sendingFromDLQ,
-                                       calcEffectiveAddress(slotIssueM0.ins, slotIssueM0.state, sendingFromDLQ, dataFromDLQ));
+               sendingFromDLQ <= '0';          -- TEMP!
+               dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
+                    
+           sendingToAgu <= slotIssueM0.full or sendingFromDLQ;
+	       dataToAgu(0) <= (slotIssueM0.full or sendingFromDLQ, calcEffectiveAddress(slotIssueM0.ins, slotIssueM0.state, sendingFromDLQ, dataFromDLQ));
        
            STAGE_AGU: entity work.GenericStage(Behavioral)
            generic map(
@@ -568,14 +558,12 @@ begin
                execCausing => execCausing
            );
 
-	       lsData <= (sendingM0_E0, setDataCompleted(setAddressCompleted(slotM0_E0(0).ins, '0'), '0'));
-           dataInMem0(0) <= lsData;
-           sqAddressInput <= lsData; -- TEMP!!
-           lqAddressInput <= lsData;
+	       dataInMem0(0) <= (sendingM0_E0, setDataCompleted(setAddressCompleted(slotM0_E0(0).ins, '0'), '0'));
+           sqAddressInput <= dataInMem0(0);
+           lqAddressInput <= dataInMem0(0);
 
            dataInMemInt0 <= clearFloatDest(dataInMem0);
            dataInMemFloat0 <= clearIntDest(dataInMem0);
-
 
            -- TLB lookup, Dcache access
 	       STAGE_MEM0: entity work.GenericStage(Behavioral)
@@ -619,9 +607,6 @@ begin
            );
                       
            dataOutMem0(0) <= mergePhysDests(slotM0_E1i(0), slotM0_E1f(0)); -- [dest := Int.dest | Float.dest];
-                      
-	       sendingAddressing <= sendingM0_E1; -- After translation
-	       addressingData	<= dataOutMem0(0).ins;
 
            dataInMem1(0).full <= sendingM0_E1;
            dataInMem1(0).ins <= getLSResultData(dataOutMem0(0).ins,
@@ -631,11 +616,11 @@ begin
                                                   sqSelectedOutput.full, sqSelectedOutput.ins,
                                                   lqSelectedOutput);
                                                   
-                 sendingIntLoad <= sendingM0_E1 and not dataOutMem0(0).ins.physicalArgSpec.floatDestSel; -- TODO: check exact conditions 
-                 sendingFloatLoad <= sendingM0_E1 and dataOutMem0(0).ins.physicalArgSpec.floatDestSel;
+              sendingIntLoad <= sendingM0_E1 and not dataOutMem0(0).ins.physicalArgSpec.floatDestSel; -- TODO: check exact conditions 
+              sendingFloatLoad <= sendingM0_E1 and dataOutMem0(0).ins.physicalArgSpec.floatDestSel;
                           
-                 dataInMemInt1 <= clearFloatDest(dataInMem1); -- with zeroed dest when load is FP
-                 dataInMemFloat1 <= clearIntDest(dataInMem1); -- with zeroed dest when load is Int??
+              dataInMemInt1 <= clearFloatDest(dataInMem1); -- with zeroed dest when load is FP
+              dataInMemFloat1 <= clearIntDest(dataInMem1); -- with zeroed dest when load is Int??
                                                   	       
            -- Source selection and verification
 	       STAGE_MEM1: entity work.GenericStage(Behavioral)
@@ -693,6 +678,8 @@ begin
         readyRegFlagsSV <= (readyRegFlags(2), '0', '0', readyRegFlags(5), '0', '0', readyRegFlags(8), '0', '0', readyRegFlags(11), '0', '0');
 
         SUBPIPES_STORE_VALUE: block
+            signal dataToStoreValueIQ, dataToStoreValueFloatIQ,
+               schedDataStoreValue, schedDataStoreValueFloat: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);        
         begin
             
             intStoreMask <= getStoreMask(renamedDataLiving) and not floatStoreMask;                                        
@@ -770,8 +757,7 @@ begin
                 fni => fniEmpty,
                 regValues => regValsS0     
             );
-    
-    
+      
             ------------------------------------
             readyRegFlagsFloatSV <= (readyFloatFlags(2), '0', '0', readyFloatFlags(5), '0', '0', readyFloatFlags(8), '0', '0', readyFloatFlags(11), '0', '0');
             
@@ -808,8 +794,7 @@ begin
                 en => '0',
         
                 prevSending => sendingToIssueFloatStoreValue,
-                nextAccepting => --'1',--
-                                  allowIssueStageStoreDataFP,
+                nextAccepting => allowIssueStageStoreDataFP,
         
                 input => dataToIssueFloatStoreValue,
                 
@@ -851,7 +836,7 @@ begin
 
         
         SUBPIPE_FP0: block
-           signal dataToFpu0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                  
+            signal dataToFpu0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                  
         begin
             schedDataF0 <= getSchedData(extractData(renamedDataLivingFloat), getFpuMask(renamedDataLivingFloat));
             dataToQueueF0 <= work.LogicIssue.updateSchedulerArray(schedDataF0, readyFloatFlags xor readyFloatFlags, fniFloat, ENQUEUE_FN_MAP_FLOAT, true);
@@ -1165,26 +1150,21 @@ begin
             
             
          execOutputs1(0) <= (sendingI0_E0, slotI0_E0(0).ins);
-         execOutputs1(2) <= mergePhysDests(slotM0_E2i(0), slotM0_E2f(0)); --  [dest := Int.dest | Float.dest];
-             
+         
+         execOutputs1(2) <= mergePhysDests(slotM0_E2i(0), slotM0_E2f(0)); --  [dest := Int.dest | Float.dest];             
          execOutputs1(3) <= (sendingF0_E2, slotF0_E2(0).ins);
             
-            -- TODO: include mem hit in 'full' flag! Should merge some info from Float path??
-
-         --execOutputs2(0) <= (sendingBranch, dataFromBranch.ins);
+         -- TODO: include mem hit in 'full' flag! Should merge some info from Float path??
          
-            execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins);
-
-        
+         execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins);
+    
          EXEC_OUTPUTS_VIEW: block
-            signal execOutputsText1, execOutputsText2: InstructionTextArray(0 to 3);
-         
+            signal execOutputsText1, execOutputsText2: InstructionTextArray(0 to 3);       
          begin
             execOutputsText1 <= insSlotArrayText(execOutputs1);
             execOutputsText2 <= insSlotArrayText(execOutputs2);            
          end block;
-
-         
+     
          regsSelI0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotSelI0.ins)));
          regsSelM0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotSelM0.ins)));        
             -- TEMP!
