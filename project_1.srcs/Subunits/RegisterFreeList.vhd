@@ -58,7 +58,7 @@ architecture Behavioral of RegisterFreeList is
 			signal physCommitFreedDelayed, physCommitDestsDelayed: 
 							PhysNameArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
 		signal newPhysDestsSync: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-		signal newPhysDestsAsync: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+		signal newPhysDestsAsync, newPhysDestsAsync_T: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 		
 function initList return PhysNameArray is
     variable res: PhysNameArray(0 to FREE_LIST_SIZE-1) := (others => (others=> '0'));
@@ -74,6 +74,30 @@ begin
     end loop;
     return res;
 end function;
+
+function initList32 return WordArray is
+    variable res: WordArray(0 to FREE_LIST_SIZE/4 - 1) := (others => (others=> '0'));
+begin
+    for i in 0 to (N_PHYS - 32)/4 - 1 loop
+        res(i)(7 downto 0) := i2slv(32 + 4*i + 0, PhysName'length);
+        res(i)(15 downto 8) := i2slv(32 + 4*i + 1, PhysName'length);
+        res(i)(23 downto 16) := i2slv(32 + 4*i + 2, PhysName'length);
+        res(i)(31 downto 24) := i2slv(32 + 4*i + 3, PhysName'length);       
+        
+        if IS_FP then
+            res(i)(7 downto 0) := i2slv(32 + 4*i + 1, PhysName'length);
+            res(i)(15 downto 8) := i2slv(32 + 4*i + 2, PhysName'length);
+            res(i)(23 downto 16) := i2slv(32 + 4*i + 3, PhysName'length);
+            res(i)(31 downto 24) := i2slv(32 + 4*i + 4, PhysName'length);            
+            
+            if i = N_PHYS - 32 - 1 then
+               res(i) := (others => '0'); -- CAREFUL: no reg 0 for FP, so 1 less on the list!
+            end if;
+        end if;
+    end loop;
+    return res;
+end function;
+
 
 -- TEMP: to reduce num regs by 1 in case of FP
 function FP_1 return integer is
@@ -126,10 +150,10 @@ begin
 			signal listPtrPut: SmallNumber := i2slv(N_PHYS - 32 - FP_1, SMALL_NUMBER_SIZE);
 		begin
 			
-			freeListTakeNumTags(0) <= i2slv((slv2u(listPtrTake)) mod FREE_LIST_SIZE, SMALL_NUMBER_SIZE);
+			--freeListTakeNumTags(0) <= i2slv((slv2u(listPtrTake)) mod FREE_LIST_SIZE, SMALL_NUMBER_SIZE);
 
 			READ_DESTS: for i in 0 to WIDTH-1 generate
-				newPhysDestsAsync(i) <= listContent((slv2u(listPtrTake) + i) mod FREE_LIST_SIZE);
+				newPhysDestsAsync_T(i) <= listContent((slv2u(listPtrTake) + i) mod FREE_LIST_SIZE);
 			end generate;
 
 
@@ -189,6 +213,8 @@ begin
 		
 		IMPL_2: block
             signal listContent: PhysNameArray(0 to FREE_LIST_SIZE-1) := initList;
+                signal listContent32: WordArray(0 to FREE_LIST_SIZE/4 - 1) := initList32;
+            
             signal listPtrTake: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
             signal listPtrPut: SmallNumber := i2slv(N_PHYS - 32 - FP_1, SMALL_NUMBER_SIZE);
             
@@ -199,7 +225,7 @@ begin
             signal numFront, numBack: integer := 0;
         begin
             
-            --freeListTakeNumTags(0) <= i2slv((slv2u(listPtrTake)) mod FREE_LIST_SIZE, SMALL_NUMBER_SIZE);
+            freeListTakeNumTags(0) <= i2slv((slv2u(listPtrTake)) mod FREE_LIST_SIZE, SMALL_NUMBER_SIZE);
 
 
             -- 
@@ -210,7 +236,7 @@ begin
             --
 
             READ_DESTS: for i in 0 to WIDTH-1 generate
-                --newPhysDestsAsync(i) <= listContent((slv2u(listPtrTake) + i) mod FREE_LIST_SIZE);
+                newPhysDestsAsync(i) <= listFront(i);
             end generate;
 
 
@@ -246,7 +272,23 @@ begin
                             indTakeV := i2slv(indTake, listPtrTake'length);
                             
                             numFrontVar := numFrontVar - nTaken;                          
-                            listFrontExt(0 to 7) := listFrontExt(0 + nTaken to 7 + nTaken);                          
+                            
+                            -- CAREFUL: expression is
+                            --listFrontExt(0 to 7) := listFrontExt(0 + nTaken to 7 + nTaken);
+                            
+                                case nTaken is
+                                    when 1 =>
+                                        listFrontExt(0 to 7) := listFrontExt(0 + 1 to 7 + 1);
+                                    when 2 =>
+                                        listFrontExt(0 to 7) := listFrontExt(0 + 2 to 7 + 2);
+                                    when 3 =>
+                                        listFrontExt(0 to 7) := listFrontExt(0 + 3 to 7 + 3);
+                                    when 4 =>
+                                        listFrontExt(0 to 7) := listFrontExt(0 + 4 to 7 + 4);
+                                    when others =>
+                                         
+                                end case;
+                                                   
                             listPtrTake <= indTakeV;                            
                         end if;
                         
@@ -254,7 +296,80 @@ begin
                              if numFrontVar <= 4 then
                                 
                                 listFrontExtM4(4 to 15) := listFrontExt;                                
-                                listFrontExtM4(numFrontVar + 4 to numFrontVar + 3 + 4) := listContent(slv2u(physPtrTake) to slv2u(physPtrTake) + 3);
+                                
+                                -- CAREFUL: expression is
+                                --listFrontExtM4(numFrontVar + 4 to numFrontVar + 3 + 4) := listContent(slv2u(physPtrTake) to slv2u(physPtrTake) + 3);
+--                                case numFrontVar is
+--                                    when 1 =>
+--                                        listFrontExtM4(1 + 4) := listContent(slv2u(physPtrTake) + 0);
+--                                        listFrontExtM4(2 + 4) := listContent(slv2u(physPtrTake) + 1);
+--                                        listFrontExtM4(3 + 4) := listContent(slv2u(physPtrTake) + 2);
+--                                        listFrontExtM4(4 + 4) := listContent(slv2u(physPtrTake) + 3);                                        
+--                                    when 2 =>
+--                                        listFrontExtM4(2 + 4) := listContent(slv2u(physPtrTake) + 0);
+--                                        listFrontExtM4(3 + 4) := listContent(slv2u(physPtrTake) + 1);
+--                                        listFrontExtM4(4 + 4) := listContent(slv2u(physPtrTake) + 2);
+--                                        listFrontExtM4(5 + 4) := listContent(slv2u(physPtrTake) + 3);
+--                                    when 3 =>
+--                                        listFrontExtM4(3 + 4) := listContent(slv2u(physPtrTake) + 0);
+--                                        listFrontExtM4(4 + 4) := listContent(slv2u(physPtrTake) + 1);
+--                                        listFrontExtM4(5 + 4) := listContent(slv2u(physPtrTake) + 2);
+--                                        listFrontExtM4(6 + 4) := listContent(slv2u(physPtrTake) + 3);                                    
+--                                    when 4 =>
+--                                        listFrontExtM4(4 + 4) := listContent(slv2u(physPtrTake) + 0);
+--                                        listFrontExtM4(5 + 4) := listContent(slv2u(physPtrTake) + 1);
+--                                        listFrontExtM4(6 + 4) := listContent(slv2u(physPtrTake) + 2);
+--                                        listFrontExtM4(7 + 4) := listContent(slv2u(physPtrTake) + 3);
+--                                    when others =>
+--                                        listFrontExtM4(0 + 4) := listContent(slv2u(physPtrTake) + 0);
+--                                        listFrontExtM4(1 + 4) := listContent(slv2u(physPtrTake) + 1);
+--                                        listFrontExtM4(2 + 4) := listContent(slv2u(physPtrTake) + 2);
+--                                        listFrontExtM4(3 + 4) := listContent(slv2u(physPtrTake) + 3);
+--                                    end case;
+                                
+                                case numFrontVar is
+                                    when -2 =>
+                                        listFrontExtM4(-2 + 4) := listContent32(slv2u(physPtrTake)/4)(7 downto 0);
+                                        listFrontExtM4(-1 + 4) := listContent32(slv2u(physPtrTake)/4)(15 downto 8);
+                                        listFrontExtM4(0 + 4) := listContent32(slv2u(physPtrTake)/4)(23 downto 16);
+                                        listFrontExtM4(1 + 4) := listContent32(slv2u(physPtrTake)/4)(31 downto 24);                                    
+                                    when -1 =>
+                                        listFrontExtM4(-1 + 4) := listContent32(slv2u(physPtrTake)/4)(7 downto 0);
+                                        listFrontExtM4(0 + 4) := listContent32(slv2u(physPtrTake)/4)(15 downto 8);
+                                        listFrontExtM4(1 + 4) := listContent32(slv2u(physPtrTake)/4)(23 downto 16);
+                                        listFrontExtM4(2 + 4) := listContent32(slv2u(physPtrTake)/4)(31 downto 24);                                    
+                                    when 0 =>
+                                        listFrontExtM4(0 + 4) := listContent32(slv2u(physPtrTake)/4)(7 downto 0);
+                                        listFrontExtM4(1 + 4) := listContent32(slv2u(physPtrTake)/4)(15 downto 8);
+                                        listFrontExtM4(2 + 4) := listContent32(slv2u(physPtrTake)/4)(23 downto 16);
+                                        listFrontExtM4(3 + 4) := listContent32(slv2u(physPtrTake)/4)(31 downto 24);                                    
+                                    when 1 =>
+                                        listFrontExtM4(1 + 4) := listContent32(slv2u(physPtrTake)/4)(7 downto 0);
+                                        listFrontExtM4(2 + 4) := listContent32(slv2u(physPtrTake)/4)(15 downto 8);
+                                        listFrontExtM4(3 + 4) := listContent32(slv2u(physPtrTake)/4)(23 downto 16);
+                                        listFrontExtM4(4 + 4) := listContent32(slv2u(physPtrTake)/4)(31 downto 24);                           
+                                    when 2 =>
+                                        listFrontExtM4(2 + 4) := listContent32(slv2u(physPtrTake)/4)(7 downto 0);
+                                        listFrontExtM4(3 + 4) := listContent32(slv2u(physPtrTake)/4)(15 downto 8);
+                                        listFrontExtM4(4 + 4) := listContent32(slv2u(physPtrTake)/4)(23 downto 16);
+                                        listFrontExtM4(5 + 4) := listContent32(slv2u(physPtrTake)/4)(31 downto 24);
+                                    when 3 =>
+                                        listFrontExtM4(3 + 4) := listContent32(slv2u(physPtrTake)/4)(7 downto 0);
+                                        listFrontExtM4(4 + 4) := listContent32(slv2u(physPtrTake)/4)(15 downto 8);
+                                        listFrontExtM4(5 + 4) := listContent32(slv2u(physPtrTake)/4)(23 downto 16);
+                                        listFrontExtM4(6 + 4) := listContent32(slv2u(physPtrTake)/4)(31 downto 24);                                   
+                                    when 4 =>
+                                        listFrontExtM4(4 + 4) := listContent32(slv2u(physPtrTake)/4)(7 downto 0);
+                                        listFrontExtM4(5 + 4) := listContent32(slv2u(physPtrTake)/4)(15 downto 8);
+                                        listFrontExtM4(6 + 4) := listContent32(slv2u(physPtrTake)/4)(23 downto 16);
+                                        listFrontExtM4(7 + 4) := listContent32(slv2u(physPtrTake)/4)(31 downto 24);
+                                    when others => -- -3
+                                        listFrontExtM4(-3 + 4) := listContent32(slv2u(physPtrTake)/4)(7 downto 0);
+                                        listFrontExtM4(-2 + 4) := listContent32(slv2u(physPtrTake)/4)(15 downto 8);
+                                        listFrontExtM4(-1 + 4) := listContent32(slv2u(physPtrTake)/4)(23 downto 16);
+                                        listFrontExtM4(0 + 4) := listContent32(slv2u(physPtrTake)/4)(31 downto 24);
+                                    end case;
+                                                                    
                                 listFrontExt := listFrontExtM4(4 to 15);                                   
                                 numFrontVar := numFrontVar + 4;
                                 physPtrTake <= i2slv(slv2u(physPtrTake) + 4, SMALL_NUMBER_SIZE);
@@ -268,6 +383,18 @@ begin
                         
                         listBackExt(0 to 7) := listBack;
                         numBackVar := numBack;
+                        if numBackVar >= 4 then
+                            --for j in 0 to 3 loop
+                            --    listContent((slv2u(physPtrPut) + j) mod FREE_LIST_SIZE) <= listBackExt(j);
+                            --end loop;
+                            listContent32((slv2u(physPtrPut)/4)) <= listBackExt(3) & listBackExt(2) & listBackExt(1) & listBackExt(0); 
+
+                            listBackExt(0 to 7) := listBackExt(4 to 11);
+                            numBackVar := numBackVar - 4;
+                            
+                            physPtrPut <= i2slv(slv2u(physPtrPut) + 4, SMALL_NUMBER_SIZE);                          
+                        end if;                        
+                        
                         if freeListPutAllow = '1' then
                             for i in 0 to WIDTH-1 loop
                                 -- for each element of input vec
@@ -279,18 +406,15 @@ begin
                             end loop;
                             listPtrPut <= i2slv(indPut, listPtrPut'length);
                             
-                            listBackExt(numBackVar to numBackVar + 3) := physCommitFreedDelayed;
-                            numBackVar := numBackVar + nPut;
-                            if numBackVar >= 4 then
-                                for j in 0 to 3 loop
-                                    listContent((slv2u(physPtrPut) + j) mod FREE_LIST_SIZE) <= listBackExt(j);
-                                end loop;
+                            -- CAREFUL: expression is
+                            --listBackExt(numBackVar to numBackVar + 3) := physCommitFreedDelayed;
+                            listBackExt(numBackVar + 0) := physCommitFreedDelayed(0);
+                            listBackExt(numBackVar + 1) := physCommitFreedDelayed(1);
+                            listBackExt(numBackVar + 2) := physCommitFreedDelayed(2);
+                            listBackExt(numBackVar + 3) := physCommitFreedDelayed(3);
                             
-                                listBackExt(0 to 7) := listBackExt(4 to 11);
-                                numBackVar := numBackVar - 4;
-                                
-                                physPtrPut <= i2slv(slv2u(physPtrPut) + 4, SMALL_NUMBER_SIZE);                          
-                            end if;                                                           
+                            numBackVar := numBackVar + nPut;
+                                                           
                         end if;                        
                         
                         listBack <= listBackExt(0 to 7);
