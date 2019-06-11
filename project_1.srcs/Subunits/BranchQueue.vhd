@@ -85,6 +85,9 @@ architecture Behavioral of BranchQueue is
 	signal dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	
 	constant PTR_MASK_SN: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+
+	   signal nFull, nFullNext,  nFullRestored, nIn, nOut: integer := 0;
+	   signal recoveryCounter: integer := 0;
 	
 	function getCausingPtr(content: InstructionStateArray; causing: InstructionState) return SmallNumber is
 	   variable res: SmallNumber := (others => '0');
@@ -336,9 +339,46 @@ begin
                 pAll <= addSN(causingPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;             
             elsif prevSendingBr = '1' then -- + N
                 pAll <= addSN(pAll, i2slv(countOnes(inputMaskBr), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-            end if;			
+            end if;
+            
+                
+                if lateEventSignal = '1' or execEventSignal = '1' then
+                    recoveryCounter <= 1;
+                elsif recoveryCounter > 0 then
+                    recoveryCounter <= recoveryCounter - 1;
+                end if;
+                
+                
+                --if recoveryCounter = 1 then
+                --   nFull <= nFullRestored;
+                --else
+                --   nFull <= nFull + nIn - nOut;
+                --end if;
+                
+                nFull <= nFullNext;
+                if nFullNext > QUEUE_SIZE-4 then
+                    
+                elsif nFullNext > QUEUE_SIZE-8 then
+                    
+                else
+                    
+                end if;
+                
+                
+                        
 		end if;
 	end process;
+
+            nFullNext <=  nFullRestored when recoveryCounter = 1
+                    else  nFull + nIn - nOut;
+            
+            
+
+           nOut <= countOnes(extractFullMask(dataOutSig)) when isSending = '1'
+          else 0;        
+        
+           nFullRestored <= QUEUE_SIZE when pStart = pAll and fullMask(0) = '1' 
+                    else slv2s(pAll) - slv2s(pStart); -- TODO: modulo to make it positive  
 
 	isSending <= committing and dataOutSig(0).full;
 	dataOutV <= dataOutSig;

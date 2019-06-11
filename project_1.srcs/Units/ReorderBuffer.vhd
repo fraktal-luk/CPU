@@ -72,26 +72,21 @@ end ReorderBuffer;
 
 
 architecture Behavioral of ReorderBuffer is
-	signal fullMask: --, TMP_mask, TMP_ckEnForInput, TMP_sendingMask, TMP_killMask, TMP_livingMask, TMP_maskNext:
-				std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
+	signal fullMask: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
 
     signal content, contentNext: ReorderBufferArray := DEFAULT_ROB_ARRAY;
 
 	signal isSending: std_logic := '0';
 	signal execEvent: std_logic := '0'; -- depends on input in slot referring to branch ops
-		
-	--signal numKilled: SmallNumber := (others => '0');
 
-	--	signal execEnds: InstructionStateArray(0 to 3) := (others => DEFAULT_INSTRUCTION_STATE);
-	--	signal execReady: std_logic_vector(0 to 3) := (others => '0');
-	--	signal execEnds2: InstructionStateArray(0 to 3) := (others => DEFAULT_INSTRUCTION_STATE);
-	--	signal execReady2: std_logic_vector(0 to 3) := (others => '0');
-	
-            constant ROB_HAS_RESET: std_logic := '0';
-            constant ROB_HAS_EN: std_logic := '0';
+    constant ROB_HAS_RESET: std_logic := '0';
+    constant ROB_HAS_EN: std_logic := '0';
 
 	constant PTR_MASK_TAG: InsTag := i2slv(ROB_SIZE-1, TAG_SIZE);
 	constant PTR_MASK_SN: SmallNumber := i2slv(ROB_SIZE-1, SMALL_NUMBER_SIZE);
+	
+	       signal recoveryCounter: integer := 0;
+	       signal nFull, nFullRestored, nIn, nOut: integer := 0;
 	
 	function getNextRobContent(content: ReorderBufferArray;
 	                           newGroup: InstructionSlotArray;
@@ -174,8 +169,29 @@ begin
             elsif prevSending = '1' then
                 endPtr <= addSN(endPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
             end if;
+            
+            
+            if lateEventSignal = '1' or execEvent = '1' then
+                recoveryCounter <= 1;
+            elsif recoveryCounter > 0 then
+                recoveryCounter <= recoveryCounter - 1;
+            end if;
+            
+            if recoveryCounter = 1 then
+                nFull <= nFullRestored;
+            else
+                nFull <= nFull + nIn - nOut;
+            end if;
+                
 		end if;		
 	end process;
+	
+	   nIn <= 1 when prevSending = '1' else 0;
+	   nOut <= 1 when isSending = '1' else 0;
+
+       nFullRestored <= ROB_SIZE when startPtr = endPtr and content(0).full = '1' 
+                   else slv2s(endPtr) - slv2s(startPtr); -- TODO: modulo to make it positive  	   
+	   
 	
 	isSending <= groupCompleted(content(slv2u(startPtr)).ops) and content(slv2u(startPtr)).full and nextAccepting;
 

@@ -90,6 +90,9 @@ architecture Behavioral of StoreQueue is
 	signal dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	signal dataDrainSig: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 	
+	   signal nFull, nFullRestored, nIn, nOut: integer := 0;
+	   signal recoveryCounter: integer := 0;
+	
 	constant PTR_MASK_SN: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
 	
 	function getCausingPtr(content: InstructionStateArray; causing: InstructionState) return SmallNumber is
@@ -494,15 +497,46 @@ begin
                 pTagged <= addSN(pTagged, i2slv(countOnes(inputMask), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
             end if;
 
---            if lateEventSignal = '1' then
---                pAll <= pStart;
---            elsif execEventSignal = '1' then
---                pAll <= addSN(causingPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;             
---            elsif prevSendingBr = '1' then -- + N
---                pAll <= addSN(pAll, i2slv(countOnes(inputMaskBr), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
---            end if;			
+
+            
+            
+            if lateEventSignal = '1' or execEventSignal = '1' then
+                recoveryCounter <= 1;
+            elsif recoveryCounter > 0 then
+                recoveryCounter <= recoveryCounter - 1;
+            end if;
+            
+            -- nFull handling
+            -- Event - start recovery
+            -- Otherwise add incoming, subtract leaving
+            --  -- CAREFUL: assumes isDraining a single bit 
+	        if recoveryCounter = 1 then
+	           nFull <= nFullRestored;
+	        else
+	           nFull <= nFull + nIn - nOut;
+	        end if;
+	        
 		end if;
 	end process;
+
+	    nIn <= countOnes(inputMask) when prevSending = '1' else 0;
+	        
+        LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
+           nOut <= countOnes(extractFullMask(dataOutSig)) when isSending = '1'
+          else 0;        
+        
+           nFullRestored <= QUEUE_SIZE when pStart = pTagged and fullMask(0) = '1' 
+                    else slv2s(pTagged) - slv2s(pStart); -- TODO: modulo to make it positive           
+        end generate;
+    
+        STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
+	        nOut <= 1 when isDraining = '1'
+              else 0;
+                  
+           nFullRestored <= QUEUE_SIZE when pStart = pTagged and fullMask(0) = '1' 
+                    else slv2s(pTagged) - slv2s(pStart); -- TODO: modulo to make it positive           
+        end generate;
+
 
     isDraining <= dataDrainSig(0).full;
 	isSending <= committing and dataOutSig(0).full;
