@@ -90,8 +90,10 @@ architecture Behavioral of StoreQueue is
 	signal dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	signal dataDrainSig: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 	
-	   signal nFull, nFullRestored, nIn, nOut: integer := 0;
+	   signal nFull, nFullNext, nFullRestored, nIn, nOut: integer := 0;
 	   signal recoveryCounter: integer := 0;
+	   signal isFull, isAlmostFull: std_logic := '0'; 	
+
 	
 	constant PTR_MASK_SN: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
 	
@@ -510,14 +512,29 @@ begin
             -- Event - start recovery
             -- Otherwise add incoming, subtract leaving
             --  -- CAREFUL: assumes isDraining a single bit 
-	        if recoveryCounter = 1 then
-	           nFull <= nFullRestored;
-	        else
-	           nFull <= nFull + nIn - nOut;
-	        end if;
+--	        if recoveryCounter = 1 then
+--	           nFull <= nFullRestored;
+--	        else
+--	           nFull <= nFull + nIn - nOut;
+--	        end if;
 	        
+	        nFull <= nFullNext;
+	        
+            if nFullNext > QUEUE_SIZE-4 then
+                isFull <= '1';
+                isAlmostFull <= '1';
+            elsif nFullNext > QUEUE_SIZE-8 then
+                isFull <= '0';
+                isAlmostFull <= '1';
+            else
+                isFull <= '0';
+                isAlmostFull <= '0';
+            end if; 	        
 		end if;
 	end process;
+
+            nFullNext <=  nFullRestored when recoveryCounter = 1
+                    else  nFull + nIn - nOut;
 
 	    nIn <= countOnes(inputMask) when prevSending = '1' else 0;
 	        
@@ -526,7 +543,7 @@ begin
           else 0;        
         
            nFullRestored <= QUEUE_SIZE when pStart = pTagged and fullMask(0) = '1' 
-                    else slv2s(pTagged) - slv2s(pStart); -- TODO: modulo to make it positive           
+                    else (slv2s(pTagged) - slv2s(pStart)) mod QUEUE_SIZE; -- TODO: modulo to make it positive           
         end generate;
     
         STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
@@ -534,7 +551,7 @@ begin
               else 0;
                   
            nFullRestored <= QUEUE_SIZE when pStart = pTagged and fullMask(0) = '1' 
-                    else slv2s(pTagged) - slv2s(pStart); -- TODO: modulo to make it positive           
+                    else (slv2s(pTagged) - slv2s(pStart)) mod QUEUE_SIZE; -- TODO: modulo to make it positive           
         end generate;
 
 
@@ -546,9 +563,10 @@ begin
     pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
     pAccMore <= subSN(pStart, i2slv(8, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
     
-	acceptingOut <= not taggedMask(slv2u(pAcc)) and (not committedMask(slv2u(pAcc)) or bool2std(IS_LOAD_QUEUE));
-	almostFull <= taggedMask(slv2u(pAccMore)) or (committedMask(slv2u(pAcc)) and not bool2std(IS_LOAD_QUEUE)); -- TODO: more efficient full/almost full management (whole Core level)
-
+	acceptingOut <= --not taggedMask(slv2u(pAcc)) and (not committedMask(slv2u(pAcc)) or bool2std(IS_LOAD_QUEUE));
+	               not isFull;
+	almostFull <= --taggedMask(slv2u(pAccMore)) or (committedMask(slv2u(pAcc)) and not bool2std(IS_LOAD_QUEUE)); -- TODO: more efficient full/almost full management (whole Core level)
+                    isAlmostFull;
 	sendingSQOut <= isSending;
 
 	selectedDataOutput <= selectedDataOutputSig;

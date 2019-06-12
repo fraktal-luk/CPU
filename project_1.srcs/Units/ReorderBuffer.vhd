@@ -86,7 +86,10 @@ architecture Behavioral of ReorderBuffer is
 	constant PTR_MASK_SN: SmallNumber := i2slv(ROB_SIZE-1, SMALL_NUMBER_SIZE);
 	
 	       signal recoveryCounter: integer := 0;
-	       signal nFull, nFullRestored, nIn, nOut: integer := 0;
+	       signal nFull, nFullNext, nFullRestored, nIn, nOut: integer := 0;
+
+	   signal isFull, isAlmostFull: std_logic := '0'; 	
+
 	
 	function getNextRobContent(content: ReorderBufferArray;
 	                           newGroup: InstructionSlotArray;
@@ -177,12 +180,24 @@ begin
                 recoveryCounter <= recoveryCounter - 1;
             end if;
             
-            if recoveryCounter = 1 then
-                nFull <= nFullRestored;
+--            if recoveryCounter = 1 then
+--                nFull <= nFullRestored;
+--            else
+--                nFull <= nFull + nIn - nOut;
+--            end if;
+            
+            nFull <= nFullNext;
+            
+            if nFullNext > ROB_SIZE-1 then
+                isFull <= '1';
+                isAlmostFull <= '1';
+            elsif nFullNext > ROB_SIZE-2 then
+                isFull <= '0';
+                isAlmostFull <= '1';
             else
-                nFull <= nFull + nIn - nOut;
-            end if;
-                
+                isFull <= '0';
+                isAlmostFull <= '0';
+            end if;            
 		end if;		
 	end process;
 	
@@ -190,15 +205,19 @@ begin
 	   nOut <= 1 when isSending = '1' else 0;
 
        nFullRestored <= ROB_SIZE when startPtr = endPtr and content(0).full = '1' 
-                   else slv2s(endPtr) - slv2s(startPtr); -- TODO: modulo to make it positive  	   
-	   
+                   else (slv2s(endPtr) - slv2s(startPtr)) mod ROB_SIZE; -- TODO: modulo to make it positive  	   
+
+            nFullNext <=  nFullRestored when recoveryCounter = 1
+                    else  nFull + nIn - nOut;	   
 	
 	isSending <= groupCompleted(content(slv2u(startPtr)).ops) and content(slv2u(startPtr)).full and nextAccepting;
 
-	acceptingOut <= not content(slv2u(endPtr)).full; -- When a free place exists
-    acmPtr <= subSN(endPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-    acceptingMore <= not content(slv2u(acmPtr)).full;
-								
+	acceptingOut <= --not content(slv2u(endPtr)).full; -- When a free place exists
+	               not isFull;
+	
+    acmPtr <= addSN(endPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+    acceptingMore <=  --not content(slv2u(acmPtr)).full;
+				    not isAlmostFull;		
 	outputData <= content(slv2u(startPtr)).ops;
 
 	sendingOut <= isSending;

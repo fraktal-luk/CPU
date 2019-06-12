@@ -88,6 +88,7 @@ architecture Behavioral of BranchQueue is
 
 	   signal nFull, nFullNext,  nFullRestored, nIn, nOut: integer := 0;
 	   signal recoveryCounter: integer := 0;
+	   signal isFull, isAlmostFull: std_logic := '0'; 	
 	
 	function getCausingPtr(content: InstructionStateArray; causing: InstructionState) return SmallNumber is
 	   variable res: SmallNumber := (others => '0');
@@ -357,11 +358,14 @@ begin
                 
                 nFull <= nFullNext;
                 if nFullNext > QUEUE_SIZE-4 then
-                    
+                    isFull <= '1';
+                    isAlmostFull <= '1';
                 elsif nFullNext > QUEUE_SIZE-8 then
-                    
+                    isFull <= '0';
+                    isAlmostFull <= '1';
                 else
-                    
+                    isFull <= '0';
+                    isAlmostFull <= '0';
                 end if;
                 
                 
@@ -378,7 +382,7 @@ begin
           else 0;        
         
            nFullRestored <= QUEUE_SIZE when pStart = pAll and fullMask(0) = '1' 
-                    else slv2s(pAll) - slv2s(pStart); -- TODO: modulo to make it positive  
+                    else (slv2s(pAll) - slv2s(pStart)) mod QUEUE_SIZE; -- TODO: modulo to make it positive  
 
 	isSending <= committing and dataOutSig(0).full;
 	dataOutV <= dataOutSig;
@@ -387,8 +391,9 @@ begin
 
     -- Accept when 4 free slot exist
     pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-	acceptingBr <= not fullMask(slv2u(pAcc));
-
+	acceptingBr <= --not fullMask(slv2u(pAcc));
+                   not isFull;
+                    
 	sendingSQOut <= isSending;
 
 	selectedDataOutput <= selectedDataSlot;
