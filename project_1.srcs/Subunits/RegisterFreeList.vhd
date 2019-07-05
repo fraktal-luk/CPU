@@ -179,7 +179,7 @@ begin
             effectivePhysPtrTake <= i2slv(slv2u(physPtrTake) + 4, SMALL_NUMBER_SIZE) when (needTake and memRead) = '1'
                                else physPtrTake;
             needTake <= --bool2std(numFront - numToTake <= 4);
-                        cmpLessSignedSN(numFront, addSN(numToTake, i2slv(4, SMALL_NUMBER_SIZE)));
+                        not cmpGreaterSignedSN(numFront, addSN(numToTake, i2slv(4, SMALL_NUMBER_SIZE)));
             numToTake <= --countOnes(freeListTakeSel) when freeListTakeAllow = '1' else 0;
                         i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE) when freeListTakeAllow = '1' else (others => '0');
 
