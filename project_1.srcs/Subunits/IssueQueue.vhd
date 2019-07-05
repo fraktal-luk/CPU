@@ -185,8 +185,10 @@ begin
 
 	
 	killMask <= getKillMask(queueData, fullMask, execCausing, execEventSignal, lateEventSignal); 
-	acceptingOut <= not isNonzero(fullMask(IQ_SIZE-PIPE_WIDTH to IQ_SIZE-1)); 
-	acceptingMore <= not isNonzero(fullMask(IQ_SIZE-2*PIPE_WIDTH to IQ_SIZE-PIPE_WIDTH-1));
+	acceptingOut <= --not isNonzero(fullMask(IQ_SIZE-PIPE_WIDTH to IQ_SIZE-1));
+	                   not fullMask(IQ_SIZE-PIPE_WIDTH); -- Equivalent and much better because in collapsing queue mask is continuous!
+	acceptingMore <= --not isNonzero(fullMask(IQ_SIZE-2*PIPE_WIDTH to IQ_SIZE-PIPE_WIDTH-1));
+	                   not fullMask(IQ_SIZE-2*PIPE_WIDTH);
 	
 	anyReadyLive <= isNonzero(readyMaskLive);
 	anyReadyFull <= isNonzero(readyMask);

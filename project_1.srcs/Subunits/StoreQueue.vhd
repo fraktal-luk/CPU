@@ -90,8 +90,8 @@ architecture Behavioral of StoreQueue is
 	signal dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	signal dataDrainSig: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 	
-	   signal nFull, nFullNext, nFullRestored, nIn, nOut: integer := 0;
-	   signal recoveryCounter: integer := 0;
+	   signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
+	   signal recoveryCounter: SmallNumber := (others => '0');
 	   signal isFull, isAlmostFull: std_logic := '0'; 	
 
 	
@@ -503,9 +503,9 @@ begin
             
             
             if lateEventSignal = '1' or execEventSignal = '1' then
-                recoveryCounter <= 1;
-            elsif recoveryCounter > 0 then
-                recoveryCounter <= recoveryCounter - 1;
+                recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
+            elsif recoveryCounter /= i2slv(0, SMALL_NUMBER_SIZE) then
+                recoveryCounter <= subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
             end if;
             
             -- nFull handling
@@ -520,10 +520,12 @@ begin
 	        
 	        nFull <= nFullNext;
 	        
-            if nFullNext > QUEUE_SIZE-4 then
+            if --nFullNext > QUEUE_SIZE-4 then
+                cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-4, SMALL_NUMBER_SIZE)) = '1' then
                 isFull <= '1';
                 isAlmostFull <= '1';
-            elsif nFullNext > QUEUE_SIZE-8 then
+            elsif --nFullNext > QUEUE_SIZE-8 then
+                cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-8, SMALL_NUMBER_SIZE)) = '1' then
                 isFull <= '0';
                 isAlmostFull <= '1';
             else
@@ -533,25 +535,34 @@ begin
 		end if;
 	end process;
 
-            nFullNext <=  nFullRestored when recoveryCounter = 1
-                    else  nFull + nIn - nOut;
+            nFullNext <=  nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
+                    else  --nFull + nIn - nOut;
+                          subSN(addSN(nFull, nIn), nOut);
 
-	    nIn <= countOnes(inputMask) when prevSending = '1' else 0;
+	    nIn <= i2slv( countOnes(inputMask), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
 	        
         LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
-           nOut <= countOnes(extractFullMask(dataOutSig)) when isSending = '1'
-          else 0;        
+            constant QUEUE_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+            signal tagDiff: SmallNumber := (others => '0');
+        begin
+           nOut <= i2slv(countOnes(extractFullMask(dataOutSig)), SMALL_NUMBER_SIZE) when isSending = '1'
+          else (others => '0');        
         
-           nFullRestored <= QUEUE_SIZE when pStart = pTagged and fullMask(0) = '1' 
-                    else (slv2s(pTagged) - slv2s(pStart)) mod QUEUE_SIZE; -- TODO: modulo to make it positive           
+           nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStart = pTagged and fullMask(0) = '1'
+                           else tagDiff and QUEUE_SIZE_MASK;
+                           tagDiff <= subSN(pTagged, pStart); -- TODO: modulo to make it positive           
         end generate;
     
         STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
-	        nOut <= 1 when isDraining = '1'
-              else 0;
+            constant QUEUE_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+            signal tagDiff: SmallNumber := (others => '0');
+        begin        
+	        nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isDraining = '1'
+              else (others => '0');
                   
-           nFullRestored <= QUEUE_SIZE when pStart = pTagged and fullMask(0) = '1' 
-                    else (slv2s(pTagged) - slv2s(pStart)) mod QUEUE_SIZE; -- TODO: modulo to make it positive           
+           nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStart = pTagged and fullMask(0) = '1' 
+                else tagDiff and QUEUE_SIZE_MASK;
+                tagDiff <= subSN(pTagged, pStart); -- TODO: modulo to make it positive
         end generate;
 
 
