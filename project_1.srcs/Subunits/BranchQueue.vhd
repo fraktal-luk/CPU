@@ -86,8 +86,8 @@ architecture Behavioral of BranchQueue is
 	
 	constant PTR_MASK_SN: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
 
-	   signal nFull, nFullNext,  nFullRestored, nIn, nOut: integer := 0;
-	   signal recoveryCounter: integer := 0;
+	   signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
+	   signal recoveryCounter: SmallNumber := (others => '0');
 	   signal isFull, isAlmostFull: std_logic := '0'; 	
 	
 	function getCausingPtr(content: InstructionStateArray; causing: InstructionState) return SmallNumber is
@@ -342,47 +342,55 @@ begin
                 pAll <= addSN(pAll, i2slv(countOnes(inputMaskBr), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
             end if;
             
-                
-                if lateEventSignal = '1' or execEventSignal = '1' then
-                    recoveryCounter <= 1;
-                elsif recoveryCounter > 0 then
-                    recoveryCounter <= recoveryCounter - 1;
-                end if;
-                
-                
-                --if recoveryCounter = 1 then
-                --   nFull <= nFullRestored;
-                --else
-                --   nFull <= nFull + nIn - nOut;
-                --end if;
-                
-                nFull <= nFullNext;
-                if nFullNext > QUEUE_SIZE-4 then
-                    isFull <= '1';
-                    isAlmostFull <= '1';
-                elsif nFullNext > QUEUE_SIZE-8 then
-                    isFull <= '0';
-                    isAlmostFull <= '1';
-                else
-                    isFull <= '0';
-                    isAlmostFull <= '0';
-                end if;
+
+
+
+            
+            if lateEventSignal = '1' or execEventSignal = '1' then
+                recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
+            elsif recoveryCounter /= i2slv(0, SMALL_NUMBER_SIZE) then
+                recoveryCounter <= subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
+            end if;
+                            
+            if --nFullNext > QUEUE_SIZE-4 then
+                cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-4, SMALL_NUMBER_SIZE)) = '1' then
+                isFull <= '1';
+                isAlmostFull <= '1';
+            elsif --nFullNext > QUEUE_SIZE-8 then
+                cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-8, SMALL_NUMBER_SIZE)) = '1' then
+                isFull <= '0';
+                isAlmostFull <= '1';
+            else
+                isFull <= '0';
+                isAlmostFull <= '0';
+            end if;     
                 
                 
                         
 		end if;
 	end process;
 
-            nFullNext <=  nFullRestored when recoveryCounter = 1
-                    else  nFull + nIn - nOut;
-            
-            
 
-           nOut <= countOnes(extractFullMask(dataOutSig)) when isSending = '1'
-          else 0;        
+
+            nFullNext <=  nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
+                    else  --nFull + nIn - nOut;
+                          subSN(addSN(nFull, nIn), nOut);
+
+	    nIn <= i2slv( countOnes(extractFullMask(dataInBr)), SMALL_NUMBER_SIZE ) when prevSendingBr = '1' else (others => '0');
+	        
+        QUEUE_MANAGEMENT: block
+            constant QUEUE_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+            signal tagDiff: SmallNumber := (others => '0');
+        begin
+           nOut <= i2slv(countOnes(extractFullMask(dataOutSig)), SMALL_NUMBER_SIZE) when isSending = '1'
+          else (others => '0');        
         
-           nFullRestored <= QUEUE_SIZE when pStart = pAll and fullMask(0) = '1' 
-                    else (slv2s(pAll) - slv2s(pStart)) mod QUEUE_SIZE; -- TODO: modulo to make it positive  
+           nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStart = pAll and fullMask(0) = '1'
+                           else tagDiff and QUEUE_SIZE_MASK;
+                           tagDiff <= subSN(pAll, pStart); -- TODO: modulo to make it positive           
+        end block;
+
+
 
 	isSending <= committing and dataOutSig(0).full;
 	dataOutV <= dataOutSig;

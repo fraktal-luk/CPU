@@ -531,7 +531,7 @@ begin
             else
                 isFull <= '0';
                 isAlmostFull <= '0';
-            end if; 	        
+            end if;	        
 		end if;
 	end process;
 

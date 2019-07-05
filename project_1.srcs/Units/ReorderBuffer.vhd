@@ -85,10 +85,11 @@ architecture Behavioral of ReorderBuffer is
 	constant PTR_MASK_TAG: InsTag := i2slv(ROB_SIZE-1, TAG_SIZE);
 	constant PTR_MASK_SN: SmallNumber := i2slv(ROB_SIZE-1, SMALL_NUMBER_SIZE);
 	
-	       signal recoveryCounter: integer := 0;
-	       signal nFull, nFullNext, nFullRestored, nIn, nOut: integer := 0;
+	
+       signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
+       signal recoveryCounter: SmallNumber := (others => '0');
+       signal isFull, isAlmostFull: std_logic := '0';     
 
-	   signal isFull, isAlmostFull: std_logic := '0'; 	
 
 	
 	function getNextRobContent(content: ReorderBufferArray;
@@ -175,23 +176,29 @@ begin
             
             
             if lateEventSignal = '1' or execEvent = '1' then
-                recoveryCounter <= 1;
-            elsif recoveryCounter > 0 then
-                recoveryCounter <= recoveryCounter - 1;
+                recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
+            elsif recoveryCounter /= i2slv(0, SMALL_NUMBER_SIZE) then
+                recoveryCounter <= subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
             end if;
             
+            -- nFull handling
+            -- Event - start recovery
+            -- Otherwise add incoming, subtract leaving
+            --  -- CAREFUL: assumes isDraining a single bit 
 --            if recoveryCounter = 1 then
---                nFull <= nFullRestored;
+--               nFull <= nFullRestored;
 --            else
---                nFull <= nFull + nIn - nOut;
+--               nFull <= nFull + nIn - nOut;
 --            end if;
             
             nFull <= nFullNext;
             
-            if nFullNext > ROB_SIZE-1 then
+            if --nFullNext > QUEUE_SIZE-4 then
+                cmpGreaterUnsignedSN(nFullNext, i2slv(ROB_SIZE-1, SMALL_NUMBER_SIZE)) = '1' then
                 isFull <= '1';
                 isAlmostFull <= '1';
-            elsif nFullNext > ROB_SIZE-2 then
+            elsif --nFullNext > QUEUE_SIZE-8 then
+                cmpGreaterUnsignedSN(nFullNext, i2slv(ROB_SIZE-2, SMALL_NUMBER_SIZE)) = '1' then
                 isFull <= '0';
                 isAlmostFull <= '1';
             else
@@ -201,14 +208,22 @@ begin
 		end if;		
 	end process;
 	
-	   nIn <= 1 when prevSending = '1' else 0;
-	   nOut <= 1 when isSending = '1' else 0;
+	   nIn <= i2slv(1, SMALL_NUMBER_SIZE) when prevSending = '1' else (others => '0');
+	   nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');
 
-       nFullRestored <= ROB_SIZE when startPtr = endPtr and content(0).full = '1' 
-                   else (slv2s(endPtr) - slv2s(startPtr)) mod ROB_SIZE; -- TODO: modulo to make it positive  	   
+            nFullNext <=  nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
+                    else  --nFull + nIn - nOut;
+                          subSN(addSN(nFull, nIn), nOut);
+        QUEUE_MANAGEMENT: block
+            constant QUEUE_SIZE_MASK: SmallNumber := i2slv(2*ROB_SIZE-1, SMALL_NUMBER_SIZE);
+            signal tagDiff: SmallNumber := (others => '0');
+        begin
+        
+           nFullRestored <= i2slv(ROB_SIZE, SMALL_NUMBER_SIZE) when startPtr = endPtr and content(0).full = '1'
+                           else tagDiff and QUEUE_SIZE_MASK;
+                           tagDiff <= subSN(endPtr, startPtr); -- TODO: modulo to make it positive           
+        end block;
 
-            nFullNext <=  nFullRestored when recoveryCounter = 1
-                    else  nFull + nIn - nOut;	   
 	
 	isSending <= groupCompleted(content(slv2u(startPtr)).ops) and content(slv2u(startPtr)).full and nextAccepting;
 
