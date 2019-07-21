@@ -507,16 +507,6 @@ begin
             elsif recoveryCounter /= i2slv(0, SMALL_NUMBER_SIZE) then
                 recoveryCounter <= subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
             end if;
-            
-            -- nFull handling
-            -- Event - start recovery
-            -- Otherwise add incoming, subtract leaving
-            --  -- CAREFUL: assumes isDraining a single bit 
---	        if recoveryCounter = 1 then
---	           nFull <= nFullRestored;
---	        else
---	           nFull <= nFull + nIn - nOut;
---	        end if;
 	        
 	        nFull <= nFullNext;
 	        
@@ -531,13 +521,20 @@ begin
             else
                 isFull <= '0';
                 isAlmostFull <= '0';
-            end if;	        
+            end if;	    
+   
 		end if;
 	end process;
-
+        N_FULL_NEXT: block
+            constant QUEUE_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+            signal flowDiff: SmallNumber := (others => '0');            
+        begin
             nFullNext <=  nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
                     else  --nFull + nIn - nOut;
-                          subSN(addSN(nFull, nIn), nOut);
+                          --subSN(addSN(nFull, nIn), nOut);
+                          flowDiff and QUEUE_SIZE_MASK;
+            flowDiff <= subSN(addSN(nFull, nIn), nOut);
+        end block;
 
 	    nIn <= i2slv( countOnes(inputMask), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
 	        

@@ -61,7 +61,7 @@ architecture Behavioral of RegisterFreeList is
 		signal newPhysDestsAsync, newPhysDestsAsync_T: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 		
 		      signal ch0: std_logic := '0';
-		      signal recoveryCounter: integer := 0;
+		      signal recoveryCounter: SmallNumber := (others => '0');
 		
 function initList return PhysNameArray is
     variable res: PhysNameArray(0 to FREE_LIST_SIZE-1) := (others => (others=> '0'));
@@ -379,9 +379,9 @@ begin
                         
                         -- CHECK: 3 cycles to restore?
                         if freeListRewind = '1' then
-                            recoveryCounter <= 3;
-                        elsif recoveryCounter > 0 then
-                            recoveryCounter <= recoveryCounter - 1;
+                            recoveryCounter <= i2slv(3, SMALL_NUMBER_SIZE);
+                        elsif isNonzero(recoveryCounter) = '1' then
+                            recoveryCounter <= subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
                         end if;
                 end if;
             end process;            
