@@ -70,7 +70,8 @@ begin
 					ci.load := '1';
 				end if;
 				
-				if ins.operation.unit = Jump then
+				if --ins.operation.unit = Jump then
+				    ins.classInfo.branchIns = '1' then
 					ci.branchIns := '1';
 					--ci.secCluster := '1';
 				elsif ins.operation = (System, sysMtc) then
@@ -294,6 +295,7 @@ begin
     -- Find if any branch predicted
     for i in 0 to FETCH_WIDTH-1 loop
         fullOut(i) := full(i);
+        res(i).ins.classInfo.branchIns := branchIns(i);
         if full(i) = '1' and branchIns(i) = '1' and predictedTaken(i) = '1' then
             if uncondJump(i) = '1' then
                 res(i).ins.controlInfo.confirmedBranch := '1';	-- CAREFUL: setting it here, so that if implementation

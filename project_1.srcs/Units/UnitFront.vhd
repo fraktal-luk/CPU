@@ -72,6 +72,9 @@ architecture Behavioral of UnitFront is
 	signal earlyBranchMultiDataInA, earlyBranchMultiDataOutA:
 								InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	signal branchMask: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
+	
+	   signal dataToBranchTransfer: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+	   signal sendingToBranchTransfer: std_logic := '0';
 begin
 	killAll <= execEventSignal or lateEventSignal;
     killAllOrFront <= killAll or frontKill;
@@ -181,7 +184,6 @@ begin
 	earlyBranchDataOut <= earlyBranchDataOutA(0).ins;
 
 	branchMask <= getBranchMask(earlyBranchMultiDataInA);
-	bpData <= prepareForBQ(earlyBranchMultiDataInA, branchMask);
 
 	frontKill <= frontBranchEvent;-- or fetchStall;
 
@@ -228,5 +230,36 @@ begin
 
 	frontCausing <= frontCausingSig;
 	
-	bpSending <= sendingOutFetch1 and not fetchStall;
+--	process(clk)
+--	begin
+--	   if rising_edge(clk) then
+--	       --bpSending 
+	       
+	       sendingToBranchTransfer <= sendingOutFetch1 and not fetchStall;
+	       --bpData
+	       dataToBranchTransfer <= prepareForBQ(earlyBranchMultiDataInA, branchMask);
+--	   end if;
+--	end process;
+
+
+    SUBUNIT_BRANCH_TRANSFER: entity work.GenericStage(Behavioral)
+	generic map(
+		WIDTH => PIPE_WIDTH
+	)
+	port map(
+		clk => clk, reset => resetSig, en => enSig,
+				
+		prevSending => sendingToBranchTransfer,	
+		nextAccepting => '1',
+		stageDataIn => dataToBranchTransfer,
+		
+		acceptingOut => open,
+		sendingOut => bpSending,
+		stageDataOut => bpData,
+		
+		execEventSignal => killAll,
+		lateEventSignal => killAll,
+		execCausing => DEFAULT_INSTRUCTION_STATE
+	);
+
 end Behavioral;

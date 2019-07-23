@@ -400,7 +400,8 @@ begin
     -- Accept when 4 free slot exist
     pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
 	acceptingBr <= --not fullMask(slv2u(pAcc));
-                   not isFull;
+                   --not isFull;
+                   not isAlmostFull;     
                     
 	sendingSQOut <= isSending;
 
