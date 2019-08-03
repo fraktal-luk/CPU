@@ -1171,7 +1171,9 @@ begin
             regsSelS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadStoreValue.ins)));
           
           -- Forwarding network
-		  fni.nextTagsM1 <= (0 => slotIssueI0.ins.physicalArgSpec.dest, 2 => dataOutMem0(0).ins.physicalArgSpec.dest, others => (others => '0'));        
+		  fni.nextTagsM1 <= (0 => slotIssueI0.ins.physicalArgSpec.dest, 2 => --dataOutMem0(0).ins.physicalArgSpec.dest,
+		                                                                      slotM0_E1i(0).ins.physicalArgSpec.dest,
+		                                                                          others => (others => '0'));        
 		  fni.nextTagsM2 <= (                                           2 => slotM0_E0(0).ins.physicalArgSpec.dest, others => (others => '0'));
           fni.tags0 <= (execOutputs1(0).ins.physicalArgSpec.dest, execOutputs1(1).ins.physicalArgSpec.dest, slotM0_E2i(0).ins.physicalArgSpec.dest);
           fni.tags1 <= (0 => slotI0_D0(0).ins.physicalArgSpec.dest, 2 => slotM0_D0i(0).ins.physicalArgSpec.dest, others => (others => '0'));

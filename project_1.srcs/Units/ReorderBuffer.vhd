@@ -72,11 +72,11 @@ end ReorderBuffer;
 
 
 architecture Behavioral of ReorderBuffer is
-	signal fullMask: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
+	signal fullMask, completedMask, completedMaskNext: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
 
     signal content, contentNext: ReorderBufferArray := DEFAULT_ROB_ARRAY;
 
-	signal isSending: std_logic := '0';
+	signal isSending, isSending_T: std_logic := '0';
 	signal execEvent: std_logic := '0'; -- depends on input in slot referring to branch ops
 
     constant ROB_HAS_RESET: std_logic := '0';
@@ -199,7 +199,10 @@ begin
             else
                 isFull <= '0';
                 isAlmostFull <= '0';
-            end if;            
+            end if;
+            
+            completedMask <= completedMaskNext;
+                        
 		end if;		
 	end process;
 	--
@@ -227,8 +230,13 @@ begin
 	                   else flowDiff and PTR_MASK_SN;
 	   end block;
 	   
+	FULL_MASK: for i in 0 to ROB_SIZE-1 generate
+	   fullMask(i) <= content(i).full;
+       completedMaskNext(i) <= groupCompleted(content(i).ops) and content(i).full;	   
+	end generate;
 	
-	isSending <= groupCompleted(content(slv2u(startPtr)).ops) and content(slv2u(startPtr)).full and nextAccepting;
+	--isSending <= groupCompleted(content(slv2u(startPtr)).ops) and content(slv2u(startPtr)).full and nextAccepting;
+	isSending <= completedMask(slv2u(startPtr)) and content(slv2u(startPtr)).full and nextAccepting;
 
 	acceptingOut <= --not content(slv2u(endPtr)).full; -- When a free place exists
 	               not isFull;
