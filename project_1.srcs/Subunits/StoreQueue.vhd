@@ -85,7 +85,7 @@ architecture Behavioral of StoreQueue is
 	signal selectedDataSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	signal selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 
-	signal pDrain, pStart, pTagged, pAll, causingPtr, pAcc, pAccMore: SmallNumber := (others => '0');
+	signal pDrain, pStart, pStartNext, pTagged, pAll, causingPtr, pAcc, pAccMore: SmallNumber := (others => '0');
 	
 	signal dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	signal dataDrainSig: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -470,7 +470,12 @@ begin
 	
 	selectedDataSlot <= selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
 	                           --selectDataSlot(content, taggedMask, compareAddressInput);
-	
+
+            --if isSending = '1' then
+                pStartNext <= pStart when isSending = '0' else addSN(pStart,
+                             i2slv(countOnes(extractFullMask(dataOutSig)), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+            --end if;
+            	
 	process (clk)
 	begin
 		if rising_edge(clk) then
@@ -486,13 +491,14 @@ begin
                 pDrain <= addSN(pDrain, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
             end if;
             
-            if isSending = '1' then
-                pStart <= addSN(pStart,
-                             i2slv(countOnes(extractFullMask(dataOutSig)), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-            end if;
+--            if isSending = '1' then
+--                pStart <= addSN(pStart,
+--                             i2slv(countOnes(extractFullMask(dataOutSig)), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+--            end if;
+            pStart <= pStartNext;
             
             if lateEventSignal = '1' then
-                pTagged <= pStart;
+                pTagged <= pStartNext;
             elsif execEventSignal = '1' then
                 pTagged <= subSN(pTagged, i2slv(countOnes(killMask), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
             elsif prevSending = '1' then -- + N
@@ -539,15 +545,15 @@ begin
 	    nIn <= i2slv( countOnes(inputMask), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
 	        
         LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
-            constant QUEUE_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+            constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
             signal tagDiff: SmallNumber := (others => '0');
         begin
            nOut <= i2slv(countOnes(extractFullMask(dataOutSig)), SMALL_NUMBER_SIZE) when isSending = '1'
           else (others => '0');        
         
-           nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStart = pTagged and fullMask(0) = '1'
-                           else tagDiff and QUEUE_SIZE_MASK;
-                           tagDiff <= subSN(pTagged, pStart); -- TODO: modulo to make it positive           
+           nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and fullMask(0) = '1'
+                           else tagDiff and TAG_DIFF_SIZE_MASK;
+                           tagDiff <= subSN(pTagged, pStartNext); -- TODO: modulo to make it positive           
         end generate;
     
         STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate

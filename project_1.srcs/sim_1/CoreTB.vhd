@@ -335,7 +335,7 @@ BEGIN
 
       wait until rising_edge(clk);
         -- After x cycles send interrupt
-        wait for 19 * 10 ns;
+        wait for 22 * 10 ns;
        wait until rising_edge(clk);        
             int1 <= '1';
       wait until rising_edge(clk);
