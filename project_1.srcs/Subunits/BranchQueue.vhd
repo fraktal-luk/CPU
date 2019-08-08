@@ -458,7 +458,7 @@ begin
             signal tagDiff: SmallNumber := (others => '0');
         begin
            nOut <= i2slv(countOnes(extractFullMask(--dataOutSigOld
-                                                     dataOutSigFinal   )), SMALL_NUMBER_SIZE) when isSending = '1'
+                                                     dataOutSigFinal   )), SMALL_NUMBER_SIZE) when isSending_T = '1'
           else (others => '0');        
         
            nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pAll and fullMask(0) = '1'
@@ -471,7 +471,7 @@ begin
 
     isSending_T <= dataOutSigFinal(0).full;
 
-	isSending <= committing and dataOutSigOld(0).full;
+	isSending <= committing and dataOutSigOld(0).full; -- DEPREC
 
 	acceptingOut <= '1';
 
