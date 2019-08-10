@@ -85,7 +85,7 @@ architecture Behavioral of StoreQueue is
 	signal selectedDataSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	signal selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 
-	signal pDrain, pStart, pStartNext, pStartNext_T, pTagged, pAll, causingPtr, pAcc, pAccMore: SmallNumber := (others => '0');
+	signal pDrain, pStart, pDrainNext, pStartNext, pStartNext_T, pTagged, pAll, causingPtr, pAcc, pAccMore: SmallNumber := (others => '0');
 	
 	signal dataOutSig, dataOutSigOld, dataOutSigFinal, dataOutSigNext: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	signal dataDrainSig: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -216,14 +216,20 @@ architecture Behavioral of StoreQueue is
                     res(i).tags := slot.ins.tags;
                     res(i).operation := slot.ins.operation;
                     res(i).controlInfo.completed := '0';
-                    res(i).controlInfo.completed2 := '0';                                  
+                    res(i).controlInfo.completed2 := '0';
+                        res(i).controlInfo.firstBr := '0';                                  
            end if;
            
            -- Mark loads which break data dependence on older stores
            if isLQ and matchingNewerLoads(i) = '1' then
                res(i).controlInfo.orderViolation := '1';
+                    res(i).controlInfo.newEvent := '1';
            end if;
         end loop;
+
+        if prevSending = '1' then
+            res(slv2u(pTagged)).controlInfo.firstBr := '1';
+        end if;
 
         -- Update target after mem execution
         for i in 0 to QUEUE_SIZE-1 loop
@@ -536,10 +542,12 @@ begin
 	                           --selectDataSlot(content, taggedMask, compareAddressInput);
 
             --if isSending = '1' then
-                pStartNext <= pStart when isSending = '0' else addSN(pStart,
-                             i2slv(countOnes(extractFullMask(dataOutSigOld)), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                pStartNext <= --pStart when isSending = '0' else addSN(pStart, i2slv(countOnes(extractFullMask(dataOutSigOld)), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                                pStartNext_T;
             --end if;
                 pStartNext_T <= addSN(pStart, i2slv(getNumberToSendSQ(dataOutSig, groupCtrInc, committing), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+
+            pDrainNext <= pDrain when isDraining = '0' else addSN(pDrain, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
             	
 	process (clk)
 	begin
@@ -554,9 +562,7 @@ begin
 
             dataOutSig <= dataOutSigNext;
 
-            if isDraining = '1' then
-                pDrain <= addSN(pDrain, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-            end if;
+            pDrain <= pDrainNext;
             
 --            if isSending = '1' then
 --                pStart <= addSN(pStart,
@@ -615,7 +621,8 @@ begin
             constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
             signal tagDiff: SmallNumber := (others => '0');
         begin
-           nOut <= i2slv(countOnes(extractFullMask(dataOutSigOld)), SMALL_NUMBER_SIZE) when isSending = '1'
+           nOut <= i2slv(countOnes(extractFullMask(--dataOutSigOld
+                                                    dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending_T = '1'
           else (others => '0');        
         
            nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and fullMask(0) = '1'
@@ -630,9 +637,9 @@ begin
 	        nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isDraining = '1'
               else (others => '0');
                   
-           nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and fullMask(0) = '1' 
+           nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pDrainNext = pTagged and fullMask(0) = '1' 
                 else tagDiff and QUEUE_SIZE_MASK;
-                tagDiff <= subSN(pTagged, pStartNext); -- TODO: modulo to make it positive
+                tagDiff <= subSN(pTagged, pDrainNext); -- TODO: modulo to make it positive
         end generate;
 
 
@@ -643,7 +650,8 @@ begin
      
         isSending_T <= dataOutSigFinal(0).full;	
 	
-	dataOutV <= dataOutSigOld;
+	dataOutV <= --dataOutSigOld;
+	               dataOutSigFinal;
 
     -- Accept when 4 free slot exist
     pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
@@ -653,7 +661,8 @@ begin
 	               not isFull;
 	almostFull <= --taggedMask(slv2u(pAccMore)) or (committedMask(slv2u(pAcc)) and not bool2std(IS_LOAD_QUEUE)); -- TODO: more efficient full/almost full management (whole Core level)
                     isAlmostFull;
-	sendingSQOut <= isSending;
+	sendingSQOut <= --isSending;
+	               isSending_T;
 
 	selectedDataOutput <= selectedDataOutputSig;
 	
