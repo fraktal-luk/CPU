@@ -72,7 +72,7 @@ architecture Behavioral of IssueQueue is
 	signal queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 	signal newContent, newSchedData: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 				
-	signal anyReadyFull, anyReadyLive, sends, sendPossible, sendingKilled, sent, sentKilled: std_logic := '0';
+	signal anyReadyFull, anyReadyLive, sends, sends_N, sendPossible, sendingKilled, sent, sentKilled, sentUnexpected: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
 	-- Select item at first '1', or the last one if all zeros
@@ -165,6 +165,7 @@ begin
 			queueContent <= queueContentNext_N;
 			     queueContent_N <= queueContentNext_N;
 			     sentKilled <= sendingKilled;
+			     --sentUnexpected <= isNonzero(selMask) and not nextAccepting;
 		end if;
 	end process;	
 
@@ -193,10 +194,13 @@ begin
                 sent <= isNonzero(issuedMask);
                 sendingKilled <= isNonzero(killMask and selMask);
             
+                    sends_N <= anyReadyFull and nextAccepting;
+            
             queueContentNext_N <= iqContentNext_N(queueContentUpdated, newContent,
                                               remainMask, fullMask, livingMask, selMask, issuedMask,
                                               
-                                              sendPossible, sent,
+                                              sends, sent,-- and not sentUnexpected,
+                                              sentUnexpected,
                                               prevSendingOK);
 					
 	-- TODO: below could be optimized because some code is shared (comparators!)
@@ -222,5 +226,5 @@ begin
 	
 	schedulerOut <= (sends, dispatchDataNew.ins, dispatchDataNew.state);
 	sending <= sends;
-	   sentCancelled <= sentKilled;
+	   sentCancelled <= sentKilled;-- or sentUnexpected;
 end Behavioral;

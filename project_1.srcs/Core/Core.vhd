@@ -419,7 +419,7 @@ begin
                 regValues => regValsI0 --(others => (others => '0'))     
             );
           
-            dataToAlu(0) <= (slotIssueI0.full, executeAlu(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins, branchData));
+            dataToAlu(0) <= (slotIssueI0.full and not sentCancelledI0, executeAlu(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins, branchData));
           
             STAGE_I0_E0: entity work.GenericStage(Behavioral)
             generic map(
@@ -538,8 +538,8 @@ begin
                sendingFromDLQ <= '0';          -- TEMP!
                dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
                     
-           sendingToAgu <= slotIssueM0.full or sendingFromDLQ;
-	       dataToAgu(0) <= (slotIssueM0.full or sendingFromDLQ, calcEffectiveAddress(slotIssueM0.ins, slotIssueM0.state, sendingFromDLQ, dataFromDLQ));
+           sendingToAgu <= (slotIssueM0.full and not sentCancelledM0) or sendingFromDLQ;
+	       dataToAgu(0) <= ((slotIssueM0.full and not sentCancelledM0) or sendingFromDLQ, calcEffectiveAddress(slotIssueM0.ins, slotIssueM0.state, sendingFromDLQ, dataFromDLQ));
        
            STAGE_AGU: entity work.GenericStage(Behavioral)
            generic map(
@@ -684,6 +684,7 @@ begin
             signal dataToStoreValueIQ, dataToStoreValueFloatIQ,
                schedDataStoreValue, schedDataStoreValueFloat: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);        
         begin
+            -- CHECK: does it need to use 'sentCancelled' signal from IQs?
             
             intStoreMask <= getStoreMask(renamedDataLiving) and not floatStoreMask;                                        
             schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLiving)), intStoreMask);
@@ -915,7 +916,7 @@ begin
                         regValues => regValsF0     
                     );
           
-            dataToFpu0(0) <= (slotRegReadF0.full, executeFpu(slotregReadF0.ins, slotregReadF0.state));
+            dataToFpu0(0) <= (slotRegReadF0.full and not sentCancelledF0, executeFpu(slotregReadF0.ins, slotregReadF0.state));
           
             STAGE_F0_E0: entity work.GenericStage(Behavioral)
             generic map(

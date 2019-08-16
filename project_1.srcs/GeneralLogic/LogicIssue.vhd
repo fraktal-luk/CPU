@@ -41,7 +41,8 @@ return SchedulerEntrySlotArray;
 
 function iqContentNext_N(queueContent: SchedulerEntrySlotArray; inputDataS: SchedulerEntrySlotArray;
 								 remainMask, fullMask, livingMask, selMask, issuedMask: std_logic_vector;
-								 sendPossible, sent: std_logic;
+								 sends, sent: std_logic;
+								 sentUnexpected,
 								 prevSending: std_logic)
 return SchedulerEntrySlotArray;
 
@@ -352,7 +353,8 @@ end function;
 
 function iqContentNext_N(queueContent: SchedulerEntrySlotArray; inputDataS: SchedulerEntrySlotArray;
 								 remainMask, fullMask, livingMask, selMask, issuedMask: std_logic_vector;
-								 sendPossible, sent: std_logic;
+								 sends, sent: std_logic;
+								 sentUnexpected,
 								 prevSending: std_logic)
 return SchedulerEntrySlotArray is
 	constant QUEUE_SIZE: natural := queueContent'length;
@@ -382,9 +384,14 @@ begin
 	
 	-- What is being issued now is marked
     for i in 0 to QUEUE_SIZE-1 loop
-            if selMask(i) = '1' then
+            if selMask(i) = '1' and sends = '1' then
                 xVecS(i).state.argValues.issued := '1';
-            end if;    
+            end if;
+            
+            -- Retraction into IQ when sending turns out disallowed
+            if issuedMask(i) = '1' and sentUnexpected = '1' then
+            --    xVecS(i).state.argValues.issued := '0';
+            end if;  
     end loop;	
 	
 	xVecS(QUEUE_SIZE) := xVecS(QUEUE_SIZE-1);
