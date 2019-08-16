@@ -155,6 +155,7 @@ end record;
 		
 
 type InstructionArgValues is record
+	issued: std_logic;
 	newInQueue: std_logic;
 	immediate: std_logic;
 	zero: std_logic_vector(0 to 2);
@@ -365,7 +366,8 @@ end function;
 
 function defaultArgValues return InstructionArgValues is
 begin
-	return (newInQueue => '0',
+	return (  issued => '0',
+	          newInQueue => '0',
 			  immediate => '0',
 			  zero => (others => '0'),
 			  --readyBefore => (others=>'0'),

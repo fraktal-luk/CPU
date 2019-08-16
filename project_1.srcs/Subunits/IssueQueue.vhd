@@ -52,6 +52,8 @@ entity IssueQueue is
 		selectionFM: ForwardingMap; 
 		readyRegFlags: in std_logic_vector(0 to 3*PIPE_WIDTH-1);
 		
+		sentCancelled: out std_logic;
+		
 		acceptingMore: out std_logic;
 		acceptingOut: out std_logic;
 		
@@ -64,13 +66,13 @@ end IssueQueue;
 
 architecture Behavioral of IssueQueue is
 	signal queueData: InstructionStateArray(0 to IQ_SIZE-1)  := (others => DEFAULT_INSTRUCTION_STATE);
-	signal fullMask, fullMaskNext, killMask, livingMask, readyMask, readyMaskLive, stayMask: std_logic_vector(0 to IQ_SIZE-1) := (others=>'0');	
+	signal fullMask, fullMaskNext, killMask, livingMask, readyMask, readyMaskLive, stayMask, selMask, issuedMask, remainMask: std_logic_vector(0 to IQ_SIZE-1) := (others=>'0');	
 
-	signal queueContent, queueContentNext: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	signal queueContent, queueContentNext, queueContent_N, queueContentNext_N: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 	signal queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 	signal newContent, newSchedData: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 				
-	signal anyReadyFull, anyReadyLive, sends, sendPossible: std_logic := '0';
+	signal anyReadyFull, anyReadyLive, sends, sendPossible, sendingKilled, sentKilled: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
 	-- Select item at first '1', or the last one if all zeros
@@ -153,6 +155,9 @@ begin
 	begin
 		if rising_edge(clk) then		
 			queueContent <= queueContentNext;
+			     queueContent_N <= queueContentNext_N;
+			     issuedMask <= selMask;
+			     sentKilled <= sendingKilled;
 		end if;
 	end process;	
 
@@ -173,6 +178,18 @@ begin
 									  stayMask, fullMask, livingMask,
 									  sendPossible, sends,
 									  prevSendingOK);
+            
+            
+            selMask <= getFirstOne(readyMask);
+            remainMask <= TMP_setUntil(issuedMask, '1'); 
+            
+                sendingKilled <= isNonzero(killMask and selMask);
+            
+            queueContentNext_N <= iqContentNext_N(queueContentUpdated, newContent,
+                                              remainMask, fullMask, livingMask, selMask, issuedMask,
+                                              
+                                              sendPossible, '1', -- TEMP: sent = '1'
+                                              prevSendingOK);
 					
 	-- TODO: below could be optimized because some code is shared (comparators!)
 	queueContentUpdated <= --updateForWaitingArrayFNI(queueContent, readyRegFlags, fni);
@@ -197,4 +214,5 @@ begin
 	
 	schedulerOut <= (sends, dispatchDataNew.ins, dispatchDataNew.state);
 	sending <= sends;
+	   sentCancelled <= sentKilled;
 end Behavioral;

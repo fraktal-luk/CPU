@@ -329,6 +329,7 @@ begin
                   dataToExecStoreValue: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
         signal sendingToIssueStoreValue, sendingToRegReadStoreValue, sendingStoreValue, sendingToIssueFloatStoreValue: std_logic := '0';
 
+                signal sentCancelledI0, sentCancelledI1, sentCancelledM0, sentCancelledM1, sentCancelledF0, sentCancelledSVI, sentCancelledSVF: std_logic := '0';
 
       ----==============----------
            signal intStoreMask, floatStoreMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');            
@@ -380,6 +381,7 @@ begin
         
                 acceptingOut => iqAcceptingI0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreI0,
+                    sentCancelled => sentCancelledI0,
                 prevSendingOK => renamedSending,
                 newArr => dataToQueueI0,--,schArrays(4),
                 fni => fni,
@@ -494,6 +496,7 @@ begin
        
                acceptingOut => iqAcceptingM0,--iqAcceptingI0rr(4),
                acceptingMore => iqAcceptingMoreM0,
+                    sentCancelled => sentCancelledM0,               
                prevSendingOK => renamedSending,
                newArr => dataToQueueM0,--,schArrays(4),
                fni => fni,
@@ -699,6 +702,7 @@ begin
         
                 acceptingOut => iqAcceptingS0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreS0,
+                    sentCancelled => sentCancelledSVI,                
                 prevSendingOK => renamedSending,
                 newArr => dataToStoreValueIQ,--,schArrays(4),
                 fni => fni,
@@ -771,6 +775,7 @@ begin
         
                 acceptingOut => iqAcceptingSF0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreSF0,
+                    sentCancelled => sentCancelledSVF,                
                 prevSendingOK => renamedSending,
                 newArr => dataToStoreValueFloatIQ,--,schArrays(4),
                 fni => fniFloat,
@@ -850,6 +855,7 @@ begin
         
                 acceptingOut => iqAcceptingF0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreF0,
+                    sentCancelled => sentCancelledF0,                
                 prevSendingOK => renamedSending,
                 newArr => dataToQueueF0,--,schArrays(4),
                 fni => fniFloat,
