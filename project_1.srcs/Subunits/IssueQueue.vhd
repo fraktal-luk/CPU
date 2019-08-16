@@ -72,7 +72,7 @@ architecture Behavioral of IssueQueue is
 	signal queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 	signal newContent, newSchedData: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 				
-	signal anyReadyFull, anyReadyLive, sends, sendPossible, sendingKilled, sentKilled: std_logic := '0';
+	signal anyReadyFull, anyReadyLive, sends, sendPossible, sendingKilled, sent, sentKilled: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
 	-- Select item at first '1', or the last one if all zeros
@@ -148,15 +148,22 @@ architecture Behavioral of IssueQueue is
 		return res;
 	end function;
 
+	function TMP_getIssuedMask(elems: SchedulerEntrySlotArray) return std_logic_vector is
+           variable res: std_logic_vector(0 to elems'length-1) := (others => '0');
+	begin
+		for i in 0 to elems'length-1 loop
+		    res(i) := elems(i).state.argValues.issued;
+		end loop;
+		return res;
+    end function;
 			signal ch0, ch1, ch2: std_logic := '0';
 begin
 
 	QUEUE_SYNCHRONOUS: process(clk) 	
 	begin
 		if rising_edge(clk) then		
-			queueContent <= queueContentNext;
+			queueContent <= queueContentNext_N;
 			     queueContent_N <= queueContentNext_N;
-			     issuedMask <= selMask;
 			     sentKilled <= sendingKilled;
 		end if;
 	end process;	
@@ -182,13 +189,14 @@ begin
             
             selMask <= getFirstOne(readyMask);
             remainMask <= TMP_setUntil(issuedMask, '1'); 
-            
+            issuedMask <= TMP_getIssuedMask(queueContent);
+                sent <= isNonzero(issuedMask);
                 sendingKilled <= isNonzero(killMask and selMask);
             
             queueContentNext_N <= iqContentNext_N(queueContentUpdated, newContent,
                                               remainMask, fullMask, livingMask, selMask, issuedMask,
                                               
-                                              sendPossible, '1', -- TEMP: sent = '1'
+                                              sendPossible, sent,
                                               prevSendingOK);
 					
 	-- TODO: below could be optimized because some code is shared (comparators!)

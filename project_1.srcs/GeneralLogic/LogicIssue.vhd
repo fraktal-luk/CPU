@@ -377,7 +377,16 @@ begin
 		dataNewDataS(i).state.argValues.newInQueue := '1';
 	end loop;
 
+    
 	xVecS := queueContent & dataNewDataS;
+	
+	-- What is being issued now is marked
+    for i in 0 to QUEUE_SIZE-1 loop
+            if selMask(i) = '1' then
+                xVecS(i).state.argValues.issued := '1';
+            end if;    
+    end loop;	
+	
 	xVecS(QUEUE_SIZE) := xVecS(QUEUE_SIZE-1);
 	for i in 0 to QUEUE_SIZE + PIPE_WIDTH - 1 loop
 		xVecS(i).state.argValues.newInQueue := '0';
@@ -416,10 +425,7 @@ begin
 			iqDataNextS(i) := --dataNewDataS(slv2u(sel));  -- Not using get n;
 			                  getNewElemSch(iqRemainingMaskSh(i+1 to i+3), dataNewDataS);
 		end if;
-		
-            if selMask(i) = '1' then
-                iqDataNextS(i).state.argValues.issued := '1';
-            end if;		
+
 	end loop;
 
 	-- Fill output array
