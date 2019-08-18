@@ -72,6 +72,7 @@ end ReorderBuffer;
 
 
 architecture Behavioral of ReorderBuffer is
+    signal outputDataReg: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	signal fullMask, completedMask, completedMaskNext: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
 
     signal content, contentNext: ReorderBufferArray := DEFAULT_ROB_ARRAY;
@@ -206,7 +207,7 @@ begin
             end if;
             
             completedMask <= completedMaskNext;
-                        
+            outputDataReg <= content(slv2u(startPtrNext)).ops;          
 		end if;		
 	end process;
 	--
@@ -248,7 +249,8 @@ begin
     acmPtr <= addSN(endPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
     acceptingMore <= -- not content(slv2u(acmPtr)).full;
 				    not isAlmostFull;		
-	outputData <= content(slv2u(startPtr)).ops;
+	outputData <= --content(slv2u(startPtr)).ops;
+	               outputDataReg;
 
 	sendingOut <= isSending;
 end Behavioral;
