@@ -108,6 +108,7 @@ architecture Implem of InstructionBuffer is
             else
                 --res(i).ins := newContent(slv2u(sel)).ins;
                     res(i) := getNewElem(remainingMaskExt(i+1 to i+3), newContent);
+                        res(i).ins.controlInfo.skipped := '0'; -- By definition skipped words don't go to this buffer
             end if;
             
             -- No events before decoding; newEvent flag set for branches must be cleared.
@@ -142,6 +143,12 @@ begin
 		if rising_edge(clk) then
             queueData <= queueDataNext;
 		end if;
-	end process;	
+	end process;
+	
+	VIEW: block
+	   signal queueTxt: InstructionTextArray(0 to IBUFFER_SIZE-1);
+	begin
+	   queueTxt <= insSlotArrayText(queueData, '0');
+	end block;	
 
 end Implem;

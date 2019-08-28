@@ -72,12 +72,29 @@ architecture Behavioral of UnitFront is
 	signal earlyBranchMultiDataInA, earlyBranchMultiDataOutA:
 								InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	signal branchMask: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
+	
+	   signal dataToBranchTransfer: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+	   signal sendingToBranchTransfer: std_logic := '0';
+	   
+	signal fetchCounter, fetchCounterNext: Word := (others => '0');
+	
+	function assignFetchCounter(ins: InstructionState; ctr: Word) return InstructionState is
+	   variable res: InstructionState := ins;
+	begin
+	   res.tags.fetchCtr := ctr;
+	   return res;
+	end function;
+	
 begin
 	killAll <= execEventSignal or lateEventSignal;
     killAllOrFront <= killAll or frontKill;
+
+
+        fetchCounterNext <= i2slv(slv2u(fetchCounter) + PIPE_WIDTH, 32) when pcSending = '1'
+                      else fetchCounter;
 			
 
-    stageDataInFetch0(0) <= (pcSending, pcDataLiving);
+    stageDataInFetch0(0) <= (pcSending, assignFetchCounter(pcDataLiving, fetchCounter));
 
 	SUBUNIT_FETCH_0: entity work.GenericStage(Behavioral)
 	generic map(
@@ -126,6 +143,7 @@ begin
     begin
         if rising_edge(clk) then
             fetchedLine1 <= fetchedLine0;
+            fetchCounter <= fetchCounterNext;
         end if;
     end process;
 				
@@ -181,7 +199,6 @@ begin
 	earlyBranchDataOut <= earlyBranchDataOutA(0).ins;
 
 	branchMask <= getBranchMask(earlyBranchMultiDataInA);
-	bpData <= prepareForBQ(earlyBranchMultiDataInA, branchMask);
 
 	frontKill <= frontBranchEvent;-- or fetchStall;
 
@@ -228,5 +245,43 @@ begin
 
 	frontCausing <= frontCausingSig;
 	
-	bpSending <= sendingOutFetch1 and not fetchStall;
+--	process(clk)
+--	begin
+--	   if rising_edge(clk) then
+--	       --bpSending 
+	       
+	       sendingToBranchTransfer <= sendingOutFetch1 and not fetchStall;
+	       --bpData
+	       dataToBranchTransfer <= prepareForBQ(earlyBranchMultiDataInA, branchMask);
+--	   end if;
+--	end process;
+
+
+    SUBUNIT_BRANCH_TRANSFER: entity work.GenericStage(Behavioral)
+	generic map(
+		WIDTH => PIPE_WIDTH
+	)
+	port map(
+		clk => clk, reset => resetSig, en => enSig,
+				
+		prevSending => sendingToBranchTransfer,	
+		nextAccepting => '1',
+		stageDataIn => dataToBranchTransfer,
+		
+		acceptingOut => open,
+		sendingOut => bpSending,
+		stageDataOut => bpData,
+		
+		execEventSignal => killAll,
+		lateEventSignal => killAll,
+		execCausing => DEFAULT_INSTRUCTION_STATE
+	);
+
+    VIEW: block
+        signal insBufInput: InstructionTextArray(0 to PIPE_WIDTH-1);
+    begin
+        insBufInput <= insSlotArrayText(earlyBranchMultiDataInA, '0');
+        
+    end block;
+
 end Behavioral;

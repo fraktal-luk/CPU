@@ -37,7 +37,7 @@ return InstructionState;
 
 -- BACK ROUTING
 -- Unifies content of ROB slot with BQ, others queues etc. to restore full state needed at Commit
-function recreateGroup(insVec: InstructionSlotArray; bqGroup: InstructionSlotArray; prevTarget: Mword)
+function recreateGroup(insVec: InstructionSlotArray; bqGroup: InstructionSlotArray; prevTarget: Mword; commitCtr32: Word)
 return InstructionSlotArray;
 
 
@@ -208,7 +208,7 @@ end function;
 
 -- Unifies content of ROB slot with BQ, others queues etc. to restore full state needed at Commit
 function recreateGroup(insVec: InstructionSlotArray; bqGroup: InstructionSlotArray;
-							  prevTarget: Mword--; tempValue: Mword; useTemp: std_logic
+							  prevTarget: Mword; commitCtr32: Word
 							  ) return InstructionSlotArray is
 	variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	variable targets: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -242,6 +242,7 @@ begin
 		res(i).ins.ip := prevTrg; -- ??
 		prevTrg := targets(i);
 		res(i).ins.target := targets(i);
+		  res(i).ins.tags.commitCtr := i2slv(slv2u(commitCtr32) + i, 32);
 	end loop;
 	
 	return res;

@@ -69,6 +69,7 @@ architecture Behavioral of UnitRegManager is
  
     signal renameCtr, renameCtrNext: InsTag := INITIAL_RENAME_CTR;
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
+        signal renameCtr32, renameCtr32Next: Word := (others => '0');
 
     signal newIntDests, newFloatDests, physStableInt, physStableFloat: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal newIntDestPointer, newFloatDestPointer: SmallNumber := (others => '0');
@@ -85,7 +86,8 @@ architecture Behavioral of UnitRegManager is
                                 renameCtr: InsTag;
                                 renameGroupCtrNext: InsTag;
                                 newIntDestPointer: SmallNumber;
-                                newFloatDestPointer: SmallNumber;                                
+                                newFloatDestPointer: SmallNumber;
+                                renameCtr32: Word;                               
                                 dbtrap: std_logic
                                 ) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
@@ -117,6 +119,7 @@ architecture Behavioral of UnitRegManager is
         for i in 0 to PIPE_WIDTH-1 loop
             res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
             res(i).ins.tags.renameSeq := i2slv(slv2u(renameCtr) + i, TAG_SIZE);
+                res(i).ins.tags.renameCtr := i2slv(slv2u(renameCtr32) + i, 32);
             res(i).ins.tags.intPointer := i2slv(slv2u(newIntDestPointer) + countOnes(takeVecInt(0 to i)), SMALL_NUMBER_SIZE); 
                                                                          -- Don't increment pointer on ops which use no destination!
             res(i).ins.tags.floatPointer := i2slv(slv2u(newFloatDestPointer) + countOnes(takeVecFloat(0 to i)), SMALL_NUMBER_SIZE); 
@@ -304,6 +307,7 @@ begin
                                                             renameGroupCtrNext,
                                                             newIntDestPointer,
                                                             newFloatDestPointer,
+                                                            renameCtr32,
                                                             '0' --dbtrapOn
                                                             );
 
@@ -392,6 +396,10 @@ begin
                                                                              when frontLastSending = '1'
                                else renameCtr;
         
+                renameCtr32Next <= i2slv(slv2u(renameCtr32) + countOnes(extractFullMask(stageDataRenameIn)), 32) when frontLastSending = '1'
+                            else renameCtr32;
+                
+        
             -- Re-allow renaming when everything from rename/exec is committed - reg map will be well defined now
             renameLockRelease <= '1' when commitGroupCtr = renameGroupCtr else '0';
                 -- CAREFUL, CHECK: when the counters are equal, renaming can be resumed, but renameLockRelease
@@ -407,6 +415,7 @@ begin
                 if rising_edge(clk) then
                     renameCtr <= renameCtrNext;
                     renameGroupCtr <= renameGroupCtrNext;
+                        renameCtr32 <= renameCtr32Next;
         
                     -- Lock when exec part causes event
                     if execEventSignal = '1' or lateEventSignal = '1' then -- CAREFUL

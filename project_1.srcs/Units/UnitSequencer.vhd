@@ -118,6 +118,8 @@ architecture Behavioral of UnitSequencer is
     signal sysStoreAddress: slv5 := (others => '0'); 
     signal sysStoreValue: Mword := (others => '0'); 
         
+    signal commitCtr32, commitCtr32Next: Word := (others => '0');
+        
         constant HAS_RESET_SEQ: std_logic := '0';
         constant HAS_EN_SEQ: std_logic := '0';
 
@@ -245,6 +247,8 @@ begin
             commitCtrNext <= i2slv(slv2u(commitCtr) + countOnes(effectiveMask), TAG_SIZE) when sendingToCommit = '1' else commitCtr;
             commitGroupCtrIncNext <= i2slv(slv2u(commitGroupCtrInc) + PIPE_WIDTH, TAG_SIZE) when sendingToCommit = '1' else commitGroupCtrInc;
 
+                commitCtr32Next <= i2slv(slv2u(commitCtr32) + countOnes(effectiveMask), 32) when sendingToCommit = '1' else commitCtr32;
+
             effectiveMask <= getEffectiveMask(stageDataToCommit);
                 
             COMMON_SYNCHRONOUS: process(clk)     
@@ -252,7 +256,8 @@ begin
                 if rising_edge(clk) then
                     commitCtr <= commitCtrNext;                    
                     commitGroupCtr <= commitGroupCtrNext;
-                    commitGroupCtrInc <= commitGroupCtrIncNext;                  
+                    commitGroupCtrInc <= commitGroupCtrIncNext;
+                        commitCtr32 <= commitCtr32Next;                
                 end if;    
             end process;        
         
@@ -290,7 +295,7 @@ begin
             --            When committing normal op -> increment by length of the op
             --            
             --            The 'target' field will be used to update return address for exc/int
-  stageDataToCommit <= recreateGroup(robDataLiving, dataFromBQV, stageDataLastEffectiveOutA(0).ins.target);
+  stageDataToCommit <= recreateGroup(robDataLiving, dataFromBQV, stageDataLastEffectiveOutA(0).ins.target, commitCtr32);
   stageDataLastEffectiveInA(0) <= getNewEffective(sendingToCommit, robDataLiving, dataFromBQV,
                                                                 stageDataLastEffectiveOutA(0).ins, 
                                                                 stageDataLateCausingOut(0).ins,
@@ -372,9 +377,9 @@ begin
        signal committedText: InstructionTextArray(0 to PIPE_WIDTH-1);
        signal lastEffectiveText, lateCausingText: InstructionTextArray(0 to 0);
     begin
-       committedText <= insSlotArrayText(stageDataCommitOutA);
-       lastEffectiveText <= insSlotArrayText(stageDataLastEffectiveOutA);
-       lateCausingText <= insSlotArrayText(stageDataLateCausingOut);
+       committedText <= insSlotArrayText(stageDataCommitOutA, '0');
+       lastEffectiveText <= insSlotArrayText(stageDataLastEffectiveOutA, '0');
+       lateCausingText <= insSlotArrayText(stageDataLateCausingOut, '0');
     end block;
    
     EVENT_LINK_INFO: process(clk)

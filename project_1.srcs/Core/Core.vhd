@@ -83,6 +83,18 @@ architecture Behavioral of Core is
     
     signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
 
+
+
+    --  TODO: Which signals will be main indicators for diagnosing flow blockage? 
+        
+    --    pcSending, frontLastSending, renamedSending, robSending
+    
+    --    frontAccepting, renameAccepting, robAccepting, iqAccepting, iqAccepting*, acceptingSQ, acceptingLQ,
+    --                                                                iqAcceptingMore*, not almostFullSQ, not almostFullLQ, bqAccepting,  
+    --    
+
+
+
                                                             -- sendingBranchIns - EXEC
     signal execEventSignal, lateEventSignal, lateEventSetPC, sendingBranchIns: std_logic := '0';
     signal robSending, robAccepting, renamedSending, commitAccepting, 
@@ -241,9 +253,9 @@ begin
     RENAMED_VIEW: block
         signal renamedIntText, renamedFloatText, renamedMergedText: InstructionTextArray(0 to PIPE_WIDTH-1);
     begin
-        renamedIntText <= insSlotArrayText(renamedDataLiving);
-        renamedFloatText <= insSlotArrayText(renamedDataLivingFloat);
-        renamedMergedText <= insSlotArrayText(renamedDataMerged);
+        renamedIntText <= insSlotArrayText(renamedDataLiving, '0');
+        renamedFloatText <= insSlotArrayText(renamedDataLivingFloat, '0');
+        renamedMergedText <= insSlotArrayText(renamedDataMerged, '0');
     end block;
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
@@ -270,7 +282,7 @@ begin
     ROB_OUT_VIEW: block
         signal robOutText: InstructionTextArray(0 to PIPE_WIDTH-1);
     begin
-        robOutText <= insSlotArrayText(dataOutROB);
+        robOutText <= insSlotArrayText(dataOutROB, '0');
     end block;
 
     TEMP_EXEC: block
@@ -329,6 +341,7 @@ begin
                   dataToExecStoreValue: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
         signal sendingToIssueStoreValue, sendingToRegReadStoreValue, sendingStoreValue, sendingToIssueFloatStoreValue: std_logic := '0';
 
+                signal sentCancelledI0, sentCancelledI1, sentCancelledM0, sentCancelledM1, sentCancelledF0, sentCancelledSVI, sentCancelledSVF: std_logic := '0';
 
       ----==============----------
            signal intStoreMask, floatStoreMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');            
@@ -380,6 +393,7 @@ begin
         
                 acceptingOut => iqAcceptingI0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreI0,
+                    sentCancelled => sentCancelledI0,
                 prevSendingOK => renamedSending,
                 newArr => dataToQueueI0,--,schArrays(4),
                 fni => fni,
@@ -417,7 +431,7 @@ begin
                 regValues => regValsI0 --(others => (others => '0'))     
             );
           
-            dataToAlu(0) <= (slotIssueI0.full, executeAlu(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins, branchData));
+            dataToAlu(0) <= (slotIssueI0.full and not sentCancelledI0, executeAlu(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins, branchData));
           
             STAGE_I0_E0: entity work.GenericStage(Behavioral)
             generic map(
@@ -494,6 +508,7 @@ begin
        
                acceptingOut => iqAcceptingM0,--iqAcceptingI0rr(4),
                acceptingMore => iqAcceptingMoreM0,
+                    sentCancelled => sentCancelledM0,               
                prevSendingOK => renamedSending,
                newArr => dataToQueueM0,--,schArrays(4),
                fni => fni,
@@ -535,8 +550,8 @@ begin
                sendingFromDLQ <= '0';          -- TEMP!
                dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
                     
-           sendingToAgu <= slotIssueM0.full or sendingFromDLQ;
-	       dataToAgu(0) <= (slotIssueM0.full or sendingFromDLQ, calcEffectiveAddress(slotIssueM0.ins, slotIssueM0.state, sendingFromDLQ, dataFromDLQ));
+           sendingToAgu <= (slotIssueM0.full and not sentCancelledM0) or sendingFromDLQ;
+	       dataToAgu(0) <= ((slotIssueM0.full and not sentCancelledM0) or sendingFromDLQ, calcEffectiveAddress(slotIssueM0.ins, slotIssueM0.state, sendingFromDLQ, dataFromDLQ));
        
            STAGE_AGU: entity work.GenericStage(Behavioral)
            generic map(
@@ -681,6 +696,7 @@ begin
             signal dataToStoreValueIQ, dataToStoreValueFloatIQ,
                schedDataStoreValue, schedDataStoreValueFloat: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);        
         begin
+            -- CHECK: does it need to use 'sentCancelled' signal from IQs?
             
             intStoreMask <= getStoreMask(renamedDataLiving) and not floatStoreMask;                                        
             schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLiving)), intStoreMask);
@@ -699,6 +715,7 @@ begin
         
                 acceptingOut => iqAcceptingS0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreS0,
+                    sentCancelled => sentCancelledSVI,                
                 prevSendingOK => renamedSending,
                 newArr => dataToStoreValueIQ,--,schArrays(4),
                 fni => fni,
@@ -771,6 +788,7 @@ begin
         
                 acceptingOut => iqAcceptingSF0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreSF0,
+                    sentCancelled => sentCancelledSVF,                
                 prevSendingOK => renamedSending,
                 newArr => dataToStoreValueFloatIQ,--,schArrays(4),
                 fni => fniFloat,
@@ -850,6 +868,7 @@ begin
         
                 acceptingOut => iqAcceptingF0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreF0,
+                    sentCancelled => sentCancelledF0,                
                 prevSendingOK => renamedSending,
                 newArr => dataToQueueF0,--,schArrays(4),
                 fni => fniFloat,
@@ -909,7 +928,7 @@ begin
                         regValues => regValsF0     
                     );
           
-            dataToFpu0(0) <= (slotRegReadF0.full, executeFpu(slotregReadF0.ins, slotregReadF0.state));
+            dataToFpu0(0) <= (slotRegReadF0.full and not sentCancelledF0, executeFpu(slotregReadF0.ins, slotregReadF0.state));
           
             STAGE_F0_E0: entity work.GenericStage(Behavioral)
             generic map(
@@ -1161,8 +1180,8 @@ begin
          EXEC_OUTPUTS_VIEW: block
             signal execOutputsText1, execOutputsText2: InstructionTextArray(0 to 3);       
          begin
-            execOutputsText1 <= insSlotArrayText(execOutputs1);
-            execOutputsText2 <= insSlotArrayText(execOutputs2);            
+            execOutputsText1 <= insSlotArrayText(execOutputs1, '0');
+            execOutputsText2 <= insSlotArrayText(execOutputs2, '0');            
          end block;
      
          regsSelI0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotSelI0.ins)));
@@ -1171,7 +1190,9 @@ begin
             regsSelS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadStoreValue.ins)));
           
           -- Forwarding network
-		  fni.nextTagsM1 <= (0 => slotIssueI0.ins.physicalArgSpec.dest, 2 => dataOutMem0(0).ins.physicalArgSpec.dest, others => (others => '0'));        
+		  fni.nextTagsM1 <= (0 => slotIssueI0.ins.physicalArgSpec.dest, 2 => --dataOutMem0(0).ins.physicalArgSpec.dest,
+		                                                                      slotM0_E1i(0).ins.physicalArgSpec.dest,
+		                                                                          others => (others => '0'));        
 		  fni.nextTagsM2 <= (                                           2 => slotM0_E0(0).ins.physicalArgSpec.dest, others => (others => '0'));
           fni.tags0 <= (execOutputs1(0).ins.physicalArgSpec.dest, execOutputs1(1).ins.physicalArgSpec.dest, slotM0_E2i(0).ins.physicalArgSpec.dest);
           fni.tags1 <= (0 => slotI0_D0(0).ins.physicalArgSpec.dest, 2 => slotM0_D0i(0).ins.physicalArgSpec.dest, others => (others => '0'));
@@ -1306,6 +1327,31 @@ begin
          end process;
          
          sysRegSending <= sysRegRead;
+         
+         VIEW: block
+            signal issueTextI0, issueTextM0, issueTextSVI, issueTextSVF, issueTextF0: SchedEntryText;
+            signal slotTextRegReadF0: SchedEntryText;            
+            signal slotTextI0_E0, slotTextI0_E1, slotTextI0_E2, slotTextM0_E0, slotTextM0_E1i, slotTextM0_E2i, slotTextM0_E1f, slotTextM0_E2f: InstructionText;
+         begin
+            issueTextI0 <= getSchedStateText(slotIssueI0.state, slotIssueI0.full);
+            issueTextM0 <= getSchedStateText(slotIssueM0.state, slotIssueM0.full);
+            
+            slotTextRegReadF0 <= getSchedStateText(slotRegReadF0.state, slotRegReadF0.full);
+
+            slotTextI0_E0 <= insSlotArrayText(slotI0_E0, '0')(0);
+            slotTextI0_E1 <= insSlotArrayText(slotI0_E1, '0')(0);
+            slotTextI0_E2 <= insSlotArrayText(slotI0_E2, '0')(0);
+
+            slotTextM0_E0 <= insSlotArrayText(slotM0_E0, '0')(0);
+            slotTextM0_E1i <= insSlotArrayText(slotM0_E1i, '0')(0);
+            slotTextM0_E1f <= insSlotArrayText(slotM0_E1f, '0')(0);
+            slotTextM0_E2i <= insSlotArrayText(slotM0_E2i, '0')(0);
+            slotTextM0_E2f <= insSlotArrayText(slotM0_E2f, '0')(0);
+                                    
+            -- TODO: add remaining stages of Exec area
+         end block;
+         
+         
     end block;
 
     renamedDataToBQ <= setFullMask(renamedDataLiving, getBranchMask(renamedDataLiving));

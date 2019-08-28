@@ -87,6 +87,7 @@ type InstructionControlInfo is record
 	   tlbMiss: std_logic;
 	   dataMiss: std_logic;
 	   sqMiss:    std_logic;
+	       firstBr: std_logic;
 	exceptionCode: SmallNumber; -- Set when exception occurs, remains cause exception can be only 1 per op
 end record;
 
@@ -143,17 +144,19 @@ end record;
 		end record;
 
 		type InstructionTags is record
-			fetchCtr: word;	-- Ctr is never reset!
-			decodeCtr: word; -- Ctr is never reset!
-			renameCtr: word;
+			fetchCtr: Word;	-- Ctr is never reset!
+			decodeCtr: Word; -- Ctr is never reset!
+			renameCtr: Word;
 			renameSeq: InsTag;
 			renameIndex: InsTag;	-- group + group position
 			intPointer: SmallNumber;
 			floatPointer: SmallNumber;
+			commitCtr: Word;
 		end record;
 		
 
 type InstructionArgValues is record
+	issued: std_logic;
 	newInQueue: std_logic;
 	immediate: std_logic;
 	zero: std_logic_vector(0 to 2);
@@ -228,7 +231,8 @@ constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
 			renameSeq => (others => '0'), 
 			renameIndex => (others => '0'),
 			intPointer => (others => '0'),
-			floatPointer => (others => '0')
+			floatPointer => (others => '0'),
+			commitCtr => (others => '0')
 );
 
 constant DEFAULT_INSTRUCTION_STATE: InstructionState := defaultInstructionState;
@@ -282,9 +286,57 @@ end record;
 type InstructionTextArray is array(integer range <>) of InstructionText;
 
 
-function insText2(ins: InstructionState) return InstructionText;
+--type InstructionArgValues is record
+--	issued: std_logic;
+--	newInQueue: std_logic;
+--	immediate: std_logic;
+--	zero: std_logic_vector(0 to 2);
+--	readyNow: std_logic_vector(0 to 2);
+--	readyNext: std_logic_vector(0 to 2);
+--	readyM2:	std_logic_vector(0 to 2);
+--	locs: SmallNumberArray(0 to 2);
+--	nextLocs: SmallNumberArray(0 to 2);
+--	locsM2: SmallNumberArray(0 to 2);
+--	missing: std_logic_vector(0 to 2);
+--	stored:  std_logic_vector(0 to 2);
+--	arg0: Mword;
+--	arg1: Mword;
+--	arg2: Mword;
+	
+--	argLocsPipe: SmallNumberArray(0 to 2);
+--	argLocsPhase: SmallNumberArray(0 to 2);
+--end record;
 
-function insSlotArrayText(insVec: InstructionSlotArray) return InstructionTextArray;
+--  Issued/Ready 101 zr-
+--  0: 000000000, Z
+--  1: ---------, R wait
+--  2: ---------, unused 
+
+type SchedEntryText is record
+    stateTxt: string(1 to 40);
+    arg0: string(1 to 40);
+    arg1: string(1 to 40);
+    arg2: string(1 to 40);
+end record;
+
+type SchedEntryTextArray is array(integer range <>) of SchedEntryText;
+
+
+function w2hex(w: Word) return string;
+
+function insText2(ins: InstructionState; mem: std_logic) return InstructionText;
+
+function insSlotText(insSlot: InstructionSlot; mem: std_logic) return InstructionText;
+
+function insStateArrayText(insVec: InstructionStateArray; mask: std_logic_vector; mem: std_logic) return InstructionTextArray;
+function insSlotArrayText(insVec: InstructionSlotArray; mem: std_logic) return InstructionTextArray;
+
+
+function getSchedStateText(se: SchedulerState; full: std_logic) return SchedEntryText;
+
+function schedEntrySlotArrayTextIns(insVec: SchedulerEntrySlotArray; mem: std_logic) return InstructionTextArray;
+
+function schedEntrySlotArrayTextState(insVec: SchedulerEntrySlotArray) return SchedEntryTextArray;
 
 end InstructionState;
 
@@ -315,6 +367,7 @@ begin
 												    tlbMiss => '0',
 												    dataMiss => '0',
 												    sqMiss => '0',
+												        firstBr => '0',
 												exceptionCode => (others=>'0')
 												);
 end function;
@@ -363,7 +416,8 @@ end function;
 
 function defaultArgValues return InstructionArgValues is
 begin
-	return (newInQueue => '0',
+	return (  issued => '0',
+	          newInQueue => '0',
 			  immediate => '0',
 			  zero => (others => '0'),
 			  --readyBefore => (others=>'0'),
@@ -489,39 +543,9 @@ begin
 end function;
 
 
-
---type InstructionState is record
---	controlInfo: InstructionControlInfo;
---	ip: Mword;
---	bits: word; -- instruction word
---	tags: InstructionTags;
---	operation: BinomialOp;
---	classInfo: InstructionClassInfo;
---	constantArgs: InstructionConstantArgs;
---	virtualArgSpec: InstructionArgSpec;
---	physicalArgSpec: InstructionArgSpec;
---	--argValues: InstructionArgValues;
---	result: Mword;
---	target: Mword;
---end record;
---
--- Example
--- tags(45, 4a, 22, 12)
--- adr  hex
--- virtual txt
--- physical txt
--- some control info
--- 
--- fetch 22, buf 20, ren 22, seq 31
--- 00000010: 2f130045
--- sub_r r05, r06, r02, ?ff, #00000045
--- sub_r p32, p19, p08, ?ff
--- none // this is control status
--- 
-
-function insText2(ins: InstructionState) return InstructionText is
+function insText2(ins: InstructionState; mem: std_logic) return InstructionText is
     variable dest, src0, src1, src2: string(1 to 3) := (others => '*');
-    variable tagStr, hexStr, virtStr, physStr, controlStr: string(1 to 40) := (others => nul);
+    variable tagStr, hexStr, virtStr, physStr, controlStr, memStr: string(1 to 40) := (others => nul);
     variable res: InstructionText;
     variable hexTarget: string(1 to 8);
 begin
@@ -636,30 +660,6 @@ begin
     physStr(24 to 25) := ", ";
     physStr(26 to 28) := src2;
 
-
---type InstructionControlInfo is record
---		squashed: std_logic;
---		skipped: std_logic;
---	completed: std_logic;
---		completed2: std_logic;
---	newEvent: std_logic; -- True if any new event appears
---	--	hasReset: std_logic;
---	hasInterrupt: std_logic;
---	hasException: std_logic;
---	--hasBranch: std_logic;
---	--hasReturn: std_logic;
---	   refetch: std_logic;
---	   frontBranch: std_logic;
---	   confirmedBranch: std_logic;
---	specialAction: std_logic;
---	dbtrap: std_logic;
---	   orderViolation: std_logic;
---	   tlbMiss: std_logic;
---	   dataMiss: std_logic;
---	   sqMiss:    std_logic;
---	exceptionCode: SmallNumber; -- Set when exception occurs, remains cause exception can be only 1 per op
---end record;
-
     -- Control txt
             -- BrP: T/N/-, Ref: Y/N, BrC: T/N,-, Exc: Y/N, Sp: Y/N
     if ins.controlInfo.refetch = '1' then
@@ -701,20 +701,144 @@ begin
     res.virtTxt := virtStr;
     res.physTxt := physStr;
     res.controlTxt := controlStr;
+    
+    -- For mem ops:
+    -- completed2: Value; completed: Addr
+        memStr(1) := '@';
+        memStr(10) := ':';
+        memStr(2 to 9) := (others => '-');
+        memStr(11 to 18) := (others => '-');        
+        if ins.controlInfo.completed = '1' then
+            memStr(2 to 9) := w2hex(ins.target);
+        end if;
+        
+        if ins.controlInfo.completed2 = '1' then
+            memStr(11 to 18) := w2hex(ins.result);            
+        end if;
+    
+        memStr(19 to 21) := ";  ";
+        if ins.controlInfo.orderViolation = '1' then
+            memStr(21) := 'O';
+        end if;
+   
+        if mem = '1' then
+            res.controlTxt := memStr;
+        end if;
    
     return res;
 end function;
 
-function insSlotArrayText(insVec: InstructionSlotArray) return InstructionTextArray is
+function insSlotText(insSlot: InstructionSlot; mem: std_logic) return InstructionText is
+    variable res: InstructionText;
+begin    
+        if insSlot.full = '1' then
+            res := insText2(insSlot.ins, mem);
+        end if;
+    return res;
+end function;
+
+function insSlotArrayText(insVec: InstructionSlotArray; mem: std_logic) return InstructionTextArray is
     variable res: InstructionTextArray(insVec'range);
 begin    
     for i in res'range loop
         if insVec(i).full = '1' then
-            res(i) := insText2(insVec(i).ins);
+            res(i) := insText2(insVec(i).ins, mem);
         end if;
     end loop;
     return res;
 end function;
 
+function insStateArrayText(insVec: InstructionStateArray; mask: std_logic_vector; mem: std_logic) return InstructionTextArray is
+    variable res: InstructionTextArray(insVec'range);
+begin    
+    for i in res'range loop
+        if mask(i) = '1' then
+            res(i) := insText2(insVec(i), mem);
+        end if;
+    end loop;
+    return res;
+end function;
+
+
+
+
+function getSchedStateText(se: SchedulerState; full: std_logic) return SchedEntryText is
+    variable res: SchedEntryText; 
+begin
+    if full = '0' then
+        return res;
+    end if;
+
+    if se.argValues.issued = '1' then
+        res.stateTxt(1 to 6) := "Issue ";
+    elsif se.argValues.missing = "000" then
+        res.stateTxt(1 to 6) := "Ready ";
+    else
+        res.stateTxt(1 to 6) := "Waits ";
+    end if;
+
+    res.arg0(1 to 3) := "0: ";
+    res.arg0(12 to 13) := ", ";
+    res.arg0(4 to 11) := (others => '-');
+    if se.argValues.missing(0) = '1' then
+        
+        res.stateTxt(7) := '1';
+    else
+        --res.arg0(4 to 11) := w2hex(se.argValues.arg0);
+        if se.argValues.zero(0) = '1' then
+            res.arg0(14) := 'Z';
+        else
+            res.arg0(14 to 18) := std_logic'image(se.argValues.argLocsPipe(0)(1))(2) & std_logic'image(se.argValues.argLocsPipe(0)(0))(2)
+                               &  ':'
+                               &  std_logic'image(se.argValues.argLocsPhase(0)(0))(2) & std_logic'image(se.argValues.argLocsPhase(0)(0))(2);
+        end if;
+        res.stateTxt(7) := '0';
+    end if;
+
+    res.arg1(1 to 3) := "1: ";
+    res.arg1(12 to 13) := ", ";
+    res.arg1(4 to 11) := (others => '-');
+    if se.argValues.missing(1) = '1' then
+        res.stateTxt(8) := '1';
+    else
+        if se.argValues.zero(1) = '1' then
+            res.arg1(14) := 'Z';
+        elsif se.argValues.immediate = '1' then
+            res.arg1(14) := 'I';
+        else
+            res.arg1(14 to 18) := std_logic'image(se.argValues.argLocsPipe(1)(1))(2) & std_logic'image(se.argValues.argLocsPipe(1)(0))(2)
+                           &  ':'
+                           &  std_logic'image(se.argValues.argLocsPhase(1)(0))(2) & std_logic'image(se.argValues.argLocsPhase(1)(0))(2);        
+        end if;
+        res.stateTxt(8) := '0';
+    end if;
+        
+        res.stateTxt(9) := '0';
+        
+    return res;
+end function;
+
+
+function schedEntrySlotArrayTextIns(insVec: SchedulerEntrySlotArray; mem: std_logic) return InstructionTextArray is
+    variable res: InstructionTextArray(insVec'range);
+begin    
+    for i in res'range loop
+        if insVec(i).full = '1' then
+            res(i) := insText2(insVec(i).ins, mem);
+        end if;
+    end loop;
+    return res;
+end function;
+
+function schedEntrySlotArrayTextState(insVec: SchedulerEntrySlotArray) return SchedEntryTextArray is
+    variable res: SchedEntryTextArray(insVec'range);
+begin    
+    for i in res'range loop
+        if insVec(i).full = '1' then
+            res(i) := getSchedStateText(insVec(i).state, '1');
+        end if;
+    end loop;
+    return res;
+end function;
 
 end InstructionState;
