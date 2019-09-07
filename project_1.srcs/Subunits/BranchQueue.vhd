@@ -71,17 +71,19 @@ end BranchQueue;
 architecture Behavioral of BranchQueue is
 	constant PTR_MASK_SN: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
 
+	signal isSending: std_logic := '0';
+
 	signal content, contentNext: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INSTRUCTION_STATE);
 	signal fullMask, taggedMask, killMask, livingMask, frontMask, sendingMask, inputMask, inputMaskBr,
 			 fullMaskNext, taggedMaskNext, taggedLivingMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
 	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
-	signal dataOutSig, dataOutSigOld, dataOutSigNext, dataOutSigFinal: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+	signal dataOutSig, dataOutSigNext, dataOutSigFinal: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
 	signal pStart, pStartNext, pTagged, pAll, causingPtr, pAcc: SmallNumber := (others => '0');
 	   signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
 	   signal recoveryCounter: SmallNumber := (others => '0');
-	   signal isSending, isFull, isAlmostFull: std_logic := '0'; 	
+	   signal isFull, isAlmostFull: std_logic := '0';
 	
 
     function getNewContentBr(content: InstructionStateArray; dataIn, dataInBr: InstructionSlotArray;
@@ -208,7 +210,6 @@ begin
 	process (clk)
 	begin
 		if rising_edge(clk) then	
---			TMP_mask <= TMP_maskNext;
             fullMask <= fullMaskNext;
             taggedMask <= taggedMaskNext;
 			content <= contentNext;
@@ -239,16 +240,21 @@ begin
                 recoveryCounter <= subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
             end if;
                
-            isFull <= cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-4, SMALL_NUMBER_SIZE)); -- queueCmpGt(nFullNext, QUEUE_SIZE-4, N_BITS_FULL) = '1' then
+            isFull <= cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-4, SMALL_NUMBER_SIZE));
             isAlmostFull <= cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-8, SMALL_NUMBER_SIZE));
                 
-            nFull <= nFullNext;    
-                        
+            nFull <= nFullNext;                     
 		end if;
 	end process;
 
-    nFullNext <=  nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
-            else  subSN(addSN(nFull, nIn), nOut);
+    N_FULL_NEXT: block
+        constant QUEUE_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+        signal flowDiff: SmallNumber := (others => '0');            
+    begin
+        nFullNext <=  nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
+                else flowDiff and QUEUE_SIZE_MASK;
+        flowDiff <= subSN(addSN(nFull, nIn), nOut);
+    end block;
 
     nIn <= i2slv( countOnes(extractFullMask(dataInBr)), SMALL_NUMBER_SIZE ) when prevSendingBr = '1' else (others => '0');
         

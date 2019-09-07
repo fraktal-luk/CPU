@@ -67,9 +67,8 @@ architecture Behavioral of UnitRegManager is
                 stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, sendingCommitInt, sendingCommitFloat, renameLockState, renameLockEnd, renameLockRelease: std_logic := '0';
  
-    signal renameCtr, renameCtrNext: InsTag := INITIAL_RENAME_CTR;
-    signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
-        signal renameCtr32, renameCtr32Next: Word := (others => '0');
+    signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG; -- This is rewinded on events
+    signal renameCtr, renameCtrNext: Word := (others => '0');
 
     signal newIntDests, newFloatDests, physStableInt, physStableFloat: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal newIntDestPointer, newFloatDestPointer: SmallNumber := (others => '0');
@@ -80,14 +79,12 @@ architecture Behavioral of UnitRegManager is
     signal renamedBase: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     function renameGroupBase(insVec: InstructionSlotArray;
-                                newPhysSources: PhysNameArray;
                                 newIntDests: PhysNameArray;
                                 newFloatDests: PhysNameArray;                                
-                                renameCtr: InsTag;
                                 renameGroupCtrNext: InsTag;
                                 newIntDestPointer: SmallNumber;
                                 newFloatDestPointer: SmallNumber;
-                                renameCtr32: Word;                               
+                                renameCtr: Word;                               
                                 dbtrap: std_logic
                                 ) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
@@ -114,12 +111,10 @@ architecture Behavioral of UnitRegManager is
             res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;     
         end loop;
 
-
         -- Setting tags
         for i in 0 to PIPE_WIDTH-1 loop
             res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
-            res(i).ins.tags.renameSeq := i2slv(slv2u(renameCtr) + i, TAG_SIZE);
-                res(i).ins.tags.renameCtr := i2slv(slv2u(renameCtr32) + i, 32);
+            res(i).ins.tags.renameCtr := i2slv(slv2u(renameCtr) + i, 32);
             res(i).ins.tags.intPointer := i2slv(slv2u(newIntDestPointer) + countOnes(takeVecInt(0 to i)), SMALL_NUMBER_SIZE); 
                                                                          -- Don't increment pointer on ops which use no destination!
             res(i).ins.tags.floatPointer := i2slv(slv2u(newFloatDestPointer) + countOnes(takeVecFloat(0 to i)), SMALL_NUMBER_SIZE); 
@@ -152,11 +147,9 @@ architecture Behavioral of UnitRegManager is
                                 newPhysSources: PhysNameArray;
                                 newIntDests: PhysNameArray;
                                 newFloatDests: PhysNameArray;                                
-                                renameCtr: InsTag;
                                 renameGroupCtrNext: InsTag;
                                 newIntDestPointer: SmallNumber;
-                                newFloatDestPointer: SmallNumber;                                
-                                dbtrap: std_logic
+                                newFloatDestPointer: SmallNumber
                                 ) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
         variable reserveSelSig, takeVecInt, takeVecFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
@@ -223,10 +216,7 @@ architecture Behavioral of UnitRegManager is
     function renameGroupFloat(insVec: InstructionSlotArray;
                                 newFloatSources: PhysNameArray;
                                 newFloatDests: PhysNameArray;
-                                renameCtr: InsTag;
-                                renameGroupCtrNext: InsTag;
-                                --newPhysDestPointer: SmallNumber;
-                                dbtrap: std_logic
+                                renameGroupCtrNext: InsTag
                                 ) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
         variable reserveSelSig, takeVecInt, takeVecFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
@@ -246,44 +236,20 @@ architecture Behavioral of UnitRegManager is
         -- Overwrite sources depending on destinations of this group
         -- TODO: arg name comparisons are shared with int registers! Reuse the same comparators
         for i in 0 to PIPE_WIDTH-1 loop
-            for j in PIPE_WIDTH-1 downto 0 loop
-                if j >= i then
-                    next;
-                end if;
-                
-                if res(i).ins.virtualArgSpec.args(0)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0) -- name match
-                    and res(i).ins.virtualArgSpec.floatArgSel(0) = res(j).ins.virtualArgSpec.floatDestSel -- intSel match
-                then
-                    res(i).ins.physicalArgSpec.args(0) := res(j).ins.physicalArgSpec.dest;
-                    exit;                   
-                end if;
-            end loop;
-
-            for j in PIPE_WIDTH-1 downto 0 loop
-                if j >= i then
-                    next;
-                end if;
-                
-                if res(i).ins.virtualArgSpec.args(1)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
-                    and res(i).ins.virtualArgSpec.floatArgSel(1) = res(j).ins.virtualArgSpec.floatDestSel
-                then
-                    res(i).ins.physicalArgSpec.args(1) := res(j).ins.physicalArgSpec.dest;
-                    exit;                 
-                end if;
-            end loop;
-            
-            for j in PIPE_WIDTH-1 downto 0 loop
-                if j >= i then
-                    next;
-                end if;
-                
-                if res(i).ins.virtualArgSpec.args(2)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
-                    and res(i).ins.virtualArgSpec.floatArgSel(2) = res(j).ins.virtualArgSpec.floatDestSel
-                then
-                    res(i).ins.physicalArgSpec.args(2) := res(j).ins.physicalArgSpec.dest;
-                    exit;                  
-                end if;
-            end loop;                        
+            for k in 0 to 2 loop -- For each of 3 possible source arguments
+                for j in PIPE_WIDTH-1 downto 0 loop
+                    if j >= i then
+                        next;
+                    end if;
+                    
+                    if res(i).ins.virtualArgSpec.args(k)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0) -- name match
+                        and res(i).ins.virtualArgSpec.floatArgSel(k) = res(j).ins.virtualArgSpec.floatDestSel -- intSel match
+                    then
+                        res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
+                        exit;                   
+                    end if;
+                end loop;
+            end loop;                     
 
         end loop;
 
@@ -300,35 +266,28 @@ begin
     eventSig <= execEventSignal or lateEventSignal;
 
     renamedBase <= renameGroupBase(frontDataLastLiving,
-                                                          newIntSources, 
-                                                          newIntDests, 
-                                                                newFloatDests, -- TEMP! change to float dests
-                                                            renameCtr,
+                                                            newIntDests, 
+                                                            newFloatDests,
                                                             renameGroupCtrNext,
                                                             newIntDestPointer,
                                                             newFloatDestPointer,
-                                                            renameCtr32,
+                                                            renameCtr,
                                                             '0' --dbtrapOn
                                                             );
 
     stageDataRenameIn <= renameGroupInt(renamedBase,
-                                                          newIntSources, 
-                                                          newIntDests, 
-                                                                newFloatDests, -- TEMP! change to float dests
-                                                            renameCtr,
+                                                            newIntSources, 
+                                                            newIntDests, 
+                                                            newFloatDests,
                                                             renameGroupCtrNext,
                                                             newIntDestPointer,
-                                                            newFloatDestPointer,
-                                                            '0' --dbtrapOn
+                                                            newFloatDestPointer
                                                             );
 
     stageDataRenameInFloat <= renameGroupFloat(renamedBase,
-                                                          newFloatSources, -- TEMP! change to float 
-                                                                newFloatDests, -- TEMP! change to float dests
-                                                            renameCtr,
-                                                            renameGroupCtrNext,
-                                                            --(others => '0'), -- TEMP!
-                                                            '0' --dbtrapOn
+                                                            newFloatSources,
+                                                            newFloatDests,
+                                                            renameGroupCtrNext
                                                             );
                                                                                                                             
         SUBUNIT_RENAME_INT: entity work.GenericStage(Behavioral)--Renaming)
@@ -387,17 +346,9 @@ begin
                                else clearTagLow(execCausing.tags.renameIndex) when execEventSignal = '1'
                                else i2slv(slv2u(renameGroupCtr) + PIPE_WIDTH, TAG_SIZE) when frontLastSending = '1'
                                else renameGroupCtr;
-                                                                                                       
-            renameCtrNext <=  
-                                    commitCtr when lateEventSignal = '1'
-                               else execCausing.tags.renameSeq when execEventSignal = '1'
-                               else i2slv(slv2u(renameCtr) + countOnes(extractFullMask(stageDataRenameIn)),
-                                                                                TAG_SIZE)
-                                                                             when frontLastSending = '1'
-                               else renameCtr;
         
-                renameCtr32Next <= i2slv(slv2u(renameCtr32) + countOnes(extractFullMask(stageDataRenameIn)), 32) when frontLastSending = '1'
-                            else renameCtr32;
+            renameCtrNext <= i2slv(slv2u(renameCtr) + countOnes(extractFullMask(stageDataRenameIn)), 32) when frontLastSending = '1'
+                            else renameCtr;
                 
         
             -- Re-allow renaming when everything from rename/exec is committed - reg map will be well defined now
@@ -413,9 +364,8 @@ begin
             COMMON_SYNCHRONOUS: process(clk)     
             begin
                 if rising_edge(clk) then
-                    renameCtr <= renameCtrNext;
                     renameGroupCtr <= renameGroupCtrNext;
-                        renameCtr32 <= renameCtr32Next;
+                    renameCtr <= renameCtrNext;
         
                     -- Lock when exec part causes event
                     if execEventSignal = '1' or lateEventSignal = '1' then -- CAREFUL

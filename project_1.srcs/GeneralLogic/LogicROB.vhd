@@ -65,7 +65,7 @@ package body LogicROB is
 function groupCompleted(insVec: InstructionSlotArray) return std_logic is
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if       insVec(i).full = '1' and (
+		if   insVec(i).full = '1' and (
 			   insVec(i).ins.controlInfo.completed = '0'
 			or	 insVec(i).ins.controlInfo.completed2 = '0')
 		then

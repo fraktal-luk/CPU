@@ -73,11 +73,11 @@ end ReorderBuffer;
 
 architecture Behavioral of ReorderBuffer is
     signal outputDataReg: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-	signal fullMask, completedMask, completedMaskNext: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
+	signal fullMask, completedMask, completedMaskNext, completedMask_T,  completedMaskNext_T: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
 
     signal content, contentNext: ReorderBufferArray := DEFAULT_ROB_ARRAY;
 
-	signal isSending, isSending_T: std_logic := '0';
+	signal isSending, isSending_T, isEmpty, ch0, ch1: std_logic := '0';
 	signal execEvent: std_logic := '0'; -- depends on input in slot referring to branch ops
 
     constant ROB_HAS_RESET: std_logic := '0';
@@ -160,6 +160,8 @@ begin
 
     startPtrNext <= startPtr when isSending = '0' else addSN(startPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
 							
+	isEmpty <= bool2std(startPtr = endPtr); -- CAREFUL: elsewhere it MUST be assured that ROB never gets full because this would become incorrect. 'isFull' must mean 1 free slot
+							
 	SYNCHRONOUS: process (clk)
 	begin
 		if rising_edge(clk) then	
@@ -193,12 +195,13 @@ begin
             
             nFull <= nFullNext;
             
+            -- CAREFUL: here we assure that the buffer is never full (so isFull incidcates 1 free slot). So startPtr = endPtr always indicates emptiness
             if --nFullNext > ROB_SIZE-1 then
-                cmpGreaterUnsignedSN(nFullNext, i2slv(ROB_SIZE-1, SMALL_NUMBER_SIZE)) = '1' then
+                cmpGreaterUnsignedSN(nFullNext, i2slv(ROB_SIZE-1-1, SMALL_NUMBER_SIZE)) = '1' then
                 isFull <= '1';
                 isAlmostFull <= '1';
             elsif --nFullNext > ROB_SIZE-2 then
-                cmpGreaterUnsignedSN(nFullNext, i2slv(ROB_SIZE-2, SMALL_NUMBER_SIZE)) = '1' then
+                cmpGreaterUnsignedSN(nFullNext, i2slv(ROB_SIZE-2-1, SMALL_NUMBER_SIZE)) = '1' then
                 isFull <= '0';
                 isAlmostFull <= '1';
             else
@@ -207,6 +210,7 @@ begin
             end if;
             
             completedMask <= completedMaskNext;
+                completedMask_T <= completedMaskNext_T;
             outputDataReg <= content(slv2u(startPtrNext)).ops;          
 		end if;		
 	end process;
@@ -226,8 +230,9 @@ begin
 	   CTR_MANAGEMENT: block
 	       signal ptrDiff, flowDiff: SmallNumber := (others => '0');
 	   begin
-	       nFullRestored <= i2slv(ROB_SIZE, SMALL_NUMBER_SIZE) when startPtrNext = endPtr and content(0).full = '1'
-	                   else ptrDiff and PTR_MASK_SN;
+	       nFullRestored <= --i2slv(ROB_SIZE, SMALL_NUMBER_SIZE) when startPtrNext = endPtr and content(0).full = '1'
+	                   --else 
+	                           ptrDiff and PTR_MASK_SN;
 	       ptrDiff <= subSN(endPtr, startPtrNext);
 	       
 	       flowDiff <= subSN(addSN(nFull, nIn), nOut);
@@ -237,11 +242,18 @@ begin
 	   
 	FULL_MASK: for i in 0 to ROB_SIZE-1 generate
 	   fullMask(i) <= content(i).full;
-       completedMaskNext(i) <= groupCompleted(content(i).ops) and content(i).full and not lateEventSignal;	   
+       --completedMaskNext(i) <= groupCompleted(content(i).ops) and content(i).full 
+       --                                                         and not lateEventSignal;
+                                                completedMaskNext_T(i) <= groupCompleted(content(i).ops) and not isEmpty and not lateEventSignal;
 	end generate;
 	
-	--isSending <= groupCompleted(content(slv2u(startPtr)).ops) and content(slv2u(startPtr)).full and nextAccepting;
-	isSending <= completedMask(slv2u(startPtr)) and content(slv2u(startPtr)).full and nextAccepting;
+	--isSending <= completedMask(slv2u(startPtr)) and content(slv2u(startPtr)).full and nextAccepting;
+                                                --and nextAccepting and not isEmpty;
+        isSending <= completedMask_T(slv2u(startPtr)) and nextAccepting and not isEmpty;
+    
+        ch0 <= bool2std(isSending_T = isSending);
+        ch1 <= bool2std(completedMaskNext = completedMaskNext_T);
+
 
 	acceptingOut <= --not content(slv2u(endPtr)).full; -- When a free place exists
 	               not isFull;

@@ -74,29 +74,23 @@ end StoreQueue;
 
 
 architecture Behavioral of StoreQueue is
+	constant PTR_MASK_SN: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+
 	signal isSending, isDraining: std_logic := '0';							
 
-	signal content, contentNext: InstructionStateArray(0 to QUEUE_SIZE-1)
-															:= (others => DEFAULT_INSTRUCTION_STATE);
-	signal fullMask, taggedMask, killMask, livingMask, frontMask, drainMask, sendingMask, drainMaskNext, inputMask,
+	signal content, contentNext: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INSTRUCTION_STATE);
+	signal fullMask, taggedMask, killMask, livingMask, frontMask, sendingMask, inputMask, drainMask, drainMaskNext,
 			 committedMask, committedMaskNext, fullMaskNext, taggedMaskNext: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 	
 	signal taggedLivingMask, fullOrCommittedMask, matchedMask, newerLQ, olderSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
-	signal selectedDataSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-	signal selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-
-	signal pDrain, pStart, pDrainNext, pStartNext, pStartNext_T, pTagged, pAll, causingPtr, pAcc, pAccMore: SmallNumber := (others => '0');
+	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+	signal dataOutSig, dataOutSigNext, dataOutSigFinal, dataDrainSig: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	
-	signal dataOutSig, dataOutSigOld, dataOutSigFinal, dataOutSigNext: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-	signal dataDrainSig: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
-	
+	signal pStart, pStartNext, pDrain, pDrainNext, pStartNext_T, pTagged, pAll, causingPtr, pAcc, pAccMore: SmallNumber := (others => '0');	
 	   signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
 	   signal recoveryCounter: SmallNumber := (others => '0');
 	   signal isFull, isAlmostFull: std_logic := '0'; 	
-
-	
-	constant PTR_MASK_SN: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
 
 
     function getNewContentSQ(content: InstructionStateArray; dataIn: InstructionSlotArray;
@@ -333,16 +327,14 @@ begin
     taggedLivingMask <= taggedMask and not killMask;
 				
     inputMask <= getInputMask(taggedMask, extractFullMask(dataIn), prevSending, pTagged, PTR_MASK_SN);				
-    --inputMaskBr <= getInputMask(fullMask, extractFullMask(dataInBr), prevSendingBr, pAll);
-				
-	--fullMaskNext <= (livingMask and not sendingMask) or inputMaskBr;
+
 	taggedMaskNext <= (taggedLivingMask and not sendingMask) or inputMask;
 	committedMaskNext <= (committedMask or sendingMask) and not drainMask;
 	  
 	fullOrCommittedMask <= taggedMask or committedMask; 
 	   
-	   -- TODO: this won't work if the queue is allowed to become full of 'committed'. If it could, change to [set '1' on drainP when startP ~= drainP]
-	   drainMask <= committedMask and not (committedMask(QUEUE_SIZE-1) & committedMask(0 to QUEUE_SIZE-2)); -- First '1' bit of committedMask
+	-- TODO: this won't work if the queue is allowed to become full of 'committed'. If it could, change to [set '1' on drainP when startP ~= drainP]
+	drainMask <= committedMask and not (committedMask(QUEUE_SIZE-1) & committedMask(0 to QUEUE_SIZE-2)); -- First '1' bit of committedMask
 	
 	contentNext <=
 				getNewContentSQ(content, dataIn,
@@ -355,10 +347,9 @@ begin
 				                IS_LOAD_QUEUE, newerLQ
 				                                    );
 
-	dataDrainSig <= getWindow(content, drainMask, pDrain, 1);				                
-	dataOutSigOld <= getWindow(content, frontMask, pStart, PIPE_WIDTH);
+	dataDrainSig <= getWindow(content, drainMask, pDrain, PIPE_WIDTH);				                
 
-        dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
+    dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
 
 	newerLQ <= TMP_cmpTagsAfter(content, compareAddressInput.ins.tags.renameIndex) and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, store)
 	                   else (others => '0'); -- Only those with known address
@@ -378,14 +369,12 @@ begin
 	process (clk)
 	begin
 		if rising_edge(clk) then
---			TMP_mask <= TMP_maskNext;
             fullMask <= fullMaskNext;
             taggedMask <= taggedMaskNext;
 			content <= contentNext;
 	        committedMask <= committedMaskNext;
 			
-			selectedDataOutputSig <= selectedDataSlot;--(selectedSendingSig, selectedData);
-
+			selectedDataOutputSig <= selectedDataSlot;
             dataOutSig <= dataOutSigNext;
 
             pDrain <= pDrainNext;
@@ -400,76 +389,59 @@ begin
                 pTagged <= addSN(pTagged, i2slv(countOnes(inputMask), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
             end if;
 
-
-            
-            
             if lateEventSignal = '1' or execEventSignal = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
             elsif recoveryCounter /= i2slv(0, SMALL_NUMBER_SIZE) then
                 recoveryCounter <= subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
             end if;
-	        
-	        nFull <= nFullNext;
-	        
-            if --nFullNext > QUEUE_SIZE-4 then
-                cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-4, SMALL_NUMBER_SIZE)) = '1' then
-                isFull <= '1';
-                isAlmostFull <= '1';
-            elsif --nFullNext > QUEUE_SIZE-8 then
-                cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-8, SMALL_NUMBER_SIZE)) = '1' then
-                isFull <= '0';
-                isAlmostFull <= '1';
-            else
-                isFull <= '0';
-                isAlmostFull <= '0';
-            end if;	    
-   
+	                
+	        isFull <= cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-4, SMALL_NUMBER_SIZE));
+            isAlmostFull <= cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-8, SMALL_NUMBER_SIZE));
+
+	        nFull <= nFullNext;	           
 		end if;
 	end process;
-        N_FULL_NEXT: block
-            constant QUEUE_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
-            signal flowDiff: SmallNumber := (others => '0');            
-        begin
-            nFullNext <=  nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
-                    else flowDiff and QUEUE_SIZE_MASK;
-            flowDiff <= subSN(addSN(nFull, nIn), nOut);
-        end block;
 
-	    nIn <= i2slv( countOnes(inputMask), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
-	        
-        LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
-            constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
-            signal tagDiff: SmallNumber := (others => '0');
-        begin
-           nOut <= i2slv(countOnes(extractFullMask(dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending = '1'
-          else (others => '0');        
-        
-           nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and fullMask(0) = '1'
-                           else tagDiff and TAG_DIFF_SIZE_MASK;
-                           tagDiff <= subSN(pTagged, pStartNext);          
-        end generate;
-    
-        STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
-            constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
-            signal tagDiff: SmallNumber := (others => '0');
-        begin        
-	        nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isDraining = '1'
-              else (others => '0');
-                  
-           nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pDrainNext = pTagged and fullMask(0) = '1' 
-                else tagDiff and TAG_DIFF_SIZE_MASK;
-                tagDiff <= subSN(pTagged, pDrainNext);
-        end generate;
+	N_FULL_NEXT: block
+		constant QUEUE_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+		signal flowDiff: SmallNumber := (others => '0');            
+	begin
+		nFullNext <=  nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
+				else flowDiff and QUEUE_SIZE_MASK;
+		flowDiff <= subSN(addSN(nFull, nIn), nOut);
+	end block;
+
+	nIn <= i2slv( countOnes(inputMask), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
+		
+	LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
+		constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+		signal tagDiff: SmallNumber := (others => '0');
+	begin
+	   nOut <= i2slv(countOnes(extractFullMask(dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending = '1'
+	  else (others => '0');        
+	
+	   nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and fullMask(0) = '1'
+					   else tagDiff and TAG_DIFF_SIZE_MASK;
+					   tagDiff <= subSN(pTagged, pStartNext);          
+	end generate;
+
+	STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
+		constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+		signal tagDiff: SmallNumber := (others => '0');
+	begin        
+		nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isDraining = '1'
+		  else (others => '0');
+			  
+	   nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pDrainNext = pTagged and fullMask(0) = '1' 
+			else tagDiff and TAG_DIFF_SIZE_MASK;
+			tagDiff <= subSN(pTagged, pDrainNext);
+	end generate;
 
 
     isDraining <= dataDrainSig(0).full;
-	isSending <= committing and dataOutSigOld(0).full;
-	
     dataOutSigFinal <= getSendingArray(dataOutSig, groupCtrInc, committing);
      
-        isSending <= dataOutSigFinal(0).full;	
-	
-	dataOutV <= dataOutSigFinal;
+    isSending <= dataOutSigFinal(0).full;	
 
     -- Accept when 4 free slot exist
     pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
@@ -477,6 +449,8 @@ begin
     
 	acceptingOut <= not isFull;
 	almostFull <= isAlmostFull;
+
+	dataOutV <= dataOutSigFinal;	
 	sendingSQOut <= isSending;
 
 	selectedDataOutput <= selectedDataOutputSig;
