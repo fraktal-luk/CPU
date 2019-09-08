@@ -48,11 +48,7 @@ entity ReorderBuffer is
 		en: in std_logic;
 		
 		lateEventSignal: in std_logic;
-		--execEventSignal: in std_logic;
-		--execCausing: in InstructionState; -- Redundant cause we have inputs from all Exec ends? 
-		
 		commitGroupCtr: in InsTag;
-		--commitGroupCtrNext: in InsTag;
 
 		execEndSigs1: in InstructionSlotArray(0 to 3);
 		execEndSigs2: in InstructionSlotArray(0 to 3);
@@ -86,8 +82,8 @@ architecture Behavioral of ReorderBuffer is
 	constant PTR_MASK_TAG: InsTag := i2slv(ROB_SIZE-1, TAG_SIZE);
 	constant PTR_MASK_SN: SmallNumber := i2slv(ROB_SIZE-1, SMALL_NUMBER_SIZE);
 	
-	       signal recoveryCounter: SmallNumber := (others => '0');
-	       signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0'); 
+	signal recoveryCounter: SmallNumber := (others => '0');
+	signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0'); 
 	
 	signal isFull, isAlmostFull: std_logic := '0'; 	
 
@@ -102,9 +98,6 @@ architecture Behavioral of ReorderBuffer is
 	   variable killMask: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
 	   variable ptr1, ptr2,  iv, tagHiPart, tagLoPart: SmallNumber := (others => '0');
 	begin
-	   -- if late event: clear all 'full' bits, endPtr = startPtr
-	   -- elseif execEvent: endPtr = causingPtr, clear 'full' bits that are "behind" causingPtr
-	
 	   if sends = '1' then
 	       res(slv2u(startPtr)).full := '0'; -- CAREFUL: don't get index out of bounds
 	   end if;
@@ -144,8 +137,7 @@ architecture Behavioral of ReorderBuffer is
 	   return res;
 	end function;
 	
-	signal startPtr, startPtrNext, endPtr, acmPtr, 
-	       causingPtr: SmallNumber := (others => '0');
+	signal startPtr, startPtrNext, endPtr, acmPtr, causingPtr: SmallNumber := (others => '0');
 	
 begin
 	execEvent <= execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
@@ -166,10 +158,7 @@ begin
 	begin
 		if rising_edge(clk) then	
             content <= contentNext;
-            
---            if isSending = '1' then
---                startPtr <= addSN(startPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
---            end if;
+
             startPtr <= startPtrNext;
             
             if lateEventSignal = '1' then
@@ -179,19 +168,12 @@ begin
             elsif prevSending = '1' then
                 endPtr <= addSN(endPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
             end if;
-            
-            
+                   
             if lateEventSignal = '1' or execEvent = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
             elsif isNonzero(recoveryCounter) = '1' then
                 recoveryCounter <= subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
             end if;
-            
---            if recoveryCounter = 1 then
---                nFull <= nFullRestored;
---            else
---                nFull <= nFull + nIn - nOut;
---            end if;
             
             nFull <= nFullNext;
             
@@ -210,59 +192,36 @@ begin
             end if;
             
             completedMask <= completedMaskNext;
-                completedMask_T <= completedMaskNext_T;
             outputDataReg <= content(slv2u(startPtrNext)).ops;          
 		end if;		
 	end process;
-	--
---	   nIn <= 1 when prevSending = '1' else 0;
---	   nOut <= 1 when isSending = '1' else 0;
-
---       nFullRestored <= ROB_SIZE when startPtr = endPtr and content(0).full = '1' 
---                   else (slv2s(endPtr) - slv2s(startPtr)) mod ROB_SIZE; -- TODO: modulo to make it positive  	   
-
---            nFullNext <=  nFullRestored when recoveryCounter = 1
---                    else  nFull + nIn - nOut;	   
---	--   
-	   nIn <= i2slv(1, SMALL_NUMBER_SIZE) when prevSending = '1' else (others => '0');
-	   nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');
-	   
-	   CTR_MANAGEMENT: block
-	       signal ptrDiff, flowDiff: SmallNumber := (others => '0');
-	   begin
-	       nFullRestored <= --i2slv(ROB_SIZE, SMALL_NUMBER_SIZE) when startPtrNext = endPtr and content(0).full = '1'
-	                   --else 
-	                           ptrDiff and PTR_MASK_SN;
-	       ptrDiff <= subSN(endPtr, startPtrNext);
-	       
-	       flowDiff <= subSN(addSN(nFull, nIn), nOut);
-	       nFullNext <=     nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
-	                   else flowDiff and PTR_MASK_SN;
-	   end block;
+ 
+    nIn <= i2slv(1, SMALL_NUMBER_SIZE) when prevSending = '1' else (others => '0');
+    nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');
+       
+    CTR_MANAGEMENT: block
+        signal ptrDiff, flowDiff: SmallNumber := (others => '0');
+    begin
+        nFullRestored <= ptrDiff and PTR_MASK_SN;
+        ptrDiff <= subSN(endPtr, startPtrNext);
+          
+        flowDiff <= subSN(addSN(nFull, nIn), nOut);
+        nFullNext <=     nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
+                    else flowDiff and PTR_MASK_SN;
+    end block;
 	   
 	FULL_MASK: for i in 0 to ROB_SIZE-1 generate
 	   fullMask(i) <= content(i).full;
-       --completedMaskNext(i) <= groupCompleted(content(i).ops) and content(i).full 
-       --                                                         and not lateEventSignal;
-                                                completedMaskNext_T(i) <= groupCompleted(content(i).ops) and not isEmpty and not lateEventSignal;
+       completedMaskNext(i) <= groupCompleted(content(i).ops) and not isEmpty and not lateEventSignal;
 	end generate;
 	
-	--isSending <= completedMask(slv2u(startPtr)) and content(slv2u(startPtr)).full and nextAccepting;
-                                                --and nextAccepting and not isEmpty;
-        isSending <= completedMask_T(slv2u(startPtr)) and nextAccepting and not isEmpty;
-    
-        ch0 <= bool2std(isSending_T = isSending);
-        ch1 <= bool2std(completedMaskNext = completedMaskNext_T);
+    isSending <= completedMask(slv2u(startPtr)) and nextAccepting and not isEmpty;
 
-
-	acceptingOut <= --not content(slv2u(endPtr)).full; -- When a free place exists
-	               not isFull;
+	acceptingOut <= not isFull;
 	
     acmPtr <= addSN(endPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-    acceptingMore <= -- not content(slv2u(acmPtr)).full;
-				    not isAlmostFull;		
-	outputData <= --content(slv2u(startPtr)).ops;
-	               outputDataReg;
+    acceptingMore <= not isAlmostFull;		
+	outputData <= outputDataReg;
 
 	sendingOut <= isSending;
 	
@@ -271,4 +230,5 @@ begin
 	begin
 	   robTxt <= getRobView(content);
 	end block;
+
 end Behavioral;

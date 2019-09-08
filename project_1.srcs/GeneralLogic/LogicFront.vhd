@@ -31,13 +31,6 @@ function decodeInstruction(inputState: InstructionState) return InstructionState
 function decodeMulti(sd: InstructionSlotArray) return InstructionSlotArray;
 function fillTargetsAndLinks(insVec: InstructionSlotArray) return InstructionSlotArray;
 
---function newFromHbufferW(content: InstructionStateArray; fullMask: std_logic_vector)
---return InstructionSlotArray;
-
---function getAnnotatedWords(fetchIns: InstructionState; fetchInsMulti: InstructionSlotArray;
---									 fetchBlock: HwordArray)
---return InstructionStateArray;
-
 function getFrontEventMulti(predictedAddress: Mword; ins: InstructionState; fetchLine: WordArray(0 to FETCH_WIDTH-1))
 return InstructionSlotArray;
 
@@ -86,13 +79,6 @@ begin
 				ci.mainCluster := '0';
 				ci.secCluster := '0';
 			end if;
-
---			ci.branchCond := '0';
---			if 	ins.operation.func = jump then
---				null;
---			elsif ins.operation.func = jumpZ or ins.operation.func = jumpNZ then 
---				ci.branchCond := '1';	
---			end if;
 			
 		if ins.operation.unit = ALU or ins.operation.unit = Jump then
 			ci.pipeA := '1';
@@ -173,48 +159,6 @@ begin
 end function;
 
 
---function newFromHbufferW(content: InstructionStateArray; fullMask: std_logic_vector)
---return InstructionSlotArray is
---	variable res: InstructionSlotArray(0 to content'length-1) := (others => DEFAULT_INSTRUCTION_SLOT);
---begin
---	for i in 0 to PIPE_WIDTH-1 loop
---		res(i).full := fullMask(i); --'1';
---		res(i).ins.bits := content(i).bits;--(15 downto 0) & content(2*i+1).bits(15 downto 0);
---		res(i).ins.ip := content(i).ip;
---		res(i).ins.controlInfo.squashed := content(i).controlInfo.squashed;
---		res(i).ins.controlInfo.frontBranch := content(i).controlInfo.frontBranch;
---	end loop;
-
---	return res;
---end function;
-
-
---function getAnnotatedWords(fetchIns: InstructionState; fetchInsMulti: InstructionSlotArray;
---									 fetchBlock: HwordArray)
---return InstructionStateArray is
---	variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_STATE);
---	variable	tempWord: word := (others => '0');
---	variable wordIP: Mword := (others => '0');
---begin
---	for i in 0 to PIPE_WIDTH-1 loop
---		wordIP := fetchIns.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(4*i, ALIGN_BITS);
---		tempWord(31 downto 16) := fetchBlock(2*i);
---		tempWord(15 downto 0) := fetchBlock(2*i+1);
-
---		res(i).bits := tempWord;
---		res(i).ip := wordIP;
---		res(i).classInfo.short := '0'; -- TEMP!
---		res(i).controlInfo.squashed := fetchIns.controlInfo.squashed; -- CAREFUL: guarding from wrong reading 
---	end loop;
-
---	for i in 0 to PIPE_WIDTH-1 loop
---		res(i).controlInfo.frontBranch := fetchInsMulti(i).ins.controlInfo.frontBranch;		
---		res(i).target := fetchInsMulti(i).ins.target;
---	end loop;
-	
---	return res;
---end function;
-
 function getFrontEventMulti(predictedAddress: Mword;
 							  ins: InstructionState; fetchLine: WordArray(0 to FETCH_WIDTH-1))
 return InstructionSlotArray is
@@ -268,7 +212,7 @@ begin
             predictedTaken(i) := '1'; -- Long jump is unconditional (no space for register encoding!)
         elsif  fetchLine(i)(31 downto 26) = opcode2slv(ext1) 
             and (fetchLine(i)(15 downto 10) = opcont2slv(ext1, jzR)
-                    or fetchLine(i)(15 downto 10) = opcont2slv(ext1, jnzR)) then
+                 or fetchLine(i)(15 downto 10) = opcont2slv(ext1, jnzR)) then
             regJump := '1';
             predictedTaken(i) := '0'; -- TEMP: register jumps predicted not taken
         end if;
@@ -284,8 +228,6 @@ begin
         end if;
 
         res(i).ins.target := addMwordFaster(res(i).ins.ip, tempOffset);
-
-        --res(i).ins.classInfo.branchCond := branchIns(i); -- Mark as ins of type branch
         
         -- Now applying the skip!
         if res(i).ins.controlInfo.skipped = '1' then
