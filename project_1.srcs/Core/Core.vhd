@@ -100,7 +100,7 @@ architecture Behavioral of Core is
     signal robSending, robAccepting, renamedSending, commitAccepting, 
                 iqAccepting, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
                 robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0: std_logic := '0';
-    signal commitGroupCtr, commitCtr, commitGroupCtrInc: InsTag := (others => '0');
+    signal commitGroupCtr, commitGroupCtrInc: InsTag := (others => '0');
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal intSignal: std_logic := '0';
     signal intType: std_logic_vector(0 to 1) := (others => '0');
@@ -172,7 +172,7 @@ begin
         sbEmpty => sbEmpty,
 
         commitGroupCtrOut => commitGroupCtr,
-        commitCtrOut => commitCtr,
+        --commitCtrOut => commitCtr,
         commitGroupCtrIncOut => commitGroupCtrInc,
         
         doneSig => oaux(0),
@@ -230,7 +230,7 @@ begin
         newFloatDestsOut => newFloatDests,
             
         commitGroupCtr => commitGroupCtr,
-        commitCtr => commitCtr,
+        --commitCtr => commitCtr,
 		
 		execCausing => execCausing,
         lateCausing => lateCausing,

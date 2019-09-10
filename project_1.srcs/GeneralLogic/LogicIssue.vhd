@@ -33,13 +33,6 @@ return SchedulerEntrySlot;
 
 
 function iqContentNext(queueContent: SchedulerEntrySlotArray; inputDataS: SchedulerEntrySlotArray;
-								 stayMask, fullMask, livingMask: std_logic_vector;
-								 sendPossible, sends: std_logic;
-								 prevSending: std_logic)
-return SchedulerEntrySlotArray;
-
-
-function iqContentNext_N(queueContent: SchedulerEntrySlotArray; inputDataS: SchedulerEntrySlotArray;
 								 remainMask, fullMask, livingMask, selMask, issuedMask: std_logic_vector;
 								 sends, sent: std_logic;
 								 sentUnexpected,
@@ -273,85 +266,6 @@ end function;
 
 
 function iqContentNext(queueContent: SchedulerEntrySlotArray; inputDataS: SchedulerEntrySlotArray;
-								 stayMask, fullMask, livingMask: std_logic_vector;
-								 sendPossible, sends: std_logic;
-								 prevSending: std_logic)
-return SchedulerEntrySlotArray is
-	constant QUEUE_SIZE: natural := queueContent'length;
-	variable res: SchedulerEntrySlotArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT); 	
-	variable newMask: std_logic_vector(0 to PIPE_WIDTH-1) := extractFullMask(inputDataS);--inputData.fullMask;--
-	variable compMask: std_logic_vector(0 to PIPE_WIDTH-1) := compactMask(newMask);
-	variable dataNewDataS: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := inputDataS;
-	
-	variable iqDataNextS: SchedulerEntrySlotArray(0 to QUEUE_SIZE - 1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-	variable iqFullMaskNext: std_logic_vector(0 to QUEUE_SIZE - 1) :=	(others => '0');
-    variable iqRemainingMaskSh: std_logic_vector(0 to QUEUE_SIZE + 4 - 1) := (others => '0');
-
-	variable xVecS: SchedulerEntrySlotArray(0 to QUEUE_SIZE + PIPE_WIDTH - 1);
-	variable fullMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := fullMask;
-	variable livingMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := livingMask;
-	variable fillMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');	
-	--variable remv: std_logic_vector(0 to 2) := "000";
-	--variable sel: std_logic_vector(1 downto 0) := "00";		
-begin
-	-- Important, new instrucitons in queue must be marked!	
-	for i in 0 to PIPE_WIDTH-1 loop
-		dataNewDataS(i).state.argValues.newInQueue := '1';
-	end loop;
-
-	xVecS := queueContent & dataNewDataS;
-	xVecS(QUEUE_SIZE) := xVecS(QUEUE_SIZE-1);
-	for i in 0 to QUEUE_SIZE + PIPE_WIDTH - 1 loop
-		xVecS(i).state.argValues.newInQueue := '0';
-	end loop;
-
-	for i in 0 to QUEUE_SIZE-2 loop
-		livingMaskSh(i) := livingMask(i) and (livingMask(i+1) or not sends);
-		fullMaskSh(i) := fullMask(i) and (fullMask(i+1) or not sendPossible);			
-	end loop;
-	livingMaskSh(QUEUE_SIZE-1) := livingMask(QUEUE_SIZE-1) and ('0' or not sends);
-	fullMaskSh(QUEUE_SIZE-1) := fullMask(QUEUE_SIZE-1) and ('0' or not sendPossible);
-
-	-- Now assign from x or y
-	iqRemainingMaskSh(0 to 3) := (others => '1');
-	iqRemainingMaskSh(4 to QUEUE_SIZE + 4 - 1) := fullMaskSh;
-	iqDataNextS := queueContent;
-	for i in 0 to QUEUE_SIZE-1 loop
-		--remv := iqRemainingMaskSh(i+1 to i+3);	                   
-	    
-        fillMask(i) := '0';
-        for k in 0 to 3 loop -- Further beyond end requires more ful inputs to be filled:
-            --                            !! equiv to remainingMask(-1-k), where '1' for k < 0
-            fillMask(i) := fillMask(i) or (iqRemainingMaskSh(i + 3-k) and compMask(k));
-        end loop;
-	      
-		iqFullMaskNext(i) := livingMaskSh(i) or (fillMask(i) and prevSending);
-		if fullMaskSh(i) = '1' then -- From x	
-			if stayMask(i) = '1' then
-				iqDataNextS(i) := xVecS(i);
-			else
-				iqDataNextS(i) := xVecS(i + 1);
-			end if;
-		else -- From y
-		    --sel := getSelector(remv, newMask(0 to 2));    
-			iqDataNextS(i) := --dataNewDataS(slv2u(sel));  -- Not using get n;
-			                  getNewElemSch(iqRemainingMaskSh(i+1 to i+3), dataNewDataS);
-		end if;
-	end loop;
-
-	-- Fill output array
-	for i in 0 to res'right loop
-		res(i).full := iqFullMaskNext(i);
-		res(i).ins := iqDataNextS(i).ins;
-		res(i).state := iqDataNextS(i).state;
-	end loop;
-
-	return res;
-end function;
-
-
-
-function iqContentNext_N(queueContent: SchedulerEntrySlotArray; inputDataS: SchedulerEntrySlotArray;
 								 remainMask, fullMask, livingMask, selMask, issuedMask: std_logic_vector;
 								 sends, sent: std_logic;
 								 sentUnexpected,
@@ -371,15 +285,12 @@ return SchedulerEntrySlotArray is
 	variable fullMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := fullMask;
 	variable livingMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := livingMask;
 	variable fillMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');	
-	--variable remv: std_logic_vector(0 to 2) := "000";
-	--variable sel: std_logic_vector(1 downto 0) := "00";		
 begin
 	-- Important, new instrucitons in queue must be marked!	
 	for i in 0 to PIPE_WIDTH-1 loop
 		dataNewDataS(i).state.argValues.newInQueue := '1';
 	end loop;
-
-    
+  
 	xVecS := queueContent & dataNewDataS;
 	
 	-- What is being issued now is marked
@@ -410,13 +321,9 @@ begin
 	iqRemainingMaskSh(0 to 3) := (others => '1');
 	iqRemainingMaskSh(4 to QUEUE_SIZE + 4 - 1) := fullMaskSh;
 	iqDataNextS := queueContent;
-	for i in 0 to QUEUE_SIZE-1 loop
-	
-		--remv := iqRemainingMaskSh(i+1 to i+3);	                   
-	    
+	for i in 0 to QUEUE_SIZE-1 loop		    
         fillMask(i) := '0';
-        for k in 0 to 3 loop -- Further beyond end requires more ful inputs to be filled:
-            --                            !! equiv to remainingMask(-1-k), where '1' for k < 0
+        for k in 0 to 3 loop -- Further beyond end requires more full inputs to be filled: !! equiv to remainingMask(-1-k), where '1' for k < 0
             fillMask(i) := fillMask(i) or (iqRemainingMaskSh(i + 3-k) and compMask(k));
         end loop;
 	      
@@ -428,11 +335,8 @@ begin
 				iqDataNextS(i) := xVecS(i + 1);
 			end if;
 		else -- From y
-		    --sel := getSelector(remv, newMask(0 to 2));    
-			iqDataNextS(i) := --dataNewDataS(slv2u(sel));  -- Not using get n;
-			                  getNewElemSch(iqRemainingMaskSh(i+1 to i+3), dataNewDataS);
+			iqDataNextS(i) := getNewElemSch(iqRemainingMaskSh(i+1 to i+3), dataNewDataS);
 		end if;
-
 	end loop;
 
 	-- Fill output array
@@ -446,15 +350,9 @@ begin
 end function;
 
 
-
-
-
-
-
 function updateSchedulerStateGeneric(ins: InstructionState; st: SchedulerState;
 										readyRegFlags: std_logic_vector; fni: ForwardingInfo;
-										fnm: ForwardingMap; progressLocs: boolean)--;
-									--isNew: std_logic)
+										fnm: ForwardingMap; progressLocs: boolean)
 return SchedulerEntrySlot is
 	variable res: SchedulerEntrySlot := DEFAULT_SCHEDULER_ENTRY_SLOT;
 	variable tmp8: SmallNumber := (others => '0');

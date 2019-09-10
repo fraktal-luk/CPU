@@ -133,26 +133,26 @@ type InstructionPhysicalDestArgs is record
 end record;
 
 
-		type InstructionArgSpec is record
-			intDestSel: std_logic;
-			floatDestSel: std_logic;
-			dest: SmallNumber;
-			destAlt: SmallNumber;
-			intArgSel: std_logic_vector(0 to 2);
-			floatArgSel: std_logic_vector(0 to 2);
-			args: SmallNumberArray(0 to 2);
-		end record;
+type InstructionArgSpec is record
+    intDestSel: std_logic;
+    floatDestSel: std_logic;
+    dest: SmallNumber;
+    destAlt: SmallNumber;
+    intArgSel: std_logic_vector(0 to 2);
+    floatArgSel: std_logic_vector(0 to 2);
+    args: SmallNumberArray(0 to 2);
+end record;
 
-		type InstructionTags is record
-			fetchCtr: Word;	-- Ctr is never reset!
-			decodeCtr: Word; -- Ctr is never reset!
-			renameCtr: Word;
-			renameSeq: InsTag;
-			renameIndex: InsTag;	-- group + group position
-			intPointer: SmallNumber;
-			floatPointer: SmallNumber;
-			commitCtr: Word;
-		end record;
+type InstructionTags is record
+    fetchCtr: Word;	-- Ctr is never reset!
+    decodeCtr: Word; -- Ctr is never reset!
+    renameCtr: Word;
+    --renameSeq: InsTag;
+    renameIndex: InsTag;	-- group + group position
+    intPointer: SmallNumber;
+    floatPointer: SmallNumber;
+    commitCtr: Word;
+end record;
 		
 
 type InstructionArgValues is record
@@ -228,7 +228,7 @@ constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
 			fetchCtr => (others => '0'),
 			decodeCtr => (others => '0'),
 			renameCtr => (others => '0'),
-			renameSeq => (others => '0'), 
+			--renameSeq => (others => '0'), 
 			renameIndex => (others => '0'),
 			intPointer => (others => '0'),
 			floatPointer => (others => '0'),

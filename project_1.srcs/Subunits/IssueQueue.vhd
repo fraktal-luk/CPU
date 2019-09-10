@@ -47,9 +47,9 @@ entity IssueQueue is
 		lateEventSignal: in std_logic;
 		execEventSignal: in std_logic;
 		execCausing: in InstructionState;
-		fni: ForwardingInfo;
-		waitingFM: ForwardingMap;
-		selectionFM: ForwardingMap; 
+		fni: in ForwardingInfo;
+		waitingFM: in ForwardingMap;
+		selectionFM: in ForwardingMap; 
 		readyRegFlags: in std_logic_vector(0 to 3*PIPE_WIDTH-1);
 		
 		sentCancelled: out std_logic;
@@ -149,23 +149,21 @@ architecture Behavioral of IssueQueue is
 	end function;
 
 	function TMP_getIssuedMask(elems: SchedulerEntrySlotArray) return std_logic_vector is
-           variable res: std_logic_vector(0 to elems'length-1) := (others => '0');
+        variable res: std_logic_vector(0 to elems'length-1) := (others => '0');
 	begin
 		for i in 0 to elems'length-1 loop
 		    res(i) := elems(i).state.argValues.issued;
 		end loop;
 		return res;
     end function;
-			signal ch0, ch1, ch2: std_logic := '0';
+	--		signal ch0, ch1, ch2: std_logic := '0';
 begin
 
 	QUEUE_SYNCHRONOUS: process(clk) 	
 	begin
 		if rising_edge(clk) then		
-			queueContent <= queueContentNext_N;
-			     queueContent_N <= queueContentNext_N;
-			     sentKilled <= sendingKilled;
-			     --sentUnexpected <= isNonzero(selMask) and not nextAccepting;
+			queueContent <= queueContentNext;
+			sentKilled <= sendingKilled;
 		end if;
 	end process;	
 
@@ -174,19 +172,13 @@ begin
 	fullMask <= extractFullMask(queueContent);
     queueData <= extractData(queueContent);
 
-	sends <= anyReadyLive and nextAccepting;
+	sends <= anyReadyLive and nextAccepting; -- CHECK: can we use full instead of living?
 	sendPossible <= anyReadyFull and nextAccepting; -- Includes ops that would send but are killed
 	
 	dispatchDataNew <= TMP_clearDestIfEmpty(prioSelect(queueContentUpdatedSel, readyMask), sends);
 	stayMask <= TMP_setUntil(readyMask, nextAccepting);
 
     newContent <= newArr;
-
-	queueContentNext <= iqContentNext(queueContentUpdated, newContent,
-									  stayMask, fullMask, livingMask,
-									  sendPossible, sends,
-									  prevSendingOK);
-            
             
             selMask <= getFirstOne(readyMask);
             remainMask <= TMP_setUntil(issuedMask, '1'); 
@@ -194,30 +186,23 @@ begin
                 sent <= isNonzero(issuedMask);
                 sendingKilled <= isNonzero(killMask and selMask);
             
-                    sends_N <= anyReadyFull and nextAccepting;
-            
-            queueContentNext_N <= iqContentNext_N(queueContentUpdated, newContent,
-                                              remainMask, fullMask, livingMask, selMask, issuedMask,
-                                              
-                                              sends, sent,-- and not sentUnexpected,
+            queueContentNext <= iqContentNext(queueContentUpdated, newContent,
+                                              remainMask, fullMask, livingMask, selMask, issuedMask,                                             
+                                              sends, sent,
                                               sentUnexpected,
                                               prevSendingOK);
 					
 	-- TODO: below could be optimized because some code is shared (comparators!)
-	queueContentUpdated <= --updateForWaitingArrayFNI(queueContent, readyRegFlags, fni);
-	                       updateSchedulerArray(queueContent, readyRegFlags, fni, waitingFM, true);
-	queueContentUpdatedSel <= --updateForSelectionArrayFNI(queueContent, readyRegFlags, fni);
-	                       updateSchedulerArray(queueContent, readyRegFlags, fni, selectionFM, false);
+	queueContentUpdated <= updateSchedulerArray(queueContent, readyRegFlags, fni, waitingFM, true);
+	queueContentUpdatedSel <= updateSchedulerArray(queueContent, readyRegFlags, fni, selectionFM, false);
 
 	readyMask <= extractReadyMaskNew(queueContentUpdatedSel) and fullMask;	
 	readyMaskLive <= readyMask and livingMask;
 
 	
 	killMask <= getKillMask(queueData, fullMask, execCausing, execEventSignal, lateEventSignal); 
-	acceptingOut <= --not isNonzero(fullMask(IQ_SIZE-PIPE_WIDTH to IQ_SIZE-1));
-	                   not fullMask(IQ_SIZE-PIPE_WIDTH); -- Equivalent and much better because in collapsing queue mask is continuous!
-	acceptingMore <= --not isNonzero(fullMask(IQ_SIZE-2*PIPE_WIDTH to IQ_SIZE-PIPE_WIDTH-1));
-	                   not fullMask(IQ_SIZE-2*PIPE_WIDTH);
+	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH); -- Equivalent and much better because in collapsing queue mask is continuous!
+	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);
 	
 	anyReadyLive <= isNonzero(readyMaskLive);
 	anyReadyFull <= isNonzero(readyMask);

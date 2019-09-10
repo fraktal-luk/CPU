@@ -51,7 +51,7 @@ port(
     sendingFromROB: in std_logic;
    
     commitGroupCtr: in InsTag;
-    commitCtr: in InsTag;
+    --commitCtr: in InsTag;
   
     execCausing: in InstructionState;
     lateCausing: in InstructionState;

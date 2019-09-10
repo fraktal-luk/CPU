@@ -108,30 +108,30 @@ begin
 	res.classInfo := getInstructionClassInfo(res);	
     res.classInfo.fpRename := decodedIns.classInfo.fpRename;
 
-				if res.operation.unit = System and
-						(	res.operation.func = sysRetI or res.operation.func = sysRetE
-						or res.operation.func = sysSync or res.operation.func = sysReplay
-						or res.operation.func = sysError
-						or res.operation.func = sysHalt
-						or res.operation.func = sysCall
-						or res.operation.func = sysSend ) then 		
-					res.controlInfo.specialAction := '1';
-					
-						-- CAREFUL: Those ops don't get issued, they are handled at retirement
-						res.classInfo.mainCluster := '0';
-						res.classInfo.secCluster := '0';
-				end if;	
+    if res.operation.unit = System and
+            (	res.operation.func = sysRetI or res.operation.func = sysRetE
+            or res.operation.func = sysSync or res.operation.func = sysReplay
+            or res.operation.func = sysError
+            or res.operation.func = sysHalt
+            or res.operation.func = sysCall
+            or res.operation.func = sysSend ) then 		
+        res.controlInfo.specialAction := '1';
+        
+        -- CAREFUL: Those ops don't get issued, they are handled at retirement
+        res.classInfo.mainCluster := '0';
+        res.classInfo.secCluster := '0';
+    end if;	
 	
-		if res.operation.func = sysUndef then
-			res.controlInfo.hasException := '1';
-			res.controlInfo.exceptionCode := i2slv(ExceptionType'pos(undefinedInstruction), SMALL_NUMBER_SIZE);
-		end if;
-		
-		if res.controlInfo.squashed = '1' then	-- CAREFUL: ivalid was '0'
-			report "Trying to decode invalid location" severity error;
-		end if;
-		
-		res.controlInfo.squashed := '0';
+    if res.operation.func = sysUndef then
+        res.controlInfo.hasException := '1';
+        res.controlInfo.exceptionCode := i2slv(ExceptionType'pos(undefinedInstruction), SMALL_NUMBER_SIZE);
+    end if;
+    
+    if res.controlInfo.squashed = '1' then	-- CAREFUL: ivalid was '0'
+        report "Trying to decode invalid location" severity error;
+    end if;
+    
+    res.controlInfo.squashed := '0';
 	return res;
 end function;
 
@@ -181,6 +181,7 @@ begin
 		end if;
 		
 		res(i).ins.tags.fetchCtr := ins.tags.fetchCtr(31 downto LOG2_PIPE_WIDTH) & i2slv(i, LOG2_PIPE_WIDTH);
+
         res(i).ins.bits := fetchLine(i);
         res(i).ins.ip := ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);        
         res(i).ins.result := ins.ip;
