@@ -176,7 +176,7 @@ begin
 	for i in 0 to FETCH_WIDTH-1 loop
 		full(i) := '1'; -- For skipping we use 'skipped' flag, not clearing 'full' 
 		if i < nSkippedIns then
-			res(i).ins.controlInfo.skipped := '1';
+			--res(i).ins.controlInfo.skipped := '1';
 			full(i) := '0'; -- CAREFUL: trying to dispose of 'skipped' flag
 		end if;
 		
@@ -231,7 +231,8 @@ begin
         res(i).ins.target := addMwordFaster(res(i).ins.ip, tempOffset);
         
         -- Now applying the skip!
-        if res(i).ins.controlInfo.skipped = '1' then
+        if --res(i).ins.controlInfo.skipped = '1' then
+            full(i) = '0' then
             branchIns(i) := '0';
         end if;			
     end loop;
@@ -279,7 +280,8 @@ function findEarlyTakenJump(ins: InstructionState; insVec: InstructionSlotArray)
 	variable res: InstructionState := ins;
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0' and insVec(i).ins.controlInfo.frontBranch = '1' then
+		if insVec(i).full = '1' --and insVec(i).ins.controlInfo.skipped = '0' 
+		                          and insVec(i).ins.controlInfo.frontBranch = '1' then
 		    res.controlInfo.newEvent := insVec(i).ins.controlInfo.newEvent; -- CAREFUL: event only if needs redirection
             res.controlInfo.frontBranch := '1';
             res.target  := insVec(i).ins.target; -- Correcting target within fetch line is still needed even if no redirection!
@@ -313,7 +315,7 @@ function prepareForBQ(insVec: InstructionSlotArray; branchMask: std_logic_vector
 	variable result, target: Mword;
 begin
 	for i in insVec'range loop
-		res(i).full := branchMask(i) and insVec(i).full and not insVec(i).ins.controlInfo.skipped; 
+		res(i).full := branchMask(i) and insVec(i).full;-- and not insVec(i).ins.controlInfo.skipped; 
 	end loop;
 	
 	return res;
