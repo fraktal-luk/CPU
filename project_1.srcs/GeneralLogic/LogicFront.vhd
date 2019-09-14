@@ -127,11 +127,11 @@ begin
         res.controlInfo.exceptionCode := i2slv(ExceptionType'pos(undefinedInstruction), SMALL_NUMBER_SIZE);
     end if;
     
-    if res.controlInfo.squashed = '1' then	-- CAREFUL: ivalid was '0'
-        report "Trying to decode invalid location" severity error;
-    end if;
+    --if res.controlInfo.squashed = '1' then	-- CAREFUL: ivalid was '0'
+    --    report "Trying to decode invalid location" severity error;
+    --end if;
     
-    res.controlInfo.squashed := '0';
+    --res.controlInfo.squashed := '0';
 	return res;
 end function;
 
@@ -170,14 +170,12 @@ return InstructionSlotArray is
 	variable regularJump, longJump, regJump: std_logic := '0';
 begin
 	-- CAREFUL: Only without hword instructions now!
-	-- Find which are before the start of fetch address
-	nSkippedIns := slv2u(predictedAddress(ALIGN_BITS-1 downto 2));								
+	nSkippedIns := slv2u(predictedAddress(ALIGN_BITS-1 downto 2));	-- How many are before fetch address							
 			
 	for i in 0 to FETCH_WIDTH-1 loop
-		full(i) := '1'; -- For skipping we use 'skipped' flag, not clearing 'full' 
+		full(i) := '1';
 		if i < nSkippedIns then
-			--res(i).ins.controlInfo.skipped := '1';
-			full(i) := '0'; -- CAREFUL: trying to dispose of 'skipped' flag
+			full(i) := '0';
 		end if;
 		
 		res(i).ins.tags.fetchCtr := ins.tags.fetchCtr(31 downto LOG2_PIPE_WIDTH) & i2slv(i, LOG2_PIPE_WIDTH);
@@ -206,8 +204,7 @@ begin
         then
             regularJump := '1';				
             predictedTaken(i) := fetchLine(i)(20);		-- CAREFUL, TODO: temporary predicted taken iff backwards
-        elsif fetchLine(i)(31 downto 26) = opcode2slv(j) -- Long jump instruction
-        then
+        elsif fetchLine(i)(31 downto 26) = opcode2slv(j) then -- Long jump instruction     
             uncondJump(i) := '1';
             longJump := '1';				
             predictedTaken(i) := '1'; -- Long jump is unconditional (no space for register encoding!)
@@ -218,23 +215,16 @@ begin
             predictedTaken(i) := '0'; -- TEMP: register jumps predicted not taken
         end if;
         
-        branchIns(i) := regularJump or longJump or regJump;
-        
         if longJump = '1' then
             tempOffset := (others => fetchLine(i)(25));
             tempOffset(25 downto 0) := fetchLine(i)(25 downto 0);
-        else --elsif regularJump = '1' then
+        else
             tempOffset := (others => fetchLine(i)(20));
-            tempOffset(20 downto 0) := fetchLine(i)(20 downto 0);				
+            tempOffset(20 downto 0) := fetchLine(i)(20 downto 0);
         end if;
 
-        res(i).ins.target := addMwordFaster(res(i).ins.ip, tempOffset);
-        
-        -- Now applying the skip!
-        if --res(i).ins.controlInfo.skipped = '1' then
-            full(i) = '0' then
-            branchIns(i) := '0';
-        end if;			
+        branchIns(i) := regularJump or longJump or regJump;
+        res(i).ins.target := addMwordFaster(res(i).ins.ip, tempOffset);			
     end loop;
     
     -- Find if any branch predicted
@@ -242,27 +232,21 @@ begin
         fullOut(i) := full(i);
         res(i).ins.classInfo.branchIns := branchIns(i);
         if full(i) = '1' and branchIns(i) = '1' and predictedTaken(i) = '1' then
-            if uncondJump(i) = '1' then
-                res(i).ins.controlInfo.confirmedBranch := '1';	-- CAREFUL: setting it here, so that if implementation
-                                                                --     treats is as NOP in Exec, it still gets this flag		       
-            end if; 
+            if uncondJump(i) = '1' then -- CAREFUL: setting it here, so that if implementation treats is as NOP in Exec, it still gets this flag
+                res(i).ins.controlInfo.confirmedBranch := '1';
+            end if;
+
+            res(i).ins.controlInfo.frontBranch := '1';					
             
             -- Here check if the next line from line predictor agrees with the target predicted now.
             --	If so, don't cause the event but set invalidation mask that next line will use.
-            if res(i).ins.target(MWORD_SIZE-1 downto ALIGN_BITS) = ins.target(MWORD_SIZE-1 downto ALIGN_BITS)
-            then					
-                -- CAREFUL: Remeber that it actually is treated as a branch, otherwise would be done 
-                --				again at Exec!
-                res(i).ins.controlInfo.frontBranch := '1';
-            else -- Raise event
+            if res(i).ins.target(MWORD_SIZE-1 downto ALIGN_BITS) /= ins.target(MWORD_SIZE-1 downto ALIGN_BITS) then
                 res(i).ins.controlInfo.newEvent := '1';
-                res(i).ins.controlInfo.frontBranch := '1';					
             end if;
             
             -- CAREFUL: When not using line predictor, branches predicted taken must always be done here 
             if not USE_LINE_PREDICTOR then
                 res(i).ins.controlInfo.newEvent := '1';
-                res(i).ins.controlInfo.frontBranch := '1';					
             end if;
 
             exit;
@@ -280,12 +264,11 @@ function findEarlyTakenJump(ins: InstructionState; insVec: InstructionSlotArray)
 	variable res: InstructionState := ins;
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if insVec(i).full = '1' --and insVec(i).ins.controlInfo.skipped = '0' 
-		                          and insVec(i).ins.controlInfo.frontBranch = '1' then
-		    res.controlInfo.newEvent := insVec(i).ins.controlInfo.newEvent; -- CAREFUL: event only if needs redirection
+		if insVec(i).full = '1' and insVec(i).ins.controlInfo.frontBranch = '1' then
+		    res.controlInfo.newEvent := insVec(i).ins.controlInfo.newEvent; -- CAREFUL: event only if needs redirection, but break group at any taken jump 
             res.controlInfo.frontBranch := '1';
-            res.target  := insVec(i).ins.target; -- Correcting target within fetch line is still needed even if no redirection!
-            exit;		       
+            res.target := insVec(i).ins.target; -- Correcting target within subsequent fetch line is still needed even if no redirection!
+            exit;
 		end if;
 	end loop;
 	

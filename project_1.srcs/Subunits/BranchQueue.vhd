@@ -157,6 +157,29 @@ architecture Behavioral of BranchQueue is
                --res(i) := dataInBr(sel).ins;
                     slot := getNewElem(remv, dataInBr);
                     res(i) := slot.ins;
+                    
+                        res(i).ip := (others => '0');
+                        res(i).bits := (others => '0');
+                    --    res(i).classInfo := DEFAULT_CLASS_INFO;              
+                                     
+                        --res(slv2u(endPtr)).ops(i).ins.result := (others => '0');
+                        --res(slv2u(endPtr)).ops(i).ins.target := (others => '0');
+                        
+                        res(i).constantArgs := DEFAULT_CONSTANT_ARGS;
+                        res(i).virtualArgSpec := DEFAULT_ARG_SPEC;
+                        res(i).physicalArgSpec := DEFAULT_ARG_SPEC;
+                     
+                        res(i).operation := (System, sysUndef);
+
+                           res(i).tags.fetchCtr := (others => '0');
+                           res(i).tags.decodeCtr := (others => '0');
+                           res(i).tags.renameCtr := (others => '0');
+                           
+                           -- TODO: ptrs may be better here than go through IQ!
+                           res(i).tags.intPointer := (others => '0');
+                           res(i).tags.floatPointer := (others => '0');
+
+                           res(i).tags.commitCtr := (others => '0');                        
            end if;
         end loop;
 

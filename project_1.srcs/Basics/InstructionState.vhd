@@ -68,16 +68,13 @@ type BinomialOp is record
 end record;
 
 type InstructionControlInfo is record
-		squashed: std_logic;
-	--	skipped: std_logic;
+	--squashed: std_logic;
 	completed: std_logic;
-		completed2: std_logic;
+	completed2: std_logic;
+	
 	newEvent: std_logic; -- True if any new event appears
-	--	hasReset: std_logic;
 	hasInterrupt: std_logic;
 	hasException: std_logic;
-	--hasBranch: std_logic;
-	--hasReturn: std_logic;
 	   refetch: std_logic;
 	   frontBranch: std_logic;
 	   confirmedBranch: std_logic;
@@ -87,7 +84,7 @@ type InstructionControlInfo is record
 	   tlbMiss: std_logic;
 	   dataMiss: std_logic;
 	   sqMiss:    std_logic;
-	       firstBr: std_logic;
+	   firstBr: std_logic;
 	exceptionCode: SmallNumber; -- Set when exception occurs, remains cause exception can be only 1 per op
 end record;
 
@@ -348,16 +345,12 @@ package body InstructionState is
 function defaultControlInfo return InstructionControlInfo is
 begin
 	return InstructionControlInfo'(
-													squashed => '0',
-													--skipped => '0',
+												--squashed => '0',
 												completed => '0',
-													completed2 => '0',
+												completed2 => '0',
 												newEvent => '0',
 												hasInterrupt => '0',
-												--	hasReset => '0',
 												hasException => '0',
-												--hasBranch => '0',
-												--hasReturn => '0',
 												    refetch => '0',
 												    frontBranch => '0',
                                                     confirmedBranch => '0',												    											
@@ -367,7 +360,7 @@ begin
 												    tlbMiss => '0',
 												    dataMiss => '0',
 												    sqMiss => '0',
-												        firstBr => '0',
+												    firstBr => '0',
 												exceptionCode => (others=>'0')
 												);
 end function;
@@ -377,7 +370,6 @@ begin
 	return InstructionClassInfo'( short => '0',
 											mainCluster => '0',
 											secCluster => '0',
-											--branchCond => '0',
 											fpRename => '0',
 											pipeA => '0',
 											pipeB => '0',

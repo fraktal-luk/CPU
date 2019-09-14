@@ -113,7 +113,7 @@ end function;
 	       
 	       if eventFound then
 	    		if res(k).full = '1' then
-                    res(k).ins.controlInfo.squashed := '1';
+                    --res(k).ins.controlInfo.squashed := '1';
                 end if;
                 res(k).full := '0';
 	       end if;

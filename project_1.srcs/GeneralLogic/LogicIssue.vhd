@@ -343,6 +343,22 @@ begin
 	for i in 0 to res'right loop
 		res(i).full := iqFullMaskNext(i);
 		res(i).ins := iqDataNextS(i).ins;
+		
+	        res(i).ins.ip := (others => '0');
+            res(i).ins.bits := (others => '0');            
+            res(i).ins.result := (others => '0');
+            res(i).ins.target := (others => '0');		  
+
+                           res(i).ins.tags.fetchCtr := (others => '0');
+                           res(i).ins.tags.decodeCtr := (others => '0');
+                           res(i).ins.tags.renameCtr := (others => '0');
+                           
+                           -- TODO: ptrs may be better kept in BQ!
+                           --res(i).tags.intPointer := (others => '0');
+                           --res(i).tags.floatPointer := (others => '0');
+
+                           res(i).ins.tags.commitCtr := (others => '0'); 
+		
 		res(i).state := iqDataNextS(i).state;
 	end loop;
 
@@ -392,7 +408,7 @@ begin
 		 locsM2 := (findLoc2b(cmp0toM2), findLoc2b(cmp1toM2), (others => '0'));
 
 	if res.state.argValues.newInQueue = '1' then
-		tmp8 := "000000" & ins.tags.renameIndex(1 downto 0);
+		tmp8 := "000000" & ins.tags.renameIndex(1 downto 0);   -- !!!!!!!!!!!!!!!!
 		rrf := readyRegFlags(3*slv2u(tmp8) to 3*slv2u(tmp8) + 2);
     else
         rrf := (others => '0');
