@@ -105,31 +105,6 @@ architecture Behavioral of ReorderBuffer is
 	   if receiving = '1' then
 	       res(slv2u(endPtr)).full := '1'; -- CAREFUL: don't get index out of bounds
 	       res(slv2u(endPtr)).ops := newGroup;
-	       
-	               for i in 0 to PIPE_WIDTH-1 loop
-	                   res(slv2u(endPtr)).ops(i).ins.ip := (others => '0');
-                       res(slv2u(endPtr)).ops(i).ins.bits := (others => '0');              
-                       res(slv2u(endPtr)).ops(i).ins.result := (others => '0');
-                       res(slv2u(endPtr)).ops(i).ins.target := (others => '0');
-                       
-                       res(slv2u(endPtr)).ops(i).ins.constantArgs := DEFAULT_CONSTANT_ARGS;
-                    
-                       --res(slv2u(endPtr)).ops(i).ins.operation := (System, sysUndef); !! Operation must be known to UnitSequencer after commit
-                       
-                       --res(slv2u(endPtr)).ops(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
-                           res(slv2u(endPtr)).ops(i).ins.tags.fetchCtr := (others => '0');
-                           res(slv2u(endPtr)).ops(i).ins.tags.decodeCtr := (others => '0');
-                           res(slv2u(endPtr)).ops(i).ins.tags.renameCtr := (others => '0');
-                           
-                           --res(slv2u(endPtr)).ops(i).ins.tags.intPointer := (others => '0');
-                           --res(slv2u(endPtr)).ops(i).ins.tags.floatPointer := (others => '0');
-
-                           res(slv2u(endPtr)).ops(i).ins.tags.commitCtr := (others => '0');
-
-                       
-                       --res(slv2u(endPtr)).ops
-                       --res(slv2u(endPtr)).ops
-	               end loop;
 	   end if;
 	
 	   killMask := getMaskBetween(ROB_SIZE, causingPtr, endPtr, '0'); -- This has '1' also at 'equal' position!
@@ -158,6 +133,29 @@ architecture Behavioral of ReorderBuffer is
 	           res(i).full := '0';
 	       end if;
 	   end loop;
+
+       -- Clear unused fields for better synthesis
+       if CLEAR_DEBUG_INFO then
+           for j in 0 to ROB_SIZE-1 loop
+               for i in 0 to PIPE_WIDTH-1 loop
+                   res(j).ops(i).ins.ip := (others => '0');
+                   res(j).ops(i).ins.bits := (others => '0');              
+                   res(j).ops(i).ins.result := (others => '0');
+                   res(j).ops(i).ins.target := (others => '0');
+                   
+                   res(j).ops(i).ins.constantArgs := DEFAULT_CONSTANT_ARGS;
+                
+                   --res(slv2u(endPtr)).ops(i).ins.operation := (System, sysUndef); !! Operation must be known to UnitSequencer after commit
+                   
+                   --res(slv2u(j)).ops(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
+                   res(j).ops(i).ins.tags.fetchCtr := (others => '0');
+                   res(j).ops(i).ins.tags.decodeCtr := (others => '0');
+                   res(j).ops(i).ins.tags.renameCtr := (others => '0');
+    
+                   res(j).ops(i).ins.tags.commitCtr := (others => '0');
+               end loop;
+           end loop;
+       end if;
 	   
 	   return res;
 	end function;

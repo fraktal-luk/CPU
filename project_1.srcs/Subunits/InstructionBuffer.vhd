@@ -98,14 +98,6 @@ architecture Implem of InstructionBuffer is
                 end if;
             else
                 res(i) := getNewElem(remainingMaskExt(i+1 to i+3), newContent);
-
-                    res(i).ins.ip := (others => '0');
-                    res(i).ins.bits := (others => '0');                
-                    res(i).ins.result := (others => '0');
-                    res(i).ins.target := (others => '0');
-                    
-                    res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
-
             end if;
             
             res(i).ins.controlInfo.newEvent := '0'; -- Separating front events from exec events
@@ -119,6 +111,17 @@ architecture Implem of InstructionBuffer is
             res(i).full := (remainingMaskExt(i + 4) or (fillMask(i) and prevSending)) and not kill;
         end loop;
         
+        if CLEAR_DEBUG_INFO then    
+            for i in 0 to IBUFFER_SIZE-1 loop
+                res(i).ins.ip := (others => '0');
+                res(i).ins.bits := (others => '0');                
+                res(i).ins.result := (others => '0');
+                res(i).ins.target := (others => '0');
+                
+                res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
+            end loop;
+        end if;
+
         return res;
     end function;
 

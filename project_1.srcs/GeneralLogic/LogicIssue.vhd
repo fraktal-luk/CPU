@@ -341,25 +341,33 @@ begin
 
 	-- Fill output array
 	for i in 0 to res'right loop
-		res(i).full := iqFullMaskNext(i);
-		res(i).ins := iqDataNextS(i).ins;
-		
-	        res(i).ins.ip := (others => '0');
-            res(i).ins.bits := (others => '0');            
-            res(i).ins.result := (others => '0');
-            res(i).ins.target := (others => '0');		  
+	   res(i).full := iqFullMaskNext(i);
+	   res(i).ins := iqDataNextS(i).ins;
 
-                           res(i).ins.tags.fetchCtr := (others => '0');
-                           res(i).ins.tags.decodeCtr := (others => '0');
-                           res(i).ins.tags.renameCtr := (others => '0');
-                           
-                           -- TODO: ptrs may be better kept in BQ!
-                           --res(i).tags.intPointer := (others => '0');
-                           --res(i).tags.floatPointer := (others => '0');
-
-                           res(i).ins.tags.commitCtr := (others => '0'); 
-		
-		res(i).state := iqDataNextS(i).state;
+	   res(i).state := iqDataNextS(i).state;
+	
+	   res(i).state.argValues.stored := (others => '0');
+	   res(i).state.argValues.arg0 := (others => '0');
+	   res(i).state.argValues.arg1 := (others => '0');
+	   res(i).state.argValues.arg2 := (others => '0');
+	       
+	
+       if CLEAR_DEBUG_INFO then
+           res(i).ins.ip := (others => '0');
+           res(i).ins.bits := (others => '0');
+           res(i).ins.tags.fetchCtr := (others => '0');
+           res(i).ins.tags.decodeCtr := (others => '0');
+           res(i).ins.tags.renameCtr := (others => '0');
+           
+           -- TODO: ptrs may be better kept in BQ!
+           --res(i).tags.intPointer := (others => '0');
+           --res(i).tags.floatPointer := (others => '0');
+       end if;
+       
+       res(i).ins.result := (others => '0');
+       res(i).ins.target := (others => '0');
+        
+       res(i).ins.tags.commitCtr := (others => '0');		
 	end loop;
 
 	return res;
