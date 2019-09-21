@@ -158,12 +158,107 @@ begin
       
             signal numFront, numBack, numToTake: SmallNumber := (others => '0');
             signal memRead, needTake: std_logic := '0';
+            
+                signal indL, indMN, indMT: std_logic_vector(1 downto 0) := "00";
+                signal enVec, overNF, overNFmNT: std_logic_vector(0 to 7) := (others => '0');
+                       signal listFront_E, listFrontNext_E, listFrontNext_A, listFrontNext_B, listFrontNext_C: PhysNameArray(0 to 7) := (others => (others => '0'));
+                       signal memTemp: PhysNameArray(0 to 3) := (others => (others => '0'));
+                       signal doTake: std_logic := '0';
+                        
+                signal compLists: std_logic_vector(0 to 7);
+                signal numEq: integer := 0;
+                
+            
+            function next_A(list: PhysNameArray; memData: PhysNameArray; allow: std_logic; nF, nT: SmallNumber) return PhysNameArray is
+                variable res: PhysNameArray(0 to 7) := (others => (others => '0'));
+                variable listExt: PhysNameArray(0 to 11) := list & PhysNameArray'(X"00", X"00", X"00", X"00");
+            begin
+                for i in 0 to 6 loop
+                    res(i) := listExt(i + (slv2u(nT)-1 mod 4) + 1);
+                end loop;
+                
+                return res;
+            end function;
+
+            function next_B(list: PhysNameArray; memData: PhysNameArray; allow: std_logic; nF, nT: SmallNumber) return PhysNameArray is
+                variable res: PhysNameArray(0 to 7) := (others => (others => '0'));
+                
+            begin
+                for i in 0 to 7 loop
+                    res(i) := memData((i - slv2u(nF)) mod 4);
+                end loop;
+                
+                return res;
+            end function;
+            
+            function next_C(list: PhysNameArray; memData: PhysNameArray; allow: std_logic; nF, nT: SmallNumber) return PhysNameArray is
+                variable res: PhysNameArray(0 to 7) := (others => (others => '0'));
+                
+            begin
+                for i in 0 to 7 loop
+                    res(i) := memData((i - slv2u(nF) + slv2u(nT)) mod 4);
+                end loop;
+                
+                return res;
+            end function;            
+
+
+            
+            function getOverNF(nF, nT: SmallNumber) return std_logic_vector is
+                variable res: std_logic_vector(0 to 7) := (others => '0');
+            begin
+                for i in 0 to 7 loop
+                    res(i) := not cmpGreaterSignedSN(nF, i2slv(i, SMALL_NUMBER_SIZE));
+                end loop;
+                
+                return res;
+            end function;
+
+            function getOverNFmNT(nF, nT: SmallNumber) return std_logic_vector is
+                variable res: std_logic_vector(0 to 7) := (others => '0');
+            begin
+                for i in 0 to 7 loop
+                    res(i) := not cmpGreaterSignedSN(subSN(nF, nT), i2slv(i, SMALL_NUMBER_SIZE));
+                end loop;
+                
+                return res;
+            end function;
+                        
         begin
+                doTake <= freeListTakeAllow and isNonzero(freeListTakeSel);
+                GEN_MEM_TEMP: for i in 0 to 3 generate
+                    memTemp(i) <= memData(8*i + 7 downto 8*i);
+                end generate;
+                
+                GEN_VEC: for i in 0 to 7 generate
+                    listFrontNext_E(i) <=  listFrontNext_C(i) when (doTake and overNFmNT(i)) = '1'
+                                   else listFrontNext_A(i)     when (doTake and not overNFmNT(i)) = '1'
+                                   else listFrontNext_B(i)     when (not doTake and overNF(i)) = '1'
+                                   else listFront_E(i);
+                                   
+                          compLists(i) <= bool2std(listFront(i) = listFront_E(i));
+                end generate; 
+                         numEq <= countOnes(compLists);
+                         
+                                            
+                    overNF <= getOverNF(numFront, numToTake);
+                    overNFmNT <= getOverNFmNT(numFront, numToTake);
+            
+                    listFrontNext_A <= next_A(listFront_E, memTemp, '1', numFront, numToTake);
+                    listFrontNext_B <= next_B(listFront_E, memTemp, '1', numFront, numToTake);
+                    listFrontNext_C <= next_C(listFront_E, memTemp, '1', numFront, numToTake);
+            
+                    --listFrontNext_E <= listFront when (freeListTakeAllow and isNonzero(freeListTakeSel))
+                    --            else
+                    
+                    
+            
             
             freeListTakeNumTags(0) <= i2slv((slv2u(listPtrTake)) mod FREE_LIST_SIZE, SMALL_NUMBER_SIZE);
 
             READ_DESTS: for i in 0 to WIDTH-1 generate
-                newPhysDestsAsync(i) <= listFront(i);
+                newPhysDestsAsync(i) <= --listFront(i);
+                                            listFront_E(i);
             end generate;
             
             effectivePhysPtrTake <= i2slv(slv2u(physPtrTake) + 4, SMALL_NUMBER_SIZE) when (needTake and memRead) = '1'
@@ -180,6 +275,8 @@ begin
                 variable listFrontExtM4: PhysNameArray(0 to 15) := (others => (others => '0'));                
             begin
                 if rising_edge(clk) then
+                                listFront_E <= listFrontNext_E;
+                
                     indTake := listPtrTake;
                     indPut := listPtrPut;
                                     
@@ -200,7 +297,7 @@ begin
                     end if;
                     
                     if freeListTakeAllow = '1' and freeListRewind = '0' then
-                        indTake := addSN(indTake, nTaken); -- TODO: mask for list size!
+                        --indTake := addSN(listPtrTake, nTaken); -- TODO: mask for list size!
                         numFrontVar := subSN(numFrontVar, nTaken);
                     
                         --listFrontExt(0 to 7) := listFrontExt(0 + slv2u(nTaken(2 downto 0)) to 7 + slv2u(nTaken(2 downto 0)));                        
@@ -208,18 +305,18 @@ begin
                             listFrontExt(i) := listFrontExt(i + slv2u(nTaken(2 downto 0)));                                                   
                         end loop;
                         
-                        listPtrTake <= indTake;                            
+                        listPtrTake <= addSN(listPtrTake, nTaken);                            
                     end if;
                     
                     if freeListRewind = '0' then
                          if --numFrontVar <= 4 then
                             cmpGreaterSignedSN(numFrontVar, i2slv(4, SMALL_NUMBER_SIZE)) = '0' then
-                            listFrontExtM4(4 to 15) := listFrontExt;                                                           
-                         
+                            
+                            -- Append memData to listFront
+                            listFrontExtM4(4 to 15) := listFrontExt;
                             for i in 0 to 3 loop
                                 listFrontExtM4(slv2s(numFrontVar(4 downto 0)) + i + 4) := memData(8*i + 7 downto 8*i);
                             end loop;
-           
                             listFrontExt := listFrontExtM4(4 to 15);
                                 
                             if memRead = '1' then                            
