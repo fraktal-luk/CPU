@@ -168,7 +168,7 @@ begin
         dataFromBQV => bqData,
 
         sbSending => sbSending,
-        dataFromSB => dataFromSB(0).ins,
+        dataFromSB => dataFromSB(0),
         sbEmpty => sbEmpty,
 
         commitGroupCtrOut => commitGroupCtr,
@@ -1385,6 +1385,7 @@ begin
         ----
 
 		committing => robSending, -- When ROB is sending so is BQ if it has corresponding branches
+		robData => dataOutROB,
 		groupCtrInc => commitGroupCtrInc,
 
 		lateEventSignal => lateEventSignal,
@@ -1419,6 +1420,7 @@ begin
         ------------
 
 		committing => robSending,
+		robData => dataOutROB,
 		groupCtrInc => commitGroupCtrInc,
 
 		lateEventSignal => lateEventSignal,
@@ -1460,6 +1462,7 @@ begin
         ----------------
 
 		committing => robSending,
+		robData => dataOutROB,
 		groupCtrInc => commitGroupCtrInc,
 
 		lateEventSignal => lateEventSignal,
@@ -1493,7 +1496,7 @@ begin
 		--dadr <= dataFromSB(0).ins.target;
 		doutadr <= dataFromSB(0).ins.target;
 		--dread <= memLoadAllow;
-		dwrite <= sbSending and bool2std(dataFromSB(0).ins.operation = (Memory, store));
+		dwrite <= sbSending and dataFromSB(0).full and bool2std(dataFromSB(0).ins.operation = (Memory, store));
 		dout <= dataFromSB(0).ins.result;
 
 	end block;

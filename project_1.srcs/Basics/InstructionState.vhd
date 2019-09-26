@@ -710,7 +710,7 @@ begin
     
         memStr(19 to 21) := ";  ";
         if ins.controlInfo.orderViolation = '1' then
-            memStr(21) := 'O';
+            memStr(21 to 23) := "Ord";
         end if;
    
         if mem = '1' then

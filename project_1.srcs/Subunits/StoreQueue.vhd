@@ -56,6 +56,7 @@ entity StoreQueue is
 		selectedDataOutput: out InstructionSlot;
 
 		committing: in std_logic;
+		robData: in InstructionSlotArray(0 to PIPE_WIDTH-1);		
 		groupCtrInc: in InsTag;
 
 		lateEventSignal: in std_logic;
@@ -80,18 +81,31 @@ architecture Behavioral of StoreQueue is
 
 	signal content, contentNext: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INSTRUCTION_STATE);
 	signal fullMask, taggedMask, killMask, livingMask, frontMask, sendingMask, inputMask, drainMask, drainMaskNext,
-			 committedMask, committedMaskNext, fullMaskNext, taggedMaskNext: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+			 committedMask, committedMaskNext, fullMaskNext, taggedMaskNext, sqCmpMask, lqCmpMask, addressMatchMask,
+			 cancelMask, cancelledMask, cancelledMaskNext,
+			 scMask, drainMaskNC: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 	
 	signal taggedLivingMask, fullOrCommittedMask, matchedMask, newerLQ, olderSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
 	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-	signal dataOutSig, dataOutSigNext, dataOutSigFinal, dataDrainSig: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+	signal dataOutSig, dataOutSigNext, dataOutSigFinal, dataDrainSig, dataDrainSigNC: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	
 	signal pStart, pStartNext, pDrain, pDrainNext, pStartNext_T, pTagged, pAll, causingPtr, pAcc, pAccMore: SmallNumber := (others => '0');	
 	   signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
 	   signal recoveryCounter: SmallNumber := (others => '0');
 	   signal isFull, isAlmostFull: std_logic := '0'; 	
 
+    function getMatchedAddresses(content: InstructionStateArray; cmpIns: InstructionSlot) return std_logic_vector is
+        variable res: std_logic_vector(0 to content'length-1) := (others => '0');
+    begin
+        for i in res'range loop
+            if content(i).target = cmpIns.ins.result then
+                res(i) := '1';
+            end if;
+        end loop;
+        return res;
+    end function;
+    
 
     function getNewContentSQ(content: InstructionStateArray; dataIn: InstructionSlotArray;
                                 taggedMask: std_logic_vector;
@@ -228,34 +242,36 @@ architecture Behavioral of StoreQueue is
                                      ins: InstructionState)
     return std_logic_vector is
         constant LEN: integer := cmpMask'length;        
-        variable res, older, before: std_logic_vector(0 to LEN-1) := (others => '0');
+        variable res, res1, res2, older, before: std_logic_vector(0 to LEN-1) := (others => '0');
         variable indices, rawIndices: SmallNumberArray(0 to LEN-1) := (others => (others => '0'));
-        variable matchBefore: std_logic := '0';
-        
-        variable tmpVec: std_logic_vector(0 to LEN-1) := (others => '0');
+        variable matchBefore: std_logic := '0';       
+        variable tmpVec, tmpVec1, tmpVec2: std_logic_vector(0 to LEN-1) := (others => '0');
     begin
         -- From qs we must check which are older than ins
-        --indices := getQueueIndicesFrom(LEN, pStart);
-        --rawIndices := getQueueIndicesFrom(LEN, (others => '0'));
-        older := olderSQ;-- TMP_cmpTagsBefore(content, ins.tags.renameIndex) and whichAddressCompleted(content); -- only those with known address
-        before := setToOnes(older, slv2u(pStart));
+        --older := olderSQ;-- TMP_cmpTagsBefore(content, ins.tags.renameIndex) and whichAddressCompleted(content); -- only those with known address
+        before := setToOnes(olderSQ, slv2u(pStart));
         -- Use priority enc. to find last in the older ones. But they may be divided:
         --        V  1 1 1 0 0 0 0 1 1 1 and cmp  V
         --           0 1 0 0 0 0 0 1 0 1
         -- and then there are 2 runs of bits and those at the enc must be ignored (r older than first run)
         
         -- If there's a match before pStart, it is younger than those at or after pStart
-        tmpVec := cmpMask and older and before;
-        matchBefore := isNonzero(tmpVec);
+        tmpVec1 := cmpMask and olderSQ;
+        tmpVec2 := cmpMask and olderSQ and before;
+            tmpVec := cmpMask and olderSQ and before;
+        matchBefore := isNonzero(tmpVec2);
         
-        if matchBefore = '1' then
-            -- Ignore those after
-            tmpVec := cmpMask and older and before;
-            res := invertVec(getFirstOne(invertVec(tmpVec)));
-        else
-            -- Don't ignore any matches
-            tmpVec := cmpMask and older;
-            res := invertVec(getFirstOne(invertVec(tmpVec)));
+        res1 := invertVec(getFirstOne(invertVec(tmpVec1)));
+        res2 := invertVec(getFirstOne(invertVec(tmpVec2)));
+        
+        if matchBefore = '1' then -- Ignore those after            
+            --tmpVec := cmpMask and olderSQ and before;
+            res := --invertVec(getFirstOne(invertVec(tmpVec)));
+                    res2;
+        else -- Don't ignore any matches           
+            --tmpVec := cmpMask and olderSQ;
+            res := --invertVec(getFirstOne(invertVec(tmpVec)));
+                    res1;
         end if;
         
         return res;
@@ -319,6 +335,11 @@ begin
     
 	-- in shifting queue this would be shfited by nSend
 	frontMask <= getSendingMask(content, taggedLivingMask, groupCtrInc);
+	   cancelMask <= getCancelMask(content, taggedLivingMask, groupCtrInc, robData);
+	   scMask <= sendingMask and cancelMask;
+	
+	   cancelledMaskNext <= (cancelledMask and not drainMask) or scMask;
+	
 	sendingMask <= frontMask when committing = '1' else (others => '0');
 
 	killMask <= getKillMask(content, taggedMask, execCausing, execEventSignal, lateEventSignal);
@@ -347,18 +368,30 @@ begin
 				                IS_LOAD_QUEUE, newerLQ
 				                                    );
 
-	dataDrainSig <= getWindow(content, drainMask, pDrain, PIPE_WIDTH);				                
+            drainMaskNC <= drainMask and not cancelledMask;
+ 
+	dataDrainSig <= getWindow(content, -- drainMaskNC <= drainMask and not cancelledMask
+	                                       drainMask,
+	                                       pDrain, PIPE_WIDTH);				                
+
+	dataDrainSigNC <= getWindow(content, -- drainMaskNC <= drainMask and not cancelledMask
+	                                       drainMaskNC,
+	                                       pDrain, PIPE_WIDTH);	
 
     dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
 
-	newerLQ <= TMP_cmpTagsAfter(content, compareAddressInput.ins.tags.renameIndex) and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, store)
+	newerLQ <= TMP_cmpTagsAfter(content, compareAddressInput.ins.tags.renameIndex) and addressMatchMask and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, store)
 	                   else (others => '0'); -- Only those with known address
-	olderSQ <= TMP_cmpTagsBefore(content, compareAddressInput.ins.tags.renameIndex) and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, load)
+	olderSQ <= TMP_cmpTagsBefore(content, compareAddressInput.ins.tags.renameIndex) and addressMatchMask and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, load)
 	                   else (others => '0'); -- Only those with known address
 	
-	matchedMask <= findOldestMatch(content, newerLQ, taggedMask,          pStart, compareAddressInput.ins) when IS_LOAD_QUEUE 
+	addressMatchMask <= getMatchedAddresses(content, compareAddressInput);
+	--lqCmpMask <= addressMatchMask and taggedMask;
+	--sqCmpMask <= addressMatchMask and fullOrCommittedMask;
+	
+	matchedMask <= findOldestMatch(content, newerLQ, taggedMask,           pStart, compareAddressInput.ins) when IS_LOAD_QUEUE 
 	                                                 -- TODO: above - not necessary to find oldest, each younger load can be "poisoned" and cause an event on Commit
-	         else  findNewestMatch(content, olderSQ, fullOrCommittedMask, pStart, compareAddressInput.ins);
+	         else  findNewestMatch(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
 	
 	selectedDataSlot <= selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
 
@@ -373,6 +406,8 @@ begin
             taggedMask <= taggedMaskNext;
 			content <= contentNext;
 	        committedMask <= committedMaskNext;
+			
+			     cancelledMask <= cancelledMaskNext;
 			
 			selectedDataOutputSig <= selectedDataSlot;
             dataOutSig <= dataOutSigNext;
@@ -414,7 +449,7 @@ begin
 	nIn <= i2slv( countOnes(inputMask), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
 		
 	LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
-		constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+		constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
 		signal tagDiff: SmallNumber := (others => '0');
 	begin
 	   nOut <= i2slv(countOnes(extractFullMask(dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending = '1'
@@ -426,7 +461,7 @@ begin
 	end generate;
 
 	STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
-		constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+		constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
 		signal tagDiff: SmallNumber := (others => '0');
 	begin        
 		nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isDraining = '1'
@@ -457,7 +492,7 @@ begin
 	
 	committedEmpty <= not isNonzero(committedMask);
 	committedSending <= isDraining;
-	committedDataOut <= (0 => dataDrainSig(0), others => DEFAULT_INSTRUCTION_SLOT);
+	committedDataOut <= (0 => dataDrainSigNC(0), others => DEFAULT_INSTRUCTION_SLOT);
 	
     VIEW: block
        signal queueTxt: InstructionTextArray(0 to QUEUE_SIZE-1);

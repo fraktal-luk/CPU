@@ -72,7 +72,7 @@ entity UnitSequencer is
     
     dataFromBQV: in InstructionSlotArray(0 to PIPE_WIDTH-1);
     
-    dataFromSB: in InstructionState;
+    dataFromSB: in InstructionSlot;
     sbEmpty: in std_logic;
     sbSending: in std_logic;       
     
@@ -135,9 +135,9 @@ begin
         enSig <= en or not HAS_EN_SEQ;
    
    
-   sysStoreAllow <= sbSending and bool2std(dataFromSB.operation = (System, sysMtc));
-   sysStoreAddress <= dataFromSB.target(4 downto 0);
-   sysStoreValue <= dataFromSB.result;
+   sysStoreAllow <= sbSending and dataFromSB.full and bool2std(dataFromSB.ins.operation = (System, sysMtc));
+   sysStoreAddress <= dataFromSB.ins.target(4 downto 0);
+   sysStoreValue <= dataFromSB.ins.result;
    
             eventOccurred <= lateEventSending or execEventSignal or frontEventSignal;
             killPC <= '0';
