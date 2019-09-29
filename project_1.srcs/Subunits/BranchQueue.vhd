@@ -76,7 +76,7 @@ architecture Behavioral of BranchQueue is
 
 	signal content, contentNext: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INSTRUCTION_STATE);
 	signal fullMask, taggedMask, killMask, livingMask, frontMask, sendingMask, inputMask, inputMaskBr,
-			 fullMaskNext, taggedMaskNext, taggedLivingMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+			 fullMaskNext, taggedMaskNext, taggedLivingMask, matchMask, matchMaskUpdate: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
 	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
 	signal dataOutSig, dataOutSigNext, dataOutSigFinal: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -92,6 +92,7 @@ architecture Behavioral of BranchQueue is
 				                prevSending, prevSendingBr: std_logic;
 				                inputMask, inputMaskBr: std_logic_vector;
 				                pTagged, pAll: SmallNumber;
+				                matchMaskUpdate: std_logic_vector;
 				                storeValueInput: InstructionSlot
 				                )
     return InstructionStateArray is
@@ -164,7 +165,8 @@ architecture Behavioral of BranchQueue is
         -- Update target after branch execution
         for i in 0 to QUEUE_SIZE-1 loop
            if taggedMask(i) = '1' -- !! Prevent instruction with r.i. = 0 form updating untagged entries! 
-               and content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
+               and --content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
+                    matchMaskUpdate(i) = '1'
                and storeValueInput.full = '1'
            then
                res(i).target := storeValueInput.ins.target;
@@ -226,10 +228,14 @@ begin
 				                prevSending, prevSendingBr,
 				                inputMask, inputMaskBr,				             
 				                pTagged, pAll,
+				                matchMaskUpdate,
 				                storeValueInput);
 				                
 	dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
-	selectedDataSlot <= selectBranchDataSlot(content, taggedMask, compareAddressInput);
+	selectedDataSlot <= selectBranchDataSlot(content, taggedMask, matchMask, compareAddressInput);
+	
+	matchMask <= getMatchingTags(content, compareAddressInput.ins.tags.renameIndex);
+	--matchMaskUpdate <= getMatchingTags(content, storeValueInput.ins.tags.renameIndex);
 	
     pStartNext <= addSN(pStart, i2slv(getNumberToSend(dataOutSig, groupCtrInc, committing), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
 	
@@ -243,6 +249,8 @@ begin
 			
 			selectedDataOutputSig <= selectedDataSlot;
             dataOutSig <= dataOutSigNext;
+            
+                matchMaskUpdate <= matchMask;
             
             if lateEventSignal = '1' then
                 pTagged <= pStartNext;
