@@ -106,6 +106,7 @@ architecture Behavioral of Core is
     signal intType: std_logic_vector(0 to 1) := (others => '0');
     signal sysRegReadValue: Mword := (others => '0');
     signal sysRegReadSel: slv5 := (others => '0');
+    signal preAguTag: InsTag := (others => '0');
     
     signal sbSending, sbEmpty, sysRegRead, sysRegSending: std_logic := '0';
     signal dataFromSB: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -548,7 +549,9 @@ begin
                fni => fni,
                regValues => regValsM0 --(others => (others => '0'))     
            );
-                      
+               
+               preAguTag <= slotIssueM0.ins.tags.renameIndex;
+                                     
                sendingFromDLQ <= '0';          -- TEMP!
                dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
                     
@@ -1417,6 +1420,7 @@ begin
         -- interface with Exec
 		storeValueInput => sqValueInput, 
 		compareAddressInput => sqAddressInput,
+        compareTagInput => preAguTag,
                             
 		selectedDataOutput => sqSelectedOutput,
         ------------
@@ -1459,7 +1463,8 @@ begin
         -- interface with Exec
 		storeValueInput => DEFAULT_INSTRUCTION_SLOT, 
 		compareAddressInput => lqAddressInput,
-                            
+        compareTagInput => preAguTag,
+             
 		selectedDataOutput => lqSelectedOutput,
         ----------------
 

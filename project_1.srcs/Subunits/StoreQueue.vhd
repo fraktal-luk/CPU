@@ -52,6 +52,7 @@ entity StoreQueue is
 
 		storeValueInput: in InstructionSlot;
 		compareAddressInput: in InstructionSlot;
+        compareTagInput:    in InsTag;
 
 		selectedDataOutput: out InstructionSlot;
 
@@ -85,7 +86,8 @@ architecture Behavioral of StoreQueue is
 			 cancelMask, cancelledMask, cancelledMaskNext,
 			 scMask, drainMaskNC: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 	
-	signal taggedLivingMask, fullOrCommittedMask, matchedMask, newerLQ, olderSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+	signal taggedLivingMask, fullOrCommittedMask, matchedMask,
+	           newerLQ, olderSQ, newerLQ_O, olderSQ_O, newerLQ_N, olderSQ_N, newerNextLQ, olderNextSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
 	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	signal dataOutSig, dataOutSigNext, dataOutSigFinal, dataDrainSig, dataDrainSigNC: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -380,10 +382,21 @@ begin
 
     dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
 
-	newerLQ <= TMP_cmpTagsAfter(content, compareAddressInput.ins.tags.renameIndex) and addressMatchMask and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, store)
+	newerLQ <= --TMP_cmpTagsAfter(content, compareAddressInput.ins.tags.renameIndex)
+	                   newerLQ_N
+	               and addressMatchMask and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, store)
 	                   else (others => '0'); -- Only those with known address
-	olderSQ <= TMP_cmpTagsBefore(content, compareAddressInput.ins.tags.renameIndex) and addressMatchMask and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, load)
+	olderSQ <= --TMP_cmpTagsBefore(content, compareAddressInput.ins.tags.renameIndex) 
+	                   olderSQ_N  
+	               and addressMatchMask and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, load)
 	                   else (others => '0'); -- Only those with known address
+	
+	   newerLQ_O <= TMP_cmpTagsAfter(content, compareAddressInput.ins.tags.renameIndex);
+	   olderSQ_O <= TMP_cmpTagsBefore(content, compareAddressInput.ins.tags.renameIndex);
+	
+	   newerNextLQ <= TMP_cmpTagsAfter(content, compareTagInput);
+	   olderNextSQ <= TMP_cmpTagsBefore(content, compareTagInput);
+
 	
 	addressMatchMask <= getMatchedAddresses(content, compareAddressInput);
 	--lqCmpMask <= addressMatchMask and taggedMask;
@@ -408,6 +421,9 @@ begin
 	        committedMask <= committedMaskNext;
 			
 			     cancelledMask <= cancelledMaskNext;
+			
+			     newerLQ_N <= newerNextLQ;
+			     olderSQ_N <= olderNextSQ;
 			
 			selectedDataOutputSig <= selectedDataSlot;
             dataOutSig <= dataOutSigNext;
