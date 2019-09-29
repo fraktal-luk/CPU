@@ -453,10 +453,12 @@ begin
                 execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
             );      
           
-            branchData <= basicBranch(setInstructionTarget(slotIssueI0.ins, slotIssueI0.ins.constantArgs.imm),
-                                      slotIssueI0.state, bqSelected.ins, bqSelected.full);                    
+            branchData <= basicBranch(--setInstructionTarget(slotIssueI0.ins, slotIssueI0.ins.constantArgs.imm),
+                                      slotIssueI0.ins,
+                                      slotIssueI0.state, bqSelected.ins); --, bqSelected.full);                    
             
-            dataToBranch(0) <= (slotIssueI0.full and isBranch(slotIssueI0.ins), branchData);
+            dataToBranch(0) <= (slotIssueI0.full and --isBranch(slotIssueI0.ins), branchData);
+                                                     slotIssueI0.ins.classInfo.branchIns, branchData);
             sendingBranchIns <= dataToBranch(0).full;
             
             bqCompare <= (sendingBranchIns, slotIssueI0.ins);

@@ -51,7 +51,7 @@ package LogicQueues is
                         p: SmallNumber; n: natural)
     return InstructionSlotArray;
     
-    function selectDataSlot(content: InstructionStateArray; taggedMask: std_logic_vector;
+    function selectBranchDataSlot(content: InstructionStateArray; taggedMask: std_logic_vector;
                             compareAddressInput: InstructionSlot)
     return InstructionSlot;
     
@@ -182,7 +182,7 @@ package body LogicQueues is
         return res;
     end function;
     
-    function selectDataSlot(content: InstructionStateArray; taggedMask: std_logic_vector;
+    function selectBranchDataSlot(content: InstructionStateArray; taggedMask: std_logic_vector;
                             compareAddressInput: InstructionSlot)
     return InstructionSlot is
         constant LEN: integer := content'length;
@@ -190,10 +190,9 @@ package body LogicQueues is
     begin
         for i in 0 to LEN-1 loop 
             res.ins := content(i);
-            if content(i).tags.renameIndex = compareAddressInput.ins.tags.renameIndex
-                and compareAddressInput.full = '1' and taggedMask(i) = '1'
+            if content(i).tags.renameIndex = compareAddressInput.ins.tags.renameIndex and taggedMask(i) = '1'
             then
-                res.full := '1';
+                res.full := compareAddressInput.full;
                 exit;
             end if;
         end loop;

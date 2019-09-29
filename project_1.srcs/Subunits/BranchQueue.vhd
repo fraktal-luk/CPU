@@ -229,7 +229,7 @@ begin
 				                storeValueInput);
 				                
 	dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
-	selectedDataSlot <= selectDataSlot(content, taggedMask, compareAddressInput);
+	selectedDataSlot <= selectBranchDataSlot(content, taggedMask, compareAddressInput);
 	
     pStartNext <= addSN(pStart, i2slv(getNumberToSend(dataOutSig, groupCtrInc, committing), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
 	

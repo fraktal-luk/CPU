@@ -175,7 +175,7 @@ begin
             and ins.physicalArgSpec.floatDestSel = '0') -- ???
     then
         res.ins.physicalArgSpec.dest := (others => '0'); -- Don't allow false notifications of args
-        res.ins.physicalArgSpec.destAlt := (others => '0'); -- ??
+        --res.ins.physicalArgSpec.destAlt := (others => '0'); -- ??
     end if;
 
 	--res.state.argValues.readyNow := ready;

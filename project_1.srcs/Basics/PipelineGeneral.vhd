@@ -442,7 +442,7 @@ begin
 		-- CAREFUL: clearing result tags for empty slots
 		for i in 0 to LEN-1 loop
 			res(i).ins.physicalArgSpec.dest := (others => '0');
-			res(i).ins.physicalArgSpec.destAlt := (others => '0');			
+			--res(i).ins.physicalArgSpec.destAlt := (others => '0');			
 			res(i).ins.controlInfo.newEvent := '0';
 		end loop;
 		for i in 0 to LEN-1 loop
