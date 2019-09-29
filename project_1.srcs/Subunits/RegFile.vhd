@@ -71,6 +71,9 @@ architecture Behavioral of RegFile is
 	-- Memory block
 	signal content: MwordArray(0 to N_PHYSICAL_REGS-1) := (others => (others => '0'));
 
+    attribute ram_style: string;
+    attribute ram_style of content: signal is "block";
+
 	constant HAS_RESET_REGFILE: std_logic := '1';
 	constant HAS_EN_REGFILE: std_logic := '1';
 begin
