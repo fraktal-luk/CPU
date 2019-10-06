@@ -85,7 +85,7 @@ type InstructionControlInfo is record
 	   dataMiss: std_logic;
 	   sqMiss:    std_logic;
 	   firstBr: std_logic;
-	exceptionCode: SmallNumber; -- Set when exception occurs, remains cause exception can be only 1 per op
+	--exceptionCode: SmallNumber; -- Set when exception occurs, remains cause exception can be only 1 per op
 end record;
 
 type InstructionClassInfo is record
@@ -360,8 +360,8 @@ begin
 												    tlbMiss => '0',
 												    dataMiss => '0',
 												    sqMiss => '0',
-												    firstBr => '0',
-												exceptionCode => (others=>'0')
+												    firstBr => '0'
+												--exceptionCode => (others=>'0')
 												);
 end function;
 

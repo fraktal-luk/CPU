@@ -124,7 +124,7 @@ begin
 	
     if res.operation.func = sysUndef then
         res.controlInfo.hasException := '1';
-        res.controlInfo.exceptionCode := i2slv(ExceptionType'pos(undefinedInstruction), SMALL_NUMBER_SIZE);
+        --res.controlInfo.exceptionCode := i2slv(ExceptionType'pos(undefinedInstruction), SMALL_NUMBER_SIZE);
     end if;
     
     --if res.controlInfo.squashed = '1' then	-- CAREFUL: ivalid was '0'

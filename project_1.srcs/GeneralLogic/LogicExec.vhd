@@ -177,7 +177,7 @@ package body LogicExec is
 		return res;
 	end function;
 
-
+    -- UNUSED
 	function setExecState(ins: InstructionState;
 								result: Mword; carry: std_logic; exc: std_logic_vector(3 downto 0))
 	return InstructionState is
@@ -188,8 +188,8 @@ package body LogicExec is
 		--res.controlInfo.hasEvent := res.controlInfo.newEvent;
 		--res.controlInfo.newException := res.controlInfo.newEvent;
 		res.controlInfo.hasException := res.controlInfo.newEvent;						
-		res.controlInfo.exceptionCode := (others => '0');
-		res.controlInfo.exceptionCode(3 downto 0) := exc;
+		--res.controlInfo.exceptionCode := (others => '0');
+		--res.controlInfo.exceptionCode(3 downto 0) := exc;
 		return res;
 	end function;
 	
@@ -282,7 +282,7 @@ package body LogicExec is
 
 			res.controlInfo.newEvent := '0';
 			res.controlInfo.hasException := '0';
-			res.controlInfo.exceptionCode := (others => '0'); -- ???	
+			--res.controlInfo.exceptionCode := (others => '0'); -- ???	
 
 		if ins.operation.func = arithAdd or ins.operation.func = arithSub then
 			carry := resultExt(MWORD_SIZE); -- CAREFUL, with subtraction carry is different, keep in mind
@@ -309,7 +309,7 @@ package body LogicExec is
 		if ov = '1' then
 			res.controlInfo.newEvent := '1';
 			res.controlInfo.hasException := '1';
-			res.controlInfo.exceptionCode := (0 => '1', others => '0'); -- ???
+			--res.controlInfo.exceptionCode := (0 => '1', others => '0'); -- ???
 		end if;      
 		
 		res.result := result;

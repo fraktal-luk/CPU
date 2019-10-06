@@ -94,10 +94,10 @@ begin
 		elsif commitCausing.controlInfo.hasException = '1'
 			or commitCausing.controlInfo.dbtrap = '1' then
 			-- TODO, FIX: exceptionCode sliced - shift left by ALIGN_BITS? or leave just base address
-			res.ip := EXC_BASE(MWORD_SIZE-1 downto commitCausing.controlInfo.exceptionCode'length)
-									& commitCausing.controlInfo.exceptionCode(
-													commitCausing.controlInfo.exceptionCode'length-1 downto ALIGN_BITS)
-									& EXC_BASE(ALIGN_BITS-1 downto 0);	
+			res.ip := EXC_BASE;--(MWORD_SIZE-1 downto commitCausing.controlInfo.exceptionCode'length)
+								--	& commitCausing.controlInfo.exceptionCode(
+								--					commitCausing.controlInfo.exceptionCode'length-1 downto ALIGN_BITS)
+								--	& EXC_BASE(ALIGN_BITS-1 downto 0);	
 			-- TODO: if exception, it overrides dbtrap, but if only dbtrap, a specific vector address
 			res.result := currentState or X"00000100";
 			res.result := res.result and X"fdffffff";	-- Clear dbtrap

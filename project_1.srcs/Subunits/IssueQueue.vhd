@@ -131,7 +131,7 @@ architecture Behavioral of IssueQueue is
     
         res.ins.controlInfo.newEvent := '0';
         res.ins.controlInfo.hasInterrupt := '0';
-        res.ins.controlInfo.exceptionCode := (others => '0');		
+        --res.ins.controlInfo.exceptionCode := (others => '0');		
 		return res;
 	end function;
 	
