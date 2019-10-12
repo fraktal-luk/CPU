@@ -145,7 +145,7 @@ type InsDefArray is array (natural range <>) of InsDef;
 				32 => (ext2, send,  System, sysSend, FMT_DEFAULT),
 				
 				33 => (fop,  fmov,  FPU, fpuMov, FMT_FP1),
-				34 => (fop,  fmov,  FPU, fpuOr, FMT_FP2),
+				34 => (fop,  forr,  FPU, fpuOr, FMT_FP2),
 				
 				others => (ext2, undef, System, sysUndef, FMT_DEFAULT)
 				);
