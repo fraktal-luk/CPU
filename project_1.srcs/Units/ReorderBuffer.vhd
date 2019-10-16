@@ -145,7 +145,7 @@ architecture Behavioral of ReorderBuffer is
                    
                    res(j).ops(i).ins.constantArgs := DEFAULT_CONSTANT_ARGS;
                 
-                   --res(slv2u(endPtr)).ops(i).ins.operation := (System, sysUndef); !! Operation must be known to UnitSequencer after commit
+                   --res(slv2u(endPtr)).ops(i).ins.operation := (System, sysUndef); --!! Operation must be known to UnitSequencer after commit
                    
                         res(j).ops(i).ins.virtualArgSpec.intArgSel := (others => '0');
                         res(j).ops(i).ins.virtualArgSpec.floatArgSel := (others => '0');

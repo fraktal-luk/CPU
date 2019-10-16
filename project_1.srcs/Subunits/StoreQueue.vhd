@@ -87,7 +87,7 @@ architecture Behavioral of StoreQueue is
 			 scMask, drainMaskNC: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 	
 	signal taggedLivingMask, fullOrCommittedMask, matchedMask,
-	           newerLQ, olderSQ, newerLQ_O, olderSQ_O, newerLQ_N, olderSQ_N, newerNextLQ, olderNextSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+	           newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
 	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	signal dataOutSig, dataOutSigNext, dataOutSigFinal, dataDrainSig, dataDrainSigNC: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -120,21 +120,16 @@ architecture Behavioral of StoreQueue is
     return InstructionStateArray is
         variable res: InstructionStateArray(0 to QUEUE_SIZE-1) := content;
         variable slot: InstructionSlot;
-        --variable sel: natural range 0 to 3 := 0;
         variable diff: SmallNumber := (others => '0');
 	    variable remv: std_logic_vector(0 to 2) := "000";
-	    --variable compMask, compMaskBr: std_logic_vector(0 to 3) := "0000";
 	    variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
 	    constant isStoreOp: boolean := (storeAddressInput.ins.operation = (Memory, store) or storeAddressInput.ins.operation = (System, sysMtc));
 	    constant isLoadOp: boolean := (storeAddressInput.ins.operation = (Memory, load) or storeAddressInput.ins.operation = (System, sysMfc));
     begin
-        --compMask := compactMask(extractFullMask(dataIn));
-        --compMaskBr := compactMask(extractFullMask(dataInBr));
 
         for i in 0 to QUEUE_SIZE-1 loop
         
            diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;
-           --sel := slv2u(diff(1 downto 0));
            
            case diff(1 downto 0) is
                when "00" =>
@@ -147,17 +142,15 @@ architecture Behavioral of StoreQueue is
                     remv := "000";                                                                                       
            end case;
            
-           --sel := slv2u(getSelector(remv, extractFullMask(dataIn)(0 to 2)));
            if im(i) = '1' then
-               --res(i).tags := dataIn(sel).ins.tags;
-               --res(i).operation := dataIn(sel).ins.operation;
                     slot := getNewElem(remv, dataIn);
+                            --dataIn(slv2u(diff(1 downto 0)));
                     res(i) := slot.ins;          
                     res(i).tags := slot.ins.tags;
                     res(i).operation := slot.ins.operation;
                     res(i).controlInfo.completed := '0';
                     res(i).controlInfo.completed2 := '0';
-                        res(i).controlInfo.firstBr := '0';                                  
+                    res(i).controlInfo.firstBr := '0';                                  
            end if;
            
            -- Mark loads which break data dependence on older stores
@@ -267,13 +260,9 @@ architecture Behavioral of StoreQueue is
         res2 := invertVec(getFirstOne(invertVec(tmpVec2)));
         
         if matchBefore = '1' then -- Ignore those after            
-            --tmpVec := cmpMask and olderSQ and before;
-            res := --invertVec(getFirstOne(invertVec(tmpVec)));
-                    res2;
+            res := res2;
         else -- Don't ignore any matches           
-            --tmpVec := cmpMask and olderSQ;
-            res := --invertVec(getFirstOne(invertVec(tmpVec)));
-                    res1;
+            res := res1;
         end if;
         
         return res;
@@ -372,35 +361,22 @@ begin
 
             drainMaskNC <= drainMask and not cancelledMask;
  
-	dataDrainSig <= getWindow(content, -- drainMaskNC <= drainMask and not cancelledMask
-	                                       drainMask,
-	                                       pDrain, PIPE_WIDTH);				                
+	dataDrainSig <= getWindow(content, drainMask, pDrain, PIPE_WIDTH);				                
 
-	dataDrainSigNC <= getWindow(content, -- drainMaskNC <= drainMask and not cancelledMask
-	                                       drainMaskNC,
-	                                       pDrain, PIPE_WIDTH);	
+	dataDrainSigNC <= getWindow(content, drainMaskNC, pDrain, PIPE_WIDTH);	
 
     dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
 
-	newerLQ <= --TMP_cmpTagsAfter(content, compareAddressInput.ins.tags.renameIndex)
-	                   newerLQ_N
-	               and addressMatchMask and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, store)
-	                   else (others => '0'); -- Only those with known address
-	olderSQ <= --TMP_cmpTagsBefore(content, compareAddressInput.ins.tags.renameIndex) 
-	                   olderSQ_N  
-	               and addressMatchMask and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, load)
-	                   else (others => '0'); -- Only those with known address
-	
-	   newerLQ_O <= TMP_cmpTagsAfter(content, compareAddressInput.ins.tags.renameIndex);
-	   olderSQ_O <= TMP_cmpTagsBefore(content, compareAddressInput.ins.tags.renameIndex);
+	newerLQ <=     newerRegLQ and addressMatchMask and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, store)
+	          else (others => '0'); -- Only those with known address
+	olderSQ <=     olderRegSQ and addressMatchMask and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, load)
+	          else (others => '0'); -- Only those with known address
 	
 	   newerNextLQ <= TMP_cmpTagsAfter(content, compareTagInput);
 	   olderNextSQ <= TMP_cmpTagsBefore(content, compareTagInput);
 
 	
 	addressMatchMask <= getMatchedAddresses(content, compareAddressInput);
-	--lqCmpMask <= addressMatchMask and taggedMask;
-	--sqCmpMask <= addressMatchMask and fullOrCommittedMask;
 	
 	matchedMask <= findOldestMatch(content, newerLQ, taggedMask,           pStart, compareAddressInput.ins) when IS_LOAD_QUEUE 
 	                                                 -- TODO: above - not necessary to find oldest, each younger load can be "poisoned" and cause an event on Commit
@@ -408,7 +384,7 @@ begin
 	
 	selectedDataSlot <= selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
 
-                pStartNext <= addSN(pStart, i2slv(getNumberToSend(dataOutSig, groupCtrInc, committing), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+            pStartNext <= addSN(pStart, i2slv(getNumberToSend(dataOutSig, groupCtrInc, committing), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
 
             pDrainNext <= pDrain when isDraining = '0' else addSN(pDrain, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
             	
@@ -422,8 +398,8 @@ begin
 			
 			     cancelledMask <= cancelledMaskNext;
 			
-			     newerLQ_N <= newerNextLQ;
-			     olderSQ_N <= olderNextSQ;
+			     newerRegLQ <= newerNextLQ;
+			     olderRegSQ <= olderNextSQ;
 			
 			selectedDataOutputSig <= selectedDataSlot;
             dataOutSig <= dataOutSigNext;

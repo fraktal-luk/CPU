@@ -120,12 +120,39 @@ begin
             or res.operation.func = sysHalt
             or res.operation.func = sysCall
             or res.operation.func = sysSend ) then 		
-        res.controlInfo.specialAction := '1';
+        res.controlInfo.specialAction := '1'; -- TODO: move this to classInfo?
         
         -- CAREFUL: Those ops don't get issued, they are handled at retirement
         res.classInfo.mainCluster := '0';
         res.classInfo.secCluster := '0';
     end if;	
+	
+--	   if res.operation.unit = System then
+--	       if    res.operation.func = sysRetI then
+--	           res.classInfo.ret1 := '1';
+--	           res.classInfo.sync := '1';	           
+--	       elsif res.operation.func = sysRetE then
+--	           res.classInfo.ret0 := '1';
+--	           res.classInfo.sync := '1';	                          
+--	       elsif res.operation.func = sysSync then
+--	           res.classInfo.sync := '1';
+--	       elsif res.operation.func = sysReplay then
+--	           res.controlInfo.refetch := '1';
+--	       elsif res.operation.func = sysHalt then
+--	           res.classInfo.halt := '1';
+--	           res.classInfo.sync := '1';         
+--	       elsif res.operation.func = sysCall then
+--	           --res.classInfo.ret1 := '1';	  -- ???? TODO
+--	           res.classInfo.sync := '1';
+
+	           	                
+--	       elsif res.operation.func = sysSend then
+--	           res.classInfo.isSend := '1';
+--	       elsif res.operation.func = sysError then
+--               res.classInfo.isError := '1';	               	       
+--	       end if;
+--	   end if;
+	
 	
     if res.operation.func = sysUndef then
         res.controlInfo.hasException := '1';

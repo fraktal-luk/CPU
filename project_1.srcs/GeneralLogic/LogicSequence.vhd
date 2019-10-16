@@ -286,7 +286,6 @@ begin
     branchTarget := lastEffectiveIns.target;
     -- Now last effective and taken target from BQ
     for i in 0 to PIPE_WIDTH-1 loop
-        --ind := dataFromBQV(i).ins.tags.renameIndex(LOG2_PIPE_WIDTH-1 downto 0);
         -- Corresponding ROB entry must be effective, otherwise branch doesn't happen!
         -- But if not effective, BQ entry would've been killed, so no need to check
         if dataFromBQV(i).full = '0' then
@@ -294,7 +293,6 @@ begin
         end if;
         
         if dataFromBQV(i).ins.controlInfo.confirmedBranch = '1' then
-            --bqTakenBranchVec(slv2u(ind)) := '1';
             branchTarget := dataFromBQV(i).ins.target;
         end if;
     end loop;		

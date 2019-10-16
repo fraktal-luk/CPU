@@ -101,7 +101,6 @@ architecture Behavioral of UnitSequencer is
     signal stageDataLateCausingOut: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);    
     signal excInfoUpdate, intInfoUpdate, sendingToLateCausing, committingEvent, sendingToCommit, sendingOutCommit, acceptingOutCommit: std_logic := '0';
     signal stageDataToCommit, stageDataOutCommit: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);                              
-    --signal commitCtr, commitCtrNext: InsTag := (others => '1');
     signal commitGroupCtr, commitGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
     signal commitGroupCtrInc, commitGroupCtrIncNext: InsTag := INITIAL_GROUP_TAG_INC;--(others => '0');
     signal effectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
@@ -245,7 +244,6 @@ begin
         pcSending <= sendingOutPC;
 
         commitGroupCtrNext <= commitGroupCtrInc when sendingToCommit = '1' else commitGroupCtr;
-        --commitCtrNext <= i2slv(slv2u(commitCtr) + countOnes(effectiveMask), TAG_SIZE) when sendingToCommit = '1' else commitCtr;
         commitGroupCtrIncNext <= i2slv(slv2u(commitGroupCtrInc) + PIPE_WIDTH, TAG_SIZE) when sendingToCommit = '1' else commitGroupCtrInc;
 
         commitCtrNext <= i2slv(slv2u(commitCtr) + countOnes(effectiveMask), 32) when sendingToCommit = '1' else commitCtr;
@@ -255,7 +253,6 @@ begin
         COMMON_SYNCHRONOUS: process(clk)     
         begin
             if rising_edge(clk) then
-                --commitCtr <= commitCtrNext;                    
                 commitGroupCtr <= commitGroupCtrNext;
                 commitGroupCtrInc <= commitGroupCtrIncNext;
                 commitCtr <= commitCtrNext;                
@@ -399,8 +396,6 @@ begin
     
     commitGroupCtrOut <= commitGroupCtr;
     commitGroupCtrIncOut <= commitGroupCtrInc;
-    
-    --commitCtrOut <= commitCtr;
     
     commitAccepting <= not eventCommitted and not lateEventSending; -- Blocked while procesing event
 

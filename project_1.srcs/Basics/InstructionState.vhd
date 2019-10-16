@@ -80,6 +80,7 @@ type InstructionControlInfo is record
 	   confirmedBranch: std_logic;
 	specialAction: std_logic;
 	dbtrap: std_logic;
+	--illegal: std_logic;
 	   orderViolation: std_logic;
 	   tlbMiss: std_logic;
 	   dataMiss: std_logic;
@@ -90,11 +91,21 @@ end record;
 
 type InstructionClassInfo is record
 	short: std_logic;
-		mainCluster: std_logic;
-		secCluster: std_logic;
+	mainCluster: std_logic;
+	secCluster: std_logic;
 	--branchCond: std_logic;
 	fpRename: std_logic; -- true if instruction is routed to FP renamer (NOTE, CHECK: Int renamer is used for all ops, even those that don't go to any IQ)
 	pipeA, pipeB, pipeC, load, store, branchIns: std_logic;
+	
+	--sync:      std_logic; -- when committed causes fetch of following instruction
+	--halt:      std_logic;
+	--ret0:      std_logic;       -- retE
+	--ret1:      std_logic;       -- retI
+	--lsWrite:   std_logic;  -- store/mtc as opposed to load/mfc 
+	--lsSystem:  std_logic; -- mtc/mfc
+	
+	--isSend:    std_logic;  -- DEBUG
+	--isError:   std_logic; -- DEBUG
 end record;
 
 
@@ -356,6 +367,7 @@ begin
                                                     confirmedBranch => '0',												    											
 												specialAction => '0',
 												dbtrap => '0',
+												--illegal => '0',
 												    orderViolation => '0',
 												    tlbMiss => '0',
 												    dataMiss => '0',
@@ -376,7 +388,17 @@ begin
 											pipeC => '0',
 											load => '0',
 											store => '0',
-											branchIns => '0'
+											branchIns => '0'--,
+											
+	                                        --sync => '0',
+                                            --halt => '0',
+                                            --ret0 => '0',
+                                            --ret1 => '0',
+                                            --lsWrite => '0',
+                                            --lsSystem => '0',
+                                            
+                                            --isSend => '0',
+                                            --isError => '0'									
 											);	
 end function;
 

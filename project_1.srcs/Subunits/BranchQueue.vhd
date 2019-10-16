@@ -98,19 +98,14 @@ architecture Behavioral of BranchQueue is
     return InstructionStateArray is
         variable res: InstructionStateArray(0 to QUEUE_SIZE-1) := content;
         variable slot: InstructionSlot;
-        --variable sel: natural range 0 to 3 := 0;
         variable diff: SmallNumber := (others => '0');
 	    variable remv: std_logic_vector(0 to 2) := "000";
-	    --variable compMask, compMaskBr: std_logic_vector(0 to 3) := "0000";
 	    variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
 	    variable imBr: std_logic_vector(0 to QUEUE_SIZE-1) := inputMaskBr;	    
     begin
-        --compMask := compactMask(extractFullMask(dataIn));
-        --compMaskBr := compactMask(extractFullMask(dataInBr));
 
         for i in 0 to QUEUE_SIZE-1 loop
            diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;
-           --sel := slv2u(diff(1 downto 0));
            
            case diff(1 downto 0) is
                when "00" =>
@@ -123,14 +118,12 @@ architecture Behavioral of BranchQueue is
                     remv := "000";                                                                                       
            end case;
            
-           --sel := slv2u(getSelector(remv, extractFullMask(dataIn)(0 to 2)));
            if im(i) = '1' then
-               --res(i).tags := dataIn(sel).ins.tags;
-               --res(i).operation := dataIn(sel).ins.operation;
-                    slot := getNewElem(remv, dataIn);          
-                    res(i).tags := slot.ins.tags;
-                    res(i).operation := slot.ins.operation;
-                        res(i).controlInfo.firstBr := '0'; -- This is '1' only for the first branch in group!               
+               slot := getNewElem(remv, dataIn); 
+                       --dataIn(slv2u(diff(1 downto 0)));         
+               res(i).tags := slot.ins.tags;
+               res(i).operation := slot.ins.operation;
+               res(i).controlInfo.firstBr := '0'; -- This is '1' only for the first branch in group!               
            end if;
         end loop;
 
@@ -141,7 +134,6 @@ architecture Behavioral of BranchQueue is
 
         for i in 0 to QUEUE_SIZE-1 loop
            diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pAll) and PTR_MASK_SN;
-           --sel := slv2u(diff(1 downto 0));
            
            case diff(1 downto 0) is
                when "00" =>
@@ -154,19 +146,17 @@ architecture Behavioral of BranchQueue is
                     remv := "000";                                                                                       
            end case;
            
-           --sel := slv2u(getSelector(remv, extractFullMask(dataInBr)(0 to 2))); 
            if imBr(i) = '1' then
-               --res(i) := dataInBr(sel).ins;
-                    slot := getNewElem(remv, dataInBr);
-                    res(i) := slot.ins;                       
+              slot := getNewElem(remv, dataInBr);
+                     --dataInBr(slv2u(diff(1 downto 0)));  
+              res(i) := slot.ins;                       
            end if;
         end loop;
 
         -- Update target after branch execution
         for i in 0 to QUEUE_SIZE-1 loop
-           if taggedMask(i) = '1' -- !! Prevent instruction with r.i. = 0 form updating untagged entries! 
-               and --content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
-                    matchMaskUpdate(i) = '1'
+           if taggedMask(i) = '1' -- !! Prevent instruction with renmeIndex. = 0 from updating untagged entries! 
+               and matchMaskUpdate(i) = '1'
                and storeValueInput.full = '1'
            then
                res(i).target := storeValueInput.ins.target;

@@ -51,7 +51,6 @@ port(
     sendingFromROB: in std_logic;
    
     commitGroupCtr: in InsTag;
-    --commitCtr: in InsTag;
   
     execCausing: in InstructionState;
     lateCausing: in InstructionState;
@@ -77,7 +76,16 @@ architecture Behavioral of UnitRegManager is
     signal causingPtrInt, causingPtrFloat: SmallNumber := (others => '0');
     
     signal renamedBase: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    
+    
+    type DependencySpec is array(0 to 2) of std_logic_vector(0 to PIPE_WIDTH-1); 
+    type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;--  std_logic_vector(0 to 2);
+    
+    constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
 
+    signal depVec: DependencyVec := DEFAULT_DEP_VEC;
+    
+    
     function renameGroupBase(insVec: InstructionSlotArray;
                                 newIntDests: PhysNameArray;
                                 newFloatDests: PhysNameArray;                                
@@ -142,11 +150,35 @@ architecture Behavioral of UnitRegManager is
 
         return res;
     end function;
+
+    function findDeps(insVec: InstructionSlotArray) return DependencyVec is
+        variable res: DependencyVec := DEFAULT_DEP_VEC;
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            for k in 0 to 2 loop -- For each of 3 possible source arguments
+                for j in PIPE_WIDTH-1 downto 0 loop
+                    if j >= i then
+                        next;
+                    end if;
+                    
+                    if insVec(i).ins.virtualArgSpec.args(k)(4 downto 0) = insVec(j).ins.virtualArgSpec.dest(4 downto 0) -- name match       
+                    then
+                        res(i)(k)(j) := '1';                   
+                    end if;
+                end loop;
+            end loop;
+        end loop;
+        
+        return res;
+    end function;
+
+
        
     function renameGroupInt(insVec: InstructionSlotArray;
                                 newPhysSources: PhysNameArray;
                                 newIntDests: PhysNameArray;
-                                newFloatDests: PhysNameArray;                                
+                                newFloatDests: PhysNameArray;
+                                depVec: DependencyVec;                                
                                 renameGroupCtrNext: InsTag;
                                 newIntDestPointer: SmallNumber;
                                 newFloatDestPointer: SmallNumber
@@ -168,44 +200,20 @@ architecture Behavioral of UnitRegManager is
         
         -- Overwrite sources depending on destinations of this group
         for i in 0 to PIPE_WIDTH-1 loop
-            for j in PIPE_WIDTH-1 downto 0 loop
-                if j >= i then
-                    next;
-                end if;
-                
-                if res(i).ins.virtualArgSpec.args(0)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0) -- name match
-                    and res(i).ins.virtualArgSpec.intArgSel(0) = res(j).ins.virtualArgSpec.intDestSel -- intSel match
-                then
-                    res(i).ins.physicalArgSpec.args(0) := res(j).ins.physicalArgSpec.dest;
-                    exit;                   
-                end if;
+           for k in 0 to 2 loop -- For each of 3 possible source arguments
+                for j in PIPE_WIDTH-1 downto 0 loop
+                    if j >= i then
+                        next;
+                    end if;
+                    
+                    if depVec(i)(k)(j) = '1'   
+                        and res(i).ins.virtualArgSpec.intArgSel(k) = res(j).ins.virtualArgSpec.intDestSel -- intSel match
+                    then
+                        res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
+                        exit;             
+                    end if;
+                end loop;
             end loop;
-
-            for j in PIPE_WIDTH-1 downto 0 loop
-                if j >= i then
-                    next;
-                end if;
-                
-                if res(i).ins.virtualArgSpec.args(1)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
-                    and res(i).ins.virtualArgSpec.intArgSel(1) = res(j).ins.virtualArgSpec.intDestSel
-                then
-                    res(i).ins.physicalArgSpec.args(1) := res(j).ins.physicalArgSpec.dest;
-                    exit;                 
-                end if;
-            end loop;
-            
-            for j in PIPE_WIDTH-1 downto 0 loop
-                if j >= i then
-                    next;
-                end if;
-                
-                if res(i).ins.virtualArgSpec.args(2)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
-                    and res(i).ins.virtualArgSpec.intArgSel(2) = res(j).ins.virtualArgSpec.intDestSel
-                then
-                    res(i).ins.physicalArgSpec.args(2) := res(j).ins.physicalArgSpec.dest;
-                    exit;                  
-                end if;
-            end loop;                        
 
         end loop;        
           
@@ -216,6 +224,7 @@ architecture Behavioral of UnitRegManager is
     function renameGroupFloat(insVec: InstructionSlotArray;
                                 newFloatSources: PhysNameArray;
                                 newFloatDests: PhysNameArray;
+                                depVec: DependencyVec;
                                 renameGroupCtrNext: InsTag
                                 ) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
@@ -242,7 +251,7 @@ architecture Behavioral of UnitRegManager is
                         next;
                     end if;
                     
-                    if res(i).ins.virtualArgSpec.args(k)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0) -- name match
+                    if depVec(i)(k)(j) = '1'
                         and res(i).ins.virtualArgSpec.floatArgSel(k) = res(j).ins.virtualArgSpec.floatDestSel -- intSel match
                     then
                         res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
@@ -265,6 +274,8 @@ architecture Behavioral of UnitRegManager is
 begin
     eventSig <= execEventSignal or lateEventSignal;
 
+    depVec <= findDeps(frontDataLastLiving);
+
     renamedBase <= renameGroupBase(frontDataLastLiving,
                                                             newIntDests, 
                                                             newFloatDests,
@@ -279,6 +290,7 @@ begin
                                                             newIntSources, 
                                                             newIntDests, 
                                                             newFloatDests,
+                                                            depVec,
                                                             renameGroupCtrNext,
                                                             newIntDestPointer,
                                                             newFloatDestPointer
@@ -287,6 +299,7 @@ begin
     stageDataRenameInFloat <= renameGroupFloat(renamedBase,
                                                             newFloatSources,
                                                             newFloatDests,
+                                                            depVec,
                                                             renameGroupCtrNext
                                                             );
                                                                                                                             
