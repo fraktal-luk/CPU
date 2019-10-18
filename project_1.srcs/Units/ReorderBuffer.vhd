@@ -155,8 +155,12 @@ architecture Behavioral of ReorderBuffer is
                         res(j).ops(i).ins.physicalArgSpec.floatArgSel := (others => '0');
                         res(j).ops(i).ins.physicalArgSpec.args := (others => (others => '0'));
                    
-                        --res(j).ops(i).ins.virtualArgSpec.dest := (others => '0');  -- separate RAM
-                        --res(j).ops(i).ins.physicalArgSpec.dest := (others => '0'); -- separate RAM
+                        res(j).ops(i).ins.virtualArgSpec.dest := (others => '0');  -- separate RAM
+                        res(j).ops(i).ins.physicalArgSpec.dest := (others => '0'); -- separate RAM
+                   
+                        
+                       -- res(j).ops(i).ins.virtualArgSpec.intDestSel := '0';
+                       -- res(j).ops(i).ins.physicalArgSpec.intDestSel := '0';
                    
                    --res(slv2u(j)).ops(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
                    res(j).ops(i).ins.tags.fetchCtr := (others => '0');
@@ -175,8 +179,11 @@ architecture Behavioral of ReorderBuffer is
 	   variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
 	begin
 	   for i in 0 to PIPE_WIDTH-1 loop
-	       --res(i).ins.physicalArgSpec.dest := constInfo(8*i + 7 downto 8*i);
-	       --res(i).ins.virtualArgSpec.dest := "000" & constInfo2(5*i + 4 downto 5*i);
+	       res(i).ins.physicalArgSpec.dest := constInfo(8*i + 7 downto 8*i);
+	       res(i).ins.virtualArgSpec.dest := "000" & constInfo2(5*i + 4 downto 5*i);
+	       
+	       --        res(i).ins.virtualArgSpec.intDestSel := constInfo2(20 + 2*i + 0);
+	       --        res(i).ins.physicalArgSpec.intDestSel := constInfo2(20 + 2*i + 0);
 	   end loop;
 	   
 	   return res;
@@ -203,6 +210,17 @@ begin
         inputConstant <= inputData(3).ins.physicalArgSpec.dest & inputData(2).ins.physicalArgSpec.dest & inputData(1).ins.physicalArgSpec.dest & inputData(0).ins.physicalArgSpec.dest;
         inputConstant2(19 downto 0) <= inputData(3).ins.virtualArgSpec.dest(4 downto 0) & inputData(2).ins.virtualArgSpec.dest(4 downto 0)
                         & inputData(1).ins.virtualArgSpec.dest(4 downto 0) & inputData(0).ins.virtualArgSpec.dest(4 downto 0);
+    
+--        inputConstant2(27 downto 20) <=  inputData(3).ins.physicalArgSpec.intDestSel & inputData(3).ins.virtualArgSpec.intDestSel
+--                                       & inputData(2).ins.physicalArgSpec.intDestSel & inputData(2).ins.virtualArgSpec.intDestSel
+--                                       & inputData(1).ins.physicalArgSpec.intDestSel & inputData(1).ins.virtualArgSpec.intDestSel
+--                                       & inputData(0).ins.physicalArgSpec.intDestSel & inputData(0).ins.virtualArgSpec.intDestSel;
+                                       
+--        inputConstant2(31 downto 28) <=  inputData(3).ins.physicalArgSpec.floatDestSel
+--                                                                      & inputData(2).ins.physicalArgSpec.floatDestSel
+--                                                                      & inputData(1).ins.physicalArgSpec.floatDestSel
+--                                                                      & inputData(0).ins.physicalArgSpec.floatDestSel;
+                                       
     
     CONSTANT_MEM: process (clk)
     begin
