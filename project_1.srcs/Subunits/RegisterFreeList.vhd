@@ -55,7 +55,7 @@ architecture Behavioral of RegisterFreeList is
 		signal freeListWriteTag: SmallNumber := (others => '0');
 		
 		signal stableUpdateSelDelayed: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-		signal physCommitFreedDelayed, physCommitDestsDelayed: 
+		signal physCommitFreedDelayed, physCommitFreedDelayed_N, physCommitDestsDelayed: 
 							PhysNameArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
 		signal newPhysDestsSync: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 		signal newPhysDestsAsync, newPhysDestsAsync_T: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -109,12 +109,28 @@ begin
     end if;
 end function;
 
-						
+function compactFreedRegs(names: PhysNameArray; mask: std_logic_vector) return PhysNameArray is
+    variable res: PhysNameArray(0 to PIPE_WIDTH-1) := names;
+    variable j: integer := 0;
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        if mask(i) = '1' then
+            res(j) := names(i);
+            j := j + 1;
+        end if;
+    end loop;
+    
+    return res;    
+end function;
+	
+					
 begin
 		FREED_DELAYED_SELECTION: for i in 0 to PIPE_WIDTH-1 generate
 			physCommitFreedDelayed(i) <= physStableDelayed(i) when stableUpdateSelDelayed(i) = '1'
 										else physCommitDestsDelayed(i);
 		end generate;
+
+                physCommitFreedDelayed_N <= compactFreedRegs(physCommitFreedDelayed, freeListPutSel);
 
 		physCommitDestsDelayed <= getPhysicalDests(stageDataToRelease);
 		
@@ -359,10 +375,10 @@ begin
                         
                         -- CAREFUL: expression is
                         --listBackExt(numBackVar to numBackVar + 3) := physCommitFreedDelayed;
-                        listBackExt(slv2u(numBackVar) + 0) := physCommitFreedDelayed(0);
-                        listBackExt(slv2u(numBackVar) + 1) := physCommitFreedDelayed(1);
-                        listBackExt(slv2u(numBackVar) + 2) := physCommitFreedDelayed(2);
-                        listBackExt(slv2u(numBackVar) + 3) := physCommitFreedDelayed(3);
+                        listBackExt(slv2u(numBackVar) + 0) := physCommitFreedDelayed_N(0);
+                        listBackExt(slv2u(numBackVar) + 1) := physCommitFreedDelayed_N(1);
+                        listBackExt(slv2u(numBackVar) + 2) := physCommitFreedDelayed_N(2);
+                        listBackExt(slv2u(numBackVar) + 3) := physCommitFreedDelayed_N(3);
                         
                         numBackVar := addSN(numBackVar, nPut);                 
                     end if;                        
