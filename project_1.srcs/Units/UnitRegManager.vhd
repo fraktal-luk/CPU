@@ -148,6 +148,30 @@ architecture Behavioral of UnitRegManager is
             end if;
         end loop;
 
+        
+        if CLEAR_DEBUG_INFO then
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i).ins.ip := (others => '0');
+                res(i).ins.bits := (others => '0');
+                res(i).ins.target := (others => '0');                    
+                res(i).ins.result := (others => '0');                    
+                
+                res(i).ins.tags.fetchCtr := (others => '0');
+                res(i).ins.tags.decodeCtr := (others => '0');
+                res(i).ins.tags.renameCtr := (others => '0');
+                res(i).ins.tags.commitCtr := (others => '0');
+                
+                -- TODO: this is unused anyway
+                res(i).ins.controlInfo.newEvent := '0';
+                res(i).ins.controlInfo.hasInterrupt := '0';
+                res(i).ins.controlInfo.refetch := '0';
+                res(i).ins.controlInfo.orderViolation := '0';
+                res(i).ins.controlInfo.tlbMiss := '0';
+                res(i).ins.controlInfo.sqMiss := '0';
+                res(i).ins.controlInfo.firstBr := '0';
+            end loop;           
+        end if;
+
         return res;
     end function;
 

@@ -87,7 +87,10 @@ begin
 
     fetchCounterNext <= i2slv(slv2u(fetchCounter) + PIPE_WIDTH, 32) when pcSending = '1' else fetchCounter;
 
-    stageDataInFetch0(0) <= (pcSending, assignFetchCounter(pcDataLiving, fetchCounter));
+    stageDataInFetch0(0).full <= pcSending;
+    stageDataInFetch0(0).ins.ip <= pcDataLiving.ip;
+    stageDataInFetch0(0).ins.target <= pcDataLiving.target;
+    stageDataInFetch0(0).ins.tags.fetchCtr <= fetchCounter when not CLEAR_DEBUG_INFO else (others => '0');
 
 	SUBUNIT_FETCH_0: entity work.GenericStage(Behavioral)
 	generic map(
