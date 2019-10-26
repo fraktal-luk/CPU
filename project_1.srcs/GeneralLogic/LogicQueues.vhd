@@ -44,14 +44,18 @@ package LogicQueues is
 	function getSendingMask(content: InstructionStateArray; mask: std_logic_vector;
 	                tag: InsTag) return std_logic_vector;
 
+	function getCancelMask(content: InstructionStateArray; mask: std_logic_vector;
+	                tag: InsTag; robData: InstructionSlotArray) return std_logic_vector;
     
     function getWindow(content: InstructionStateArray; mask: std_logic_vector;
                         p: SmallNumber; n: natural)
     return InstructionSlotArray;
     
-    function selectDataSlot(content: InstructionStateArray; taggedMask: std_logic_vector;
+    function selectBranchDataSlot(content: InstructionStateArray; taggedMask, matchMask: std_logic_vector;
                             compareAddressInput: InstructionSlot)
     return InstructionSlot;
+
+    function getMatchingTags(content: InstructionStateArray; tag: InsTag) return std_logic_vector;
     
     function getNumberToSend(dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1); nextCommitTag: InsTag; committing: std_logic) return integer;
 
@@ -134,6 +138,30 @@ package body LogicQueues is
 	   return res;
 	end function;
 
+
+	function getCancelMask(content: InstructionStateArray; mask: std_logic_vector;
+	                tag: InsTag; robData: InstructionSlotArray) return std_logic_vector is
+	   constant LEN: integer := content'length;
+	   variable res: std_logic_vector(0 to content'length-1) := (others => '0');
+	begin
+	   for i in 0 to LEN-1 loop   
+           if    getTagLow(content(i).tags.renameIndex) = "10" and
+                 (not robData(3).full or robData(3).ins.controlInfo.hasException or robData(3).ins.controlInfo.specialAction or robData(3).ins.controlInfo.dbtrap) = '1' then
+               res(i) := '1';           
+           elsif getTagLow(content(i).tags.renameIndex) = "10" and
+                 (not robData(2).full or robData(2).ins.controlInfo.hasException or robData(2).ins.controlInfo.specialAction or robData(2).ins.controlInfo.dbtrap) = '1' then
+               res(i) := '1';           
+           elsif getTagLow(content(i).tags.renameIndex) = "01" and
+                 (not robData(1).full or robData(1).ins.controlInfo.hasException or robData(1).ins.controlInfo.specialAction or robData(1).ins.controlInfo.dbtrap) = '1' then
+               res(i) := '1';
+           elsif 
+                 (not robData(0).full or robData(0).ins.controlInfo.hasException or robData(0).ins.controlInfo.specialAction or robData(0).ins.controlInfo.dbtrap) = '1' then
+               res(i) := '1';
+           end if; 
+       end loop;
+	   return res;
+	end function;
+	
     
     function getWindow(content: InstructionStateArray; mask: std_logic_vector;
                         p: SmallNumber; n: natural)
@@ -156,7 +184,7 @@ package body LogicQueues is
         return res;
     end function;
     
-    function selectDataSlot(content: InstructionStateArray; taggedMask: std_logic_vector;
+    function selectBranchDataSlot(content: InstructionStateArray; taggedMask, matchMask: std_logic_vector;
                             compareAddressInput: InstructionSlot)
     return InstructionSlot is
         constant LEN: integer := content'length;
@@ -164,12 +192,22 @@ package body LogicQueues is
     begin
         for i in 0 to LEN-1 loop 
             res.ins := content(i);
-            if content(i).tags.renameIndex = compareAddressInput.ins.tags.renameIndex
-                and compareAddressInput.full = '1' and taggedMask(i) = '1'
+            if --content(i).tags.renameIndex = compareAddressInput.ins.tags.renameIndex
+                     matchMask(i) = '1'
+                 and taggedMask(i) = '1'
             then
-                res.full := '1';
+                res.full := compareAddressInput.full;
                 exit;
             end if;
+        end loop;
+        return res;
+    end function;
+    
+    function getMatchingTags(content: InstructionStateArray; tag: InsTag) return std_logic_vector is
+        variable res: std_logic_vector(content'range) := (others => '0');
+    begin
+        for i in content'range loop
+            res(i) := bool2std(content(i).tags.renameIndex = tag);
         end loop;
         return res;
     end function;

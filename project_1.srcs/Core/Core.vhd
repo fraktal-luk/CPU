@@ -100,12 +100,13 @@ architecture Behavioral of Core is
     signal robSending, robAccepting, renamedSending, commitAccepting, 
                 iqAccepting, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
                 robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0: std_logic := '0';
-    signal commitGroupCtr, commitCtr, commitGroupCtrInc: InsTag := (others => '0');
+    signal commitGroupCtr, commitGroupCtrInc: InsTag := (others => '0');
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal intSignal: std_logic := '0';
     signal intType: std_logic_vector(0 to 1) := (others => '0');
     signal sysRegReadValue: Mword := (others => '0');
     signal sysRegReadSel: slv5 := (others => '0');
+    signal preAguTag: InsTag := (others => '0');
     
     signal sbSending, sbEmpty, sysRegRead, sysRegSending: std_logic := '0';
     signal dataFromSB: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -168,11 +169,11 @@ begin
         dataFromBQV => bqData,
 
         sbSending => sbSending,
-        dataFromSB => dataFromSB(0).ins,
+        dataFromSB => dataFromSB(0),
         sbEmpty => sbEmpty,
 
         commitGroupCtrOut => commitGroupCtr,
-        commitCtrOut => commitCtr,
+        --commitCtrOut => commitCtr,
         commitGroupCtrIncOut => commitGroupCtrInc,
         
         doneSig => oaux(0),
@@ -230,7 +231,7 @@ begin
         newFloatDestsOut => newFloatDests,
             
         commitGroupCtr => commitGroupCtr,
-        commitCtr => commitCtr,
+        --commitCtr => commitCtr,
 		
 		execCausing => execCausing,
         lateCausing => lateCausing,
@@ -453,10 +454,12 @@ begin
                 execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
             );      
           
-            branchData <= basicBranch(setInstructionTarget(slotIssueI0.ins, slotIssueI0.ins.constantArgs.imm),
-                                      slotIssueI0.state, bqSelected.ins, bqSelected.full);                    
+            branchData <= basicBranch(--setInstructionTarget(slotIssueI0.ins, slotIssueI0.ins.constantArgs.imm),
+                                      slotIssueI0.ins,
+                                      slotIssueI0.state, bqSelected.ins); --, bqSelected.full);                    
             
-            dataToBranch(0) <= (slotIssueI0.full and isBranch(slotIssueI0.ins), branchData);
+            dataToBranch(0) <= (slotIssueI0.full and --isBranch(slotIssueI0.ins), branchData);
+                                                     slotIssueI0.ins.classInfo.branchIns, branchData);
             sendingBranchIns <= dataToBranch(0).full;
             
             bqCompare <= (sendingBranchIns, slotIssueI0.ins);
@@ -546,7 +549,9 @@ begin
                fni => fni,
                regValues => regValsM0 --(others => (others => '0'))     
            );
-                      
+               
+               preAguTag <= slotIssueM0.ins.tags.renameIndex;
+                                     
                sendingFromDLQ <= '0';          -- TEMP!
                dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
                     
@@ -1385,6 +1390,7 @@ begin
         ----
 
 		committing => robSending, -- When ROB is sending so is BQ if it has corresponding branches
+		robData => dataOutROB,
 		groupCtrInc => commitGroupCtrInc,
 
 		lateEventSignal => lateEventSignal,
@@ -1414,11 +1420,13 @@ begin
         -- interface with Exec
 		storeValueInput => sqValueInput, 
 		compareAddressInput => sqAddressInput,
+        compareTagInput => preAguTag,
                             
 		selectedDataOutput => sqSelectedOutput,
         ------------
 
 		committing => robSending,
+		robData => dataOutROB,
 		groupCtrInc => commitGroupCtrInc,
 
 		lateEventSignal => lateEventSignal,
@@ -1455,11 +1463,13 @@ begin
         -- interface with Exec
 		storeValueInput => DEFAULT_INSTRUCTION_SLOT, 
 		compareAddressInput => lqAddressInput,
-                            
+        compareTagInput => preAguTag,
+             
 		selectedDataOutput => lqSelectedOutput,
         ----------------
 
 		committing => robSending,
+		robData => dataOutROB,
 		groupCtrInc => commitGroupCtrInc,
 
 		lateEventSignal => lateEventSignal,
@@ -1493,7 +1503,7 @@ begin
 		--dadr <= dataFromSB(0).ins.target;
 		doutadr <= dataFromSB(0).ins.target;
 		--dread <= memLoadAllow;
-		dwrite <= sbSending and bool2std(dataFromSB(0).ins.operation = (Memory, store));
+		dwrite <= sbSending and dataFromSB(0).full and bool2std(dataFromSB(0).ins.operation = (Memory, store));
 		dout <= dataFromSB(0).ins.result;
 
 	end block;

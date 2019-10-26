@@ -49,8 +49,7 @@ package LogicROB is
     function updateOpGroup(ops: InstructionSlotArray; execResult: InstructionSlot; num: natural)
     return InstructionSlotArray;
 
-function groupCompleted(insVec: InstructionSlotArray) return std_logic;
-
+    function groupCompleted(insVec: InstructionSlotArray) return std_logic;
 
     type RobText is array(0 to ROB_SIZE-1) of string(1 to 70);
     
@@ -65,7 +64,7 @@ package body LogicROB is
 function groupCompleted(insVec: InstructionSlotArray) return std_logic is
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if       insVec(i).full = '1' and (
+		if   insVec(i).full = '1' and (
 			   insVec(i).ins.controlInfo.completed = '0'
 			or	 insVec(i).ins.controlInfo.completed2 = '0')
 		then
@@ -114,7 +113,7 @@ end function;
 	       
 	       if eventFound then
 	    		if res(k).full = '1' then
-                    res(k).ins.controlInfo.squashed := '1';
+                    --res(k).ins.controlInfo.squashed := '1';
                 end if;
                 res(k).full := '0';
 	       end if;
@@ -139,7 +138,7 @@ end function;
                     res(k).ins.controlInfo.newEvent := '1'; --- !!!
                     res(k).ins.controlInfo.specialAction := '1';
                     
-                        res(k).ins.controlInfo.refetch := '1';
+                    res(k).ins.controlInfo.refetch := '1';
                     
                     eventFound := true;
                 end if;

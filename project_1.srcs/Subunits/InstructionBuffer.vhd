@@ -75,10 +75,6 @@ architecture Implem of InstructionBuffer is
         variable fullMask, fillMask, remainingMask, nextMask: std_logic_vector(0 to LEN-1) := (others => '0');
         variable remainingMaskExt: std_logic_vector(0 to LEN + 3) := (others => '0');
         variable inputMask, inputMaskComp: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
-        --variable sel: std_logic_vector(1 downto 0) := "00";
-        --variable remainingMaskM1, remainingMaskM2, remainingMaskM3, remainingMaskM4,
-        --            rM3, rM2, rM1: std_logic := '0';
-        --variable remv: std_logic_vector(0 to 2) := "000"; 
     begin
         fullMask := extractFullMask(content);
         inputMask := extractFullMask(newContent);
@@ -93,12 +89,7 @@ architecture Implem of InstructionBuffer is
             remainingMaskExt(0 to 3) := (others => '1');
         end if;
         
-        for i in 0 to LEN-1 loop
-              
-            --remv := remainingMaskExt(i+1 to i+3);
-            --sel := getSelector(remv, inputMask(0 to 2));
-                -- elemNew := getNewElem(newContent, inputMask(0 to 2), remainingMaskExt(i+1 to i+3));
-            
+        for i in 0 to LEN-1 loop       
             if remainingMaskExt(i + 4) = '1' then  -- !! equivalent to remainingMask(i), where '1' for i < 0    
                 if nextAccepting = '1' and i + 4 < LEN then
                     res(i).ins := content(i+4).ins;
@@ -106,26 +97,31 @@ architecture Implem of InstructionBuffer is
                     res(i).ins := content(i).ins;
                 end if;
             else
-                --res(i).ins := newContent(slv2u(sel)).ins;
-                    res(i) := getNewElem(remainingMaskExt(i+1 to i+3), newContent);
-                        res(i).ins.controlInfo.skipped := '0'; -- By definition skipped words don't go to this buffer
+                res(i) := getNewElem(remainingMaskExt(i+1 to i+3), newContent);
             end if;
             
-            -- No events before decoding; newEvent flag set for branches must be cleared.
-            --  Meanwhile, branch taken/not taken state must be retained
-            res(i).ins.controlInfo.newEvent := '0';
-            
+            res(i).ins.controlInfo.newEvent := '0'; -- Separating front events from exec events
+                                         --  Meanwhile, branch taken/not taken state must be retained         
             fillMask(i) := '0';
             for k in 0 to 3 loop -- Further beyond end requires more ful inputs to be filled:
                 --                            !! equiv to remainingMask(-1-k), where '1' for k < 0
                 fillMask(i) := fillMask(i) or (remainingMaskExt(i + 3-k) and inputMaskComp(k));
             end loop;
             
-            nextMask(i) := (remainingMaskExt(i + 4) or (fillMask(i) and prevSending)) and not kill;
-            
-            res(i).full := nextMask(i);
+            res(i).full := (remainingMaskExt(i + 4) or (fillMask(i) and prevSending)) and not kill;
         end loop;
         
+        if CLEAR_DEBUG_INFO then    
+            for i in 0 to IBUFFER_SIZE-1 loop
+                res(i).ins.ip := (others => '0');
+                res(i).ins.bits := (others => '0');                
+                res(i).ins.result := (others => '0');
+                res(i).ins.target := (others => '0');
+                
+                res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
+            end loop;
+        end if;
+
         return res;
     end function;
 

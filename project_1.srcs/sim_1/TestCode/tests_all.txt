@@ -6,6 +6,8 @@ branch_conditional
 branch_register
 stores1
 loads1
+sf_0
+sf_1
 sys_regs
 loads_fp
 fp0

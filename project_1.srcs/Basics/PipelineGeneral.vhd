@@ -442,7 +442,7 @@ begin
 		-- CAREFUL: clearing result tags for empty slots
 		for i in 0 to LEN-1 loop
 			res(i).ins.physicalArgSpec.dest := (others => '0');
-			res(i).ins.physicalArgSpec.destAlt := (others => '0');			
+			--res(i).ins.physicalArgSpec.destAlt := (others => '0');			
 			res(i).ins.controlInfo.newEvent := '0';
 		end loop;
 		for i in 0 to LEN-1 loop
@@ -555,7 +555,7 @@ function getExceptionMask(insVec: InstructionSlotArray) return std_logic_vector 
 begin
 	for i in insVec'range loop
 		res(i) := insVec(i).ins.controlInfo.hasException
-		          or insVec(i).ins.controlInfo.specialAction; -- CAREFUL: what if special actions are allowed to write registers?
+		       or insVec(i).ins.controlInfo.specialAction; -- CAREFUL: what if special actions are allowed to write registers?
 	end loop;			
 	return res;
 end function;
@@ -600,7 +600,7 @@ function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
+		if 		insVec(i).full = '1' -- and insVec(i).ins.controlInfo.skipped = '0'
 			and 	insVec(i).ins.classInfo.branchIns = '1'
 		then
 			res(i) := '1';
@@ -614,7 +614,7 @@ function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
+		if 		insVec(i).full = '1' --and insVec(i).ins.controlInfo.skipped = '0'
 			and (insVec(i).ins.operation = (Memory, load) or insVec(i).ins.operation = (System, sysMfc))
 		then
 			res(i) := '1';
@@ -628,7 +628,7 @@ function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
+		if 		insVec(i).full = '1' --and insVec(i).ins.controlInfo.skipped = '0'
 			and (insVec(i).ins.operation = (Memory, store) or insVec(i).ins.operation = (System, sysMtc))
 		then
 			res(i) := '1';
@@ -642,7 +642,7 @@ function getAluMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
+		if 		insVec(i).full = '1' --and insVec(i).ins.controlInfo.skipped = '0'
 			and (insVec(i).ins.operation.unit = Alu or insVec(i).ins.operation.unit = Jump)
 		then
 			res(i) := '1';
@@ -656,7 +656,7 @@ function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
+		if 		insVec(i).full = '1' --and insVec(i).ins.controlInfo.skipped = '0'
 			and (insVec(i).ins.operation.unit = FPU)
 		then
 			res(i) := '1';

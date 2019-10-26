@@ -68,36 +68,44 @@ type BinomialOp is record
 end record;
 
 type InstructionControlInfo is record
-		squashed: std_logic;
-		skipped: std_logic;
+	--squashed: std_logic;
 	completed: std_logic;
-		completed2: std_logic;
+	completed2: std_logic;
+	
 	newEvent: std_logic; -- True if any new event appears
-	--	hasReset: std_logic;
 	hasInterrupt: std_logic;
 	hasException: std_logic;
-	--hasBranch: std_logic;
-	--hasReturn: std_logic;
 	   refetch: std_logic;
 	   frontBranch: std_logic;
 	   confirmedBranch: std_logic;
 	specialAction: std_logic;
 	dbtrap: std_logic;
+	--illegal: std_logic;
 	   orderViolation: std_logic;
 	   tlbMiss: std_logic;
 	   dataMiss: std_logic;
 	   sqMiss:    std_logic;
-	       firstBr: std_logic;
-	exceptionCode: SmallNumber; -- Set when exception occurs, remains cause exception can be only 1 per op
+	   firstBr: std_logic;
+	--exceptionCode: SmallNumber; -- Set when exception occurs, remains cause exception can be only 1 per op
 end record;
 
 type InstructionClassInfo is record
 	short: std_logic;
-		mainCluster: std_logic;
-		secCluster: std_logic;
+	mainCluster: std_logic;
+	secCluster: std_logic;
 	--branchCond: std_logic;
 	fpRename: std_logic; -- true if instruction is routed to FP renamer (NOTE, CHECK: Int renamer is used for all ops, even those that don't go to any IQ)
 	pipeA, pipeB, pipeC, load, store, branchIns: std_logic;
+	
+	--sync:      std_logic; -- when committed causes fetch of following instruction
+	--halt:      std_logic;
+	--ret0:      std_logic;       -- retE
+	--ret1:      std_logic;       -- retI
+	--lsWrite:   std_logic;  -- store/mtc as opposed to load/mfc 
+	--lsSystem:  std_logic; -- mtc/mfc
+	
+	--isSend:    std_logic;  -- DEBUG
+	--isError:   std_logic; -- DEBUG
 end record;
 
 
@@ -133,26 +141,26 @@ type InstructionPhysicalDestArgs is record
 end record;
 
 
-		type InstructionArgSpec is record
-			intDestSel: std_logic;
-			floatDestSel: std_logic;
-			dest: SmallNumber;
-			destAlt: SmallNumber;
-			intArgSel: std_logic_vector(0 to 2);
-			floatArgSel: std_logic_vector(0 to 2);
-			args: SmallNumberArray(0 to 2);
-		end record;
+type InstructionArgSpec is record
+    intDestSel: std_logic;
+    floatDestSel: std_logic;
+    dest: SmallNumber;
+    --destAlt: SmallNumber;
+    intArgSel: std_logic_vector(0 to 2);
+    floatArgSel: std_logic_vector(0 to 2);
+    args: SmallNumberArray(0 to 2);
+end record;
 
-		type InstructionTags is record
-			fetchCtr: Word;	-- Ctr is never reset!
-			decodeCtr: Word; -- Ctr is never reset!
-			renameCtr: Word;
-			renameSeq: InsTag;
-			renameIndex: InsTag;	-- group + group position
-			intPointer: SmallNumber;
-			floatPointer: SmallNumber;
-			commitCtr: Word;
-		end record;
+type InstructionTags is record
+    fetchCtr: Word;	-- Ctr is never reset!
+    decodeCtr: Word; -- Ctr is never reset!
+    renameCtr: Word;
+    --renameSeq: InsTag;
+    renameIndex: InsTag;	-- group + group position
+    intPointer: SmallNumber;
+    floatPointer: SmallNumber;
+    commitCtr: Word;
+end record;
 		
 
 type InstructionArgValues is record
@@ -218,7 +226,7 @@ constant DEFAULT_ARG_SPEC: InstructionArgSpec := InstructionArgSpec'(
 			intDestSel => '0',
 			floatDestSel => '0',
 			dest => (others => '0'),
-			destAlt => (others => '0'),
+			--destAlt => (others => '0'),
 			intArgSel => (others => '0'),
 			floatArgSel => (others => '0'),
 			args => ((others => '0'), (others => '0'), (others => '0'))
@@ -228,7 +236,7 @@ constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
 			fetchCtr => (others => '0'),
 			decodeCtr => (others => '0'),
 			renameCtr => (others => '0'),
-			renameSeq => (others => '0'), 
+			--renameSeq => (others => '0'), 
 			renameIndex => (others => '0'),
 			intPointer => (others => '0'),
 			floatPointer => (others => '0'),
@@ -348,27 +356,24 @@ package body InstructionState is
 function defaultControlInfo return InstructionControlInfo is
 begin
 	return InstructionControlInfo'(
-													squashed => '0',
-													skipped => '0',
+												--squashed => '0',
 												completed => '0',
-													completed2 => '0',
+												completed2 => '0',
 												newEvent => '0',
 												hasInterrupt => '0',
-												--	hasReset => '0',
 												hasException => '0',
-												--hasBranch => '0',
-												--hasReturn => '0',
 												    refetch => '0',
 												    frontBranch => '0',
                                                     confirmedBranch => '0',												    											
 												specialAction => '0',
 												dbtrap => '0',
+												--illegal => '0',
 												    orderViolation => '0',
 												    tlbMiss => '0',
 												    dataMiss => '0',
 												    sqMiss => '0',
-												        firstBr => '0',
-												exceptionCode => (others=>'0')
+												    firstBr => '0'
+												--exceptionCode => (others=>'0')
 												);
 end function;
 
@@ -377,14 +382,23 @@ begin
 	return InstructionClassInfo'( short => '0',
 											mainCluster => '0',
 											secCluster => '0',
-											--branchCond => '0',
 											fpRename => '0',
 											pipeA => '0',
 											pipeB => '0',
 											pipeC => '0',
 											load => '0',
 											store => '0',
-											branchIns => '0'
+											branchIns => '0'--,
+											
+	                                        --sync => '0',
+                                            --halt => '0',
+                                            --ret0 => '0',
+                                            --ret1 => '0',
+                                            --lsWrite => '0',
+                                            --lsSystem => '0',
+                                            
+                                            --isSend => '0',
+                                            --isError => '0'									
 											);	
 end function;
 
@@ -718,7 +732,7 @@ begin
     
         memStr(19 to 21) := ";  ";
         if ins.controlInfo.orderViolation = '1' then
-            memStr(21) := 'O';
+            memStr(21 to 23) := "Ord";
         end if;
    
         if mem = '1' then

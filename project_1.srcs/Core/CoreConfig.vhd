@@ -27,6 +27,9 @@ use work.ArchDefs.all;
 
 package CoreConfig is
 
+constant CLEAR_DEBUG_INFO: boolean := true;
+
+
 constant LOG2_PIPE_WIDTH: natural := 0 + 2;
 constant PIPE_WIDTH: positive := 2**LOG2_PIPE_WIDTH;
 constant ALIGN_BITS: natural := LOG2_PIPE_WIDTH + 2;
@@ -42,10 +45,12 @@ constant ROB_SIZE: positive := 8;
 constant USE_LINE_PREDICTOR: boolean := true;
 
 constant PHYS_REG_BITS: natural := 6 + LOG2_PIPE_WIDTH;
-constant N_PHYSICAL_REGS: natural := 64 * PIPE_WIDTH;
+constant N_PHYSICAL_REGS: natural := --64 * PIPE_WIDTH;
+                                        128;
 constant N_PHYS: natural := N_PHYSICAL_REGS;
 	
-constant FREE_LIST_SIZE: positive := N_PHYSICAL_REGS;
+constant FREE_LIST_SIZE: positive := --N_PHYSICAL_REGS;
+                                        256;
 
 end CoreConfig;
 

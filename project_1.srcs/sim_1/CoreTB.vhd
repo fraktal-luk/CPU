@@ -181,59 +181,79 @@ BEGIN
        variable dummy: boolean;
        variable progB: ProgramBuffer;
        variable decBits, decIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
-       variable testName: line;
-       file testFile: text open read_mode is "C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\test_names.txt";
+       variable testName, suiteName: line;
+       file suiteFile: text open read_mode is "C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\suite_names.txt";
+       file testFile: text;-- open read_mode is "C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\test_names.txt";
+       file testFile0: text;
+       
+        
        
    begin		
 	  wait for 110 ns;
-
-	  loop
-	      testName := null;	  
-	      readline(testFile, testName);
-	      if testName = null then -- testName'length = 0 then
-	          exit;
-	      elsif testName(1) = ';' then
-	          next;
-	      end if;
-
-	      report "Now to run: " & testName.all;
-	      --testName := ...;
-	      progB := readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\" & testName.all & ".txt");
-          machineCode <= processProgram(progB);
+      
+      loop
+          suiteName := null;
+          readline(suiteFile, suiteName);
+          if suiteName = null then -- testName'length = 0 then
+              exit;
+          elsif suiteName(1) = ';' then
+              next;
+          end if;          
           
-          wait until rising_edge(clk);
+          report "Starting suite: " & suiteName.all;
           
-          testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
-          testProgram(512/4) <= ins6L(j, -512);-- TEMP! 
-          testProgram(384/4) <= ins655655(ext2, 0, 0, send, 0, 0);
-          testProgram(384/4 + 1) <= ins6L(j, 0); -- idle loop          
-                   
-          --wait until rising_edge(clk);         
-          testToDo <= '1';
-          int0b <= '1';
-          wait until rising_edge(clk);
-          testToDo <= '0';
-          int0b <= '0';
-          report "Waiting for completion...";
-
+          file_open(testFile, "C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\" & suiteName.all & ".txt", read_mode);
+          
           loop
+              testName := null;	  
+              readline(testFile, testName);
+              if testName = null then -- testName'length = 0 then
+                  exit;
+              elsif testName(1) = ';' then
+                  next;
+              end if;
+    
+              report "Now to run: " & testName.all;
+              --testName := ...;
+              progB := readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\" & testName.all & ".txt");
+              machineCode <= processProgram(progB);
+              
               wait until rising_edge(clk);
-                  if testDone = '1' then
-                      report "Test done";
-                      exit;
-                  end if;
-                  
-                  if testFail = '1' then
-                      report "TEST FAIL: " & testName.all;
+              
+              testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+              testProgram(512/4) <= ins6L(j, -512);-- TEMP! 
+              testProgram(384/4) <= ins655655(ext2, 0, 0, send, 0, 0);
+              testProgram(384/4 + 1) <= ins6L(j, 0); -- idle loop          
+                       
+              --wait until rising_edge(clk);         
+              testToDo <= '1';
+              int0b <= '1';
+              wait until rising_edge(clk);
+              testToDo <= '0';
+              int0b <= '0';
+              report "Waiting for completion...";
+    
+              loop
+                  wait until rising_edge(clk);
+                      if testDone = '1' then
+                          report "Test done";
+                          exit;
+                      end if;
                       
-                      wait;                     
-                  end if;                  
+                      if testFail = '1' then
+                          report "TEST FAIL: " & testName.all;
+                          
+                          wait;                     
+                      end if;                  
+              end loop;
+                
+              wait until rising_edge(clk);
           end loop;
-            
-          wait until rising_edge(clk);
-	  end loop;
-	  
-	  report "All suite done!";
+          report "All tests in suite done!";
+      
+      end loop;
+          
+      report "All suites done!";
 	  --wait;
 
       wait until rising_edge(clk);
@@ -346,6 +366,7 @@ BEGIN
         wait until rising_edge(clk);
               if testDone = '1' then
                   report "Test done";
+                  report "All test runs have been completed successfully";
                   exit;
               end if;
               
