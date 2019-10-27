@@ -40,7 +40,7 @@ type ForwardingInfo is record
 	tags1: PhysNameArray(0 to 2);
 	values0: MwordArray(0 to 2);
 	values1: MwordArray(0 to 2);	
-	nextResultTags: PhysNameArray(0 to 2);
+	nextTagsM1: PhysNameArray(0 to 2);
 	nextTagsM2:	PhysNameArray(0 to 2);
 end record;
 
@@ -61,7 +61,7 @@ constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
 		values1 => (others => (others => '0')),
 		
 	--resultTags => (others => (others => '0')),
-	nextResultTags => (others => (others => '0')),
+	nextTagsM1 => (others => (others => '0')),
 	nextTagsM2 => (others => (others => '0'))
 	--resultValues => (others => (others => '0'))
 );
@@ -129,6 +129,8 @@ function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
+
+function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector;
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
@@ -198,7 +200,37 @@ function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
             maskM1 => "000",
             maskM2 => "000"
         );
-  
+
+        -- FP cluster
+        constant WAITING_FN_MAP_FLOAT: ForwardingMap := (
+            maskRR => "111",   
+            maskR1 => "000",  
+            maskR0 => "000",
+            maskM1 => "000",
+            maskM2 => "111"
+        );        
+
+        constant ENQUEUE_FN_MAP_FLOAT: ForwardingMap := (
+            maskRR => "000",      
+            maskR1 => "111",  
+            maskR0 => "111",
+            maskM1 => "111",
+            maskM2 => "111"
+        );
+
+        constant SELECTION_FN_MAP_FLOAT: ForwardingMap := (
+            maskRR => "111",
+            maskR1 => "000",  
+            maskR0 => "000",
+            maskM1 => "000",
+            maskM2 => "000"
+        );
+
+
+        function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray;
+        function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray;
+        function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
+          
 end package;
 
 
@@ -410,6 +442,7 @@ begin
 		-- CAREFUL: clearing result tags for empty slots
 		for i in 0 to LEN-1 loop
 			res(i).ins.physicalArgSpec.dest := (others => '0');
+			--res(i).ins.physicalArgSpec.destAlt := (others => '0');			
 			res(i).ins.controlInfo.newEvent := '0';
 		end loop;
 		for i in 0 to LEN-1 loop
@@ -522,7 +555,7 @@ function getExceptionMask(insVec: InstructionSlotArray) return std_logic_vector 
 begin
 	for i in insVec'range loop
 		res(i) := insVec(i).ins.controlInfo.hasException
-		          or insVec(i).ins.controlInfo.specialAction; -- CAREFUL: what if special actions are allowed to write registers?
+		       or insVec(i).ins.controlInfo.specialAction; -- CAREFUL: what if special actions are allowed to write registers?
 	end loop;			
 	return res;
 end function;
@@ -533,9 +566,6 @@ end function;
 		for i in 0 to PIPE_WIDTH-1 loop
 			res(i).ins := insArr(i);
 			res(i).full := fullMask(i);
-            
-            -- CAREFUL, UNNEEDED
-            res(i).state.argValues.origSlot := i2slv(i, 2); -- So we know which 'readyRegs' slots to use in IQ!
             
             -- CAREFUL, TODO: define precisely what 'zero' designation means
 			-- Set state markers: "zero" bit; only valid for Int args because FP doesn't use HW zero 
@@ -570,7 +600,7 @@ function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
+		if 		insVec(i).full = '1' -- and insVec(i).ins.controlInfo.skipped = '0'
 			and 	insVec(i).ins.classInfo.branchIns = '1'
 		then
 			res(i) := '1';
@@ -584,7 +614,7 @@ function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
+		if 		insVec(i).full = '1' --and insVec(i).ins.controlInfo.skipped = '0'
 			and (insVec(i).ins.operation = (Memory, load) or insVec(i).ins.operation = (System, sysMfc))
 		then
 			res(i) := '1';
@@ -598,7 +628,7 @@ function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
+		if 		insVec(i).full = '1' --and insVec(i).ins.controlInfo.skipped = '0'
 			and (insVec(i).ins.operation = (Memory, store) or insVec(i).ins.operation = (System, sysMtc))
 		then
 			res(i) := '1';
@@ -612,7 +642,7 @@ function getAluMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' and insVec(i).ins.controlInfo.skipped = '0'
+		if 		insVec(i).full = '1' --and insVec(i).ins.controlInfo.skipped = '0'
 			and (insVec(i).ins.operation.unit = Alu or insVec(i).ins.operation.unit = Jump)
 		then
 			res(i) := '1';
@@ -621,6 +651,21 @@ begin
 	
 	return res;
 end function;
+
+function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+	for i in 0 to PIPE_WIDTH-1 loop
+		if 		insVec(i).full = '1' --and insVec(i).ins.controlInfo.skipped = '0'
+			and (insVec(i).ins.operation.unit = FPU)
+		then
+			res(i) := '1';
+		end if;
+	end loop;
+	
+	return res;
+end function;
+
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray is
     variable res: InstructionSlotArray(insVec'range) := insVec;
@@ -754,4 +799,32 @@ end function;
             return res;
         end function;
 
+        function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray is
+            variable res: InstructionSlotArray(insArr'range) := insArr;
+        begin
+            for i in res'range loop
+                if res(i).ins.physicalArgSpec.floatDestSel = '1' then
+                   res(i).ins.physicalArgSpec.dest := (others => '0');
+                end if;
+            end loop;
+            return res;
+        end function;
+        
+        function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray is
+            variable res: InstructionSlotArray(insArr'range) := insArr;
+        begin
+            for i in res'range loop
+                if res(i).ins.physicalArgSpec.floatDestSel = '0' then
+                   res(i).ins.physicalArgSpec.dest := (others => '0');
+                end if;
+            end loop;
+            return res;
+        end function;
+
+        function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot is
+            variable res: InstructionSlot := insS0;
+        begin
+            res.ins.physicalArgSpec.dest := insS0.ins.physicalArgSpec.dest or insS1.ins.physicalArgSpec.dest;
+            return res;
+        end function;
 end package body;

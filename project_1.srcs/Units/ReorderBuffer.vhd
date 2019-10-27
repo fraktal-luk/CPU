@@ -48,11 +48,7 @@ entity ReorderBuffer is
 		en: in std_logic;
 		
 		lateEventSignal: in std_logic;
-		--execEventSignal: in std_logic;
-		--execCausing: in InstructionState; -- Redundant cause we have inputs from all Exec ends? 
-		
 		commitGroupCtr: in InsTag;
-		--commitGroupCtrNext: in InsTag;
 
 		execEndSigs1: in InstructionSlotArray(0 to 3);
 		execEndSigs2: in InstructionSlotArray(0 to 3);
@@ -72,26 +68,25 @@ end ReorderBuffer;
 
 
 architecture Behavioral of ReorderBuffer is
-	signal fullMask: --, TMP_mask, TMP_ckEnForInput, TMP_sendingMask, TMP_killMask, TMP_livingMask, TMP_maskNext:
-				std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
+    signal outputDataReg: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+	signal fullMask, completedMask, completedMaskNext, completedMask_T,  completedMaskNext_T: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
 
     signal content, contentNext: ReorderBufferArray := DEFAULT_ROB_ARRAY;
 
-	signal isSending: std_logic := '0';
+	signal isSending, isSending_T, isEmpty, ch0, ch1: std_logic := '0';
 	signal execEvent: std_logic := '0'; -- depends on input in slot referring to branch ops
-		
-	--signal numKilled: SmallNumber := (others => '0');
 
-	--	signal execEnds: InstructionStateArray(0 to 3) := (others => DEFAULT_INSTRUCTION_STATE);
-	--	signal execReady: std_logic_vector(0 to 3) := (others => '0');
-	--	signal execEnds2: InstructionStateArray(0 to 3) := (others => DEFAULT_INSTRUCTION_STATE);
-	--	signal execReady2: std_logic_vector(0 to 3) := (others => '0');
-	
-            constant ROB_HAS_RESET: std_logic := '0';
-            constant ROB_HAS_EN: std_logic := '0';
+    constant ROB_HAS_RESET: std_logic := '0';
+    constant ROB_HAS_EN: std_logic := '0';
 
 	constant PTR_MASK_TAG: InsTag := i2slv(ROB_SIZE-1, TAG_SIZE);
 	constant PTR_MASK_SN: SmallNumber := i2slv(ROB_SIZE-1, SMALL_NUMBER_SIZE);
+	
+	signal recoveryCounter: SmallNumber := (others => '0');
+	signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0'); 
+	
+	signal isFull, isAlmostFull: std_logic := '0'; 	
+
 	
 	function getNextRobContent(content: ReorderBufferArray;
 	                           newGroup: InstructionSlotArray;
@@ -103,9 +98,6 @@ architecture Behavioral of ReorderBuffer is
 	   variable killMask: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
 	   variable ptr1, ptr2,  iv, tagHiPart, tagLoPart: SmallNumber := (others => '0');
 	begin
-	   -- if late event: clear all 'full' bits, endPtr = startPtr
-	   -- elseif execEvent: endPtr = causingPtr, clear 'full' bits that are "behind" causingPtr
-	
 	   if sends = '1' then
 	       res(slv2u(startPtr)).full := '0'; -- CAREFUL: don't get index out of bounds
 	   end if;
@@ -141,49 +133,189 @@ architecture Behavioral of ReorderBuffer is
 	           res(i).full := '0';
 	       end if;
 	   end loop;
+
+       -- Clear unused fields for better synthesis
+       if CLEAR_DEBUG_INFO then
+           for j in 0 to ROB_SIZE-1 loop
+               for i in 0 to PIPE_WIDTH-1 loop
+                   res(j).ops(i).ins.ip := (others => '0');
+                   res(j).ops(i).ins.bits := (others => '0');              
+                   res(j).ops(i).ins.result := (others => '0');
+                   res(j).ops(i).ins.target := (others => '0');
+                   
+                   res(j).ops(i).ins.constantArgs := DEFAULT_CONSTANT_ARGS;
+                
+                   --res(slv2u(endPtr)).ops(i).ins.operation := (System, sysUndef); --!! Operation must be known to UnitSequencer after commit
+                   
+                        res(j).ops(i).ins.virtualArgSpec.intArgSel := (others => '0');
+                        res(j).ops(i).ins.virtualArgSpec.floatArgSel := (others => '0');
+                        res(j).ops(i).ins.virtualArgSpec.args := (others => (others => '0'));
+
+                        res(j).ops(i).ins.physicalArgSpec.intArgSel := (others => '0');
+                        res(j).ops(i).ins.physicalArgSpec.floatArgSel := (others => '0');
+                        res(j).ops(i).ins.physicalArgSpec.args := (others => (others => '0'));
+                   
+                        res(j).ops(i).ins.virtualArgSpec.dest := (others => '0');  -- separate RAM
+                        res(j).ops(i).ins.physicalArgSpec.dest := (others => '0'); -- separate RAM
+                   
+                        
+                       -- res(j).ops(i).ins.virtualArgSpec.intDestSel := '0';
+                       -- res(j).ops(i).ins.physicalArgSpec.intDestSel := '0';
+                   
+                   --res(slv2u(j)).ops(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
+                   res(j).ops(i).ins.tags.fetchCtr := (others => '0');
+                   res(j).ops(i).ins.tags.decodeCtr := (others => '0');
+                   res(j).ops(i).ins.tags.renameCtr := (others => '0');
+    
+                   res(j).ops(i).ins.tags.commitCtr := (others => '0');
+               end loop;
+           end loop;
+       end if;
 	   
 	   return res;
 	end function;
 	
-	signal startPtr, endPtr, acmPtr, 
-	       causingPtr: SmallNumber := (others => '0');
+	function replaceConstantInformation(insVec: InstructionSlotArray; constInfo, constInfo2: Word) return InstructionSlotArray is
+	   variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+	begin
+	   for i in 0 to PIPE_WIDTH-1 loop
+	       res(i).ins.physicalArgSpec.dest := constInfo(8*i + 7 downto 8*i);
+	       res(i).ins.virtualArgSpec.dest := "000" & constInfo2(5*i + 4 downto 5*i);
+	       
+	       --        res(i).ins.virtualArgSpec.intDestSel := constInfo2(20 + 2*i + 0);
+	       --        res(i).ins.physicalArgSpec.intDestSel := constInfo2(20 + 2*i + 0);
+	   end loop;
+	   
+	   return res;
+	end function;
 	
+
+	signal startPtr, startPtrNext, endPtr, acmPtr, causingPtr: SmallNumber := (others => '0');
+	
+	signal constantBuf, constantBuf2: WordArray(0 to ROB_SIZE-1) := (others => (others => '0'));
+	signal inputConstant, inputConstant2, constantFromBuf, constantFromBuf2: Word := (others => '0');
+	
+    attribute ram_style: string;
+    attribute ram_style of constantBuf, constantBuf2: signal is "block";	
 begin
-	execEvent <= execEndSigs2(0).full and execEndSigs2(0).ins.controlInfo.newEvent;
-	causingPtr <= getTagHighSN(execEndSigs2(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
+	execEvent <= execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
+	causingPtr <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
 	
 	contentNext <= getNextRobContent(content, inputData,
 	                                 execEndSigs1, execEndSigs2,
 	                                 isSending, prevSending,
 	                                 execEvent, lateEventSignal,
 	                                 startPtr, endPtr, causingPtr);
+    
+        inputConstant <= inputData(3).ins.physicalArgSpec.dest & inputData(2).ins.physicalArgSpec.dest & inputData(1).ins.physicalArgSpec.dest & inputData(0).ins.physicalArgSpec.dest;
+        inputConstant2(19 downto 0) <= inputData(3).ins.virtualArgSpec.dest(4 downto 0) & inputData(2).ins.virtualArgSpec.dest(4 downto 0)
+                        & inputData(1).ins.virtualArgSpec.dest(4 downto 0) & inputData(0).ins.virtualArgSpec.dest(4 downto 0);
+    
+--        inputConstant2(27 downto 20) <=  inputData(3).ins.physicalArgSpec.intDestSel & inputData(3).ins.virtualArgSpec.intDestSel
+--                                       & inputData(2).ins.physicalArgSpec.intDestSel & inputData(2).ins.virtualArgSpec.intDestSel
+--                                       & inputData(1).ins.physicalArgSpec.intDestSel & inputData(1).ins.virtualArgSpec.intDestSel
+--                                       & inputData(0).ins.physicalArgSpec.intDestSel & inputData(0).ins.virtualArgSpec.intDestSel;
+                                       
+--        inputConstant2(31 downto 28) <=  inputData(3).ins.physicalArgSpec.floatDestSel
+--                                                                      & inputData(2).ins.physicalArgSpec.floatDestSel
+--                                                                      & inputData(1).ins.physicalArgSpec.floatDestSel
+--                                                                      & inputData(0).ins.physicalArgSpec.floatDestSel;
+                                       
+    
+    CONSTANT_MEM: process (clk)
+    begin
+        if rising_edge(clk) then
+            if prevSending = '1' then
+                constantBuf(slv2u(endPtr)) <= inputConstant;
+                constantBuf2(slv2u(endPtr)) <= inputConstant2;
+            end if;
+            
+            constantFromBuf <= constantBuf(slv2u(startPtrNext));
+            constantFromBuf2 <= constantBuf2(slv2u(startPtrNext));            
+        end if;
+    end process;
+
+
+    startPtrNext <= startPtr when isSending = '0' else addSN(startPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+							
+	isEmpty <= bool2std(startPtr = endPtr); -- CAREFUL: elsewhere it MUST be assured that ROB never gets full because this would become incorrect. 'isFull' must mean 1 free slot
 							
 	SYNCHRONOUS: process (clk)
 	begin
 		if rising_edge(clk) then	
             content <= contentNext;
-            
-            if isSending = '1' then
-                startPtr <= addSN(startPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-            end if;
+
+            startPtr <= startPtrNext;
             
             if lateEventSignal = '1' then
-                endPtr <= startPtr;
+                endPtr <= startPtrNext;
             elsif execEvent = '1' then
                 endPtr <= addSN(causingPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
             elsif prevSending = '1' then
                 endPtr <= addSN(endPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
             end if;
+                   
+            if lateEventSignal = '1' or execEvent = '1' then
+                recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
+            elsif isNonzero(recoveryCounter) = '1' then
+                recoveryCounter <= subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
+            end if;
+            
+            nFull <= nFullNext;
+            
+            -- CAREFUL: here we assure that the buffer is never full (so isFull incidcates 1 free slot). So startPtr = endPtr always indicates emptiness
+            if --nFullNext > ROB_SIZE-1 then
+                cmpGreaterUnsignedSN(nFullNext, i2slv(ROB_SIZE-1-1, SMALL_NUMBER_SIZE)) = '1' then
+                isFull <= '1';
+                isAlmostFull <= '1';
+            elsif --nFullNext > ROB_SIZE-2 then
+                cmpGreaterUnsignedSN(nFullNext, i2slv(ROB_SIZE-2-1, SMALL_NUMBER_SIZE)) = '1' then
+                isFull <= '0';
+                isAlmostFull <= '1';
+            else
+                isFull <= '0';
+                isAlmostFull <= '0';
+            end if;
+            
+            completedMask <= completedMaskNext;
+            outputDataReg <= content(slv2u(startPtrNext)).ops;          
 		end if;		
 	end process;
+ 
+    nIn <= i2slv(1, SMALL_NUMBER_SIZE) when prevSending = '1' else (others => '0');
+    nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');
+       
+    CTR_MANAGEMENT: block
+        signal ptrDiff, flowDiff: SmallNumber := (others => '0');
+    begin
+        nFullRestored <= ptrDiff and PTR_MASK_SN;
+        ptrDiff <= subSN(endPtr, startPtrNext);
+          
+        flowDiff <= subSN(addSN(nFull, nIn), nOut);
+        nFullNext <=     nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
+                    else flowDiff and PTR_MASK_SN;
+    end block;
+	   
+	FULL_MASK: for i in 0 to ROB_SIZE-1 generate
+	   fullMask(i) <= content(i).full;
+       completedMaskNext(i) <= groupCompleted(content(i).ops) and not isEmpty and not lateEventSignal;
+	end generate;
 	
-	isSending <= groupCompleted(content(slv2u(startPtr)).ops) and content(slv2u(startPtr)).full and nextAccepting;
+    isSending <= completedMask(slv2u(startPtr)) and nextAccepting and not isEmpty;
 
-	acceptingOut <= not content(slv2u(endPtr)).full; -- When a free place exists
-    acmPtr <= subSN(endPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-    acceptingMore <= not content(slv2u(acmPtr)).full;
-								
-	outputData <= content(slv2u(startPtr)).ops;
+	acceptingOut <= not isFull;
+	
+    acmPtr <= addSN(endPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+    acceptingMore <= not isAlmostFull;		
+	outputData <= --outputDataReg;
+	               replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2);
 
 	sendingOut <= isSending;
+	
+	VIEW: block
+	   signal robTxt: RobText;
+	begin
+	   robTxt <= getRobView(content);
+	end block;
+
 end Behavioral;

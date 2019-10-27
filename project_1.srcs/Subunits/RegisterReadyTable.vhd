@@ -15,7 +15,8 @@ use work.LogicRenaming.all;
 
 entity RegisterReadyTable is
 	generic(
-		WRITE_WIDTH: integer := 1
+		WRITE_WIDTH: integer := 1;
+		IS_FP: boolean := false
 	);
 	port(
 		clk: in std_logic;
@@ -44,7 +45,7 @@ architecture Behavioral of RegisterReadyTable is
 		signal readyTableClearAllow: std_logic := '0';
 		signal readyTableClearSel: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
-		signal readyRegsSig: std_logic_vector(0 to N_PHYSICAL_REGS-1) := (0 to 31 => '1', others=>'0');
+		--signal readyRegsSig: std_logic_vector(0 to N_PHYSICAL_REGS-1) := (0 to 31 => '1', others=>'0');
 			signal altMask: std_logic_vector(0 to WRITE_WIDTH-1) := (others => '0');
 			signal altDests: PhysNameArray(0 to WRITE_WIDTH-1) := (others => (others => '0'));
 			
@@ -58,17 +59,29 @@ begin
 	end loop;		
 	return res;
 end function;	
+
+function initList(IS_FP: boolean) return std_logic_vector is
+    variable res: std_logic_vector(0 to N_PHYSICAL_REGS-1) := (others => '0');
+begin
+    if IS_FP then
+        res := (0 to 32 => '1', others => '0');        
+    else
+        res := (0 to 31 => '1', others => '0'); 
+    end if;
+    return res;
+end function;
+
 begin
 		readyTableClearAllow <= sendingToReserve; -- for ready table
 		readyTableClearSel <= (others => '1'); -- No need to prevent free yet-unallocated regs from clearing!	
 		
-		altMask(0) <= writingMask(0) and writingData(0).physicalArgSpec.intDestSel;
+		altMask(0) <= writingMask(0) and ((writingData(0).physicalArgSpec.floatDestSel and bool2std(IS_FP)) or ( writingData(0).physicalArgSpec.intDestSel and not bool2std(IS_FP)));
 		altDests(0) <= writingData(0).physicalArgSpec.dest;-- <= getArrayPhysicalDests(writingData);
 		
 		      --newPhysDests <= getPhysicalDests(stageDataReserved);
 		
 		IMPL: block
-			signal content: std_logic_vector(0 to N_PHYSICAL_REGS-1) := (0 to 31 => '1', others => '0');
+			signal content: std_logic_vector(0 to N_PHYSICAL_REGS-1) := initList(IS_FP);--(0 to 31 => '1', others => '0');
 		begin
 				SYNCHRONOUS: process(clk)
 				begin

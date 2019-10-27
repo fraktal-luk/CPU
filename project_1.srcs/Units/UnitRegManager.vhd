@@ -51,7 +51,6 @@ port(
     sendingFromROB: in std_logic;
    
     commitGroupCtr: in InsTag;
-    commitCtr: in InsTag;
   
     execCausing: in InstructionState;
     lateCausing: in InstructionState;
@@ -67,23 +66,33 @@ architecture Behavioral of UnitRegManager is
                 stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, sendingCommitInt, sendingCommitFloat, renameLockState, renameLockEnd, renameLockRelease: std_logic := '0';
  
-    signal renameCtr, renameCtrNext: InsTag := INITIAL_RENAME_CTR;
-    signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
+    signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG; -- This is rewinded on events
+    signal renameCtr, renameCtrNext: Word := (others => '0');
 
     signal newIntDests, newFloatDests, physStableInt, physStableFloat: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal newIntDestPointer, newFloatDestPointer: SmallNumber := (others => '0');
     signal newIntSources, newFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal causingPtrInt, causingPtrFloat: SmallNumber := (others => '0');
-       
-    function renameGroup(insVec: InstructionSlotArray;
-                                newPhysSources: PhysNameArray;
+    
+    signal renamedBase: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    
+    
+    type DependencySpec is array(0 to 2) of std_logic_vector(0 to PIPE_WIDTH-1); 
+    type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;--  std_logic_vector(0 to 2);
+    
+    constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
+
+    signal depVec: DependencyVec := DEFAULT_DEP_VEC;
+    
+    
+    function renameGroupBase(insVec: InstructionSlotArray;
                                 newIntDests: PhysNameArray;
                                 newFloatDests: PhysNameArray;                                
-                                renameCtr: InsTag;
                                 renameGroupCtrNext: InsTag;
                                 newIntDestPointer: SmallNumber;
-                                newFloatDestPointer: SmallNumber;                                
+                                newFloatDestPointer: SmallNumber;
+                                renameCtr: Word;                               
                                 dbtrap: std_logic
                                 ) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
@@ -104,65 +113,16 @@ architecture Behavioral of UnitRegManager is
             takeVecInt(i) := insVec(i).ins.virtualArgSpec.intDestSel;
             takeVecFloat(i) := insVec(i).ins.virtualArgSpec.floatDestSel;
             
-            
-            res(i).ins.physicalArgSpec.args(0) := newPhysSources(3*i+0);
-            res(i).ins.physicalArgSpec.args(1) := newPhysSources(3*i+1);
-            res(i).ins.physicalArgSpec.args(2) := newPhysSources(3*i+2);
-            
             res(i).ins.physicalArgSpec.intArgSel := res(i).ins.virtualArgSpec.intArgSel;
             res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
-                res(i).ins.physicalArgSpec.floatArgSel := res(i).ins.virtualArgSpec.floatArgSel;
-                res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;            
+            res(i).ins.physicalArgSpec.floatArgSel := res(i).ins.virtualArgSpec.floatArgSel;
+            res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;     
         end loop;
-        
-        -- Overwrite sources depending on destinations of this group
-        for i in 0 to PIPE_WIDTH-1 loop
-            for j in PIPE_WIDTH-1 downto 0 loop
-                if j >= i then
-                    next;
-                end if;
-                
-                if res(i).ins.virtualArgSpec.args(0)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0) -- name match
-                    and res(i).ins.virtualArgSpec.intArgSel(0) = res(j).ins.virtualArgSpec.intDestSel -- intSel match
-                then
-                    res(i).ins.physicalArgSpec.args(0) := res(j).ins.physicalArgSpec.dest;
-                    exit;                   
-                end if;
-            end loop;
 
-            for j in PIPE_WIDTH-1 downto 0 loop
-                if j >= i then
-                    next;
-                end if;
-                
-                if res(i).ins.virtualArgSpec.args(1)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
-                    and res(i).ins.virtualArgSpec.intArgSel(1) = res(j).ins.virtualArgSpec.intDestSel
-                then
-                    res(i).ins.physicalArgSpec.args(1) := res(j).ins.physicalArgSpec.dest;
-                    exit;                 
-                end if;
-            end loop;
-            
-            for j in PIPE_WIDTH-1 downto 0 loop
-                if j >= i then
-                    next;
-                end if;
-                
-                if res(i).ins.virtualArgSpec.args(2)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
-                    and res(i).ins.virtualArgSpec.intArgSel(2) = res(j).ins.virtualArgSpec.intDestSel
-                then
-                    res(i).ins.physicalArgSpec.args(2) := res(j).ins.physicalArgSpec.dest;
-                    exit;                  
-                end if;
-            end loop;                        
-
-        end loop;        
-        
-        
         -- Setting tags
         for i in 0 to PIPE_WIDTH-1 loop
             res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
-            res(i).ins.tags.renameSeq := i2slv(slv2u(renameCtr) + i, TAG_SIZE);
+            res(i).ins.tags.renameCtr := i2slv(slv2u(renameCtr) + i, 32);
             res(i).ins.tags.intPointer := i2slv(slv2u(newIntDestPointer) + countOnes(takeVecInt(0 to i)), SMALL_NUMBER_SIZE); 
                                                                          -- Don't increment pointer on ops which use no destination!
             res(i).ins.tags.floatPointer := i2slv(slv2u(newFloatDestPointer) + countOnes(takeVecFloat(0 to i)), SMALL_NUMBER_SIZE); 
@@ -186,7 +146,101 @@ architecture Behavioral of UnitRegManager is
             then
                 found := true;
             end if;
-        end loop;            
+        end loop;
+
+        
+        if CLEAR_DEBUG_INFO then
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i).ins.ip := (others => '0');
+                res(i).ins.bits := (others => '0');
+                res(i).ins.target := (others => '0');                    
+                res(i).ins.result := (others => '0');                    
+                
+                res(i).ins.tags.fetchCtr := (others => '0');
+                res(i).ins.tags.decodeCtr := (others => '0');
+                res(i).ins.tags.renameCtr := (others => '0');
+                res(i).ins.tags.commitCtr := (others => '0');
+                
+                -- TODO: this is unused anyway
+                res(i).ins.controlInfo.newEvent := '0';
+                res(i).ins.controlInfo.hasInterrupt := '0';
+                res(i).ins.controlInfo.refetch := '0';
+                res(i).ins.controlInfo.orderViolation := '0';
+                res(i).ins.controlInfo.tlbMiss := '0';
+                res(i).ins.controlInfo.sqMiss := '0';
+                res(i).ins.controlInfo.firstBr := '0';
+            end loop;           
+        end if;
+
+        return res;
+    end function;
+
+    function findDeps(insVec: InstructionSlotArray) return DependencyVec is
+        variable res: DependencyVec := DEFAULT_DEP_VEC;
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            for k in 0 to 2 loop -- For each of 3 possible source arguments
+                for j in PIPE_WIDTH-1 downto 0 loop
+                    if j >= i then
+                        next;
+                    end if;
+                    
+                    if insVec(i).ins.virtualArgSpec.args(k)(4 downto 0) = insVec(j).ins.virtualArgSpec.dest(4 downto 0) -- name match       
+                    then
+                        res(i)(k)(j) := '1';                   
+                    end if;
+                end loop;
+            end loop;
+        end loop;
+        
+        return res;
+    end function;
+
+
+       
+    function renameGroupInt(insVec: InstructionSlotArray;
+                                newPhysSources: PhysNameArray;
+                                newIntDests: PhysNameArray;
+                                newFloatDests: PhysNameArray;
+                                depVec: DependencyVec;                                
+                                renameGroupCtrNext: InsTag;
+                                newIntDestPointer: SmallNumber;
+                                newFloatDestPointer: SmallNumber
+                                ) return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+        variable reserveSelSig, takeVecInt, takeVecFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
+        variable nToTake: integer := 0;
+        variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
+        variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
+       	variable found: boolean := false;
+    begin
+        
+        -- Assign dest registers
+        for i in 0 to PIPE_WIDTH-1 loop                    
+            res(i).ins.physicalArgSpec.args(0) := newPhysSources(3*i+0);
+            res(i).ins.physicalArgSpec.args(1) := newPhysSources(3*i+1);
+            res(i).ins.physicalArgSpec.args(2) := newPhysSources(3*i+2);      
+        end loop;  
+        
+        -- Overwrite sources depending on destinations of this group
+        for i in 0 to PIPE_WIDTH-1 loop
+           for k in 0 to 2 loop -- For each of 3 possible source arguments
+                for j in PIPE_WIDTH-1 downto 0 loop
+                    if j >= i then
+                        next;
+                    end if;
+                    
+                    if depVec(i)(k)(j) = '1'   
+                        and res(i).ins.virtualArgSpec.intArgSel(k) = res(j).ins.virtualArgSpec.intDestSel -- intSel match
+                    then
+                        res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
+                        exit;             
+                    end if;
+                end loop;
+            end loop;
+
+        end loop;        
+          
         return res;
     end function;
     
@@ -194,10 +248,8 @@ architecture Behavioral of UnitRegManager is
     function renameGroupFloat(insVec: InstructionSlotArray;
                                 newFloatSources: PhysNameArray;
                                 newFloatDests: PhysNameArray;
-                                renameCtr: InsTag;
-                                renameGroupCtrNext: InsTag;
-                                --newPhysDestPointer: SmallNumber;
-                                dbtrap: std_logic
+                                depVec: DependencyVec;
+                                renameGroupCtrNext: InsTag
                                 ) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
         variable reserveSelSig, takeVecInt, takeVecFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
@@ -209,96 +261,30 @@ architecture Behavioral of UnitRegManager is
         
         -- Assign dest registers
         for i in 0 to PIPE_WIDTH-1 loop
-            if res(i).ins.virtualArgSpec.floatDestSel = '1' then
-                res(i).ins.physicalArgSpec.dest := newFloatDests(countOnes(takeVecFloat)); -- how many used before
-            end if;
-            --takeVecInt(i) := insVec(i).ins.virtualArgSpec.intDestSel;
-            takeVecFloat(i) := insVec(i).ins.virtualArgSpec.floatDestSel;
-            
-            
             res(i).ins.physicalArgSpec.args(0) := newFloatSources(3*i+0);
             res(i).ins.physicalArgSpec.args(1) := newFloatSources(3*i+1);
-            res(i).ins.physicalArgSpec.args(2) := newFloatSources(3*i+2);
-            
-            --res(i).ins.physicalArgSpec.intArgSel := res(i).ins.virtualArgSpec.intArgSel;
-            --res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
-                res(i).ins.physicalArgSpec.floatArgSel := res(i).ins.virtualArgSpec.floatArgSel;
-                res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;            
+            res(i).ins.physicalArgSpec.args(2) := newFloatSources(3*i+2);           
         end loop;
         
         -- Overwrite sources depending on destinations of this group
         -- TODO: arg name comparisons are shared with int registers! Reuse the same comparators
         for i in 0 to PIPE_WIDTH-1 loop
-            for j in PIPE_WIDTH-1 downto 0 loop
-                if j >= i then
-                    next;
-                end if;
-                
-                if res(i).ins.virtualArgSpec.args(0)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0) -- name match
-                    and res(i).ins.virtualArgSpec.floatArgSel(0) = res(j).ins.virtualArgSpec.floatDestSel -- intSel match
-                then
-                    res(i).ins.physicalArgSpec.args(0) := res(j).ins.physicalArgSpec.dest;
-                    exit;                   
-                end if;
-            end loop;
+            for k in 0 to 2 loop -- For each of 3 possible source arguments
+                for j in PIPE_WIDTH-1 downto 0 loop
+                    if j >= i then
+                        next;
+                    end if;
+                    
+                    if depVec(i)(k)(j) = '1'
+                        and res(i).ins.virtualArgSpec.floatArgSel(k) = res(j).ins.virtualArgSpec.floatDestSel -- intSel match
+                    then
+                        res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
+                        exit;                   
+                    end if;
+                end loop;
+            end loop;                     
 
-            for j in PIPE_WIDTH-1 downto 0 loop
-                if j >= i then
-                    next;
-                end if;
-                
-                if res(i).ins.virtualArgSpec.args(1)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
-                    and res(i).ins.virtualArgSpec.floatArgSel(1) = res(j).ins.virtualArgSpec.floatDestSel
-                then
-                    res(i).ins.physicalArgSpec.args(1) := res(j).ins.physicalArgSpec.dest;
-                    exit;                 
-                end if;
-            end loop;
-            
-            for j in PIPE_WIDTH-1 downto 0 loop
-                if j >= i then
-                    next;
-                end if;
-                
-                if res(i).ins.virtualArgSpec.args(2)(4 downto 0) = res(j).ins.virtualArgSpec.dest(4 downto 0)
-                    and res(i).ins.virtualArgSpec.floatArgSel(2) = res(j).ins.virtualArgSpec.floatDestSel
-                then
-                    res(i).ins.physicalArgSpec.args(2) := res(j).ins.physicalArgSpec.dest;
-                    exit;                  
-                end if;
-            end loop;                        
-
-        end loop;        
-        
-        
-        -- Setting tags
-        for i in 0 to PIPE_WIDTH-1 loop
-            res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
-            res(i).ins.tags.renameSeq := i2slv(slv2u(renameCtr) + i, TAG_SIZE);
-            --res(i).ins.tags.intPointer := i2slv(slv2u(newPhysDestPointer) + countOnes(takeVecInt(0 to i)), SMALL_NUMBER_SIZE); 
-                                                                         -- Don't increment pointer on ops which use no destination!
-            --res(i).ins.tags.floatPointer := i2slv(slv2u(newFloatDestPointer) + countOnes(takeVecFloat(0 to i)), SMALL_NUMBER_SIZE); 
         end loop;
-
---        -- Setting 'complete' for ops not using Exec resources
---        for i in 0 to PIPE_WIDTH-1 loop        -- TEMP!                           
---            res(i).ins.controlInfo.completed := not res(i).ins.classInfo.mainCluster;
---            res(i).ins.controlInfo.completed2 := not res(i).ins.classInfo.secCluster;
---        end loop;
-                
---        -- If found special instruction or exception, kill next ones
---        for i in 0 to PIPE_WIDTH-1 loop
---            if found then
---                res(i).full := '0';
---            end if;
-    
---            if     res(i).ins.controlInfo.specialAction = '1'
---                or res(i).ins.controlInfo.hasException = '1'
---                or res(i).ins.controlInfo.dbtrap = '1'
---            then
---                found := true;
---            end if;
---        end loop;
 
         -- TODO: move this somewhere else?
         for i in res'range loop
@@ -312,24 +298,33 @@ architecture Behavioral of UnitRegManager is
 begin
     eventSig <= execEventSignal or lateEventSignal;
 
-    stageDataRenameIn <= renameGroup(frontDataLastLiving,
-                                                          newIntSources, 
-                                                          newIntDests, 
-                                                                newFloatDests, -- TEMP! change to float dests
-                                                            renameCtr,
+    depVec <= findDeps(frontDataLastLiving);
+
+    renamedBase <= renameGroupBase(frontDataLastLiving,
+                                                            newIntDests, 
+                                                            newFloatDests,
                                                             renameGroupCtrNext,
                                                             newIntDestPointer,
                                                             newFloatDestPointer,
+                                                            renameCtr,
                                                             '0' --dbtrapOn
                                                             );
 
-    stageDataRenameInFloat <= renameGroupFloat(frontDataLastLiving,
-                                                          newFloatSources, -- TEMP! change to float 
-                                                                newFloatDests, -- TEMP! change to float dests
-                                                            renameCtr,
+    stageDataRenameIn <= renameGroupInt(renamedBase,
+                                                            newIntSources, 
+                                                            newIntDests, 
+                                                            newFloatDests,
+                                                            depVec,
                                                             renameGroupCtrNext,
-                                                            --(others => '0'), -- TEMP!
-                                                            '0' --dbtrapOn
+                                                            newIntDestPointer,
+                                                            newFloatDestPointer
+                                                            );
+
+    stageDataRenameInFloat <= renameGroupFloat(renamedBase,
+                                                            newFloatSources,
+                                                            newFloatDests,
+                                                            depVec,
+                                                            renameGroupCtrNext
                                                             );
                                                                                                                             
         SUBUNIT_RENAME_INT: entity work.GenericStage(Behavioral)--Renaming)
@@ -388,14 +383,10 @@ begin
                                else clearTagLow(execCausing.tags.renameIndex) when execEventSignal = '1'
                                else i2slv(slv2u(renameGroupCtr) + PIPE_WIDTH, TAG_SIZE) when frontLastSending = '1'
                                else renameGroupCtr;
-                                                                                                       
-            renameCtrNext <=  
-                                    commitCtr when lateEventSignal = '1'
-                               else execCausing.tags.renameSeq when execEventSignal = '1'
-                               else i2slv(slv2u(renameCtr) + countOnes(extractFullMask(stageDataRenameIn)),
-                                                                                TAG_SIZE)
-                                                                             when frontLastSending = '1'
-                               else renameCtr;
+        
+            renameCtrNext <= i2slv(slv2u(renameCtr) + countOnes(extractFullMask(stageDataRenameIn)), 32) when frontLastSending = '1'
+                            else renameCtr;
+                
         
             -- Re-allow renaming when everything from rename/exec is committed - reg map will be well defined now
             renameLockRelease <= '1' when commitGroupCtr = renameGroupCtr else '0';
@@ -410,8 +401,8 @@ begin
             COMMON_SYNCHRONOUS: process(clk)     
             begin
                 if rising_edge(clk) then
-                    renameCtr <= renameCtrNext;
                     renameGroupCtr <= renameGroupCtrNext;
+                    renameCtr <= renameCtrNext;
         
                     -- Lock when exec part causes event
                     if execEventSignal = '1' or lateEventSignal = '1' then -- CAREFUL
@@ -566,5 +557,6 @@ begin
 			);
 			        
         newPhysDestsOut <= newIntDests;
+        newFloatDestsOut <= newFloatDests; 
         renameAccepting <= not renameLockState;
 end Behavioral;

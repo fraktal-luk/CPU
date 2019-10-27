@@ -60,6 +60,7 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
     mul, mulh_s, mulh_u,
     div_u, div_s,
     
+    mov_f, or_f,    -- Float operations
     
     ldi_i, ldi_r, -- int
     sti_i, sti_r,
@@ -102,6 +103,7 @@ type ProcOpcode is (
 							ext0, -- E format: opcont is present and defines exact operation  
 							ext1,
 							ext2,
+							fop, -- Float operations
 							
 							undef
 							);
@@ -155,6 +157,9 @@ type ProcOpcont is ( -- ALU functions
 							mfc,
 							mtc,
 							
+							fmov,
+							forr,
+							
 							undef
 							
 							);
@@ -174,10 +179,10 @@ type ExceptionType is (none, unknown,
 --							int0, int1, int2
 --							);
 
-
-constant EXC_BASE: Mword := X"00000100"; -- TODO: enable 64b
-constant CALL_BASE: Mword := X"00000180"; -- TODO: enable 64b
-constant INT_BASE: Mword := X"00000200"; -- TODO: enable 64b
+-- TODO: enable 64b
+constant EXC_BASE: Mword := X"00000100";
+constant CALL_BASE: Mword := X"00000180";
+constant INT_BASE: Mword := X"00000200";
 
 
 function hasOpcont(op: ProcOpcode) return boolean; 
@@ -216,7 +221,7 @@ package body ArchDefs is
 function hasOpcont(op: ProcOpcode) return boolean is
 begin
 	case op is 
-		when ext0 | ext1 | ext2 =>
+		when ext0 | ext1 | ext2 | fop =>
 			return true;
 		when others => 
 			return false;
@@ -233,7 +238,8 @@ begin
 			return store;
 		when ext2 =>
 			return retE;
-					--	mfc;
+		when fop =>
+			return fmov;
 		when others =>
 			return none; -- none corresponds ofc to those that have no opcont
 	end case;

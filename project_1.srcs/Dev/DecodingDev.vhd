@@ -75,6 +75,7 @@ constant FMT_INT2   : InstructionFormat := ('0', '0', '0', '1', "110",  '0', "00
 constant FMT_INT3   : InstructionFormat := ('0', '0', '0', '1', "111",  '0', "000",  '0');
 constant FMT_IMM    : InstructionFormat := ('0', '1', '0', '1', "110",  '0', "000",  '1');
 constant FMT_SHIFT  : InstructionFormat := ('0', '1', '0', '1', "110",  '0', "000",  '0');
+constant FMT_FP1    : InstructionFormat := ('0', '0', '0', '0', "000",  '1', "100",  '0');
 constant FMT_FP2    : InstructionFormat := ('0', '0', '0', '0', "000",  '1', "110",  '0');
 constant FMT_FP3    : InstructionFormat := ('0', '0', '0', '0', "000",  '1', "111",  '0');
 constant FMT_FLOAD  : InstructionFormat := ('0', '1', '0', '0', "110",  '1', "000",  '1');
@@ -100,10 +101,10 @@ end record;
 type InsDefArray is array (natural range <>) of InsDef;
 
 		constant DECODE_TABLE: InsDefArray(0 to 40) := (
-				0 => (andI, none, Alu, logicAnd, FMT_IMM),
-				1 => (orI,  none, Alu, logicOr,  FMT_IMM),
-				2 => (addI, none, Alu, arithAdd, FMT_IMM),
-				3 => (subI, none, Alu, arithSub, FMT_IMM),
+				0 => (andI, none, ALU, logicAnd, FMT_IMM),
+				1 => (orI,  none, ALU, logicOr,  FMT_IMM),
+				2 => (addI, none, ALU, arithAdd, FMT_IMM),
+				3 => (subI, none, ALU, arithSub, FMT_IMM),
 				
 				4 => (ld, none,	Memory,load,	FMT_IMM),
 				5 => (st, none,Memory,store,	FMT_ISTORE),
@@ -113,20 +114,20 @@ type InsDefArray is array (natural range <>) of InsDef;
 				8 => (jz, 	none, Jump, jumpZ, FMT_JC),
 				9 => (jnz, 	none, Jump, jumpNZ, FMT_JC),
 				
-				10=> (ext0, muls, Mac, mulS, FMT_INT2),
-				11=> (ext0, mulu, Mac, mulU, FMT_INT2),
+				10=> (ext0, muls, MAC, mulS, FMT_INT2),
+				11=> (ext0, mulu, MAC, mulU, FMT_INT2),
 
-				12 => (ext0, shlC,  Alu,  logicShl,	FMT_SHIFT),
+				12 => (ext0, shlC,  ALU,  logicShl,	FMT_SHIFT),
 				--13 => (ext0, shrlC, Alu,  logicShrl,fmtShiftImm),
-				14 => (ext0, shaC, Alu,  arithSha, FMT_SHIFT),
+				14 => (ext0, shaC, ALU,  arithSha, FMT_SHIFT),
 
 				15=> (ext2, mfc,	System, sysMFC, FMT_SLOAD),
 				16=> (ext2, mtc, 	System, sysMTC, FMT_SSTORE),		
 							
-				17=> (ext0, addR, Alu, arithAdd, FMT_INT2),
-				18=> (ext0, subR, Alu, arithSub, FMT_INT2),
-				19=> (ext0, andR, Alu, logicAnd, FMT_INT2),
-				20=> (ext0, orR,  Alu, logicOr,  FMT_INT2),
+				17=> (ext0, addR, ALU, arithAdd, FMT_INT2),
+				18=> (ext0, subR, ALU, arithSub, FMT_INT2),
+				19=> (ext0, andR, ALU, logicAnd, FMT_INT2),
+				20=> (ext0, orR,  ALU, logicOr,  FMT_INT2),
 					
 				21=> (ext1, jzR,  Jump, jumpZ, FMT_JR),
 				22=> (ext1, jnzR, Jump, jumpNZ, FMT_JR),
@@ -143,14 +144,14 @@ type InsDefArray is array (natural range <>) of InsDef;
 				31 => (ext2, call,  System, sysCall, FMT_DEFAULT),
 				32 => (ext2, send,  System, sysSend, FMT_DEFAULT),
 				
+				33 => (fop,  fmov,  FPU, fpuMov, FMT_FP1),
+				34 => (fop,  forr,  FPU, fpuOr, FMT_FP2),
+				
 				others => (ext2, undef, System, sysUndef, FMT_DEFAULT)
 				);
 
 
 function decodeFromWord(w: word) return InstructionState;
-
-function insText(ins: InstructionState) return string;
-
 
 end package;
 
@@ -280,74 +281,5 @@ begin
     return res;
 end function;
 
-
-
-
-function reg2txt(reg: std_logic_vector) return string is
-    variable res: string(1 to 2);
-    constant letters: string(1 to 16) := "0123456789abcdef";
-begin
-    if reg(4) = '1' then
-        res(1) := '1';
-    else
-        res(1) := '0';
-    end if;
-    
-    res(2) := letters(slv2u(reg(3 downto 0)) + 1);
-    
-    return res;
-end function;
-
-function w2hex(w: Word) return string is
-    constant letters: string(1 to 16) := "0123456789abcdef";
-    variable res: string(1 to 8) := (others => '0');
-begin
-    for i in 7 downto 0 loop
-        res(8-i) := letters(slv2u(w(4*i+3 downto 4*i)) + 1);
-    end loop;
-    return res;
-end function;
-
-function strExt(str: string; n: positive) return string is 
-    variable res: string(1 to n) := (others => ' ');
-begin
-    for i in 1 to str'length loop
-        if i > n then
-            exit;
-        end if;
-        res(i) := str(i);
-    end loop;
-    return res;
-end function;
-
-function insText(ins: InstructionState) return string is
-    variable dest, src0, src1, src2: string(1 to 3) := (others => '*');
-begin
-    
-
-     dest(2 to 3) := reg2txt(ins.virtualArgSpec.dest);
-     src0(2 to 3) := reg2txt((ins.virtualArgSpec.args(0)));
-     src1(2 to 3) := reg2txt((ins.virtualArgSpec.args(1)));
-     src2(2 to 3) := reg2txt((ins.virtualArgSpec.args(2)));
-    
-    if ins.virtualArgSpec.intDestSel = '1' then
-        dest(1) := 'r';
-    end if;
-    if ins.virtualArgSpec.intArgSel(0) = '1' then
-        src0(1) := 'r';
-    end if;
-    if ins.virtualArgSpec.intArgSel(1) = '1' then
-        src1(1) := 'r';
-    end if;
-    
-    -- Length 35
-    return strExt(ExecFunc'image(ins.operation.func), 9) & "  " &
-     dest & ", " &
-     src0 & ", " &
-     src1 & ", #" &
-     w2hex(ins.constantArgs.imm);    
-    
-    --return "";
-end function;
 
 end package body;

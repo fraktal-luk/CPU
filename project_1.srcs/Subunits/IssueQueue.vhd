@@ -47,10 +47,12 @@ entity IssueQueue is
 		lateEventSignal: in std_logic;
 		execEventSignal: in std_logic;
 		execCausing: in InstructionState;
-		fni: ForwardingInfo;
-		waitingFM: ForwardingMap;
-		selectionFM: ForwardingMap; 
+		fni: in ForwardingInfo;
+		waitingFM: in ForwardingMap;
+		selectionFM: in ForwardingMap; 
 		readyRegFlags: in std_logic_vector(0 to 3*PIPE_WIDTH-1);
+		
+		sentCancelled: out std_logic;
 		
 		acceptingMore: out std_logic;
 		acceptingOut: out std_logic;
@@ -64,13 +66,13 @@ end IssueQueue;
 
 architecture Behavioral of IssueQueue is
 	signal queueData: InstructionStateArray(0 to IQ_SIZE-1)  := (others => DEFAULT_INSTRUCTION_STATE);
-	signal fullMask, fullMaskNext, killMask, livingMask, readyMask, readyMaskLive, stayMask: std_logic_vector(0 to IQ_SIZE-1) := (others=>'0');	
+	signal fullMask, fullMaskNext, killMask, livingMask, readyMask, readyMaskLive, stayMask, selMask, issuedMask, remainMask: std_logic_vector(0 to IQ_SIZE-1) := (others=>'0');	
 
-	signal queueContent, queueContentNext: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	signal queueContent, queueContentNext, queueContent_N, queueContentNext_N: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 	signal queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 	signal newContent, newSchedData: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 				
-	signal anyReadyFull, anyReadyLive, sends, sendPossible: std_logic := '0';
+	signal anyReadyFull, anyReadyLive, sends, sends_N, sendPossible, sendingKilled, sent, sentKilled, sentUnexpected: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
 	-- Select item at first '1', or the last one if all zeros
@@ -129,7 +131,7 @@ architecture Behavioral of IssueQueue is
     
         res.ins.controlInfo.newEvent := '0';
         res.ins.controlInfo.hasInterrupt := '0';
-        res.ins.controlInfo.exceptionCode := (others => '0');		
+        --res.ins.controlInfo.exceptionCode := (others => '0');		
 		return res;
 	end function;
 	
@@ -146,13 +148,22 @@ architecture Behavioral of IssueQueue is
 		return res;
 	end function;
 
-			signal ch0, ch1, ch2: std_logic := '0';
+	function TMP_getIssuedMask(elems: SchedulerEntrySlotArray) return std_logic_vector is
+        variable res: std_logic_vector(0 to elems'length-1) := (others => '0');
+	begin
+		for i in 0 to elems'length-1 loop
+		    res(i) := elems(i).state.argValues.issued;
+		end loop;
+		return res;
+    end function;
+	--		signal ch0, ch1, ch2: std_logic := '0';
 begin
 
 	QUEUE_SYNCHRONOUS: process(clk) 	
 	begin
 		if rising_edge(clk) then		
 			queueContent <= queueContentNext;
+			sentKilled <= sendingKilled;
 		end if;
 	end process;	
 
@@ -161,32 +172,37 @@ begin
 	fullMask <= extractFullMask(queueContent);
     queueData <= extractData(queueContent);
 
-	sends <= anyReadyLive and nextAccepting;
+	sends <= anyReadyLive and nextAccepting; -- CHECK: can we use full instead of living?
 	sendPossible <= anyReadyFull and nextAccepting; -- Includes ops that would send but are killed
 	
 	dispatchDataNew <= TMP_clearDestIfEmpty(prioSelect(queueContentUpdatedSel, readyMask), sends);
 	stayMask <= TMP_setUntil(readyMask, nextAccepting);
 
     newContent <= newArr;
-
-	queueContentNext <= iqContentNext(queueContentUpdated, newContent,
-									  stayMask, fullMask, livingMask,
-									  sendPossible, sends,
-									  prevSendingOK);
+            
+            selMask <= getFirstOne(readyMask);
+            remainMask <= TMP_setUntil(issuedMask, '1'); 
+            issuedMask <= TMP_getIssuedMask(queueContent);
+                sent <= isNonzero(issuedMask);
+                sendingKilled <= isNonzero(killMask and selMask);
+            
+            queueContentNext <= iqContentNext(queueContentUpdated, newContent,
+                                              remainMask, fullMask, livingMask, selMask, issuedMask,                                             
+                                              sends, sent,
+                                              sentUnexpected,
+                                              prevSendingOK);
 					
 	-- TODO: below could be optimized because some code is shared (comparators!)
-	queueContentUpdated <= --updateForWaitingArrayFNI(queueContent, readyRegFlags, fni);
-	                       updateSchedulerArray(queueContent, readyRegFlags, fni, waitingFM, true);
-	queueContentUpdatedSel <= --updateForSelectionArrayFNI(queueContent, readyRegFlags, fni);
-	                       updateSchedulerArray(queueContent, readyRegFlags, fni, selectionFM, false);
+	queueContentUpdated <= updateSchedulerArray(queueContent, readyRegFlags, fni, waitingFM, true);
+	queueContentUpdatedSel <= updateSchedulerArray(queueContent, readyRegFlags, fni, selectionFM, false);
 
 	readyMask <= extractReadyMaskNew(queueContentUpdatedSel) and fullMask;	
 	readyMaskLive <= readyMask and livingMask;
 
 	
 	killMask <= getKillMask(queueData, fullMask, execCausing, execEventSignal, lateEventSignal); 
-	acceptingOut <= not isNonzero(fullMask(IQ_SIZE-PIPE_WIDTH to IQ_SIZE-1)); 
-	acceptingMore <= not isNonzero(fullMask(IQ_SIZE-2*PIPE_WIDTH to IQ_SIZE-PIPE_WIDTH-1));
+	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH); -- Equivalent and much better because in collapsing queue mask is continuous!
+	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);
 	
 	anyReadyLive <= isNonzero(readyMaskLive);
 	anyReadyFull <= isNonzero(readyMask);
@@ -195,4 +211,13 @@ begin
 	
 	schedulerOut <= (sends, dispatchDataNew.ins, dispatchDataNew.state);
 	sending <= sends;
+	   sentCancelled <= sentKilled;-- or sentUnexpected;
+	   
+	   VIEW: block   
+           signal queueTextIns: InstructionTextArray(0 to IQ_SIZE-1);
+           signal queueTextState: SchedEntryTextArray(0 to IQ_SIZE-1);           
+       begin
+           queueTextIns <= schedEntrySlotArrayTextIns(queueContent, '0');
+           queueTextState <= schedEntrySlotArrayTextState(queueContent);
+	   end block;
 end Behavioral;

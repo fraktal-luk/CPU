@@ -72,14 +72,14 @@ entity UnitSequencer is
     
     dataFromBQV: in InstructionSlotArray(0 to PIPE_WIDTH-1);
     
-    dataFromSB: in InstructionState;
+    dataFromSB: in InstructionSlot;
     sbEmpty: in std_logic;
     sbSending: in std_logic;       
     
     -- Counter outputs
     commitGroupCtrOut: out InsTag;
     commitGroupCtrIncOut: out InsTag;
-    commitCtrOut: out InsTag;
+    --commitCtrOut: out InsTag;
 
     intAllowOut: out std_logic;
     
@@ -101,7 +101,6 @@ architecture Behavioral of UnitSequencer is
     signal stageDataLateCausingOut: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);    
     signal excInfoUpdate, intInfoUpdate, sendingToLateCausing, committingEvent, sendingToCommit, sendingOutCommit, acceptingOutCommit: std_logic := '0';
     signal stageDataToCommit, stageDataOutCommit: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);                              
-    signal commitCtr, commitCtrNext: InsTag := (others => '1');
     signal commitGroupCtr, commitGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
     signal commitGroupCtrInc, commitGroupCtrIncNext: InsTag := INITIAL_GROUP_TAG_INC;--(others => '0');
     signal effectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
@@ -118,24 +117,26 @@ architecture Behavioral of UnitSequencer is
     signal sysStoreAddress: slv5 := (others => '0'); 
     signal sysStoreValue: Mword := (others => '0'); 
         
-        constant HAS_RESET_SEQ: std_logic := '0';
-        constant HAS_EN_SEQ: std_logic := '0';
+    signal commitCtr, commitCtrNext: Word := (others => '0');
+        
+    constant HAS_RESET_SEQ: std_logic := '0';
+    constant HAS_EN_SEQ: std_logic := '0';
 
-        signal sysRegArray: MwordArray(0 to 31) := (0 => (others => '1'), others => (others => '0'));    
-    
-        alias currentState is sysRegArray(1);
-        alias linkRegExc is sysRegArray(2);
-        alias linkRegInt is sysRegArray(3);
-        alias savedStateExc is sysRegArray(4);
-        alias savedStateInt is sysRegArray(5);
+    signal sysRegArray: MwordArray(0 to 31) := (0 => (others => '1'), others => (others => '0'));    
+
+    alias currentState is sysRegArray(1);
+    alias linkRegExc is sysRegArray(2);
+    alias linkRegInt is sysRegArray(3);
+    alias savedStateExc is sysRegArray(4);
+    alias savedStateInt is sysRegArray(5);
 begin     
         resetSig <= reset and HAS_RESET_SEQ;
         enSig <= en or not HAS_EN_SEQ;
    
    
-   sysStoreAllow <= sbSending and bool2std(dataFromSB.operation = (System, sysMtc));
-   sysStoreAddress <= dataFromSB.target(4 downto 0);
-   sysStoreValue <= dataFromSB.result;
+   sysStoreAllow <= sbSending and dataFromSB.full and bool2std(dataFromSB.ins.operation = (System, sysMtc));
+   sysStoreAddress <= dataFromSB.ins.target(4 downto 0);
+   sysStoreValue <= dataFromSB.ins.result;
    
             eventOccurred <= lateEventSending or execEventSignal or frontEventSignal;
             killPC <= '0';
@@ -150,35 +151,36 @@ begin
                                             frontEventSignal, frontCausing,
                                             pcNext);
                 
-       sendingToPC <= running or eventOccurred;      
-            process(clk)
-            begin
-                if rising_edge(clk) then
-                    if (reset or restartPC) = '1' then
-                        running <= '1';
-                    elsif killPC = '1' then
-                        running <= '0';
-                    end if;
+        sendingToPC <= running or eventOccurred;
+     
+        process(clk)
+        begin
+            if rising_edge(clk) then
+                if (reset or restartPC) = '1' then
+                    running <= '1';
+                elsif killPC = '1' then
+                    running <= '0';
                 end if;
-            end process;
-        
-        
-            SUBUNIT_PC: entity work.GenericStage(Behavioral) port map(
-                clk => clk, reset => resetSig, en => enSig,
-                        
-                prevSending => sendingToPC,
-        
-                nextAccepting => running, -- In multithreaded implementation it should be '1' for selected thread 
-                stageDataIn => stageDataToPC,
-                
-                acceptingOut => acceptingOutPC,
-                sendingOut => sendingOutPC,
-                stageDataOut => tmpPcOutA,
-                
-                execEventSignal => eventOccurred,
-                lateEventSignal => lateEventSending,
-                execCausing => DEFAULT_INSTRUCTION_STATE
-            );            
+            end if;
+        end process;
+    
+    
+        SUBUNIT_PC: entity work.GenericStage(Behavioral) port map(
+            clk => clk, reset => resetSig, en => enSig,
+                    
+            prevSending => sendingToPC,
+    
+            nextAccepting => running, -- In multithreaded implementation it should be '1' for selected thread 
+            stageDataIn => stageDataToPC,
+            
+            acceptingOut => acceptingOutPC,
+            sendingOut => sendingOutPC,
+            stageDataOut => tmpPcOutA,
+            
+            execEventSignal => eventOccurred,
+            lateEventSignal => lateEventSending,
+            execCausing => DEFAULT_INSTRUCTION_STATE
+        );            
         
         stageDataOutPC.ip <= tmpPcOutA(0).ins.ip;
         stageDataOutPC.target <= pcNext; -- CAREFUL: Attaching next address from line predictor. Correct?
@@ -241,20 +243,21 @@ begin
         pcDataLiving <= stageDataOutPC;
         pcSending <= sendingOutPC;
 
-            commitGroupCtrNext <= commitGroupCtrInc when sendingToCommit = '1' else commitGroupCtr;
-            commitCtrNext <= i2slv(slv2u(commitCtr) + countOnes(effectiveMask), TAG_SIZE) when sendingToCommit = '1' else commitCtr;
-            commitGroupCtrIncNext <= i2slv(slv2u(commitGroupCtrInc) + PIPE_WIDTH, TAG_SIZE) when sendingToCommit = '1' else commitGroupCtrInc;
+        commitGroupCtrNext <= commitGroupCtrInc when sendingToCommit = '1' else commitGroupCtr;
+        commitGroupCtrIncNext <= i2slv(slv2u(commitGroupCtrInc) + PIPE_WIDTH, TAG_SIZE) when sendingToCommit = '1' else commitGroupCtrInc;
 
-            effectiveMask <= getEffectiveMask(stageDataToCommit);
-                
-            COMMON_SYNCHRONOUS: process(clk)     
-            begin
-                if rising_edge(clk) then
-                    commitCtr <= commitCtrNext;                    
-                    commitGroupCtr <= commitGroupCtrNext;
-                    commitGroupCtrInc <= commitGroupCtrIncNext;                  
-                end if;    
-            end process;        
+        commitCtrNext <= i2slv(slv2u(commitCtr) + countOnes(effectiveMask), 32) when sendingToCommit = '1' else commitCtr;
+
+        effectiveMask <= getEffectiveMask(stageDataToCommit);
+            
+        COMMON_SYNCHRONOUS: process(clk)     
+        begin
+            if rising_edge(clk) then
+                commitGroupCtr <= commitGroupCtrNext;
+                commitGroupCtrInc <= commitGroupCtrIncNext;
+                commitCtr <= commitCtrNext;                
+            end if;    
+        end process;        
         
         sendingToCommit <= sendingFromROB;
         
@@ -290,8 +293,8 @@ begin
             --            When committing normal op -> increment by length of the op
             --            
             --            The 'target' field will be used to update return address for exc/int
-  stageDataToCommit <= recreateGroup(robDataLiving, dataFromBQV, stageDataLastEffectiveOutA(0).ins.target);
-  stageDataLastEffectiveInA(0) <= getNewEffective(sendingToCommit, robDataLiving, dataFromBQV,
+    stageDataToCommit <= recreateGroup(robDataLiving, dataFromBQV, stageDataLastEffectiveOutA(0).ins.target, commitCtr);
+    stageDataLastEffectiveInA(0) <= getNewEffective(sendingToCommit, robDataLiving, dataFromBQV,
                                                                 stageDataLastEffectiveOutA(0).ins, 
                                                                 stageDataLateCausingOut(0).ins,
                                                                 lateEventSending);
@@ -368,28 +371,35 @@ begin
         execCausing => DEFAULT_INSTRUCTION_STATE
     );
    
+    COMMITTED_VIEW: block
+       signal committedText: InstructionTextArray(0 to PIPE_WIDTH-1);
+       signal lastEffectiveText, lateCausingText: InstructionTextArray(0 to 0);
+    begin
+       committedText <= insSlotArrayText(stageDataCommitOutA, '0');
+       lastEffectiveText <= insSlotArrayText(stageDataLastEffectiveOutA, '0');
+       lateCausingText <= insSlotArrayText(stageDataLateCausingOut, '0');
+    end block;
+   
     EVENT_LINK_INFO: process(clk)
     begin
         if rising_edge(clk) then
             if sendingToLateCausing = '1' then
-                savedPC <= stageDataLastEffectiveOutA(0).ins.target; -- TODO: PC rathe than target if not restartable
+                savedPC <= stageDataLastEffectiveOutA(0).ins.target; -- TODO: PC rather than target if not restartable?
                 savedState <= currentState;                
             end if;            
         end if;
     end process;
         
-        intAllowOut <= not eventCommitted and not lateEventSending;
-        intAckOut <= sendingToLateCausing and intCommitted;
-        intRejOut <= sendingToLateCausing and intSuppressed;
-        
-        commitGroupCtrOut <= commitGroupCtr;
-        commitGroupCtrIncOut <= commitGroupCtrInc;
-        
-        commitCtrOut <= commitCtr;
-        
-        commitAccepting <= not eventCommitted and not lateEventSending; -- Blocked while procesing event
- 
-        doneSig <= eventCommitted and bool2std(stageDataLastEffectiveOutA(0).ins.operation.func = sysSend);
-        failSig <= eventCommitted and bool2std(stageDataLastEffectiveOutA(0).ins.operation.func = sysError);
+    intAllowOut <= not eventCommitted and not lateEventSending;
+    intAckOut <= sendingToLateCausing and intCommitted;
+    intRejOut <= sendingToLateCausing and intSuppressed;
+    
+    commitGroupCtrOut <= commitGroupCtr;
+    commitGroupCtrIncOut <= commitGroupCtrInc;
+    
+    commitAccepting <= not eventCommitted and not lateEventSending; -- Blocked while procesing event
+
+    doneSig <= eventCommitted and bool2std(stageDataLastEffectiveOutA(0).ins.operation.func = sysSend);
+    failSig <= eventCommitted and bool2std(stageDataLastEffectiveOutA(0).ins.operation.func = sysError);
                 
 end Behavioral;
