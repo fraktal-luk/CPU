@@ -72,6 +72,7 @@ begin
         end if;
     end process;
     
+    sending <= isSending;
     dataOut <= queueData0;
     
     accepting <= not fullMask(0); -- Don't allow more if anything needed to be buffered!

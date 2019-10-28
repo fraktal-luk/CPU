@@ -77,7 +77,11 @@ architecture Behavioral of Core is
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
                 frontEventSignal, bqAccepting, bqSending, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ: std_logic := '0';
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal frontDataLastLiving, renamedDataLiving, renamedDataLivingFloat, renamedDataMerged, dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData: 
+    signal frontDataLastLiving, 
+            renamedDataLiving, renamedDataLivingFloat, renamedDataMerged,
+            renamedDataLivingRe, renamedDataLivingFloatRe, renamedDataMergedRe,
+            dispatchBufferDataInt, dispatchBufferDataFloat, dispatchBufferDataMerged,
+            dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
@@ -97,8 +101,8 @@ architecture Behavioral of Core is
 
                                                             -- sendingBranchIns - EXEC
     signal execEventSignal, lateEventSignal, lateEventSetPC, sendingBranchIns: std_logic := '0';
-    signal robSending, robAccepting, renamedSending, commitAccepting, oooAccepting, sendingToDispatchBuffer, sendingFromDispatchBuffer,
-                iqAccepting, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
+    signal robSending, robAccepting, renamedSending, renamedSendingRe, commitAccepting, oooAccepting, sendingToDispatchBuffer, sendingFromDispatchBuffer,
+                iqAccepting, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0, dispatchAccepting,
                 robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0: std_logic := '0';
     signal commitGroupCtr, commitGroupCtrInc: InsTag := (others => '0');
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -198,7 +202,8 @@ begin
         bpSending => bpSending,
         bpData => bpData,
     
-        renameAccepting => iqAccepting,            
+        renameAccepting => iqAccepting,
+                           -- dispatchAccepting,           
         dataLastLiving => frontDataLastLiving,
         lastSending => frontLastSending,
         
@@ -220,9 +225,9 @@ begin
         frontLastSending => frontLastSending,
         frontDataLastLiving => frontDataLastLiving,
         
-        renamedDataLiving => renamedDataLiving,
-        renamedDataLivingFloat => renamedDataLivingFloat,        
-        renamedSending => renamedSending,
+        renamedDataLiving => renamedDataLivingRe,
+        renamedDataLivingFloat => renamedDataLivingFloatRe,        
+        renamedSending => renamedSendingRe,
 
         robDataLiving => dataOutROB,
         sendingFromROB => robSending,
@@ -250,32 +255,54 @@ begin
     
     
     oooAccepting <= robAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0 and acceptingSQ and acceptingLQ;
-    sendingToDispatchBuffer <= renamedSending and not oooAccepting;
+    sendingToDispatchBuffer <= renamedSendingRe and not oooAccepting;
     
+    GEN_X: if false generate
+        renamedSending <= renamedSendingRe;
+        renamedDataLiving <= renamedDataLivingRe;
+        renamedDataLivingFloat <= renamedDataLivingFloatRe;
+    end generate;
+    
+    GEN_Y: if true generate
+         renamedSending <= (renamedSendingRe and oooAccepting) or sendingFromDispatchBuffer;
+         renamedDataLiving <= renamedDataLivingRe when oooAccepting = '1' else dispatchBufferDataInt; 
+         renamedDataLivingFloat <= renamedDataLivingFloatRe when oooAccepting = '1' else dispatchBufferDataFloat; 
+    end generate;
+
     renamedDataMerged <= mergeDests(renamedDataLiving, renamedDataLivingFloat);
     
     
         DISPATCH_BUFFER: entity work.DispatchBuffer port map(
-            clk => clk,         
-            dataIn => renamedDataLiving,
-            
-            nextAccepting => oooAccepting,
-            
-            accepting => open,
-            
+            clk => clk,
+
+            nextAccepting => oooAccepting,          
+            accepting => dispatchAccepting,
             prevSending => sendingToDispatchBuffer,
-            
+            dataIn => renamedDataLiving,            
             sending => sendingFromDispatchBuffer,
-            dataOut => open,
+            dataOut => dispatchBufferDataInt,
             
             execEventSignal => execEventSignal,
-            lateEventSignal => lateEventSignal,
-             
-            
+            lateEventSignal => lateEventSignal,        
             empty => open            
         );
     
+        DISPATCH_BUFFER_FP: entity work.DispatchBuffer port map(
+            clk => clk,
+
+            nextAccepting => oooAccepting,          
+            accepting => open,
+            prevSending => sendingToDispatchBuffer,
+            dataIn => renamedDataLivingFloat,            
+            sending => open,--sendingFromDispatchBuffer,
+            dataOut => dispatchBufferDataFloat,
+            
+            execEventSignal => execEventSignal,
+            lateEventSignal => lateEventSignal,        
+            empty => open            
+        );
     
+        
     
     RENAMED_VIEW: block
         signal renamedIntText, renamedFloatText, renamedMergedText: InstructionTextArray(0 to PIPE_WIDTH-1);
