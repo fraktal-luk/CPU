@@ -97,7 +97,7 @@ architecture Behavioral of Core is
 
                                                             -- sendingBranchIns - EXEC
     signal execEventSignal, lateEventSignal, lateEventSetPC, sendingBranchIns: std_logic := '0';
-    signal robSending, robAccepting, renamedSending, commitAccepting, 
+    signal robSending, robAccepting, renamedSending, commitAccepting, oooAccepting, sendingToDispatchBuffer, sendingFromDispatchBuffer,
                 iqAccepting, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
                 robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0: std_logic := '0';
     signal commitGroupCtr, commitGroupCtrInc: InsTag := (others => '0');
@@ -249,7 +249,33 @@ begin
     or (robAcceptingMore and iqAcceptingMoreI0 and iqAcceptingMoreM0 and iqAcceptingMoreS0 and iqAcceptingMoreF0 and iqAcceptingMoreSF0 and not almostFullSQ and not almostFullLQ and renameAccepting);
     
     
+    oooAccepting <= robAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0 and acceptingSQ and acceptingLQ;
+    sendingToDispatchBuffer <= renamedSending and not oooAccepting;
+    
     renamedDataMerged <= mergeDests(renamedDataLiving, renamedDataLivingFloat);
+    
+    
+        DISPATCH_BUFFER: entity work.DispatchBuffer port map(
+            clk => clk,         
+            dataIn => renamedDataLiving,
+            
+            nextAccepting => oooAccepting,
+            
+            accepting => open,
+            
+            prevSending => sendingToDispatchBuffer,
+            
+            sending => sendingFromDispatchBuffer,
+            dataOut => open,
+            
+            execEventSignal => execEventSignal,
+            lateEventSignal => lateEventSignal,
+             
+            
+            empty => open            
+        );
+    
+    
     
     RENAMED_VIEW: block
         signal renamedIntText, renamedFloatText, renamedMergedText: InstructionTextArray(0 to PIPE_WIDTH-1);

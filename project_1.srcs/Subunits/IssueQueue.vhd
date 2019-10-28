@@ -70,7 +70,7 @@ architecture Behavioral of IssueQueue is
 
 	signal queueContent, queueContentNext, queueContent_N, queueContentNext_N: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 	signal queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-	signal newContent, newSchedData: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	signal newContent, newContentRR, newSchedData: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 				
 	signal anyReadyFull, anyReadyLive, sends, sends_N, sendPossible, sendingKilled, sent, sentKilled, sentUnexpected: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
@@ -157,13 +157,61 @@ architecture Behavioral of IssueQueue is
 		return res;
     end function;
 	--		signal ch0, ch1, ch2: std_logic := '0';
+	
+	
+	   signal inputStage, inputStageUpdated, inputStageNext: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	   signal inputStageAny, inputReadingAny: std_logic := '0';
+	   signal inputStageMoving, acceptingForInputStage: std_logic := '0'; -- This is when the content shifts to the main part of queue
+	   
+	function iqInputStageNext(content, newContent: SchedulerEntrySlotArray; prevSending: std_logic) return SchedulerEntrySlotArray is
+	   variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := content;
+	begin
+	   if prevSending = '1' then
+	       res := newContent;
+	   end if;
+	   
+	   return res;
+	end function;
+	
+	function updateRR(newContent: SchedulerEntrySlotArray; rr: std_logic_vector) return SchedulerEntrySlotArray is
+	   variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := newContent;
+       variable rrf, readyBefore: std_logic_vector(0 to 2) := (others=>'0');
+	   constant Z3: std_logic_vector(0 to 2) := (others => '0');
+       constant ZZ3: SmallNumberArray(0 to 2) := (others=>(others=>'0'));       	   
+	begin
+	
+	   for i in 0 to PIPE_WIDTH-1 loop
+	       readyBefore := not res(i).state.argValues.missing;
+	       rrf := rr(3*i to 3*i + 2);
+	       res(i).state.argValues := updateArgLocs(res(i).state.argValues,
+                                                   readyBefore, rrf,
+                                                   Z3, Z3, Z3, Z3,
+                                                   ZZ3, ZZ3, ZZ3, ZZ3,
+                                                   true);
+                                                   
+            res(i).state.argValues.missing := res(i).state.argValues.missing and not rrf;	       
+	   end loop;
+	   
+	   return res;
+	end function;
 begin
 
+        inputStageUpdated <= updateSchedulerArray(inputStage, readyRegFlags xor readyRegFlags, fni, waitingFM, true);
+        
+        inputStageNext <= iqInputStageNext(inputStageUpdated, newContentRR, prevSendingOK);
+        inputReadingAny <= prevSendingOK and isNonzero(extractFullMask(newArr));
+        
+        -- 
+        
+        
 	QUEUE_SYNCHRONOUS: process(clk) 	
 	begin
 		if rising_edge(clk) then		
 			queueContent <= queueContentNext;
 			sentKilled <= sendingKilled;
+			
+            inputStage <= inputStageNext;
+			
 		end if;
 	end process;	
 
@@ -179,6 +227,7 @@ begin
 	stayMask <= TMP_setUntil(readyMask, nextAccepting);
 
     newContent <= newArr;
+          newContentRR <= updateRR(newArr, readyRegFlags); 
             
             selMask <= getFirstOne(readyMask);
             remainMask <= TMP_setUntil(issuedMask, '1'); 
@@ -200,8 +249,10 @@ begin
 	readyMaskLive <= readyMask and livingMask;
 
 	
-	killMask <= getKillMask(queueData, fullMask, execCausing, execEventSignal, lateEventSignal); 
-	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH); -- Equivalent and much better because in collapsing queue mask is continuous!
+	killMask <= getKillMask(queueData, fullMask, execCausing, execEventSignal, lateEventSignal);
+	
+	       acceptingForInputStage <= not fullMask(IQ_SIZE-PIPE_WIDTH);
+	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH);
 	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);
 	
 	anyReadyLive <= isNonzero(readyMaskLive);
