@@ -75,7 +75,7 @@ end Core;
 architecture Behavioral of Core is
     signal pcDataSig, frontCausing, execCausing, lateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
-                frontEventSignal, bqAccepting, bqSending, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ: std_logic := '0';
+                frontEventSignal, bqAccepting, bqSending, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ, dbEmpty: std_logic := '0';
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal frontDataLastLiving, 
             renamedDataLiving, renamedDataLivingFloat, renamedDataMerged,
@@ -202,8 +202,8 @@ begin
         bpSending => bpSending,
         bpData => bpData,
     
-        renameAccepting => iqAccepting,
-                           -- dispatchAccepting,           
+        renameAccepting => --iqAccepting,
+                            dispatchAccepting,           
         dataLastLiving => frontDataLastLiving,
         lastSending => frontLastSending,
         
@@ -255,7 +255,9 @@ begin
     
     
     oooAccepting <= robAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0 and acceptingSQ and acceptingLQ;
-    sendingToDispatchBuffer <= renamedSendingRe and not oooAccepting;
+    
+    -- From Rename we send to OOO if it accepts and DB is empty. If DB is not empty, we have to drain it first!
+    sendingToDispatchBuffer <= renamedSendingRe and (not oooAccepting or not dbEmpty);
     
     GEN_X: if false generate
         renamedSending <= renamedSendingRe;
@@ -265,8 +267,8 @@ begin
     
     GEN_Y: if true generate
          renamedSending <= (renamedSendingRe and oooAccepting) or sendingFromDispatchBuffer;
-         renamedDataLiving <= renamedDataLivingRe when oooAccepting = '1' else dispatchBufferDataInt; 
-         renamedDataLivingFloat <= renamedDataLivingFloatRe when oooAccepting = '1' else dispatchBufferDataFloat; 
+         renamedDataLiving <= renamedDataLivingRe when sendingFromDispatchBuffer = '0' else dispatchBufferDataInt; 
+         renamedDataLivingFloat <= renamedDataLivingFloatRe when sendingFromDispatchBuffer = '0' else dispatchBufferDataFloat; 
     end generate;
 
     renamedDataMerged <= mergeDests(renamedDataLiving, renamedDataLivingFloat);
@@ -278,13 +280,13 @@ begin
             nextAccepting => oooAccepting,          
             accepting => dispatchAccepting,
             prevSending => sendingToDispatchBuffer,
-            dataIn => renamedDataLiving,            
+            dataIn => renamedDataLivingRe,            
             sending => sendingFromDispatchBuffer,
             dataOut => dispatchBufferDataInt,
             
             execEventSignal => execEventSignal,
             lateEventSignal => lateEventSignal,        
-            empty => open            
+            empty => dbEmpty            
         );
     
         DISPATCH_BUFFER_FP: entity work.DispatchBuffer port map(
@@ -293,7 +295,7 @@ begin
             nextAccepting => oooAccepting,          
             accepting => open,
             prevSending => sendingToDispatchBuffer,
-            dataIn => renamedDataLivingFloat,            
+            dataIn => renamedDataLivingFloatRe,            
             sending => open,--sendingFromDispatchBuffer,
             dataOut => dispatchBufferDataFloat,
             
@@ -305,11 +307,17 @@ begin
         
     
     RENAMED_VIEW: block
+        signal renamedIntTextRe, renamedFloatTextRe, renamedMergedTextRe: InstructionTextArray(0 to PIPE_WIDTH-1);
+    
         signal renamedIntText, renamedFloatText, renamedMergedText: InstructionTextArray(0 to PIPE_WIDTH-1);
     begin
         renamedIntText <= insSlotArrayText(renamedDataLiving, '0');
         renamedFloatText <= insSlotArrayText(renamedDataLivingFloat, '0');
         renamedMergedText <= insSlotArrayText(renamedDataMerged, '0');
+        
+        renamedIntTextRe <= insSlotArrayText(renamedDataLivingRe, '0');
+        renamedFloatTextRe <= insSlotArrayText(renamedDataLivingFloatRe, '0');
+        renamedMergedTextRe <= insSlotArrayText(renamedDataMergedRe, '0');        
     end block;
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)

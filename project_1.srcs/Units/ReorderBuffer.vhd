@@ -298,7 +298,7 @@ begin
 	   
 	FULL_MASK: for i in 0 to ROB_SIZE-1 generate
 	   fullMask(i) <= content(i).full;
-       completedMaskNext(i) <= groupCompleted(content(i).ops) and not isEmpty and not lateEventSignal;
+       completedMaskNext(i) <= groupCompleted(content(i).ops) and fullMask(i) and not isEmpty and not lateEventSignal;
 	end generate;
 	
     isSending <= completedMask(slv2u(startPtr)) and nextAccepting and not isEmpty;

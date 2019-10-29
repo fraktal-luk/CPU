@@ -42,28 +42,34 @@ begin
     isSending <= nextAccepting and fullMask(0) and not (execEventSignal or lateEventSignal);
     
     SYNCH: process (clk)
+        variable fullMaskNew0: std_logic := '0';
     begin
+        fullMaskNew0 := fullMask(0);
         if rising_edge(clk) then
             
             if isSending = '1' then
                 queueData0 <= queueData1;
-                fullMask(0) <= fullMask(1);
+                --fullMask(0) <= fullMask(1);
+                fullMaskNew0 := fullMask(1);
                 fullMask(1) <= '0';
             end if;
             
             if prevSending = '1' then
-                if fullMask(0) = '1' and nextAccepting = '0' then -- This means full(0) and not sending
+                if --fullMask(0) = '1' and nextAccepting = '0' then -- This means full(0) and not sending
+                   fullMaskNew0 = '1' then
                     queueData1 <= dataIn;
                     fullMask(1) <= '1';
                 else
                     queueData0 <= dataIn;
-                    fullMask(0) <= '1';
+                    fullMaskNew0 := '1';
                 end if;
                 
                 if fullMask(0) = '1' and fullMask(1) = '1' then -- If buffer full but putting more
-                    report "DispatchBuffer overflow!" severity error;
+                    report "DispatchBuffer overflow!" severity failure;
                 end if;
             end if;
+            
+            fullMask(0) <= fullMaskNew0;
             
             if execEventSignal = '1' or lateEventSignal = '1' then
                 fullMask <= (others => '0');
@@ -76,4 +82,5 @@ begin
     dataOut <= queueData0;
     
     accepting <= not fullMask(0); -- Don't allow more if anything needed to be buffered!
+    empty <= not fullMask(0); -- CAREFUL: same as accepting but accepting refers to stage BEFORE Rename while empty is needed by flow FROM Rename
 end Behavioral;
