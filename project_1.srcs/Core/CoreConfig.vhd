@@ -27,7 +27,7 @@ use work.ArchDefs.all;
 
 package CoreConfig is
 
-constant CLEAR_DEBUG_INFO: boolean := false;--true;
+constant CLEAR_DEBUG_INFO: boolean := false; --true;
 
 
 constant LOG2_PIPE_WIDTH: natural := 0 + 2;

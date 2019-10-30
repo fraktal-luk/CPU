@@ -51,7 +51,7 @@ entity IssueQueue is
 		waitingFM: in ForwardingMap;
 		selectionFM: in ForwardingMap; 
 		readyRegFlags: in std_logic_vector(0 to 3*PIPE_WIDTH-1);
-		
+
 		sentCancelled: out std_logic;
 		
 		acceptingMore: out std_logic;
@@ -159,15 +159,23 @@ architecture Behavioral of IssueQueue is
 	--		signal ch0, ch1, ch2: std_logic := '0';
 	
 	
-	   signal inputStage, inputStageUpdated, inputStageNext: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-	   signal inputStageAny, inputReadingAny: std_logic := '0';
+	   signal inputStagePreRR, inputStage, inputStageUpdated, inputStageNext: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	   signal inputStageAny, inputStageLivingAny, inputReadingAny: std_logic := '0';
 	   signal inputStageMoving, acceptingForInputStage: std_logic := '0'; -- This is when the content shifts to the main part of queue
 	   
-	function iqInputStageNext(content, newContent: SchedulerEntrySlotArray; prevSending: std_logic) return SchedulerEntrySlotArray is
+	   constant readyRegFlagsZ: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+	   
+	   
+	function iqInputStageNext(content, newContent: SchedulerEntrySlotArray; prevSending, execEventSignal, lateEventSignal: std_logic) return SchedulerEntrySlotArray is
 	   variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := content;
 	begin
-	   if prevSending = '1' then
+	   if prevSending = '1' and execEventSignal = '0' and lateEventSignal = '0' then
 	       res := newContent;
+	       
+	   else -- Clearing everything - sent to main queue
+	       for i in 0 to PIPE_WIDTH-1 loop
+	           res(i).full := '0';
+	       end loop;    
 	   end if;
 	   
 	   return res;
@@ -198,11 +206,17 @@ begin
 
         inputStageUpdated <= updateSchedulerArray(inputStage, readyRegFlags xor readyRegFlags, fni, waitingFM, true);
         
-        inputStageNext <= iqInputStageNext(inputStageUpdated, newContentRR, prevSendingOK);
+        inputStageNext <= iqInputStageNext(inputStageUpdated, newContent, prevSendingOK, execEventSignal, lateEventSignal);
         inputReadingAny <= prevSendingOK and isNonzero(extractFullMask(newArr));
-        
+        inputStageAny <= isNonzero(extractFullMask(inputStage));
+        inputStageLivingAny <= inputStageAny and not execEventSignal and not lateEventSignal;
         -- 
         
+        -- TEMP: acceptingOut would be '1' when PIPE_WIDTH slots free in the main queue AND not inputStageAny
+        --
+        
+        inputStage <= updateRR(inputStagePreRR, readyRegFlags);
+
         
 	QUEUE_SYNCHRONOUS: process(clk) 	
 	begin
@@ -210,7 +224,7 @@ begin
 			queueContent <= queueContentNext;
 			sentKilled <= sendingKilled;
 			
-            inputStage <= inputStageNext;
+            inputStagePreRR <= inputStageNext;
 			
 		end if;
 	end process;	
@@ -227,7 +241,7 @@ begin
 	stayMask <= TMP_setUntil(readyMask, nextAccepting);
 
     newContent <= newArr;
-          newContentRR <= updateRR(newArr, readyRegFlags); 
+          --newContentRR <= updateRR(newArr, readyRegFlags); 
             
             selMask <= getFirstOne(readyMask);
             remainMask <= TMP_setUntil(issuedMask, '1'); 
@@ -235,15 +249,18 @@ begin
                 sent <= isNonzero(issuedMask);
                 sendingKilled <= isNonzero(killMask and selMask);
             
-            queueContentNext <= iqContentNext(queueContentUpdated, newContent,
+            queueContentNext <= iqContentNext(queueContentUpdated, --newContent,
+                                                                    inputStage,
                                               remainMask, fullMask, livingMask, selMask, issuedMask,                                             
                                               sends, sent,
                                               sentUnexpected,
-                                              prevSendingOK);
+                                              --prevSendingOK
+                                                inputStageLivingAny
+                                              );
 					
 	-- TODO: below could be optimized because some code is shared (comparators!)
-	queueContentUpdated <= updateSchedulerArray(queueContent, readyRegFlags, fni, waitingFM, true);
-	queueContentUpdatedSel <= updateSchedulerArray(queueContent, readyRegFlags, fni, selectionFM, false);
+	queueContentUpdated <= updateSchedulerArray(queueContent, readyRegFlagsZ, fni, waitingFM, true);
+	queueContentUpdatedSel <= updateSchedulerArray(queueContent, readyRegFlagsZ, fni, selectionFM, false);
 
 	readyMask <= extractReadyMaskNew(queueContentUpdatedSel) and fullMask;	
 	readyMaskLive <= readyMask and livingMask;
@@ -253,6 +270,8 @@ begin
 	
 	       acceptingForInputStage <= not fullMask(IQ_SIZE-PIPE_WIDTH);
 	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH);
+	                 --  not fullMask(IQ_SIZE-PIPE_WIDTH) and not inputStageAny;
+	               
 	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);
 	
 	anyReadyLive <= isNonzero(readyMaskLive);
