@@ -62,7 +62,7 @@ end UnitRegManager;
 
 
 architecture Behavioral of UnitRegManager is
-    signal stageDataRenameIn, stageDataRenameInFloat,
+    signal stageDataRenameIn, stageDataRenameInFloat, renamedDataLivingPre, renamedDataLivingFloatPre,
                 stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, sendingCommitInt, sendingCommitFloat, renameLockState, renameLockEnd, renameLockRelease: std_logic := '0';
  
@@ -159,6 +159,9 @@ architecture Behavioral of UnitRegManager is
                 res(i).ins.tags.fetchCtr := (others => '0');
                 res(i).ins.tags.decodeCtr := (others => '0');
                 res(i).ins.tags.renameCtr := (others => '0');
+                if i > 0 then -- High bits are the same as in slot 0, low bits are constant equal to i
+                    res(i).ins.tags.renameIndex := (others => '0');
+                end if;
                 res(i).ins.tags.commitCtr := (others => '0');
                 
                 -- TODO: this is unused anyway
@@ -344,7 +347,7 @@ begin
             -- Interface with IQ
             nextAccepting => '1',
             sendingOut => renamedSending,
-            stageDataOut => renamedDataLiving,
+            stageDataOut => renamedDataLivingPre,
             
             -- Event interface
             execEventSignal => '0',
@@ -370,13 +373,16 @@ begin
             -- Interface with IQ
             nextAccepting => '1',
             sendingOut => open,--renamedSending,
-            stageDataOut => renamedDataLivingFloat,
+            stageDataOut => renamedDataLivingFloatPre,
             
             -- Event interface
             execEventSignal => '0',
             lateEventSignal => eventSig, -- bcause Exec is always older than Rename     
             execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
         );
+        
+        renamedDataLiving <= restoreRenameIndex(renamedDataLivingPre);
+        renamedDataLivingFloat <= restoreRenameIndex(renamedDataLivingFloatPre);
         
             renameGroupCtrNext <= 
                                     commitGroupCtr when lateEventSignal = '1'

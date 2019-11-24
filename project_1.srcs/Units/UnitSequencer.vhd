@@ -30,6 +30,7 @@ use work.InstructionState.all;
 use work.CoreConfig.all;
 use work.PipelineGeneral.all;
 use work.LogicSequence.all;
+use work.LogicRenaming.all;
 
 
 entity UnitSequencer is
@@ -54,7 +55,7 @@ entity UnitSequencer is
   
     lateEventOut: out std_logic;
     lateEventSetPC: out std_logic;
-    lateCausing : out InstructionState;
+    lateCausing: out InstructionState;
     
     -- Interface PC <-> front pipe
     frontAccepting: in std_logic;
@@ -118,7 +119,9 @@ architecture Behavioral of UnitSequencer is
     signal sysStoreValue: Mword := (others => '0'); 
         
     signal commitCtr, commitCtrNext: Word := (others => '0');
-        
+    
+    signal intPointer, intPointerNext, floatPointer, floatPointerNext: SmallNumber := (others => '0');
+    
     constant HAS_RESET_SEQ: std_logic := '0';
     constant HAS_EN_SEQ: std_logic := '0';
 
@@ -129,6 +132,16 @@ architecture Behavioral of UnitSequencer is
     alias linkRegInt is sysRegArray(3);
     alias savedStateExc is sysRegArray(4);
     alias savedStateInt is sysRegArray(5);
+    
+    
+    function setPointers(ins: InstructionState; intPointer, floatPointer: SmallNumber) return InstructionState is
+        variable res: InstructionState := ins;
+    begin
+        res.tags.intPointer := intPointer;
+        res.tags.floatPointer := floatPointer;
+        return res;
+    end function;
+
 begin     
         resetSig <= reset and HAS_RESET_SEQ;
         enSig <= en or not HAS_EN_SEQ;
@@ -143,7 +156,7 @@ begin
         
             lateEventOut <= lateEventSending;
             lateEventSetPC <= lateEventSending;
-            lateCausing <= stageDataLateCausingOut(0).ins;        
+            lateCausing <= setPointers(stageDataLateCausingOut(0).ins, intPointer, floatPointer);  
         
         stageDataToPC(0).full <= sendingToPC;
         stageDataToPC(0).ins <= newPCData(lateEventSending, stageDataLateCausingOut(0).ins,
@@ -248,6 +261,22 @@ begin
 
         commitCtrNext <= i2slv(slv2u(commitCtr) + countOnes(effectiveMask), 32) when sendingToCommit = '1' else commitCtr;
 
+    
+        TMP_REGS: block
+            signal putVecInt, putVecFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+            signal nPutInt, nPutFloat: integer := 0;
+        begin
+                putVecInt <= whichPutReg(stageDataToCommit, false);
+                putVecFloat <= whichPutReg(stageDataToCommit, true);
+
+                nPutInt <= countOnes(putVecInt);
+                nPutFloat <= countOnes(putVecFloat);
+
+                intPointerNext <= i2slv(slv2u(intPointer) + nPutInt, SMALL_NUMBER_SIZE) when sendingToCommit = '1' else intPointer;
+                floatPointerNext <= i2slv(slv2u(floatPointer) + nPutFloat, SMALL_NUMBER_SIZE) when sendingToCommit = '1' else floatPointer;
+        end block;
+        
+
         effectiveMask <= getEffectiveMask(stageDataToCommit);
             
         COMMON_SYNCHRONOUS: process(clk)     
@@ -255,8 +284,11 @@ begin
             if rising_edge(clk) then
                 commitGroupCtr <= commitGroupCtrNext;
                 commitGroupCtrInc <= commitGroupCtrIncNext;
-                commitCtr <= commitCtrNext;                
-            end if;    
+                commitCtr <= commitCtrNext;
+                
+                    intPointer <= intPointerNext;
+                    floatPointer <= floatPointerNext;            
+            end if;
         end process;        
         
         sendingToCommit <= sendingFromROB;
@@ -297,7 +329,7 @@ begin
     stageDataLastEffectiveInA(0) <= getNewEffective(sendingToCommit, robDataLiving, dataFromBQV,
                                                                 stageDataLastEffectiveOutA(0).ins, 
                                                                 stageDataLateCausingOut(0).ins,
-                                                                lateEventSending);
+                                                                lateEventSending);--, intPointerNext, floatPointerNext);
                                                                 
     sendingToLastEffective <= sendingToCommit or lateEventSending;
 
@@ -351,6 +383,9 @@ begin
     
     stageDataLateCausingIn(0) <= (sendingToLateCausing, newLateCausing);
 
+               -- ch0 <= bool2std(newLateCausing.tags.intPointer = intPointer);
+               -- ch1 <= bool2std(stageDataLateCausingOut(0).ins.tags.intPointer = intPointer);
+
     LATE_CAUSING_SLOT: entity work.GenericStage(Behavioral)
     port map(
         clk => clk, reset => resetSig, en => enSig,
@@ -371,7 +406,7 @@ begin
         execCausing => DEFAULT_INSTRUCTION_STATE
     );
    
-    COMMITTED_VIEW: block
+    COMMITTED_VIEW: block -- CAREFUL, TODO: include replaced intPointer and floatPointer in this view 
        signal committedText: InstructionTextArray(0 to PIPE_WIDTH-1);
        signal lastEffectiveText, lateCausingText: InstructionTextArray(0 to 0);
     begin
@@ -397,7 +432,7 @@ begin
     commitGroupCtrOut <= commitGroupCtr;
     commitGroupCtrIncOut <= commitGroupCtrInc;
     
-    commitAccepting <= not eventCommitted and not lateEventSending; -- Blocked while procesing event
+    commitAccepting <= not eventCommitted and not intCommitted and not lateEventSending; -- Blocked while procesing event
 
     doneSig <= eventCommitted and bool2std(stageDataLastEffectiveOutA(0).ins.operation.func = sysSend);
     failSig <= eventCommitted and bool2std(stageDataLastEffectiveOutA(0).ins.operation.func = sysError);

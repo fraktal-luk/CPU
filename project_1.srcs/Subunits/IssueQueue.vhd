@@ -202,6 +202,7 @@ architecture Behavioral of IssueQueue is
 	   
 	   return res;
 	end function;
+    	
 begin
 
         inputStageUpdated <= updateSchedulerArray(inputStage, readyRegFlags xor readyRegFlags, fni, waitingFM, true);
@@ -215,7 +216,7 @@ begin
         -- TEMP: acceptingOut would be '1' when PIPE_WIDTH slots free in the main queue AND not inputStageAny
         --
         
-        inputStage <= updateRR(inputStagePreRR, readyRegFlags);
+        inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
 
         
 	QUEUE_SYNCHRONOUS: process(clk) 	

@@ -36,7 +36,7 @@ end DispatchBuffer;
 architecture Behavioral of DispatchBuffer is
     signal queueData0, queueData1: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
     signal fullMask: std_logic_vector(0 to 1) := (others => '0');
-    signal isSending: std_logic := '0';
+    signal isSending: std_logic := '0';   
 begin
     
     isSending <= nextAccepting and fullMask(0) and not (execEventSignal or lateEventSignal);
@@ -74,13 +74,60 @@ begin
             if execEventSignal = '1' or lateEventSignal = '1' then
                 fullMask <= (others => '0');
             end if;
-            
+           
+--           for i in 0 to PIPE_WIDTH-1 loop
+               
+--           end loop;
+           
+           
+           if CLEAR_DEBUG_INFO then
+                for i in 0 to PIPE_WIDTH-1 loop
+                   queueData0(i).ins.ip <= (others => '0');
+                   queueData0(i).ins.bits <= (others => '0');
+                   --queueData0(i).ins.result <= (others => '0');
+                   --queueData0(i).ins.target <= (others => '0');
+                    
+                   --queueData0(i).ins.constantArgs <= DEFAULT_CONSTANT_ARGS;
+                 
+                    --res(slv2u(endPtr)).ops(i).ins.operation := (System, sysUndef); --!! Operation must be known to UnitSequencer after commit
+                    
+--                         res(j).ops(i).ins.virtualArgSpec.intArgSel := (others => '0');
+--                         res(j).ops(i).ins.virtualArgSpec.floatArgSel := (others => '0');
+--                         res(j).ops(i).ins.virtualArgSpec.args := (others => (others => '0'));
+        
+--                         res(j).ops(i).ins.physicalArgSpec.intArgSel := (others => '0');
+--                         res(j).ops(i).ins.physicalArgSpec.floatArgSel := (others => '0');
+--                         res(j).ops(i).ins.physicalArgSpec.args := (others => (others => '0'));
+                    
+--                         res(j).ops(i).ins.virtualArgSpec.dest := (others => '0');  -- separate RAM
+--                         res(j).ops(i).ins.physicalArgSpec.dest := (others => '0'); -- separate RAM
+                    
+                         
+                        -- res(j).ops(i).ins.virtualArgSpec.intDestSel := '0';
+                        -- res(j).ops(i).ins.physicalArgSpec.intDestSel := '0';
+                    
+                    --res(slv2u(j)).ops(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
+                     queueData0(i).ins.tags.fetchCtr <= (others => '0');
+                     queueData0(i).ins.tags.decodeCtr <= (others => '0');
+                     queueData0(i).ins.tags.renameCtr <= (others => '0');
+                     if i > 0 then -- As in RegisterManager
+                        queueData0(i).ins.tags.renameIndex <= (others => '0');
+                     end if;
+                     --    queueData0(i).ins.tags.intPointer <= (others => '0');
+                     --    queueData0(i).ins.tags.floatPointer <= (others => '0');
+        
+        
+                     queueData0(i).ins.tags.commitCtr <= (others => '0');                   
+                end loop;
+            end if;    
+
         end if;
     end process;
     
     sending <= isSending;
-    dataOut <= queueData0;
-    
+    dataOut <= --queueData0;
+                restoreRenameIndex(queueData0);
+
     accepting <= not fullMask(0); -- Don't allow more if anything needed to be buffered!
     empty <= not fullMask(0); -- CAREFUL: same as accepting but accepting refers to stage BEFORE Rename while empty is needed by flow FROM Rename
 end Behavioral;

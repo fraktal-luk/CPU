@@ -166,8 +166,11 @@ architecture Behavioral of ReorderBuffer is
                    res(j).ops(i).ins.tags.fetchCtr := (others => '0');
                    res(j).ops(i).ins.tags.decodeCtr := (others => '0');
                    res(j).ops(i).ins.tags.renameCtr := (others => '0');
-    
+                            res(j).ops(i).ins.tags.renameIndex := (others => '0');
                    res(j).ops(i).ins.tags.commitCtr := (others => '0');
+                   
+                        res(j).ops(i).ins.tags.intPointer := (others => '0');
+                        res(j).ops(i).ins.tags.floatPointer := (others => '0');
                end loop;
            end loop;
        end if;
@@ -196,7 +199,7 @@ architecture Behavioral of ReorderBuffer is
 	signal inputConstant, inputConstant2, constantFromBuf, constantFromBuf2: Word := (others => '0');
 	
     attribute ram_style: string;
-    attribute ram_style of constantBuf, constantBuf2: signal is "block";	
+    --attribute ram_style of constantBuf, constantBuf2: signal is "block";	
 begin
 	execEvent <= execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
 	causingPtr <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!

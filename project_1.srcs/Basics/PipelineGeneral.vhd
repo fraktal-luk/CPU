@@ -230,7 +230,9 @@ function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
         function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray;
         function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray;
         function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
-          
+
+    function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray;
+    function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return SchedulerEntrySlotArray;              
 end package;
 
 
@@ -827,4 +829,24 @@ end function;
             res.ins.physicalArgSpec.dest := insS0.ins.physicalArgSpec.dest or insS1.ins.physicalArgSpec.dest;
             return res;
         end function;
+        
+    function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := content;
+    begin
+        for i in 1 to PIPE_WIDTH-1 loop
+            res(i).ins.tags.renameIndex := clearTagLow(res(0).ins.tags.renameIndex) or i2slv(i, TAG_SIZE);
+        end loop;
+    
+        return res;
+    end function;
+    
+    function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return SchedulerEntrySlotArray is
+        variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := content;
+    begin
+        for i in 1 to PIPE_WIDTH-1 loop
+            res(i).ins.tags.renameIndex := clearTagLow(res(0).ins.tags.renameIndex) or i2slv(i, TAG_SIZE);
+        end loop;
+    
+        return res;
+    end function;             
 end package body;
