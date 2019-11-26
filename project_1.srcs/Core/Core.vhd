@@ -86,7 +86,7 @@ architecture Behavioral of Core is
     signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
-
+    signal specialOutROB: InstructionSlot := DEFAULT_INS_SLOT;
 
 
     --  TODO: Which signals will be main indicators for diagnosing flow blockage? 
@@ -169,6 +169,7 @@ begin
         commitAccepting => commitAccepting,
         sendingFromROB => robSending,    
         robDataLiving => dataOutROB,
+        robSpecial => specialOutROB,
         ---
         dataFromBQV => bqData,
 
@@ -338,7 +339,8 @@ begin
 		
 		nextAccepting => commitAccepting,
 		sendingOut => robSending, 
-		outputData => dataOutROB		
+		outputData => dataOutROB,
+		outputSpecial => specialOutROB		
 	);
 
     ROB_OUT_VIEW: block

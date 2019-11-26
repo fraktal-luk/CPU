@@ -69,6 +69,7 @@ entity UnitSequencer is
     -- Interface with ROB
     commitAccepting: out std_logic;
     robDataLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+    robSpecial: in InstructionSlot;
     sendingFromROB: in std_logic;
     
     dataFromBQV: in InstructionSlotArray(0 to PIPE_WIDTH-1);
@@ -111,6 +112,8 @@ architecture Behavioral of UnitSequencer is
     signal stageDataCommitInA, stageDataCommitOutA: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);    
     signal stageDataToPC, tmpPcOutA, stageDataLastEffectiveInA, stageDataLastEffectiveOutA, stageDataLateCausingIn:
                         InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+
+    signal special: InstructionSlot := DEFAULT_INS_SLOT;
 
     signal intTypeCommitted: std_logic_vector(0 to 1) := (others => '0');
  
@@ -201,7 +204,8 @@ begin
         pcNext <= getNextPC(stageDataOutPC.ip, (others => '0'), '0');
 
         excInfoUpdate <= lateEventSending 
-                                        and (stageDataLateCausingOut(0).ins.controlInfo.hasException or bool2std(stageDataLateCausingOut(0).ins.operation = (System, sysCall)))
+                                        and (stageDataLateCausingOut(0).ins.controlInfo.hasException or bool2std(--stageDataLateCausingOut(0).ins.operation = (System, sysCall)))
+                                                                                                                  special.ins.operation = (System, sysCall)))
                                         and not stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
         intInfoUpdate <= lateEventSending and stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
         ----------------------------------------------------------------------
@@ -287,7 +291,12 @@ begin
                 commitCtr <= commitCtrNext;
                 
                     intPointer <= intPointerNext;
-                    floatPointer <= floatPointerNext;            
+                    floatPointer <= floatPointerNext;
+                    
+                    
+               if sendingFromROB = '1' then
+                   special <= robSpecial;
+               end if;           
             end if;
         end process;        
         
@@ -379,7 +388,7 @@ begin
     sendingToLateCausing <= (eventCommitted or intCommitted) and sbEmpty;
     
     newLateCausing <= getLatePCData(stageDataLastEffectiveOutA(0).ins, intCommitted, intTypeCommitted,
-                                        currentState, linkRegExc, linkRegInt, savedStateExc, savedStateInt);
+                                        currentState, linkRegExc, linkRegInt, savedStateExc, savedStateInt, special);
     
     stageDataLateCausingIn(0) <= (sendingToLateCausing, newLateCausing);
 
@@ -434,7 +443,9 @@ begin
     
     commitAccepting <= not eventCommitted and not intCommitted and not lateEventSending; -- Blocked while procesing event
 
-    doneSig <= eventCommitted and bool2std(stageDataLastEffectiveOutA(0).ins.operation.func = sysSend);
-    failSig <= eventCommitted and bool2std(stageDataLastEffectiveOutA(0).ins.operation.func = sysError);
+    doneSig <= eventCommitted and bool2std(--stageDataLastEffectiveOutA(0).ins.operation.func = sysSend);
+                                            special.ins.operation.func = sysSend);
+    failSig <= eventCommitted and bool2std(--stageDataLastEffectiveOutA(0).ins.operation.func = sysError);
+                                            special.ins.operation.func = sysError);
                 
 end Behavioral;

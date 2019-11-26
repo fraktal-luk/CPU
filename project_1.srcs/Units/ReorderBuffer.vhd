@@ -61,7 +61,8 @@ entity ReorderBuffer is
 		nextAccepting: in std_logic;
 		sendingOut: out std_logic; 
 		
-		outputData: out InstructionSlotArray(0 to PIPE_WIDTH-1)
+		outputData: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+		outputSpecial: out InstructionSlot
 	);	
 end ReorderBuffer;
 
@@ -69,6 +70,8 @@ end ReorderBuffer;
 
 architecture Behavioral of ReorderBuffer is
     signal outputDataReg: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal outputSpecialReg: InstructionSlot := DEFAULT_INS_SLOT;
+
 	signal fullMask, completedMask, completedMaskNext, completedMask_T,  completedMaskNext_T: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
 
     signal content, contentNext: ReorderBufferArray := DEFAULT_ROB_ARRAY;
@@ -87,6 +90,29 @@ architecture Behavioral of ReorderBuffer is
 	
 	signal isFull, isAlmostFull: std_logic := '0'; 	
 
+    --signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT; -- There needs to be only 1 such slot because everything younger is to be killed on commit
+
+
+            function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot is
+               variable res: InstructionSlot := insVec(0);
+            begin
+               res.full := '0';
+               
+               for i in PIPE_WIDTH-1 downto 0 loop
+                   -- TODO: simpler to get last full slot because if a static event is present, nothing will be after it in group.
+                   --       Then the 'full' bit of 'special' would be set if specialAction/exc/dbTrap
+                   if (insVec(i).full and 
+                               (    insVec(i).ins.controlInfo.specialAction
+                                or insVec(i).ins.controlInfo.hasException
+                                or insVec(i).ins.controlInfo.dbtrap)) = '1'
+                   then
+                       res := insVec(i);               
+                       exit;
+                   end if;
+               end loop;
+               
+               return res;
+            end function;    
 	
 	function getNextRobContent(content: ReorderBufferArray;
 	                           newGroup: InstructionSlotArray;
@@ -105,6 +131,8 @@ architecture Behavioral of ReorderBuffer is
 	   if receiving = '1' then
 	       res(slv2u(endPtr)).full := '1'; -- CAREFUL: don't get index out of bounds
 	       res(slv2u(endPtr)).ops := newGroup;
+	       
+	           res(slv2u(endPtr)).special := getSpecialActionSlot(newGroup);
 	   end if;
 	
 	   killMask := getMaskBetween(ROB_SIZE, causingPtr, endPtr, '0'); -- This has '1' also at 'equal' position!
@@ -245,7 +273,8 @@ begin
 							
 	SYNCHRONOUS: process (clk)
 	begin
-		if rising_edge(clk) then	
+		if rising_edge(clk) then		  
+		    -- Regular content
             content <= contentNext;
 
             startPtr <= startPtrNext;
@@ -281,7 +310,8 @@ begin
             end if;
             
             completedMask <= completedMaskNext;
-            outputDataReg <= content(slv2u(startPtrNext)).ops;          
+            outputDataReg <= content(slv2u(startPtrNext)).ops;
+                outputSpecialReg <= content(slv2u(startPtrNext)).special;
 		end if;		
 	end process;
  
@@ -314,6 +344,8 @@ begin
 	               replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2);
 
 	sendingOut <= isSending;
+	
+	   outputSpecial <= outputSpecialReg;
 	
 	VIEW: block
 	   signal robTxt: RobText;
