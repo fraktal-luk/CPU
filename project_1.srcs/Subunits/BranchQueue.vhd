@@ -183,8 +183,8 @@ architecture Behavioral of BranchQueue is
                   res(i).tags.renameCtr := (others => '0');
                   
                   -- TODO: ptrs may be better here than go through IQ!
-                  res(i).tags.intPointer := (others => '0');
-                  res(i).tags.floatPointer := (others => '0');
+                  --res(i).tags.intPointer := (others => '0');
+                  --res(i).tags.floatPointer := (others => '0');
     
                   res(i).tags.commitCtr := (others => '0');
              end if;                    

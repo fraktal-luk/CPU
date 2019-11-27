@@ -360,8 +360,8 @@ begin
            res(i).ins.tags.renameCtr := (others => '0');
            
            -- TODO: ptrs may be better kept in BQ!
-           --res(i).tags.intPointer := (others => '0');
-           --res(i).tags.floatPointer := (others => '0');
+               res(i).ins.tags.intPointer := (others => '0');
+               res(i).ins.tags.floatPointer := (others => '0');
        end if;
        
        res(i).ins.result := (others => '0');

@@ -173,6 +173,8 @@ package body LogicExec is
 		res.target := trueTarget;
 		-- Return address
 		res.result := queueData.result;
+			res.tags.intPointer := queueData.tags.intPointer;
+			res.tags.floatPointer := queueData.tags.floatPointer;
 							
 		return res;
 	end function;
