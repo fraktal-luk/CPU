@@ -204,6 +204,28 @@ begin
 end function;
 
 
+
+function isJumpLink(w: Word) return std_logic is
+begin
+    return bool2std(w(31 downto 26) = opcode2slv(jl));
+end function;
+
+function isJumpCond(w: Word) return std_logic is
+begin
+    return bool2std(w(31 downto 26) = opcode2slv(jz)) or bool2std(w(31 downto 26) = opcode2slv(jnz));
+end function;
+
+function isJumpLong(w: Word) return std_logic is
+begin
+    return bool2std(w(31 downto 26) = opcode2slv(j));
+end function;
+
+function isJumpReg(w: Word) return std_logic is
+begin
+    return bool2std(w(31 downto 26) = opcode2slv(ext1)) and bool2std(w(15 downto 10) = opcont2slv(ext1, jzR) or w(15 downto 10) = opcont2slv(ext1, jzR));
+end function;
+
+
 function getFrontEventMulti(predictedAddress: Mword;
 							  ins: InstructionState; fetchLine: WordArray(0 to FETCH_WIDTH-1))
 return InstructionSlotArray is
@@ -239,23 +261,27 @@ begin
         longJump := '0';
         regJump := '0';
         
-        if 	fetchLine(i)(31 downto 26) = opcode2slv(jl) then
+        if 	--fetchLine(i)(31 downto 26) = opcode2slv(jl) then
+            isJumpLink(fetchLine(i)) = '1' then
             regularJump := '1';				
             predictedTaken(i) := '1';       -- CAREFUL, TODO: temporary predicted taken iff backwards
             uncondJump(i) := '1';		    
         elsif
-             fetchLine(i)(31 downto 26) = opcode2slv(jz) 
-            or fetchLine(i)(31 downto 26) = opcode2slv(jnz)
+            -- fetchLine(i)(31 downto 26) = opcode2slv(jz) 
+            --or fetchLine(i)(31 downto 26) = opcode2slv(jnz)
+            isJumpCond(fetchLine(i)) = '1'
         then
             regularJump := '1';				
             predictedTaken(i) := fetchLine(i)(20);		-- CAREFUL, TODO: temporary predicted taken iff backwards
-        elsif fetchLine(i)(31 downto 26) = opcode2slv(j) then -- Long jump instruction     
+        elsif --fetchLine(i)(31 downto 26) = opcode2slv(j) then -- Long jump instruction 
+               isJumpLong(fetchLine(i)) = '1' then
             uncondJump(i) := '1';
             longJump := '1';				
             predictedTaken(i) := '1'; -- Long jump is unconditional (no space for register encoding!)
-        elsif  fetchLine(i)(31 downto 26) = opcode2slv(ext1) 
-            and (fetchLine(i)(15 downto 10) = opcont2slv(ext1, jzR)
-                 or fetchLine(i)(15 downto 10) = opcont2slv(ext1, jnzR)) then
+        elsif  --fetchLine(i)(31 downto 26) = opcode2slv(ext1) 
+            --and (fetchLine(i)(15 downto 10) = opcont2slv(ext1, jzR)
+             --    or fetchLine(i)(15 downto 10) = opcont2slv(ext1, jnzR)) then
+              isJumpReg(fetchLine(i)) = '1' then   
             regJump := '1';
             predictedTaken(i) := '0'; -- TEMP: register jumps predicted not taken
         end if;
