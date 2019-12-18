@@ -47,6 +47,8 @@ port(
     newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     
+    specialActionOut: out InstructionSlot;
+    
     robDataLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1);
     sendingFromROB: in std_logic;
    
@@ -84,6 +86,8 @@ architecture Behavioral of UnitRegManager is
     constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
 
     signal depVec: DependencyVec := DEFAULT_DEP_VEC;
+    
+    signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     
     function renameGroupBase(insVec: InstructionSlotArray;
@@ -407,6 +411,12 @@ begin
             COMMON_SYNCHRONOUS: process(clk)     
             begin
                 if rising_edge(clk) then
+                
+                    if frontLastSending = '1' then
+                        specialActionSlot <= getSpecialActionSlot(renamedBase);
+                    end if;
+                
+                
                     renameGroupCtr <= renameGroupCtrNext;
                     renameCtr <= renameCtrNext;
         
@@ -561,8 +571,10 @@ begin
 				
 				physStableDelayed => physStableFloat -- FOR MAPPING (from MAP)
 			);
-			        
-        newPhysDestsOut <= newIntDests;
-        newFloatDestsOut <= newFloatDests; 
-        renameAccepting <= not renameLockState;
+	
+	specialActionOut <= specialActionSlot;
+	
+    newPhysDestsOut <= newIntDests;
+    newFloatDestsOut <= newFloatDests; 
+    renameAccepting <= not renameLockState;
 end Behavioral;

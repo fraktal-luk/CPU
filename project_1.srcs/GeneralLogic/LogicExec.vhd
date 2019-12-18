@@ -127,21 +127,13 @@ package body LogicExec is
 		variable branchTaken, targetMatch: std_logic := '0';
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
 		variable targetEqual: std_logic := '0';
-	begin		
-		--res.operation := (General, Unknown);
-	
-		-- TODO: cases to handle
+	begin			
+		-- Cases to handle
 		-- jr taken		: if not taken goto return, if taken and not equal goto reg, if taken and equal ok 
 		-- jr not taken: if not taken ok, if taken goto reg
 		-- j taken		: if not taken goto return, if taken equal
 		-- j not taken : if not taken ok, if taken goto dest
-		
-		-- Can keep dest and returnAdr from BQ in (target, result)?
-		-- 	Then return := result, dest := target
-		-- storedTarget := res.target; 
-		-- storedReturn := res.result;
-		-- targetEqual := [if storedTarget = reg then '1' else '0'];
-        
+
         targetMatch := bool2std(queueData.target = st.argValues.arg1);
 		branchTaken := resolveBranchCondition(st.argValues, ins.operation);
 
@@ -187,23 +179,9 @@ package body LogicExec is
 	begin
 		res.result := result;
 		res.controlInfo.newEvent := isNonzero(exc);
-		--res.controlInfo.hasEvent := res.controlInfo.newEvent;
-		--res.controlInfo.newException := res.controlInfo.newEvent;
-		res.controlInfo.hasException := res.controlInfo.newEvent;						
-		--res.controlInfo.exceptionCode := (others => '0');
-		--res.controlInfo.exceptionCode(3 downto 0) := exc;
+		res.controlInfo.hasException := res.controlInfo.newEvent;
 		return res;
 	end function;
-	
---	function isBranch(ins: InstructionState) return std_logic is
---	begin
---		if ins.operation = (Jump, jump) or ins.operation = (Jump, jumpZ) or ins.operation = (Jump, jumpNZ) then
---			return '1';
---		else
---			return '0';
---		end if;
---	end function;
-	
 	
 	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState; branchIns: InstructionState)
 	return InstructionState is

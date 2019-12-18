@@ -123,8 +123,8 @@ architecture Behavioral of StoreQueue is
         variable diff: SmallNumber := (others => '0');
 	    variable remv: std_logic_vector(0 to 2) := "000";
 	    variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
-	    constant isStoreOp: boolean := (storeAddressInput.ins.operation = (Memory, store) or storeAddressInput.ins.operation = (System, sysMtc));
-	    constant isLoadOp: boolean := (storeAddressInput.ins.operation = (Memory, load) or storeAddressInput.ins.operation = (System, sysMfc));
+	    constant IS_STORE_OP: boolean := isStoreOp(storeAddressInput.ins) = '1';
+	    constant IS_LOAD_OP: boolean := isLoadOp(storeAddressInput.ins) = '1';
     begin
 
         for i in 0 to QUEUE_SIZE-1 loop
@@ -177,7 +177,7 @@ architecture Behavioral of StoreQueue is
            if taggedMask(i) = '1' -- !! Prevent instruction with r.i. = 0 form updating untagged entries! 
                and content(i).tags.renameIndex = storeAddressInput.ins.tags.renameIndex
                and storeAddressInput.full = '1'
-               and ((isStoreOp and not isLQ) or (isLoadOp and isLQ))
+               and ((IS_STORE_OP and not isLQ) or (IS_LOAD_OP and isLQ))
            then
                res(i).controlInfo.completed := '1'; -- address completed           
                res(i).target := storeAddressInput.ins.result;
@@ -367,9 +367,9 @@ begin
 
     dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
 
-	newerLQ <=     newerRegLQ and addressMatchMask and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, store)
+	newerLQ <=     newerRegLQ and addressMatchMask and whichAddressCompleted(content) when isStoreMemOp(compareAddressInput.ins) = '1'
 	          else (others => '0'); -- Only those with known address
-	olderSQ <=     olderRegSQ and addressMatchMask and whichAddressCompleted(content) when compareAddressInput.ins.operation = (Memory, load)
+	olderSQ <=     olderRegSQ and addressMatchMask and whichAddressCompleted(content) when isLoadMemOp(compareAddressInput.ins) = '1'
 	          else (others => '0'); -- Only those with known address
 	
 	   newerNextLQ <= TMP_cmpTagsAfter(content, compareTagInput);

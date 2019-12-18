@@ -150,7 +150,7 @@ begin
         enSig <= en or not HAS_EN_SEQ;
    
    
-   sysStoreAllow <= sbSending and dataFromSB.full and bool2std(dataFromSB.ins.operation = (System, sysMtc));
+   sysStoreAllow <= sbSending and dataFromSB.full and isStoreSysOp(dataFromSB.ins);
    sysStoreAddress <= dataFromSB.ins.target(4 downto 0);
    sysStoreValue <= dataFromSB.ins.result;
    
@@ -204,8 +204,7 @@ begin
         pcNext <= getNextPC(stageDataOutPC.ip, (others => '0'), '0');
 
         excInfoUpdate <= lateEventSending 
-                                        and (stageDataLateCausingOut(0).ins.controlInfo.hasException or bool2std(--stageDataLateCausingOut(0).ins.operation = (System, sysCall)))
-                                                                                                                  special.ins.operation = (System, sysCall)))
+                                        and (stageDataLateCausingOut(0).ins.controlInfo.hasException or bool2std(special.ins.operation = (System, sysCall)))
                                         and not stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
         intInfoUpdate <= lateEventSending and stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
         ----------------------------------------------------------------------
@@ -443,9 +442,7 @@ begin
     
     commitAccepting <= not eventCommitted and not intCommitted and not lateEventSending; -- Blocked while procesing event
 
-    doneSig <= eventCommitted and bool2std(--stageDataLastEffectiveOutA(0).ins.operation.func = sysSend);
-                                            special.ins.operation.func = sysSend);
-    failSig <= eventCommitted and bool2std(--stageDataLastEffectiveOutA(0).ins.operation.func = sysError);
-                                            special.ins.operation.func = sysError);
+    doneSig <= eventCommitted and bool2std(special.ins.operation.func = sysSend);
+    failSig <= eventCommitted and bool2std(special.ins.operation.func = sysError);
                 
 end Behavioral;

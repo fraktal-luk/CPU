@@ -232,7 +232,17 @@ function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
         function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
 
     function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray;
-    function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return SchedulerEntrySlotArray;              
+    function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return SchedulerEntrySlotArray;
+    
+    function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot;
+    
+    function isLoadOp(ins: InstructionState) return std_logic;
+    function isStoreOp(ins: InstructionState) return std_logic;
+    function isLoadMemOp(ins: InstructionState) return std_logic;
+    function isStoreMemOp(ins: InstructionState) return std_logic;
+    function isLoadSysOp(ins: InstructionState) return std_logic;
+    function isStoreSysOp(ins: InstructionState) return std_logic;
+                
 end package;
 
 
@@ -602,7 +612,7 @@ function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' -- and insVec(i).ins.controlInfo.skipped = '0'
+		if 		insVec(i).full = '1'
 			and 	insVec(i).ins.classInfo.branchIns = '1'
 		then
 			res(i) := '1';
@@ -616,8 +626,8 @@ function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' --and insVec(i).ins.controlInfo.skipped = '0'
-			and (insVec(i).ins.operation = (Memory, load) or insVec(i).ins.operation = (System, sysMfc))
+		if 		insVec(i).full = '1'
+			and isLoadOp(insVec(i).ins) = '1'
 		then
 			res(i) := '1';
 		end if;
@@ -630,8 +640,8 @@ function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' --and insVec(i).ins.controlInfo.skipped = '0'
-			and (insVec(i).ins.operation = (Memory, store) or insVec(i).ins.operation = (System, sysMtc))
+		if 		insVec(i).full = '1'
+			and isStoreOp(insVec(i).ins) = '1'
 		then
 			res(i) := '1';
 		end if;
@@ -644,7 +654,7 @@ function getAluMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' --and insVec(i).ins.controlInfo.skipped = '0'
+		if 		insVec(i).full = '1'
 			and (insVec(i).ins.operation.unit = Alu or insVec(i).ins.operation.unit = Jump)
 		then
 			res(i) := '1';
@@ -658,7 +668,7 @@ function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1' --and insVec(i).ins.controlInfo.skipped = '0'
+		if 		insVec(i).full = '1'
 			and (insVec(i).ins.operation.unit = FPU)
 		then
 			res(i) := '1';
@@ -848,5 +858,60 @@ end function;
         end loop;
     
         return res;
-    end function;             
+    end function;
+    
+
+    function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot is
+       variable res: InstructionSlot := insVec(0);
+    begin
+       res.full := '0';
+       
+       for i in PIPE_WIDTH-1 downto 0 loop
+           -- TODO: simpler to get last full slot because if a static event is present, nothing will be after it in group.
+           --       Then the 'full' bit of 'special' would be set if specialAction/exc/dbTrap
+           if (insVec(i).full and 
+                       (    insVec(i).ins.controlInfo.specialAction
+                        or insVec(i).ins.controlInfo.hasException
+                        or insVec(i).ins.controlInfo.dbtrap)) = '1'
+           then
+               res := insVec(i);               
+               exit;
+           end if;
+       end loop;
+       
+       return res;
+    end function;    
+
+
+
+    function isLoadOp(ins: InstructionState) return std_logic is
+    begin
+        return bool2std(ins.operation = (Memory, load) or ins.operation = (System, sysMfc));
+    end function;
+
+    function isStoreOp(ins: InstructionState) return std_logic is
+    begin
+        return bool2std(ins.operation = (Memory, store) or ins.operation = (System, sysMtc));
+    end function;
+
+    function isLoadMemOp(ins: InstructionState) return std_logic is
+    begin
+        return bool2std(ins.operation = (Memory, load));
+    end function;
+
+    function isStoreMemOp(ins: InstructionState) return std_logic is
+    begin
+        return bool2std(ins.operation = (Memory, store));
+    end function;
+
+    function isLoadSysOp(ins: InstructionState) return std_logic is
+    begin
+        return bool2std(ins.operation = (System, sysMfc));
+    end function;
+
+    function isStoreSysOp(ins: InstructionState) return std_logic is
+    begin
+        return bool2std(ins.operation = (System, sysMtc));
+    end function;
+         
 end package body;

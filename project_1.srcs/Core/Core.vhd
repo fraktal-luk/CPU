@@ -115,6 +115,8 @@ architecture Behavioral of Core is
     signal sbSending, sbEmpty, sysRegRead, sysRegSending: std_logic := '0';
     signal dataFromSB: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
     
+    signal specialAction, specialActionDispatchBuffer, specialActionToROB: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+    
     function mergeDests(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := dataInt;
     begin
@@ -236,6 +238,8 @@ begin
         newPhysDestsOut => newIntDests,
         newFloatDestsOut => newFloatDests,
             
+        specialActionOut => specialAction,
+            
         commitGroupCtr => commitGroupCtr,
         --commitCtr => commitCtr,
 		
@@ -274,16 +278,20 @@ begin
 
     renamedDataMerged <= mergeDests(renamedDataLiving, renamedDataLivingFloat);
     
+        specialActionToROB <= specialAction when sendingFromDispatchBuffer = '0' else specialActionDispatchBuffer;
+    
     
         DISPATCH_BUFFER: entity work.DispatchBuffer port map(
             clk => clk,
-
+            
+            specialAction => specialAction,
             nextAccepting => oooAccepting,          
             accepting => dispatchAccepting,
             prevSending => sendingToDispatchBuffer,
             dataIn => renamedDataLivingRe,            
             sending => sendingFromDispatchBuffer,
             dataOut => dispatchBufferDataInt,
+            specialOut => specialActionDispatchBuffer,
             
             execEventSignal => execEventSignal,
             lateEventSignal => lateEventSignal,        
@@ -292,13 +300,15 @@ begin
     
         DISPATCH_BUFFER_FP: entity work.DispatchBuffer port map(
             clk => clk,
-
+            
+            specialAction => specialAction,
             nextAccepting => oooAccepting,          
             accepting => open,
             prevSending => sendingToDispatchBuffer,
             dataIn => renamedDataLivingFloatRe,            
             sending => open,--sendingFromDispatchBuffer,
             dataOut => dispatchBufferDataFloat,
+            specialOut => open,
             
             execEventSignal => execEventSignal,
             lateEventSignal => lateEventSignal,        
@@ -331,6 +341,8 @@ begin
 
 		execEndSigs1 => execOutputs1,
 		execEndSigs2 => execOutputs2,
+		
+		inputSpecial => specialActionToROB,
 		
 		inputData => renamedDataMerged,
 		prevSending => renamedSending,
@@ -751,7 +763,7 @@ begin
 		   dread <= '1';
            dadr <= slotM0_E0(0).ins.result;
            sysRegReadSel <= slotM0_E0(0).ins.result(4 downto 0);
-           sysRegRead <= sendingM0_E0 and bool2std(slotM0_E0(0).ins.operation = (System, sysMfc));
+           sysRegRead <= sendingM0_E0 and isLoadSysOp(slotM0_E0(0).ins);
            
            memLoadReady <= dvalid;              
            memLoadValue <= din;      
@@ -1553,20 +1565,8 @@ begin
 	MEMORY_INTERFACE: block
 		signal sysStoreAddressW: Mword := (others => '0');
 	begin
-		--memStoreAddress <= dataFromSB(0).ins.target;
-		--memStoreValue <= dataFromSB(0).ins.result;
-		--memStoreAllow <= sbSending and dataFromSB(0).ins.operation = (Memory, store);
-				
-		--sysStoreAllow <= sbSending and isSysRegWrite(dataFromSB);
-
-		--sysStoreAddressW <= getStoredArg1(dataFromSB);
-		--sysStoreAddress <= sysStoreAddressW(4 downto 0);
-		--sysStoreValue <= getStoredArg2(dataFromSB);			
-
-		--dadr <= dataFromSB(0).ins.target;
 		doutadr <= dataFromSB(0).ins.target;
-		--dread <= memLoadAllow;
-		dwrite <= sbSending and dataFromSB(0).full and bool2std(dataFromSB(0).ins.operation = (Memory, store));
+		dwrite <= sbSending and dataFromSB(0).full and isStoreMemOp(dataFromSB(0).ins);
 		dout <= dataFromSB(0).ins.result;
 
 	end block;

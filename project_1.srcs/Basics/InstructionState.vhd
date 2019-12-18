@@ -52,6 +52,32 @@ type ExecFunc is (unknown,
 						);	
 
 
+--------------
+type SubpipeType is (None, ALU, Mem, FP);
+
+type ArithOp is (opAnd, opOr, opXor, opAdd, opSub, opShl, opSha, opJz, opJnz, opJ, opJl, opMul, opMulshs, opMulhu);
+type MemOp is (opLoad, opStore, opLoadSys, opStoreSys);
+
+type FpOp is (opMove, opOr);
+
+type SysOp is (opNone, opUndef, opHalt, opSync, opReplay,  opRetI, opRetE, opCall, opError, opSend);
+
+type SpecificOp is record
+    subpipe: SubpipeType;
+
+    arith: ArithOp;
+    memory: MemOp;
+    float: FpOp;
+    system: SysOp;
+end record;
+
+constant DEFAULT_SPECIFIC_OP: SpecificOp := (   subpipe => None,
+                                                arith => opAnd,
+                                                memory => opLoad,
+                                                float => opMove,
+                                                system => opNone);
+---------------
+
 constant TAG_SIZE: integer := 7 + LOG2_PIPE_WIDTH;
 subtype InsTag is std_logic_vector(TAG_SIZE-1 downto 0);
 

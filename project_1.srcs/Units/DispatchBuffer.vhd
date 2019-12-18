@@ -15,6 +15,7 @@ use work.PipelineGeneral.all;
 entity DispatchBuffer is
     Port ( clk : in STD_LOGIC;
            
+           specialAction: in InstructionSlot;
            dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
            
            nextAccepting: in std_logic;
@@ -25,6 +26,7 @@ entity DispatchBuffer is
            
            sending: out std_logic;
            dataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+           specialOut: out InstructionSlot;
            
            execEventSignal: in std_logic;
            lateEventSignal: in std_logic;          
@@ -35,6 +37,7 @@ end DispatchBuffer;
 
 architecture Behavioral of DispatchBuffer is
     signal queueData0, queueData1: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
+    signal special0, special1: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     signal fullMask: std_logic_vector(0 to 1) := (others => '0');
     signal isSending: std_logic := '0';   
 begin
@@ -49,6 +52,7 @@ begin
             
             if isSending = '1' then
                 queueData0 <= queueData1;
+                special0 <= special1;
                 --fullMask(0) <= fullMask(1);
                 fullMaskNew0 := fullMask(1);
                 fullMask(1) <= '0';
@@ -58,9 +62,11 @@ begin
                 if --fullMask(0) = '1' and nextAccepting = '0' then -- This means full(0) and not sending
                    fullMaskNew0 = '1' then
                     queueData1 <= dataIn;
+                    special1 <= specialAction;
                     fullMask(1) <= '1';
                 else
                     queueData0 <= dataIn;
+                    special0 <= specialAction;
                     fullMaskNew0 := '1';
                 end if;
                 
@@ -127,6 +133,7 @@ begin
     sending <= isSending;
     dataOut <= --queueData0;
                 restoreRenameIndex(queueData0);
+    specialOut <= special0;
 
     accepting <= not fullMask(0); -- Don't allow more if anything needed to be buffered!
     empty <= not fullMask(0); -- CAREFUL: same as accepting but accepting refers to stage BEFORE Rename while empty is needed by flow FROM Rename

@@ -53,6 +53,7 @@ entity ReorderBuffer is
 		execEndSigs1: in InstructionSlotArray(0 to 3);
 		execEndSigs2: in InstructionSlotArray(0 to 3);
 		
+		inputSpecial: in InstructionSlot;
 		inputData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		prevSending: in std_logic;
 		acceptingOut: out std_logic;
@@ -91,31 +92,10 @@ architecture Behavioral of ReorderBuffer is
 	signal isFull, isAlmostFull: std_logic := '0'; 	
 
     --signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT; -- There needs to be only 1 such slot because everything younger is to be killed on commit
-
-
-            function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot is
-               variable res: InstructionSlot := insVec(0);
-            begin
-               res.full := '0';
-               
-               for i in PIPE_WIDTH-1 downto 0 loop
-                   -- TODO: simpler to get last full slot because if a static event is present, nothing will be after it in group.
-                   --       Then the 'full' bit of 'special' would be set if specialAction/exc/dbTrap
-                   if (insVec(i).full and 
-                               (    insVec(i).ins.controlInfo.specialAction
-                                or insVec(i).ins.controlInfo.hasException
-                                or insVec(i).ins.controlInfo.dbtrap)) = '1'
-                   then
-                       res := insVec(i);               
-                       exit;
-                   end if;
-               end loop;
-               
-               return res;
-            end function;    
 	
 	function getNextRobContent(content: ReorderBufferArray;
 	                           newGroup: InstructionSlotArray;
+	                           newSpecialAction: InstructionSlot;
 	                           execInfo1, execInfo2: InstructionSlotArray;
 	                           sends, receiving, execEvent, lateEventSignal: std_logic;
 	                           startPtr, endPtr, causingPtr: SmallNumber)
@@ -132,7 +112,8 @@ architecture Behavioral of ReorderBuffer is
 	       res(slv2u(endPtr)).full := '1'; -- CAREFUL: don't get index out of bounds
 	       res(slv2u(endPtr)).ops := newGroup;
 	       
-	           res(slv2u(endPtr)).special := getSpecialActionSlot(newGroup);
+	           res(slv2u(endPtr)).special := --getSpecialActionSlot(newGroup);
+	                                         newSpecialAction;  
 	   end if;
 	
 	   killMask := getMaskBetween(ROB_SIZE, causingPtr, endPtr, '0'); -- This has '1' also at 'equal' position!
@@ -173,7 +154,7 @@ architecture Behavioral of ReorderBuffer is
                    
                    res(j).ops(i).ins.constantArgs := DEFAULT_CONSTANT_ARGS;
                 
-                   --res(slv2u(endPtr)).ops(i).ins.operation := (System, sysUndef); --!! Operation must be known to UnitSequencer after commit
+                   res(slv2u(endPtr)).ops(i).ins.operation := (System, sysUndef);
                    
                         res(j).ops(i).ins.virtualArgSpec.intArgSel := (others => '0');
                         res(j).ops(i).ins.virtualArgSpec.floatArgSel := (others => '0');
@@ -233,6 +214,7 @@ begin
 	causingPtr <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
 	
 	contentNext <= getNextRobContent(content, inputData,
+	                                 inputSpecial,
 	                                 execEndSigs1, execEndSigs2,
 	                                 isSending, prevSending,
 	                                 execEvent, lateEventSignal,

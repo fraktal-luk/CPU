@@ -102,36 +102,25 @@ begin
 			res.result := currentState or X"00000100";
 			res.result := res.result and X"fdffffff";	-- Clear dbtrap
 		elsif commitCausing.controlInfo.specialAction = '1' then
-		    
-		
+
 			res.result := currentState;
-            if --commitCausing.operation.func = sysSync 
-               -- or commitCausing.operation.func = sysSend then
-                special.ins.operation.func = sysSync 
-                 or special.ins.operation.func = sysSend then
-                
+            if special.ins.operation.func = sysSync 
+                 or special.ins.operation.func = sysSend then              
                 res.ip := commitCausing.target;
-            elsif --commitCausing.operation.func = sysReplay -- then
-                    special.ins.operation.func = sysReplay -- then
-            
+            elsif special.ins.operation.func = sysReplay -- then       
                 or commitCausing.controlInfo.refetch = '1' then
                 res.ip := addMwordFaster(commitCausing.target, MINUS_4); -- CAREFUL: wouldn't work if branch or short
-            elsif --commitCausing.operation.func = sysHalt then
-                special.ins.operation.func = sysHalt then
+            elsif special.ins.operation.func = sysHalt then
                 res.ip := commitCausing.target; -- ???
-            elsif --commitCausing.operation.func = sysRetI then
-                special.ins.operation.func = sysRetI then
+            elsif special.ins.operation.func = sysRetI then
                 res.result := stateInt;
                 res.ip := linkInt;
-            elsif --commitCausing.operation.func = sysRetE then
-                    special.ins.operation.func = sysRetE then
+            elsif special.ins.operation.func = sysRetE then
                 res.result := stateExc;
                 res.ip := linkExc;
-            elsif --commitCausing.operation.func = sysError then
-                special.ins.operation.func = sysError then
+            elsif special.ins.operation.func = sysError then
                 res.ip := EXC_BASE;
-            elsif --commitCausing.operation.func = sysCall then
-                special.ins.operation.func = sysCall then
+            elsif special.ins.operation.func = sysCall then
                 res.ip := CALL_BASE; -- TEMP			    
             end if;
 		end if;		
