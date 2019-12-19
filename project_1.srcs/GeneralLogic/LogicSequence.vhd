@@ -104,23 +104,31 @@ begin
 		elsif commitCausing.controlInfo.specialAction = '1' then
 
 			res.result := currentState;
-            if special.ins.operation.func = sysSync 
-                 or special.ins.operation.func = sysSend then              
+            if --     special.ins.operation.func = sysSync
+               --  or special.ins.operation.func = sysSend then
+                   special.ins.specificOperation.system = opSync 
+                or special.ins.specificOperation.system = opSend then                              
                 res.ip := commitCausing.target;
-            elsif special.ins.operation.func = sysReplay -- then       
+            elsif --special.ins.operation.func = sysReplay -- then
+                    special.ins.specificOperation.system = opReplay       
                 or commitCausing.controlInfo.refetch = '1' then
                 res.ip := addMwordFaster(commitCausing.target, MINUS_4); -- CAREFUL: wouldn't work if branch or short
-            elsif special.ins.operation.func = sysHalt then
+            elsif --special.ins.operation.func = sysHalt then
+                    special.ins.specificOperation.system = opHalt then
                 res.ip := commitCausing.target; -- ???
-            elsif special.ins.operation.func = sysRetI then
+            elsif --special.ins.operation.func = sysRetI then
+                    special.ins.specificOperation.system = opRetI then
                 res.result := stateInt;
                 res.ip := linkInt;
-            elsif special.ins.operation.func = sysRetE then
+            elsif --special.ins.operation.func = sysRetE then
+                    special.ins.specificOperation.system = opRetE then 
                 res.result := stateExc;
                 res.ip := linkExc;
-            elsif special.ins.operation.func = sysError then
+            elsif --special.ins.operation.func = sysError then
+                    special.ins.specificOperation.system = opError then
                 res.ip := EXC_BASE;
-            elsif special.ins.operation.func = sysCall then
+            elsif --special.ins.operation.func = sysCall then
+                    special.ins.specificOperation.system = opCall then
                 res.ip := CALL_BASE; -- TEMP			    
             end if;
 		end if;		

@@ -204,7 +204,8 @@ begin
         pcNext <= getNextPC(stageDataOutPC.ip, (others => '0'), '0');
 
         excInfoUpdate <= lateEventSending 
-                                        and (stageDataLateCausingOut(0).ins.controlInfo.hasException or bool2std(special.ins.operation = (System, sysCall)))
+                                        and (stageDataLateCausingOut(0).ins.controlInfo.hasException or --bool2std(special.ins.operation = (System, sysCall)))
+                                                                                   (special.ins.controlInfo.specialAction and bool2std(special.ins.specificOperation.system = opCall)))
                                         and not stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
         intInfoUpdate <= lateEventSending and stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
         ----------------------------------------------------------------------
@@ -442,7 +443,9 @@ begin
     
     commitAccepting <= not eventCommitted and not intCommitted and not lateEventSending; -- Blocked while procesing event
 
-    doneSig <= eventCommitted and bool2std(special.ins.operation.func = sysSend);
-    failSig <= eventCommitted and bool2std(special.ins.operation.func = sysError);
+    doneSig <= eventCommitted and bool2std(--special.ins.operation.func = sysSend);
+                                              special.ins.specificOperation.system = opSend);
+    failSig <= eventCommitted and bool2std(--special.ins.operation.func = sysError);
+                                              special.ins.specificOperation.system = opError);
                 
 end Behavioral;

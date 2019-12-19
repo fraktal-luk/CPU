@@ -874,7 +874,31 @@ end function;
                         or insVec(i).ins.controlInfo.hasException
                         or insVec(i).ins.controlInfo.dbtrap)) = '1'
            then
-               res := insVec(i);               
+               res := insVec(i);
+                             
+               case res.ins.operation.func is
+                   when sysRetI =>
+                       res.ins.specificOperation.system := opRetI;
+                   when sysRetE =>
+                       res.ins.specificOperation.system := opRetE;
+                   when sysHalt =>
+                       res.ins.specificOperation.system := opHalt;
+                   when sysSync =>
+                       res.ins.specificOperation.system := opSync;
+                   when sysReplay =>
+                       res.ins.specificOperation.system := opReplay;
+                   when sysError =>
+                       res.ins.specificOperation.system := opError;
+                   when sysCall =>
+                       res.ins.specificOperation.system := opCall;
+                   when sysSend =>
+                       res.ins.specificOperation.system := opSend;                                                                                                                                                                                                      
+                   when others =>
+                       res.ins.specificOperation.system := opNone;                                                                                                                                                                                                                          
+               end case;
+               
+               res.ins.operation := (System, sysUndef);
+                   
                exit;
            end if;
        end loop;

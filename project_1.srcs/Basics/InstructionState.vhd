@@ -216,6 +216,7 @@ type InstructionState is record
 	bits: word; -- instruction word
 	tags: InstructionTags;
 	operation: BinomialOp;
+	specificOperation: SpecificOp;
 	classInfo: InstructionClassInfo;
 	constantArgs: InstructionConstantArgs;
 	virtualArgSpec: InstructionArgSpec;
@@ -483,6 +484,8 @@ begin
 	res.controlInfo := defaultControlInfo;
 	res.ip := (others => '0');
 	res.bits := (others=>'0');
+	
+	res.specificOperation := DEFAULT_SPECIFIC_OP;
 	res.tags := DEFAULT_INSTRUCTION_TAGS;
 	res.classInfo := defaultClassInfo;
 	res.constantArgs := defaultConstantArgs;
