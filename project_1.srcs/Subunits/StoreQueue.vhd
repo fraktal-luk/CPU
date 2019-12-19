@@ -147,7 +147,9 @@ architecture Behavioral of StoreQueue is
                             --dataIn(slv2u(diff(1 downto 0)));
                     res(i) := slot.ins;          
                     res(i).tags := slot.ins.tags;
-                    res(i).operation := slot.ins.operation;
+                    res(i).operation := --slot.ins.operation;
+                                        (General, unknown);
+                        res(i).specificOperation := slot.ins.specificOperation;
                     res(i).controlInfo.completed := '0';
                     res(i).controlInfo.completed2 := '0';
                     res(i).controlInfo.firstBr := '0';                                  
@@ -355,7 +357,7 @@ begin
 				                inputMask,				             
 				                pTagged,
 				                storeValueInput,
-				                (compareAddressInput.full, compareAddressInput.ins),
+				                compareAddressInput,
 				                IS_LOAD_QUEUE, newerLQ
 				                                    );
 

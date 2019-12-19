@@ -235,6 +235,14 @@ function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
     function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return SchedulerEntrySlotArray;
     
     function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot;
+
+
+    function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray;
+    function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
+    function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
+    
+    function TMP_clearOldOperation(insVec: InstructionSlotArray) return InstructionSlotArray;
+
     
     function isLoadOp(ins: InstructionState) return std_logic;
     function isStoreOp(ins: InstructionState) return std_logic;
@@ -627,7 +635,8 @@ function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector is
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if 		insVec(i).full = '1'
-			and isLoadOp(insVec(i).ins) = '1'
+			--and isLoadOp(insVec(i).ins) = '1'
+			 and (insVec(i).ins.operation = (Memory, load) or insVec(i).ins.operation = (System, sysMfc)) -- TEMP!
 		then
 			res(i) := '1';
 		end if;
@@ -641,7 +650,8 @@ function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector is
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if 		insVec(i).full = '1'
-			and isStoreOp(insVec(i).ins) = '1'
+			--and isStoreOp(insVec(i).ins) = '1'
+			 and (insVec(i).ins.operation = (Memory, store) or insVec(i).ins.operation = (System, sysMtc)) -- TEMP!
 		then
 			res(i) := '1';
 		end if;
@@ -693,6 +703,8 @@ end function;
             variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
         begin
             for i in 0 to PIPE_WIDTH-1 loop
+                    res(i).operation := (General, unknown);
+            
                 res(i).constantArgs.immSel := '0';
                 
                 res(i).virtualArgSpec.intDestSel := '0';
@@ -757,6 +769,8 @@ end function;
             variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVecInt;
         begin
             for i in 0 to PIPE_WIDTH-1 loop
+                    res(i).operation := (General, unknown);            
+            
                 res(i).constantArgs.immSel := '0';
                 
                 res(i).virtualArgSpec.intDestSel := '0';
@@ -907,35 +921,139 @@ end function;
     end function;    
 
 
+    function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray is
+        variable res: InstructionSlotArray(insVec'range) := insVec;
+    begin
+        for i in res'range loop
+            case res(i).ins.operation.func is
+                when sysMtc =>
+                    res(i).ins.specificOperation.memory := opStoreSys;
+                when sysMfc =>
+                    res(i).ins.specificOperation.memory := opLoadSys;
+                when store => 
+                    res(i).ins.specificOperation.memory := opStore;
+                when others => -- load
+                    res(i).ins.specificOperation.memory := opLoad;
+            end case;
+        end loop;
+    
+        return res;
+    end function;
+
+    function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray is
+        variable res: InstructionSlotArray(insVec'range) := insVec;
+    begin
+        for i in res'range loop
+            case res(i).ins.operation.func is                
+                when fpuMov => 
+                    res(i).ins.specificOperation.float := opMove;
+                when others => -- fpuOr
+                    res(i).ins.specificOperation.float := opOr;
+            end case;
+        end loop;
+    
+        return res;
+    end function;
+
+--						arithAdd, arithSub, arithSha,
+--						logicAnd, logicOr, logicShl,
+						
+--						mulS, mulU, 
+					
+--						divS, divU,
+						
+--						load, store,
+						
+--						jump,
+--						jumpZ,
+--						jumpNZ,
+--type ArithOp is (opAnd, opOr, opXor, opAdd, opSub, opShl, opSha, opJz, opJnz, opJ, opJl, opMul, opMulshs, opMulhu, opDiv);
+
+    function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray is
+        variable res: InstructionSlotArray(insVec'range) := insVec;
+    begin
+        for i in res'range loop
+            case res(i).ins.operation.func is                
+                when jump => 
+                    res(i).ins.specificOperation.arith := opJ;
+                when jumpZ => 
+                    res(i).ins.specificOperation.arith := opJz;
+                when jumpNZ => 
+                    res(i).ins.specificOperation.arith := opJnz;
+
+                when mulS => 
+                    res(i).ins.specificOperation.arith := opMul;
+                when mulU => 
+                    res(i).ins.specificOperation.arith := opMul;
+                        
+                when divS => 
+                    res(i).ins.specificOperation.arith := opDiv;
+                    
+               
+                when logicAnd => 
+                    res(i).ins.specificOperation.arith := opAnd;
+                when logicOr => 
+                    res(i).ins.specificOperation.arith := opOr;
+                --when logicXor => 
+                --    res(i).ins.specificOperation.arith := opXor;
+                when logicShl => 
+                    res(i).ins.specificOperation.arith := opShl;
+                
+                when arithAdd =>
+                    res(i).ins.specificOperation.arith := opAdd;
+                when arithSub => 
+                    res(i).ins.specificOperation.arith := opSub;                                                                                                                                                                      
+                when others => -- arithSha
+                    res(i).ins.specificOperation.arith := opSha;
+            end case;
+        end loop;
+    
+        return res;
+    end function;
+    
+    function TMP_clearOldOperation(insVec: InstructionSlotArray) return InstructionSlotArray is
+        variable res: InstructionSlotArray(insVec'range) := insVec;
+    begin
+        for i in res'range loop
+            res(i).ins.operation := (General, unknown);    
+        end loop;    
+        return res;
+    end function;
 
     function isLoadOp(ins: InstructionState) return std_logic is
     begin
-        return bool2std(ins.operation = (Memory, load) or ins.operation = (System, sysMfc));
+--        return bool2std(ins.operation = (Memory, load) or ins.operation = (System, sysMfc));
+        return bool2std(ins.specificOperation.memory = opLoad or ins.specificOperation.memory = opLoadSys);      
     end function;
 
     function isStoreOp(ins: InstructionState) return std_logic is
     begin
-        return bool2std(ins.operation = (Memory, store) or ins.operation = (System, sysMtc));
+       -- return bool2std(ins.operation = (Memory, store) or ins.operation = (System, sysMtc));
+        return bool2std(ins.specificOperation.memory = opStore or ins.specificOperation.memory = opStoreSys);              
     end function;
 
     function isLoadMemOp(ins: InstructionState) return std_logic is
     begin
-        return bool2std(ins.operation = (Memory, load));
+        --return bool2std(ins.operation = (Memory, load));
+        return bool2std(ins.specificOperation.memory = opLoad);        
     end function;
 
     function isStoreMemOp(ins: InstructionState) return std_logic is
     begin
-        return bool2std(ins.operation = (Memory, store));
+        --return bool2std(ins.operation = (Memory, store));
+        return bool2std(ins.specificOperation.memory = opStore);
     end function;
 
     function isLoadSysOp(ins: InstructionState) return std_logic is
     begin
-        return bool2std(ins.operation = (System, sysMfc));
+        --return bool2std(ins.operation = (System, sysMfc));
+        return bool2std(ins.specificOperation.memory = opLoadSys);
     end function;
 
     function isStoreSysOp(ins: InstructionState) return std_logic is
     begin
-        return bool2std(ins.operation = (System, sysMtc));
+        --return bool2std(ins.operation = (System, sysMtc));
+        return bool2std(ins.specificOperation.memory = opStoreSys);        
     end function;
          
 end package body;

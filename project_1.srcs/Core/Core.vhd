@@ -78,7 +78,7 @@ architecture Behavioral of Core is
                 frontEventSignal, bqAccepting, bqSending, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ, dbEmpty: std_logic := '0';
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal frontDataLastLiving, 
-            renamedDataLiving, renamedDataLivingFloat, renamedDataMerged,
+            renamedDataLiving, renamedDataLivingFloat, renamedDataMerged, renamedDataLivingMem,
             renamedDataLivingRe, renamedDataLivingFloatRe, renamedDataMergedRe,
             dispatchBufferDataInt, dispatchBufferDataFloat, dispatchBufferDataMerged,
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData: 
@@ -278,6 +278,8 @@ begin
 
     renamedDataMerged <= mergeDests(renamedDataLiving, renamedDataLivingFloat);
     
+    renamedDataLivingMem <= TMP_recodeMem(renamedDataLiving);
+    
         specialActionToROB <= specialAction when sendingFromDispatchBuffer = '0' else specialActionDispatchBuffer;
     
     
@@ -457,7 +459,7 @@ begin
            signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
            signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
         begin
-            schedDataI0 <= getSchedData(extractData(renamedDataLiving), getAluMask(renamedDataLiving));
+            schedDataI0 <= getSchedData(extractData(TMP_clearOldOperation(TMP_recodeALU(renamedDataLiving))), getAluMask(renamedDataLiving));
             dataToQueueI0 <= work.LogicIssue.updateSchedulerArray(schedDataI0, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);
             
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -571,10 +573,10 @@ begin
         begin
         
            memMaskInt <=  getStoreMask(renamedDataLiving) or getLoadMask(renamedDataLiving);
-           memMaskFloat <=  getStoreMask(renamedDataLivingFloat) or getLoadMask(renamedDataLivingFloat);        
-           memMask <= memMaskInt or memMaskFloat;
+           --memMaskFloat <=  getStoreMask(renamedDataLivingFloat) or getLoadMask(renamedDataLivingFloat);        
+           --memMask <= memMaskInt or memMaskFloat;
             
-           schedDataM0 <= getSchedData(removeArg2(extractData(renamedDataLiving)), memMaskInt);
+           schedDataM0 <= getSchedData(removeArg2(extractData(TMP_clearOldOperation(renamedDataLivingMem))), memMaskInt);
            dataToQueueM0 <= work.LogicIssue.updateSchedulerArray(schedDataM0, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);
                     
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -779,11 +781,11 @@ begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
             
             intStoreMask <= getStoreMask(renamedDataLiving) and not floatStoreMask;                                        
-            schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLiving)), intStoreMask);
+            schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLivingMem)), intStoreMask);
             dataToStoreValueIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValue, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP_SV, true);
             
             floatStoreMask <= getStoreMask(renamedDataLivingFloat);
-            schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLiving), extractData(renamedDataLivingFloat)), floatStoreMask);       
+            schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLivingMem), extractData(renamedDataLivingFloat)), floatStoreMask);       
             dataToStoreValueFloatIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValueFloat, readyFloatFlags xor readyFloatFlags, fniFloat, ENQUEUE_FN_MAP_FLOAT_SV, true);
                     
             IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -936,7 +938,7 @@ begin
         SUBPIPE_FP0: block
             signal dataToFpu0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                  
         begin
-            schedDataF0 <= getSchedData(extractData(renamedDataLivingFloat), getFpuMask(renamedDataLivingFloat));
+            schedDataF0 <= getSchedData(extractData(TMP_clearOldOperation(TMP_recodeFP(renamedDataLivingFloat))), getFpuMask(renamedDataLivingFloat));
             dataToQueueF0 <= work.LogicIssue.updateSchedulerArray(schedDataF0, readyFloatFlags xor readyFloatFlags, fniFloat, ENQUEUE_FN_MAP_FLOAT, true);
             
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -1435,8 +1437,8 @@ begin
     end block;
 
     renamedDataToBQ <= setFullMask(renamedDataLiving, getBranchMask(renamedDataLiving));
-    renamedDataToSQ <= setFullMask(renamedDataLiving, getStoreMask(renamedDataLiving));
-    renamedDataToLQ <= setFullMask(renamedDataLiving, getLoadMask(renamedDataLiving));
+    renamedDataToSQ <= setFullMask(renamedDataLivingMem, getStoreMask(renamedDataLivingMem));
+    renamedDataToLQ <= setFullMask(renamedDataLivingMem, getLoadMask(renamedDataLivingMem));
 
     BRANCH_QUEUE: entity work.BranchQueue
 	generic map(
