@@ -572,7 +572,8 @@ begin
            signal dataToAgu, dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                               
         begin
         
-           memMaskInt <=  getStoreMask(renamedDataLiving) or getLoadMask(renamedDataLiving);
+           memMaskInt <=  --getStoreMask(renamedDataLiving) or getLoadMask(renamedDataLiving);
+                            getMemMask(renamedDataLiving);
            --memMaskFloat <=  getStoreMask(renamedDataLivingFloat) or getLoadMask(renamedDataLivingFloat);        
            --memMask <= memMaskInt or memMaskFloat;
             

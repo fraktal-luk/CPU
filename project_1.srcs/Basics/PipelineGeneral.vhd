@@ -129,8 +129,9 @@ function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
-
 function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getMemMask(insVec: InstructionSlotArray) return std_logic_vector;
+
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
@@ -636,7 +637,9 @@ begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if 		insVec(i).full = '1'
 			--and isLoadOp(insVec(i).ins) = '1'
-			 and (insVec(i).ins.operation = (Memory, load) or insVec(i).ins.operation = (System, sysMfc)) -- TEMP!
+			-- and (insVec(i).ins.operation = (Memory, load) or insVec(i).ins.operation = (System, sysMfc)) -- TEMP!
+			and insVec(i).ins.specificOperation.subpipe = Mem 
+			and (insVec(i).ins.specificOperation.memory = opLoad or insVec(i).ins.specificOperation.memory = opLoadSys) 
 		then
 			res(i) := '1';
 		end if;
@@ -651,7 +654,9 @@ begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if 		insVec(i).full = '1'
 			--and isStoreOp(insVec(i).ins) = '1'
-			 and (insVec(i).ins.operation = (Memory, store) or insVec(i).ins.operation = (System, sysMtc)) -- TEMP!
+			-- and (insVec(i).ins.operation = (Memory, store) or insVec(i).ins.operation = (System, sysMtc)) -- TEMP!
+			and insVec(i).ins.specificOperation.subpipe = Mem 
+            and (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys)			
 		then
 			res(i) := '1';
 		end if;
@@ -665,7 +670,8 @@ function getAluMask(insVec: InstructionSlotArray) return std_logic_vector is
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if 		insVec(i).full = '1'
-			and (insVec(i).ins.operation.unit = Alu or insVec(i).ins.operation.unit = Jump)
+			--and (insVec(i).ins.operation.unit = Alu or insVec(i).ins.operation.unit = Jump)
+			and insVec(i).ins.specificOperation.subpipe = ALU
 		then
 			res(i) := '1';
 		end if;
@@ -679,7 +685,23 @@ function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector is
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if 		insVec(i).full = '1'
-			and (insVec(i).ins.operation.unit = FPU)
+			--and (insVec(i).ins.operation.unit = FPU)
+			and insVec(i).ins.specificOperation.subpipe = FP
+		then
+			res(i) := '1';
+		end if;
+	end loop;
+	
+	return res;
+end function;
+
+function getMemMask(insVec: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+	for i in 0 to PIPE_WIDTH-1 loop
+		if 		insVec(i).full = '1'
+			--and (insVec(i).ins.operation.unit = FPU)
+			and insVec(i).ins.specificOperation.subpipe = Mem
 		then
 			res(i) := '1';
 		end if;
@@ -890,26 +912,28 @@ end function;
            then
                res := insVec(i);
                              
-               case res.ins.operation.func is
-                   when sysRetI =>
-                       res.ins.specificOperation.system := opRetI;
-                   when sysRetE =>
-                       res.ins.specificOperation.system := opRetE;
-                   when sysHalt =>
-                       res.ins.specificOperation.system := opHalt;
-                   when sysSync =>
-                       res.ins.specificOperation.system := opSync;
-                   when sysReplay =>
-                       res.ins.specificOperation.system := opReplay;
-                   when sysError =>
-                       res.ins.specificOperation.system := opError;
-                   when sysCall =>
-                       res.ins.specificOperation.system := opCall;
-                   when sysSend =>
-                       res.ins.specificOperation.system := opSend;                                                                                                                                                                                                      
-                   when others =>
-                       res.ins.specificOperation.system := opNone;                                                                                                                                                                                                                          
-               end case;
+--               case res.ins.operation.func is
+--                   when sysRetI =>
+--                       res.ins.specificOperation.system := opRetI;
+--                   when sysRetE =>
+--                       res.ins.specificOperation.system := opRetE;
+--                   when sysHalt =>
+--                       res.ins.specificOperation.system := opHalt;
+--                   when sysSync =>
+--                       res.ins.specificOperation.system := opSync;
+--                   when sysReplay =>
+--                       res.ins.specificOperation.system := opReplay;
+--                   when sysError =>
+--                       res.ins.specificOperation.system := opError;
+--                   when sysCall =>
+--                       res.ins.specificOperation.system := opCall;
+--                   when sysSend =>
+--                       res.ins.specificOperation.system := opSend;                                                                                                                                                                                                      
+--                   when others =>
+--                       res.ins.specificOperation.system := opNone;                                                                                                                                                                                                                          
+--               end case;
+                
+                    res.ins.specificOperation.system := SysOp'val(slv2u(res.ins.specificOperation.bits));
                
                res.ins.operation := (System, sysUndef);
                    
@@ -925,16 +949,18 @@ end function;
         variable res: InstructionSlotArray(insVec'range) := insVec;
     begin
         for i in res'range loop
-            case res(i).ins.operation.func is
-                when sysMtc =>
-                    res(i).ins.specificOperation.memory := opStoreSys;
-                when sysMfc =>
-                    res(i).ins.specificOperation.memory := opLoadSys;
-                when store => 
-                    res(i).ins.specificOperation.memory := opStore;
-                when others => -- load
-                    res(i).ins.specificOperation.memory := opLoad;
-            end case;
+--            case res(i).ins.operation.func is
+--                when sysMtc =>
+--                    res(i).ins.specificOperation.memory := opStoreSys;
+--                when sysMfc =>
+--                    res(i).ins.specificOperation.memory := opLoadSys;
+--                when store => 
+--                    res(i).ins.specificOperation.memory := opStore;
+--                when others => -- load
+--                    res(i).ins.specificOperation.memory := opLoad;
+--            end case;
+            
+                res(i).ins.specificOperation.memory := MemOp'val(slv2u(res(i).ins.specificOperation.bits));
         end loop;
     
         return res;
@@ -944,12 +970,14 @@ end function;
         variable res: InstructionSlotArray(insVec'range) := insVec;
     begin
         for i in res'range loop
-            case res(i).ins.operation.func is                
-                when fpuMov => 
-                    res(i).ins.specificOperation.float := opMove;
-                when others => -- fpuOr
-                    res(i).ins.specificOperation.float := opOr;
-            end case;
+--            case res(i).ins.operation.func is                
+--                when fpuMov => 
+--                    res(i).ins.specificOperation.float := opMove;
+--                when others => -- fpuOr
+--                    res(i).ins.specificOperation.float := opOr;
+--            end case;
+            
+                res(i).ins.specificOperation.float := FpOp'val(slv2u(res(i).ins.specificOperation.bits));
         end loop;
     
         return res;
@@ -973,39 +1001,41 @@ end function;
         variable res: InstructionSlotArray(insVec'range) := insVec;
     begin
         for i in res'range loop
-            case res(i).ins.operation.func is                
-                when jump => 
-                    res(i).ins.specificOperation.arith := opJ;
-                when jumpZ => 
-                    res(i).ins.specificOperation.arith := opJz;
-                when jumpNZ => 
-                    res(i).ins.specificOperation.arith := opJnz;
+--            case res(i).ins.operation.func is                
+--                when jump => 
+--                    res(i).ins.specificOperation.arith := opJ;
+--                when jumpZ => 
+--                    res(i).ins.specificOperation.arith := opJz;
+--                when jumpNZ => 
+--                    res(i).ins.specificOperation.arith := opJnz;
 
-                when mulS => 
-                    res(i).ins.specificOperation.arith := opMul;
-                when mulU => 
-                    res(i).ins.specificOperation.arith := opMul;
+--                when mulS => 
+--                    res(i).ins.specificOperation.arith := opMul;
+--                when mulU => 
+--                    res(i).ins.specificOperation.arith := opMul;
                         
-                when divS => 
-                    res(i).ins.specificOperation.arith := opDiv;
+--                when divS => 
+--                    res(i).ins.specificOperation.arith := opDiv;
                     
                
-                when logicAnd => 
-                    res(i).ins.specificOperation.arith := opAnd;
-                when logicOr => 
-                    res(i).ins.specificOperation.arith := opOr;
-                --when logicXor => 
-                --    res(i).ins.specificOperation.arith := opXor;
-                when logicShl => 
-                    res(i).ins.specificOperation.arith := opShl;
+--                when logicAnd => 
+--                    res(i).ins.specificOperation.arith := opAnd;
+--                when logicOr => 
+--                    res(i).ins.specificOperation.arith := opOr;
+--                --when logicXor => 
+--                --    res(i).ins.specificOperation.arith := opXor;
+--                when logicShl => 
+--                    res(i).ins.specificOperation.arith := opShl;
                 
-                when arithAdd =>
-                    res(i).ins.specificOperation.arith := opAdd;
-                when arithSub => 
-                    res(i).ins.specificOperation.arith := opSub;                                                                                                                                                                      
-                when others => -- arithSha
-                    res(i).ins.specificOperation.arith := opSha;
-            end case;
+--                when arithAdd =>
+--                    res(i).ins.specificOperation.arith := opAdd;
+--                when arithSub => 
+--                    res(i).ins.specificOperation.arith := opSub;                                                                                                                                                                      
+--                when others => -- arithSha
+--                    res(i).ins.specificOperation.arith := opSha;
+--            end case;
+            
+                res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));            
         end loop;
     
         return res;
@@ -1023,7 +1053,7 @@ end function;
     function isLoadOp(ins: InstructionState) return std_logic is
     begin
 --        return bool2std(ins.operation = (Memory, load) or ins.operation = (System, sysMfc));
-        return bool2std(ins.specificOperation.memory = opLoad or ins.specificOperation.memory = opLoadSys);      
+        return bool2std(ins.specificOperation.memory = opLoad or ins.specificOperation.memory = opLoadSys);            
     end function;
 
     function isStoreOp(ins: InstructionState) return std_logic is

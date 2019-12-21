@@ -62,9 +62,16 @@ type FpOp is (opMove, opOr);
 
 type SysOp is (opNone, opUndef, opHalt, opSync, opReplay,  opRetI, opRetE, opCall, opError, opSend);
 
+function getSpecificOpSize return natural;
+
+function findLog2(n: positive) return natural;
+
+constant OP_TYPE_BITS: natural := findLog2(SubpipeType'pos(SubpipeType'high) - SubpipeType'pos(SubpipeType'low) + 1);
+constant OP_VALUE_BITS: natural := getSpecificOpSize;
+
 type SpecificOp is record
     subpipe: SubpipeType;
-
+    bits: std_logic_vector(OP_VALUE_BITS-1 downto 0);
     arith: ArithOp;
     memory: MemOp;
     float: FpOp;
@@ -72,10 +79,17 @@ type SpecificOp is record
 end record;
 
 constant DEFAULT_SPECIFIC_OP: SpecificOp := (   subpipe => None,
+                                                bits => (others => '0'),
                                                 arith => opAnd,
                                                 memory => opLoad,
                                                 float => opMove,
                                                 system => opNone);
+                                                
+function sop(sub: SubpipeType; func: ArithOp) return SpecificOp;
+function sop(sub: SubpipeType; func: MemOp) return SpecificOp;
+function sop(sub: SubpipeType; func: FpOp) return SpecificOp;
+function sop(sub: SubpipeType; func: SysOp) return SpecificOp;
+                                                
 ---------------
 
 constant TAG_SIZE: integer := 7 + LOG2_PIPE_WIDTH;
@@ -377,7 +391,90 @@ end InstructionState;
 
 
 
-package body InstructionState is
+package body InstructionState is     
+
+function sop(sub: SubpipeType; func: ArithOp) return SpecificOp is
+    variable res: SpecificOp := DEFAULT_SPECIFIC_OP;
+begin
+    res.subpipe := ALU;
+    res.arith := func;
+    res.bits := i2slv(ArithOp'pos(func), OP_VALUE_BITS);
+    return res;
+end function;
+
+function sop(sub: SubpipeType; func: MemOp) return SpecificOp is
+    variable res: SpecificOp := DEFAULT_SPECIFIC_OP;
+begin
+    res.subpipe := Mem;
+    res.memory := func;
+    res.bits := i2slv(MemOp'pos(func), OP_VALUE_BITS);
+    return res;
+end function;
+
+function sop(sub: SubpipeType; func: FpOp) return SpecificOp is
+    variable res: SpecificOp := DEFAULT_SPECIFIC_OP;
+begin
+    res.subpipe := FP;
+    res.float := func;
+    res.bits := i2slv(FpOp'pos(func), OP_VALUE_BITS);
+    return res;
+end function;
+
+function sop(sub: SubpipeType; func: SysOp) return SpecificOp is
+    variable res: SpecificOp := DEFAULT_SPECIFIC_OP;
+begin
+    res.subpipe := None;
+    res.system := func;
+    res.bits := i2slv(SysOp'pos(func), OP_VALUE_BITS);
+    return res;
+end function;
+
+
+
+function findLog2(n: positive) return natural is
+    variable i: natural := 0;
+    variable pow2: positive := 1;
+begin
+    loop
+        if pow2 >= n then
+            return i;
+        end if;
+        i := i + 1;
+        pow2 := 2*pow2;
+    end loop;    
+end function;
+
+function getSpecificOpSize return positive is
+    variable res: positive := 1;
+    constant A: natural := ArithOp'pos(ArithOp'high) - ArithOp'pos(ArithOp'low) + 1;
+    constant M: natural := MemOp'pos(MemOp'high) - MemOp'pos(MemOp'low) + 1;
+    constant F: natural := FpOp'pos(FpOp'high) - FpOp'pos(FpOp'low) + 1;
+    constant S: natural := SysOp'pos(SysOp'high) - SysOp'pos(SysOp'low) + 1;
+    variable maxAM, maxAMF, maxAMFS, maxAll: natural := 0;
+    variable i: positive := 1;
+    variable pow2: positive := 2;
+begin
+    if A > M then
+       maxAM := A;
+    else
+       maxAM := M;
+    end if;
+    
+    if maxAM > F then
+        maxAMF := maxAM;
+    else
+        maxAMF := F;
+    end if;
+    
+    if maxAMF > S then
+        maxAMFS := maxAMF;
+    else
+        maxAMFS := S;
+    end if;
+    maxAll := maxAMFS;
+    
+    return findLog2(maxAll);
+end function;
 	
 
 function defaultControlInfo return InstructionControlInfo is

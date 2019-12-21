@@ -90,12 +90,12 @@ begin
                 for i in 0 to PIPE_WIDTH-1 loop
                    queueData0(i).ins.ip <= (others => '0');
                    queueData0(i).ins.bits <= (others => '0');
-                   --queueData0(i).ins.result <= (others => '0');
-                   --queueData0(i).ins.target <= (others => '0');
+                   queueData0(i).ins.result <= (others => '0');
+                   queueData0(i).ins.target <= (others => '0');
                     
                    --queueData0(i).ins.constantArgs <= DEFAULT_CONSTANT_ARGS;
                  
-                    --res(slv2u(endPtr)).ops(i).ins.operation := (System, sysUndef); --!! Operation must be known to UnitSequencer after commit
+                   queueData0(i).ins.operation <= (System, sysUndef); --!! Operation must be known to UnitSequencer after commit
                     
 --                         res(j).ops(i).ins.virtualArgSpec.intArgSel := (others => '0');
 --                         res(j).ops(i).ins.virtualArgSpec.floatArgSel := (others => '0');
