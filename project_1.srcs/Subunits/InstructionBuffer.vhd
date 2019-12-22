@@ -118,6 +118,8 @@ architecture Implem of InstructionBuffer is
                 res(i).ins.result := (others => '0');
                 res(i).ins.target := (others => '0');
                 
+                    res(i).ins.operation := (General, unknown);
+                
                 res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
             end loop;
         end if;

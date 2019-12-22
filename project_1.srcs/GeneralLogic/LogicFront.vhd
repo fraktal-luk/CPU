@@ -59,41 +59,46 @@ begin
 				-- Which clusters?
 				-- CAREFUL, TODO: make it more regular and clear!
 				ci.mainCluster := '1';
-				if ins.operation = (Memory, store) then
+				if --ins.operation = (Memory, store) then
+				        ins.specificOperation.subpipe = Mem and (ins.specificOperation.memory = opStore or ins.specificOperation.memory = opStoreSys) then
 					ci.store := '1';
 					ci.secCluster := '1';
 				end if;
 				
-				if ins.operation = (Memory, load) or ins.operation = (System, sysMFC) then
+				if --ins.operation = (Memory, load) or ins.operation = (System, sysMFC) then
+				        ins.specificOperation.subpipe = Mem and (ins.specificOperation.memory = opLoad or ins.specificOperation.memory = opLoadSys) then
 					ci.load := '1';
 				end if;
 				
-				if ins.operation.unit = Jump then
+				if --ins.operation.unit = Jump then
+				        ins.specificOperation.subpipe = Alu
+				    and (ins.specificOperation.arith = opJ or ins.specificOperation.arith = opJz or ins.specificOperation.arith = opJnz) then
 				   -- ins.classInfo.branchIns = '1' then
 					ci.branchIns := '1';
 					--ci.secCluster := '1';
-				elsif ins.operation = (System, sysMtc) then
-					ci.store := '1';
-					ci.secCluster := '1';
-				elsif	(ins.operation.unit = System and ins.operation.func /= sysMfc) then
+				--elsif ins.operation = (System, sysMtc) then
+				--	ci.store := '1';
+				--	ci.secCluster := '1';
+				elsif	--(ins.operation.unit = System and ins.operation.func /= sysMfc) then
+				      ins.specificOperation.subpipe = none then  
 					ci.mainCluster := '0';
-					ci.secCluster := '1';
+					ci.secCluster := '0';
 				end if;
 
-			if ins.operation.func = sysUndef then
-				ci.mainCluster := '0';
-				ci.secCluster := '0';
-			end if;
+--			if ins.operation.func = sysUndef then
+--				ci.mainCluster := '0';
+--				ci.secCluster := '0';
+--			end if;
 			
-		if ins.operation.unit = ALU or ins.operation.unit = Jump then
-			ci.pipeA := '1';
-		end if;
+--		if ins.operation.unit = ALU or ins.operation.unit = Jump then
+--			ci.pipeA := '1';
+--		end if;
 		
-		if ins.operation.unit = MAC then
-			ci.pipeB := '1';
-		end if;
+--		if ins.operation.unit = MAC then
+--			ci.pipeB := '1';
+--		end if;
 		
-		ci.pipeC := ci.load or ci.store;
+--		ci.pipeC := ci.load or ci.store;
 		
 	return ci;
 end function;
@@ -114,18 +119,25 @@ begin
 	res.classInfo := getInstructionClassInfo(res);	
     res.classInfo.fpRename := decodedIns.classInfo.fpRename;
 
-    if res.operation.unit = System and
-            (	res.operation.func = sysRetI or res.operation.func = sysRetE
-            or res.operation.func = sysSync or res.operation.func = sysReplay
-            or res.operation.func = sysError
-            or res.operation.func = sysHalt
-            or res.operation.func = sysCall
-            or res.operation.func = sysSend ) then 		
+--    if res.operation.unit = System and
+--            (	res.operation.func = sysRetI or res.operation.func = sysRetE
+--            or res.operation.func = sysSync or res.operation.func = sysReplay
+--            or res.operation.func = sysError
+--            or res.operation.func = sysHalt
+--            or res.operation.func = sysCall
+--            or res.operation.func = sysSend ) then
+     if res.specificOperation.subpipe = none then      
+            	
         res.controlInfo.specialAction := '1'; -- TODO: move this to classInfo?
         
         -- CAREFUL: Those ops don't get issued, they are handled at retirement
         res.classInfo.mainCluster := '0';
         res.classInfo.secCluster := '0';
+        
+        if res.specificOperation.system = opUndef then
+            res.controlInfo.hasException := '1';
+            --res.controlInfo.exceptionCode := i2slv(ExceptionType'pos(undefinedInstruction), SMALL_NUMBER_SIZE);
+        end if;        
     end if;	
 	
 --	   if res.operation.unit = System then
@@ -155,10 +167,10 @@ begin
 --	   end if;
 	
 	
-    if res.operation.func = sysUndef then
-        res.controlInfo.hasException := '1';
-        --res.controlInfo.exceptionCode := i2slv(ExceptionType'pos(undefinedInstruction), SMALL_NUMBER_SIZE);
-    end if;
+--    if res.operation.func = sysUndef then
+--        res.controlInfo.hasException := '1';
+--        --res.controlInfo.exceptionCode := i2slv(ExceptionType'pos(undefinedInstruction), SMALL_NUMBER_SIZE);
+--    end if;
     
     --if res.controlInfo.squashed = '1' then	-- CAREFUL: ivalid was '0'
     --    report "Trying to decode invalid location" severity error;
