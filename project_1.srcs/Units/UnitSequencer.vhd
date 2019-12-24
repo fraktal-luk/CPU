@@ -30,6 +30,7 @@ use work.InstructionState.all;
 use work.CoreConfig.all;
 use work.PipelineGeneral.all;
 use work.LogicSequence.all;
+use work.LogicRenaming.all;
 
 
 entity UnitSequencer is
@@ -54,7 +55,7 @@ entity UnitSequencer is
   
     lateEventOut: out std_logic;
     lateEventSetPC: out std_logic;
-    lateCausing : out InstructionState;
+    lateCausing: out InstructionState;
     
     -- Interface PC <-> front pipe
     frontAccepting: in std_logic;
@@ -68,6 +69,7 @@ entity UnitSequencer is
     -- Interface with ROB
     commitAccepting: out std_logic;
     robDataLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+    robSpecial: in InstructionSlot;
     sendingFromROB: in std_logic;
     
     dataFromBQV: in InstructionSlotArray(0 to PIPE_WIDTH-1);
@@ -111,6 +113,8 @@ architecture Behavioral of UnitSequencer is
     signal stageDataToPC, tmpPcOutA, stageDataLastEffectiveInA, stageDataLastEffectiveOutA, stageDataLateCausingIn:
                         InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
+    signal special: InstructionSlot := DEFAULT_INS_SLOT;
+
     signal intTypeCommitted: std_logic_vector(0 to 1) := (others => '0');
  
     signal sysStoreAllow: std_logic := '0';
@@ -118,7 +122,9 @@ architecture Behavioral of UnitSequencer is
     signal sysStoreValue: Mword := (others => '0'); 
         
     signal commitCtr, commitCtrNext: Word := (others => '0');
-        
+    
+    signal intPointer, intPointerNext, floatPointer, floatPointerNext: SmallNumber := (others => '0');
+    
     constant HAS_RESET_SEQ: std_logic := '0';
     constant HAS_EN_SEQ: std_logic := '0';
 
@@ -129,12 +135,22 @@ architecture Behavioral of UnitSequencer is
     alias linkRegInt is sysRegArray(3);
     alias savedStateExc is sysRegArray(4);
     alias savedStateInt is sysRegArray(5);
+    
+    
+    function setPointers(ins: InstructionState; intPointer, floatPointer: SmallNumber) return InstructionState is
+        variable res: InstructionState := ins;
+    begin
+        res.tags.intPointer := intPointer;
+        res.tags.floatPointer := floatPointer;
+        return res;
+    end function;
+
 begin     
         resetSig <= reset and HAS_RESET_SEQ;
         enSig <= en or not HAS_EN_SEQ;
    
    
-   sysStoreAllow <= sbSending and dataFromSB.full and bool2std(dataFromSB.ins.operation = (System, sysMtc));
+   sysStoreAllow <= sbSending and dataFromSB.full and isStoreSysOp(dataFromSB.ins);
    sysStoreAddress <= dataFromSB.ins.target(4 downto 0);
    sysStoreValue <= dataFromSB.ins.result;
    
@@ -143,7 +159,7 @@ begin
         
             lateEventOut <= lateEventSending;
             lateEventSetPC <= lateEventSending;
-            lateCausing <= stageDataLateCausingOut(0).ins;        
+            lateCausing <= setPointers(stageDataLateCausingOut(0).ins, intPointer, floatPointer);  
         
         stageDataToPC(0).full <= sendingToPC;
         stageDataToPC(0).ins <= newPCData(lateEventSending, stageDataLateCausingOut(0).ins,
@@ -188,7 +204,8 @@ begin
         pcNext <= getNextPC(stageDataOutPC.ip, (others => '0'), '0');
 
         excInfoUpdate <= lateEventSending 
-                                        and (stageDataLateCausingOut(0).ins.controlInfo.hasException or bool2std(stageDataLateCausingOut(0).ins.operation = (System, sysCall)))
+                                        and (stageDataLateCausingOut(0).ins.controlInfo.hasException or --bool2std(special.ins.operation = (System, sysCall)))
+                                                                                   (special.ins.controlInfo.specialAction and bool2std(special.ins.specificOperation.system = opCall)))
                                         and not stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
         intInfoUpdate <= lateEventSending and stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
         ----------------------------------------------------------------------
@@ -248,6 +265,22 @@ begin
 
         commitCtrNext <= i2slv(slv2u(commitCtr) + countOnes(effectiveMask), 32) when sendingToCommit = '1' else commitCtr;
 
+    
+        TMP_REGS: block
+            signal putVecInt, putVecFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+            signal nPutInt, nPutFloat: integer := 0;
+        begin
+                putVecInt <= whichPutReg(stageDataToCommit, false);
+                putVecFloat <= whichPutReg(stageDataToCommit, true);
+
+                nPutInt <= countOnes(putVecInt);
+                nPutFloat <= countOnes(putVecFloat);
+
+                intPointerNext <= i2slv(slv2u(intPointer) + nPutInt, SMALL_NUMBER_SIZE) when sendingToCommit = '1' else intPointer;
+                floatPointerNext <= i2slv(slv2u(floatPointer) + nPutFloat, SMALL_NUMBER_SIZE) when sendingToCommit = '1' else floatPointer;
+        end block;
+        
+
         effectiveMask <= getEffectiveMask(stageDataToCommit);
             
         COMMON_SYNCHRONOUS: process(clk)     
@@ -255,8 +288,16 @@ begin
             if rising_edge(clk) then
                 commitGroupCtr <= commitGroupCtrNext;
                 commitGroupCtrInc <= commitGroupCtrIncNext;
-                commitCtr <= commitCtrNext;                
-            end if;    
+                commitCtr <= commitCtrNext;
+                
+                    intPointer <= intPointerNext;
+                    floatPointer <= floatPointerNext;
+                    
+                    
+               if sendingFromROB = '1' then
+                   special <= robSpecial;
+               end if;           
+            end if;
         end process;        
         
         sendingToCommit <= sendingFromROB;
@@ -297,7 +338,7 @@ begin
     stageDataLastEffectiveInA(0) <= getNewEffective(sendingToCommit, robDataLiving, dataFromBQV,
                                                                 stageDataLastEffectiveOutA(0).ins, 
                                                                 stageDataLateCausingOut(0).ins,
-                                                                lateEventSending);
+                                                                lateEventSending);--, intPointerNext, floatPointerNext);
                                                                 
     sendingToLastEffective <= sendingToCommit or lateEventSending;
 
@@ -347,9 +388,12 @@ begin
     sendingToLateCausing <= (eventCommitted or intCommitted) and sbEmpty;
     
     newLateCausing <= getLatePCData(stageDataLastEffectiveOutA(0).ins, intCommitted, intTypeCommitted,
-                                        currentState, linkRegExc, linkRegInt, savedStateExc, savedStateInt);
+                                        currentState, linkRegExc, linkRegInt, savedStateExc, savedStateInt, special);
     
     stageDataLateCausingIn(0) <= (sendingToLateCausing, newLateCausing);
+
+               -- ch0 <= bool2std(newLateCausing.tags.intPointer = intPointer);
+               -- ch1 <= bool2std(stageDataLateCausingOut(0).ins.tags.intPointer = intPointer);
 
     LATE_CAUSING_SLOT: entity work.GenericStage(Behavioral)
     port map(
@@ -371,7 +415,7 @@ begin
         execCausing => DEFAULT_INSTRUCTION_STATE
     );
    
-    COMMITTED_VIEW: block
+    COMMITTED_VIEW: block -- CAREFUL, TODO: include replaced intPointer and floatPointer in this view 
        signal committedText: InstructionTextArray(0 to PIPE_WIDTH-1);
        signal lastEffectiveText, lateCausingText: InstructionTextArray(0 to 0);
     begin
@@ -397,9 +441,11 @@ begin
     commitGroupCtrOut <= commitGroupCtr;
     commitGroupCtrIncOut <= commitGroupCtrInc;
     
-    commitAccepting <= not eventCommitted and not lateEventSending; -- Blocked while procesing event
+    commitAccepting <= not eventCommitted and not intCommitted and not lateEventSending; -- Blocked while procesing event
 
-    doneSig <= eventCommitted and bool2std(stageDataLastEffectiveOutA(0).ins.operation.func = sysSend);
-    failSig <= eventCommitted and bool2std(stageDataLastEffectiveOutA(0).ins.operation.func = sysError);
+    doneSig <= eventCommitted and bool2std(--special.ins.operation.func = sysSend);
+                                              special.ins.specificOperation.system = opSend);
+    failSig <= eventCommitted and bool2std(--special.ins.operation.func = sysError);
+                                              special.ins.specificOperation.system = opError);
                 
 end Behavioral;

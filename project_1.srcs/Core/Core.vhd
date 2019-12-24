@@ -75,14 +75,18 @@ end Core;
 architecture Behavioral of Core is
     signal pcDataSig, frontCausing, execCausing, lateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
-                frontEventSignal, bqAccepting, bqSending, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ: std_logic := '0';
+                frontEventSignal, bqAccepting, bqSending, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ, dbEmpty: std_logic := '0';
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal frontDataLastLiving, renamedDataLiving, renamedDataLivingFloat, renamedDataMerged, dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData: 
+    signal frontDataLastLiving, 
+            renamedDataLiving, renamedDataLivingFloat, renamedDataMerged, renamedDataLivingMem,
+            renamedDataLivingRe, renamedDataLivingFloatRe, renamedDataMergedRe,
+            dispatchBufferDataInt, dispatchBufferDataFloat, dispatchBufferDataMerged,
+            dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
-
+    signal specialOutROB: InstructionSlot := DEFAULT_INS_SLOT;
 
 
     --  TODO: Which signals will be main indicators for diagnosing flow blockage? 
@@ -97,8 +101,8 @@ architecture Behavioral of Core is
 
                                                             -- sendingBranchIns - EXEC
     signal execEventSignal, lateEventSignal, lateEventSetPC, sendingBranchIns: std_logic := '0';
-    signal robSending, robAccepting, renamedSending, commitAccepting, 
-                iqAccepting, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
+    signal robSending, robAccepting, renamedSending, renamedSendingRe, commitAccepting, oooAccepting, sendingToDispatchBuffer, sendingFromDispatchBuffer,
+                iqAccepting, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0, dispatchAccepting,
                 robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0: std_logic := '0';
     signal commitGroupCtr, commitGroupCtrInc: InsTag := (others => '0');
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -110,6 +114,8 @@ architecture Behavioral of Core is
     
     signal sbSending, sbEmpty, sysRegRead, sysRegSending: std_logic := '0';
     signal dataFromSB: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
+    
+    signal specialAction, specialActionDispatchBuffer, specialActionToROB: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     function mergeDests(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := dataInt;
@@ -165,6 +171,7 @@ begin
         commitAccepting => commitAccepting,
         sendingFromROB => robSending,    
         robDataLiving => dataOutROB,
+        robSpecial => specialOutROB,
         ---
         dataFromBQV => bqData,
 
@@ -198,7 +205,8 @@ begin
         bpSending => bpSending,
         bpData => bpData,
     
-        renameAccepting => iqAccepting,            
+        renameAccepting => --iqAccepting,
+                            dispatchAccepting,           
         dataLastLiving => frontDataLastLiving,
         lastSending => frontLastSending,
         
@@ -220,15 +228,17 @@ begin
         frontLastSending => frontLastSending,
         frontDataLastLiving => frontDataLastLiving,
         
-        renamedDataLiving => renamedDataLiving,
-        renamedDataLivingFloat => renamedDataLivingFloat,        
-        renamedSending => renamedSending,
+        renamedDataLiving => renamedDataLivingRe,
+        renamedDataLivingFloat => renamedDataLivingFloatRe,        
+        renamedSending => renamedSendingRe,
 
         robDataLiving => dataOutROB,
         sendingFromROB => robSending,
         
         newPhysDestsOut => newIntDests,
         newFloatDestsOut => newFloatDests,
+            
+        specialActionOut => specialAction,
             
         commitGroupCtr => commitGroupCtr,
         --commitCtr => commitCtr,
@@ -249,14 +259,78 @@ begin
     or (robAcceptingMore and iqAcceptingMoreI0 and iqAcceptingMoreM0 and iqAcceptingMoreS0 and iqAcceptingMoreF0 and iqAcceptingMoreSF0 and not almostFullSQ and not almostFullLQ and renameAccepting);
     
     
+    oooAccepting <= robAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0 and acceptingSQ and acceptingLQ;
+    
+    -- From Rename we send to OOO if it accepts and DB is empty. If DB is not empty, we have to drain it first!
+    sendingToDispatchBuffer <= renamedSendingRe and (not oooAccepting or not dbEmpty);
+    
+    GEN_X: if false generate
+        renamedSending <= renamedSendingRe;
+        renamedDataLiving <= renamedDataLivingRe;
+        renamedDataLivingFloat <= renamedDataLivingFloatRe;
+    end generate;
+    
+    GEN_Y: if true generate
+         renamedSending <= (renamedSendingRe and oooAccepting) or sendingFromDispatchBuffer;
+         renamedDataLiving <= renamedDataLivingRe when sendingFromDispatchBuffer = '0' else dispatchBufferDataInt; 
+         renamedDataLivingFloat <= renamedDataLivingFloatRe when sendingFromDispatchBuffer = '0' else dispatchBufferDataFloat; 
+    end generate;
+
     renamedDataMerged <= mergeDests(renamedDataLiving, renamedDataLivingFloat);
     
+    renamedDataLivingMem <= TMP_recodeMem(renamedDataLiving);
+    
+        specialActionToROB <= specialAction when sendingFromDispatchBuffer = '0' else specialActionDispatchBuffer;
+    
+    
+        DISPATCH_BUFFER: entity work.DispatchBuffer port map(
+            clk => clk,
+            
+            specialAction => specialAction,
+            nextAccepting => oooAccepting,          
+            accepting => dispatchAccepting,
+            prevSending => sendingToDispatchBuffer,
+            dataIn => renamedDataLivingRe,            
+            sending => sendingFromDispatchBuffer,
+            dataOut => dispatchBufferDataInt,
+            specialOut => specialActionDispatchBuffer,
+            
+            execEventSignal => execEventSignal,
+            lateEventSignal => lateEventSignal,        
+            empty => dbEmpty            
+        );
+    
+        DISPATCH_BUFFER_FP: entity work.DispatchBuffer port map(
+            clk => clk,
+            
+            specialAction => specialAction,
+            nextAccepting => oooAccepting,          
+            accepting => open,
+            prevSending => sendingToDispatchBuffer,
+            dataIn => renamedDataLivingFloatRe,            
+            sending => open,--sendingFromDispatchBuffer,
+            dataOut => dispatchBufferDataFloat,
+            specialOut => open,
+            
+            execEventSignal => execEventSignal,
+            lateEventSignal => lateEventSignal,        
+            empty => open            
+        );
+    
+        
+    
     RENAMED_VIEW: block
+        signal renamedIntTextRe, renamedFloatTextRe, renamedMergedTextRe: InstructionTextArray(0 to PIPE_WIDTH-1);
+    
         signal renamedIntText, renamedFloatText, renamedMergedText: InstructionTextArray(0 to PIPE_WIDTH-1);
     begin
         renamedIntText <= insSlotArrayText(renamedDataLiving, '0');
         renamedFloatText <= insSlotArrayText(renamedDataLivingFloat, '0');
         renamedMergedText <= insSlotArrayText(renamedDataMerged, '0');
+        
+        renamedIntTextRe <= insSlotArrayText(renamedDataLivingRe, '0');
+        renamedFloatTextRe <= insSlotArrayText(renamedDataLivingFloatRe, '0');
+        renamedMergedTextRe <= insSlotArrayText(renamedDataMergedRe, '0');        
     end block;
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
@@ -270,6 +344,8 @@ begin
 		execEndSigs1 => execOutputs1,
 		execEndSigs2 => execOutputs2,
 		
+		inputSpecial => specialActionToROB,
+		
 		inputData => renamedDataMerged,
 		prevSending => renamedSending,
 		acceptingOut => robAccepting,
@@ -277,7 +353,8 @@ begin
 		
 		nextAccepting => commitAccepting,
 		sendingOut => robSending, 
-		outputData => dataOutROB		
+		outputData => dataOutROB,
+		outputSpecial => specialOutROB		
 	);
 
     ROB_OUT_VIEW: block
@@ -382,7 +459,7 @@ begin
            signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
            signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
         begin
-            schedDataI0 <= getSchedData(extractData(renamedDataLiving), getAluMask(renamedDataLiving));
+            schedDataI0 <= getSchedData(extractData(TMP_clearOldOperation(TMP_recodeALU(renamedDataLiving))), getAluMask(renamedDataLiving));
             dataToQueueI0 <= work.LogicIssue.updateSchedulerArray(schedDataI0, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);
             
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -495,11 +572,12 @@ begin
            signal dataToAgu, dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                               
         begin
         
-           memMaskInt <=  getStoreMask(renamedDataLiving) or getLoadMask(renamedDataLiving);
-           memMaskFloat <=  getStoreMask(renamedDataLivingFloat) or getLoadMask(renamedDataLivingFloat);        
-           memMask <= memMaskInt or memMaskFloat;
+           memMaskInt <=  --getStoreMask(renamedDataLiving) or getLoadMask(renamedDataLiving);
+                            getMemMask(renamedDataLiving);
+           --memMaskFloat <=  getStoreMask(renamedDataLivingFloat) or getLoadMask(renamedDataLivingFloat);        
+           --memMask <= memMaskInt or memMaskFloat;
             
-           schedDataM0 <= getSchedData(removeArg2(extractData(renamedDataLiving)), memMaskInt);
+           schedDataM0 <= getSchedData(removeArg2(extractData(TMP_clearOldOperation(renamedDataLivingMem))), memMaskInt);
            dataToQueueM0 <= work.LogicIssue.updateSchedulerArray(schedDataM0, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);
                     
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -688,7 +766,7 @@ begin
 		   dread <= '1';
            dadr <= slotM0_E0(0).ins.result;
            sysRegReadSel <= slotM0_E0(0).ins.result(4 downto 0);
-           sysRegRead <= sendingM0_E0 and bool2std(slotM0_E0(0).ins.operation = (System, sysMfc));
+           sysRegRead <= sendingM0_E0 and isLoadSysOp(slotM0_E0(0).ins);
            
            memLoadReady <= dvalid;              
            memLoadValue <= din;      
@@ -704,11 +782,11 @@ begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
             
             intStoreMask <= getStoreMask(renamedDataLiving) and not floatStoreMask;                                        
-            schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLiving)), intStoreMask);
+            schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLivingMem)), intStoreMask);
             dataToStoreValueIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValue, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP_SV, true);
             
             floatStoreMask <= getStoreMask(renamedDataLivingFloat);
-            schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLiving), extractData(renamedDataLivingFloat)), floatStoreMask);       
+            schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLivingMem), extractData(renamedDataLivingFloat)), floatStoreMask);       
             dataToStoreValueFloatIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValueFloat, readyFloatFlags xor readyFloatFlags, fniFloat, ENQUEUE_FN_MAP_FLOAT_SV, true);
                     
             IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -861,7 +939,7 @@ begin
         SUBPIPE_FP0: block
             signal dataToFpu0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                  
         begin
-            schedDataF0 <= getSchedData(extractData(renamedDataLivingFloat), getFpuMask(renamedDataLivingFloat));
+            schedDataF0 <= getSchedData(extractData(TMP_clearOldOperation(TMP_recodeFP(renamedDataLivingFloat))), getFpuMask(renamedDataLivingFloat));
             dataToQueueF0 <= work.LogicIssue.updateSchedulerArray(schedDataF0, readyFloatFlags xor readyFloatFlags, fniFloat, ENQUEUE_FN_MAP_FLOAT, true);
             
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -1360,8 +1438,8 @@ begin
     end block;
 
     renamedDataToBQ <= setFullMask(renamedDataLiving, getBranchMask(renamedDataLiving));
-    renamedDataToSQ <= setFullMask(renamedDataLiving, getStoreMask(renamedDataLiving));
-    renamedDataToLQ <= setFullMask(renamedDataLiving, getLoadMask(renamedDataLiving));
+    renamedDataToSQ <= setFullMask(renamedDataLivingMem, getStoreMask(renamedDataLivingMem));
+    renamedDataToLQ <= setFullMask(renamedDataLivingMem, getLoadMask(renamedDataLivingMem));
 
     BRANCH_QUEUE: entity work.BranchQueue
 	generic map(
@@ -1490,20 +1568,8 @@ begin
 	MEMORY_INTERFACE: block
 		signal sysStoreAddressW: Mword := (others => '0');
 	begin
-		--memStoreAddress <= dataFromSB(0).ins.target;
-		--memStoreValue <= dataFromSB(0).ins.result;
-		--memStoreAllow <= sbSending and dataFromSB(0).ins.operation = (Memory, store);
-				
-		--sysStoreAllow <= sbSending and isSysRegWrite(dataFromSB);
-
-		--sysStoreAddressW <= getStoredArg1(dataFromSB);
-		--sysStoreAddress <= sysStoreAddressW(4 downto 0);
-		--sysStoreValue <= getStoredArg2(dataFromSB);			
-
-		--dadr <= dataFromSB(0).ins.target;
 		doutadr <= dataFromSB(0).ins.target;
-		--dread <= memLoadAllow;
-		dwrite <= sbSending and dataFromSB(0).full and bool2std(dataFromSB(0).ins.operation = (Memory, store));
+		dwrite <= sbSending and dataFromSB(0).full and isStoreMemOp(dataFromSB(0).ins);
 		dout <= dataFromSB(0).ins.result;
 
 	end block;

@@ -120,6 +120,22 @@ package body LogicExec is
 		
 	end function;
 
+	function resolveBranchConditionNew(av: InstructionArgValues; op: ArithOp) return std_logic is
+		variable isZero: std_logic;
+	begin
+		isZero := not isNonzero(av.arg0);
+			
+		if op = opJ then
+			return '1';
+		elsif op = opJnz and isZero = '0' then
+			return '1';
+		elsif op = opJz and isZero = '1' then
+		    return '1';
+		else
+			return '0';
+		end if;	
+		
+	end function;
 
 	function basicBranch(ins: InstructionState; st: SchedulerState; queueData: InstructionState --; qs: std_logic
 									) return InstructionState is
@@ -127,23 +143,16 @@ package body LogicExec is
 		variable branchTaken, targetMatch: std_logic := '0';
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
 		variable targetEqual: std_logic := '0';
-	begin		
-		--res.operation := (General, Unknown);
-	
-		-- TODO: cases to handle
+	begin			
+		-- Cases to handle
 		-- jr taken		: if not taken goto return, if taken and not equal goto reg, if taken and equal ok 
 		-- jr not taken: if not taken ok, if taken goto reg
 		-- j taken		: if not taken goto return, if taken equal
 		-- j not taken : if not taken ok, if taken goto dest
-		
-		-- Can keep dest and returnAdr from BQ in (target, result)?
-		-- 	Then return := result, dest := target
-		-- storedTarget := res.target; 
-		-- storedReturn := res.result;
-		-- targetEqual := [if storedTarget = reg then '1' else '0'];
-        
+
         targetMatch := bool2std(queueData.target = st.argValues.arg1);
-		branchTaken := resolveBranchCondition(st.argValues, ins.operation);
+		branchTaken := --resolveBranchCondition(st.argValues, ins.operation);
+                        resolveBranchConditionNew(st.argValues, ins.specificOperation.arith);
 
 		if res.controlInfo.frontBranch = '1' and branchTaken = '0' then						
 			res.controlInfo.newEvent := '1';
@@ -173,6 +182,8 @@ package body LogicExec is
 		res.target := trueTarget;
 		-- Return address
 		res.result := queueData.result;
+			res.tags.intPointer := queueData.tags.intPointer;
+			res.tags.floatPointer := queueData.tags.floatPointer;
 							
 		return res;
 	end function;
@@ -185,23 +196,9 @@ package body LogicExec is
 	begin
 		res.result := result;
 		res.controlInfo.newEvent := isNonzero(exc);
-		--res.controlInfo.hasEvent := res.controlInfo.newEvent;
-		--res.controlInfo.newException := res.controlInfo.newEvent;
-		res.controlInfo.hasException := res.controlInfo.newEvent;						
-		--res.controlInfo.exceptionCode := (others => '0');
-		--res.controlInfo.exceptionCode(3 downto 0) := exc;
+		res.controlInfo.hasException := res.controlInfo.newEvent;
 		return res;
 	end function;
-	
---	function isBranch(ins: InstructionState) return std_logic is
---	begin
---		if ins.operation = (Jump, jump) or ins.operation = (Jump, jumpZ) or ins.operation = (Jump, jumpNZ) then
---			return '1';
---		else
---			return '0';
---		end if;
---	end function;
-	
 	
 	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState; branchIns: InstructionState)
 	return InstructionState is
@@ -222,7 +219,8 @@ package body LogicExec is
 		arg1 := st.argValues.arg1;
 		arg2 := st.argValues.arg2;
 
-		if ins.operation.func = arithSub then
+		if --ins.operation.func = arithSub then
+		      ins.specificOperation.arith = opSub then
 			argAddSub := not arg1;
 			carryIn := '1';
 		else
@@ -233,7 +231,8 @@ package body LogicExec is
 	
 		--shTemp(4 downto 0) := c0; -- CAREFUL, TODO: handle the issue of 1-32 vs 0-31	
 		shTemp(5 downto 0) := arg1(5 downto 0);
-		if ins.operation.func = logicShl then
+		if --ins.operation.func = logicShl then
+		      ins.specificOperation.arith = opShl then
 			shNum := subSN(shNum, shTemp);
 		else
 			shNum := shTemp;
@@ -243,7 +242,8 @@ package body LogicExec is
 				--0;
 		shL := slv2u(shNum(2 downto 0));
 	
-		if ins.operation.func = arithSha then
+		if --ins.operation.func = arithSha then
+		      ins.specificOperation.arith = opSha then
 			tempBits(95 downto 64) := (others => arg0(MWORD_SIZE-1));	
 		end if;
 		tempBits(63 downto 32) := arg0;
@@ -267,11 +267,13 @@ package body LogicExec is
 		resultExt := addMwordFasterExt(arg0, argAddSub, carryIn);	
 		linkAdr := queueData.result;
 
-		if (	(ins.operation.func = arithAdd 
+		if (	(--ins.operation.func = arithAdd
+		          ins.specificOperation.arith = opAdd
 			and arg0(MWORD_SIZE-1) = arg1(MWORD_SIZE-1)
 			and arg0(MWORD_SIZE-1) /= resultExt(MWORD_SIZE-1)))
 			or
-			(	(ins.operation.func = arithSub 
+			(	(--ins.operation.func = arithSub
+			     ins.specificOperation.arith = opSub 
 			and arg0(MWORD_SIZE-1) /= arg1(MWORD_SIZE-1)
 			and arg0(MWORD_SIZE-1) /= resultExt(MWORD_SIZE-1)))
 		then 
@@ -284,17 +286,22 @@ package body LogicExec is
 			res.controlInfo.hasException := '0';
 			--res.controlInfo.exceptionCode := (others => '0'); -- ???	
 
-		if ins.operation.func = arithAdd or ins.operation.func = arithSub then
+		if --ins.operation.func = arithAdd or ins.operation.func = arithSub then
+		      ins.specificOperation.arith = opAdd or ins.specificOperation.arith = opSub then
 			carry := resultExt(MWORD_SIZE); -- CAREFUL, with subtraction carry is different, keep in mind
 			result := resultExt(MWORD_SIZE-1 downto 0);					
 		else
 		
-			case ins.operation.func is
-				when logicAnd =>
+			case --ins.operation.func is
+			     ins.specificOperation.arith is
+				when --logicAnd =>
+				        opAnd =>
 					result := arg0 and arg1;				
-				when logicOr =>
+				when --logicOr =>
+				        opOr =>
 					result := arg0 or arg1;
-				when jump | jumpZ | jumpNZ => 
+				when --jump | jumpZ | jumpNZ => 
+				       opJ | opJz | opJnz => 
 					result := linkAdr;
 					
 					res.controlInfo.newEvent := branchIns.controlInfo.newEvent;
@@ -322,13 +329,16 @@ package body LogicExec is
 	function executeFpu(ins: InstructionState; st: SchedulerState) return InstructionState is
        variable res: InstructionState := ins;
 	begin
-        if ins.operation.func = fpuOr then
+        if --ins.operation.func = fpuOr then
+            ins.specificOperation.float = opOr then
            res.result := st.argValues.arg0 or st.argValues.arg1;
-        elsif ins.operation.func = fpuMov then
+        elsif --ins.operation.func = fpuMov then
+            ins.specificOperation.float = opMove then
            res.result := st.argValues.arg0;
         else
            
 		end if;
+
 		return res;
 	end function;
 
@@ -379,7 +389,8 @@ package body LogicExec is
         -- else
 
         -- So far TLB and tag misses are not implemented
-         if ins.operation = (System, sysMfc) or ins.operation = (System, sysMtc) then
+         if --ins.operation = (System, sysMfc) or ins.operation = (System, sysMtc) then
+            isLoadSysOp(ins) = '1' or isStoreSysOp(ins) = '1' then
              res.result := sysLoadValue;
          elsif false then
             -- TLB problems...
@@ -396,7 +407,9 @@ package body LogicExec is
          end if;
        
          -- CAREFUL: store when newer load has been done - violation resolution when reissue is used
-         if ins.operation = (Memory, store) and lqSelectedOutput.full = '1' then
+         if --ins.operation = (Memory, store) 
+              isStoreMemOp(ins) = '1' 
+                and lqSelectedOutput.full = '1' then
             res.controlInfo.orderViolation := '1';
                 res.controlInfo.specialAction := '1';
          end if;

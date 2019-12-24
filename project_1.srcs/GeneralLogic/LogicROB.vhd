@@ -37,9 +37,10 @@ package LogicROB is
     type ReorderBufferEntry is record
         full: std_logic;
         ops: InstructionSlotArray(0 to PIPE_WIDTH-1);
+        special: InstructionSlot;
     end record;
     
-    constant DEFAULT_ROB_ENTRY: ReorderBufferEntry := (full => '0', ops => (others => DEFAULT_INSTRUCTION_SLOT));
+    constant DEFAULT_ROB_ENTRY: ReorderBufferEntry := (full => '0', ops => (others => DEFAULT_INSTRUCTION_SLOT), special => DEFAULT_INSTRUCTION_SLOT);
     
     type ReorderBufferArray is array (0 to ROB_SIZE-1) of ReorderBufferEntry;
     constant DEFAULT_ROB_ARRAY: ReorderBufferArray := (others => DEFAULT_ROB_ENTRY); 
@@ -190,6 +191,8 @@ end function;
             end loop;    
                 
             str(18 + 16*(PIPE_WIDTH-1)) := ']';
+            
+                str(18 + 16*(PIPE_WIDTH-1) + 2) := std_logic'image(arr(i).special.full)(2);
             
             res(i) := str;
             

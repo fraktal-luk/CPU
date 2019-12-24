@@ -33,8 +33,8 @@ function decodeLine(sd: WordArray) return InstructionSlotArray;
 
 function fillTargetsAndLinks(insVec: InstructionSlotArray) return InstructionSlotArray;
 
-function getFrontEventMulti(predictedAddress: Mword; ins: InstructionState; fetchLine: WordArray(0 to FETCH_WIDTH-1))
-return InstructionSlotArray;
+--function getFrontEventMulti(predictedAddress: Mword; ins: InstructionState; fetchLine: WordArray(0 to FETCH_WIDTH-1))
+--return InstructionSlotArray;
 
 function getFrontEventMulti2(predictedAddress: Mword; ins: InstructionState; fetchLine: WordArray(0 to FETCH_WIDTH-1))
 return InstructionSlotArray;
@@ -59,41 +59,46 @@ begin
 				-- Which clusters?
 				-- CAREFUL, TODO: make it more regular and clear!
 				ci.mainCluster := '1';
-				if ins.operation = (Memory, store) then
+				if --ins.operation = (Memory, store) then
+				        ins.specificOperation.subpipe = Mem and (ins.specificOperation.memory = opStore or ins.specificOperation.memory = opStoreSys) then
 					ci.store := '1';
 					ci.secCluster := '1';
 				end if;
 				
-				if ins.operation = (Memory, load) or ins.operation = (System, sysMFC) then
+				if --ins.operation = (Memory, load) or ins.operation = (System, sysMFC) then
+				        ins.specificOperation.subpipe = Mem and (ins.specificOperation.memory = opLoad or ins.specificOperation.memory = opLoadSys) then
 					ci.load := '1';
 				end if;
 				
-				if ins.operation.unit = Jump then
+				if --ins.operation.unit = Jump then
+				        ins.specificOperation.subpipe = Alu
+				    and (ins.specificOperation.arith = opJ or ins.specificOperation.arith = opJz or ins.specificOperation.arith = opJnz) then
 				   -- ins.classInfo.branchIns = '1' then
 					ci.branchIns := '1';
 					--ci.secCluster := '1';
-				elsif ins.operation = (System, sysMtc) then
-					ci.store := '1';
-					ci.secCluster := '1';
-				elsif	(ins.operation.unit = System and ins.operation.func /= sysMfc) then
+				--elsif ins.operation = (System, sysMtc) then
+				--	ci.store := '1';
+				--	ci.secCluster := '1';
+				elsif	--(ins.operation.unit = System and ins.operation.func /= sysMfc) then
+				      ins.specificOperation.subpipe = none then  
 					ci.mainCluster := '0';
-					ci.secCluster := '1';
+					ci.secCluster := '0';
 				end if;
 
-			if ins.operation.func = sysUndef then
-				ci.mainCluster := '0';
-				ci.secCluster := '0';
-			end if;
+--			if ins.operation.func = sysUndef then
+--				ci.mainCluster := '0';
+--				ci.secCluster := '0';
+--			end if;
 			
-		if ins.operation.unit = ALU or ins.operation.unit = Jump then
-			ci.pipeA := '1';
-		end if;
+--		if ins.operation.unit = ALU or ins.operation.unit = Jump then
+--			ci.pipeA := '1';
+--		end if;
 		
-		if ins.operation.unit = MAC then
-			ci.pipeB := '1';
-		end if;
+--		if ins.operation.unit = MAC then
+--			ci.pipeB := '1';
+--		end if;
 		
-		ci.pipeC := ci.load or ci.store;
+--		ci.pipeC := ci.load or ci.store;
 		
 	return ci;
 end function;
@@ -107,24 +112,32 @@ begin
 	decodedIns := decodeFromWord(inputState.bits);
 	
 	res.operation := decodedIns.operation;
+	   res.specificOperation := decodedIns.specificOperation;
 	res.constantArgs := decodedIns.constantArgs;
 	res.virtualArgSpec := decodedIns.virtualArgSpec;
 	
 	res.classInfo := getInstructionClassInfo(res);	
     res.classInfo.fpRename := decodedIns.classInfo.fpRename;
 
-    if res.operation.unit = System and
-            (	res.operation.func = sysRetI or res.operation.func = sysRetE
-            or res.operation.func = sysSync or res.operation.func = sysReplay
-            or res.operation.func = sysError
-            or res.operation.func = sysHalt
-            or res.operation.func = sysCall
-            or res.operation.func = sysSend ) then 		
+--    if res.operation.unit = System and
+--            (	res.operation.func = sysRetI or res.operation.func = sysRetE
+--            or res.operation.func = sysSync or res.operation.func = sysReplay
+--            or res.operation.func = sysError
+--            or res.operation.func = sysHalt
+--            or res.operation.func = sysCall
+--            or res.operation.func = sysSend ) then
+     if res.specificOperation.subpipe = none then      
+            	
         res.controlInfo.specialAction := '1'; -- TODO: move this to classInfo?
         
         -- CAREFUL: Those ops don't get issued, they are handled at retirement
         res.classInfo.mainCluster := '0';
         res.classInfo.secCluster := '0';
+        
+        if res.specificOperation.system = opUndef then
+            res.controlInfo.hasException := '1';
+            --res.controlInfo.exceptionCode := i2slv(ExceptionType'pos(undefinedInstruction), SMALL_NUMBER_SIZE);
+        end if;        
     end if;	
 	
 --	   if res.operation.unit = System then
@@ -154,10 +167,10 @@ begin
 --	   end if;
 	
 	
-    if res.operation.func = sysUndef then
-        res.controlInfo.hasException := '1';
-        --res.controlInfo.exceptionCode := i2slv(ExceptionType'pos(undefinedInstruction), SMALL_NUMBER_SIZE);
-    end if;
+--    if res.operation.func = sysUndef then
+--        res.controlInfo.hasException := '1';
+--        --res.controlInfo.exceptionCode := i2slv(ExceptionType'pos(undefinedInstruction), SMALL_NUMBER_SIZE);
+--    end if;
     
     --if res.controlInfo.squashed = '1' then	-- CAREFUL: ivalid was '0'
     --    report "Trying to decode invalid location" severity error;
@@ -204,105 +217,135 @@ begin
 end function;
 
 
-function getFrontEventMulti(predictedAddress: Mword;
-							  ins: InstructionState; fetchLine: WordArray(0 to FETCH_WIDTH-1))
-return InstructionSlotArray is
-	variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-	variable tempOffset: Mword := (others => '0');
-	variable targets: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-	variable fullOut, full, branchIns, predictedTaken, uncondJump: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-	variable nSkippedIns: integer := 0;
-	variable regularJump, longJump, regJump: std_logic := '0';
+
+function isJumpLink(w: Word) return std_logic is
 begin
-	-- CAREFUL: Only without hword instructions now!
-	nSkippedIns := slv2u(predictedAddress(ALIGN_BITS-1 downto 2));	-- How many are before fetch address							
-			
-	for i in 0 to FETCH_WIDTH-1 loop
-		full(i) := '1';
-		if i < nSkippedIns then
-			full(i) := '0';
-		end if;
-		
-		res(i).ins.tags.fetchCtr := ins.tags.fetchCtr(31 downto LOG2_PIPE_WIDTH) & i2slv(i, LOG2_PIPE_WIDTH);
-
-        res(i).ins.bits := fetchLine(i);
-        res(i).ins.ip := ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);        
-        res(i).ins.result := ins.ip;
-        res(i).ins.result(ALIGN_BITS-1 downto 0) := i2slv((i+1)*4, ALIGN_BITS); -- CAREFUL: not for short ins
-	end loop;
-	res(PIPE_WIDTH-1).ins.result := ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
-	res(PIPE_WIDTH-1).ins.result := addMwordBasic(res(PIPE_WIDTH-1).ins.result, PC_INC);
-
-    -- Calculate target for each instruction, even if it's to be skipped
-    for i in 0 to FETCH_WIDTH-1 loop        
-        regularJump := '0';
-        longJump := '0';
-        regJump := '0';
-        
-        if 	fetchLine(i)(31 downto 26) = opcode2slv(jl) then
-            regularJump := '1';				
-            predictedTaken(i) := '1';       -- CAREFUL, TODO: temporary predicted taken iff backwards
-            uncondJump(i) := '1';		    
-        elsif
-             fetchLine(i)(31 downto 26) = opcode2slv(jz) 
-            or fetchLine(i)(31 downto 26) = opcode2slv(jnz)
-        then
-            regularJump := '1';				
-            predictedTaken(i) := fetchLine(i)(20);		-- CAREFUL, TODO: temporary predicted taken iff backwards
-        elsif fetchLine(i)(31 downto 26) = opcode2slv(j) then -- Long jump instruction     
-            uncondJump(i) := '1';
-            longJump := '1';				
-            predictedTaken(i) := '1'; -- Long jump is unconditional (no space for register encoding!)
-        elsif  fetchLine(i)(31 downto 26) = opcode2slv(ext1) 
-            and (fetchLine(i)(15 downto 10) = opcont2slv(ext1, jzR)
-                 or fetchLine(i)(15 downto 10) = opcont2slv(ext1, jnzR)) then
-            regJump := '1';
-            predictedTaken(i) := '0'; -- TEMP: register jumps predicted not taken
-        end if;
-        
-        if longJump = '1' then
-            tempOffset := (others => fetchLine(i)(25));
-            tempOffset(25 downto 0) := fetchLine(i)(25 downto 0);
-        else
-            tempOffset := (others => fetchLine(i)(20));
-            tempOffset(20 downto 0) := fetchLine(i)(20 downto 0);
-        end if;
-
-        branchIns(i) := regularJump or longJump or regJump;
-        res(i).ins.target := addMwordFaster(res(i).ins.ip, tempOffset);			
-    end loop;
-    
-    -- Find if any branch predicted
-    for i in 0 to FETCH_WIDTH-1 loop
-        fullOut(i) := full(i);
-        res(i).ins.classInfo.branchIns := branchIns(i);
-        if full(i) = '1' and branchIns(i) = '1' and predictedTaken(i) = '1' then
-            if uncondJump(i) = '1' then -- CAREFUL: setting it here, so that if implementation treats is as NOP in Exec, it still gets this flag
-                res(i).ins.controlInfo.confirmedBranch := '1';
-            end if;
-
-            res(i).ins.controlInfo.frontBranch := '1';					
-            
-            -- Here check if the next line from line predictor agrees with the target predicted now.
-            --	If so, don't cause the event but set invalidation mask that next line will use.
-            if res(i).ins.target(MWORD_SIZE-1 downto ALIGN_BITS) /= ins.target(MWORD_SIZE-1 downto ALIGN_BITS) then
-                res(i).ins.controlInfo.newEvent := '1';
-            end if;
-            
-            -- CAREFUL: When not using line predictor, branches predicted taken must always be done here 
-            if not USE_LINE_PREDICTOR then
-                res(i).ins.controlInfo.newEvent := '1';
-            end if;
-
-            exit;
-        end if;
-    end loop;
-
-	for i in 0 to FETCH_WIDTH-1 loop
-	   res(i).full := fullOut(i);
-	end loop;
-	return res;
+    return bool2std(w(31 downto 26) = opcode2slv(jl));
+           -- w(31);
 end function;
+
+function isJumpCond(w: Word) return std_logic is
+begin
+    return bool2std(w(31 downto 26) = opcode2slv(jz)) or bool2std(w(31 downto 26) = opcode2slv(jnz));
+           -- w(30);
+end function;
+
+function isJumpLong(w: Word) return std_logic is
+begin
+    return bool2std(w(31 downto 26) = opcode2slv(j));
+           -- w(29);
+end function;
+
+function isJumpReg(w: Word) return std_logic is
+begin
+    return bool2std(w(31 downto 26) = opcode2slv(ext1)) and bool2std(w(15 downto 10) = opcont2slv(ext1, jzR) or w(15 downto 10) = opcont2slv(ext1, jzR));
+           -- w(28);
+end function;
+
+
+--function getFrontEventMulti(predictedAddress: Mword;
+--							  ins: InstructionState; fetchLine: WordArray(0 to FETCH_WIDTH-1))
+--return InstructionSlotArray is
+--	variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+--	variable tempOffset: Mword := (others => '0');
+--	variable targets: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+--	variable fullOut, full, branchIns, predictedTaken, uncondJump: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+--	variable nSkippedIns: integer := 0;
+--	variable regularJump, longJump, regJump: std_logic := '0';
+--begin
+--	-- CAREFUL: Only without hword instructions now!
+--	nSkippedIns := slv2u(predictedAddress(ALIGN_BITS-1 downto 2));	-- How many are before fetch address							
+			
+--	for i in 0 to FETCH_WIDTH-1 loop
+--		full(i) := '1';
+--		if i < nSkippedIns then
+--			full(i) := '0';
+--		end if;
+		
+--		res(i).ins.tags.fetchCtr := ins.tags.fetchCtr(31 downto LOG2_PIPE_WIDTH) & i2slv(i, LOG2_PIPE_WIDTH);
+
+--        res(i).ins.bits := fetchLine(i);
+--        res(i).ins.ip := ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);        
+--        res(i).ins.result := ins.ip;
+--        res(i).ins.result(ALIGN_BITS-1 downto 0) := i2slv((i+1)*4, ALIGN_BITS); -- CAREFUL: not for short ins
+--	end loop;
+--	res(PIPE_WIDTH-1).ins.result := ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
+--	res(PIPE_WIDTH-1).ins.result := addMwordBasic(res(PIPE_WIDTH-1).ins.result, PC_INC);
+
+--    -- Calculate target for each instruction, even if it's to be skipped
+--    for i in 0 to FETCH_WIDTH-1 loop        
+--        regularJump := '0';
+--        longJump := '0';
+--        regJump := '0';
+        
+--        if 	--fetchLine(i)(31 downto 26) = opcode2slv(jl) then
+--            isJumpLink(fetchLine(i)) = '1' then
+--            regularJump := '1';				
+--            predictedTaken(i) := '1';       -- CAREFUL, TODO: temporary predicted taken iff backwards
+--            uncondJump(i) := '1';		    
+--        elsif
+--            -- fetchLine(i)(31 downto 26) = opcode2slv(jz) 
+--            --or fetchLine(i)(31 downto 26) = opcode2slv(jnz)
+--            isJumpCond(fetchLine(i)) = '1'
+--        then
+--            regularJump := '1';				
+--            predictedTaken(i) := fetchLine(i)(20);		-- CAREFUL, TODO: temporary predicted taken iff backwards
+--        elsif --fetchLine(i)(31 downto 26) = opcode2slv(j) then -- Long jump instruction 
+--               isJumpLong(fetchLine(i)) = '1' then
+--            uncondJump(i) := '1';
+--            longJump := '1';				
+--            predictedTaken(i) := '1'; -- Long jump is unconditional (no space for register encoding!)
+--        elsif  --fetchLine(i)(31 downto 26) = opcode2slv(ext1) 
+--            --and (fetchLine(i)(15 downto 10) = opcont2slv(ext1, jzR)
+--             --    or fetchLine(i)(15 downto 10) = opcont2slv(ext1, jnzR)) then
+--              isJumpReg(fetchLine(i)) = '1' then   
+--            regJump := '1';
+--            predictedTaken(i) := '0'; -- TEMP: register jumps predicted not taken
+--        end if;
+        
+--        if longJump = '1' then
+--            tempOffset := (others => fetchLine(i)(25));
+--            tempOffset(25 downto 0) := fetchLine(i)(25 downto 0);
+--        else
+--            tempOffset := (others => fetchLine(i)(20));
+--            tempOffset(20 downto 0) := fetchLine(i)(20 downto 0);
+--        end if;
+
+--        branchIns(i) := regularJump or longJump or regJump;
+--        res(i).ins.target := addMwordFaster(res(i).ins.ip, tempOffset);			
+--    end loop;
+    
+--    -- Find if any branch predicted
+--    for i in 0 to FETCH_WIDTH-1 loop
+--        fullOut(i) := full(i);
+--        res(i).ins.classInfo.branchIns := branchIns(i);
+--        if full(i) = '1' and branchIns(i) = '1' and predictedTaken(i) = '1' then
+--            if uncondJump(i) = '1' then -- CAREFUL: setting it here, so that if implementation treats is as NOP in Exec, it still gets this flag
+--                res(i).ins.controlInfo.confirmedBranch := '1';
+--            end if;
+
+--            res(i).ins.controlInfo.frontBranch := '1';					
+            
+--            -- Here check if the next line from line predictor agrees with the target predicted now.
+--            --	If so, don't cause the event but set invalidation mask that next line will use.
+--            if res(i).ins.target(MWORD_SIZE-1 downto ALIGN_BITS) /= ins.target(MWORD_SIZE-1 downto ALIGN_BITS) then
+--                res(i).ins.controlInfo.newEvent := '1';
+--            end if;
+            
+--            -- CAREFUL: When not using line predictor, branches predicted taken must always be done here 
+--            if not USE_LINE_PREDICTOR then
+--                res(i).ins.controlInfo.newEvent := '1';
+--            end if;
+
+--            exit;
+--        end if;
+--    end loop;
+
+--	for i in 0 to FETCH_WIDTH-1 loop
+--	   res(i).full := fullOut(i);
+--	end loop;
+--	return res;
+--end function;
 
 
 
@@ -372,23 +415,48 @@ begin
             
 --        end if;
 
-            if 	fetchLine(i)(31 downto 26) = opcode2slv(jl) then
+--            if 	fetchLine(i)(31 downto 26) = opcode2slv(jl) then
+--                regularJump := '1';				
+--                predictedTaken(i) := '1';       -- CAREFUL, TODO: temporary predicted taken iff backwards
+--                uncondJump(i) := '1';		    
+--            elsif
+--                 fetchLine(i)(31 downto 26) = opcode2slv(jz) 
+--                or fetchLine(i)(31 downto 26) = opcode2slv(jnz)
+--            then
+--                regularJump := '1';				
+--                predictedTaken(i) := fetchLine(i)(20);		-- CAREFUL, TODO: temporary predicted taken iff backwards
+--            elsif fetchLine(i)(31 downto 26) = opcode2slv(j) then -- Long jump instruction     
+--                uncondJump(i) := '1';
+--                longJump := '1';				
+--                predictedTaken(i) := '1'; -- Long jump is unconditional (no space for register encoding!)
+--            elsif  fetchLine(i)(31 downto 26) = opcode2slv(ext1) 
+--                and (fetchLine(i)(15 downto 10) = opcont2slv(ext1, jzR)
+--                     or fetchLine(i)(15 downto 10) = opcont2slv(ext1, jnzR)) then
+--                regJump := '1';
+--                predictedTaken(i) := '0'; -- TEMP: register jumps predicted not taken
+--            end if;
+
+            if 	--fetchLine(i)(31 downto 26) = opcode2slv(jl) then
+                isJumpLink(fetchLine(i)) = '1' then
                 regularJump := '1';				
                 predictedTaken(i) := '1';       -- CAREFUL, TODO: temporary predicted taken iff backwards
                 uncondJump(i) := '1';		    
             elsif
-                 fetchLine(i)(31 downto 26) = opcode2slv(jz) 
-                or fetchLine(i)(31 downto 26) = opcode2slv(jnz)
+                -- fetchLine(i)(31 downto 26) = opcode2slv(jz) 
+                --or fetchLine(i)(31 downto 26) = opcode2slv(jnz)
+                isJumpCond(fetchLine(i)) = '1'
             then
                 regularJump := '1';				
                 predictedTaken(i) := fetchLine(i)(20);		-- CAREFUL, TODO: temporary predicted taken iff backwards
-            elsif fetchLine(i)(31 downto 26) = opcode2slv(j) then -- Long jump instruction     
+            elsif --fetchLine(i)(31 downto 26) = opcode2slv(j) then -- Long jump instruction 
+                   isJumpLong(fetchLine(i)) = '1' then
                 uncondJump(i) := '1';
                 longJump := '1';				
                 predictedTaken(i) := '1'; -- Long jump is unconditional (no space for register encoding!)
-            elsif  fetchLine(i)(31 downto 26) = opcode2slv(ext1) 
-                and (fetchLine(i)(15 downto 10) = opcont2slv(ext1, jzR)
-                     or fetchLine(i)(15 downto 10) = opcont2slv(ext1, jnzR)) then
+            elsif  --fetchLine(i)(31 downto 26) = opcode2slv(ext1) 
+                --and (fetchLine(i)(15 downto 10) = opcont2slv(ext1, jzR)
+                 --    or fetchLine(i)(15 downto 10) = opcont2slv(ext1, jnzR)) then
+                  isJumpReg(fetchLine(i)) = '1' then   
                 regJump := '1';
                 predictedTaken(i) := '0'; -- TEMP: register jumps predicted not taken
             end if;
@@ -492,7 +560,8 @@ begin
            res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;
          
            res(i).ins.operation := (System, sysUndef);
-
+               res(i).ins.specificOperation := DEFAULT_SPECIFIC_OP;
+            
            res(i).ins.tags.fetchCtr := (others => '0');
            res(i).ins.tags.decodeCtr := (others => '0');
            res(i).ins.tags.renameCtr := (others => '0');

@@ -51,7 +51,7 @@ entity IssueQueue is
 		waitingFM: in ForwardingMap;
 		selectionFM: in ForwardingMap; 
 		readyRegFlags: in std_logic_vector(0 to 3*PIPE_WIDTH-1);
-		
+
 		sentCancelled: out std_logic;
 		
 		acceptingMore: out std_logic;
@@ -70,7 +70,7 @@ architecture Behavioral of IssueQueue is
 
 	signal queueContent, queueContentNext, queueContent_N, queueContentNext_N: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 	signal queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-	signal newContent, newSchedData: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	signal newContent, newContentRR, newSchedData: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 				
 	signal anyReadyFull, anyReadyLive, sends, sends_N, sendPossible, sendingKilled, sent, sentKilled, sentUnexpected: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
@@ -157,13 +157,76 @@ architecture Behavioral of IssueQueue is
 		return res;
     end function;
 	--		signal ch0, ch1, ch2: std_logic := '0';
+	
+	
+	   signal inputStagePreRR, inputStage, inputStageUpdated, inputStageNext: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	   signal inputStageAny, inputStageLivingAny, inputReadingAny: std_logic := '0';
+	   signal inputStageMoving, acceptingForInputStage: std_logic := '0'; -- This is when the content shifts to the main part of queue
+	   
+	   constant readyRegFlagsZ: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+	   
+	   
+	function iqInputStageNext(content, newContent: SchedulerEntrySlotArray; prevSending, execEventSignal, lateEventSignal: std_logic) return SchedulerEntrySlotArray is
+	   variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := content;
+	begin
+	   if prevSending = '1' and execEventSignal = '0' and lateEventSignal = '0' then
+	       res := newContent;
+	       
+	   else -- Clearing everything - sent to main queue
+	       for i in 0 to PIPE_WIDTH-1 loop
+	           res(i).full := '0';
+	       end loop;    
+	   end if;
+	   
+	   return res;
+	end function;
+	
+	function updateRR(newContent: SchedulerEntrySlotArray; rr: std_logic_vector) return SchedulerEntrySlotArray is
+	   variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := newContent;
+       variable rrf, readyBefore: std_logic_vector(0 to 2) := (others=>'0');
+	   constant Z3: std_logic_vector(0 to 2) := (others => '0');
+       constant ZZ3: SmallNumberArray(0 to 2) := (others=>(others=>'0'));       	   
+	begin
+	
+	   for i in 0 to PIPE_WIDTH-1 loop
+	       readyBefore := not res(i).state.argValues.missing;
+	       rrf := rr(3*i to 3*i + 2);
+	       res(i).state.argValues := updateArgLocs(res(i).state.argValues,
+                                                   readyBefore, rrf,
+                                                   Z3, Z3, Z3, Z3,
+                                                   ZZ3, ZZ3, ZZ3, ZZ3,
+                                                   true);
+                                                   
+            res(i).state.argValues.missing := res(i).state.argValues.missing and not rrf;	       
+	   end loop;
+	   
+	   return res;
+	end function;
+    	
 begin
 
+        inputStageUpdated <= updateSchedulerArray(inputStage, readyRegFlags xor readyRegFlags, fni, waitingFM, true);
+        
+        inputStageNext <= iqInputStageNext(inputStageUpdated, newContent, prevSendingOK, execEventSignal, lateEventSignal);
+        inputReadingAny <= prevSendingOK and isNonzero(extractFullMask(newArr));
+        inputStageAny <= isNonzero(extractFullMask(inputStage));
+        inputStageLivingAny <= inputStageAny and not execEventSignal and not lateEventSignal;
+        -- 
+        
+        -- TEMP: acceptingOut would be '1' when PIPE_WIDTH slots free in the main queue AND not inputStageAny
+        --
+        
+        inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
+
+        
 	QUEUE_SYNCHRONOUS: process(clk) 	
 	begin
 		if rising_edge(clk) then		
 			queueContent <= queueContentNext;
 			sentKilled <= sendingKilled;
+			
+            inputStagePreRR <= inputStageNext;
+			
 		end if;
 	end process;	
 
@@ -179,6 +242,7 @@ begin
 	stayMask <= TMP_setUntil(readyMask, nextAccepting);
 
     newContent <= newArr;
+          --newContentRR <= updateRR(newArr, readyRegFlags); 
             
             selMask <= getFirstOne(readyMask);
             remainMask <= TMP_setUntil(issuedMask, '1'); 
@@ -186,22 +250,29 @@ begin
                 sent <= isNonzero(issuedMask);
                 sendingKilled <= isNonzero(killMask and selMask);
             
-            queueContentNext <= iqContentNext(queueContentUpdated, newContent,
+            queueContentNext <= iqContentNext(queueContentUpdated, --newContent,
+                                                                    inputStageUpdated,
                                               remainMask, fullMask, livingMask, selMask, issuedMask,                                             
                                               sends, sent,
                                               sentUnexpected,
-                                              prevSendingOK);
+                                              --prevSendingOK
+                                                inputStageLivingAny
+                                              );
 					
 	-- TODO: below could be optimized because some code is shared (comparators!)
-	queueContentUpdated <= updateSchedulerArray(queueContent, readyRegFlags, fni, waitingFM, true);
-	queueContentUpdatedSel <= updateSchedulerArray(queueContent, readyRegFlags, fni, selectionFM, false);
+	queueContentUpdated <= updateSchedulerArray(queueContent, readyRegFlagsZ, fni, waitingFM, true);
+	queueContentUpdatedSel <= updateSchedulerArray(queueContent, readyRegFlagsZ, fni, selectionFM, false);
 
 	readyMask <= extractReadyMaskNew(queueContentUpdatedSel) and fullMask;	
 	readyMaskLive <= readyMask and livingMask;
 
 	
-	killMask <= getKillMask(queueData, fullMask, execCausing, execEventSignal, lateEventSignal); 
-	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH); -- Equivalent and much better because in collapsing queue mask is continuous!
+	killMask <= getKillMask(queueData, fullMask, execCausing, execEventSignal, lateEventSignal);
+	
+	       acceptingForInputStage <= not fullMask(IQ_SIZE-PIPE_WIDTH);
+	acceptingOut <= --not fullMask(IQ_SIZE-PIPE_WIDTH);
+	                   not fullMask(IQ_SIZE-PIPE_WIDTH) and not inputStageAny;
+	               
 	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);
 	
 	anyReadyLive <= isNonzero(readyMaskLive);

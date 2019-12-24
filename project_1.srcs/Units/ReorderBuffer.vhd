@@ -53,6 +53,7 @@ entity ReorderBuffer is
 		execEndSigs1: in InstructionSlotArray(0 to 3);
 		execEndSigs2: in InstructionSlotArray(0 to 3);
 		
+		inputSpecial: in InstructionSlot;
 		inputData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		prevSending: in std_logic;
 		acceptingOut: out std_logic;
@@ -61,7 +62,8 @@ entity ReorderBuffer is
 		nextAccepting: in std_logic;
 		sendingOut: out std_logic; 
 		
-		outputData: out InstructionSlotArray(0 to PIPE_WIDTH-1)
+		outputData: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+		outputSpecial: out InstructionSlot
 	);	
 end ReorderBuffer;
 
@@ -69,6 +71,8 @@ end ReorderBuffer;
 
 architecture Behavioral of ReorderBuffer is
     signal outputDataReg: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal outputSpecialReg: InstructionSlot := DEFAULT_INS_SLOT;
+
 	signal fullMask, completedMask, completedMaskNext, completedMask_T,  completedMaskNext_T: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
 
     signal content, contentNext: ReorderBufferArray := DEFAULT_ROB_ARRAY;
@@ -87,9 +91,11 @@ architecture Behavioral of ReorderBuffer is
 	
 	signal isFull, isAlmostFull: std_logic := '0'; 	
 
+    --signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT; -- There needs to be only 1 such slot because everything younger is to be killed on commit
 	
 	function getNextRobContent(content: ReorderBufferArray;
 	                           newGroup: InstructionSlotArray;
+	                           newSpecialAction: InstructionSlot;
 	                           execInfo1, execInfo2: InstructionSlotArray;
 	                           sends, receiving, execEvent, lateEventSignal: std_logic;
 	                           startPtr, endPtr, causingPtr: SmallNumber)
@@ -105,6 +111,9 @@ architecture Behavioral of ReorderBuffer is
 	   if receiving = '1' then
 	       res(slv2u(endPtr)).full := '1'; -- CAREFUL: don't get index out of bounds
 	       res(slv2u(endPtr)).ops := newGroup;
+	       
+	           res(slv2u(endPtr)).special := --getSpecialActionSlot(newGroup);
+	                                         newSpecialAction;  
 	   end if;
 	
 	   killMask := getMaskBetween(ROB_SIZE, causingPtr, endPtr, '0'); -- This has '1' also at 'equal' position!
@@ -145,7 +154,7 @@ architecture Behavioral of ReorderBuffer is
                    
                    res(j).ops(i).ins.constantArgs := DEFAULT_CONSTANT_ARGS;
                 
-                   --res(slv2u(endPtr)).ops(i).ins.operation := (System, sysUndef); --!! Operation must be known to UnitSequencer after commit
+                   res(j).ops(i).ins.operation := (System, sysUndef);
                    
                         res(j).ops(i).ins.virtualArgSpec.intArgSel := (others => '0');
                         res(j).ops(i).ins.virtualArgSpec.floatArgSel := (others => '0');
@@ -166,9 +175,26 @@ architecture Behavioral of ReorderBuffer is
                    res(j).ops(i).ins.tags.fetchCtr := (others => '0');
                    res(j).ops(i).ins.tags.decodeCtr := (others => '0');
                    res(j).ops(i).ins.tags.renameCtr := (others => '0');
-    
+                            res(j).ops(i).ins.tags.renameIndex := (others => '0');
                    res(j).ops(i).ins.tags.commitCtr := (others => '0');
+                   
+                        res(j).ops(i).ins.tags.intPointer := (others => '0');
+                        res(j).ops(i).ins.tags.floatPointer := (others => '0');
                end loop;
+               
+               res(j).special.ins.ip := (others => '0');
+               res(j).special.ins.bits := (others => '0');              
+               res(j).special.ins.result := (others => '0');
+               res(j).special.ins.target := (others => '0');
+               
+               res(j).special.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
+            
+               res(j).special.ins.operation := (System, sysUndef);
+               
+               res(j).special.ins.virtualArgSpec := DEFAULT_ARG_SPEC; 
+               res(j).special.ins.physicalArgSpec := DEFAULT_ARG_SPEC;
+               
+               res(j).special.ins.tags := DEFAULT_INSTRUCTION_TAGS;                            
            end loop;
        end if;
 	   
@@ -196,12 +222,13 @@ architecture Behavioral of ReorderBuffer is
 	signal inputConstant, inputConstant2, constantFromBuf, constantFromBuf2: Word := (others => '0');
 	
     attribute ram_style: string;
-    attribute ram_style of constantBuf, constantBuf2: signal is "block";	
+    --attribute ram_style of constantBuf, constantBuf2: signal is "block";	
 begin
 	execEvent <= execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
 	causingPtr <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
 	
 	contentNext <= getNextRobContent(content, inputData,
+	                                 inputSpecial,
 	                                 execEndSigs1, execEndSigs2,
 	                                 isSending, prevSending,
 	                                 execEvent, lateEventSignal,
@@ -242,7 +269,8 @@ begin
 							
 	SYNCHRONOUS: process (clk)
 	begin
-		if rising_edge(clk) then	
+		if rising_edge(clk) then		  
+		    -- Regular content
             content <= contentNext;
 
             startPtr <= startPtrNext;
@@ -278,7 +306,8 @@ begin
             end if;
             
             completedMask <= completedMaskNext;
-            outputDataReg <= content(slv2u(startPtrNext)).ops;          
+            outputDataReg <= content(slv2u(startPtrNext)).ops;
+                outputSpecialReg <= content(slv2u(startPtrNext)).special;
 		end if;		
 	end process;
  
@@ -298,7 +327,7 @@ begin
 	   
 	FULL_MASK: for i in 0 to ROB_SIZE-1 generate
 	   fullMask(i) <= content(i).full;
-       completedMaskNext(i) <= groupCompleted(content(i).ops) and not isEmpty and not lateEventSignal;
+       completedMaskNext(i) <= groupCompleted(content(i).ops) and fullMask(i) and not isEmpty and not lateEventSignal;
 	end generate;
 	
     isSending <= completedMask(slv2u(startPtr)) and nextAccepting and not isEmpty;
@@ -311,6 +340,8 @@ begin
 	               replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2);
 
 	sendingOut <= isSending;
+	
+	   outputSpecial <= outputSpecialReg;
 	
 	VIEW: block
 	   signal robTxt: RobText;
