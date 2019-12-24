@@ -1,23 +1,3 @@
-----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date: 04.11.2018 22:12:21
--- Design Name: 
--- Module Name: BasicTypes - 
--- Project Name: 
--- Target Devices: 
--- Tool Versions: 
--- Description: 
--- 
--- Dependencies: 
--- 
--- Revision:
--- Revision 0.01 - File Created
--- Additional Comments:
--- 
-----------------------------------------------------------------------------------
-
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
@@ -25,38 +5,31 @@ use IEEE.STD_LOGIC_1164.ALL;
 
 package BasicTypes is
 
-	-- Typical data sizes
-	subtype  Byte is std_logic_vector( 7 downto 0);
-	subtype Hword is std_logic_vector(15 downto 0);
-	subtype  Word is std_logic_vector(31 downto 0);
-	subtype Dword is std_logic_vector(63 downto 0);
-	subtype Qword is std_logic_vector(127 downto 0);
-	
-	-- Special dataSizes
-	subtype slv5  is std_logic_vector(4 downto 0);
-	subtype slv6  is std_logic_vector(5 downto 0);
-	subtype slv10 is std_logic_vector(9 downto 0);
-	subtype slv21 is std_logic_vector(20 downto 0);
-	subtype slv26 is std_logic_vector(25 downto 0);	
-	
-	subtype uint5 is natural range 0 to 31;
-	subtype int10 is integer range -512 to 511;
-	-- WARNING! When imm16 is unsigned, writing it as bit-equiv signed number is needed!
-	subtype int16 is integer range -2**15 to 2**15 - 1;
-	subtype int21 is integer range -2**20 to 2**20 - 1;
-	subtype int26 is integer range -2**25 to 2**25 - 1; 
-	
-	type ByteArray is array(integer range <>) of byte;
-	type HwordArray is array(integer range <>) of hword;
-	type WordArray is array(integer range <>) of word;
-	type DwordArray is array(integer range <>) of dword;
-	
-	type IntArray is array (integer range <>) of integer;
-	
-	function slv2s(v: std_logic_vector) return integer;
-	function slv2u(v: std_logic_vector) return natural;
-	function i2slv(val: integer; n: natural) return std_logic_vector;
+-- Typical data sizes
+subtype  Byte is std_logic_vector( 7 downto 0);
+subtype Hword is std_logic_vector(15 downto 0);
+subtype  Word is std_logic_vector(31 downto 0);
+subtype Dword is std_logic_vector(63 downto 0);
+subtype Qword is std_logic_vector(127 downto 0);
 
+-- Special dataSizes
+subtype slv5  is std_logic_vector(4 downto 0);
+subtype slv6  is std_logic_vector(5 downto 0);
+subtype slv10 is std_logic_vector(9 downto 0);
+subtype slv21 is std_logic_vector(20 downto 0);
+subtype slv26 is std_logic_vector(25 downto 0);	
+ 
+
+type ByteArray is array(integer range <>) of byte;
+type HwordArray is array(integer range <>) of hword;
+type WordArray is array(integer range <>) of word;
+type DwordArray is array(integer range <>) of dword;
+
+type IntArray is array (integer range <>) of integer;
+
+function slv2s(v: std_logic_vector) return integer;
+function slv2u(v: std_logic_vector) return natural;
+function i2slv(val: integer; n: natural) return std_logic_vector;
 
 
 subtype SmallNumber is byte;
@@ -64,6 +37,7 @@ type SmallNumberArray is array(integer range <>) of SmallNumber;
 constant SMALL_NUMBER_SIZE: natural := SmallNumber'length;
 
 
+-- Some arithmetic for SmallNumber
 function addSN(a, b: SmallNumber) return SmallNumber;
 function subSN(a, b: SmallNumber) return SmallNumber;
 
@@ -81,6 +55,7 @@ function cmpGreaterThanSignedSNA(arr: SmallNumberArray; num: SmallNumber) return
 function cmpLessThanUnsignedSNA(arr: SmallNumberArray; num: SmallNumber) return std_logic_vector;
 function cmpLessThanSignedSNA(arr: SmallNumberArray; num: SmallNumber) return std_logic_vector;
 function cmpEqualToSNA(arr: SmallNumberArray; num: SmallNumber) return std_logic_vector;
+
 end package;
 
 
@@ -117,10 +92,8 @@ package body BasicTypes is
 		for i in v'high downto v'low loop
 			if v(i) = '1' then
 				bitVal := 1;
-				--report "1!";
 			else
 				bitVal := 0;
-				--report "0!";
 			end if;
 			
 			accum := 2*accum + bitVal;

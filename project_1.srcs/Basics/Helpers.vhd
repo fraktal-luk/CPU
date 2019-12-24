@@ -1,27 +1,10 @@
-----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date: 04.11.2018 22:45:51
--- Design Name: 
--- Module Name: Helpers - Behavioral
--- Project Name: 
--- Target Devices: 
--- Tool Versions: 
--- Description: 
--- 
--- Dependencies: 
--- 
--- Revision:
--- Revision 0.01 - File Created
--- Additional Comments:
--- 
-----------------------------------------------------------------------------------
 
+-------------------------------------------------------------------------------------------------------------
+-- This file defines some general functions to manipulate on bit vectors and numbers 
+-------------------------------------------------------------------------------------------------------------
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
-
 
 use work.BasicTypes.all;
 
@@ -31,9 +14,9 @@ package Helpers is
 function std2bool(arg: std_logic) return boolean;
 function bool2std(b: boolean) return std_logic;
 
-	function addWordE(a, b: Word) return std_logic_vector;
-	function addWord(a, b: Word) return word;
-	function addDword(a, b: Word) return dword;
+function addWordE(a, b: Word) return std_logic_vector;
+function addWord(a, b: Word) return word;
+function addDword(a, b: Word) return dword;
 
 
 -- Get '1' bits for remaining slots, pushed to left
@@ -52,7 +35,7 @@ function clz(vec: std_logic_vector) return natural;
 -- Shift left so that all leading zeroes are out
 function alignLeft(vec: std_logic_vector) return std_logic_vector;
 
-function findByNumber(numVec: IntArray; seeking: integer) return std_logic_vector;
+--function findByNumber(numVec: IntArray; seeking: integer) return std_logic_vector;
 
 -- Finding first position of qualified ones
 -- Those 2 functions must work together: if returned slv at returned index is '0', then OFC it means "nothing" 
@@ -258,7 +241,6 @@ function alignLeft(vec: std_logic_vector) return std_logic_vector is
 	variable res: std_logic_vector(vec'range) := (others=>'0');
 	variable nlz: natural := clz(vec);
 begin 
---			report integer'image(nlz);
 	for i in vec'left to vec'right - nlz loop
 		res(i) := vec(i + nlz);
 	end loop;
@@ -266,16 +248,16 @@ begin
 end function;
 
 
-function findByNumber(numVec: IntArray; seeking: integer) return std_logic_vector is
-	variable res: std_logic_vector(numVec'range) := (others=>'0');
-begin
-	for i in numVec'range loop
-		if numVec(i) = seeking then
-			res(i) := '1';
-		end if;
-	end loop;
-	return res;
-end function;
+--function findByNumber(numVec: IntArray; seeking: integer) return std_logic_vector is
+--	variable res: std_logic_vector(numVec'range) := (others=>'0');
+--begin
+--	for i in numVec'range loop
+--		if numVec(i) = seeking then
+--			res(i) := '1';
+--		end if;
+--	end loop;
+--	return res;
+--end function;
 
 
 function getFirstOne(readySlots: std_logic_vector) return std_logic_vector is

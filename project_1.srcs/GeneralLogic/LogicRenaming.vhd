@@ -1,21 +1,5 @@
 ----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date: 10.12.2018 21:49:16
--- Design Name: 
--- Module Name: LogicRenaming - Behavioral
--- Project Name: 
--- Target Devices: 
--- Tool Versions: 
--- Description: 
--- 
--- Dependencies: 
--- 
--- Revision:
--- Revision 0.01 - File Created
--- Additional Comments:
--- 
+
 ----------------------------------------------------------------------------------
 
 library IEEE;

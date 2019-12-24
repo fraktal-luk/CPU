@@ -1,22 +1,7 @@
 ----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date:    23:57:56 12/11/2016 
--- Design Name: 
--- Module Name:    MemoryUnit - Behavioral 
--- Project Name: 
--- Target Devices: 
--- Tool versions: 
--- Description: 
---
--- Dependencies: 
---
--- Revision: 
--- Revision 0.01 - File Created
--- Additional Comments: 
---
+
 ----------------------------------------------------------------------------------
+
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 
@@ -40,7 +25,7 @@ entity BranchQueue is
 		en: in std_logic;
 
 		acceptingOut: out std_logic;
-			almostFull: out std_logic;
+		almostFull: out std_logic;
 		
 		acceptingBr: out std_logic;
 		
@@ -225,7 +210,6 @@ begin
 	selectedDataSlot <= selectBranchDataSlot(content, taggedMask, matchMask, compareAddressInput);
 	
 	matchMask <= getMatchingTags(content, compareAddressInput.ins.tags.renameIndex);
-	--matchMaskUpdate <= getMatchingTags(content, storeValueInput.ins.tags.renameIndex);
 	
     pStartNext <= addSN(pStart, i2slv(getNumberToSend(dataOutSig, groupCtrInc, committing), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
 	
@@ -240,7 +224,7 @@ begin
 			selectedDataOutputSig <= selectedDataSlot;
             dataOutSig <= dataOutSigNext;
             
-                matchMaskUpdate <= matchMask;
+            matchMaskUpdate <= matchMask;
             
             if lateEventSignal = '1' then
                 pTagged <= pStartNext;

@@ -1,11 +1,4 @@
---
---	Package File Template
---
---	Purpose: This package defines supplemental types, subtypes, 
---		 constants, and functions 
---
---   To use any of the example code shown below, uncomment the lines and modify as necessary
---
+
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.all;
@@ -15,41 +8,42 @@ use work.ArchDefs.all;
 
 use work.CoreConfig.all;
 
+
 package InstructionState is
 	
-	subtype PhysName is SmallNumber;
-	type PhysNameArray is array(natural range <>) of PhysName;
+subtype PhysName is SmallNumber;
+type PhysNameArray is array(natural range <>) of PhysName;
 
 
-type ExecUnit is (General, ALU, MAC, Divide, Jump, Memory, System, FPU );
-type ExecFunc is (unknown,
-
-						arithAdd, arithSub, arithSha,
-						logicAnd, logicOr, logicShl,
-						
-						mulS, mulU, 
-					
-						divS, divU,
-						
-						load, store,
-						
-						jump,
-						jumpZ,
-						jumpNZ,
-						
-						sysRetI, sysRetE,
-						sysHalt,
-						sysSync, sysReplay,
-						sysMTC, sysMFC, -- move to/from control
-						sysError,
-						sysCall,
-						sysSend,
-						
-						fpuMov,
-						fpuOr,
-						
-						sysUndef
-						);	
+    type ExecUnit is (General, ALU, MAC, Divide, Jump, Memory, System, FPU );
+    type ExecFunc is (unknown,
+    
+                            arithAdd, arithSub, arithSha,
+                            logicAnd, logicOr, logicShl,
+                            
+                            mulS, mulU, 
+                        
+                            divS, divU,
+                            
+                            load, store,
+                            
+                            jump,
+                            jumpZ,
+                            jumpNZ,
+                            
+                            sysRetI, sysRetE,
+                            sysHalt,
+                            sysSync, sysReplay,
+                            sysMTC, sysMFC, -- move to/from control
+                            sysError,
+                            sysCall,
+                            sysSend,
+                            
+                            fpuMov,
+                            fpuOr,
+                            
+                            sysUndef
+                            );	
 
 
 --------------
@@ -108,7 +102,6 @@ type BinomialOp is record
 end record;
 
 type InstructionControlInfo is record
-	--squashed: std_logic;
 	completed: std_logic;
 	completed2: std_logic;
 	
@@ -120,40 +113,25 @@ type InstructionControlInfo is record
 	   confirmedBranch: std_logic;
 	specialAction: std_logic;
 	dbtrap: std_logic;
-	--illegal: std_logic;
 	   orderViolation: std_logic;
 	   tlbMiss: std_logic;
 	   dataMiss: std_logic;
 	   sqMiss:    std_logic;
 	   firstBr: std_logic;
-	--exceptionCode: SmallNumber; -- Set when exception occurs, remains cause exception can be only 1 per op
 end record;
 
 type InstructionClassInfo is record
 	short: std_logic;
 	mainCluster: std_logic;
 	secCluster: std_logic;
-	--branchCond: std_logic;
 	fpRename: std_logic; -- true if instruction is routed to FP renamer (NOTE, CHECK: Int renamer is used for all ops, even those that don't go to any IQ)
-	pipeA, pipeB, pipeC, load, store, branchIns: std_logic;
-	
-	--sync:      std_logic; -- when committed causes fetch of following instruction
-	--halt:      std_logic;
-	--ret0:      std_logic;       -- retE
-	--ret1:      std_logic;       -- retI
-	--lsWrite:   std_logic;  -- store/mtc as opposed to load/mfc 
-	--lsSystem:  std_logic; -- mtc/mfc
-	
-	--isSend:    std_logic;  -- DEBUG
-	--isError:   std_logic; -- DEBUG
+	branchIns: std_logic;
 end record;
 
 
 type InstructionConstantArgs is record
 	immSel: std_logic;
 	imm: word;
-	--c0: slv5;
-	--c1: slv5;
 end record;
 
 type InstructionVirtualArgs is record
@@ -185,7 +163,6 @@ type InstructionArgSpec is record
     intDestSel: std_logic;
     floatDestSel: std_logic;
     dest: SmallNumber;
-    --destAlt: SmallNumber;
     intArgSel: std_logic_vector(0 to 2);
     floatArgSel: std_logic_vector(0 to 2);
     args: SmallNumberArray(0 to 2);
@@ -195,7 +172,6 @@ type InstructionTags is record
     fetchCtr: Word;	-- Ctr is never reset!
     decodeCtr: Word; -- Ctr is never reset!
     renameCtr: Word;
-    --renameSeq: InsTag;
     renameIndex: InsTag;	-- group + group position
     intPointer: SmallNumber;
     floatPointer: SmallNumber;
@@ -507,22 +483,7 @@ begin
 											mainCluster => '0',
 											secCluster => '0',
 											fpRename => '0',
-											pipeA => '0',
-											pipeB => '0',
-											pipeC => '0',
-											load => '0',
-											store => '0',
-											branchIns => '0'--,
-											
-	                                        --sync => '0',
-                                            --halt => '0',
-                                            --ret0 => '0',
-                                            --ret1 => '0',
-                                            --lsWrite => '0',
-                                            --lsSystem => '0',
-                                            
-                                            --isSend => '0',
-                                            --isError => '0'									
+											branchIns => '0'									
 											);	
 end function;
 
@@ -570,8 +531,8 @@ begin
 			  arg0 => (others=>'0'),
 			  arg1 => (others=>'0'),
 			  arg2 => (others=>'0'),
-				argLocsPipe => (others => (others => '0')),
-				argLocsPhase => (others => (others => '0'))
+		      argLocsPipe => (others => (others => '0')),
+			  argLocsPhase => (others => (others => '0'))
 			  );
 end function;
 
@@ -588,7 +549,6 @@ begin
 	res.constantArgs := defaultConstantArgs;
 	res.virtualArgSpec := DEFAULT_ARG_SPEC;
 	res.physicalArgSpec := DEFAULT_ARG_SPEC;
-	--res.argValues := defaultArgValues;
 	res.result := (others => '0');
 	res.target := (others => '0');
 	return res;

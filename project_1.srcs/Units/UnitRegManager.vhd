@@ -1,21 +1,5 @@
 ----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date: 01.12.2018 23:35:07
--- Design Name: 
--- Module Name: UnitRegManager - Behavioral
--- Project Name: 
--- Target Devices: 
--- Tool Versions: 
--- Description: 
--- 
--- Dependencies: 
--- 
--- Revision:
--- Revision 0.01 - File Created
--- Additional Comments:
--- 
+
 ----------------------------------------------------------------------------------
 
 

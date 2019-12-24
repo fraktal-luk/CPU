@@ -1,23 +1,3 @@
-----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date: 12.11.2018 20:20:51
--- Design Name: 
--- Module Name: PipelineGeneral - Behavioral
--- Project Name: 
--- Target Devices: 
--- Tool Versions: 
--- Description: 
--- 
--- Dependencies: 
--- 
--- Revision:
--- Revision 0.01 - File Created
--- Additional Comments:
--- 
-----------------------------------------------------------------------------------
-
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
@@ -54,16 +34,13 @@ end record;
 
 
 constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
-	--writtenTags => (others => (others => '0')),
-		tags0 => (others => (others => '0')),
-		tags1 => (others => (others => '0')),
-		values0 => (others => (others => '0')),
-		values1 => (others => (others => '0')),
+    tags0 => (others => (others => '0')),
+    tags1 => (others => (others => '0')),
+    values0 => (others => (others => '0')),
+    values1 => (others => (others => '0')),
 		
-	--resultTags => (others => (others => '0')),
 	nextTagsM1 => (others => (others => '0')),
 	nextTagsM2 => (others => (others => '0'))
-	--resultValues => (others => (others => '0'))
 );
 
 constant DEFAULT_FORWARDING_MAP: ForwardingMap := (
@@ -83,10 +60,10 @@ function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionSt
 function setInstructionTarget(ins: InstructionState; target: Mword) return InstructionState;
 function setInstructionResult(ins: InstructionState; result: Mword) return InstructionState;
 
-        function getStoredArg1(ins: InstructionState) return Mword;
-        function getStoredArg2(ins: InstructionState) return Mword;
-        function setStoredArg1(ins: InstructionState; val: Mword) return InstructionState;
-        function setStoredArg2(ins: InstructionState; val: Mword) return InstructionState;
+--        function getStoredArg1(ins: InstructionState) return Mword;
+--        function getStoredArg2(ins: InstructionState) return Mword;
+--        function setStoredArg1(ins: InstructionState; val: Mword) return InstructionState;
+--        function setStoredArg2(ins: InstructionState; val: Mword) return InstructionState;
 
 function getAddressIncrement(ins: InstructionState) return Mword;
 
@@ -475,32 +452,30 @@ begin
 end function;
 
 
-        function getStoredArg1(ins: InstructionState) return Mword is
-        begin
-            return ins.result;
-        end function;
+--        function getStoredArg1(ins: InstructionState) return Mword is
+--        begin
+--            return ins.result;
+--        end function;
         
-        function getStoredArg2(ins: InstructionState) return Mword is
-        begin
-            return ins.target;
-        end function;
+--        function getStoredArg2(ins: InstructionState) return Mword is
+--        begin
+--            return ins.target;
+--        end function;
         
-        function setStoredArg1(ins: InstructionState; val: Mword) return InstructionState is
-            variable res: InstructionState := ins;
-        begin
-            res.result := val;
-            return res;
-        end function;
+--        function setStoredArg1(ins: InstructionState; val: Mword) return InstructionState is
+--            variable res: InstructionState := ins;
+--        begin
+--            res.result := val;
+--            return res;
+--        end function;
         
-        function setStoredArg2(ins: InstructionState; val: Mword) return InstructionState is
-            variable res: InstructionState := ins;
-        begin
-            res.target := val;
-            return res;
-        end function;
-        
-        
-        
+--        function setStoredArg2(ins: InstructionState; val: Mword) return InstructionState is
+--            variable res: InstructionState := ins;
+--        begin
+--            res.target := val;
+--            return res;
+--        end function;
+    
 
 function getTagHigh(tag: std_logic_vector) return std_logic_vector is
 	variable res: std_logic_vector(tag'high-LOG2_PIPE_WIDTH downto 0) := (others => '0');

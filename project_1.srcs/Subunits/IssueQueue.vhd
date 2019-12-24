@@ -1,20 +1,5 @@
 ----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date:    20:07:12 05/05/2016 
--- Design Name: 
--- Module Name:    SubunitIQBuffer - Behavioral 
--- Project Name: 
--- Target Devices: 
--- Tool versions: 
--- Description: 
---
--- Dependencies: 
---
--- Revision: 
--- Revision 0.01 - File Created
--- Additional Comments: 
+
 --
 
 library IEEE;

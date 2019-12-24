@@ -1,10 +1,5 @@
 --
---	Package File Template
---
---	Purpose: This package defines supplemental types, subtypes, 
---		 constants, and functions 
---
---   To use any of the example code shown below, uncomment the lines and modify as necessary
+
 --
 
 library IEEE;
@@ -61,13 +56,13 @@ begin
 				ci.mainCluster := '1';
 				if --ins.operation = (Memory, store) then
 				        ins.specificOperation.subpipe = Mem and (ins.specificOperation.memory = opStore or ins.specificOperation.memory = opStoreSys) then
-					ci.store := '1';
+					--ci.store := '1';
 					ci.secCluster := '1';
 				end if;
 				
 				if --ins.operation = (Memory, load) or ins.operation = (System, sysMFC) then
 				        ins.specificOperation.subpipe = Mem and (ins.specificOperation.memory = opLoad or ins.specificOperation.memory = opLoadSys) then
-					ci.load := '1';
+					--ci.load := '1';
 				end if;
 				
 				if --ins.operation.unit = Jump then
