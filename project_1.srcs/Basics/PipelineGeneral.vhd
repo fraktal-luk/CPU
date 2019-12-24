@@ -14,7 +14,6 @@ use work.InstructionState.all;
 
 package PipelineGeneral is
 
-
 type ForwardingInfo is record
 	tags0: PhysNameArray(0 to 2);
 	tags1: PhysNameArray(0 to 2);
@@ -60,15 +59,10 @@ function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionSt
 function setInstructionTarget(ins: InstructionState; target: Mword) return InstructionState;
 function setInstructionResult(ins: InstructionState; result: Mword) return InstructionState;
 
---        function getStoredArg1(ins: InstructionState) return Mword;
---        function getStoredArg2(ins: InstructionState) return Mword;
---        function setStoredArg1(ins: InstructionState; val: Mword) return InstructionState;
---        function setStoredArg2(ins: InstructionState; val: Mword) return InstructionState;
-
 function getAddressIncrement(ins: InstructionState) return Mword;
 
-function CMP_tagBefore(tagA, tagB: InsTag) return std_logic;
-function CMP_tagAfter(tagA, tagB: InsTag) return std_logic;
+function compareTagBefore(tagA, tagB: InsTag) return std_logic;
+function compareTagAfter(tagA, tagB: InsTag) return std_logic;
 
 function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector;
 
@@ -113,7 +107,6 @@ function getMemMask(insVec: InstructionSlotArray) return std_logic_vector;
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
 function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray;
---function prepareForStoreValueIntFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray;
 function prepareForStoreValueFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray;
 
 
@@ -205,29 +198,31 @@ function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
         );
 
 
-        function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray;
-        function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray;
-        function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
+function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray;
+function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray;
+function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
 
-    function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray;
-    function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return SchedulerEntrySlotArray;
-    
-    function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot;
+function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray;
+function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return SchedulerEntrySlotArray;
+
+function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot;
 
 
-    function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray;
-    function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
-    function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
-    
-    function TMP_clearOldOperation(insVec: InstructionSlotArray) return InstructionSlotArray;
+function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray;
+function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
+function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
 
-    
-    function isLoadOp(ins: InstructionState) return std_logic;
-    function isStoreOp(ins: InstructionState) return std_logic;
-    function isLoadMemOp(ins: InstructionState) return std_logic;
-    function isStoreMemOp(ins: InstructionState) return std_logic;
-    function isLoadSysOp(ins: InstructionState) return std_logic;
-    function isStoreSysOp(ins: InstructionState) return std_logic;
+function TMP_clearOldOperation(insVec: InstructionSlotArray) return InstructionSlotArray;
+
+
+function isLoadOp(ins: InstructionState) return std_logic;
+function isStoreOp(ins: InstructionState) return std_logic;
+function isLoadMemOp(ins: InstructionState) return std_logic;
+function isStoreMemOp(ins: InstructionState) return std_logic;
+function isLoadSysOp(ins: InstructionState) return std_logic;
+function isStoreSysOp(ins: InstructionState) return std_logic;
+
+function hasSyncEvent(ins: InstructionState) return std_logic;
                 
 end package;
 
@@ -347,7 +342,7 @@ begin
 end function;
 
 
-function CMP_tagBefore(tagA, tagB: InsTag) return std_logic is
+function compareTagBefore(tagA, tagB: InsTag) return std_logic is
 	variable wA, wB: word := (others => '0');
 	variable wC: std_logic_vector(32 downto 0) := (others => '0');
 begin
@@ -360,10 +355,10 @@ begin
 	return wC(TAG_SIZE-1);
 end function;
 
-function CMP_tagAfter(tagA, tagB: InsTag) return std_logic is
+function compareTagAfter(tagA, tagB: InsTag) return std_logic is
 	variable wA, wB, wC: word := (others => '0');
 begin
-	return CMP_tagBefore(tagB, tagA);
+	return compareTagBefore(tagB, tagA);
 end function;
 
 function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector is
@@ -403,19 +398,18 @@ begin
 	return res;
 end function;
 
-	function killByTag(before, ei, int: std_logic) return std_logic is
-	begin
-		return (before and ei) or int;
-	end function;
+function killByTag(before, ei, int: std_logic) return std_logic is
+begin
+    return (before and ei) or int;
+end function;
 
 function getKillMask(content: InstructionStateArray; fullMask: std_logic_vector;
 							causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector is
 	variable res: std_logic_vector(0 to fullMask'length-1);
-	variable diff: SmallNumber := (others => '0');
 begin
 	for i in 0 to fullMask'length-1 loop
-		res(i) := killByTag(CMP_tagBefore(causing.tags.renameIndex, content(i).tags.renameIndex),
+		res(i) := killByTag(compareTagBefore(causing.tags.renameIndex, content(i).tags.renameIndex),
 									execEventSig, lateEventSig) and fullMask(i);
 	end loop;
 	return res;
@@ -425,7 +419,6 @@ function stageArrayNext(livingContent, newContent: InstructionSlotArray; full, s
 return InstructionSlotArray is 
     constant LEN: natural := livingContent'length;
 	variable res: InstructionSlotArray(0 to LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-	--	constant CLEAR_VACATED_SLOTS_GENERAL: boolean := clearEmptySlots; 
 begin
 	res := livingContent;
 	if kill = '1' then
@@ -440,7 +433,6 @@ begin
 		-- CAREFUL: clearing result tags for empty slots
 		for i in 0 to LEN-1 loop
 			res(i).ins.physicalArgSpec.dest := (others => '0');
-			--res(i).ins.physicalArgSpec.destAlt := (others => '0');			
 			res(i).ins.controlInfo.newEvent := '0';
 		end loop;
 		for i in 0 to LEN-1 loop
@@ -451,31 +443,6 @@ begin
 	return res;
 end function;
 
-
---        function getStoredArg1(ins: InstructionState) return Mword is
---        begin
---            return ins.result;
---        end function;
-        
---        function getStoredArg2(ins: InstructionState) return Mword is
---        begin
---            return ins.target;
---        end function;
-        
---        function setStoredArg1(ins: InstructionState; val: Mword) return InstructionState is
---            variable res: InstructionState := ins;
---        begin
---            res.result := val;
---            return res;
---        end function;
-        
---        function setStoredArg2(ins: InstructionState; val: Mword) return InstructionState is
---            variable res: InstructionState := ins;
---        begin
---            res.target := val;
---            return res;
---        end function;
-    
 
 function getTagHigh(tag: std_logic_vector) return std_logic_vector is
 	variable res: std_logic_vector(tag'high-LOG2_PIPE_WIDTH downto 0) := (others => '0');
@@ -556,63 +523,69 @@ begin
 	return res;
 end function;
 
-	function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector) return SchedulerEntrySlotArray is
-		variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-	begin
-		for i in 0 to PIPE_WIDTH-1 loop
-			res(i).ins := insArr(i);
-			res(i).full := fullMask(i);
-            
-            -- CAREFUL, TODO: define precisely what 'zero' designation means
-			-- Set state markers: "zero" bit; only valid for Int args because FP doesn't use HW zero 
-			res(i).state.argValues.zero(0) := (res(i).ins.physicalArgSpec.intArgSel(0) and not isNonzero(res(i).ins.virtualArgSpec.args(0)(4 downto 0)))
-			                                     or (not res(i).ins.physicalArgSpec.intArgSel(0) and not res(i).ins.physicalArgSpec.floatArgSel(0));
-			res(i).state.argValues.zero(1) := (res(i).ins.physicalArgSpec.intArgSel(1) and not isNonzero(res(i).ins.virtualArgSpec.args(1)(4 downto 0)))
-			                                     or (not res(i).ins.physicalArgSpec.intArgSel(1) and not res(i).ins.physicalArgSpec.floatArgSel(1));
-			res(i).state.argValues.zero(2) := (res(i).ins.physicalArgSpec.intArgSel(2) and not isNonzero(res(i).ins.virtualArgSpec.args(2)(4 downto 0)))
-			                                     or (not res(i).ins.physicalArgSpec.intArgSel(2) and not res(i).ins.physicalArgSpec.floatArgSel(2));
 
-			-- Set 'missing' flags for non-const arguments
-			res(i).state.argValues.missing := (res(i).ins.physicalArgSpec.intArgSel and not res(i).state.argValues.zero)
-			                               or (res(i).ins.physicalArgSpec.floatArgSel);
-			
-			-- Handle possible immediate arg
-			if res(i).ins.constantArgs.immSel = '1' then
-				res(i).state.argValues.missing(1) := '0';
-				res(i).state.argValues.immediate := '1';
-				res(i).state.argValues.zero(1) := '0';
-			end if;
+function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector) return SchedulerEntrySlotArray is
+    variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i).ins := insArr(i);
+        res(i).full := fullMask(i);
+        
+        -- CAREFUL, TODO: define precisely what 'zero' designation means
+        -- Set state markers: "zero" bit; only valid for Int args because FP doesn't use HW zero
+        for j in 0 to 2 loop
+            res(i).state.argValues.zero(j) :=         (res(i).ins.physicalArgSpec.intArgSel(j) and not isNonzero(res(i).ins.virtualArgSpec.args(j)(4 downto 0)))
+                                               or (not res(i).ins.physicalArgSpec.intArgSel(j) and not res(i).ins.physicalArgSpec.floatArgSel(j));
+        end loop;
 
-			res(i).ins.ip := (others => '0');			
-			res(i).ins.target := (others => '0');
-			res(i).ins.result := (others => '0');
-			res(i).ins.bits := (others => '0');
+        -- Set 'missing' flags for non-const arguments
+        res(i).state.argValues.missing := (res(i).ins.physicalArgSpec.intArgSel and not res(i).state.argValues.zero)
+                                       or (res(i).ins.physicalArgSpec.floatArgSel);
+        
+        -- Handle possible immediate arg
+        if res(i).ins.constantArgs.immSel = '1' then
+            res(i).state.argValues.missing(1) := '0';
+            res(i).state.argValues.immediate := '1';
+            res(i).state.argValues.zero(1) := '0';
+        end if;
 
-		end loop;
-		return res;
-	end function;
+        if CLEAR_DEBUG_INFO then
+            res(i).ins.ip := (others => '0');			
+            res(i).ins.target := (others => '0');
+            res(i).ins.result := (others => '0');
+            res(i).ins.bits := (others => '0');
+        end if;
+
+    end loop;
+    return res;
+end function;
 
 function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1'
-			and 	insVec(i).ins.classInfo.branchIns = '1'
-		then
-			res(i) := '1';
-		end if;
-	end loop;
-	
+		res(i) := insVec(i).full and insVec(i).ins.classInfo.branchIns;
+	end loop;	
 	return res;
 end function;
+
+
+-- Base for implementing subpipe selection
+function getSubpipeMask(insVec: InstructionSlotArray; subpipe: SubpipeType) return std_logic_vector is
+	variable res: std_logic_vector(insVec'range) := (others => '0');
+begin
+    for i in insVec'range loop
+        res(i) := insVec(i).full and bool2std(insVec(i).ins.specificOperation.subpipe = subpipe);
+    end loop;
+    return res;
+end function;
+
 
 function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if 		insVec(i).full = '1'
-			--and isLoadOp(insVec(i).ins) = '1'
-			-- and (insVec(i).ins.operation = (Memory, load) or insVec(i).ins.operation = (System, sysMfc)) -- TEMP!
 			and insVec(i).ins.specificOperation.subpipe = Mem 
 			and (insVec(i).ins.specificOperation.memory = opLoad or insVec(i).ins.specificOperation.memory = opLoadSys) 
 		then
@@ -627,11 +600,8 @@ function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1'
-			--and isStoreOp(insVec(i).ins) = '1'
-			-- and (insVec(i).ins.operation = (Memory, store) or insVec(i).ins.operation = (System, sysMtc)) -- TEMP!
-			and insVec(i).ins.specificOperation.subpipe = Mem 
-            and (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys)			
+		if 	  insVec(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
+		      and (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys)			
 		then
 			res(i) := '1';
 		end if;
@@ -641,48 +611,18 @@ begin
 end function;
 
 function getAluMask(insVec: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
-	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1'
-			--and (insVec(i).ins.operation.unit = Alu or insVec(i).ins.operation.unit = Jump)
-			and insVec(i).ins.specificOperation.subpipe = ALU
-		then
-			res(i) := '1';
-		end if;
-	end loop;
-	
-	return res;
+	return getSubpipeMask(insVec, ALU);
 end function;
 
 function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
-	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1'
-			--and (insVec(i).ins.operation.unit = FPU)
-			and insVec(i).ins.specificOperation.subpipe = FP
-		then
-			res(i) := '1';
-		end if;
-	end loop;
-	
-	return res;
+	return getSubpipeMask(insVec, FP);
 end function;
 
 function getMemMask(insVec: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
-	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1'
-			--and (insVec(i).ins.operation.unit = FPU)
-			and insVec(i).ins.specificOperation.subpipe = Mem
-		then
-			res(i) := '1';
-		end if;
-	end loop;
-	
-	return res;
+	return getSubpipeMask(insVec, Mem);
 end function;
 
 
@@ -696,369 +636,235 @@ begin
     return res;
 end function;
 
-        function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray is
-            variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                    res(i).operation := (General, unknown);
-            
-                res(i).constantArgs.immSel := '0';
-                
-                res(i).virtualArgSpec.intDestSel := '0';
-                    res(i).virtualArgSpec.floatDestSel := '0';                
-                
-                res(i).virtualArgSpec.intArgSel(0) := res(i).virtualArgSpec.intArgSel(2);
-                res(i).virtualArgSpec.intArgSel(2) := '0';                
-                    res(i).virtualArgSpec.floatArgSel(0) := '0';--res(i).virtualArgSpec.floatArgSel(2);
-                    res(i).virtualArgSpec.floatArgSel(1) := '0';                                    
-                    res(i).virtualArgSpec.floatArgSel(2) := '0';                
-                
-                res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
-                res(i).virtualArgSpec.args(2) := (others => '0');
 
-
-                --res(i).constantArgs.immSel := '0';
-                
-                res(i).physicalArgSpec.intDestSel := '0';
-                    res(i).physicalArgSpec.floatDestSel := '0';                
-                
-                res(i).physicalArgSpec.intArgSel(0) := res(i).physicalArgSpec.intArgSel(2);
-                res(i).physicalArgSpec.intArgSel(2) := '0';                
-                    res(i).physicalArgSpec.floatArgSel(0) := '0';--res(i).virtualArgSpec.floatArgSel(2);
-                    res(i).physicalArgSpec.floatArgSel(1) := '0';                                    
-                    res(i).physicalArgSpec.floatArgSel(2) := '0';                
-                
-                res(i).physicalArgSpec.args(0) := res(i).physicalArgSpec.args(2);
-                res(i).physicalArgSpec.args(2) := (others => '0');                                              
-            end loop;
-            
-            return res;
-        end function;
-
---        function prepareForStoreValueIntFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray is
---            variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVecInt;
---        begin
---            for i in 0 to PIPE_WIDTH-1 loop
---                res(i).constantArgs.immSel := '0';
-                
---                res(i).virtualArgSpec.intDestSel := '0';
---                    res(i).virtualArgSpec.floatDestSel := '0';                
-                
---                res(i).virtualArgSpec.intArgSel(0) := res(i).virtualArgSpec.intArgSel(2);
---                res(i).virtualArgSpec.intArgSel(2) := '0';                
---                    res(i).virtualArgSpec.floatArgSel(0) := res(i).virtualArgSpec.floatArgSel(2);
---                    res(i).virtualArgSpec.floatArgSel(2) := '0';                
-                
---                if res(i).virtualArgSpec.floatArgSel(0) = '1' then
---                    res(i).virtualArgSpec.args(0) := insVecFloat(i).virtualArgSpec.args(2);
---                else
---                    res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
---                end if;
---                res(i).virtualArgSpec.args(2) := (others => '0');
-                                              
---            end loop;
-            
---            return res;
---        end function;
-
+function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray is
+    variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i).operation := (General, unknown);
+    
+        res(i).constantArgs.immSel := '0';
         
-        function prepareForStoreValueFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray is
-            variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVecInt;
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                    res(i).operation := (General, unknown);            
-            
-                res(i).constantArgs.immSel := '0';
-                
-                res(i).virtualArgSpec.intDestSel := '0';
-                    res(i).virtualArgSpec.floatDestSel := '0';                
-                
-                res(i).virtualArgSpec.intArgSel(0) := '0';--res(i).virtualArgSpec.intArgSel(2);
-                res(i).virtualArgSpec.intArgSel(1) := '0';                
-                res(i).virtualArgSpec.intArgSel(2) := '0';                
-                    res(i).virtualArgSpec.floatArgSel(0) := res(i).virtualArgSpec.floatArgSel(2);
-                    res(i).virtualArgSpec.floatArgSel(2) := '0';                
-                
-                --if res(i).virtualArgSpec.floatArgSel(0) = '1' then
-                    res(i).virtualArgSpec.args(0) := insVecFloat(i).virtualArgSpec.args(2);
-                --else
-                --    res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
-                --end if;
-                res(i).virtualArgSpec.args(2) := (others => '0');
-
-
-                res(i).physicalArgSpec.intDestSel := '0';
-                    res(i).physicalArgSpec.floatDestSel := '0';                
-                
-                res(i).physicalArgSpec.intArgSel(0) := '0';--res(i).virtualArgSpec.intArgSel(2);
-                res(i).physicalArgSpec.intArgSel(1) := '0';                
-                res(i).physicalArgSpec.intArgSel(2) := '0';                
-                    res(i).physicalArgSpec.floatArgSel(0) := res(i).physicalArgSpec.floatArgSel(2);
-                    res(i).physicalArgSpec.floatArgSel(2) := '0';                
-                
-                --if res(i).virtualArgSpec.floatArgSel(0) = '1' then
-                    res(i).physicalArgSpec.args(0) := insVecFloat(i).physicalArgSpec.args(2);
-                --else
-                --    res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
-                --end if;
-                res(i).physicalArgSpec.args(2) := (others => '0');                                              
-            end loop;
-            
-            return res;
-        end function;
-
-
-        function removeArg2(insVec: InstructionStateArray) return InstructionStateArray is
-            variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                res(i).virtualArgSpec.intArgSel(2) := '0';
-                res(i).virtualArgSpec.args(2) := (others => '0');
-                
-                res(i).physicalArgSpec.intArgSel(2) := '0';
-                res(i).physicalArgSpec.args(2) := (others => '0');                                                
-            end loop;
-            
-            return res;
-        end function;
-
-        function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray is
-            variable res: InstructionSlotArray(insArr'range) := insArr;
-        begin
-            for i in res'range loop
-                if res(i).ins.physicalArgSpec.floatDestSel = '1' then
-                   res(i).ins.physicalArgSpec.dest := (others => '0');
-                end if;
-            end loop;
-            return res;
-        end function;
+        res(i).virtualArgSpec.intDestSel := '0';
+        res(i).virtualArgSpec.floatDestSel := '0';                
         
-        function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray is
-            variable res: InstructionSlotArray(insArr'range) := insArr;
-        begin
-            for i in res'range loop
-                if res(i).ins.physicalArgSpec.floatDestSel = '0' then
-                   res(i).ins.physicalArgSpec.dest := (others => '0');
-                end if;
-            end loop;
-            return res;
-        end function;
-
-        function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot is
-            variable res: InstructionSlot := insS0;
-        begin
-            res.ins.physicalArgSpec.dest := insS0.ins.physicalArgSpec.dest or insS1.ins.physicalArgSpec.dest;
-            return res;
-        end function;
+        res(i).virtualArgSpec.intArgSel(0) := res(i).virtualArgSpec.intArgSel(2);
+        res(i).virtualArgSpec.intArgSel(2) := '0';                
+        res(i).virtualArgSpec.floatArgSel(0) := '0';
+        res(i).virtualArgSpec.floatArgSel(1) := '0';                                    
+        res(i).virtualArgSpec.floatArgSel(2) := '0';                
         
-    function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray is
-        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := content;
-    begin
-        for i in 1 to PIPE_WIDTH-1 loop
-            res(i).ins.tags.renameIndex := clearTagLow(res(0).ins.tags.renameIndex) or i2slv(i, TAG_SIZE);
-        end loop;
+        res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
+        res(i).virtualArgSpec.args(2) := (others => '0');
+
+        res(i).physicalArgSpec.intDestSel := '0';
+        res(i).physicalArgSpec.floatDestSel := '0';                
+        
+        res(i).physicalArgSpec.intArgSel(0) := res(i).physicalArgSpec.intArgSel(2);
+        res(i).physicalArgSpec.intArgSel(2) := '0';                
+        res(i).physicalArgSpec.floatArgSel(0) := '0';--res(i).virtualArgSpec.floatArgSel(2);
+        res(i).physicalArgSpec.floatArgSel(1) := '0';                                    
+        res(i).physicalArgSpec.floatArgSel(2) := '0';                
+        
+        res(i).physicalArgSpec.args(0) := res(i).physicalArgSpec.args(2);
+        res(i).physicalArgSpec.args(2) := (others => '0');                                              
+    end loop;
     
-        return res;
-    end function;
+    return res;
+end function;
+
+
+function prepareForStoreValueFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray is
+    variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVecInt;
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i).operation := (General, unknown);            
     
-    function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return SchedulerEntrySlotArray is
-        variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := content;
-    begin
-        for i in 1 to PIPE_WIDTH-1 loop
-            res(i).ins.tags.renameIndex := clearTagLow(res(0).ins.tags.renameIndex) or i2slv(i, TAG_SIZE);
-        end loop;
+        res(i).constantArgs.immSel := '0';
+        
+        res(i).virtualArgSpec.intDestSel := '0';
+        res(i).virtualArgSpec.floatDestSel := '0';                
+        
+        res(i).virtualArgSpec.intArgSel(0) := '0';
+        res(i).virtualArgSpec.intArgSel(1) := '0';                
+        res(i).virtualArgSpec.intArgSel(2) := '0';                
+        res(i).virtualArgSpec.floatArgSel(0) := res(i).virtualArgSpec.floatArgSel(2);
+        res(i).virtualArgSpec.floatArgSel(2) := '0';                
+        
+        res(i).virtualArgSpec.args(0) := insVecFloat(i).virtualArgSpec.args(2);
+        res(i).virtualArgSpec.args(2) := (others => '0');
+
+
+        res(i).physicalArgSpec.intDestSel := '0';
+        res(i).physicalArgSpec.floatDestSel := '0';                
+        
+        res(i).physicalArgSpec.intArgSel(0) := '0';
+        res(i).physicalArgSpec.intArgSel(1) := '0';                
+        res(i).physicalArgSpec.intArgSel(2) := '0';                
+        res(i).physicalArgSpec.floatArgSel(0) := res(i).physicalArgSpec.floatArgSel(2);
+        res(i).physicalArgSpec.floatArgSel(2) := '0';                
+        
+        res(i).physicalArgSpec.args(0) := insVecFloat(i).physicalArgSpec.args(2);
+        res(i).physicalArgSpec.args(2) := (others => '0');                                              
+    end loop;
     
-        return res;
-    end function;
+    return res;
+end function;
+
+
+function removeArg2(insVec: InstructionStateArray) return InstructionStateArray is
+    variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i).virtualArgSpec.intArgSel(2) := '0';
+        res(i).virtualArgSpec.args(2) := (others => '0');
+        
+        res(i).physicalArgSpec.intArgSel(2) := '0';
+        res(i).physicalArgSpec.args(2) := (others => '0');                                                
+    end loop;
+    
+    return res;
+end function;
+
+function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(insArr'range) := insArr;
+begin
+    for i in res'range loop
+        if res(i).ins.physicalArgSpec.floatDestSel = '1' then
+           res(i).ins.physicalArgSpec.dest := (others => '0');
+        end if;
+    end loop;
+    return res;
+end function;
+
+function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(insArr'range) := insArr;
+begin
+    for i in res'range loop
+        if res(i).ins.physicalArgSpec.floatDestSel = '0' then
+           res(i).ins.physicalArgSpec.dest := (others => '0');
+        end if;
+    end loop;
+    return res;
+end function;
+
+function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot is
+    variable res: InstructionSlot := insS0;
+begin
+    res.ins.physicalArgSpec.dest := insS0.ins.physicalArgSpec.dest or insS1.ins.physicalArgSpec.dest;
+    return res;
+end function;
+        
+function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := content;
+begin
+    for i in 1 to PIPE_WIDTH-1 loop
+        res(i).ins.tags.renameIndex := clearTagLow(res(0).ins.tags.renameIndex) or i2slv(i, TAG_SIZE);
+    end loop;
+
+    return res;
+end function;
+
+function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return SchedulerEntrySlotArray is
+    variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := content;
+begin
+    for i in 1 to PIPE_WIDTH-1 loop
+        res(i).ins.tags.renameIndex := clearTagLow(res(0).ins.tags.renameIndex) or i2slv(i, TAG_SIZE);
+    end loop;
+
+    return res;
+end function;
     
 
-    function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot is
-       variable res: InstructionSlot := insVec(0);
-    begin
-       res.full := '0';
-       
-       for i in PIPE_WIDTH-1 downto 0 loop
-           -- TODO: simpler to get last full slot because if a static event is present, nothing will be after it in group.
-           --       Then the 'full' bit of 'special' would be set if specialAction/exc/dbTrap
-           if (insVec(i).full and 
-                       (    insVec(i).ins.controlInfo.specialAction
-                        or insVec(i).ins.controlInfo.hasException
-                        or insVec(i).ins.controlInfo.dbtrap)) = '1'
-           then
-               res := insVec(i);
-                             
---               case res.ins.operation.func is
---                   when sysRetI =>
---                       res.ins.specificOperation.system := opRetI;
---                   when sysRetE =>
---                       res.ins.specificOperation.system := opRetE;
---                   when sysHalt =>
---                       res.ins.specificOperation.system := opHalt;
---                   when sysSync =>
---                       res.ins.specificOperation.system := opSync;
---                   when sysReplay =>
---                       res.ins.specificOperation.system := opReplay;
---                   when sysError =>
---                       res.ins.specificOperation.system := opError;
---                   when sysCall =>
---                       res.ins.specificOperation.system := opCall;
---                   when sysSend =>
---                       res.ins.specificOperation.system := opSend;                                                                                                                                                                                                      
---                   when others =>
---                       res.ins.specificOperation.system := opNone;                                                                                                                                                                                                                          
---               end case;
-                
-                    res.ins.specificOperation.system := SysOp'val(slv2u(res.ins.specificOperation.bits));
-               
-               res.ins.operation := (System, sysUndef);
-                   
-               exit;
-           end if;
-       end loop;
-       
-       return res;
-    end function;    
+function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot is
+   variable res: InstructionSlot := insVec(0);
+begin
+   res.full := '0';  
+   for i in PIPE_WIDTH-1 downto 0 loop
+       -- TODO: simpler to get last full slot because if a static event is present, nothing will be after it in group.
+       --       Then the 'full' bit of 'special' would be set if specialAction/exc/dbTrap
+       if (insVec(i).full and hasSyncEvent(insVec(i).ins)) = '1' then
+           res := insVec(i);
+           res.ins.specificOperation.system := SysOp'val(slv2u(res.ins.specificOperation.bits));
+           res.ins.operation := (System, sysUndef);                 
+           exit;
+       end if;
+   end loop;
+   
+   return res;
+end function;    
 
 
-    function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray is
-        variable res: InstructionSlotArray(insVec'range) := insVec;
-    begin
-        for i in res'range loop
---            case res(i).ins.operation.func is
---                when sysMtc =>
---                    res(i).ins.specificOperation.memory := opStoreSys;
---                when sysMfc =>
---                    res(i).ins.specificOperation.memory := opLoadSys;
---                when store => 
---                    res(i).ins.specificOperation.memory := opStore;
---                when others => -- load
---                    res(i).ins.specificOperation.memory := opLoad;
---            end case;
-            
-                res(i).ins.specificOperation.memory := MemOp'val(slv2u(res(i).ins.specificOperation.bits));
-        end loop;
-    
-        return res;
-    end function;
+function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(insVec'range) := insVec;
+begin
+    for i in res'range loop   
+        res(i).ins.specificOperation.memory := MemOp'val(slv2u(res(i).ins.specificOperation.bits));
+    end loop;
 
-    function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray is
-        variable res: InstructionSlotArray(insVec'range) := insVec;
-    begin
-        for i in res'range loop
---            case res(i).ins.operation.func is                
---                when fpuMov => 
---                    res(i).ins.specificOperation.float := opMove;
---                when others => -- fpuOr
---                    res(i).ins.specificOperation.float := opOr;
---            end case;
-            
-                res(i).ins.specificOperation.float := FpOp'val(slv2u(res(i).ins.specificOperation.bits));
-        end loop;
-    
-        return res;
-    end function;
+    return res;
+end function;
 
---						arithAdd, arithSub, arithSha,
---						logicAnd, logicOr, logicShl,
-						
---						mulS, mulU, 
-					
---						divS, divU,
-						
---						load, store,
-						
---						jump,
---						jumpZ,
---						jumpNZ,
---type ArithOp is (opAnd, opOr, opXor, opAdd, opSub, opShl, opSha, opJz, opJnz, opJ, opJl, opMul, opMulshs, opMulhu, opDiv);
+function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(insVec'range) := insVec;
+begin
+    for i in res'range loop
+        res(i).ins.specificOperation.float := FpOp'val(slv2u(res(i).ins.specificOperation.bits));
+    end loop;
+    return res;
+end function;
 
-    function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray is
-        variable res: InstructionSlotArray(insVec'range) := insVec;
-    begin
-        for i in res'range loop
---            case res(i).ins.operation.func is                
---                when jump => 
---                    res(i).ins.specificOperation.arith := opJ;
---                when jumpZ => 
---                    res(i).ins.specificOperation.arith := opJz;
---                when jumpNZ => 
---                    res(i).ins.specificOperation.arith := opJnz;
+function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(insVec'range) := insVec;
+begin
+    for i in res'range loop     
+        res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));            
+    end loop;  
+    return res;
+end function;
 
---                when mulS => 
---                    res(i).ins.specificOperation.arith := opMul;
---                when mulU => 
---                    res(i).ins.specificOperation.arith := opMul;
-                        
---                when divS => 
---                    res(i).ins.specificOperation.arith := opDiv;
-                    
-               
---                when logicAnd => 
---                    res(i).ins.specificOperation.arith := opAnd;
---                when logicOr => 
---                    res(i).ins.specificOperation.arith := opOr;
---                --when logicXor => 
---                --    res(i).ins.specificOperation.arith := opXor;
---                when logicShl => 
---                    res(i).ins.specificOperation.arith := opShl;
-                
---                when arithAdd =>
---                    res(i).ins.specificOperation.arith := opAdd;
---                when arithSub => 
---                    res(i).ins.specificOperation.arith := opSub;                                                                                                                                                                      
---                when others => -- arithSha
---                    res(i).ins.specificOperation.arith := opSha;
---            end case;
-            
-                res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));            
-        end loop;
-    
-        return res;
-    end function;
-    
-    function TMP_clearOldOperation(insVec: InstructionSlotArray) return InstructionSlotArray is
-        variable res: InstructionSlotArray(insVec'range) := insVec;
-    begin
-        for i in res'range loop
-            res(i).ins.operation := (General, unknown);    
-        end loop;    
-        return res;
-    end function;
+function TMP_clearOldOperation(insVec: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(insVec'range) := insVec;
+begin
+    for i in res'range loop
+        res(i).ins.operation := (General, unknown);    
+    end loop;    
+    return res;
+end function;
 
-    function isLoadOp(ins: InstructionState) return std_logic is
-    begin
---        return bool2std(ins.operation = (Memory, load) or ins.operation = (System, sysMfc));
-        return bool2std(ins.specificOperation.memory = opLoad or ins.specificOperation.memory = opLoadSys);            
-    end function;
+function isLoadOp(ins: InstructionState) return std_logic is
+begin
+    return bool2std(ins.specificOperation.memory = opLoad or ins.specificOperation.memory = opLoadSys);            
+end function;
 
-    function isStoreOp(ins: InstructionState) return std_logic is
-    begin
-       -- return bool2std(ins.operation = (Memory, store) or ins.operation = (System, sysMtc));
-        return bool2std(ins.specificOperation.memory = opStore or ins.specificOperation.memory = opStoreSys);              
-    end function;
+function isStoreOp(ins: InstructionState) return std_logic is
+begin
+    return bool2std(ins.specificOperation.memory = opStore or ins.specificOperation.memory = opStoreSys);              
+end function;
 
-    function isLoadMemOp(ins: InstructionState) return std_logic is
-    begin
-        --return bool2std(ins.operation = (Memory, load));
-        return bool2std(ins.specificOperation.memory = opLoad);        
-    end function;
+function isLoadMemOp(ins: InstructionState) return std_logic is
+begin
+    return bool2std(ins.specificOperation.memory = opLoad);        
+end function;
 
-    function isStoreMemOp(ins: InstructionState) return std_logic is
-    begin
-        --return bool2std(ins.operation = (Memory, store));
-        return bool2std(ins.specificOperation.memory = opStore);
-    end function;
+function isStoreMemOp(ins: InstructionState) return std_logic is
+begin
+    return bool2std(ins.specificOperation.memory = opStore);
+end function;
 
-    function isLoadSysOp(ins: InstructionState) return std_logic is
-    begin
-        --return bool2std(ins.operation = (System, sysMfc));
-        return bool2std(ins.specificOperation.memory = opLoadSys);
-    end function;
+function isLoadSysOp(ins: InstructionState) return std_logic is
+begin
+    return bool2std(ins.specificOperation.memory = opLoadSys);
+end function;
 
-    function isStoreSysOp(ins: InstructionState) return std_logic is
-    begin
-        --return bool2std(ins.operation = (System, sysMtc));
-        return bool2std(ins.specificOperation.memory = opStoreSys);        
-    end function;
+function isStoreSysOp(ins: InstructionState) return std_logic is
+begin
+    return bool2std(ins.specificOperation.memory = opStoreSys);        
+end function;
+
+function hasSyncEvent(ins: InstructionState) return std_logic is
+begin
+    return  ins.controlInfo.hasException or ins.controlInfo.specialAction or ins.controlInfo.dbtrap; 
+end function;
          
 end package body;

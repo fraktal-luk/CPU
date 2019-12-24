@@ -39,46 +39,35 @@ entity GenericStage is
 end GenericStage;
 
 
-
 architecture Behavioral of GenericStage is
-	--signal flowDrive: FlowDriveSimple := (others=>'0');
-	--signal flowResponse: FlowResponseSimple := (others=>'0');		
 	signal before, full, kill, living, sending: std_logic := '0';
 	signal stageData, stageDataNext: InstructionSlotArray(0 to WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 begin
 	stageDataNext <= stageArrayNext(stageData, stageDataIn,
-								living, sending, prevSending,
-								kill and USE_CLEAR);
+								    living, sending, prevSending,
+								    kill and USE_CLEAR);
 
 	PIPE_CLOCKED: process(clk) 
 	begin
 		if rising_edge(clk) then
 		  stageData <= stageDataNext;
 		  
+		  -- CAREFUL: This is important because signal combinations can be different from {'0', '1'} on initialisation.
+		  --          Simple assigment: full <= ((living and not sending) or prevSending); fails if we don't have a binary value.
+		  --          TODO? Can it be guaranteed that there is also a binary value form the beginning?
 		  if ((living and not sending) or prevSending) = '1' then
-		      full <= '1';--(living and not sending) or prevSending;
+		      full <= '1';
 		  else
 		      full <= '0';
 		  end if;
 		end if;
 	end process;
 
---	SIMPLE_SLOT_LOGIC: entity work.SimpleSlotLogic port map(
---		clk => clk, reset => reset, en => en,
---		flowDrive => flowDrive,
---		flowResponse => flowResponse
---	);
-
-	--flowDrive.prevSending <= prevSending;
-	--flowDrive.nextAccepting <= nextAccepting;
-
     living <= full and not kill;
     sending <= living and nextAccepting;
 
-	before <= (not COMPARE_TAG) or CMP_tagBefore(execCausing.tags.renameIndex, stageData(0).ins.tags.renameIndex);
+	before <= (not COMPARE_TAG) or compareTagBefore(execCausing.tags.renameIndex, stageData(0).ins.tags.renameIndex);
 	kill <= (before and execEventSignal) or lateEventSignal;
-	
-	--flowDrive.kill <= kill;
 
 	acceptingOut <= nextAccepting or not living;	
 	sendingOut <= sending;

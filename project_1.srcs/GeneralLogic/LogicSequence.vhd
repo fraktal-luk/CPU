@@ -45,8 +45,6 @@ function getEffectiveMask(newContent: InstructionSlotArray) return std_logic_vec
 
 function anyEvent(insVec: InstructionSlotArray) return std_logic;
 
-function hasSyncEvent(ins: InstructionState) return std_logic; 
-
 end LogicSequence;
 
 
@@ -324,11 +322,5 @@ begin
     end loop;
     return '0'; 
 end function;
-
-function hasSyncEvent(ins: InstructionState) return std_logic is
-begin
-    return  ins.controlInfo.hasException or ins.controlInfo.specialAction or ins.controlInfo.dbtrap; 
-end function;
-
 
 end LogicSequence;

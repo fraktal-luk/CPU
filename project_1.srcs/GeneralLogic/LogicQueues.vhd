@@ -126,16 +126,16 @@ package body LogicQueues is
 	begin
 	   for i in 0 to LEN-1 loop   
            if    getTagLow(content(i).tags.renameIndex) = "10" and
-                 (not robData(3).full or robData(3).ins.controlInfo.hasException or robData(3).ins.controlInfo.specialAction or robData(3).ins.controlInfo.dbtrap) = '1' then
+                 (not robData(3).full or hasSyncEvent(robData(3).ins)) = '1' then
                res(i) := '1';           
            elsif getTagLow(content(i).tags.renameIndex) = "10" and
-                 (not robData(2).full or robData(2).ins.controlInfo.hasException or robData(2).ins.controlInfo.specialAction or robData(2).ins.controlInfo.dbtrap) = '1' then
+                 (not robData(2).full or hasSyncEvent(robData(2).ins)) = '1' then
                res(i) := '1';           
            elsif getTagLow(content(i).tags.renameIndex) = "01" and
-                 (not robData(1).full or robData(1).ins.controlInfo.hasException or robData(1).ins.controlInfo.specialAction or robData(1).ins.controlInfo.dbtrap) = '1' then
+                 (not robData(1).full or hasSyncEvent(robData(1).ins)) = '1' then
                res(i) := '1';
            elsif 
-                 (not robData(0).full or robData(0).ins.controlInfo.hasException or robData(0).ins.controlInfo.specialAction or robData(0).ins.controlInfo.dbtrap) = '1' then
+                 (not robData(0).full or hasSyncEvent(robData(0).ins)) = '1' then
                res(i) := '1';
            end if; 
        end loop;
