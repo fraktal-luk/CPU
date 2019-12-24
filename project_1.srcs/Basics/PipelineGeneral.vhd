@@ -349,7 +349,7 @@ begin
 	wA(TAG_SIZE-1 downto 0) := tagA;
 	wB(TAG_SIZE-1 downto 0) := tagB;
 	wB := not wB;
-	-- TODO: when going to 64 bit, this must be changed!
+	-- TODO: when going to 64 bit, this must be changed
 	wC := addMwordFasterExt(wA, wB, '1');
 	wC(32 downto TAG_SIZE) := (others => '0');
 	return wC(TAG_SIZE-1);
