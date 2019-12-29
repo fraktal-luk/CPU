@@ -276,12 +276,14 @@ begin
         
     QUEUE_MANAGEMENT: block
         constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+        constant TAG_DIFF_SIZE: natural := countOnes(TAG_DIFF_SIZE_MASK);
         signal tagDiff: SmallNumber := (others => '0');
     begin
        nOut <= i2slv(countOnes(extractFullMask(dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');              
        nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pAll and fullMask(0) = '1'
                        else tagDiff and TAG_DIFF_SIZE_MASK;
-       tagDiff <= subSN(pAll, pStartNext);       
+                          
+       tagDiff <= subSN(pAll, pStartNext);      
     end block;
     
     dataOutSigFinal <= getSendingArray(dataOutSig, groupCtrInc, committing);
@@ -291,7 +293,7 @@ begin
 
     -- Accept when 4 free slot exist
     --pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-        pAcc <= addIntTrunc(pStart, 4, QUEUE_PTR_SIZE);
+     --   pAcc <= addIntTrunc(pStart, -4, QUEUE_PTR_SIZE);
 	acceptingBr <= not isAlmostFull;     
  
 	dataOutV <= dataOutSigFinal;                   

@@ -62,6 +62,7 @@ end StoreQueue;
 
 architecture Behavioral of StoreQueue is
 	constant PTR_MASK_SN: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+    constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
 
 	signal isSending, isDraining: std_logic := '0';							
 
@@ -362,8 +363,10 @@ begin
 	         else  findNewestMatch(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
 	
 	selectedDataSlot <= selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
-    pStartNext <= addSN(pStart, i2slv(getNumberToSend(dataOutSig, groupCtrInc, committing), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-    pDrainNext <= pDrain when isDraining = '0' else addSN(pDrain, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+    pStartNext <= --addSN(pStart, i2slv(getNumberToSend(dataOutSig, groupCtrInc, committing), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                    addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE);
+    pDrainNext <= pDrain when isDraining = '0' else --addSN(pDrain, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                                                    addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE);
             	
 	process (clk)
 	begin
@@ -387,19 +390,25 @@ begin
             if lateEventSignal = '1' then
                 pTagged <= pStartNext;
             elsif execEventSignal = '1' then
-                pTagged <= subSN(pTagged, i2slv(countOnes(killMask), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                pTagged <= --subSN(pTagged, i2slv(countOnes(killMask), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                            addIntTrunc(pTagged, -countOnes(killMask), QUEUE_PTR_SIZE);
             elsif prevSending = '1' then -- + N
-                pTagged <= addSN(pTagged, i2slv(countOnes(inputMask), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                pTagged <= --addSN(pTagged, i2slv(countOnes(inputMask), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                            addIntTrunc(pTagged, countOnes(inputMask), QUEUE_PTR_SIZE);
             end if;
 
             if lateEventSignal = '1' or execEventSignal = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
-            elsif recoveryCounter /= i2slv(0, SMALL_NUMBER_SIZE) then
-                recoveryCounter <= subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
+            elsif --recoveryCounter /= i2slv(0, SMALL_NUMBER_SIZE) then
+                    isNonzero(recoveryCounter) = '1' then
+                recoveryCounter <= --subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
+                                    addInt(recoveryCounter, -1);
             end if;
 	                
-	        isFull <= cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-4, SMALL_NUMBER_SIZE));
-            isAlmostFull <= cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-8, SMALL_NUMBER_SIZE));
+	        isFull <= --cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-4, SMALL_NUMBER_SIZE));
+	                   cmpGtU(nFullNext, QUEUE_SIZE-4);
+            isAlmostFull <= --cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-8, SMALL_NUMBER_SIZE));
+                            cmpGtU(nFullNext, QUEUE_SIZE-8);
 
 	        nFull <= nFullNext;	           
 		end if;
@@ -446,8 +455,9 @@ begin
     isSending <= dataOutSigFinal(0).full;	
 
     -- Accept when 4 free slot exist
-    pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-    pAccMore <= subSN(pStart, i2slv(8, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+    --pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+            --addIntTrunc(pStart, -4, 
+    --pAccMore <= subSN(pStart, i2slv(8, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
     
 	acceptingOut <= not isFull;
 	almostFull <= isAlmostFull;

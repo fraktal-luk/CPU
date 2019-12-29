@@ -355,6 +355,74 @@ begin
 end procedure;
 
 
+
+function zeroExtend(a: std_logic_vector; n: natural) return std_logic_vector is
+    constant LEN: natural := a'length;
+    variable res: std_logic_vector(n-1 downto 0) := (others => '0');
+begin
+    CHECK_BE(a);
+
+    if n < LEN then
+        res := a(n-1 downto 0);
+    else
+        res(n-1 downto 0) := a;
+    end if;
+    
+    return res;
+end function; 
+
+
+function signExtend(a: std_logic_vector; n: natural) return std_logic_vector is
+    constant LEN: natural := a'length;
+    variable res: std_logic_vector(n-1 downto 0) := (others => '0');
+begin
+    CHECK_BE(a);
+
+    if n < LEN then
+        res := a(n-1 downto 0);
+    else
+        res(n-1 downto 0) := a;
+        res(LEN-1 downto n) := (others => a(n-1));
+    end if;
+    
+    return res;
+end function; 
+
+
+function addTruncZ(a: std_logic_vector; b: std_logic_vector; n: natural) return std_logic_vector is
+    variable res0, res: std_logic_vector(a'range) := (others => '0');
+    variable bRes: std_logic_vector(a'range) := (others => '0');       
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+    
+    bRes := zeroExtend(b, a'length);
+    
+    -- TODO res0 := (a+b)
+
+    res(n-1 downto 0) := res0(n-1 downto 0);
+
+    return res;
+end function;
+
+function subTruncZ(a: std_logic_vector; b: std_logic_vector; n: natural) return std_logic_vector is
+    variable res0, res: std_logic_vector(a'range) := (others => '0');
+    variable bRes: std_logic_vector(a'range) := (others => '0');       
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+    
+    bRes := zeroExtend(b, a'length);
+    
+    -- TODO res0 := (a-b)
+
+    res(n-1 downto 0) := res0(n-1 downto 0);
+
+    return res;
+end function;
+
+
+
 function addInt(v: std_logic_vector; n: integer) return std_logic_vector is
     variable res: std_logic_vector(v'range) := (others => '0');
     variable vInt: integer := slv2u(v); -- Signed or not, addition bit results are the same  
@@ -374,37 +442,6 @@ begin
     return res;
 end function;
 
-
-function zeroExtend(a: std_logic_vector; n: natural) return std_logic_vector is
-    constant LEN: natural := a'length;
-    variable res: std_logic_vector(n-1 downto 0) := (others => '0');
-begin
-    CHECK_BE(a);
-
-    if n < LEN then
-        res := a(n-1 downto 0);
-    else
-        res(n-1 downto 0) := a;
-    end if;
-    
-    return res;
-end function; 
-
-function signExtend(a: std_logic_vector; n: natural) return std_logic_vector is
-    constant LEN: natural := a'length;
-    variable res: std_logic_vector(n-1 downto 0) := (others => '0');
-begin
-    CHECK_BE(a);
-
-    if n < LEN then
-        res := a(n-1 downto 0);
-    else
-        res(n-1 downto 0) := a;
-        res(LEN-1 downto n) := (others => a(n-1));
-    end if;
-    
-    return res;
-end function; 
 
 
 -- This is the internal implementation

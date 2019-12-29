@@ -266,9 +266,11 @@ begin
 
         newPhysDestsAsync(0 to WIDTH-1) <= listFront(0 to WIDTH-1);
       
-        effectivePhysPtrTake <= i2slv(slv2u(physPtrTake) + 4, SMALL_NUMBER_SIZE) when (needTake and memRead) = '1'
+        effectivePhysPtrTake <= --i2slv(slv2u(physPtrTake) + 4, SMALL_NUMBER_SIZE) when (needTake and memRead) = '1'
+                                addInt(physPtrTake, 4) when (needTake and memRead) = '1'
                            else physPtrTake;
-        needTake <= not cmpGreaterSignedSN(numFront, addSN(numToTake, i2slv(4, SMALL_NUMBER_SIZE)));
+        needTake <= --not cmpGreaterSignedSN(numFront, addSN(numToTake, i2slv(4, SMALL_NUMBER_SIZE)));
+                    cmpLeS(numFront, addInt(numToTake, 4));
         numToTake <= i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE) when freeListTakeAllow = '1' else (others => '0');
     
         SYNCHRONOUS: process(clk)
@@ -306,10 +308,11 @@ begin
                 
                 if freeListRewind = '0' then
                      if --numFrontVar <= 4 then
-                        cmpGreaterSignedSN(numFrontVar, i2slv(4, SMALL_NUMBER_SIZE)) = '0' then
-
+                        --cmpGreaterSignedSN(numFrontVar, i2slv(4, SMALL_NUMBER_SIZE)) = '0' then
+                        cmpLeS(numFrontVar, 4) = '1' then
                         if memRead = '1' then                            
-                            numFrontVar := addSN(numFrontVar, i2slv(4, SMALL_NUMBER_SIZE));
+                            numFrontVar := --addSN(numFrontVar, i2slv(4, SMALL_NUMBER_SIZE));
+                                            addInt(numFrontVar, 4); 
                         end if;
                      end if;
                      
@@ -323,20 +326,24 @@ begin
                 numBackVar := numBack;
     
                 if --numBackVar >= 4 then
-                    cmpLessSignedSN(numBackVar, i2slv(4, SMALL_NUMBER_SIZE)) = '0' then
+                    --cmpLessSignedSN(numBackVar, i2slv(4, SMALL_NUMBER_SIZE)) = '0' then
+                    cmpGeS(numBack, 4) = '1' then
+                    
                     listContent32((slv2u(physPtrPut)/4)) <= listBackExt(3) & listBackExt(2) & listBackExt(1) & listBackExt(0); 
     
                     listBackExt(0 to 7) := listBackExt(4 to 11);
-                    numBackVar := subSN(numBackVar, i2slv(4, SMALL_NUMBER_SIZE));                    
-                    physPtrPut <= i2slv(slv2u(physPtrPut) + 4, SMALL_NUMBER_SIZE);                          
+                    numBackVar := --subSN(numBackVar, i2slv(4, SMALL_NUMBER_SIZE));
+                                    addInt(numBackVar, -4);               
+                    physPtrPut <= --i2slv(slv2u(physPtrPut) + 4, SMALL_NUMBER_SIZE);
+                                    addInt(physPtrPut, 4);         
                 end if;                        
                 
                 if freeListPutAllow = '1' then
                     for i in 0 to WIDTH-1 loop
                         -- for each element of input vec
                         if freeListPutSel(i) = '1' then
-                            indPut := addSN(indPut, i2slv(1, SMALL_NUMBER_SIZE)); -- TODO: mask for list size!
-                            
+                            indPut := --addSN(indPut, i2slv(1, SMALL_NUMBER_SIZE)); -- TODO: mask for list size!
+                                        addInt(indPut, 1);
                             assert isNonzero(physCommitFreedDelayed(i)) = '1' report "Putting 0 to free list!";
                         end if;    
                     end loop;
@@ -356,7 +363,8 @@ begin
                 if freeListRewind = '1' then
                     recoveryCounter <= i2slv(3, SMALL_NUMBER_SIZE);
                 elsif isNonzero(recoveryCounter) = '1' then
-                    recoveryCounter <= subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
+                    recoveryCounter <= --subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
+                                        addInt(recoveryCounter, -1);
                 end if;
             end if;
         end process;            
