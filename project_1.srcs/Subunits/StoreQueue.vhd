@@ -128,22 +128,21 @@ architecture Behavioral of StoreQueue is
            end case;
            
            if im(i) = '1' then
-                    slot := getNewElem(remv, dataIn);
-                            --dataIn(slv2u(diff(1 downto 0)));
-                    res(i) := slot.ins;          
-                    res(i).tags := slot.ins.tags;
-                    res(i).operation := --slot.ins.operation;
-                                        (General, unknown);
-                        res(i).specificOperation := slot.ins.specificOperation;
-                    res(i).controlInfo.completed := '0';
-                    res(i).controlInfo.completed2 := '0';
-                    res(i).controlInfo.firstBr := '0';                                  
+                slot := getNewElem(remv, dataIn);
+                        --dataIn(slv2u(diff(1 downto 0)));
+                res(i) := slot.ins;          
+                res(i).tags := slot.ins.tags;
+                res(i).operation := (General, unknown);
+                res(i).specificOperation := slot.ins.specificOperation;
+                res(i).controlInfo.completed := '0';
+                res(i).controlInfo.completed2 := '0';
+                res(i).controlInfo.firstBr := '0';                                  
            end if;
            
            -- Mark loads which break data dependence on older stores
            if isLQ and matchingNewerLoads(i) = '1' then
                res(i).controlInfo.orderViolation := '1';
-                    res(i).controlInfo.newEvent := '1';
+               res(i).controlInfo.newEvent := '1';
            end if;
         end loop;
 
@@ -295,8 +294,7 @@ architecture Behavioral of StoreQueue is
     
     function selectWithMask(content: InstructionStateArray; mask: std_logic_vector; compareValid: std_logic) return InstructionSlot is
         variable res: InstructionSlot := ('0', content(0));
-    begin
-        
+    begin       
         for i in 0 to content'length-1 loop
             if mask(i) = '1' then
                 res := (compareValid, content(i));
@@ -308,29 +306,27 @@ architecture Behavioral of StoreQueue is
     end function;
 
 begin
-
     causingPtr <= getCausingPtr(content, execCausing);
     
 	-- in shifting queue this would be shfited by nSend
 	frontMask <= getSendingMask(content, taggedLivingMask, groupCtrInc);
-	   cancelMask <= getCancelMask(content, taggedLivingMask, groupCtrInc, robData);
-	   scMask <= sendingMask and cancelMask;
+	cancelMask <= getCancelMask(content, taggedLivingMask, groupCtrInc, robData);
+	scMask <= sendingMask and cancelMask;
 	
-	   cancelledMaskNext <= (cancelledMask and not drainMask) or scMask;
+	cancelledMaskNext <= (cancelledMask and not drainMask) or scMask;
 	
 	sendingMask <= frontMask when committing = '1' else (others => '0');
 
 	killMask <= getKillMask(content, taggedMask, execCausing, execEventSignal, lateEventSignal);
-	livingMask <= fullMask when (lateEventSignal = '0' and execEventSignal = '0') 
-	         else taggedLivingMask;	
+	livingMask <= fullMask when (lateEventSignal = '0' and execEventSignal = '0') else taggedLivingMask;
     taggedLivingMask <= taggedMask and not killMask;
 				
-    inputMask <= getInputMask(taggedMask, extractFullMask(dataIn), prevSending, pTagged, PTR_MASK_SN);				
+    inputMask <= getInputMask(taggedMask, extractFullMask(dataIn), prevSending, pTagged, PTR_MASK_SN);
 
 	taggedMaskNext <= (taggedLivingMask and not sendingMask) or inputMask;
 	committedMaskNext <= (committedMask or sendingMask) and not drainMask;
-	  
-	fullOrCommittedMask <= taggedMask or committedMask; 
+
+	fullOrCommittedMask <= taggedMask or committedMask;
 	   
 	-- TODO: this won't work if the queue is allowed to become full of 'committed'. If it could, change to [set '1' on drainP when startP ~= drainP]
 	drainMask <= committedMask and not (committedMask(QUEUE_SIZE-1) & committedMask(0 to QUEUE_SIZE-2)); -- First '1' bit of committedMask
@@ -346,12 +342,10 @@ begin
 				                IS_LOAD_QUEUE, newerLQ
 				                                    );
 
-            drainMaskNC <= drainMask and not cancelledMask;
+    drainMaskNC <= drainMask and not cancelledMask;
  
 	dataDrainSig <= getWindow(content, drainMask, pDrain, PIPE_WIDTH);				                
-
 	dataDrainSigNC <= getWindow(content, drainMaskNC, pDrain, PIPE_WIDTH);	
-
     dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
 
 	newerLQ <=     newerRegLQ and addressMatchMask and whichAddressCompleted(content) when isStoreMemOp(compareAddressInput.ins) = '1'
@@ -361,19 +355,15 @@ begin
 	
 	   newerNextLQ <= TMP_cmpTagsAfter(content, compareTagInput);
 	   olderNextSQ <= TMP_cmpTagsBefore(content, compareTagInput);
-
 	
-	addressMatchMask <= getMatchedAddresses(content, compareAddressInput);
-	
+	addressMatchMask <= getMatchedAddresses(content, compareAddressInput);	
 	matchedMask <= findOldestMatch(content, newerLQ, taggedMask,           pStart, compareAddressInput.ins) when IS_LOAD_QUEUE 
 	                                                 -- TODO: above - not necessary to find oldest, each younger load can be "poisoned" and cause an event on Commit
 	         else  findNewestMatch(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
 	
 	selectedDataSlot <= selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
-
-            pStartNext <= addSN(pStart, i2slv(getNumberToSend(dataOutSig, groupCtrInc, committing), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-
-            pDrainNext <= pDrain when isDraining = '0' else addSN(pDrain, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+    pStartNext <= addSN(pStart, i2slv(getNumberToSend(dataOutSig, groupCtrInc, committing), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+    pDrainNext <= pDrain when isDraining = '0' else addSN(pDrain, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
             	
 	process (clk)
 	begin
@@ -383,16 +373,15 @@ begin
 			content <= contentNext;
 	        committedMask <= committedMaskNext;
 			
-			     cancelledMask <= cancelledMaskNext;
-			
-			     newerRegLQ <= newerNextLQ;
-			     olderRegSQ <= olderNextSQ;
+             cancelledMask <= cancelledMaskNext;
+        
+             newerRegLQ <= newerNextLQ;
+             olderRegSQ <= olderNextSQ;
 			
 			selectedDataOutputSig <= selectedDataSlot;
             dataOutSig <= dataOutSigNext;
 
-            pDrain <= pDrainNext;
-            
+            pDrain <= pDrainNext;        
             pStart <= pStartNext;
             
             if lateEventSignal = '1' then
@@ -436,21 +425,20 @@ begin
 	
 	   nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and fullMask(0) = '1'
 					   else tagDiff and TAG_DIFF_SIZE_MASK;
-					   tagDiff <= subSN(pTagged, pStartNext);          
+	   tagDiff <= subSN(pTagged, pStartNext);          
 	end generate;
 
 	STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
 		constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
 		signal tagDiff: SmallNumber := (others => '0');
-	begin        
+	begin
 		nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isDraining = '1'
 		  else (others => '0');
 			  
 	   nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pDrainNext = pTagged and fullMask(0) = '1' 
-			else tagDiff and TAG_DIFF_SIZE_MASK;
-			tagDiff <= subSN(pTagged, pDrainNext);
+                        else tagDiff and TAG_DIFF_SIZE_MASK;
+       tagDiff <= subSN(pTagged, pDrainNext);
 	end generate;
-
 
     isDraining <= dataDrainSig(0).full;
     dataOutSigFinal <= getSendingArray(dataOutSig, groupCtrInc, committing);

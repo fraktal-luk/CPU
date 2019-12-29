@@ -54,8 +54,9 @@ entity BranchQueue is
 end BranchQueue;
 
 
-architecture Behavioral of BranchQueue is
+architecture Behavioral of BranchQueue is    
 	constant PTR_MASK_SN: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+    constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
 
 	signal isSending: std_logic := '0';
 
@@ -66,7 +67,7 @@ architecture Behavioral of BranchQueue is
 	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
 	signal dataOutSig, dataOutSigNext, dataOutSigFinal: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-	signal pStart, pStartNext, pTagged, pAll, causingPtr, pAcc: SmallNumber := (others => '0');
+	signal pStart, pStartNext, pTagged, pAll, causingPtr, pAcc     , pAcc_0, pAcc_1, pAcc_2, pAcc_3: SmallNumber := (others => '0');
 	   signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
 	   signal recoveryCounter: SmallNumber := (others => '0');
 	   signal isFull, isAlmostFull: std_logic := '0';
@@ -229,28 +230,35 @@ begin
             if lateEventSignal = '1' then
                 pTagged <= pStartNext;
             elsif execEventSignal = '1' then
-                pTagged <= addSN(causingPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                pTagged <= --addSN(causingPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                           addIntTrunc(causingPtr, 1, QUEUE_PTR_SIZE);
             elsif prevSending = '1' then -- + N
-                pTagged <= addSN(pTagged, i2slv(countOnes(inputMask), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                pTagged <= --addSN(pTagged, i2slv(countOnes(inputMask), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                           addIntTrunc(pTagged, countOnes(inputMask), QUEUE_PTR_SIZE);                
             end if;
 
             if lateEventSignal = '1' then
                 pAll <= pStartNext;
             elsif execEventSignal = '1' then
-                pAll <= addSN(causingPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;     -- increment(causingPtr, N_BITS_PTR);        
+                pAll <= --addSN(causingPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;     -- increment(causingPtr, N_BITS_PTR);
+                        addIntTrunc(causingPtr, 1, QUEUE_PTR_SIZE);       
             elsif prevSendingBr = '1' then -- + N
-                pAll <= addSN(pAll, i2slv(countOnes(inputMaskBr), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                pAll <= --addSN(pAll, i2slv(countOnes(inputMaskBr), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                        addIntTrunc(pAll, countOnes(inputMaskBr), QUEUE_PTR_SIZE);                
             end if;
                
             if lateEventSignal = '1' or execEventSignal = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
-            elsif recoveryCounter /= i2slv(0, SMALL_NUMBER_SIZE) then
-                recoveryCounter <= subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
+            elsif --recoveryCounter /= i2slv(0, SMALL_NUMBER_SIZE) then
+                  isNonzero(recoveryCounter) = '1' then
+                recoveryCounter <= --subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
+                                   addInt(recoveryCounter, -1);
             end if;
                
-            isFull <= cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-4, SMALL_NUMBER_SIZE));
-            isAlmostFull <= cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-8, SMALL_NUMBER_SIZE));
-                
+            isFull <= --cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-4, SMALL_NUMBER_SIZE));
+                            cmpGtU(nFullNext, QUEUE_SIZE-4);
+            isAlmostFull <= --cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-8, SMALL_NUMBER_SIZE));
+                            cmpGtU(nFullNext, QUEUE_SIZE-8);
             nFull <= nFullNext;                     
 		end if;
 	end process;
@@ -282,7 +290,8 @@ begin
 	acceptingOut <= '1';
 
     -- Accept when 4 free slot exist
-    pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+    --pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+        pAcc <= addIntTrunc(pStart, 4, QUEUE_PTR_SIZE);
 	acceptingBr <= not isAlmostFull;     
  
 	dataOutV <= dataOutSigFinal;                   

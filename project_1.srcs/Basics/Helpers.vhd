@@ -46,6 +46,46 @@ function isNonzero(vec: std_logic_vector) return std_logic;
 
 function invertVec(vec: std_logic_vector) return std_logic_vector;
 
+function addInt(v: std_logic_vector; n: integer) return std_logic_vector;
+function addIntTrunc(v: std_logic_vector; n: integer; len: natural) return std_logic_vector;
+
+
+function cmpLtU(a: std_logic_vector; b: std_logic_vector) return std_logic;
+function cmpLtS(a: std_logic_vector; b: std_logic_vector) return std_logic;
+function cmpLeU(a: std_logic_vector; b: std_logic_vector) return std_logic;
+function cmpLeS(a: std_logic_vector; b: std_logic_vector) return std_logic;
+
+-- Less [or eq]
+function cmpLtU(a: std_logic_vector; b: natural) return std_logic;
+function cmpLtS(a: std_logic_vector; b: integer) return std_logic;
+function cmpLeU(a: std_logic_vector; b: natural) return std_logic;
+function cmpLeS(a: std_logic_vector; b: integer) return std_logic;
+
+
+-- Greater [or eq]
+function cmpGtU(a: std_logic_vector; b: std_logic_vector) return std_logic;
+function cmpGtS(a: std_logic_vector; b: std_logic_vector) return std_logic;
+function cmpGeU(a: std_logic_vector; b: std_logic_vector) return std_logic;
+function cmpGeS(a: std_logic_vector; b: std_logic_vector) return std_logic;
+
+-- With int
+function cmpGtU(a: std_logic_vector; b: natural) return std_logic;
+function cmpGtS(a: std_logic_vector; b: integer) return std_logic;
+function cmpGeU(a: std_logic_vector; b: natural) return std_logic;
+function cmpGeS(a: std_logic_vector; b: integer) return std_logic;
+
+function cmpEqU(a: std_logic_vector; b: std_logic_vector) return std_logic;
+function cmpEqS(a: std_logic_vector; b: std_logic_vector) return std_logic;
+function cmpNeU(a: std_logic_vector; b: std_logic_vector) return std_logic;    
+function cmpNeS(a: std_logic_vector; b: std_logic_vector) return std_logic;
+
+function cmpEqU(a: std_logic_vector; b: natural) return std_logic;
+function cmpEqS(a: std_logic_vector; b: integer) return std_logic;
+function cmpNeU(a: std_logic_vector; b: natural) return std_logic;  
+function cmpNeS(a: std_logic_vector; b: integer) return std_logic;
+
+
+
 end Helpers;
 
 
@@ -309,4 +349,390 @@ begin
 end function;
 
 
-end Helpers;
+procedure CHECK_BE(v: std_logic_vector) is
+begin
+   assert not v'ascending report "Trying to use little endian slv as number!" severity error;
+end procedure;
+
+
+function addInt(v: std_logic_vector; n: integer) return std_logic_vector is
+    variable res: std_logic_vector(v'range) := (others => '0');
+    variable vInt: integer := slv2u(v); -- Signed or not, addition bit results are the same  
+begin
+    CHECK_BE(v);
+    res := i2slv(vInt + n, v'length);
+    return res;
+end function;
+
+function addIntTrunc(v: std_logic_vector; n: integer; len: natural) return std_logic_vector is
+    variable res0, res: std_logic_vector(v'range) := (others => '0');
+    variable vInt: integer := slv2u(v); -- Signed or not, addition bit results are the same 
+begin
+    CHECK_BE(v);
+    res0 := i2slv(vInt + n, v'length);
+    res(len-1 downto 0) := res0(len-1 downto 0);
+    return res;
+end function;
+
+
+function zeroExtend(a: std_logic_vector; n: natural) return std_logic_vector is
+    constant LEN: natural := a'length;
+    variable res: std_logic_vector(n-1 downto 0) := (others => '0');
+begin
+    CHECK_BE(a);
+
+    if n < LEN then
+        res := a(n-1 downto 0);
+    else
+        res(n-1 downto 0) := a;
+    end if;
+    
+    return res;
+end function; 
+
+function signExtend(a: std_logic_vector; n: natural) return std_logic_vector is
+    constant LEN: natural := a'length;
+    variable res: std_logic_vector(n-1 downto 0) := (others => '0');
+begin
+    CHECK_BE(a);
+
+    if n < LEN then
+        res := a(n-1 downto 0);
+    else
+        res(n-1 downto 0) := a;
+        res(LEN-1 downto n) := (others => a(n-1));
+    end if;
+    
+    return res;
+end function; 
+
+
+-- This is the internal implementation
+function baseCompareLessU(a: std_logic_vector; b: std_logic_vector; orEq: boolean) return std_logic is
+    constant LEN: natural := a'length;
+    variable bRes: std_logic_vector(a'range) := b;
+begin
+    
+	for i in LEN-1 downto 0 loop
+        if a(i) = '1' and bRes(i) = '0' then
+            return '0';
+        elsif a(i) = '0' and bRes(i) = '1' then
+            return '1';
+        end if;
+    end loop;
+    
+    return bool2std(orEq);
+end function;
+
+
+-- Less [or eq]
+function cmpLtU(a: std_logic_vector; b: std_logic_vector) return std_logic is
+    constant LEN: natural := a'length;
+    variable bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+    
+    bRes := zeroExtend(b, LEN);
+    return baseCompareLessU(a, bRes, false);
+end function;
+
+function cmpLtS(a: std_logic_vector; b: std_logic_vector) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+    
+    aRes := a;
+    bRes := signExtend(b, LEN);
+    aRes(LEN-1) := not aRes(LEN-1); -- Invert sign bit to allow using unsigned comparison
+    bRes(LEN-1) := not bRes(LEN-1);
+    return baseCompareLessU(aRes, bRes, false);
+end function;
+
+function cmpLeU(a: std_logic_vector; b: std_logic_vector) return std_logic is
+    constant LEN: natural := a'length;
+    variable bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+    
+    bRes := zeroExtend(b, LEN);
+    return baseCompareLessU(a, bRes, true);
+end function;
+
+function cmpLeS(a: std_logic_vector; b: std_logic_vector) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+    
+    aRes := a;
+    bRes := signExtend(b, LEN);
+    aRes(LEN-1) := not aRes(LEN-1); -- Invert sign bit to allow using unsigned comparison
+    bRes(LEN-1) := not bRes(LEN-1);
+    return baseCompareLessU(aRes, bRes, true);
+end function;
+
+--- With int
+
+-- Less [or eq]
+function cmpLtU(a: std_logic_vector; b: natural) return std_logic is
+    constant LEN: natural := a'length;
+    variable bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    --CHECK_BE(b);
+    
+    bRes := i2slv(b, LEN);
+    return baseCompareLessU(a, bRes, false);
+end function;
+
+function cmpLtS(a: std_logic_vector; b: integer) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    --CHECK_BE(b);
+    
+    aRes := a;
+    bRes := i2slv(b, LEN);
+    aRes(LEN-1) := not aRes(LEN-1); -- Invert sign bit to allow using unsigned comparison
+    bRes(LEN-1) := not bRes(LEN-1);
+    return baseCompareLessU(aRes, bRes, false);
+end function;
+
+function cmpLeU(a: std_logic_vector; b: natural) return std_logic is
+    constant LEN: natural := a'length;
+    variable bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    --CHECK_BE(b);
+    
+    bRes := i2slv(b, LEN);
+    return baseCompareLessU(a, bRes, true);
+end function;
+
+function cmpLeS(a: std_logic_vector; b: integer) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    --CHECK_BE(b);
+    
+    aRes := a;
+    bRes := i2slv(b, LEN);
+    aRes(LEN-1) := not aRes(LEN-1); -- Invert sign bit to allow using unsigned comparison
+    bRes(LEN-1) := not bRes(LEN-1);
+    return baseCompareLessU(aRes, bRes, true);
+end function;
+
+
+
+
+-- Greater [or eq]
+function cmpGtU(a: std_logic_vector; b: std_logic_vector) return std_logic is
+    constant LEN: natural := a'length;
+    variable bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+    
+    bRes := zeroExtend(b, LEN);
+    return baseCompareLessU(bRes, a, false);
+end function;
+
+function cmpGtS(a: std_logic_vector; b: std_logic_vector) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+    
+    aRes := a;
+    bRes := signExtend(b, LEN);
+    aRes(LEN-1) := not aRes(LEN-1); -- Invert sign bit to allow using unsigned comparison
+    bRes(LEN-1) := not bRes(LEN-1);
+    return baseCompareLessU(bRes, aRes, false);
+end function;
+
+function cmpGeU(a: std_logic_vector; b: std_logic_vector) return std_logic is
+    constant LEN: natural := a'length;
+    variable bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+    
+    bRes := zeroExtend(b, LEN);
+    return baseCompareLessU(bRes, a, true);
+end function;
+
+function cmpGeS(a: std_logic_vector; b: std_logic_vector) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+    
+    aRes := a;
+    bRes := signExtend(b, LEN);
+    aRes(LEN-1) := not aRes(LEN-1); -- Invert sign bit to allow using unsigned comparison
+    bRes(LEN-1) := not bRes(LEN-1);
+    return baseCompareLessU(bRes, aRes, true);
+end function;
+
+-- With int
+function cmpGtU(a: std_logic_vector; b: natural) return std_logic is
+    constant LEN: natural := a'length;
+    variable bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    --CHECK_BE(b);
+    
+    bRes := i2slv(b, LEN);
+    return baseCompareLessU(bRes, a, false);
+end function;
+
+function cmpGtS(a: std_logic_vector; b: integer) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    --CHECK_BE(b);
+    
+    aRes := a;
+    bRes := i2slv(b, LEN);
+    aRes(LEN-1) := not aRes(LEN-1); -- Invert sign bit to allow using unsigned comparison
+    bRes(LEN-1) := not bRes(LEN-1);
+    return baseCompareLessU(bRes, aRes, false);
+end function;
+
+function cmpGeU(a: std_logic_vector; b: natural) return std_logic is
+    constant LEN: natural := a'length;
+    variable bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    --CHECK_BE(b);
+    
+    bRes := i2slv(b, LEN);
+    return baseCompareLessU(bRes, a, true);
+end function;
+
+function cmpGeS(a: std_logic_vector; b: integer) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    --CHECK_BE(b);
+    
+    aRes := a;
+    bRes := i2slv(b, LEN);
+    aRes(LEN-1) := not aRes(LEN-1); -- Invert sign bit to allow using unsigned comparison
+    bRes(LEN-1) := not bRes(LEN-1);
+    return baseCompareLessU(bRes, aRes, true);
+end function;
+
+
+
+-- Equal/not equal
+function cmpEqU(a: std_logic_vector; b: std_logic_vector) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+
+    bRes := zeroExtend(b, LEN);
+    
+    return bool2std(a = bRes);
+end function;    
+    
+function cmpEqS(a: std_logic_vector; b: std_logic_vector) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+
+    bRes := signExtend(b, LEN);
+    
+    return bool2std(a = bRes);
+end function;
+
+function cmpNeU(a: std_logic_vector; b: std_logic_vector) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+
+    bRes := zeroExtend(b, LEN);
+    
+    return bool2std(a /= bRes);
+end function;    
+    
+function cmpNeS(a: std_logic_vector; b: std_logic_vector) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+
+    bRes := signExtend(b, LEN);
+    
+    return bool2std(a /= bRes);
+end function;
+
+-- With integers
+function cmpEqU(a: std_logic_vector; b: natural) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    --CHECK_BE(b);
+
+    bRes := i2slv(b, LEN);
+    
+    return bool2std(a = bRes);
+end function;    
+    
+function cmpEqS(a: std_logic_vector; b: integer) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    --CHECK_BE(b);
+
+    bRes := i2slv(b, LEN);
+    
+    return bool2std(a = bRes);
+end function;
+
+function cmpNeU(a: std_logic_vector; b: natural) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    --CHECK_BE(b);
+
+    bRes := i2slv(b, LEN);
+    
+    return bool2std(a /= bRes);
+end function;    
+    
+function cmpNeS(a: std_logic_vector; b: integer) return std_logic is
+    constant LEN: natural := a'length;
+    variable aRes, bRes: std_logic_vector(a'range) := (others => '0');
+begin
+    CHECK_BE(a);
+    --CHECK_BE(b);
+
+    bRes := i2slv(b, LEN);
+    
+    return bool2std(a /= bRes);
+end function;
+
+
+end package body;
