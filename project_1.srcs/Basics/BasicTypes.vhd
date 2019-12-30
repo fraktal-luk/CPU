@@ -1,6 +1,7 @@
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
+use ieee.std_logic_arith.all;
 
 
 package BasicTypes is
@@ -55,6 +56,14 @@ function cmpGreaterThanSignedSNA(arr: SmallNumberArray; num: SmallNumber) return
 function cmpLessThanUnsignedSNA(arr: SmallNumberArray; num: SmallNumber) return std_logic_vector;
 function cmpLessThanSignedSNA(arr: SmallNumberArray; num: SmallNumber) return std_logic_vector;
 function cmpEqualToSNA(arr: SmallNumberArray; num: SmallNumber) return std_logic_vector;
+
+function add(a: std_logic_vector; b: std_logic_vector) return std_logic_vector;
+function sub(a: std_logic_vector; b: std_logic_vector) return std_logic_vector;
+
+procedure CHECK_BE(v: std_logic_vector);
+function zeroExtend(a: std_logic_vector; n: natural) return std_logic_vector;
+function signExtend(a: std_logic_vector; n: natural) return std_logic_vector;
+
 
 end package;
 
@@ -178,6 +187,8 @@ begin
 		carry := (a(i) and b(i)) or (a(i) and carry) or (b(i) and carry);
 		res(i) := rdigit;
 	end loop;
+	       res := add(a, b);
+	
 	return res;
 end function;
 
@@ -191,6 +202,8 @@ begin
 		carry := (a(i) and not b(i)) or (a(i) and carry) or ((not b(i)) and carry);
 		res(i) := rdigit;
 	end loop;
+	
+	       res := sub(a, b);
 	return res;
 end function;
 
@@ -354,6 +367,80 @@ begin
 		end if;
 	end loop;
 	return res;
+end function;
+
+
+
+procedure CHECK_BE(v: std_logic_vector) is
+begin
+   assert not v'ascending report "Trying to use little endian slv as number!" severity error;
+end procedure;
+
+
+
+function zeroExtend(a: std_logic_vector; n: natural) return std_logic_vector is
+    constant LEN: natural := a'length;
+    variable res: std_logic_vector(n-1 downto 0) := (others => '0');
+begin
+    CHECK_BE(a);
+
+    if n < LEN then
+        res := a(n-1 downto 0);
+    else
+        res(n-1 downto 0) := a;
+    end if;
+    
+    return res;
+end function; 
+
+
+function signExtend(a: std_logic_vector; n: natural) return std_logic_vector is
+    constant LEN: natural := a'length;
+    variable res: std_logic_vector(n-1 downto 0) := (others => '0');
+begin
+    CHECK_BE(a);
+
+    if n < LEN then
+        res := a(n-1 downto 0);
+    else
+        res(n-1 downto 0) := a;
+        res(LEN-1 downto n) := (others => a(n-1));
+    end if;
+    
+    return res;
+end function; 
+
+
+function add(a: std_logic_vector; b: std_logic_vector) return std_logic_vector is
+    constant LEN: natural := a'length;
+    variable bRes, res: std_logic_vector(LEN-1 downto 0) := (others => '0');
+    variable ua, ub, ur: unsigned(LEN-1 downto 0) := (others => '0');
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+    
+    bRes := zeroExtend(b, LEN);
+    ua := unsigned(a);
+    ub := unsigned(b);
+    ur := ua + ub;
+    res := std_logic_vector(ur);
+    return res;
+end function;
+
+function sub(a: std_logic_vector; b: std_logic_vector) return std_logic_vector is
+    constant LEN: natural := a'length;
+    variable bRes, res: std_logic_vector(LEN-1 downto 0) := (others => '0');
+    variable ua, ub, ur: unsigned(LEN-1 downto 0) := (others => '0');
+begin
+    CHECK_BE(a);
+    CHECK_BE(b);
+        
+    bRes := zeroExtend(b, LEN);
+    ua := unsigned(a);
+    ub := unsigned(b);
+    ur := ua - ub;
+    res := std_logic_vector(ur);
+    return res;
 end function;
 
 

@@ -138,8 +138,15 @@ architecture Behavioral of RegisterFreeList is
 	   
 	   return res;
 	end function;
-				
+		
+		      signal test1, test2, test3, test4, test5: std_logic_vector(7 downto 0) := (others => '0');		
 begin
+                test5 <= "01000000";
+            test1 <= "00000010";
+            test2 <= "00000000";       
+                test3 <= add(test1, test2);
+                test4 <= add(test3, test5);
+
     physCommitFreedDelayed <= selAndCompactPhysDests(physStableDelayed, physCommitDestsDelayed, stableUpdateSelDelayed, freeListPutSel);
 
     physCommitDestsDelayed <= getPhysicalDests(stageDataToRelease);
@@ -192,20 +199,29 @@ begin
 
         function nextShift(list: PhysNameArray; memData: PhysNameArray; allow: std_logic; nF, nT: SmallNumber) return PhysNameArray is
             variable res: PhysNameArray(0 to 7) := (others => (others => '0'));
+            variable ind: SmallNumber := (others => '0');
+            variable indM: SmallNumber := (others => '0');--std_logic_vector(1 downto 0) := (others => '0');           
             variable listExt: PhysNameArray(0 to 11) := list & PhysNameArray'(X"00", X"00", X"00", X"00");
         begin
             for i in 0 to 6 loop
-                res(i) := listExt(i + (slv2u(nT)-1 mod 4) + 1);
+                ind := addIntTrunc(nT, -1, 2);
+                indM := addInt(ind, i + 1);
+                res(i) := listExt(--i + (slv2u(nT)-1 mod 4) + 1);
+                                    slv2u(indM(3 downto 0))); -- 4 bits for 12-element list
             end loop;
             
             return res;
         end function;
 
         function nextMemNoTake(list: PhysNameArray; memData: PhysNameArray; allow: std_logic; nF, nT: SmallNumber) return PhysNameArray is
-            variable res: PhysNameArray(0 to 7) := (others => (others => '0'));          
+            variable res: PhysNameArray(0 to 7) := (others => (others => '0'));
+            variable ind: SmallNumber := (others => '0');
+            variable notNF: SmallNumber := not nF; -- -nF == not nF + 1; not nF == -nF - 1                    
         begin
             for i in 0 to 7 loop
-                res(i) := memData((i - slv2u(nF)) mod 4);
+                ind := addIntTrunc(notNF, 1 + i, 2);
+                res(i) := memData(--(i - slv2u(nF)) mod 4);
+                                    slv2u(ind(1 downto 0)));
             end loop;
             
             return res;
@@ -213,10 +229,12 @@ begin
         
         function nextMemTake(list: PhysNameArray; memData: PhysNameArray; allow: std_logic; nF, nT: SmallNumber) return PhysNameArray is
             variable res: PhysNameArray(0 to 7) := (others => (others => '0'));
-            
+            variable ind: SmallNumber := (others => '0');
         begin
             for i in 0 to 7 loop
-                res(i) := memData((i - slv2u(nF) + slv2u(nT)) mod 4);
+                ind := addIntTrunc(subSN(nT, nF), i, 2);
+                res(i) := memData(--(i - slv2u(nF) + slv2u(nT)) mod 4);
+                                    slv2u(ind(1 downto 0)));
             end loop;
             
             return res;
@@ -226,7 +244,8 @@ begin
             variable res: std_logic_vector(0 to 7) := (others => '0');
         begin
             for i in 0 to 7 loop
-                res(i) := not cmpGreaterSignedSN(nF, i2slv(i, SMALL_NUMBER_SIZE));
+                res(i) := --not cmpGreaterSignedSN(nF, i2slv(i, SMALL_NUMBER_SIZE));
+                            cmpLeS(nF, i);
             end loop;
             
             return res;
@@ -236,7 +255,8 @@ begin
             variable res: std_logic_vector(0 to 7) := (others => '0');
         begin
             for i in 0 to 7 loop
-                res(i) := not cmpGreaterSignedSN(subSN(nF, nT), i2slv(i, SMALL_NUMBER_SIZE));
+                res(i) := --not cmpGreaterSignedSN(subSN(nF, nT), i2slv(i, SMALL_NUMBER_SIZE));
+                            cmpLeS(subSN(nF, nT), i);
             end loop;
             
             return res;

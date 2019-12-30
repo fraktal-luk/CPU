@@ -11,6 +11,8 @@ use work.BasicTypes.all;
 
 package Helpers is
 
+-- TODO: make it independent of BasicTypes!
+
 function std2bool(arg: std_logic) return boolean;
 function bool2std(b: boolean) return std_logic;
 
@@ -83,7 +85,6 @@ function cmpEqU(a: std_logic_vector; b: natural) return std_logic;
 function cmpEqS(a: std_logic_vector; b: integer) return std_logic;
 function cmpNeU(a: std_logic_vector; b: natural) return std_logic;  
 function cmpNeS(a: std_logic_vector; b: integer) return std_logic;
-
 
 
 end Helpers;
@@ -349,44 +350,7 @@ begin
 end function;
 
 
-procedure CHECK_BE(v: std_logic_vector) is
-begin
-   assert not v'ascending report "Trying to use little endian slv as number!" severity error;
-end procedure;
 
-
-
-function zeroExtend(a: std_logic_vector; n: natural) return std_logic_vector is
-    constant LEN: natural := a'length;
-    variable res: std_logic_vector(n-1 downto 0) := (others => '0');
-begin
-    CHECK_BE(a);
-
-    if n < LEN then
-        res := a(n-1 downto 0);
-    else
-        res(n-1 downto 0) := a;
-    end if;
-    
-    return res;
-end function; 
-
-
-function signExtend(a: std_logic_vector; n: natural) return std_logic_vector is
-    constant LEN: natural := a'length;
-    variable res: std_logic_vector(n-1 downto 0) := (others => '0');
-begin
-    CHECK_BE(a);
-
-    if n < LEN then
-        res := a(n-1 downto 0);
-    else
-        res(n-1 downto 0) := a;
-        res(LEN-1 downto n) := (others => a(n-1));
-    end if;
-    
-    return res;
-end function; 
 
 
 function addTruncZ(a: std_logic_vector; b: std_logic_vector; n: natural) return std_logic_vector is
@@ -398,7 +362,7 @@ begin
     
     bRes := zeroExtend(b, a'length);
     
-    -- TODO res0 := (a+b)
+    res0 := add(a, b);
 
     res(n-1 downto 0) := res0(n-1 downto 0);
 
@@ -414,7 +378,7 @@ begin
     
     bRes := zeroExtend(b, a'length);
     
-    -- TODO res0 := (a-b)
+    res0 := sub(a, b);
 
     res(n-1 downto 0) := res0(n-1 downto 0);
 
@@ -425,19 +389,23 @@ end function;
 
 function addInt(v: std_logic_vector; n: integer) return std_logic_vector is
     variable res: std_logic_vector(v'range) := (others => '0');
-    variable vInt: integer := slv2u(v); -- Signed or not, addition bit results are the same  
+    variable vInt: integer := slv2u(v); -- Signed or not, addition bit results are the same
+    variable bRes: std_logic_vector(v'range) := (others => '0'); 
 begin
     CHECK_BE(v);
-    res := i2slv(vInt + n, v'length);
+    bRes := i2slv(n, v'length);
+    
+    res := add(v, bRes);--i2slv(vInt + n, v'length);
     return res;
 end function;
 
 function addIntTrunc(v: std_logic_vector; n: integer; len: natural) return std_logic_vector is
     variable res0, res: std_logic_vector(v'range) := (others => '0');
-    variable vInt: integer := slv2u(v); -- Signed or not, addition bit results are the same 
+    variable bRes: std_logic_vector(v'range) := (others => '0'); 
 begin
     CHECK_BE(v);
-    res0 := i2slv(vInt + n, v'length);
+    bRes := i2slv(n, v'length);
+    res0 := add(v, bRes);--i2slv(vInt + n, v'length);
     res(len-1 downto 0) := res0(len-1 downto 0);
     return res;
 end function;

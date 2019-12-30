@@ -70,6 +70,7 @@ architecture Behavioral of ReorderBuffer is
 
 	constant PTR_MASK_TAG: InsTag := i2slv(ROB_SIZE-1, TAG_SIZE);
 	constant PTR_MASK_SN: SmallNumber := i2slv(ROB_SIZE-1, SMALL_NUMBER_SIZE);
+	constant ROB_PTR_SIZE: natural := countOnes(PTR_MASK_SN);	
 	
 	signal recoveryCounter: SmallNumber := (others => '0');
 	signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0'); 
@@ -248,7 +249,8 @@ begin
     end process;
 
 
-    startPtrNext <= startPtr when isSending = '0' else addSN(startPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+    startPtrNext <= startPtr when isSending = '0' else --addSN(startPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                                                        addIntTrunc(startPtr, 1, ROB_PTR_SIZE);
 							
 	isEmpty <= bool2std(startPtr = endPtr); -- CAREFUL: elsewhere it MUST be assured that ROB never gets full because this would become incorrect. 'isFull' must mean 1 free slot
 							
@@ -263,26 +265,31 @@ begin
             if lateEventSignal = '1' then
                 endPtr <= startPtrNext;
             elsif execEvent = '1' then
-                endPtr <= addSN(causingPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                endPtr <= --addSN(causingPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                            addIntTrunc(causingPtr, 1, ROB_PTR_SIZE);                            
             elsif prevSending = '1' then
-                endPtr <= addSN(endPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                endPtr <= --addSN(endPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                            addIntTrunc(endPtr, 1, ROB_PTR_SIZE);
             end if;
                    
             if lateEventSignal = '1' or execEvent = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
             elsif isNonzero(recoveryCounter) = '1' then
-                recoveryCounter <= subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
+                recoveryCounter <= --subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
+                                    addInt(recoveryCounter, -1);
             end if;
             
             nFull <= nFullNext;
             
             -- CAREFUL: here we assure that the buffer is never full (so isFull incidcates 1 free slot). So startPtr = endPtr always indicates emptiness
             if --nFullNext > ROB_SIZE-1 then
-                cmpGreaterUnsignedSN(nFullNext, i2slv(ROB_SIZE-1-1, SMALL_NUMBER_SIZE)) = '1' then
+                --cmpGreaterUnsignedSN(nFullNext, i2slv(ROB_SIZE-1-1, SMALL_NUMBER_SIZE)) = '1' then
+                cmpGtU(nFullNext, ROB_SIZE-1-1) = '1' then
                 isFull <= '1';
                 isAlmostFull <= '1';
             elsif --nFullNext > ROB_SIZE-2 then
-                cmpGreaterUnsignedSN(nFullNext, i2slv(ROB_SIZE-2-1, SMALL_NUMBER_SIZE)) = '1' then
+                --cmpGreaterUnsignedSN(nFullNext, i2slv(ROB_SIZE-2-1, SMALL_NUMBER_SIZE)) = '1' then
+                cmpGtU(nFullNext, ROB_SIZE-2-1) = '1' then
                 isFull <= '0';
                 isAlmostFull <= '1';
             else
@@ -292,7 +299,7 @@ begin
             
             completedMask <= completedMaskNext;
             outputDataReg <= content(slv2u(startPtrNext)).ops;
-                outputSpecialReg <= content(slv2u(startPtrNext)).special;
+            outputSpecialReg <= content(slv2u(startPtrNext)).special;
 		end if;		
 	end process;
  
@@ -306,7 +313,8 @@ begin
         ptrDiff <= subSN(endPtr, startPtrNext);
           
         flowDiff <= subSN(addSN(nFull, nIn), nOut);
-        nFullNext <=     nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
+        nFullNext <=     nFullRestored when --recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
+                                            cmpEqU(recoveryCounter, 1) = '1'
                     else flowDiff and PTR_MASK_SN;
     end block;
 	   
@@ -319,7 +327,8 @@ begin
 
 	acceptingOut <= not isFull;
 	
-    acmPtr <= addSN(endPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+    acmPtr <= --addSN(endPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                addIntTrunc(endPtr, 1, ROB_PTR_SIZE);
     acceptingMore <= not isAlmostFull;		
 	outputData <= --outputDataReg;
 	               replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2);

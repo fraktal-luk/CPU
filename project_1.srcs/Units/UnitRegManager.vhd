@@ -110,10 +110,13 @@ architecture Behavioral of UnitRegManager is
         -- Setting tags
         for i in 0 to PIPE_WIDTH-1 loop
             res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
-            res(i).ins.tags.renameCtr := i2slv(slv2u(renameCtr) + i, 32);
-            res(i).ins.tags.intPointer := i2slv(slv2u(newIntDestPointer) + countOnes(takeVecInt(0 to i)), SMALL_NUMBER_SIZE); 
+            res(i).ins.tags.renameCtr := --i2slv(slv2u(renameCtr) + i, 32);
+                                         addInt(renameCtr, i);
+            res(i).ins.tags.intPointer := --i2slv(slv2u(newIntDestPointer) + countOnes(takeVecInt(0 to i)), SMALL_NUMBER_SIZE);
+                                          addInt(newIntDestPointer, countOnes(takeVecInt(0 to i)));
                                                                          -- Don't increment pointer on ops which use no destination!
-            res(i).ins.tags.floatPointer := i2slv(slv2u(newFloatDestPointer) + countOnes(takeVecFloat(0 to i)), SMALL_NUMBER_SIZE); 
+            res(i).ins.tags.floatPointer := --i2slv(slv2u(newFloatDestPointer) + countOnes(takeVecFloat(0 to i)), SMALL_NUMBER_SIZE);
+                                            addInt(newFloatDestPointer, countOnes(takeVecFloat(0 to i)));
         end loop;
 
         -- Setting 'complete' for ops not using Exec resources
@@ -128,10 +131,10 @@ architecture Behavioral of UnitRegManager is
                 res(i).full := '0';
             end if;
     
-            if     res(i).ins.controlInfo.specialAction = '1'
-                or res(i).ins.controlInfo.hasException = '1'
-                or res(i).ins.controlInfo.dbtrap = '1'
-            then
+--            if     res(i).ins.controlInfo.specialAction = '1'
+--                or res(i).ins.controlInfo.hasException = '1'
+--                or res(i).ins.controlInfo.dbtrap = '1'
+            if hasSyncEvent(res(i).ins) = '1' then
                 found := true;
             end if;
         end loop;
@@ -377,10 +380,12 @@ begin
             renameGroupCtrNext <= 
                                     commitGroupCtr when lateEventSignal = '1'
                                else clearTagLow(execCausing.tags.renameIndex) when execEventSignal = '1'
-                               else i2slv(slv2u(renameGroupCtr) + PIPE_WIDTH, TAG_SIZE) when frontLastSending = '1'
+                               else --i2slv(slv2u(renameGroupCtr) + PIPE_WIDTH, TAG_SIZE) when frontLastSending = '1'
+                                    addInt(renameGroupCtr, PIPE_WIDTH) when frontLastSending = '1'
                                else renameGroupCtr;
         
-            renameCtrNext <= i2slv(slv2u(renameCtr) + countOnes(extractFullMask(stageDataRenameIn)), 32) when frontLastSending = '1'
+            renameCtrNext <= --i2slv(slv2u(renameCtr) + countOnes(extractFullMask(stageDataRenameIn)), 32) when frontLastSending = '1'
+                             addInt(renameCtr, countOnes(extractFullMask(stageDataRenameIn))) when frontLastSending = '1'
                             else renameCtr;
                 
         

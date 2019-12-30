@@ -85,7 +85,8 @@ begin
 	killAll <= execEventSignal or lateEventSignal;
     killAllOrFront <= killAll or frontKill;
 
-    fetchCounterNext <= i2slv(slv2u(fetchCounter) + PIPE_WIDTH, 32) when pcSending = '1' else fetchCounter;
+    fetchCounterNext <= --i2slv(slv2u(fetchCounter) + PIPE_WIDTH, 32) when pcSending = '1' else fetchCounter;
+                        addInt(fetchCounter, PIPE_WIDTH) when pcSending = '1' else fetchCounter;
 
     stageDataInFetch0(0).full <= pcSending;
     stageDataInFetch0(0).ins.ip <= pcDataLiving.ip;
