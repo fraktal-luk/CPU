@@ -42,6 +42,8 @@ begin
 		carry := (a(i) and b(i)) or (a(i) and carry) or (b(i) and carry);
 		res(i) := rdigit;
 	end loop;
+	
+	   res := add(a, b);
 	return res;
 end function;
 
@@ -55,13 +57,18 @@ begin
 		carry := (a(i) and not b(i)) or (a(i) and carry) or ((not b(i)) and carry);
 		res(i) := rdigit;
 	end loop;
+	
+	   res := sub(a,b);
 	return res;
 end function;
 
 function addMwordExt(a, b: Mword) return std_logic_vector is
-	variable res: std_logic_vector(MWORD_SIZE downto 0) := (others => '0');
+	variable res, ra, rb: std_logic_vector(MWORD_SIZE downto 0) := (others => '0');
 	variable rdigit, carry: std_logic := '0';
 begin
+    ra := signExtend(a, MWORD_SIZE+1);
+    rb := signExtend(b, MWORD_SIZE+1);
+
 	for i in 0 to MWORD_SIZE-1 loop
 		rdigit := a(i) xor b(i) xor carry;
 		carry := (a(i) and b(i)) or (a(i) and carry) or (b(i) and carry);
@@ -69,13 +76,18 @@ begin
 	end loop;
 	res(MWORD_SIZE) := carry;
 	
+	   res := add(ra, rb);
+	
 	return res;
 end function;
 
 function subMwordExt(a, b: Mword) return std_logic_vector is
-	variable res: std_logic_vector(MWORD_SIZE downto 0) := (others => '0');
+	variable res, ra, rb: std_logic_vector(MWORD_SIZE downto 0) := (others => '0');
 	variable rdigit, carry: std_logic := '0';
 begin
+    ra := signExtend(a, MWORD_SIZE+1);
+    rb := signExtend(b, MWORD_SIZE+1);
+
 	carry := '1';
 	for i in 0 to MWORD_SIZE-1 loop
 		rdigit := a(i) xor (not b(i)) xor carry;
@@ -84,6 +96,7 @@ begin
 	end loop;
 	res(MWORD_SIZE) := carry;
 	
+	   res := sub(a, b);
 	return res;
 end function;
 
@@ -109,8 +122,15 @@ function addMwordFasterExt(a, b: Mword; carryIn: std_logic) return std_logic_vec
 	variable rdigit, carry: std_logic := '0';
 	variable partial0N, partial1N, partial2N, partial3N, partial0C, partial1C, partial2C, partial3C:
 		std_logic_vector(8 downto 0) := (others => '0');
-	variable c7, c15, c23, c31: std_logic := '0';	
+	variable c7, c15, c23, c31: std_logic := '0';
+	   variable ra, rb, rc: std_logic_vector(a'length+1 downto 0) := (others => '0');	
 begin
+        ra(a'length downto 1) := a;
+        rb(a'length downto 1) := b;
+
+        ra(0) := carryIn;
+        rb(0) := carryIn;
+        
 	-- Carry select, for 32b
 
 	partial0N := addExt8(a(7 downto 0), b(7 downto 0), carryIn);
@@ -153,6 +173,8 @@ begin
 	--end if;
 	res(32) := c31;
 	
+	   rc := add(ra, rb);
+	   res := rc(a'length+1 downto 1);
 	return res;
 end function;
 
@@ -204,7 +226,7 @@ begin
 	--else
 	--	res(31 downto 24) := partial3N(7 downto 0);		
 	--end if;
-	
+	       res := add(a, b);
 	return res;
 end function;
 
