@@ -203,8 +203,8 @@ function fillTargetsAndLinks(insVec: InstructionSlotArray) return InstructionSlo
 	variable target, link: Mword := (others => '0');
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		target := addMwordFaster(insVec(i).ins.ip, insVec(i).ins.target);
-		link := addMwordBasic(insVec(i).ins.ip, getAddressIncrement(insVec(i).ins));
+		target := add(insVec(i).ins.ip, insVec(i).ins.target);
+		link := add(insVec(i).ins.ip, getAddressIncrement(insVec(i).ins));
 		res(i).ins.target := target;
 		res(i).ins.result := link;
 	end loop;
@@ -374,7 +374,7 @@ begin
         res(i).ins.result(ALIGN_BITS-1 downto 0) := i2slv((i+1)*4, ALIGN_BITS); -- CAREFUL: not for short ins
 	end loop;
 	res(PIPE_WIDTH-1).ins.result := ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
-	res(PIPE_WIDTH-1).ins.result := addMwordBasic(res(PIPE_WIDTH-1).ins.result, PC_INC);
+	res(PIPE_WIDTH-1).ins.result := add(res(PIPE_WIDTH-1).ins.result, PC_INC);
 
     -- Calculate target for each instruction, even if it's to be skipped
     for i in 0 to FETCH_WIDTH-1 loop        
@@ -465,7 +465,7 @@ begin
             end if;
     
             branchIns(i) := regularJump or longJump or regJump;
-            res(i).ins.target := addMwordFaster(res(i).ins.ip, tempOffset);			
+            res(i).ins.target := add(res(i).ins.ip, tempOffset);			
     end loop;
     
     -- Find if any branch predicted

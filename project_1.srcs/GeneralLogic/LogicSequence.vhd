@@ -57,7 +57,7 @@ begin
 	if jump = '1' then
 		res := jumpPC;
 	else
-		res := addMwordBasic(pcBase, PC_INC);
+		res := add(pcBase, PC_INC);
 	end if;
 	return res;
 end function;
@@ -92,7 +92,7 @@ begin
             res.ip := commitCausing.target;
         elsif special.ins.specificOperation.system = opReplay       
             or commitCausing.controlInfo.refetch = '1' then
-            res.ip := addMwordFaster(commitCausing.target, MINUS_4); -- CAREFUL: wouldn't work if branch or short
+            res.ip := add(commitCausing.target, MINUS_4); -- CAREFUL: wouldn't work if branch or short
         elsif special.ins.specificOperation.system = opHalt then
             res.ip := commitCausing.target; -- ???
         elsif special.ins.specificOperation.system = opRetI then
@@ -173,7 +173,7 @@ begin
 
 	for i in 0 to PIPE_WIDTH-1 loop
 		if confBr(i) = '0' then
-			targets(i) := addMwordBasic(prevTrg, getAddressIncrement(insVec(i).ins));
+			targets(i) := add(prevTrg, getAddressIncrement(insVec(i).ins));
 		end if;
 		res(i).ins.ip := prevTrg;
 		prevTrg := targets(i);
@@ -290,7 +290,7 @@ begin
     end loop;
     -- CAREFUL: works only for 32b instructions
     targetInc(LOG2_PIPE_WIDTH + 2 downto 2) := i2slv(countOnes(differenceVec), LOG2_PIPE_WIDTH+1);
-    res.ins.target := addMwordFaster(branchTarget, targetInc);
+    res.ins.target := add(branchTarget, targetInc);
 
 	return res;
 end function;

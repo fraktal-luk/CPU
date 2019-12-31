@@ -259,7 +259,7 @@ package body LogicExec is
 		-- Most negative byte count is -4, giving -4*8 + 0 = -32
 		-- Most positive byte count is 3, giving 3*8 + 7 = 31
 		
-		resultExt := addMwordFasterExt(arg0, argAddSub, carryIn);	
+		resultExt := addExt(arg0, argAddSub, carryIn);	
 		linkAdr := queueData.result;
 
 		if (	(--ins.operation.func = arithAdd
@@ -346,7 +346,7 @@ package body LogicExec is
         if fromDLQ = '1' then
             return dlqData;
         else
-            res.result := addMwordFaster(st.argValues.arg0, st.argValues.arg1);
+            res.result := add(st.argValues.arg0, st.argValues.arg1);
             return res;
         end if;
     end function;

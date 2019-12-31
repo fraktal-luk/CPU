@@ -343,16 +343,10 @@ end function;
 
 
 function compareTagBefore(tagA, tagB: InsTag) return std_logic is
-	variable wA, wB: word := (others => '0');
-	variable wC: std_logic_vector(32 downto 0) := (others => '0');
+	variable tC: InsTag := (others => '0');
 begin
-	wA(TAG_SIZE-1 downto 0) := tagA;
-	wB(TAG_SIZE-1 downto 0) := tagB;
-	wB := not wB;
-	-- TODO: when going to 64 bit, this must be changed
-	wC := addMwordFasterExt(wA, wB, '1');
-	wC(32 downto TAG_SIZE) := (others => '0');
-	return wC(TAG_SIZE-1);
+	tC := sub(tagA, tagB);
+	return tC(TAG_SIZE-1);
 end function;
 
 function compareTagAfter(tagA, tagB: InsTag) return std_logic is

@@ -60,6 +60,10 @@ function cmpEqualToSNA(arr: SmallNumberArray; num: SmallNumber) return std_logic
 function add(a: std_logic_vector; b: std_logic_vector) return std_logic_vector;
 function sub(a: std_logic_vector; b: std_logic_vector) return std_logic_vector;
 
+-- Accepts carry input and returns 1-bit longer result for carry output 
+function addExt(a: std_logic_vector; b: std_logic_vector; carryIn: std_logic) return std_logic_vector;
+
+
 procedure CHECK_BE(v: std_logic_vector);
 function zeroExtend(a: std_logic_vector; n: natural) return std_logic_vector;
 function signExtend(a: std_logic_vector; n: natural) return std_logic_vector;
@@ -441,6 +445,22 @@ begin
     ur := ua - ub;
     res := std_logic_vector(ur);
     return res;
+end function;
+
+-- Accepts carry input and returns 1-bit longer result for carry output 
+function addExt(a: std_logic_vector; b: std_logic_vector; carryIn: std_logic) return std_logic_vector is
+	variable res: std_logic_vector(a'length downto 0) := (others => '0');
+	variable ra, rb, rc: std_logic_vector(a'length+1 downto 0) := (others => '0');	
+begin
+    ra(a'length downto 1) := a;
+    rb(a'length downto 1) := b;
+
+    ra(0) := carryIn;
+    rb(0) := carryIn;
+
+	rc := add(ra, rb);
+	res := rc(a'length+1 downto 1);
+	return res;
 end function;
 
 
