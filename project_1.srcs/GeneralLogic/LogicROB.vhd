@@ -74,10 +74,13 @@ end function;
             iv := i2slv(i, SMALL_NUMBER_SIZE);
             if full = '1' then
                 res(i) := '1';
-            elsif cmpGreaterUnsignedSN(endP, startP) = '1' then
-                res(i) := not cmpLessUnsignedSN(iv, startP) and cmpLessUnsignedSN(iv, endP);
+            elsif --cmpGreaterUnsignedSN(endP, startP) = '1' then
+                    cmpGtU(endP, startP) = '1' then
+                res(i) := --not cmpLessUnsignedSN(iv, startP) and cmpLessUnsignedSN(iv, endP);
+                            cmpLeU(iv, startP) and cmpLtU(iv, endP);
             else
-                res(i) := not cmpLessUnsignedSN(iv, startP) or cmpLessUnsignedSN(iv, endP);
+                res(i) := --not cmpLessUnsignedSN(iv, startP) or cmpLessUnsignedSN(iv, endP);
+                            cmpLtU(iv, startP) and cmpLtU(iv, endP);
             end if;
         end loop;
         

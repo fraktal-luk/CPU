@@ -38,17 +38,14 @@ type SmallNumberArray is array(integer range <>) of SmallNumber;
 constant SMALL_NUMBER_SIZE: natural := SmallNumber'length;
 
 
--- Some arithmetic for SmallNumber
-function addSN(a, b: SmallNumber) return SmallNumber;
-function subSN(a, b: SmallNumber) return SmallNumber;
-
-function uminSN(a, b: SmallNumber) return SmallNumber;
-function sminSN(a, b: SmallNumber) return SmallNumber;
+--function uminSN(a, b: SmallNumber) return SmallNumber;
+--function sminSN(a, b: SmallNumber) return SmallNumber;
 
 function cmpLessSignedSN(a: SmallNumber; b: SmallNumber) return std_logic;
 function cmpGreaterSignedSN(a: SmallNumber; b: SmallNumber) return std_logic;
 function cmpLessUnsignedSN(a: SmallNumber; b: SmallNumber) return std_logic;
 function cmpGreaterUnsignedSN(a: SmallNumber; b: SmallNumber) return std_logic;
+
 
 
 function cmpGreaterThanUnsignedSNA(arr: SmallNumberArray; num: SmallNumber) return std_logic_vector;
@@ -62,6 +59,15 @@ function sub(a: std_logic_vector; b: std_logic_vector) return std_logic_vector;
 
 -- Accepts carry input and returns 1-bit longer result for carry output 
 function addExt(a: std_logic_vector; b: std_logic_vector; carryIn: std_logic) return std_logic_vector;
+
+
+-- Some arithmetic for SmallNumber
+--function addSN(a, b: SmallNumber) return SmallNumber;
+alias addSN is add[std_logic_vector, std_logic_vector return std_logic_vector];
+alias subSN is sub[std_logic_vector, std_logic_vector return std_logic_vector];
+
+--function subSN(a, b: SmallNumber) return SmallNumber;
+
 
 
 procedure CHECK_BE(v: std_logic_vector);
@@ -182,83 +188,83 @@ function TO_SIGNED(ARG: INTEGER; SIZE: NATURAL) return std_logic_vector is
 
 --------------------
 
-function addSN(a, b: SmallNumber) return SmallNumber is
-	variable res: SmallNumber := (others => '0');
-	variable rdigit, carry: std_logic := '0';
-begin
-	for i in 0 to SMALL_NUMBER_SIZE-1 loop
-		rdigit := a(i) xor b(i) xor carry;
-		carry := (a(i) and b(i)) or (a(i) and carry) or (b(i) and carry);
-		res(i) := rdigit;
-	end loop;
-	       res := add(a, b);
+--function addSN(a, b: SmallNumber) return SmallNumber is
+--	variable res: SmallNumber := (others => '0');
+--	variable rdigit, carry: std_logic := '0';
+--begin
+--	for i in 0 to SMALL_NUMBER_SIZE-1 loop
+--		rdigit := a(i) xor b(i) xor carry;
+--		carry := (a(i) and b(i)) or (a(i) and carry) or (b(i) and carry);
+--		res(i) := rdigit;
+--	end loop;
+--	       res := add(a, b);
 	
-	return res;
-end function;
+--	return res;
+--end function;
 
-function subSN(a, b: SmallNumber) return SmallNumber is
-	variable res: SmallNumber := (others => '0');
-	variable rdigit, carry: std_logic := '0';
-begin
-	carry := '1';
-	for i in 0 to SMALL_NUMBER_SIZE-1 loop
-		rdigit := a(i) xor (not b(i)) xor carry;
-		carry := (a(i) and not b(i)) or (a(i) and carry) or ((not b(i)) and carry);
-		res(i) := rdigit;
-	end loop;
+--function subSN(a, b: SmallNumber) return SmallNumber is
+--	variable res: SmallNumber := (others => '0');
+--	variable rdigit, carry: std_logic := '0';
+--begin
+--	carry := '1';
+--	for i in 0 to SMALL_NUMBER_SIZE-1 loop
+--		rdigit := a(i) xor (not b(i)) xor carry;
+--		carry := (a(i) and not b(i)) or (a(i) and carry) or ((not b(i)) and carry);
+--		res(i) := rdigit;
+--	end loop;
 	
-	       res := sub(a, b);
-	return res;
-end function;
+--	       res := sub(a, b);
+--	return res;
+--end function;
 
 
-function uminSN(a, b: SmallNumber) return SmallNumber is
-	variable res: SmallNumber := (others => '0');
-	variable rdigit, carry: std_logic := '0';
-begin
-	res := a;
-	for i in SMALL_NUMBER_SIZE-1 downto 0 loop
-		if a(i) = '0' and b(i) = '1' then
-			res := a;
-			exit;
-		elsif a(i) = '1' and b(i) = '0' then 
-			res := b;
-			exit;
-		else
-			null;
-		end if;
-	end loop;
-	return res;
-end function;
+--function uminSN(a, b: SmallNumber) return SmallNumber is
+--	variable res: SmallNumber := (others => '0');
+--	variable rdigit, carry: std_logic := '0';
+--begin
+--	res := a;
+--	for i in SMALL_NUMBER_SIZE-1 downto 0 loop
+--		if a(i) = '0' and b(i) = '1' then
+--			res := a;
+--			exit;
+--		elsif a(i) = '1' and b(i) = '0' then 
+--			res := b;
+--			exit;
+--		else
+--			null;
+--		end if;
+--	end loop;
+--	return res;
+--end function;
 
-function sminSN(a, b: SmallNumber) return SmallNumber is
-	variable res: SmallNumber := (others => '0');
-	variable rdigit, carry: std_logic := '0';
-begin
-	res := a;
-	if a(SMALL_NUMBER_SIZE-1) = '1' and b(SMALL_NUMBER_SIZE-1) = '0' then
-		res := a;
-		return res;
-	elsif a(SMALL_NUMBER_SIZE-1) = '0' and b(SMALL_NUMBER_SIZE-1) = '1' then
-		res := b;
-		return res;
-	else
-		null;
-	end if;
+--function sminSN(a, b: SmallNumber) return SmallNumber is
+--	variable res: SmallNumber := (others => '0');
+--	variable rdigit, carry: std_logic := '0';
+--begin
+--	res := a;
+--	if a(SMALL_NUMBER_SIZE-1) = '1' and b(SMALL_NUMBER_SIZE-1) = '0' then
+--		res := a;
+--		return res;
+--	elsif a(SMALL_NUMBER_SIZE-1) = '0' and b(SMALL_NUMBER_SIZE-1) = '1' then
+--		res := b;
+--		return res;
+--	else
+--		null;
+--	end if;
 	
-	for i in SMALL_NUMBER_SIZE-2 downto 0 loop
-		if a(i) = '0' and b(i) = '1' then
-			res := a;
-			exit;
-		elsif a(i) = '1' and b(i) = '0' then 
-			res := b;
-			exit;
-		else
-			null;
-		end if;
-	end loop;
-	return res;
-end function;
+--	for i in SMALL_NUMBER_SIZE-2 downto 0 loop
+--		if a(i) = '0' and b(i) = '1' then
+--			res := a;
+--			exit;
+--		elsif a(i) = '1' and b(i) = '0' then 
+--			res := b;
+--			exit;
+--		else
+--			null;
+--		end if;
+--	end loop;
+--	return res;
+--end function;
 
 
 function cmpLessSignedSN(a: SmallNumber; b: SmallNumber) return std_logic is
