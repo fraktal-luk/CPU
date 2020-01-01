@@ -125,6 +125,9 @@ function cmpEqS(a: std_logic_vector; b: integer) return std_logic;
 function cmpNeU(a: std_logic_vector; b: natural) return std_logic;  
 function cmpNeS(a: std_logic_vector; b: integer) return std_logic;
 
+function addTruncZ(a: std_logic_vector; b: std_logic_vector; n: natural) return std_logic_vector;
+function subTruncZ(a: std_logic_vector; b: std_logic_vector; n: natural) return std_logic_vector;
+
 end package;
 
 

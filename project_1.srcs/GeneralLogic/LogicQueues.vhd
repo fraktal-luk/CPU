@@ -172,10 +172,7 @@ package body LogicQueues is
     begin
         for i in 0 to LEN-1 loop 
             res.ins := content(i);
-            if --content(i).tags.renameIndex = compareAddressInput.ins.tags.renameIndex
-                     matchMask(i) = '1'
-                 and taggedMask(i) = '1'
-            then
+            if matchMask(i) = '1' and taggedMask(i) = '1' then
                 res.full := compareAddressInput.full;
                 exit;
             end if;

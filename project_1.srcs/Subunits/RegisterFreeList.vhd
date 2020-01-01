@@ -76,39 +76,34 @@ architecture Behavioral of RegisterFreeList is
         end loop;
         return res;
     end function;
+
+    -- TEMP: to reduce num regs by 1 in case of FP
+    function FP_1 return integer is
+    begin
+        if IS_FP then
+            return 1;
+        else
+            return 0;
+        end if;
+    end function;
     
     function initList32 return WordArray is
         variable res: WordArray(0 to FREE_LIST_SIZE/4 - 1) := (others => (others=> '0'));
     begin
         for i in 0 to (N_PHYS - 32)/4 - 1 loop
-            res(i)(7 downto 0) := i2slv(32 + 4*i + 0, PhysName'length);
-            res(i)(15 downto 8) := i2slv(32 + 4*i + 1, PhysName'length);
-            res(i)(23 downto 16) := i2slv(32 + 4*i + 2, PhysName'length);
-            res(i)(31 downto 24) := i2slv(32 + 4*i + 3, PhysName'length);       
-            
-            if IS_FP then
-                res(i)(7 downto 0) := i2slv(32 + 4*i + 1, PhysName'length);
-                res(i)(15 downto 8) := i2slv(32 + 4*i + 2, PhysName'length);
-                res(i)(23 downto 16) := i2slv(32 + 4*i + 3, PhysName'length);
-                res(i)(31 downto 24) := i2slv(32 + 4*i + 4, PhysName'length);            
-                
-                if i = N_PHYS - 32 - 1 then
-                   res(i) := (others => '0'); -- CAREFUL: no reg 0 for FP, so 1 less on the list!
-                end if;
-            end if;
+            res(i)(7 downto 0) := i2slv(32 + 4*i + 0 + FP_1, PhysName'length);
+            res(i)(15 downto 8) := i2slv(32 + 4*i + 1 + FP_1, PhysName'length);
+            res(i)(23 downto 16) := i2slv(32 + 4*i + 2 + FP_1, PhysName'length);
+            res(i)(31 downto 24) := i2slv(32 + 4*i + 3 + FP_1, PhysName'length);
         end loop;
+        
+        -- For FP, there's no register 0, mapper starts with 1:32 rather than 0:31, so one less is in this list
+        if IS_FP then
+            res((N_PHYS - 32)/4 - 1)(31 downto 24) := (others => '0');
+        end if;
         return res;
     end function;
-    
-    
-    -- TEMP: to reduce num regs by 1 in case of FP
-    function FP_1 return integer is
-    begin
-        if IS_FP then return 1;
-        else return 0;
-        end if;
-    end function;
-    
+
     function compactFreedRegs(names: PhysNameArray; mask: std_logic_vector) return PhysNameArray is
         variable res: PhysNameArray(0 to PIPE_WIDTH-1) := names;
         variable j: integer := 0;
@@ -139,14 +134,7 @@ architecture Behavioral of RegisterFreeList is
 	   return res;
 	end function;
 		
-		      signal test1, test2, test3, test4, test5: std_logic_vector(7 downto 0) := (others => '0');		
 begin
-                test5 <= "01000000";
-            test1 <= "00000010";
-            test2 <= "00000000";       
-                test3 <= add(test1, test2);
-                test4 <= add(test3, test5);
-
     physCommitFreedDelayed <= selAndCompactPhysDests(physStableDelayed, physCommitDestsDelayed, stableUpdateSelDelayed, freeListPutSel);
 
     physCommitDestsDelayed <= getPhysicalDests(stageDataToRelease);
@@ -192,10 +180,12 @@ begin
         signal numFront, numBack, numToTake: SmallNumber := (others => '0');
         signal memRead, needTake: std_logic := '0';
         
-        signal overNF, overNFmNT: std_logic_vector(0 to 7) := (others => '0');
-        signal listFrontNext, listFrontNextShift, listFrontNextMemNoTake, listFrontNextMemTake: PhysNameArray(0 to 7) := (others => (others => '0'));
+        signal listFrontNext: PhysNameArray(0 to 7) := (others => (others => '0'));
         signal memTemp: PhysNameArray(0 to 3) := (others => (others => '0'));
         signal doTake: std_logic := '0';
+
+        signal listFrontNextShift, listFrontNextMemNoTake, listFrontNextMemTake: PhysNameArray(0 to 7) := (others => (others => '0'));
+        signal overNF, overNFmNT: std_logic_vector(0 to 7) := (others => '0');
 
         function nextShift(list: PhysNameArray; memData: PhysNameArray; allow: std_logic; nF, nT: SmallNumber) return PhysNameArray is
             variable res: PhysNameArray(0 to 7) := (others => (others => '0'));
@@ -244,8 +234,7 @@ begin
             variable res: std_logic_vector(0 to 7) := (others => '0');
         begin
             for i in 0 to 7 loop
-                res(i) := --not cmpGreaterSignedSN(nF, i2slv(i, SMALL_NUMBER_SIZE));
-                            cmpLeS(nF, i);
+                res(i) := cmpLeS(nF, i);
             end loop;
             
             return res;
@@ -255,8 +244,7 @@ begin
             variable res: std_logic_vector(0 to 7) := (others => '0');
         begin
             for i in 0 to 7 loop
-                res(i) := --not cmpGreaterSignedSN(subSN(nF, nT), i2slv(i, SMALL_NUMBER_SIZE));
-                            cmpLeS(subSN(nF, nT), i);
+                res(i) := cmpLeS(subSN(nF, nT), i);
             end loop;
             
             return res;
@@ -269,30 +257,26 @@ begin
         end generate;
         
         GEN_VEC: for i in 0 to 7 generate
+            overNF <= getOverNF(numFront, numToTake);
+            overNFmNT <= getOverNFmNT(numFront, numToTake);
+                
+            listFrontNextShift <=       nextShift      (listFront, memTemp, '1', numFront, numToTake);
+            listFrontNextMemNoTake <=   nextMemNoTake  (listFront, memTemp, '1', numFront, numToTake);
+            listFrontNextMemTake <=     nextMemTake    (listFront, memTemp, '1', numFront, numToTake);
+                        
             listFrontNext(i) <= listFrontNextMemTake(i)     when (    doTake and     overNFmNT(i)) = '1'
                            else listFrontNextShift(i)       when (    doTake and not overNFmNT(i)) = '1'
                            else listFrontNextMemNoTake(i)   when (not doTake and     overNF(i)) = '1'
-                           else listFront(i);                           
+                           else listFront(i);                          
         end generate;
-                                    
-        overNF <= getOverNF(numFront, numToTake);
-        overNFmNT <= getOverNFmNT(numFront, numToTake);
 
-        listFrontNextShift <= nextShift(listFront, memTemp, '1', numFront, numToTake);
-        listFrontNextMemNoTake <= nextMemNoTake(listFront, memTemp, '1', numFront, numToTake);
-        listFrontNextMemTake <= nextMemTake(listFront, memTemp, '1', numFront, numToTake);
-        
         freeListTakeNumTags(0) <= i2slv((slv2u(listPtrTake)) mod FREE_LIST_SIZE, SMALL_NUMBER_SIZE);
-
         newPhysDestsAsync(0 to WIDTH-1) <= listFront(0 to WIDTH-1);
       
-        effectivePhysPtrTake <= --i2slv(slv2u(physPtrTake) + 4, SMALL_NUMBER_SIZE) when (needTake and memRead) = '1'
-                                addInt(physPtrTake, 4) when (needTake and memRead) = '1'
-                           else physPtrTake;
-        needTake <= --not cmpGreaterSignedSN(numFront, addSN(numToTake, i2slv(4, SMALL_NUMBER_SIZE)));
-                    cmpLeS(numFront, addInt(numToTake, 4));
+        effectivePhysPtrTake <= addInt(physPtrTake, 4) when (needTake and memRead) = '1' else physPtrTake;
+        needTake <= cmpLeS(numFront, addInt(numToTake, 4));
         numToTake <= i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE) when freeListTakeAllow = '1' else (others => '0');
-    
+
         SYNCHRONOUS: process(clk)
             variable indPut, indTake: SmallNumber := (others => '0');
             variable nTaken, nPut, numFrontVar, numBackVar: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
@@ -303,7 +287,7 @@ begin
             if rising_edge(clk) then
                 listFront <= listFrontNext;
             
-                indTake := listPtrTake;
+                --indTake := listPtrTake;
                 indPut := listPtrPut;
                                 
                 nTaken := i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE);
@@ -315,7 +299,7 @@ begin
                     listPtrTake <= freeListWriteTag; -- Indexing TMP                            
                     physPtrTake(SMALL_NUMBER_SIZE-1 downto 2) <= freeListWriteTag(SMALL_NUMBER_SIZE-1 downto 2);                         
                     tmpTag2(1 downto 0) := freeListWriteTag(1 downto 0);
-                    numFrontVar := subSN(i2slv(0, SMALL_NUMBER_SIZE), tmpTag2);
+                    numFrontVar := subSN(i2slv(0, SMALL_NUMBER_SIZE), tmpTag2); -- TODO: find simpler notation for uminus
                     memRead <= '0';
                 else
                     physPtrTake <= effectivePhysPtrTake;
@@ -327,12 +311,9 @@ begin
                 end if;
                 
                 if freeListRewind = '0' then
-                     if --numFrontVar <= 4 then
-                        --cmpGreaterSignedSN(numFrontVar, i2slv(4, SMALL_NUMBER_SIZE)) = '0' then
-                        cmpLeS(numFrontVar, 4) = '1' then
+                     if cmpLeS(numFrontVar, 4) = '1' then
                         if memRead = '1' then                            
-                            numFrontVar := --addSN(numFrontVar, i2slv(4, SMALL_NUMBER_SIZE));
-                                            addInt(numFrontVar, 4); 
+                            numFrontVar := addInt(numFrontVar, 4); 
                         end if;
                      end if;
                      
@@ -345,26 +326,20 @@ begin
                 listBackExt(0 to 7) := listBack;
                 numBackVar := numBack;
     
-                if --numBackVar >= 4 then
-                    --cmpLessSignedSN(numBackVar, i2slv(4, SMALL_NUMBER_SIZE)) = '0' then
-                    cmpGeS(numBack, 4) = '1' then
-                    
+                if cmpGeS(numBack, 4) = '1' then
                     listContent32((slv2u(physPtrPut)/4)) <= listBackExt(3) & listBackExt(2) & listBackExt(1) & listBackExt(0); 
     
                     listBackExt(0 to 7) := listBackExt(4 to 11);
-                    numBackVar := --subSN(numBackVar, i2slv(4, SMALL_NUMBER_SIZE));
-                                    addInt(numBackVar, -4);               
-                    physPtrPut <= --i2slv(slv2u(physPtrPut) + 4, SMALL_NUMBER_SIZE);
-                                    addInt(physPtrPut, 4);         
+                    numBackVar := addInt(numBackVar, -4);               
+                    physPtrPut <= addInt(physPtrPut, 4);         
                 end if;                        
                 
                 if freeListPutAllow = '1' then
                     for i in 0 to WIDTH-1 loop
                         -- for each element of input vec
                         if freeListPutSel(i) = '1' then
-                            indPut := --addSN(indPut, i2slv(1, SMALL_NUMBER_SIZE)); -- TODO: mask for list size!
-                                        addInt(indPut, 1);
-                            assert isNonzero(physCommitFreedDelayed(i)) = '1' report "Putting 0 to free list!";
+                            indPut := addInt(indPut, 1);
+                            assert isNonzero(physCommitFreedDelayed(i)) = '1' report "Putting 0 to free list!" severity failure;
                         end if;    
                     end loop;
                     listPtrPut <= indPut;
@@ -383,8 +358,7 @@ begin
                 if freeListRewind = '1' then
                     recoveryCounter <= i2slv(3, SMALL_NUMBER_SIZE);
                 elsif isNonzero(recoveryCounter) = '1' then
-                    recoveryCounter <= --subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
-                                        addInt(recoveryCounter, -1);
+                    recoveryCounter <= addInt(recoveryCounter, -1);
                 end if;
             end if;
         end process;            

@@ -57,7 +57,9 @@ begin
     if ins.specificOperation.subpipe = Alu
         and (ins.specificOperation.arith = opJ or ins.specificOperation.arith = opJz or ins.specificOperation.arith = opJnz) then
         ci.branchIns := '1';
-    elsif ins.specificOperation.subpipe = none then  
+    end if;
+
+    if ins.specificOperation.subpipe = none then  
         ci.mainCluster := '0';
         ci.secCluster := '0';
     end if;
@@ -177,9 +179,7 @@ begin
 		end if;
 
         res(i).ins.bits := fetchLine(i);
-		
 		res(i).ins := decodeInstruction(res(i).ins); -- Here decoding!
-		
 		res(i).ins.tags.fetchCtr := ins.tags.fetchCtr(31 downto LOG2_PIPE_WIDTH) & i2slv(i, LOG2_PIPE_WIDTH);
 
         res(i).ins.ip := ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);        

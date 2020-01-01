@@ -63,6 +63,7 @@ end StoreQueue;
 architecture Behavioral of StoreQueue is
 	constant PTR_MASK_SN: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
+    constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;
 
 	signal isSending, isDraining: std_logic := '0';							
 
@@ -78,7 +79,7 @@ architecture Behavioral of StoreQueue is
 	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	signal dataOutSig, dataOutSigNext, dataOutSigFinal, dataDrainSig, dataDrainSigNC: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	
-	signal pStart, pStartNext, pDrain, pDrainNext, pStartNext_T, pTagged, pAll, causingPtr, pAcc, pAccMore: SmallNumber := (others => '0');	
+	signal pStart, pStartNext, pDrain, pDrainNext, pTagged, pAll, causingPtr: SmallNumber := (others => '0');	
 	   signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
 	   signal recoveryCounter: SmallNumber := (others => '0');
 	   signal isFull, isAlmostFull: std_logic := '0'; 	
@@ -168,7 +169,7 @@ architecture Behavioral of StoreQueue is
            then
                res(i).controlInfo.completed := '1'; -- address completed           
                res(i).target := storeAddressInput.ins.result;
-                res(i).controlInfo.orderViolation := '0';
+               res(i).controlInfo.orderViolation := '0';
            end if;                      
         end loop;
 
@@ -179,7 +180,6 @@ architecture Behavioral of StoreQueue is
 	function TMP_cmpTagsBefore(content: InstructionStateArray; tag: InsTag)
 	return std_logic_vector is
 		variable res: std_logic_vector(0 to content'length-1) := (others => '0');
-		variable diff: SmallNumber := (others => '0');
 	begin
 		for i in 0 to res'length-1 loop
 			res(i) := compareTagBefore(content(i).tags.renameIndex, tag); -- If grTag < tag then diff(high) = '1'
@@ -190,7 +190,6 @@ architecture Behavioral of StoreQueue is
 	function TMP_cmpTagsAfter(content: InstructionStateArray; tag: InsTag)
 	return std_logic_vector is
 		variable res: std_logic_vector(0 to content'length-1) := (others => '0');
-		variable diff: SmallNumber := (others => '0');
 	begin
 		for i in 0 to res'length-1 loop
 		    -- CAREFUL: correct function, args are swapped
@@ -363,10 +362,8 @@ begin
 	         else  findNewestMatch(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
 	
 	selectedDataSlot <= selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
-    pStartNext <= --addSN(pStart, i2slv(getNumberToSend(dataOutSig, groupCtrInc, committing), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-                    addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE);
-    pDrainNext <= pDrain when isDraining = '0' else --addSN(pDrain, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-                                                    addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE);
+    pStartNext <= addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE);
+    pDrainNext <= pDrain when isDraining = '0' else addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE);
             	
 	process (clk)
 	begin
@@ -390,75 +387,47 @@ begin
             if lateEventSignal = '1' then
                 pTagged <= pStartNext;
             elsif execEventSignal = '1' then
-                pTagged <= --subSN(pTagged, i2slv(countOnes(killMask), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-                            addIntTrunc(pTagged, -countOnes(killMask), QUEUE_PTR_SIZE);
+                pTagged <= addIntTrunc(pTagged, -countOnes(killMask), QUEUE_PTR_SIZE);
             elsif prevSending = '1' then -- + N
-                pTagged <= --addSN(pTagged, i2slv(countOnes(inputMask), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-                            addIntTrunc(pTagged, countOnes(inputMask), QUEUE_PTR_SIZE);
+                pTagged <= addIntTrunc(pTagged, countOnes(inputMask), QUEUE_PTR_SIZE);
             end if;
 
             if lateEventSignal = '1' or execEventSignal = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
-            elsif --recoveryCounter /= i2slv(0, SMALL_NUMBER_SIZE) then
-                    isNonzero(recoveryCounter) = '1' then
-                recoveryCounter <= --subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
-                                    addInt(recoveryCounter, -1);
+            elsif isNonzero(recoveryCounter) = '1' then
+                recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
 	                
-	        isFull <= --cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-4, SMALL_NUMBER_SIZE));
-	                   cmpGtU(nFullNext, QUEUE_SIZE-4);
-            isAlmostFull <= --cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-8, SMALL_NUMBER_SIZE));
-                            cmpGtU(nFullNext, QUEUE_SIZE-8);
+	        isFull <= cmpGtU(nFullNext, QUEUE_SIZE-4);
+            isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
 
 	        nFull <= nFullNext;	           
 		end if;
 	end process;
 
-	N_FULL_NEXT: block
-		constant QUEUE_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
-		signal flowDiff: SmallNumber := (others => '0');            
-	begin
-		nFullNext <=  nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
-				else flowDiff and QUEUE_SIZE_MASK;
-		flowDiff <= subSN(addSN(nFull, nIn), nOut);
-	end block;
-
+	nFullNext <=  nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
+				else subTruncZ(add(nFull, nIn), nOut, QUEUE_CAP_SIZE);
 	nIn <= i2slv( countOnes(inputMask), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
 		
 	LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
-		constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
-		signal tagDiff: SmallNumber := (others => '0');
-	begin
-	   nOut <= i2slv(countOnes(extractFullMask(dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending = '1'
-	  else (others => '0');        
-	
-	   nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and fullMask(0) = '1'
-					   else tagDiff and TAG_DIFF_SIZE_MASK;
-	   tagDiff <= subSN(pTagged, pStartNext);          
-	end generate;
-
-	STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
-		constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
-		signal tagDiff: SmallNumber := (others => '0');
-	begin
-		nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isDraining = '1'
-		  else (others => '0');
-			  
-	   nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pDrainNext = pTagged and fullMask(0) = '1' 
-                        else tagDiff and TAG_DIFF_SIZE_MASK;
-       tagDiff <= subSN(pTagged, pDrainNext);
-	end generate;
-
+        nOut <= i2slv(countOnes(extractFullMask(dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending = '1'
+                else (others => '0');	
+        nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and fullMask(0) = '1'
+                           else subTruncZ(pTagged, pStartNext, QUEUE_PTR_SIZE); -- CAREFUL: nFullRestored can be outside PTR range but it's handled in the other branch 
+    end generate;
+    
+    STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
+        nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isDraining = '1'
+              else (others => '0');		  
+        nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pDrainNext = pTagged and fullMask(0) = '1' 
+                            else subTruncZ(pTagged, pDrainNext, QUEUE_PTR_SIZE); -- CAREFUL: nFullRestored can be outside PTR range but it's handled in the other branch
+    end generate;
+    
     isDraining <= dataDrainSig(0).full;
     dataOutSigFinal <= getSendingArray(dataOutSig, groupCtrInc, committing);
      
     isSending <= dataOutSigFinal(0).full;	
 
-    -- Accept when 4 free slot exist
-    --pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-            --addIntTrunc(pStart, -4, 
-    --pAccMore <= subSN(pStart, i2slv(8, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-    
 	acceptingOut <= not isFull;
 	almostFull <= isAlmostFull;
 
