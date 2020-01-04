@@ -211,7 +211,6 @@ type InstructionState is record
 	constantArgs: InstructionConstantArgs;
 	virtualArgSpec: InstructionArgSpec;
 	physicalArgSpec: InstructionArgSpec;
-	--argValues: InstructionArgValues;
 	result: Mword;
 	target: Mword;
 end record;
@@ -243,7 +242,6 @@ constant DEFAULT_ARG_SPEC: InstructionArgSpec := InstructionArgSpec'(
 			intDestSel => '0',
 			floatDestSel => '0',
 			dest => (others => '0'),
-			--destAlt => (others => '0'),
 			intArgSel => (others => '0'),
 			floatArgSel => (others => '0'),
 			args => ((others => '0'), (others => '0'), (others => '0'))
@@ -253,7 +251,6 @@ constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
 			fetchCtr => (others => '0'),
 			decodeCtr => (others => '0'),
 			renameCtr => (others => '0'),
-			--renameSeq => (others => '0'), 
 			renameIndex => (others => '0'),
 			intPointer => (others => '0'),
 			floatPointer => (others => '0'),
@@ -290,15 +287,13 @@ type SchedulerEntrySlot is record
 end record;
 
 constant DEFAULT_SCHEDULER_ENTRY_SLOT: SchedulerEntrySlot := (full => '0',
-																				ins => DEFAULT_INS_STATE,
-																				state => DEFAULT_SCHEDULER_STATE);
+                                                              ins => DEFAULT_INS_STATE,
+                                                              state => DEFAULT_SCHEDULER_STATE);
 constant DEFAULT_SCH_ENTRY_SLOT: SchedulerEntrySlot := (full => '0',
-																				ins => DEFAULT_INS_STATE,
-																				state => DEFAULT_SCHEDULER_STATE);
+                                                        ins => DEFAULT_INS_STATE,
+                                                        state => DEFAULT_SCHEDULER_STATE);
 
 type SchedulerEntrySlotArray is array(integer range <>) of SchedulerEntrySlot;
-
-function insText(ins: InstructionState) return string;
 
 type InstructionText is record
     tagTxt: string(1 to 40);
@@ -310,33 +305,6 @@ end record;
 
 type InstructionTextArray is array(integer range <>) of InstructionText;
 
-
---type InstructionArgValues is record
---	issued: std_logic;
---	newInQueue: std_logic;
---	immediate: std_logic;
---	zero: std_logic_vector(0 to 2);
---	readyNow: std_logic_vector(0 to 2);
---	readyNext: std_logic_vector(0 to 2);
---	readyM2:	std_logic_vector(0 to 2);
---	locs: SmallNumberArray(0 to 2);
---	nextLocs: SmallNumberArray(0 to 2);
---	locsM2: SmallNumberArray(0 to 2);
---	missing: std_logic_vector(0 to 2);
---	stored:  std_logic_vector(0 to 2);
---	arg0: Mword;
---	arg1: Mword;
---	arg2: Mword;
-	
---	argLocsPipe: SmallNumberArray(0 to 2);
---	argLocsPhase: SmallNumberArray(0 to 2);
---end record;
-
---  Issued/Ready 101 zr-
---  0: 000000000, Z
---  1: ---------, R wait
---  2: ---------, unused 
-
 type SchedEntryText is record
     stateTxt: string(1 to 40);
     arg0: string(1 to 40);
@@ -346,21 +314,16 @@ end record;
 
 type SchedEntryTextArray is array(integer range <>) of SchedEntryText;
 
-
 function w2hex(w: Word) return string;
-
-function insText2(ins: InstructionState; mem: std_logic) return InstructionText;
+function insText(ins: InstructionState; isMem: std_logic) return InstructionText;
 
 function insSlotText(insSlot: InstructionSlot; mem: std_logic) return InstructionText;
 
 function insStateArrayText(insVec: InstructionStateArray; mask: std_logic_vector; mem: std_logic) return InstructionTextArray;
 function insSlotArrayText(insVec: InstructionSlotArray; mem: std_logic) return InstructionTextArray;
 
-
 function getSchedStateText(se: SchedulerState; full: std_logic) return SchedEntryText;
-
 function schedEntrySlotArrayTextIns(insVec: SchedulerEntrySlotArray; mem: std_logic) return InstructionTextArray;
-
 function schedEntrySlotArrayTextState(insVec: SchedulerEntrySlotArray) return SchedEntryTextArray;
 
 end InstructionState;
@@ -456,35 +419,32 @@ end function;
 function defaultControlInfo return InstructionControlInfo is
 begin
 	return InstructionControlInfo'(
-												--squashed => '0',
-												completed => '0',
-												completed2 => '0',
-												newEvent => '0',
-												hasInterrupt => '0',
-												hasException => '0',
-												    refetch => '0',
-												    frontBranch => '0',
-                                                    confirmedBranch => '0',												    											
-												specialAction => '0',
-												dbtrap => '0',
-												--illegal => '0',
-												    orderViolation => '0',
-												    tlbMiss => '0',
-												    dataMiss => '0',
-												    sqMiss => '0',
-												    firstBr => '0'
-												--exceptionCode => (others=>'0')
-												);
+                                    completed => '0',
+                                    completed2 => '0',
+                                    newEvent => '0',
+                                    hasInterrupt => '0',
+                                    hasException => '0',
+                                    refetch => '0',
+                                    frontBranch => '0',
+                                    confirmedBranch => '0',												    											
+                                    specialAction => '0',
+                                    dbtrap => '0',
+                                    orderViolation => '0',
+                                    tlbMiss => '0',
+                                    dataMiss => '0',
+                                    sqMiss => '0',
+                                    firstBr => '0'
+                                 );
 end function;
 
 function defaultClassInfo return InstructionClassInfo is
 begin
 	return InstructionClassInfo'( short => '0',
-											mainCluster => '0',
-											secCluster => '0',
-											fpRename => '0',
-											branchIns => '0'									
-											);	
+                                    mainCluster => '0',
+                                    secCluster => '0',
+                                    fpRename => '0',
+                                    branchIns => '0'									
+                                  );
 end function;
 
 function defaultConstantArgs return InstructionConstantArgs is
@@ -519,7 +479,6 @@ begin
 	          newInQueue => '0',
 			  immediate => '0',
 			  zero => (others => '0'),
-			  --readyBefore => (others=>'0'),
 			  readyNow => (others=>'0'),
 			  readyNext => (others=>'0'),
 			  readyM2 => (others => '0'),
@@ -560,14 +519,8 @@ function reg2txt(reg: std_logic_vector) return string is
     variable res: string(1 to 2);
     constant letters: string(1 to 16) := "0123456789abcdef";
 begin
-    if reg(4) = '1' then
-        res(1) := '1';
-    else
-        res(1) := '0';
-    end if;
-    
+    res(1) := letters(slv2u(reg(4 downto 4)) + 1);    
     res(2) := letters(slv2u(reg(3 downto 0)) + 1);
-    
     return res;
 end function;
 
@@ -576,8 +529,7 @@ function physReg2txt(reg: std_logic_vector) return string is
     constant letters: string(1 to 16) := "0123456789abcdef";
 begin
     res(1) := letters(slv2u(reg(7 downto 4)) + 1);
-    res(2) := letters(slv2u(reg(3 downto 0)) + 1);
-    
+    res(2) := letters(slv2u(reg(3 downto 0)) + 1);    
     return res;
 end function;
 
@@ -613,43 +565,45 @@ begin
     return res;
 end function;
 
-function insText(ins: InstructionState) return string is
-    variable dest, src0, src1, src2: string(1 to 3) := (others => '*');
+
+function getDestSymbol(asp: InstructionArgSpec) return string is
+    variable res: string(1 to 3) := "---";
 begin
-    
-    dest(2 to 3) := reg2txt(ins.virtualArgSpec.dest);
-    src0(2 to 3) := reg2txt((ins.virtualArgSpec.args(0)));
-    src1(2 to 3) := reg2txt((ins.virtualArgSpec.args(1)));
-    src2(2 to 3) := reg2txt((ins.virtualArgSpec.args(2)));
-    
-    if ins.virtualArgSpec.intDestSel = '1' then
-        dest(1) := 'r';
+    if asp.intDestSel = '1' then
+        res(1) := 'r';
+    elsif asp.floatDestSel = '1' then
+        res(1) := 'f';
+    else
+        res(1) := '*';
     end if;
-    if ins.virtualArgSpec.intArgSel(0) = '1' then
-        src0(1) := 'r';
+    res(2 to 3) := physReg2txt(asp.dest);  
+    return res;
+end function;
+
+function getSrcSymbol(asp: InstructionArgSpec; i: natural) return string is
+    variable res: string(1 to 3) := "---";
+begin
+    if asp.intArgSel(i) = '1' then
+        res(1) := 'r';
+    elsif asp.floatArgSel(i) = '1' then
+        res(1) := 'f';
+    else
+        res(1) := '*';
     end if;
-    if ins.virtualArgSpec.intArgSel(1) = '1' then
-        src1(1) := 'r';
-    end if;
-    
-    -- Length 35
-    return strExt(ExecFunc'image(ins.operation.func), 9) & "  " &
-     dest & ", " &
-     src0 & ", " &
-     src1 & ", #" &
-     w2hex(ins.constantArgs.imm);    
-    
-    --return "";
+    res(2 to 3) := physReg2txt(asp.args(i));
+    return res;
 end function;
 
 
-function insText2(ins: InstructionState; mem: std_logic) return InstructionText is
+function insText(ins: InstructionState; isMem: std_logic) return InstructionText is
     variable dest, src0, src1, src2: string(1 to 3) := (others => '*');
     variable tagStr, hexStr, virtStr, physStr, controlStr, memStr: string(1 to 40) := (others => nul);
     variable res: InstructionText;
     variable hexTarget: string(1 to 8);
+    variable destSymbol: string(1 to 1);
+    variable srcSymbols: string(1 to 3);
 begin
-    -- Tag text
+    -- Tag text; fetchCtr/decodeCtr/renameCtr/renameIndex
     tagStr(1 to 8) := w2hex(ins.tags.fetchCtr);
     tagStr(9) := '/';
     tagStr(10 to 17) := w2hex(ins.tags.decodeCtr);
@@ -658,110 +612,76 @@ begin
     tagStr(27) := '/';
     tagStr(28 to 30) := tag2hex(ins.tags.renameIndex);
     
-    -- Hex text
+    -- Hex text;   adr: bits
     hexStr(1 to 8) := w2hex(ins.ip); -- TODO: introduce 64b address when needed
     hexStr(9 to 10) := ": ";
     hexStr(11 to 18) := w2hex(ins.bits);
     
-    -- Virtual txt
-    dest(2 to 3) := reg2txt(ins.virtualArgSpec.dest);
-    src0(2 to 3) := reg2txt((ins.virtualArgSpec.args(0)));
-    src1(2 to 3) := reg2txt((ins.virtualArgSpec.args(1)));
-    src2(2 to 3) := reg2txt((ins.virtualArgSpec.args(2)));
-    
-    if ins.virtualArgSpec.intDestSel = '1' then
-        dest(1) := 'r';
-    elsif ins.virtualArgSpec.floatDestSel = '1' then
-        dest(1) := 'f';
-    end if;
-    
-    if ins.virtualArgSpec.intArgSel(0) = '1' then
-        src0(1) := 'r';
-    elsif ins.virtualArgSpec.floatArgSel(0) = '1' then
-        src0(1) := 'f';        
-    end if;
-    
-    if ins.virtualArgSpec.intArgSel(1) = '1' then
-        src1(1) := 'r';
-    elsif ins.virtualArgSpec.floatArgSel(1) = '1' then
-        src1(1) := 'f';        
-    end if;
-    
+    -- Virtual txt;  
+    dest(1 to 3) := getDestSymbol(ins.virtualArgSpec);
+    src0(1 to 3) := getSrcSymbol(ins.virtualArgSpec, 0);
+    src1(1 to 3) := getSrcSymbol(ins.virtualArgSpec, 1);    
+    src2(1 to 3) := getSrcSymbol(ins.virtualArgSpec, 2);
     -- When imm value is used replace src1
     if ins.constantArgs.immSel = '1' then
         src1 := "imm";
-    end if;
+    end if;   
     
-    
-    if ins.virtualArgSpec.intArgSel(2) = '1' then
-        src2(1) := 'r';
-    elsif ins.virtualArgSpec.floatArgSel(2) = '1' then
-        src2(1) := 'f';        
-    end if;    
-    
-    virtStr(1 to 9) := strExt(ExecFunc'image(ins.operation.func), 9);
-    virtStr(10) := ' ';
-    virtStr(11 to 13) := dest;
-    virtStr(14 to 15) := ", ";
-    virtStr(16 to 18) := src0;
-    virtStr(19 to 20) := ", ";
-    virtStr(21 to 23) := src1;
-    virtStr(24 to 25) := ", ";
-    virtStr(26 to 28) := src2;   
+    -- Characters 3,4 will be overwritten, removing op- part of each operation name
+    case ins.specificOperation.subpipe is
+        when ALU => 
+            virtStr(3 to 11) := strExt(ArithOp'image(ins.specificOperation.arith), 9);
+        when Mem => 
+            virtStr(3 to 11) := strExt(MemOp'image(ins.specificOperation.memory), 9);
+        when FP => 
+            virtStr(3 to 11) := strExt(FpOp'image(ins.specificOperation.float), 9);
+        when others => 
+            virtStr(3 to 11) := strExt(SysOp'image(ins.specificOperation.system), 9);                                                              
+    end case;
+    virtStr(1 to 3) := strExt(SubpipeType'image(ins.specificOperation.subpipe), 3);
+    virtStr(4) := ':';              
+    --virtStr(10) := ' ';
+    virtStr(13 to 15) := dest;
+    virtStr(16 to 17) := ", ";
+    virtStr(18 to 20) := src0;
+    virtStr(21 to 22) := ", ";
+    virtStr(23 to 25) := src1;
+    virtStr(26 to 27) := ", ";
+    virtStr(28 to 30) := src2;   
 
     --Physical txt
-    dest := (others => '*');
-    src0 := (others => '*');
-    src1 := (others => '*');
-    src2 := (others => '*');
-    
-    dest(2 to 3) := physReg2txt(ins.physicalArgSpec.dest);
-    src0(2 to 3) := physReg2txt((ins.physicalArgSpec.args(0)));
-    src1(2 to 3) := physReg2txt((ins.physicalArgSpec.args(1)));
-    src2(2 to 3) := physReg2txt((ins.physicalArgSpec.args(2)));
-    
-    if ins.physicalArgSpec.intDestSel = '1' then
-        dest(1) := 'r';
-    elsif ins.physicalArgSpec.floatDestSel = '1' then
-        dest(1) := 'f';
-    end if;
-    
-    if ins.physicalArgSpec.intArgSel(0) = '1' then
-        src0(1) := 'r';
-    elsif ins.physicalArgSpec.floatArgSel(0) = '1' then
-        src0(1) := 'f';        
-    end if;
-    
-    if ins.physicalArgSpec.intArgSel(1) = '1' then
-        src1(1) := 'r';
-    elsif ins.physicalArgSpec.floatArgSel(1) = '1' then
-        src1(1) := 'f';        
-    end if;
-    
+    dest(1 to 3) := getDestSymbol(ins.physicalArgSpec);
+    src0(1 to 3) := getSrcSymbol(ins.physicalArgSpec, 0);
+    src1(1 to 3) := getSrcSymbol(ins.physicalArgSpec, 1);    
+    src2(1 to 3) := getSrcSymbol(ins.physicalArgSpec, 2);
     -- When imm value is used replace src1
     if ins.constantArgs.immSel = '1' then
         src1 := "imm";
-    end if;
-    
-    
-    if ins.physicalArgSpec.intArgSel(2) = '1' then
-        src2(1) := 'r';
-    elsif ins.physicalArgSpec.floatArgSel(2) = '1' then
-        src2(1) := 'f';        
-    end if;    
-    
-    physStr(1 to 9) := strExt(ExecFunc'image(ins.operation.func), 9);
-    physStr(10) := ' ';
-    physStr(11 to 13) := dest;
-    physStr(14 to 15) := ", ";
-    physStr(16 to 18) := src0;
-    physStr(19 to 20) := ", ";
-    physStr(21 to 23) := src1;
-    physStr(24 to 25) := ", ";
-    physStr(26 to 28) := src2;
+    end if;   
+
+    case ins.specificOperation.subpipe is
+        when ALU => 
+            physStr(3 to 11) := strExt(ArithOp'image(ins.specificOperation.arith), 9);
+        when Mem => 
+            physStr(3 to 11) := strExt(MemOp'image(ins.specificOperation.memory), 9);
+        when FP => 
+            physStr(3 to 11) := strExt(FpOp'image(ins.specificOperation.float), 9);
+        when others => 
+            physStr(3 to 11) := strExt(SysOp'image(ins.specificOperation.system), 9);                                                              
+    end case;
+    physStr(1 to 3) := strExt(SubpipeType'image(ins.specificOperation.subpipe), 3);
+    physStr(4) := ':';              
+    --virtStr(10) := ' ';
+    physStr(13 to 15) := dest;
+    physStr(16 to 17) := ", ";
+    physStr(18 to 20) := src0;
+    physStr(21 to 22) := ", ";
+    physStr(23 to 25) := src1;
+    physStr(26 to 27) := ", ";
+    physStr(28 to 30) := src2;
 
     -- Control txt
-            -- BrP: T/N/-, Ref: Y/N, BrC: T/N,-, Exc: Y/N, Sp: Y/N
+    -- BrP: T/N/-, Ref: Y/N, BrC: T/N,-, Exc: Y/N, Sp: Y/N
     if ins.controlInfo.refetch = '1' then
        controlStr(1 to 7) := "Refetch";
     elsif ins.controlInfo.hasException = '1' then
@@ -788,12 +708,7 @@ begin
        end if;
        controlStr(19) := ',';
        controlStr(20 to 27) := hexTarget;
-       --controlStr(28) := ';';
-    
-       --controlStr(1 to 16) := "Bf:" & std_logic'image(ins.controlInfo.frontBranch) & ',' & hexTarget & ';';
-       --controlStr(17 to 31) := "Bc:" & std_logic'image(ins.controlInfo.confirmedBranch) & ',' & hexTarget;
     end if;
-    
     
     -- Make structure
     res.tagTxt := tagStr;
@@ -804,26 +719,26 @@ begin
     
     -- For mem ops:
     -- completed2: Value; completed: Addr
-        memStr(1) := '@';
-        memStr(10) := ':';
-        memStr(2 to 9) := (others => '-');
-        memStr(11 to 18) := (others => '-');        
-        if ins.controlInfo.completed = '1' then
-            memStr(2 to 9) := w2hex(ins.target);
-        end if;
-        
-        if ins.controlInfo.completed2 = '1' then
-            memStr(11 to 18) := w2hex(ins.result);            
-        end if;
+    memStr(1) := '@';
+    memStr(10) := ':';
+    memStr(2 to 9) := (others => '-');
+    memStr(11 to 18) := (others => '-');        
+    if ins.controlInfo.completed = '1' then
+        memStr(2 to 9) := w2hex(ins.target);
+    end if;
     
-        memStr(19 to 21) := ";  ";
-        if ins.controlInfo.orderViolation = '1' then
-            memStr(21 to 23) := "Ord";
-        end if;
-   
-        if mem = '1' then
-            res.controlTxt := memStr;
-        end if;
+    if ins.controlInfo.completed2 = '1' then
+        memStr(11 to 18) := w2hex(ins.result);            
+    end if;
+
+    memStr(19 to 21) := ";  ";
+    if ins.controlInfo.orderViolation = '1' then
+        memStr(21 to 23) := "Ord";
+    end if;
+
+    if isMem = '1' then
+        res.controlTxt := memStr;
+    end if;
    
     return res;
 end function;
@@ -832,7 +747,7 @@ function insSlotText(insSlot: InstructionSlot; mem: std_logic) return Instructio
     variable res: InstructionText;
 begin    
         if insSlot.full = '1' then
-            res := insText2(insSlot.ins, mem);
+            res := insText(insSlot.ins, mem);
         end if;
     return res;
 end function;
@@ -842,7 +757,7 @@ function insSlotArrayText(insVec: InstructionSlotArray; mem: std_logic) return I
 begin    
     for i in res'range loop
         if insVec(i).full = '1' then
-            res(i) := insText2(insVec(i).ins, mem);
+            res(i) := insText(insVec(i).ins, mem);
         end if;
     end loop;
     return res;
@@ -853,14 +768,11 @@ function insStateArrayText(insVec: InstructionStateArray; mask: std_logic_vector
 begin    
     for i in res'range loop
         if mask(i) = '1' then
-            res(i) := insText2(insVec(i), mem);
+            res(i) := insText(insVec(i), mem);
         end if;
     end loop;
     return res;
 end function;
-
-
-
 
 function getSchedStateText(se: SchedulerState; full: std_logic) return SchedEntryText is
     variable res: SchedEntryText; 
@@ -884,7 +796,6 @@ begin
         
         res.stateTxt(7) := '1';
     else
-        --res.arg0(4 to 11) := w2hex(se.argValues.arg0);
         if se.argValues.zero(0) = '1' then
             res.arg0(14) := 'Z';
         else
@@ -924,7 +835,7 @@ function schedEntrySlotArrayTextIns(insVec: SchedulerEntrySlotArray; mem: std_lo
 begin    
     for i in res'range loop
         if insVec(i).full = '1' then
-            res(i) := insText2(insVec(i).ins, mem);
+            res(i) := insText(insVec(i).ins, mem);
         end if;
     end loop;
     return res;

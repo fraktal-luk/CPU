@@ -149,6 +149,11 @@ architecture Behavioral of UnitRegManager is
                 
                     res(i).ins.operation := (General, unknown);
                 
+                    res(i).ins.specificOperation.arith := opAnd;
+                    res(i).ins.specificOperation.memory := opLoad;
+                    res(i).ins.specificOperation.float := opMove;
+                    res(i).ins.specificOperation.system := opNone;
+                
                 res(i).ins.tags.fetchCtr := (others => '0');
                 res(i).ins.tags.decodeCtr := (others => '0');
                 res(i).ins.tags.renameCtr := (others => '0');

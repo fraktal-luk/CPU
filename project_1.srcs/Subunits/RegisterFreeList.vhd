@@ -43,23 +43,13 @@ end RegisterFreeList;
 
 
 architecture Behavioral of RegisterFreeList is
-	constant WIDTH: natural := PIPE_WIDTH;
-
-    signal freeListTakeAllow: std_logic := '0';
-    signal freeListTakeSel: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+    signal freeListTakeSel, freeListPutSel, stableUpdateSelDelayed: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     -- Don't remove, it is used by newPhysDestPointer!
     signal freeListTakeNumTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-    signal freeListPutAllow: std_logic := '0';
-    signal freeListPutSel: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-    signal freeListRewind: std_logic := '0';
+    signal freeListTakeAllow, freeListPutAllow, freeListRewind: std_logic := '0';
     signal freeListWriteTag: SmallNumber := (others => '0');
     
-    signal stableUpdateSelDelayed: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-    signal physCommitFreedDelayed, physCommitFreedDelayed_N, physCommitDestsDelayed: 
-                        PhysNameArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
-    signal newPhysDestsSync: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-    signal newPhysDestsAsync, newPhysDestsAsync_T: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-    
+    signal physCommitFreedDelayed, physCommitDestsDelayed, newPhysDestsSync, newPhysDestsAsync: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal recoveryCounter: SmallNumber := (others => '0');
             
     function initList return PhysNameArray is
@@ -113,8 +103,7 @@ architecture Behavioral of RegisterFreeList is
                 res(j) := names(i);
                 j := j + 1;
             end if;
-        end loop;
-        
+        end loop;      
         return res;    
     end function;
 	
@@ -127,10 +116,8 @@ architecture Behavioral of RegisterFreeList is
 	       if stableUpdateSelDelayed(i) = '0' then
 	           selected(i) := physCommitDestsDelayed(i);
 	       end if;
-	   end loop;
-	   
+	   end loop;	   
 	   res := compactFreedRegs(selected, freeListPutSel);
-	   
 	   return res;
 	end function;
 		
@@ -271,7 +258,7 @@ begin
         end generate;
 
         freeListTakeNumTags(0) <= i2slv((slv2u(listPtrTake)) mod FREE_LIST_SIZE, SMALL_NUMBER_SIZE);
-        newPhysDestsAsync(0 to WIDTH-1) <= listFront(0 to WIDTH-1);
+        newPhysDestsAsync(0 to PIPE_WIDTH-1) <= listFront(0 to PIPE_WIDTH-1);
       
         effectivePhysPtrTake <= addInt(physPtrTake, 4) when (needTake and memRead) = '1' else physPtrTake;
         needTake <= cmpLeS(numFront, addInt(numToTake, 4));
@@ -281,18 +268,14 @@ begin
             variable indPut, indTake: SmallNumber := (others => '0');
             variable nTaken, nPut, numFrontVar, numBackVar: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
             variable physPtrTakeVar, physPtrPutVar, tmpTag2: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
-            
             variable listBackExt: PhysNameArray(0 to 11) := (others => (others => '0'));
         begin
             if rising_edge(clk) then
                 listFront <= listFrontNext;
             
-                --indTake := listPtrTake;
-                indPut := listPtrPut;
-                                
+                indPut := listPtrPut;                                
                 nTaken := i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE);
                 nPut := i2slv(countOnes(freeListPutSel), SMALL_NUMBER_SIZE);
-             
                 numFrontVar := numFront;
                 
                 if freeListRewind = '1' then
@@ -315,8 +298,7 @@ begin
                         if memRead = '1' then                            
                             numFrontVar := addInt(numFrontVar, 4); 
                         end if;
-                     end if;
-                     
+                     end if;               
                      memRead <= '1';
                 end if;
                 
@@ -335,7 +317,7 @@ begin
                 end if;                        
                 
                 if freeListPutAllow = '1' then
-                    for i in 0 to WIDTH-1 loop
+                    for i in 0 to PIPE_WIDTH-1 loop
                         -- for each element of input vec
                         if freeListPutSel(i) = '1' then
                             indPut := addInt(indPut, 1);

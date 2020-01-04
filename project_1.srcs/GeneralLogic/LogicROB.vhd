@@ -117,9 +117,7 @@ begin
             if execResult.ins.controlInfo.specialAction = '1' then
                 res(k).ins.controlInfo.newEvent := '1'; --- !!!
                 res(k).ins.controlInfo.specialAction := '1';
-                
                 res(k).ins.controlInfo.refetch := '1';
-                
                 eventFound := true;
             end if;
                             
@@ -169,9 +167,8 @@ begin
             str(17 + 16*j to 19 + 16*j) := " ; ";
         end loop;    
             
-        str(18 + 16*(PIPE_WIDTH-1)) := ']';
-        
-            str(18 + 16*(PIPE_WIDTH-1) + 2) := std_logic'image(arr(i).special.full)(2);
+        str(18 + 16*(PIPE_WIDTH-1)) := ']';     
+        str(18 + 16*(PIPE_WIDTH-1) + 2) := std_logic'image(arr(i).special.full)(2);
         
         res(i) := str;
         

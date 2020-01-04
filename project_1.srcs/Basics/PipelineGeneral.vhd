@@ -99,6 +99,7 @@ function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector)
 function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getFloatStoreMask(insVec, insVecF: InstructionSlotArray) return std_logic_vector;
 function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getMemMask(insVec: InstructionSlotArray) return std_logic_vector;
@@ -604,6 +605,21 @@ begin
 	return res;
 end function;
 
+function getFloatStoreMask(insVec, insVecF: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+	for i in 0 to PIPE_WIDTH-1 loop
+		if 	  insVecF(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
+		      and (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys)			
+		then
+			res(i) := '1';
+		end if;
+	end loop;
+	
+	return res;
+end function;
+
+
 function getAluMask(insVec: InstructionSlotArray) return std_logic_vector is
 begin
 	return getSubpipeMask(insVec, ALU);
@@ -780,7 +796,7 @@ begin
        if (insVec(i).full and hasSyncEvent(insVec(i).ins)) = '1' then
            res := insVec(i);
            res.ins.specificOperation.system := SysOp'val(slv2u(res.ins.specificOperation.bits));
-           res.ins.operation := (System, sysUndef);                 
+           res.ins.operation := (System, sysUndef);                
            exit;
        end if;
    end loop;

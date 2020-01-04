@@ -14,39 +14,23 @@ use work.PipelineGeneral.all;
 
 
 package LogicQueues is
-
-
 	function getCausingPtr(content: InstructionStateArray; causing: InstructionState) return SmallNumber;
-	
-	function getInputMask(mask, newMask: std_logic_vector; prevSending: std_logic; ptr: SmallNumber; ptrMask: SmallNumber)
-	return std_logic_vector;
-
-	function getSendingMask(content: InstructionStateArray; mask: std_logic_vector;
-	                tag: InsTag) return std_logic_vector;
-
-	function getCancelMask(content: InstructionStateArray; mask: std_logic_vector;
-	                tag: InsTag; robData: InstructionSlotArray) return std_logic_vector;
-    
-    function getWindow(content: InstructionStateArray; mask: std_logic_vector;
-                        p: SmallNumber; n: natural)
-    return InstructionSlotArray;
+	function getInputMask(mask, newMask: std_logic_vector; prevSending: std_logic; ptr: SmallNumber; ptrMask: SmallNumber) return std_logic_vector;
+	function getSendingMask(content: InstructionStateArray; mask: std_logic_vector; tag: InsTag) return std_logic_vector;
+	function getCancelMask(content: InstructionStateArray; mask: std_logic_vector; tag: InsTag; robData: InstructionSlotArray) return std_logic_vector;  
+    function getWindow(content: InstructionStateArray; mask: std_logic_vector; p: SmallNumber; n: natural) return InstructionSlotArray;
     
     function selectBranchDataSlot(content: InstructionStateArray; taggedMask, matchMask: std_logic_vector;
                             compareAddressInput: InstructionSlot)
     return InstructionSlot;
 
-    function getMatchingTags(content: InstructionStateArray; tag: InsTag) return std_logic_vector;
-    
+    function getMatchingTags(content: InstructionStateArray; tag: InsTag) return std_logic_vector;    
     function getNumberToSend(dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1); nextCommitTag: InsTag; committing: std_logic) return integer;
-
-    function getSendingArray(dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1); nextCommitTag: InsTag; committing: std_logic) return InstructionSlotArray;
-
-	
+    function getSendingArray(dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1); nextCommitTag: InsTag; committing: std_logic) return InstructionSlotArray;	
 end package;
 
 
 package body LogicQueues is
-
 
 	function getCausingPtr(content: InstructionStateArray; causing: InstructionState) return SmallNumber is
 	   variable res: SmallNumber := (others => '0');
@@ -56,8 +40,7 @@ package body LogicQueues is
 	           res := i2slv(i, SMALL_NUMBER_SIZE);
 	           exit;
 	       end if;
-	   end loop;
-	   
+	   end loop;   
 	   return res;
 	end function;
 	
@@ -248,7 +231,5 @@ package body LogicQueues is
        
        return res;
     end function;
-
-
 
 end package body;

@@ -764,11 +764,11 @@ begin
         begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
             
-            intStoreMask <= getStoreMask(renamedDataLiving) and not floatStoreMask;                                        
+            intStoreMask <= getStoreMask(renamedDataLivingMem) and not floatStoreMask;                                        
             schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLivingMem)), intStoreMask);
             dataToStoreValueIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValue, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP_SV, true);
             
-            floatStoreMask <= getStoreMask(renamedDataLivingFloat);
+            floatStoreMask <= getFloatStoreMask(renamedDataLivingMem, renamedDataLivingFloat);
             schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLivingMem), extractData(renamedDataLivingFloat)), floatStoreMask);       
             dataToStoreValueFloatIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValueFloat, readyFloatFlags xor readyFloatFlags, fniFloat, ENQUEUE_FN_MAP_FLOAT_SV, true);
                     
