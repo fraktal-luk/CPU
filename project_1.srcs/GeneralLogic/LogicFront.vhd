@@ -92,7 +92,15 @@ begin
         if res.specificOperation.system = opUndef then
             res.controlInfo.hasException := '1';
         end if;        
-    end if;	
+    end if;
+    
+    if CLEAR_DEBUG_INFO then
+        res.specificOperation.arith := opAnd;
+        res.specificOperation.memory := opLoad;
+        res.specificOperation.float := opMove;
+        res.specificOperation.system := opNone;
+    end if;
+
 	return res;
 end function;
 
