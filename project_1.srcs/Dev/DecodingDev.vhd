@@ -24,8 +24,6 @@ package DecodingDev is
 -- (I|F|0)^4 -> or intSelect & fpSelect
 -- > If src0 is qa, it will always be Int (branch cond)
 
---type ImmFormat is (imm26, imm21, imm16, imm10);
-
 type InstructionFormat is record
     src0a, src1i, src2a: std_logic; -- src0 from qa? src1 from imm? src2 from qa?
     intDestSel: std_logic;
@@ -77,63 +75,61 @@ constant FMT_SLOAD  : InstructionFormat := FMT_SHIFT; -- mfc
 type InsDef is record
     opcd: ProcOpcode;
     opct: ProcOpcont;
-    unit: ExecUnit;
-    func: ExecFunc;
     fmt:  InstructionFormat;
     sop:  SpecificOp;
 end record;
 
 type InsDefArray is array (natural range <>) of InsDef;
 
-		constant DECODE_TABLE: InsDefArray(0 to 40) := (
-				0 => (andI, none, ALU, logicAnd, FMT_IMM, sop(ALU, opAnd)),
-				1 => (orI,  none, ALU, logicOr,  FMT_IMM, sop(ALU, ArithOp'(opOr))),
-				2 => (addI, none, ALU, arithAdd, FMT_IMM, sop(ALU, opAdd)),
-				3 => (subI, none, ALU, arithSub, FMT_IMM, sop(ALU, opSub)),
-				
-				4 => (ld, none,	Memory,load,	FMT_IMM,  sop(Mem, opLoad)),
-				5 => (st, none,Memory,store,	FMT_ISTORE, sop(Mem, opStore)),
+constant DECODE_TABLE: InsDefArray(0 to 40) := (
+    0 => (andI, none, FMT_IMM, sop(ALU, opAnd)),
+    1 => (orI,  none, FMT_IMM, sop(ALU, ArithOp'(opOr))),
+    2 => (addI, none, FMT_IMM, sop(ALU, opAdd)),
+    3 => (subI, none, FMT_IMM, sop(ALU, opSub)),
+    
+    4 => (ld, none,	  FMT_IMM,  sop(Mem, opLoad)),
+    5 => (st, none,   FMT_ISTORE, sop(Mem, opStore)),
 
-				6 => (j, 	none, Jump, jump, FMT_JA,     sop(ALU, opJ)),
-				7 => (jl, 	none, Jump, jump,	FMT_JL,   sop(ALU, opJ)),
-				8 => (jz, 	none, Jump, jumpZ, FMT_JC,    sop(ALU, opJz)),
-				9 => (jnz, 	none, Jump, jumpNZ, FMT_JC,   sop(ALU, opJnz)),
-				
-				10=> (ext0, muls, MAC, mulS, FMT_INT2,    sop(ALU, opMul)),
-				11=> (ext0, mulu, MAC, mulU, FMT_INT2,    sop(ALU, opMul)),
+    6 => (j, 	none, FMT_JA,     sop(ALU, opJ)),
+    7 => (jl, 	none, FMT_JL,   sop(ALU, opJ)),
+    8 => (jz, 	none, FMT_JC,    sop(ALU, opJz)),
+    9 => (jnz, 	none, FMT_JC,   sop(ALU, opJnz)),
+    
+    10=> (ext0, muls, FMT_INT2,    sop(ALU, opMul)),
+    11=> (ext0, mulu, FMT_INT2,    sop(ALU, opMul)),
 
-				12 => (ext0, shlC,  ALU,  logicShl,	FMT_SHIFT, sop(ALU, opShl)),
-				--13 => (ext0, shrlC, Alu,  logicShrl,fmtShiftImm),
-				14 => (ext0, shaC, ALU,  arithSha, FMT_SHIFT, sop(ALU, opSha)),
+    12 => (ext0, shlC,FMT_SHIFT, sop(ALU, opShl)),
+    --13 => (ext0, shrlC, Alu,  logicShrl,fmtShiftImm),
+    14 => (ext0, shaC,FMT_SHIFT, sop(ALU, opSha)),
 
-				15=> (ext2, mfc,	System, sysMFC, FMT_SLOAD, sop(Mem, opLoadSys)),
-				16=> (ext2, mtc, 	System, sysMTC, FMT_SSTORE, sop(Mem, opStoreSys)),		
-							
-				17=> (ext0, addR, ALU, arithAdd, FMT_INT2, sop(ALU, opAdd)),
-				18=> (ext0, subR, ALU, arithSub, FMT_INT2, sop(ALU, opSub)),
-				19=> (ext0, andR, ALU, logicAnd, FMT_INT2, sop(ALU, opAnd)),
-				20=> (ext0, orR,  ALU, logicOr,  FMT_INT2, sop(ALU, ArithOp'(opOr))),
-					
-				21=> (ext1, jzR,  Jump, jumpZ, FMT_JR,      sop(ALU, opJz)),
-				22=> (ext1, jnzR, Jump, jumpNZ, FMT_JR,     sop(ALU, opJnz)),
+    15=> (ext2, mfc,  FMT_SLOAD, sop(Mem, opLoadSys)),
+    16=> (ext2, mtc,  FMT_SSTORE, sop(Mem, opStoreSys)),		
+                
+    17=> (ext0, addR, FMT_INT2, sop(ALU, opAdd)),
+    18=> (ext0, subR, FMT_INT2, sop(ALU, opSub)),
+    19=> (ext0, andR, FMT_INT2, sop(ALU, opAnd)),
+    20=> (ext0, orR,  FMT_INT2, sop(ALU, ArithOp'(opOr))),
+        
+    21=> (ext1, jzR,  FMT_JR,      sop(ALU, opJz)),
+    22=> (ext1, jnzR, FMT_JR,     sop(ALU, opJnz)),
 
-			    23 => (ldf, none,	Memory,load,	FMT_FLOAD,    sop(Mem, opLoad)),
-				24 => (stf, none,	Memory,store,	FMT_FSTORE,   sop(Mem, opStore)),
-				
-				25 => (ext2, halt, System, sysHalt, FMT_DEFAULT,    sop(None, opHalt)),
-				26 => (ext2, retI, System, sysRetI, FMT_DEFAULT,    sop(None, opRetI)),
-				27 => (ext2, retE, System, sysRetE, FMT_DEFAULT,    sop(None, opRetE)),
-				28 => (ext2, sync,	System, sysSync,	 FMT_DEFAULT, sop(None, opSync)),
-				29 => (ext2, replay, System, sysReplay, FMT_DEFAULT,  sop(None, opReplay)),
-				30 => (ext2, error,  System, sysError, FMT_DEFAULT,   sop(None, opError)),
-				31 => (ext2, call,  System, sysCall, FMT_DEFAULT,     sop(None, opCall)),
-				32 => (ext2, send,  System, sysSend, FMT_DEFAULT,     sop(None, opSend)),
-				
-				33 => (fop,  fmov,  FPU, fpuMov, FMT_FP1,           sop(FP, opMove)),
-				34 => (fop,  forr,  FPU, fpuOr, FMT_FP2,            sop(FP, FpOp'(opOr))),
-				
-				others => (ext2, undef, System, sysUndef, FMT_DEFAULT, sop(None, opUndef))
-		  );
+    23 => (ldf, none, FMT_FLOAD,    sop(Mem, opLoad)),
+    24 => (stf, none, FMT_FSTORE,   sop(Mem, opStore)),
+    
+    25 => (ext2, halt,  FMT_DEFAULT, sop(None, opHalt)),
+    26 => (ext2, retI,  FMT_DEFAULT, sop(None, opRetI)),
+    27 => (ext2, retE,  FMT_DEFAULT, sop(None, opRetE)),
+    28 => (ext2, sync,  FMT_DEFAULT, sop(None, opSync)),
+    29 => (ext2, replay,FMT_DEFAULT, sop(None, opReplay)),
+    30 => (ext2, error, FMT_DEFAULT, sop(None, opError)),
+    31 => (ext2, call,  FMT_DEFAULT, sop(None, opCall)),
+    32 => (ext2, send,  FMT_DEFAULT, sop(None, opSend)),
+    
+    33 => (fop,  fmov,  FMT_FP1,     sop(FP, opMove)),
+    34 => (fop,  forr,  FMT_FP2,     sop(FP, FpOp'(opOr))),
+    
+    others => (ext2, undef, FMT_DEFAULT, sop(None, opUndef))
+);
 
 
 function decodeFromWord(w: word) return InstructionState;
@@ -188,15 +184,12 @@ begin
         if opcode = DECODE_TABLE(i).opcd and
            (not haveOpcont or opcont = DECODE_TABLE(i).opct)
         then
-           operation := (DECODE_TABLE(i).unit, DECODE_TABLE(i).func);
            specificOperation := DECODE_TABLE(i).sop;
            fmt := DECODE_TABLE(i).fmt;
            exit;
         end if;
     end loop;    
     
-    -- Convert to InstructionState
-    --res.operation := operation;
     res.specificOperation := specificOperation;
     
     res.classInfo.fpRename := fmt.fpDestSel or isNonzero(fmt.fpSrcSel);

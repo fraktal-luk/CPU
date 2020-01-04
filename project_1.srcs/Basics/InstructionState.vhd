@@ -205,7 +205,6 @@ type InstructionState is record
 	ip: Mword;
 	bits: word; -- instruction word
 	tags: InstructionTags;
-	--operation: BinomialOp;
 	specificOperation: SpecificOp;
 	classInfo: InstructionClassInfo;
 	constantArgs: InstructionConstantArgs;

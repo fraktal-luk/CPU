@@ -60,33 +60,24 @@ architecture Behavioral of UnitFront is
 	signal earlyBranchSending, earlyBranchMultiSending, sendingToBranchTransfer: std_logic := '0';
 	
 	signal fetchedLine0, fetchedLine1: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0')); 
-	signal frontBranchEvent, killAll, killAllOrFront, frontKill: std_logic := '0';
+	signal frontBranchEvent, killAll, killAllOrFront: std_logic := '0';
 	signal sendingToEarlyBranch, sendingToBuffer, fetchStall: std_logic := '0'; 
 	
-	signal frontCausingSig, earlyBranchIn, earlyBranchDataOut: InstructionState := DEFAULT_INSTRUCTION_STATE;
+	signal frontCausingSig, earlyBranchIn: InstructionState := DEFAULT_INSTRUCTION_STATE;
 	signal predictedAddress: Mword := (others => '0');
 
 	signal stageDataOutFetch0, stageDataOutFetch1, stageDataInEarlyBranch, earlyBranchDataOutA: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
+    --                              earlyBranchMultiDataOutA UNUSED!
 	signal earlyBranchMultiDataInA, earlyBranchMultiDataOutA: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-	signal branchMask: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
 	
 	signal dataToBranchTransfer: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	signal fetchCounter, fetchCounterNext: Word := (others => '0');
-	
-	function assignFetchCounter(ins: InstructionState; ctr: Word) return InstructionState is
-	   variable res: InstructionState := ins;
-	begin
-	   res.tags.fetchCtr := ctr;
-	   return res;
-	end function;
-	
 begin
 	killAll <= execEventSignal or lateEventSignal;
-    killAllOrFront <= killAll or frontKill;
+    killAllOrFront <= killAll or frontBranchEvent;
 
-    fetchCounterNext <= --i2slv(slv2u(fetchCounter) + PIPE_WIDTH, 32) when pcSending = '1' else fetchCounter;
-                        addInt(fetchCounter, PIPE_WIDTH) when pcSending = '1' else fetchCounter;
+    fetchCounterNext <= addInt(fetchCounter, PIPE_WIDTH) when pcSending = '1' else fetchCounter;
 
     stageDataInFetch0(0).full <= pcSending;
     stageDataInFetch0(0).ins.ip <= pcDataLiving.ip;
@@ -144,8 +135,7 @@ begin
         end if;
     end process;
     
-	earlyBranchMultiDataInA <=
-                getFrontEventMulti(predictedAddress, stageDataOutFetch1(0).ins, fetchedLine1);	                                                                   
+	earlyBranchMultiDataInA <= getFrontEventMulti(predictedAddress, stageDataOutFetch1(0).ins, fetchedLine1);	                                                                   
 	                                                                   
 	SUBUNIT_EARLY_BRANCH_MULTI: entity work.GenericStage(Behavioral)
 	generic map(
@@ -191,15 +181,11 @@ begin
 		execCausing => DEFAULT_INSTRUCTION_STATE
 	);
 
-	earlyBranchDataOut <= earlyBranchDataOutA(0).ins;
+	--frontKill <= frontBranchEvent;
 
-	branchMask <= getBranchMask(earlyBranchMultiDataInA);
-
-	frontKill <= frontBranchEvent;-- or fetchStall;
-
-	frontBranchEvent <= earlyBranchDataOut.controlInfo.newEvent;
+	frontBranchEvent <= earlyBranchDataOutA(0).ins.controlInfo.newEvent;
 	frontEventSignal <= frontBranchEvent;
-	frontCausingSig <= earlyBranchDataOut;
+	frontCausingSig <= earlyBranchDataOutA(0).ins;
 	
 	SAVE_PRED_TARGET: process(clk)
 	begin
@@ -230,18 +216,19 @@ begin
 		sendingOut => sendingOutBuffer,
 		stageDataOut => dataLastLiving,
 		
-		execEventSignal => killAll,--killVector(3),
+		execEventSignal => killAll,
 		execCausing => DEFAULT_INSTRUCTION_STATE		
 	);
 
 	lastSending <= sendingOutBuffer;
 	
-	frontAccepting <= '1';-- acceptingOutFetch0;
+	frontAccepting <= '1';
 
 	frontCausing <= frontCausingSig;
    
 	sendingToBranchTransfer <= sendingOutFetch1 and not fetchStall;
-	dataToBranchTransfer <= prepareForBQ(earlyBranchMultiDataInA, branchMask);
+
+	dataToBranchTransfer <= prepareForBQ(earlyBranchMultiDataInA);
 
     SUBUNIT_BRANCH_TRANSFER: entity work.GenericStage(Behavioral)
 	generic map(
