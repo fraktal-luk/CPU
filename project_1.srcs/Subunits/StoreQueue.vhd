@@ -134,7 +134,7 @@ architecture Behavioral of StoreQueue is
                         --dataIn(slv2u(diff(1 downto 0)));
                 res(i) := slot.ins;          
                 res(i).tags := slot.ins.tags;
-                res(i).operation := (General, unknown);
+                --res(i).operation := (General, unknown);
                 res(i).specificOperation := slot.ins.specificOperation;
                 res(i).controlInfo.completed := '0';
                 res(i).controlInfo.completed2 := '0';

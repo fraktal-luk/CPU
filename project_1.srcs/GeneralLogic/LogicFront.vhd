@@ -75,7 +75,7 @@ function decodeInstruction(inputState: InstructionState) return InstructionState
 begin
 	decodedIns := decodeFromWord(inputState.bits);
 	
-	res.operation := decodedIns.operation;
+	--res.operation := decodedIns.operation;
 	res.specificOperation := decodedIns.specificOperation;
 	res.constantArgs := decodedIns.constantArgs;
 	res.virtualArgSpec := decodedIns.virtualArgSpec;
@@ -311,7 +311,7 @@ begin
            res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
            res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;
          
-           res(i).ins.operation := (System, sysUndef);
+           --res(i).ins.operation := (System, sysUndef);
            res(i).ins.specificOperation := DEFAULT_SPECIFIC_OP;
             
            res(i).ins.tags.fetchCtr := (others => '0');

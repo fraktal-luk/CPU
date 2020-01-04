@@ -196,7 +196,7 @@ begin
     end loop;    
     
     -- Convert to InstructionState
-    res.operation := operation;
+    --res.operation := operation;
     res.specificOperation := specificOperation;
     
     res.classInfo.fpRename := fmt.fpDestSel or isNonzero(fmt.fpSrcSel);

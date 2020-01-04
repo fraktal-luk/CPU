@@ -109,7 +109,7 @@ architecture Behavioral of BranchQueue is
                slot := getNewElem(remv, dataIn); 
                        --dataIn(slv2u(diff(1 downto 0)));         
                res(i).tags := slot.ins.tags;
-               res(i).operation := slot.ins.operation;
+               --res(i).operation := slot.ins.operation;
                res(i).controlInfo.firstBr := '0'; -- This is '1' only for the first branch in group!               
            end if;
         end loop;
@@ -163,7 +163,7 @@ architecture Behavioral of BranchQueue is
                   res(i).virtualArgSpec := DEFAULT_ARG_SPEC;
                   res(i).physicalArgSpec := DEFAULT_ARG_SPEC;
                 
-                  res(i).operation := (System, sysUndef);
+                  --res(i).operation := (System, sysUndef);
     
                   res(i).tags.fetchCtr := (others => '0');
                   res(i).tags.decodeCtr := (others => '0');

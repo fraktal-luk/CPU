@@ -140,7 +140,7 @@ architecture Behavioral of ReorderBuffer is
                    
                    res(j).ops(i).ins.constantArgs := DEFAULT_CONSTANT_ARGS;
                 
-                   res(j).ops(i).ins.operation := (System, sysUndef);
+                   --res(j).ops(i).ins.operation := (System, sysUndef);
                    
                         res(j).ops(i).ins.virtualArgSpec.intArgSel := (others => '0');
                         res(j).ops(i).ins.virtualArgSpec.floatArgSel := (others => '0');
@@ -175,7 +175,7 @@ architecture Behavioral of ReorderBuffer is
                
                res(j).special.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
             
-               res(j).special.ins.operation := (System, sysUndef);
+               --res(j).special.ins.operation := (System, sysUndef);
                
                res(j).special.ins.virtualArgSpec := DEFAULT_ARG_SPEC; 
                res(j).special.ins.physicalArgSpec := DEFAULT_ARG_SPEC;

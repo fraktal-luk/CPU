@@ -108,16 +108,16 @@ type InstructionControlInfo is record
 	newEvent: std_logic; -- True if any new event appears
 	hasInterrupt: std_logic;
 	hasException: std_logic;
-	   refetch: std_logic;
-	   frontBranch: std_logic;
-	   confirmedBranch: std_logic;
+    refetch: std_logic;
+    frontBranch: std_logic;
+    confirmedBranch: std_logic;
 	specialAction: std_logic;
 	dbtrap: std_logic;
-	   orderViolation: std_logic;
-	   tlbMiss: std_logic;
-	   dataMiss: std_logic;
-	   sqMiss:    std_logic;
-	   firstBr: std_logic;
+    orderViolation: std_logic;
+    tlbMiss: std_logic;
+    dataMiss: std_logic;
+    sqMiss:    std_logic;
+    firstBr: std_logic;
 end record;
 
 type InstructionClassInfo is record
@@ -205,7 +205,7 @@ type InstructionState is record
 	ip: Mword;
 	bits: word; -- instruction word
 	tags: InstructionTags;
-	operation: BinomialOp;
+	--operation: BinomialOp;
 	specificOperation: SpecificOp;
 	classInfo: InstructionClassInfo;
 	constantArgs: InstructionConstantArgs;

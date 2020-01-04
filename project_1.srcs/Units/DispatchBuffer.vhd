@@ -95,7 +95,7 @@ begin
                     
                    --queueData0(i).ins.constantArgs <= DEFAULT_CONSTANT_ARGS;
                  
-                   queueData0(i).ins.operation <= (System, sysUndef); --!! Operation must be known to UnitSequencer after commit
+                   --queueData0(i).ins.operation <= (System, sysUndef); --!! Operation must be known to UnitSequencer after commit
                     
 --                         res(j).ops(i).ins.virtualArgSpec.intArgSel := (others => '0');
 --                         res(j).ops(i).ins.virtualArgSpec.floatArgSel := (others => '0');

@@ -147,7 +147,7 @@ architecture Behavioral of UnitRegManager is
                 res(i).ins.target := (others => '0');                    
                 res(i).ins.result := (others => '0');                    
                 
-                    res(i).ins.operation := (General, unknown);
+                    --res(i).ins.operation := (General, unknown);
                 
                     res(i).ins.specificOperation.arith := opAnd;
                     res(i).ins.specificOperation.memory := opLoad;

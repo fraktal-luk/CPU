@@ -651,7 +651,7 @@ function prepareForStoreValueIQ(insVec: InstructionStateArray) return Instructio
     variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i).operation := (General, unknown);
+        --res(i).operation := (General, unknown);
     
         res(i).constantArgs.immSel := '0';
         
@@ -688,7 +688,7 @@ function prepareForStoreValueFloatIQ(insVecInt, insVecFloat: InstructionStateArr
     variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVecInt;
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i).operation := (General, unknown);            
+        --res(i).operation := (General, unknown);            
     
         res(i).constantArgs.immSel := '0';
         
@@ -796,7 +796,7 @@ begin
        if (insVec(i).full and hasSyncEvent(insVec(i).ins)) = '1' then
            res := insVec(i);
            res.ins.specificOperation.system := SysOp'val(slv2u(res.ins.specificOperation.bits));
-           res.ins.operation := (System, sysUndef);                
+           --res.ins.operation := (System, sysUndef);                
            exit;
        end if;
    end loop;
@@ -837,7 +837,7 @@ function TMP_clearOldOperation(insVec: InstructionSlotArray) return InstructionS
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
     for i in res'range loop
-        res(i).ins.operation := (General, unknown);    
+        --res(i).ins.operation := (General, unknown);    
     end loop;    
     return res;
 end function;
