@@ -48,8 +48,7 @@ function updateArgLocs(argValues: InstructionArgValues;
 							  progress: boolean)
 return InstructionArgValues;
 
-function updateSchedulerArray(insArray: SchedulerEntrySlotArray; readyRegFlags: std_logic_vector;
-									fni: ForwardingInfo; fnm: ForwardingMap; progressLocs: boolean)
+function updateSchedulerArray(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo; fnm: ForwardingMap; progressLocs: boolean)
 return SchedulerEntrySlotArray;
 
 end LogicIssue;
@@ -370,7 +369,7 @@ end function;
 
 
 function updateSchedulerStateGeneric(ins: InstructionState; st: SchedulerState;
-										readyRegFlags: std_logic_vector; fni: ForwardingInfo;
+										fni: ForwardingInfo;
 										fnm: ForwardingMap; progressLocs: boolean)
 return SchedulerEntrySlot is
 	variable res: SchedulerEntrySlot := DEFAULT_SCHEDULER_ENTRY_SLOT;
@@ -410,14 +409,6 @@ begin
 		 readyM2 := (isNonzero(cmp0toM2), isNonzero(cmp1toM2), '0');
 		 locsM2 := (findLoc2b(cmp0toM2), findLoc2b(cmp1toM2), (others => '0'));
 
-	if res.state.argValues.newInQueue = '1' then
-		tmp8 := "000000" & ins.tags.renameIndex(1 downto 0);   -- !!!!!!!!!!!!!!!!
-		rrf := readyRegFlags(3*slv2u(tmp8) to 3*slv2u(tmp8) + 2);
-    else
-        rrf := (others => '0');
-    end if;
-
-    rrf := rrf and fnm.maskRR; -- 
 
 	readyBefore := not res.state.argValues.missing;
 
@@ -438,13 +429,12 @@ begin
 end function;
 
 
-function updateSchedulerArray(insArray: SchedulerEntrySlotArray; readyRegFlags: std_logic_vector;
-									fni: ForwardingInfo; fnm: ForwardingMap; progressLocs: boolean)
+function updateSchedulerArray(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo; fnm: ForwardingMap; progressLocs: boolean)
 return SchedulerEntrySlotArray is
 	variable res: SchedulerEntrySlotArray(0 to insArray'length-1);-- := insArray;
 begin
 	for i in insArray'range loop
-		res(i) := updateSchedulerStateGeneric(insArray(i).ins, insArray(i).state, readyRegFlags, fni, fnm, progressLocs);
+		res(i) := updateSchedulerStateGeneric(insArray(i).ins, insArray(i).state, fni, fnm, progressLocs);
 	    res(i).full := (insArray(i).full);
 	end loop;	
 	return res;

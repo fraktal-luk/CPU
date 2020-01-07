@@ -104,17 +104,13 @@ function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getMemMask(insVec: InstructionSlotArray) return std_logic_vector;
 
-
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
 function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray;
 function prepareForStoreValueFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray;
 
-
 function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
-
-
-        
+     
         constant WAITING_FN_MAP: ForwardingMap := (
             maskRR => "110",   -- arg2 is unused   
             maskR1 => "000",  
@@ -208,13 +204,9 @@ function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return Schedule
 
 function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot;
 
-
 function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
-
-function TMP_clearOldOperation(insVec: InstructionSlotArray) return InstructionSlotArray;
-
 
 function isLoadOp(ins: InstructionState) return std_logic;
 function isStoreOp(ins: InstructionState) return std_logic;
@@ -833,14 +825,6 @@ begin
     return res;
 end function;
 
-function TMP_clearOldOperation(insVec: InstructionSlotArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(insVec'range) := insVec;
-begin
-    for i in res'range loop
-        --res(i).ins.operation := (General, unknown);    
-    end loop;    
-    return res;
-end function;
 
 function isLoadOp(ins: InstructionState) return std_logic is
 begin
