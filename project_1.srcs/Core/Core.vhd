@@ -60,8 +60,10 @@ architecture Behavioral of Core is
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
                 frontEventSignal, bqAccepting, bqSending, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ, dbEmpty: std_logic := '0';
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    
+            signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
     signal frontDataLastLiving, 
-            renamedDataLiving, renamedDataLivingFloat, renamedDataMerged, renamedDataLivingMem,
+            renamedDataLiving, renamedDataLivingFloatPre, renamedDataLivingFloat, renamedDataLivingFloat_C, renamedDataMerged, renamedDataLivingMem,
             renamedDataLivingRe, renamedDataLivingFloatRe, renamedDataMergedRe,
             dispatchBufferDataInt, dispatchBufferDataFloat, dispatchBufferDataMerged,
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData: 
@@ -96,17 +98,32 @@ architecture Behavioral of Core is
     
     signal specialAction, specialActionDispatchBuffer, specialActionToROB: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
-    function mergeDests(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray is
+--    function mergeDests(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray is
+--        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := dataInt;
+--    begin
+--        for i in res'range loop
+--            if dataFloat(i).ins.physicalArgSpec.floatDestSel = '1' then
+--                res(i).ins.physicalArgSpec.dest := dataFloat(i).ins.physicalArgSpec.dest;
+--                res(i).ins.physicalArgSpec.floatDestSel := dataFloat(i).ins.physicalArgSpec.floatDestSel;
+--            end if;
+--        end loop;
+--        return res;
+--    end function;
+    
+    function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := dataInt;
     begin
         for i in res'range loop
-            if dataFloat(i).ins.physicalArgSpec.floatDestSel = '1' then
-                res(i).ins.physicalArgSpec.dest := dataFloat(i).ins.physicalArgSpec.dest;
-                res(i).ins.physicalArgSpec.floatDestSel := dataFloat(i).ins.physicalArgSpec.floatDestSel;
-            end if;
+            --if dataFloat(i).ins.physicalArgSpec.floatDestSel = '1' then
+            --    res(i).ins.physicalArgSpec.dest := dataFloat(i).ins.physicalArgSpec.dest;
+            --    res(i).ins.physicalArgSpec.floatDestSel := dataFloat(i).ins.physicalArgSpec.floatDestSel;
+            res(i).full := dataFloat(i).full;
+            
+            res(i).ins.physicalArgSpec.args := dataFloat(i).ins.physicalArgSpec.args;
+            --end if;
         end loop;
         return res;
-    end function; 
+    end function;     
 begin
 
     intSignal <= int0 or int1;
@@ -240,9 +257,19 @@ begin
     
     renamedSending <= (renamedSendingRe and oooAccepting) or sendingFromDispatchBuffer;
     renamedDataLiving <= renamedDataLivingRe when sendingFromDispatchBuffer = '0' else dispatchBufferDataInt; 
-    renamedDataLivingFloat <= renamedDataLivingFloatRe when sendingFromDispatchBuffer = '0' else dispatchBufferDataFloat; 
+    renamedDataLivingFloatPre <= renamedDataLivingFloatRe when sendingFromDispatchBuffer = '0' else dispatchBufferDataFloat; 
+        --renamedDataLivingFloat <= renamedDataLivingFloatPre;
 
-    renamedDataMerged <= mergeDests(renamedDataLiving, renamedDataLivingFloat);
+        renamedDataLivingFloat <= mergeFP(renamedDataLiving, renamedDataLivingFloatPre);
+
+            ch0 <= bool2std(renamedDataLivingFloat_C(0) = renamedDataLivingFloat(0));
+            ch1 <= bool2std(renamedDataLivingFloat_C(1) = renamedDataLivingFloat(1));
+            ch2 <= bool2std(renamedDataLivingFloat_C(2) = renamedDataLivingFloat(2));
+            ch3 <= bool2std(renamedDataLivingFloat_C(3) = renamedDataLivingFloat(3));
+
+
+    renamedDataMerged <= --mergeDests(renamedDataLiving, renamedDataLivingFloat);
+                            renamedDataLiving;
     
     renamedDataLivingMem <= TMP_recodeMem(renamedDataLiving);
     
