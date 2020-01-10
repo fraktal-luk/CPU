@@ -96,11 +96,6 @@ constant INITIAL_GROUP_TAG_INC: InsTag := i2slv(0, TAG_SIZE);
 type InsTagArray is array (integer range <>) of InsTag;
 
 
-type BinomialOp is record
-	unit: ExecUnit;
-	func: ExecFunc;
-end record;
-
 type InstructionControlInfo is record
 	completed: std_logic;
 	completed2: std_logic;
@@ -220,10 +215,6 @@ type InstructionStateArray is array(integer range <>) of InstructionState;
 function defaultControlInfo return InstructionControlInfo;
 function defaultClassInfo return InstructionClassInfo;
 function defaultConstantArgs return InstructionConstantArgs;
-function defaultVirtualArgs return InstructionVirtualArgs;
-function defaultVirtualDestArgs return InstructionVirtualDestArgs;
-function defaultPhysicalArgs return InstructionPhysicalArgs;
-function defaultPhysicalDestArgs return InstructionPhysicalDestArgs;
 function defaultArgValues return InstructionArgValues;
 
 function defaultInstructionState return InstructionState;
@@ -231,10 +222,6 @@ function defaultInstructionState return InstructionState;
 constant DEFAULT_CONTROL_INFO: InstructionControlInfo := defaultControlInfo;
 constant DEFAULT_CLASS_INFO: InstructionClassInfo := defaultClassInfo;
 constant DEFAULT_CONSTANT_ARGS: InstructionConstantArgs := defaultConstantArgs;
-constant DEFAULT_VIRTUAL_ARGS: InstructionVirtualArgs := defaultVirtualArgs;
-constant DEFAULT_VIRTUAL_DEST_ARGS: InstructionVirtualDestArgs := defaultVirtualDestArgs;
-constant DEFAULT_PHYSICAL_ARGS: InstructionPhysicalArgs := defaultPhysicalArgs;
-constant DEFAULT_PHYSICAL_DEST_ARGS: InstructionPhysicalDestArgs := defaultPhysicalDestArgs;
 constant DEFAULT_ARG_VALUES: InstructionArgValues := defaultArgValues;
 
 constant DEFAULT_ARG_SPEC: InstructionArgSpec := InstructionArgSpec'(
@@ -449,27 +436,6 @@ end function;
 function defaultConstantArgs return InstructionConstantArgs is
 begin
 	return InstructionConstantArgs'('0', (others=>'0'));
-end function;
-
-function defaultVirtualArgs return InstructionVirtualArgs is
-begin
-	return InstructionVirtualArgs'("000", "00000", "00000", "00000");
-end function;
-
-
-function defaultVirtualDestArgs return InstructionVirtualDestArgs is
-begin
-	return InstructionVirtualDestArgs'("0", "00000");
-end function;
-
-function defaultPhysicalArgs return InstructionPhysicalArgs is
-begin
-	return InstructionPhysicalArgs'("000", (others => '0'), (others => '0'), (others => '0'));
-end function;
-
-function defaultPhysicalDestArgs return InstructionPhysicalDestArgs is
-begin
-	return InstructionPhysicalDestArgs'("0", (others => '0'));
 end function;
 
 function defaultArgValues return InstructionArgValues is

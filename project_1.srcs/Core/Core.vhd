@@ -262,11 +262,10 @@ begin
 
         renamedDataLivingFloat <= mergeFP(renamedDataLiving, renamedDataLivingFloatPre);
 
-            ch0 <= bool2std(renamedDataLivingFloat_C(0) = renamedDataLivingFloat(0));
-            ch1 <= bool2std(renamedDataLivingFloat_C(1) = renamedDataLivingFloat(1));
-            ch2 <= bool2std(renamedDataLivingFloat_C(2) = renamedDataLivingFloat(2));
-            ch3 <= bool2std(renamedDataLivingFloat_C(3) = renamedDataLivingFloat(3));
-
+--            ch0 <= bool2std(renamedDataLivingFloat_C(0) = renamedDataLivingFloat(0));
+--            ch1 <= bool2std(renamedDataLivingFloat_C(1) = renamedDataLivingFloat(1));
+--            ch2 <= bool2std(renamedDataLivingFloat_C(2) = renamedDataLivingFloat(2));
+--            ch3 <= bool2std(renamedDataLivingFloat_C(3) = renamedDataLivingFloat(3));
 
     renamedDataMerged <= --mergeDests(renamedDataLiving, renamedDataLivingFloat);
                             renamedDataLiving;
@@ -276,7 +275,8 @@ begin
     specialActionToROB <= specialAction when sendingFromDispatchBuffer = '0' else specialActionDispatchBuffer;
 
 
-    DISPATCH_BUFFER: entity work.DispatchBuffer port map(
+    DISPATCH_BUFFER: entity work.DispatchBuffer
+    port map(
         clk => clk,
         
         specialAction => specialAction,
@@ -293,7 +293,9 @@ begin
         empty => dbEmpty            
     );
 
-    DISPATCH_BUFFER_FP: entity work.DispatchBuffer port map(
+    DISPATCH_BUFFER_FP: entity work.DispatchBuffer
+    generic map(IS_FP => true)
+    port map(
         clk => clk,
         
         specialAction => specialAction,

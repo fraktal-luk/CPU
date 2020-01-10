@@ -788,10 +788,23 @@ begin
        if (insVec(i).full and hasSyncEvent(insVec(i).ins)) = '1' then
            res := insVec(i);
            res.ins.specificOperation.system := SysOp'val(slv2u(res.ins.specificOperation.bits));
-           --res.ins.operation := (System, sysUndef);                
            exit;
        end if;
    end loop;
+   
+   if CLEAR_DEBUG_INFO then
+       res.ins.classInfo := DEFAULT_CLASS_INFO;
+       
+       res.ins.ip := (others => '0');
+       res.ins.bits := (others => '0');       
+       res.ins.target := (others => '0');
+       res.ins.result := (others => '0');
+       
+       res.ins.tags := DEFAULT_INSTRUCTION_TAGS;
+       res.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
+       res.ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+       res.ins.physicalArgSpec := DEFAULT_ARG_SPEC;    
+   end if;
    
    return res;
 end function;    

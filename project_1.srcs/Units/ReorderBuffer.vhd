@@ -174,8 +174,6 @@ architecture Behavioral of ReorderBuffer is
                res(j).special.ins.target := (others => '0');
                
                res(j).special.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
-            
-               --res(j).special.ins.operation := (System, sysUndef);
                
                res(j).special.ins.virtualArgSpec := DEFAULT_ARG_SPEC; 
                res(j).special.ins.physicalArgSpec := DEFAULT_ARG_SPEC;

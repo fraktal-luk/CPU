@@ -65,7 +65,6 @@ entity UnitSequencer is
     -- Counter outputs
     commitGroupCtrOut: out InsTag;
     commitGroupCtrIncOut: out InsTag;
-    --commitCtrOut: out InsTag;
 
     intAllowOut: out std_logic;
     

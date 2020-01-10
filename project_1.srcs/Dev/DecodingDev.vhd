@@ -163,7 +163,6 @@ function decodeFromWord(w: word) return InstructionState is
     variable opcode: ProcOpcode;
     variable opcont: ProcOpcont;
     variable haveOpcont: boolean;
-    variable operation: BinomialOp := (General, unknown);
     variable specificOperation: SpecificOp := DEFAULT_SPECIFIC_OP;
 begin
     parts := parseInsWord(w);
@@ -177,7 +176,6 @@ begin
     end if;
 
     -- Find in table
-    operation := (System, sysUndef);
     specificOperation := DEFAULT_SPECIFIC_OP;
     fmt := FMT_DEFAULT;
     for i in DECODE_TABLE'range loop
