@@ -133,6 +133,8 @@ architecture Behavioral of UnitRegManager is
         
         if CLEAR_DEBUG_INFO then
             for i in 0 to PIPE_WIDTH-1 loop
+				-- KEEP renameIndex + argSpec + specificOperation
+			
                 res(i).ins.ip := (others => '0');
                 res(i).ins.bits := (others => '0');
                 res(i).ins.target := (others => '0');                    

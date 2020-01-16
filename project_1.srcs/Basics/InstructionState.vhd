@@ -63,6 +63,10 @@ function findLog2(n: positive) return natural;
 constant OP_TYPE_BITS: natural := findLog2(SubpipeType'pos(SubpipeType'high) - SubpipeType'pos(SubpipeType'low) + 1);
 constant OP_VALUE_BITS: natural := getSpecificOpSize;
 
+	constant SYS_OP_SIZE: natural := findLog2(SysOp'pos(SysOp'high) - SysOp'pos(SysOp'low) + 1); 
+
+
+
 type SpecificOp is record
     subpipe: SubpipeType;
     bits: std_logic_vector(OP_VALUE_BITS-1 downto 0);
