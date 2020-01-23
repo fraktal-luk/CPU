@@ -90,7 +90,7 @@ begin
 			-- Reading			
 			for i in 0 to readValuesMW'length - 1 loop
 				if readAllowVec(i) = '1' then
-					readValuesMW(i) <= content(slv2u(selectReadMW(i)));
+					readValuesMW(i) <= content(slv2u(selectReadMW(i)(PHYS_REG_BITS_EFFECTIVE-1 downto 0)));
 				end if;	
 			end loop;
 			
@@ -98,7 +98,7 @@ begin
 			if writeAllow = '1' then
 				for i in 0 to WRITE_WIDTH-1 loop
 					if writeVecMW(i) = '1' then
-						content(slv2u(selectWriteMW(i))) <= writeValuesMW(i);
+						content(slv2u(selectWriteMW(i)(PHYS_REG_BITS_EFFECTIVE-1 downto 0))) <= writeValuesMW(i);
 					end if;
 				end loop;
 			end if;

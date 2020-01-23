@@ -119,10 +119,10 @@ package body LogicExec is
         targetMatch := bool2std(queueData.target = st.argValues.arg1);
 		branchTaken := resolveBranchCondition(st.argValues, ins.specificOperation.arith);
 
-		if res.controlInfo.frontBranch = '1' and branchTaken = '0' then						
+		if queueData.controlInfo.frontBranch = '1' and branchTaken = '0' then						
 			res.controlInfo.newEvent := '1';
 			trueTarget := queueData.result;
-		elsif res.controlInfo.frontBranch = '0' and branchTaken = '1' then					
+		elsif queueData.controlInfo.frontBranch = '0' and branchTaken = '1' then					
 			res.controlInfo.newEvent := '1';
 			res.controlInfo.confirmedBranch := '1';			
 			if ins.constantArgs.immSel = '0' then -- if branch reg			
@@ -130,7 +130,7 @@ package body LogicExec is
 			else
 				trueTarget := queueData.target;
 			end if;
-		elsif res.controlInfo.frontBranch = '0' and branchTaken = '0' then
+		elsif queueData.controlInfo.frontBranch = '0' and branchTaken = '0' then
 			trueTarget := queueData.result;
 		else -- taken -> taken
 			if ins.constantArgs.immSel = '0' then -- if branch reg

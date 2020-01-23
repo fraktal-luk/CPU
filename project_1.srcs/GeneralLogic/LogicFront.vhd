@@ -296,7 +296,7 @@ begin
          
            res(i).ins.specificOperation := DEFAULT_SPECIFIC_OP;
             
-           res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;		
+           res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
 	   end if;
 	end loop;
 	

@@ -190,6 +190,11 @@ begin
 
 	if res.state.argValues.immediate = '1' and USE_IMM then
 		res.state.argValues.arg1 := res.ins.constantArgs.imm;
+		
+		if IMM_AS_REG then
+		    res.state.argValues.arg1(PhysName'length-1 downto 0) := res.ins.physicalArgSpec.args(1);
+		end if;
+		
 		res.state.argValues.arg1(31 downto 17) := (others => res.ins.constantArgs.imm(16)); -- 16b + addditional sign bit
 		res.state.argValues.stored(1) := '1';
 	else
@@ -356,6 +361,15 @@ begin
            -- TODO: ptrs may be better kept in BQ!
                res(i).ins.tags.intPointer := (others => '0');
                res(i).ins.tags.floatPointer := (others => '0');
+               
+           res(i).ins.classInfo.branchIns := '0';
+           res(i).ins.controlInfo.frontBranch := '0';
+           res(i).ins.controlInfo.confirmedBranch := '0';
+           res(i).ins.controlInfo.specialAction := '0';
+                    
+           if IMM_AS_REG then        
+               res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
+           end if;
        end if;
        
        res(i).ins.result := (others => '0');

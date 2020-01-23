@@ -91,6 +91,8 @@ architecture Behavioral of BranchQueue is
 	    variable imBr: std_logic_vector(0 to QUEUE_SIZE-1) := inputMaskBr;	    
     begin
 
+        -- TODO, CHECK: clear newEvent if unneeded? Other controlInfo excpet frontBranch, confirmedBranch, firstBr?
+
         for i in 0 to QUEUE_SIZE-1 loop
            diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;
            
@@ -109,6 +111,7 @@ architecture Behavioral of BranchQueue is
                slot := getNewElem(remv, dataIn); 
                        --dataIn(slv2u(diff(1 downto 0)));         
                res(i).tags := slot.ins.tags;
+               
                --res(i).operation := slot.ins.operation;
                res(i).controlInfo.firstBr := '0'; -- This is '1' only for the first branch in group!               
            end if;

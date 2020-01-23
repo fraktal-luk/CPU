@@ -94,7 +94,7 @@ function getLowBits(vec: std_logic_vector; n: integer) return std_logic_vector;
 
 function getExceptionMask(insVec: InstructionSlotArray) return std_logic_vector;
 
-function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector) return SchedulerEntrySlotArray;
+function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector; HAS_IMM: boolean) return SchedulerEntrySlotArray;
 
 function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector;
@@ -207,6 +207,8 @@ function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSl
 function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
+
+function isBranchIns(ins: InstructionState) return std_logic;
 
 function isLoadOp(ins: InstructionState) return std_logic;
 function isStoreOp(ins: InstructionState) return std_logic;
@@ -511,7 +513,7 @@ begin
 end function;
 
 
-function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector) return SchedulerEntrySlotArray is
+function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector; HAS_IMM: boolean) return SchedulerEntrySlotArray is
     variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 begin
     for i in 0 to PIPE_WIDTH-1 loop
@@ -534,6 +536,11 @@ begin
             res(i).state.argValues.missing(1) := '0';
             res(i).state.argValues.immediate := '1';
             res(i).state.argValues.zero(1) := '0';
+            
+            if CLEAR_DEBUG_INFO and IMM_AS_REG and HAS_IMM then
+                res(i).ins.physicalArgSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);
+                res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
+            end if;
         end if;
 
         if CLEAR_DEBUG_INFO then
@@ -838,6 +845,11 @@ begin
     return res;
 end function;
 
+
+function isBranchIns(ins: InstructionState) return std_logic is
+begin
+    return bool2std(ins.specificOperation.arith = opJz or ins.specificOperation.arith = opJnz or ins.specificOperation.arith = opJ or ins.specificOperation.arith = opJl);
+end function;
 
 function isLoadOp(ins: InstructionState) return std_logic is
 begin

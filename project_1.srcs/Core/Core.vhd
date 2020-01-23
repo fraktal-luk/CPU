@@ -443,7 +443,7 @@ begin
            signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
            signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
         begin
-            schedDataI0 <= getSchedData(extractData(TMP_recodeALU(renamedDataLiving)), getAluMask(renamedDataLiving));
+            schedDataI0 <= getSchedData(extractData(TMP_recodeALU(renamedDataLiving)), getAluMask(renamedDataLiving), true);
             dataToQueueI0 <= work.LogicIssue.updateSchedulerArray(schedDataI0, fni, ENQUEUE_FN_MAP, true);
             
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -517,7 +517,8 @@ begin
           
             branchData <= basicBranch(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins);                  
             
-            dataToBranch(0) <= (slotIssueI0.full and slotIssueI0.ins.classInfo.branchIns, branchData);
+            --dataToBranch(0) <= (slotIssueI0.full and slotIssueI0.ins.classInfo.branchIns, branchData);
+            dataToBranch(0) <= (slotIssueI0.full and isBranchIns(slotIssueI0.ins), branchData);
             sendingBranchIns <= dataToBranch(0).full;
             
             bqCompare <= (sendingBranchIns, slotIssueI0.ins);
@@ -553,7 +554,7 @@ begin
         begin        
            memMaskInt <= getMemMask(renamedDataLiving);
      
-           schedDataM0 <= getSchedData(removeArg2(extractData(renamedDataLivingMem)), memMaskInt);
+           schedDataM0 <= getSchedData(removeArg2(extractData(renamedDataLivingMem)), memMaskInt, true);
            dataToQueueM0 <= work.LogicIssue.updateSchedulerArray(schedDataM0, fni, ENQUEUE_FN_MAP, true);
                     
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -758,11 +759,11 @@ begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
             
             intStoreMask <= getStoreMask(renamedDataLivingMem) and not floatStoreMask;                                        
-            schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLivingMem)), intStoreMask);
+            schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLivingMem)), intStoreMask, false);
             dataToStoreValueIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValue, fni, ENQUEUE_FN_MAP_SV, true);
             
             floatStoreMask <= getFloatStoreMask(renamedDataLivingMem, renamedDataLivingFloat);
-            schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLivingMem), extractData(renamedDataLivingFloat)), floatStoreMask);       
+            schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLivingMem), extractData(renamedDataLivingFloat)), floatStoreMask, false);       
             dataToStoreValueFloatIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValueFloat, fniFloat, ENQUEUE_FN_MAP_FLOAT_SV, true);
                     
             IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -915,7 +916,7 @@ begin
         SUBPIPE_FP0: block
             signal dataToFpu0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                  
         begin
-            schedDataF0 <= getSchedData(extractData(TMP_recodeFP(renamedDataLivingFloat)), getFpuMask(renamedDataLivingFloat));
+            schedDataF0 <= getSchedData(extractData(TMP_recodeFP(renamedDataLivingFloat)), getFpuMask(renamedDataLivingFloat), false);
             dataToQueueF0 <= work.LogicIssue.updateSchedulerArray(schedDataF0, fniFloat, ENQUEUE_FN_MAP_FLOAT, true);
             
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ

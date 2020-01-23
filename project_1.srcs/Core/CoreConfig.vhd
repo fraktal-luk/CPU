@@ -23,12 +23,19 @@ constant ROB_SIZE: positive := 8;
 constant USE_LINE_PREDICTOR: boolean := true;
 
 constant PHYS_REG_BITS: natural := 6 + LOG2_PIPE_WIDTH;
+
+-- CAREFUL, TODO: compute it by log2 from number of phys regs
+constant PHYS_REG_BITS_EFFECTIVE: natural := PHYS_REG_BITS - 1;
+
 constant N_PHYSICAL_REGS: natural := --64 * PIPE_WIDTH;
                                         128;
 constant N_PHYS: natural := N_PHYSICAL_REGS;
 	
 constant FREE_LIST_SIZE: positive := --N_PHYSICAL_REGS;
                                         256;
+
+-- Optimize immediate field by keeping part of it in physical register field
+constant IMM_AS_REG: boolean := true;
 
 end CoreConfig;
 
