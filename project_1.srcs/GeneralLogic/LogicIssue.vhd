@@ -169,11 +169,7 @@ begin
             and ins.physicalArgSpec.floatDestSel = '0') -- ???
     then
         res.ins.physicalArgSpec.dest := (others => '0'); -- Don't allow false notifications of args
-        --res.ins.physicalArgSpec.destAlt := (others => '0'); -- ??
     end if;
-
-	--res.state.argValues.readyNow := ready;
-	--res.state.argValues.locs := locs;
 
 		if res.state.argValues.zero(0) = '1' then
 			res.state.argValues.arg0 := (others => '0');
@@ -238,17 +234,17 @@ begin
 	-- Clear 'missing' flag where readyNext indicates.
 	--res.state.argValues.missing := res.state.argValues.missing and not (res.state.argValues.readyNext and not res.state.argValues.zero);
 
-		if res.state.argValues.argLocsPhase(0)(1 downto 0) = "00" and res.state.argValues.stored(0) = '0' then
-			res.state.argValues.arg0 := vals(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
-		elsif res.state.argValues.argLocsPhase(0)(1 downto 0) = "10" and res.state.argValues.stored(0) = '0' then
-			res.state.argValues.arg0 := regValues(0);
-		end if;
+    if res.state.argValues.argLocsPhase(0)(1 downto 0) = "00" and res.state.argValues.stored(0) = '0' then
+        res.state.argValues.arg0 := vals(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
+    elsif res.state.argValues.argLocsPhase(0)(1 downto 0) = "10" and res.state.argValues.stored(0) = '0' then
+        res.state.argValues.arg0 := regValues(0);
+    end if;
 
-		if res.state.argValues.argLocsPhase(1)(1 downto 0) = "00" and res.state.argValues.stored(1) = '0' then
-			res.state.argValues.arg1 := vals(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
-		elsif res.state.argValues.argLocsPhase(1)(1 downto 0) = "10" and res.state.argValues.stored(1) = '0' then -- and res.state.argValues.immediate = '0' then
-			res.state.argValues.arg1 := regValues(1);
-		end if;
+    if res.state.argValues.argLocsPhase(1)(1 downto 0) = "00" and res.state.argValues.stored(1) = '0' then
+        res.state.argValues.arg1 := vals(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
+    elsif res.state.argValues.argLocsPhase(1)(1 downto 0) = "10" and res.state.argValues.stored(1) = '0' then -- and res.state.argValues.immediate = '0' then
+        res.state.argValues.arg1 := regValues(1);
+    end if;
 	
 	return res;
 end function;
@@ -294,14 +290,14 @@ begin
 	
 	-- What is being issued now is marked
     for i in 0 to QUEUE_SIZE-1 loop
-            if selMask(i) = '1' and sends = '1' then
-                xVecS(i).state.argValues.issued := '1';
-            end if;
-            
-            -- Retraction into IQ when sending turns out disallowed
-            if issuedMask(i) = '1' and sentUnexpected = '1' then
-            --    xVecS(i).state.argValues.issued := '0';
-            end if;  
+        if selMask(i) = '1' and sends = '1' then
+            xVecS(i).state.argValues.issued := '1';
+        end if;
+        
+        -- Retraction into IQ when sending turns out disallowed
+        if issuedMask(i) = '1' and sentUnexpected = '1' then
+        --    xVecS(i).state.argValues.issued := '0';
+        end if;  
     end loop;	
 	
 	xVecS(QUEUE_SIZE) := xVecS(QUEUE_SIZE-1);
@@ -351,7 +347,7 @@ begin
 	   res(i).state.argValues.arg2 := (others => '0');
 	       
 	
-       if CLEAR_DEBUG_INFO then
+       if CLEAR_DEBUG_INFO then       
            res(i).ins.ip := (others => '0');
            res(i).ins.bits := (others => '0');
            res(i).ins.tags.fetchCtr := (others => '0');

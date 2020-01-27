@@ -123,6 +123,22 @@ architecture Behavioral of Core is
             --end if;
         end loop;
         return res;
+    end function;
+    
+    function setDestSel(ins: InstructionSlot; isFp: boolean) return InstructionSlot is
+        variable res: InstructionSlot := ins;
+    begin
+        if ins.full = '0' then
+            return res;
+        end if;
+    
+        if isFp then
+            res.ins.physicalArgSpec.floatDestSel := '1';
+        else
+            res.ins.physicalArgSpec.intDestSel := isNonzero(res.ins.physicalArgSpec.dest);
+        end if;
+        
+        return res;    
     end function;     
 begin
 
@@ -841,7 +857,7 @@ begin
             
             IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => 8 --IQ_SIZES(4)
+                IQ_SIZE => 8 -- CAREFUL: not IS_FP because doesn't have destination
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -921,7 +937,8 @@ begin
             
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => 8 --IQ_SIZES(4)
+                IQ_SIZE => 8,
+                IS_FP => true
             )
             port map(
                 clk => clk, reset => '0', en => '0',

@@ -19,7 +19,8 @@ use work.LogicIssue.all;
 
 entity IssueQueue is
 	generic(
-		IQ_SIZE: natural := 8
+		IQ_SIZE: natural := 8;
+		IS_FP: boolean := false
 	);
 	port(
 		clk: in std_logic;
@@ -98,9 +99,18 @@ architecture Behavioral of IssueQueue is
 		end if;
 	end function;
 	
-	function TMP_clearDestIfEmpty(elem: SchedulerEntrySlot; sends: std_logic) return SchedulerEntrySlot is
+	function TMP_clearDestIfEmpty(elem: SchedulerEntrySlot; sends: std_logic; IS_FP: boolean) return SchedulerEntrySlot is
 		variable res: SchedulerEntrySlot := elem;
 	begin
+	
+           if sends = '1' then
+               --res.ins.physicalArgSpec.intDestSel := bool2std(not IS_FP) and isNonzero(res.ins.physicalArgSpec.dest);
+               --res.ins.physicalArgSpec.floatDestSel := bool2std(IS_FP);	       
+           else
+               res.ins.physicalArgSpec.intDestSel := '0';
+               res.ins.physicalArgSpec.floatDestSel := '0';
+           end if;
+	
 		if sends = '0' then
 			res.ins.physicalArgSpec.dest := (others => '0');
 		end if;
@@ -116,7 +126,7 @@ architecture Behavioral of IssueQueue is
     
         res.ins.controlInfo.newEvent := '0';
         res.ins.controlInfo.hasInterrupt := '0';
-        --res.ins.controlInfo.exceptionCode := (others => '0');		
+        --res.ins.controlInfo.exceptionCode := (others => '0');	
 		return res;
 	end function;
 	
@@ -221,7 +231,7 @@ begin
 	sends <= anyReadyLive and nextAccepting; -- CHECK: can we use full instead of living?
 	sendPossible <= anyReadyFull and nextAccepting; -- Includes ops that would send but are killed
 	
-	dispatchDataNew <= TMP_clearDestIfEmpty(prioSelect(queueContentUpdatedSel, readyMask), sends);
+	dispatchDataNew <= TMP_clearDestIfEmpty(prioSelect(queueContentUpdatedSel, readyMask), sends, IS_FP);
 	stayMask <= TMP_setUntil(readyMask, nextAccepting);
 
     newContent <= newArr;
