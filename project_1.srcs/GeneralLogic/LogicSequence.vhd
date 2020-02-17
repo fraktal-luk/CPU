@@ -1,11 +1,3 @@
---
---	Package File Template
---
---	Purpose: This package defines supplemental types, subtypes, 
---		 constants, and functions 
---
---   To use any of the example code shown below, uncomment the lines and modify as necessary
---
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.all;
@@ -35,7 +27,6 @@ function newPCData( commitEvent: std_logic; commitCausing: InstructionState;
 						  pcNext: Mword)
 return InstructionState;
 
--- BACK ROUTING
 -- Unifies content of ROB slot with BQ, others queues etc. to restore full state needed at Commit
 function recreateGroup(insVec: InstructionSlotArray; bqGroup: InstructionSlotArray; prevTarget: Mword; commitCtr32: Word)
 return InstructionSlotArray;
@@ -53,8 +44,6 @@ function getEffectiveMask(newContent: InstructionSlotArray) return std_logic_vec
 
 function anyEvent(insVec: InstructionSlotArray) return std_logic;
 
-function hasSyncEvent(ins: InstructionState) return std_logic; 
-
 end LogicSequence;
 
 
@@ -68,7 +57,7 @@ begin
 	if jump = '1' then
 		res := jumpPC;
 	else
-		res := addMwordBasic(pcBase, PC_INC);
+		res := add(pcBase, PC_INC);
 	end if;
 	return res;
 end function;
@@ -81,59 +70,45 @@ return InstructionState is
 	variable newPC: Mword := (others=>'0');
 	constant MINUS_4: Mword := i2slv(-4, MWORD_SIZE);
 begin
-    
     res.controlInfo.hasInterrupt := int;
-		if int = '1' then
-            if intType = "01" then
-                res.ip := X"00000280";
-            else
-                res.ip := INT_BASE; -- TEMP!
-            end if;
-			res.result := currentState or X"00000001";
-			res.result := res.result and X"fdffffff"; -- Clear dbtrap
-		elsif commitCausing.controlInfo.hasException = '1'
-			or commitCausing.controlInfo.dbtrap = '1' then
-			-- TODO, FIX: exceptionCode sliced - shift left by ALIGN_BITS? or leave just base address
-			res.ip := EXC_BASE;--(MWORD_SIZE-1 downto commitCausing.controlInfo.exceptionCode'length)
-								--	& commitCausing.controlInfo.exceptionCode(
-								--					commitCausing.controlInfo.exceptionCode'length-1 downto ALIGN_BITS)
-								--	& EXC_BASE(ALIGN_BITS-1 downto 0);	
-			-- TODO: if exception, it overrides dbtrap, but if only dbtrap, a specific vector address
-			res.result := currentState or X"00000100";
-			res.result := res.result and X"fdffffff";	-- Clear dbtrap
-		elsif commitCausing.controlInfo.specialAction = '1' then
-
-			res.result := currentState;
-            if --     special.ins.operation.func = sysSync
-               --  or special.ins.operation.func = sysSend then
-                   special.ins.specificOperation.system = opSync 
-                or special.ins.specificOperation.system = opSend then                              
-                res.ip := commitCausing.target;
-            elsif --special.ins.operation.func = sysReplay -- then
-                    special.ins.specificOperation.system = opReplay       
-                or commitCausing.controlInfo.refetch = '1' then
-                res.ip := addMwordFaster(commitCausing.target, MINUS_4); -- CAREFUL: wouldn't work if branch or short
-            elsif --special.ins.operation.func = sysHalt then
-                    special.ins.specificOperation.system = opHalt then
-                res.ip := commitCausing.target; -- ???
-            elsif --special.ins.operation.func = sysRetI then
-                    special.ins.specificOperation.system = opRetI then
-                res.result := stateInt;
-                res.ip := linkInt;
-            elsif --special.ins.operation.func = sysRetE then
-                    special.ins.specificOperation.system = opRetE then 
-                res.result := stateExc;
-                res.ip := linkExc;
-            elsif --special.ins.operation.func = sysError then
-                    special.ins.specificOperation.system = opError then
-                res.ip := EXC_BASE;
-            elsif --special.ins.operation.func = sysCall then
-                    special.ins.specificOperation.system = opCall then
-                res.ip := CALL_BASE; -- TEMP			    
-            end if;
-		end if;		
-	   
-	   res.target := res.ip;
+    if int = '1' then
+        if intType = "01" then
+            res.ip := X"00000280";
+        else
+            res.ip := INT_BASE; -- TEMP!
+        end if;
+        res.result := currentState or X"00000001";
+        res.result := res.result and X"fdffffff"; -- Clear dbtrap
+    elsif commitCausing.controlInfo.hasException = '1'
+        or commitCausing.controlInfo.dbtrap = '1' then
+        res.ip := EXC_BASE;
+        -- TODO: if exception, it overrides dbtrap, but if only dbtrap, a specific vector address
+        res.result := currentState or X"00000100";
+        res.result := res.result and X"fdffffff";	-- Clear dbtrap
+    elsif commitCausing.controlInfo.specialAction = '1' then
+        res.result := currentState;
+        if     special.ins.specificOperation.system = opSync 
+            or special.ins.specificOperation.system = opSend then                              
+            res.ip := commitCausing.target;
+        elsif special.ins.specificOperation.system = opReplay       
+            or commitCausing.controlInfo.refetch = '1' then
+            res.ip := add(commitCausing.target, MINUS_4); -- CAREFUL: wouldn't work if branch or short
+        elsif special.ins.specificOperation.system = opHalt then
+            res.ip := commitCausing.target; -- ???
+        elsif special.ins.specificOperation.system = opRetI then
+            res.result := stateInt;
+            res.ip := linkInt;
+        elsif special.ins.specificOperation.system = opRetE then 
+            res.result := stateExc;
+            res.ip := linkExc;
+        elsif special.ins.specificOperation.system = opError then
+            res.ip := EXC_BASE;
+        elsif special.ins.specificOperation.system = opCall then
+            res.ip := CALL_BASE; -- TEMP			    
+        end if;
+    end if;		
+   
+   res.target := res.ip;
 	return res;
 end function;
 
@@ -143,15 +118,14 @@ function newPCData( commitEvent: std_logic; commitCausing: InstructionState;
 						  frontEvent: std_logic; frontCausing: InstructionState;
 						  pcNext: Mword)
 return InstructionState is
-	variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;--content;
+	variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
 	variable newPC: Mword := (others=>'0');
 begin
-	if commitEvent = '1' then -- when from exec or front
+	if commitEvent = '1' then
 		res.ip := commitCausing.target;
 	elsif execEvent = '1' then		
 		res.ip := execCausing.target;
 	elsif frontEvent = '1' then
-		--	report "front event!";
 		res.ip := frontCausing.target;	
 	else	-- Go to the next line
 		res.ip := pcNext;
@@ -171,49 +145,6 @@ begin
 	return res;
 end function;
 
-
-function getLastEffective(newContent: InstructionSlotArray) return InstructionState is
-    variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
-begin
-    -- Seeking from right side cause we need the last one 
-    for i in newContent'range loop
-        -- Count only full instructions
-        if newContent(i).full = '1' then
-            res := newContent(i).ins;
-        else
-            exit;
-        end if;
-        
-        -- If this one has an event, following ones don't count
-        if hasSyncEvent(newContent(i).ins) = '1' then
-            res.controlInfo.newEvent := '1'; -- Announce that event is to happen now!
-            exit;
-        end if;			
-    end loop;
-    
-    return res;
-end function;
-
-
-function getEffectiveMask(newContent: InstructionSlotArray) return std_logic_vector is
-    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-begin
-    -- Seeking from right side cause we need the last one 
-    for i in newContent'range loop
-        if newContent(i).full = '1' then -- Count only full instructions
-            res(i) := '1';
-        else
-            exit;
-        end if;
-        
-        -- If this one has an event, following ones don't count
-        if hasSyncEvent(newContent(i).ins) = '1' then
-            exit;
-        end if;
-        
-    end loop;
-    return res;
-end function;
 
 -- Unifies content of ROB slot with BQ, others queues etc. to restore full state needed at Commit
 function recreateGroup(insVec: InstructionSlotArray; bqGroup: InstructionSlotArray; prevTarget: Mword; commitCtr32: Word)
@@ -242,7 +173,7 @@ begin
 
 	for i in 0 to PIPE_WIDTH-1 loop
 		if confBr(i) = '0' then
-			targets(i) := addMwordBasic(prevTrg, getAddressIncrement(insVec(i).ins));
+			targets(i) := add(prevTrg, getAddressIncrement(insVec(i).ins));
 		end if;
 		res(i).ins.ip := prevTrg;
 		prevTrg := targets(i);
@@ -254,21 +185,72 @@ begin
 end function;
 
 
+function getLastEffective(newContent: InstructionSlotArray; effectiveMask: std_logic_vector) return InstructionState is
+    variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
+begin
+    res := newContent(0).ins;
+    for i in PIPE_WIDTH-1 downto 0 loop
+        if effectiveMask(i) = '1' then
+            res := newContent(i).ins;
+            res.controlInfo.newEvent := hasSyncEvent(newContent(i).ins); -- Announce that event is to happen now!            
+            exit;
+        end if;
+    end loop;
+    
+--    -- Seeking from right side cause we need the last one 
+--    for i in newContent'range loop
+--        -- Count only full instructions
+--        if newContent(i).full = '1' then
+--            res := newContent(i).ins;
+--        else
+--            exit;
+--        end if;
+        
+--        -- If this one has an event, following ones don't count
+--        if hasSyncEvent(newContent(i).ins) = '1' then
+--            res.controlInfo.newEvent := '1'; -- Announce that event is to happen now!
+--            exit;
+--        end if;			
+--    end loop;
+    
+    return res;
+end function;
+
+
+function getEffectiveMask(newContent: InstructionSlotArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+    -- Seeking from right side cause we need the last one 
+    for i in newContent'range loop
+        if newContent(i).full /= '1' then -- Count only full instructions
+            exit;
+        end if;
+        res(i) := '1';
+        
+        -- If this one has an event, following ones don't count
+        if hasSyncEvent(newContent(i).ins) = '1' then
+            exit;
+        end if;
+        
+    end loop;
+    return res;
+end function;
+
 function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray;
 						 lastEffectiveIns, lateTargetIns: InstructionState; evtPhase2: std_logic)
 return InstructionSlot is
 	variable res: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-	variable sdToCommit: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-	variable insToLastEffective: InstructionState;
-	
-	variable effectiveVec, takenBranchVec, bqTakenBranchVec, differenceVec:
-					std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+	--variable sdToCommit: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+	variable insToLastEffective: InstructionState;	
+	variable effectiveVec, takenBranchVec, bqTakenBranchVec, differenceVec: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 	variable branchTarget: Mword := lastEffectiveIns.target;
 	variable ind: std_logic_vector(LOG2_PIPE_WIDTH-1 downto 0) := (others => '0');
 	variable targetInc: Mword := (others => '0');
 begin
-	sdToCommit := robDataLiving;
-	insToLastEffective := getLastEffective(sdToCommit);
+	--sdToCommit := robDataLiving;
+    effectiveVec := getEffectiveMask(robDataLiving);	
+	
+	insToLastEffective := getLastEffective(robDataLiving, effectiveVec);
 	
 	if evtPhase2 = '1' then
 	   res := ('1', lateTargetIns);
@@ -278,17 +260,9 @@ begin
     res := (sendingToCommit, insToLastEffective);
 
     -- Find taken jumps in ROB entry and last effective index
-    for i in robDataLiving'range loop		
-        if robDataLiving(i).full = '1' then
-            effectiveVec(i) := '1';
-            takenBranchVec(i) := robDataLiving(i).ins.controlInfo.confirmedBranch; -- Taken branches don't need to finish the group, unlike special events!
-            -- If this one has an event, following ones don't count
-            if hasSyncEvent(robDataLiving(i).ins) = '1' then
-                exit;
-            end if;				
-        else
-            exit;
-        end if;		
+    
+    for i in robDataLiving'range loop
+        takenBranchVec(i) := effectiveVec(i) and robDataLiving(i).ins.controlInfo.confirmedBranch;			
     end loop;		
     
     -- Find taken jumps in BQ group and select last as target
@@ -316,7 +290,7 @@ begin
     end loop;
     -- CAREFUL: works only for 32b instructions
     targetInc(LOG2_PIPE_WIDTH + 2 downto 2) := i2slv(countOnes(differenceVec), LOG2_PIPE_WIDTH+1);
-    res.ins.target := addMwordFaster(branchTarget, targetInc);
+    res.ins.target := add(branchTarget, targetInc);
 
 	return res;
 end function;
@@ -332,11 +306,5 @@ begin
     end loop;
     return '0'; 
 end function;
-
-function hasSyncEvent(ins: InstructionState) return std_logic is
-begin
-    return  ins.controlInfo.hasException or ins.controlInfo.specialAction or ins.controlInfo.dbtrap; 
-end function;
-
 
 end LogicSequence;

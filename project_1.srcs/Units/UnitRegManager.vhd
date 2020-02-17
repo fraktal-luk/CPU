@@ -1,21 +1,5 @@
 ----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date: 01.12.2018 23:35:07
--- Design Name: 
--- Module Name: UnitRegManager - Behavioral
--- Project Name: 
--- Target Devices: 
--- Tool Versions: 
--- Description: 
--- 
--- Dependencies: 
--- 
--- Revision:
--- Revision 0.01 - File Created
--- Additional Comments:
--- 
+
 ----------------------------------------------------------------------------------
 
 
@@ -105,8 +89,7 @@ architecture Behavioral of UnitRegManager is
         variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
         variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
        	variable found: boolean := false;
-    begin
-        
+    begin      
         -- Assign dest registers
         for i in 0 to PIPE_WIDTH-1 loop
             if res(i).ins.virtualArgSpec.floatDestSel = '1' then
@@ -126,10 +109,10 @@ architecture Behavioral of UnitRegManager is
         -- Setting tags
         for i in 0 to PIPE_WIDTH-1 loop
             res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
-            res(i).ins.tags.renameCtr := i2slv(slv2u(renameCtr) + i, 32);
-            res(i).ins.tags.intPointer := i2slv(slv2u(newIntDestPointer) + countOnes(takeVecInt(0 to i)), SMALL_NUMBER_SIZE); 
+            res(i).ins.tags.renameCtr := addInt(renameCtr, i);
+            res(i).ins.tags.intPointer := addInt(newIntDestPointer, countOnes(takeVecInt(0 to i)));
                                                                          -- Don't increment pointer on ops which use no destination!
-            res(i).ins.tags.floatPointer := i2slv(slv2u(newFloatDestPointer) + countOnes(takeVecFloat(0 to i)), SMALL_NUMBER_SIZE); 
+            res(i).ins.tags.floatPointer := addInt(newFloatDestPointer, countOnes(takeVecFloat(0 to i)));
         end loop;
 
         -- Setting 'complete' for ops not using Exec resources
@@ -143,24 +126,25 @@ architecture Behavioral of UnitRegManager is
             if found then
                 res(i).full := '0';
             end if;
-    
-            if     res(i).ins.controlInfo.specialAction = '1'
-                or res(i).ins.controlInfo.hasException = '1'
-                or res(i).ins.controlInfo.dbtrap = '1'
-            then
+            if hasSyncEvent(res(i).ins) = '1' then
                 found := true;
             end if;
         end loop;
-
         
         if CLEAR_DEBUG_INFO then
             for i in 0 to PIPE_WIDTH-1 loop
+				-- KEEP renameIndex + argSpec + specificOperation
+			
                 res(i).ins.ip := (others => '0');
                 res(i).ins.bits := (others => '0');
                 res(i).ins.target := (others => '0');                    
                 res(i).ins.result := (others => '0');                    
                 
-                    res(i).ins.operation := (General, unknown);
+                
+                    res(i).ins.specificOperation.arith := opAnd;
+                    res(i).ins.specificOperation.memory := opLoad;
+                    res(i).ins.specificOperation.float := opMove;
+                    res(i).ins.specificOperation.system := opNone;
                 
                 res(i).ins.tags.fetchCtr := (others => '0');
                 res(i).ins.tags.decodeCtr := (others => '0');
@@ -204,27 +188,15 @@ architecture Behavioral of UnitRegManager is
         
         return res;
     end function;
-
-
-       
+    
     function renameGroupInt(insVec: InstructionSlotArray;
                                 newPhysSources: PhysNameArray;
                                 newIntDests: PhysNameArray;
-                                newFloatDests: PhysNameArray;
-                                depVec: DependencyVec;                                
-                                renameGroupCtrNext: InsTag;
-                                newIntDestPointer: SmallNumber;
-                                newFloatDestPointer: SmallNumber
+                                depVec: DependencyVec
                                 ) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-        variable reserveSelSig, takeVecInt, takeVecFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
-        variable nToTake: integer := 0;
-        variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
-        variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
-       	variable found: boolean := false;
-    begin
-        
-        -- Assign dest registers
+    begin      
+        -- Assign src registers
         for i in 0 to PIPE_WIDTH-1 loop                    
             res(i).ins.physicalArgSpec.args(0) := newPhysSources(3*i+0);
             res(i).ins.physicalArgSpec.args(1) := newPhysSources(3*i+1);
@@ -257,18 +229,11 @@ architecture Behavioral of UnitRegManager is
     function renameGroupFloat(insVec: InstructionSlotArray;
                                 newFloatSources: PhysNameArray;
                                 newFloatDests: PhysNameArray;
-                                depVec: DependencyVec;
-                                renameGroupCtrNext: InsTag
+                                depVec: DependencyVec
                                 ) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-        variable reserveSelSig, takeVecInt, takeVecFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
-        variable nToTake: integer := 0;
-        variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
-        variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
-           variable found: boolean := false;
     begin
-        
-        -- Assign dest registers
+        -- Assign src registers
         for i in 0 to PIPE_WIDTH-1 loop
             res(i).ins.physicalArgSpec.args(0) := newFloatSources(3*i+0);
             res(i).ins.physicalArgSpec.args(1) := newFloatSources(3*i+1);
@@ -300,279 +265,275 @@ architecture Behavioral of UnitRegManager is
             if res(i).ins.classInfo.fpRename = '0' then
                 res(i).full := '0';
             end if;
+            
+            if CLEAR_DEBUG_INFO then
+                res(i).ins.specificOperation := DEFAULT_SPECIFIC_OP;
+                
+                res(i).ins.tags.renameIndex := (others => '0');
+                res(i).ins.controlInfo := DEFAULT_CONTROL_INFO;
+                res(i).ins.classInfo := DEFAULT_CLASS_INFO;
+                
+                res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+                res(i).ins.constantArgs := DEFAULT_CONSTANT_ARGS;               
+            end if;
+            
         end loop;
             
         return res;
-    end function;    
+    end function;
+    
 begin
     eventSig <= execEventSignal or lateEventSignal;
 
     depVec <= findDeps(frontDataLastLiving);
 
     renamedBase <= renameGroupBase(frontDataLastLiving,
-                                                            newIntDests, 
-                                                            newFloatDests,
-                                                            renameGroupCtrNext,
-                                                            newIntDestPointer,
-                                                            newFloatDestPointer,
-                                                            renameCtr,
-                                                            '0' --dbtrapOn
-                                                            );
+                                    newIntDests, 
+                                    newFloatDests,
+                                    renameGroupCtrNext,
+                                    newIntDestPointer,
+                                    newFloatDestPointer,
+                                    renameCtr,
+                                    '0' --dbtrapOn
+                                    );
 
-    stageDataRenameIn <= renameGroupInt(renamedBase,
-                                                            newIntSources, 
-                                                            newIntDests, 
-                                                            newFloatDests,
-                                                            depVec,
-                                                            renameGroupCtrNext,
-                                                            newIntDestPointer,
-                                                            newFloatDestPointer
-                                                            );
-
-    stageDataRenameInFloat <= renameGroupFloat(renamedBase,
-                                                            newFloatSources,
-                                                            newFloatDests,
-                                                            depVec,
-                                                            renameGroupCtrNext
-                                                            );
+    stageDataRenameIn <=        renameGroupInt(     renamedBase, newIntSources,   newIntDests,   depVec);  -- TODO: dests already assigned in renameGroupBase - remove here? 
+    stageDataRenameInFloat <=   renameGroupFloat(   renamedBase, newFloatSources, newFloatDests, depVec); -- like above
+    -- TODO: ^ or assign dests above, not in renameGroupBase, to keep Int and FP path separate, and merge them ony when going to ROB - it could be good for layout
                                                                                                                             
-        SUBUNIT_RENAME_INT: entity work.GenericStage(Behavioral)--Renaming)
-        generic map(
-            USE_CLEAR => '0',
-            WIDTH => PIPE_WIDTH
-        )
-        port map(
-            clk => clk, reset => '0', en => '0',
-            
-            -- Interface with front
-            prevSending => frontLastSending,    
-            stageDataIn => stageDataRenameIn,
-            
-            acceptingOut => open,
-            
-            -- Interface with IQ
-            nextAccepting => '1',
-            sendingOut => renamedSending,
-            stageDataOut => renamedDataLivingPre,
-            
-            -- Event interface
-            execEventSignal => '0',
-            lateEventSignal => eventSig, -- bcause Exec is always older than Rename     
-            execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
-        );
-
-
-        SUBUNIT_RENAME_FLOAT: entity work.GenericStage(Behavioral)--Renaming)
-        generic map(
-            USE_CLEAR => '0',
-            WIDTH => PIPE_WIDTH
-        )
-        port map(
-            clk => clk, reset => '0', en => '0',
-            
-            -- Interface with front
-            prevSending => frontLastSending,    
-            stageDataIn => stageDataRenameInFloat,
-            
-            acceptingOut => open,
-            
-            -- Interface with IQ
-            nextAccepting => '1',
-            sendingOut => open,--renamedSending,
-            stageDataOut => renamedDataLivingFloatPre,
-            
-            -- Event interface
-            execEventSignal => '0',
-            lateEventSignal => eventSig, -- bcause Exec is always older than Rename     
-            execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
-        );
+    SUBUNIT_RENAME_INT: entity work.GenericStage(Behavioral)--Renaming)
+    generic map(
+        USE_CLEAR => '0',
+        WIDTH => PIPE_WIDTH
+    )
+    port map(
+        clk => clk, reset => '0', en => '0',
         
-        renamedDataLiving <= restoreRenameIndex(renamedDataLivingPre);
-        renamedDataLivingFloat <= restoreRenameIndex(renamedDataLivingFloatPre);
+        -- Interface with front
+        prevSending => frontLastSending,    
+        stageDataIn => stageDataRenameIn,
         
-            renameGroupCtrNext <= 
-                                    commitGroupCtr when lateEventSignal = '1'
-                               else clearTagLow(execCausing.tags.renameIndex) when execEventSignal = '1'
-                               else i2slv(slv2u(renameGroupCtr) + PIPE_WIDTH, TAG_SIZE) when frontLastSending = '1'
-                               else renameGroupCtr;
+        acceptingOut => open,
         
-            renameCtrNext <= i2slv(slv2u(renameCtr) + countOnes(extractFullMask(stageDataRenameIn)), 32) when frontLastSending = '1'
-                            else renameCtr;
-                
+        -- Interface with IQ
+        nextAccepting => '1',
+        sendingOut => renamedSending,
+        stageDataOut => renamedDataLivingPre,
         
-            -- Re-allow renaming when everything from rename/exec is committed - reg map will be well defined now
-            renameLockRelease <= '1' when commitGroupCtr = renameGroupCtr else '0';
-                -- CAREFUL, CHECK: when the counters are equal, renaming can be resumed, but renameLockRelease
-                --                      takes effect in next cycle, so before tha cycle renaming is still stopped.
-                --                         Should compare to commitCtrNext instead?
-                --                         But remember that rewinding GPR map needs a cycle, and before it happens,
-                --                         renaming can't be done! So this delay may be caused by this problem.
+        -- Event interface
+        execEventSignal => '0',
+        lateEventSignal => eventSig, -- because Exec is always older than Rename     
+        execCausing => DEFAULT_INSTRUCTION_STATE
+    );
+    
+    
+    SUBUNIT_RENAME_FLOAT: entity work.GenericStage(Behavioral)--Renaming)
+    generic map(
+        USE_CLEAR => '0',
+        WIDTH => PIPE_WIDTH
+    )
+    port map(
+        clk => clk, reset => '0', en => '0',
         
-            renameLockEnd <= renameLockState and renameLockRelease;
-                
-            COMMON_SYNCHRONOUS: process(clk)     
-            begin
-                if rising_edge(clk) then
-                
-                    if frontLastSending = '1' then
-                        specialActionSlot <= getSpecialActionSlot(renamedBase);
-                    end if;
-                
-                
-                    renameGroupCtr <= renameGroupCtrNext;
-                    renameCtr <= renameCtrNext;
+        -- Interface with front
+        prevSending => frontLastSending,    
+        stageDataIn => stageDataRenameInFloat,
         
-                    -- Lock when exec part causes event
-                    if execEventSignal = '1' or lateEventSignal = '1' then -- CAREFUL
-                        renameLockState <= '1';    
-                    elsif renameLockRelease = '1' then
-                        renameLockState <= '0';
-                    end if;                    
-                end if;    
-            end process;
-
-        SUBUNIT_COMMIT_INT: entity work.GenericStage(Behavioral)
-        generic map(
-            WIDTH => PIPE_WIDTH
-        )
-        port map(
-            clk => clk, reset => '0', en => '0',
-            
-            -- Interface with CQ
-            prevSending => sendingFromROB,
-            stageDataIn => robDataLiving,
-            acceptingOut => open, -- unused but don't remove
-            
-            -- Interface with hypothetical further stage
-            nextAccepting => '1',
-            sendingOut => sendingCommitInt,
-            stageDataOut => stageDataCommitInt,
-            
-            -- Event interface
-            execEventSignal => '0', -- CAREFUL: committed cannot be killed!
-            lateEventSignal => '0',    
-            execCausing => execCausing
-        );
-         
-        SUBUNIT_COMMIT_FLOAT: entity work.GenericStage(Behavioral)
-        generic map(
-            WIDTH => PIPE_WIDTH
-        )
-        port map(
-            clk => clk, reset => '0', en => '0',
-            
-            -- Interface with CQ
-            prevSending => sendingFromROB,
-            stageDataIn => robDataLiving,
-            acceptingOut => open, -- unused but don't remove
-            
-            -- Interface with hypothetical further stage
-            nextAccepting => '1',
-            sendingOut => sendingCommitFloat,
-            stageDataOut => stageDataCommitFloat,
-            
-            -- Event interface
-            execEventSignal => '0', -- CAREFUL: committed cannot be killed!
-            lateEventSignal => '0',    
-            execCausing => execCausing
-        );
-          
-        INT_MAPPER: entity work.RegisterMapper
-        port map(
-            clk => clk, en => '0', reset => '0',
-            
-            rewind => renameLockEnd,    -- FROM SEQ
-            causingInstruction => DEFAULT_INSTRUCTION_STATE,
-            
-            sendingToReserve => frontLastSending,
-            stageDataToReserve => frontDataLastLiving,
-            newPhysDests => newIntDests,    -- MAPPING (from FREE LIST)
-
-            sendingToCommit => sendingFromROB,
-            stageDataToCommit => robDataLiving,
-            physCommitDests_TMP => (others => (others => '0')), -- CAREFUL: useless input?
-            
-            prevNewPhysDests => open,
-            newPhysSources => newIntSources,    -- TO SEQ
-            
-            prevStablePhysDests => physStableInt,  -- FOR MAPPING (to FREE LIST)
-            stablePhysSources => open            
-        );
+        acceptingOut => open,
         
-        FLOAT_MAPPER: entity work.RegisterMapper
-        generic map (IS_FP => true)
-        port map(
-            clk => clk, en => '0', reset => '0',
-            
-            rewind => renameLockEnd,    -- FROM SEQ
-            causingInstruction => DEFAULT_INSTRUCTION_STATE,
-            
-            sendingToReserve => frontLastSending,
-            stageDataToReserve => frontDataLastLiving,
-            newPhysDests => newFloatDests,    -- MAPPING (from FREE LIST)
-
-            sendingToCommit => sendingFromROB,
-            stageDataToCommit => robDataLiving,
-            physCommitDests_TMP => (others => (others => '0')), -- CAREFUL: useless input?
-            
-            prevNewPhysDests => open,
-            newPhysSources => newFloatSources,    -- TO SEQ
-            
-            prevStablePhysDests => physStableFloat,  -- FOR MAPPING (to FREE LIST)
-            stablePhysSources => open            
-        );
+        -- Interface with IQ
+        nextAccepting => '1',
+        sendingOut => open,
+        stageDataOut => renamedDataLivingFloatPre,
         
-            causingPtrInt <=    lateCausing.tags.intPointer when lateEventSignal = '1'
-                        else execCausing.tags.intPointer;
-            causingPtrFloat <=    lateCausing.tags.floatPointer when lateEventSignal = '1'
-                                    else execCausing.tags.floatPointer;
-                                    
-			INT_FREE_LIST: entity work.RegisterFreeList(Behavioral)
-			port map(
-				clk => clk,
-				reset => '0',
-				en => '0',
-				
-				rewind => eventSig,
-				causingPointer => causingPtrInt,
-				
-				sendingToReserve => frontLastSending, 
-				takeAllow => frontLastSending,	-- FROM SEQ
-				auxTakeAllow => renameLockEnd,
-				stageDataToReserve => frontDataLastLiving,
-				
-				newPhysDests => newIntDests,			-- TO SEQ
-				newPhysDestPointer => newIntDestPointer, -- TO SEQ
-
-				sendingToRelease => sendingCommitInt,  -- FROM SEQ
-				stageDataToRelease => stageDataCommitInt,  -- FROM SEQ
-				
-				physStableDelayed => physStableInt -- FOR MAPPING (from MAP)
-			);
-
-			FLOAT_FREE_LIST: entity work.RegisterFreeList(Behavioral)
-			generic map( IS_FP => true)
-			port map(
-				clk => clk,
-				reset => '0',
-				en => '0',
-				
-				rewind => eventSig,
-				causingPointer => causingPtrFloat,
-				
-				sendingToReserve => frontLastSending, 
-				takeAllow => frontLastSending,	-- FROM SEQ
-				auxTakeAllow => renameLockEnd,
-				stageDataToReserve => frontDataLastLiving,
-				
-				newPhysDests => newFloatDests,			-- TO SEQ
-				newPhysDestPointer => newFloatDestPointer, -- TO SEQ
-
-				sendingToRelease => sendingCommitFloat,  -- FROM SEQ
-				stageDataToRelease => stageDataCommitFloat,  -- FROM SEQ
-				
-				physStableDelayed => physStableFloat -- FOR MAPPING (from MAP)
-			);
+        -- Event interface
+        execEventSignal => '0',
+        lateEventSignal => eventSig, -- because Exec is always older than Rename     
+        execCausing => DEFAULT_INSTRUCTION_STATE
+    );
+    
+    renamedDataLiving <= restoreRenameIndex(renamedDataLivingPre);
+    renamedDataLivingFloat <= restoreRenameIndex(renamedDataLivingFloatPre);
+    
+    renameGroupCtrNext <=   commitGroupCtr when lateEventSignal = '1'
+                       else clearTagLow(execCausing.tags.renameIndex) when execEventSignal = '1'
+                       else addInt(renameGroupCtr, PIPE_WIDTH) when frontLastSending = '1'
+                       else renameGroupCtr;
+    
+    renameCtrNext <= addInt(renameCtr, countOnes(extractFullMask(stageDataRenameIn))) when frontLastSending = '1'
+                       else renameCtr;
+    
+    -- Re-allow renaming when everything from rename/exec is committed - reg map will be well defined now
+    renameLockRelease <= '1' when commitGroupCtr = renameGroupCtr else '0';
+        -- CAREFUL, CHECK: when the counters are equal, renaming can be resumed, but renameLockRelease
+        --                      takes effect in next cycle, so before tha cycle renaming is still stopped.
+        --                         Should compare to commitCtrNext instead?
+        --                         But remember that rewinding GPR map needs a cycle, and before it happens,
+        --                         renaming can't be done! So this delay may be caused by this problem.
+    
+    renameLockEnd <= renameLockState and renameLockRelease;
+        
+    COMMON_SYNCHRONOUS: process(clk)     
+    begin
+        if rising_edge(clk) then                
+            if frontLastSending = '1' then
+                specialActionSlot <= getSpecialActionSlot(renamedBase);
+            end if;
+    
+            renameGroupCtr <= renameGroupCtrNext;
+            renameCtr <= renameCtrNext;
+    
+            -- Lock when exec part causes event
+            if execEventSignal = '1' or lateEventSignal = '1' then -- CAREFUL
+                renameLockState <= '1';    
+            elsif renameLockRelease = '1' then
+                renameLockState <= '0';
+            end if;                    
+        end if;    
+    end process;
+    
+    SUBUNIT_COMMIT_INT: entity work.GenericStage(Behavioral)
+    generic map(
+        WIDTH => PIPE_WIDTH
+    )
+    port map(
+        clk => clk, reset => '0', en => '0',
+        
+        -- Interface with CQ
+        prevSending => sendingFromROB,
+        stageDataIn => robDataLiving,
+        acceptingOut => open, -- unused but don't remove
+        
+        -- Interface with hypothetical further stage
+        nextAccepting => '1',
+        sendingOut => sendingCommitInt,
+        stageDataOut => stageDataCommitInt,
+        
+        -- Event interface
+        execEventSignal => '0', -- CAREFUL: committed cannot be killed!
+        lateEventSignal => '0',    
+        execCausing => execCausing
+    );
+    
+    SUBUNIT_COMMIT_FLOAT: entity work.GenericStage(Behavioral)
+    generic map(
+        WIDTH => PIPE_WIDTH
+    )
+    port map(
+        clk => clk, reset => '0', en => '0',
+        
+        -- Interface with CQ
+        prevSending => sendingFromROB,
+        stageDataIn => robDataLiving,
+        acceptingOut => open, -- unused but don't remove
+        
+        -- Interface with hypothetical further stage
+        nextAccepting => '1',
+        sendingOut => sendingCommitFloat,
+        stageDataOut => stageDataCommitFloat,
+        
+        -- Event interface
+        execEventSignal => '0', -- CAREFUL: committed cannot be killed!
+        lateEventSignal => '0',    
+        execCausing => execCausing
+    );
+    
+    INT_MAPPER: entity work.RegisterMapper
+    port map(
+        clk => clk, en => '0', reset => '0',
+        
+        rewind => renameLockEnd,    -- FROM SEQ
+        causingInstruction => DEFAULT_INSTRUCTION_STATE,
+        
+        sendingToReserve => frontLastSending,
+        stageDataToReserve => frontDataLastLiving,
+        newPhysDests => newIntDests,    -- MAPPING (from FREE LIST)
+        
+        sendingToCommit => sendingFromROB,
+        stageDataToCommit => robDataLiving,
+        physCommitDests_TMP => (others => (others => '0')), -- CAREFUL: useless input?
+        
+        prevNewPhysDests => open,
+        newPhysSources => newIntSources,    -- TO SEQ
+        
+        prevStablePhysDests => physStableInt,  -- FOR MAPPING (to FREE LIST)
+        stablePhysSources => open           
+    );
+    
+    FLOAT_MAPPER: entity work.RegisterMapper
+    generic map (IS_FP => true)
+    port map(
+        clk => clk, en => '0', reset => '0',
+        
+        rewind => renameLockEnd,    -- FROM SEQ
+        causingInstruction => DEFAULT_INSTRUCTION_STATE,
+        
+        sendingToReserve => frontLastSending,
+        stageDataToReserve => frontDataLastLiving,
+        newPhysDests => newFloatDests,    -- MAPPING (from FREE LIST)
+        
+        sendingToCommit => sendingFromROB,
+        stageDataToCommit => robDataLiving,
+        physCommitDests_TMP => (others => (others => '0')), -- CAREFUL: useless input?
+        
+        prevNewPhysDests => open,
+        newPhysSources => newFloatSources,    -- TO SEQ
+        
+        prevStablePhysDests => physStableFloat,  -- FOR MAPPING (to FREE LIST)
+        stablePhysSources => open           
+    );
+    
+    causingPtrInt <=      lateCausing.tags.intPointer when lateEventSignal = '1'
+                else execCausing.tags.intPointer;
+    causingPtrFloat <=    lateCausing.tags.floatPointer when lateEventSignal = '1'
+                else execCausing.tags.floatPointer;
+                            
+    INT_FREE_LIST: entity work.RegisterFreeList(Behavioral)
+    port map(
+        clk => clk,
+        reset => '0',
+        en => '0',
+        
+        rewind => eventSig,
+        causingPointer => causingPtrInt,
+        
+        sendingToReserve => frontLastSending, 
+        takeAllow => frontLastSending,	-- FROM SEQ
+        auxTakeAllow => renameLockEnd,
+        stageDataToReserve => frontDataLastLiving,
+        
+        newPhysDests => newIntDests,			-- TO SEQ
+        newPhysDestPointer => newIntDestPointer, -- TO SEQ
+    
+        sendingToRelease => sendingCommitInt,  -- FROM SEQ
+        stageDataToRelease => stageDataCommitInt,  -- FROM SEQ
+        
+        physStableDelayed => physStableInt -- FOR MAPPING (from MAP)
+    );
+    
+    FLOAT_FREE_LIST: entity work.RegisterFreeList(Behavioral)
+    generic map( IS_FP => true)
+    port map(
+        clk => clk,
+        reset => '0',
+        en => '0',
+        
+        rewind => eventSig,
+        causingPointer => causingPtrFloat,
+        
+        sendingToReserve => frontLastSending, 
+        takeAllow => frontLastSending,	-- FROM SEQ
+        auxTakeAllow => renameLockEnd,
+        stageDataToReserve => frontDataLastLiving,
+        
+        newPhysDests => newFloatDests,			-- TO SEQ
+        newPhysDestPointer => newFloatDestPointer, -- TO SEQ
+    
+        sendingToRelease => sendingCommitFloat,  -- FROM SEQ
+        stageDataToRelease => stageDataCommitFloat,  -- FROM SEQ
+        
+        physStableDelayed => physStableFloat -- FOR MAPPING (from MAP)
+    );
 	
 	specialActionOut <= specialActionSlot;
 	

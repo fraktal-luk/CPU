@@ -1,23 +1,6 @@
 ----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date: 04.11.2018 22:32:16
--- Design Name: 
--- Module Name: Core - Behavioral
--- Project Name: 
--- Target Devices: 
--- Tool Versions: 
--- Description: 
--- 
--- Dependencies: 
--- 
--- Revision:
--- Revision 0.01 - File Created
--- Additional Comments:
--- 
-----------------------------------------------------------------------------------
 
+----------------------------------------------------------------------------------
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
@@ -77,8 +60,10 @@ architecture Behavioral of Core is
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
                 frontEventSignal, bqAccepting, bqSending, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ, dbEmpty: std_logic := '0';
     signal bpData: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    
+            signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
     signal frontDataLastLiving, 
-            renamedDataLiving, renamedDataLivingFloat, renamedDataMerged, renamedDataLivingMem,
+            renamedDataLiving, renamedDataLivingFloatPre, renamedDataLivingFloat, renamedDataLivingFloat_C, renamedDataMerged, renamedDataLivingMem,
             renamedDataLivingRe, renamedDataLivingFloatRe, renamedDataMergedRe,
             dispatchBufferDataInt, dispatchBufferDataFloat, dispatchBufferDataMerged,
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData: 
@@ -89,17 +74,13 @@ architecture Behavioral of Core is
     signal specialOutROB: InstructionSlot := DEFAULT_INS_SLOT;
 
 
-    --  TODO: Which signals will be main indicators for diagnosing flow blockage? 
-        
+    --  TODO: Which signals will be main indicators for diagnosing flow blockage?    
     --    pcSending, frontLastSending, renamedSending, robSending
     
     --    frontAccepting, renameAccepting, robAccepting, iqAccepting, iqAccepting*, acceptingSQ, acceptingLQ,
     --                                                                iqAcceptingMore*, not almostFullSQ, not almostFullLQ, bqAccepting,  
     --    
 
-
-
-                                                            -- sendingBranchIns - EXEC
     signal execEventSignal, lateEventSignal, lateEventSetPC, sendingBranchIns: std_logic := '0';
     signal robSending, robAccepting, renamedSending, renamedSendingRe, commitAccepting, oooAccepting, sendingToDispatchBuffer, sendingFromDispatchBuffer,
                 iqAccepting, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0, dispatchAccepting,
@@ -117,18 +98,48 @@ architecture Behavioral of Core is
     
     signal specialAction, specialActionDispatchBuffer, specialActionToROB: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
-    function mergeDests(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray is
+--    function mergeDests(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray is
+--        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := dataInt;
+--    begin
+--        for i in res'range loop
+--            if dataFloat(i).ins.physicalArgSpec.floatDestSel = '1' then
+--                res(i).ins.physicalArgSpec.dest := dataFloat(i).ins.physicalArgSpec.dest;
+--                res(i).ins.physicalArgSpec.floatDestSel := dataFloat(i).ins.physicalArgSpec.floatDestSel;
+--            end if;
+--        end loop;
+--        return res;
+--    end function;
+    
+    function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := dataInt;
     begin
         for i in res'range loop
-            if dataFloat(i).ins.physicalArgSpec.floatDestSel = '1' then
-                --res(i).ins.physicalArgSpec.dest := dataFloat(i).ins.physicalArgSpec.dest;            
-                res(i).ins.physicalArgSpec.dest := dataFloat(i).ins.physicalArgSpec.dest;
-                res(i).ins.physicalArgSpec.floatDestSel := dataFloat(i).ins.physicalArgSpec.floatDestSel;
-            end if;
+            --if dataFloat(i).ins.physicalArgSpec.floatDestSel = '1' then
+            --    res(i).ins.physicalArgSpec.dest := dataFloat(i).ins.physicalArgSpec.dest;
+            --    res(i).ins.physicalArgSpec.floatDestSel := dataFloat(i).ins.physicalArgSpec.floatDestSel;
+            res(i).full := dataFloat(i).full;
+            
+            res(i).ins.physicalArgSpec.args := dataFloat(i).ins.physicalArgSpec.args;
+            --end if;
         end loop;
         return res;
-    end function; 
+    end function;
+    
+    function setDestSel(ins: InstructionSlot; isFp: boolean) return InstructionSlot is
+        variable res: InstructionSlot := ins;
+    begin
+        if ins.full = '0' then
+            return res;
+        end if;
+    
+        if isFp then
+            res.ins.physicalArgSpec.floatDestSel := '1';
+        else
+            res.ins.physicalArgSpec.intDestSel := isNonzero(res.ins.physicalArgSpec.dest);
+        end if;
+        
+        return res;    
+    end function;     
 begin
 
     intSignal <= int0 or int1;
@@ -180,7 +191,6 @@ begin
         sbEmpty => sbEmpty,
 
         commitGroupCtrOut => commitGroupCtr,
-        --commitCtrOut => commitCtr,
         commitGroupCtrIncOut => commitGroupCtrInc,
         
         doneSig => oaux(0),
@@ -201,12 +211,11 @@ begin
         pcSending => pcSending,    
         frontAccepting => frontAccepting,
     
-        bpAccepting => bqAccepting,--bpAccepting,
+        bpAccepting => bqAccepting,
         bpSending => bpSending,
         bpData => bpData,
     
-        renameAccepting => --iqAccepting,
-                            dispatchAccepting,           
+        renameAccepting => dispatchAccepting,           
         dataLastLiving => frontDataLastLiving,
         lastSending => frontLastSending,
         
@@ -241,7 +250,6 @@ begin
         specialActionOut => specialAction,
             
         commitGroupCtr => commitGroupCtr,
-        --commitCtr => commitCtr,
 		
 		execCausing => execCausing,
         lateCausing => lateCausing,
@@ -257,71 +265,71 @@ begin
     (not isNonzero(extractFullMask(renamedDataLiving))
         and robAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0 and acceptingSQ and acceptingLQ and renameAccepting)
     or (robAcceptingMore and iqAcceptingMoreI0 and iqAcceptingMoreM0 and iqAcceptingMoreS0 and iqAcceptingMoreF0 and iqAcceptingMoreSF0 and not almostFullSQ and not almostFullLQ and renameAccepting);
-    
-    
+   
     oooAccepting <= robAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0 and acceptingSQ and acceptingLQ;
     
     -- From Rename we send to OOO if it accepts and DB is empty. If DB is not empty, we have to drain it first!
     sendingToDispatchBuffer <= renamedSendingRe and (not oooAccepting or not dbEmpty);
     
-    GEN_X: if false generate
-        renamedSending <= renamedSendingRe;
-        renamedDataLiving <= renamedDataLivingRe;
-        renamedDataLivingFloat <= renamedDataLivingFloatRe;
-    end generate;
-    
-    GEN_Y: if true generate
-         renamedSending <= (renamedSendingRe and oooAccepting) or sendingFromDispatchBuffer;
-         renamedDataLiving <= renamedDataLivingRe when sendingFromDispatchBuffer = '0' else dispatchBufferDataInt; 
-         renamedDataLivingFloat <= renamedDataLivingFloatRe when sendingFromDispatchBuffer = '0' else dispatchBufferDataFloat; 
-    end generate;
+    renamedSending <= (renamedSendingRe and oooAccepting) or sendingFromDispatchBuffer;
+    renamedDataLiving <= renamedDataLivingRe when sendingFromDispatchBuffer = '0' else dispatchBufferDataInt; 
+    renamedDataLivingFloatPre <= renamedDataLivingFloatRe when sendingFromDispatchBuffer = '0' else dispatchBufferDataFloat; 
+        --renamedDataLivingFloat <= renamedDataLivingFloatPre;
 
-    renamedDataMerged <= mergeDests(renamedDataLiving, renamedDataLivingFloat);
+        renamedDataLivingFloat <= mergeFP(renamedDataLiving, renamedDataLivingFloatPre);
+
+--            ch0 <= bool2std(renamedDataLivingFloat_C(0) = renamedDataLivingFloat(0));
+--            ch1 <= bool2std(renamedDataLivingFloat_C(1) = renamedDataLivingFloat(1));
+--            ch2 <= bool2std(renamedDataLivingFloat_C(2) = renamedDataLivingFloat(2));
+--            ch3 <= bool2std(renamedDataLivingFloat_C(3) = renamedDataLivingFloat(3));
+
+    renamedDataMerged <= --mergeDests(renamedDataLiving, renamedDataLivingFloat);
+                            renamedDataLiving;
     
     renamedDataLivingMem <= TMP_recodeMem(renamedDataLiving);
     
-        specialActionToROB <= specialAction when sendingFromDispatchBuffer = '0' else specialActionDispatchBuffer;
-    
-    
-        DISPATCH_BUFFER: entity work.DispatchBuffer port map(
-            clk => clk,
-            
-            specialAction => specialAction,
-            nextAccepting => oooAccepting,          
-            accepting => dispatchAccepting,
-            prevSending => sendingToDispatchBuffer,
-            dataIn => renamedDataLivingRe,            
-            sending => sendingFromDispatchBuffer,
-            dataOut => dispatchBufferDataInt,
-            specialOut => specialActionDispatchBuffer,
-            
-            execEventSignal => execEventSignal,
-            lateEventSignal => lateEventSignal,        
-            empty => dbEmpty            
-        );
-    
-        DISPATCH_BUFFER_FP: entity work.DispatchBuffer port map(
-            clk => clk,
-            
-            specialAction => specialAction,
-            nextAccepting => oooAccepting,          
-            accepting => open,
-            prevSending => sendingToDispatchBuffer,
-            dataIn => renamedDataLivingFloatRe,            
-            sending => open,--sendingFromDispatchBuffer,
-            dataOut => dispatchBufferDataFloat,
-            specialOut => open,
-            
-            execEventSignal => execEventSignal,
-            lateEventSignal => lateEventSignal,        
-            empty => open            
-        );
-    
+    specialActionToROB <= specialAction when sendingFromDispatchBuffer = '0' else specialActionDispatchBuffer;
+
+
+    DISPATCH_BUFFER: entity work.DispatchBuffer
+    port map(
+        clk => clk,
         
-    
+        specialAction => specialAction,
+        nextAccepting => oooAccepting,          
+        accepting => dispatchAccepting,
+        prevSending => sendingToDispatchBuffer,
+        dataIn => renamedDataLivingRe,            
+        sending => sendingFromDispatchBuffer,
+        dataOut => dispatchBufferDataInt,
+        specialOut => specialActionDispatchBuffer,
+        
+        execEventSignal => execEventSignal,
+        lateEventSignal => lateEventSignal,        
+        empty => dbEmpty            
+    );
+
+    DISPATCH_BUFFER_FP: entity work.DispatchBuffer
+    generic map(IS_FP => true)
+    port map(
+        clk => clk,
+        
+        specialAction => specialAction,
+        nextAccepting => oooAccepting,          
+        accepting => open,
+        prevSending => sendingToDispatchBuffer,
+        dataIn => renamedDataLivingFloatRe,            
+        sending => open,--sendingFromDispatchBuffer,
+        dataOut => dispatchBufferDataFloat,
+        specialOut => open,
+        
+        execEventSignal => execEventSignal,
+        lateEventSignal => lateEventSignal,        
+        empty => open            
+    );
+
     RENAMED_VIEW: block
-        signal renamedIntTextRe, renamedFloatTextRe, renamedMergedTextRe: InstructionTextArray(0 to PIPE_WIDTH-1);
-    
+        signal renamedIntTextRe, renamedFloatTextRe, renamedMergedTextRe: InstructionTextArray(0 to PIPE_WIDTH-1);   
         signal renamedIntText, renamedFloatText, renamedMergedText: InstructionTextArray(0 to PIPE_WIDTH-1);
     begin
         renamedIntText <= insSlotArrayText(renamedDataLiving, '0');
@@ -408,39 +416,31 @@ begin
                sendingM0_D0f, sendingM0_D1f,
                sendingF0_D0,  sendingF0_D1: std_logic := '0';                         
 
-           ----
-           signal schedDataI0, dataToQueueI0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-           signal schedDataM0, dataToQueueM0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-                  
-           signal schedDataF0, dataToQueueF0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+        ----
+        signal schedDataI0, dataToQueueI0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+        signal schedDataM0, dataToQueueM0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);      
+        signal schedDataF0, dataToQueueF0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 
-           signal dataToIssueStoreValue, dataToRegReadStoreValue, dataToExecIntStoreValue,
-                  dataToIssueFloatStoreValue, dataToRegReadFloatStoreValue, dataToExecFloatStoreValue,
-                  dataToExecStoreValue: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+        signal dataToIssueStoreValue, dataToRegReadStoreValue, dataToExecIntStoreValue,
+               dataToIssueFloatStoreValue, dataToRegReadFloatStoreValue, dataToExecFloatStoreValue,
+               dataToExecStoreValue: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
         signal sendingToIssueStoreValue, sendingToRegReadStoreValue, sendingStoreValue, sendingToIssueFloatStoreValue: std_logic := '0';
+        signal sentCancelledI0, sentCancelledI1, sentCancelledM0, sentCancelledM1, sentCancelledF0, sentCancelledSVI, sentCancelledSVF: std_logic := '0';
 
-                signal sentCancelledI0, sentCancelledI1, sentCancelledM0, sentCancelledM1, sentCancelledF0, sentCancelledSVI, sentCancelledSVF: std_logic := '0';
+       --==============----------
+       signal intStoreMask, floatStoreMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');            
+       signal memMask, memMaskInt, memMaskFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
+       signal sendingBranch: std_logic := '0'; -- Internal
+       signal  dataOutMem0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT); -- Outside
+       signal sendingToAgu, sendingFromDLQ: std_logic := '0'; -- Outside block
+       signal dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
+       signal memLoadValue: Mword := (others => '0'); -- MEM
       ----==============----------
-           signal intStoreMask, floatStoreMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');            
-           signal memMask, memMaskInt, memMaskFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-
-
-           signal sendingBranch: std_logic := '0'; -- Internal
-                                  
-        signal  dataOutMem0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT); -- Outside
-        
-        signal sendingToAgu, sendingFromDLQ: std_logic := '0'; -- Outside block
-        signal dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
-            signal memLoadValue: Mword := (others => '0'); -- MEM
-
-      ----==============----------
-    
         
         signal regsSelI0,           regsSelM0, regsSelS0, regsSelFloatA, regsSelFloatC, regsSelFS0, regsSelF0: PhysNameArray(0 to 2) := (others => (others => '0'));
         signal regValsI0, regValsB, regValsM0, regValsS0, regValsE, regValsFloatA, regValsFloatB, regValsFloatC, regValsFS0, regValsF0: MwordArray(0 to 2) := (others => (others => '0'));
         signal readyRegFlags, readyRegFlagsNext, readyRegFlagsSV, readyFloatFlags, readyFloatFlagsNext, readyRegFlagsFloatSV: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
-
         
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
            
@@ -459,8 +459,8 @@ begin
            signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
            signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
         begin
-            schedDataI0 <= getSchedData(extractData(TMP_clearOldOperation(TMP_recodeALU(renamedDataLiving))), getAluMask(renamedDataLiving));
-            dataToQueueI0 <= work.LogicIssue.updateSchedulerArray(schedDataI0, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);
+            schedDataI0 <= getSchedData(extractData(TMP_recodeALU(renamedDataLiving)), getAluMask(renamedDataLiving), true);
+            dataToQueueI0 <= work.LogicIssue.updateSchedulerArray(schedDataI0, fni, ENQUEUE_FN_MAP, true);
             
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
@@ -471,7 +471,7 @@ begin
         
                 acceptingOut => iqAcceptingI0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreI0,
-                    sentCancelled => sentCancelledI0,
+                sentCancelled => sentCancelledI0,
                 prevSendingOK => renamedSending,
                 newArr => dataToQueueI0,--,schArrays(4),
                 fni => fni,
@@ -531,12 +531,10 @@ begin
                 execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
             );      
           
-            branchData <= basicBranch(--setInstructionTarget(slotIssueI0.ins, slotIssueI0.ins.constantArgs.imm),
-                                      slotIssueI0.ins,
-                                      slotIssueI0.state, bqSelected.ins); --, bqSelected.full);                    
+            branchData <= basicBranch(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins);                  
             
-            dataToBranch(0) <= (slotIssueI0.full and --isBranch(slotIssueI0.ins), branchData);
-                                                     slotIssueI0.ins.classInfo.branchIns, branchData);
+            --dataToBranch(0) <= (slotIssueI0.full and slotIssueI0.ins.classInfo.branchIns, branchData);
+            dataToBranch(0) <= (slotIssueI0.full and isBranchIns(slotIssueI0.ins), branchData);
             sendingBranchIns <= dataToBranch(0).full;
             
             bqCompare <= (sendingBranchIns, slotIssueI0.ins);
@@ -563,22 +561,17 @@ begin
             execEventSignal <= dataFromBranch.ins.controlInfo.newEvent and sendingBranch;
             execCausing <= dataFromBranch.ins;
             bqUpdate <= dataFromBranch;
-  
         end block;
          
             
         SUBPIPE_MEM: block
            signal sendingIntLoad, sendingFloatLoad: std_logic := '0';
            signal dataToAgu, dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                               
-        begin
-        
-           memMaskInt <=  --getStoreMask(renamedDataLiving) or getLoadMask(renamedDataLiving);
-                            getMemMask(renamedDataLiving);
-           --memMaskFloat <=  getStoreMask(renamedDataLivingFloat) or getLoadMask(renamedDataLivingFloat);        
-           --memMask <= memMaskInt or memMaskFloat;
-            
-           schedDataM0 <= getSchedData(removeArg2(extractData(TMP_clearOldOperation(renamedDataLivingMem))), memMaskInt);
-           dataToQueueM0 <= work.LogicIssue.updateSchedulerArray(schedDataM0, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP, true);
+        begin        
+           memMaskInt <= getMemMask(renamedDataLiving);
+     
+           schedDataM0 <= getSchedData(removeArg2(extractData(renamedDataLivingMem)), memMaskInt, true);
+           dataToQueueM0 <= work.LogicIssue.updateSchedulerArray(schedDataM0, fni, ENQUEUE_FN_MAP, true);
                     
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
@@ -589,7 +582,7 @@ begin
        
                acceptingOut => iqAcceptingM0,--iqAcceptingI0rr(4),
                acceptingMore => iqAcceptingMoreM0,
-                    sentCancelled => sentCancelledM0,               
+               sentCancelled => sentCancelledM0,               
                prevSendingOK => renamedSending,
                newArr => dataToQueueM0,--,schArrays(4),
                fni => fni,
@@ -628,13 +621,13 @@ begin
                regValues => regValsM0 --(others => (others => '0'))     
            );
                
-               preAguTag <= slotIssueM0.ins.tags.renameIndex;
-                                     
-               sendingFromDLQ <= '0';          -- TEMP!
-               dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
-                    
+           preAguTag <= slotIssueM0.ins.tags.renameIndex;
+                                 
+           sendingFromDLQ <= '0';          -- TEMP!
+           dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
+
            sendingToAgu <= (slotIssueM0.full and not sentCancelledM0) or sendingFromDLQ;
-	       dataToAgu(0) <= ((slotIssueM0.full and not sentCancelledM0) or sendingFromDLQ, calcEffectiveAddress(slotIssueM0.ins, slotIssueM0.state, sendingFromDLQ, dataFromDLQ));
+	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(slotIssueM0.ins, slotIssueM0.state, sendingFromDLQ, dataFromDLQ));
        
            STAGE_AGU: entity work.GenericStage(Behavioral)
            generic map(
@@ -714,11 +707,11 @@ begin
                                                   sqSelectedOutput.full, sqSelectedOutput.ins,
                                                   lqSelectedOutput);
                                                   
-              sendingIntLoad <= sendingM0_E1 and not dataOutMem0(0).ins.physicalArgSpec.floatDestSel; -- TODO: check exact conditions 
-              sendingFloatLoad <= sendingM0_E1 and dataOutMem0(0).ins.physicalArgSpec.floatDestSel;
-                          
-              dataInMemInt1 <= clearFloatDest(dataInMem1); -- with zeroed dest when load is FP
-              dataInMemFloat1 <= clearIntDest(dataInMem1); -- with zeroed dest when load is Int??
+          sendingIntLoad <= sendingM0_E1 and not dataOutMem0(0).ins.physicalArgSpec.floatDestSel; -- TODO: check exact conditions 
+          sendingFloatLoad <= sendingM0_E1 and dataOutMem0(0).ins.physicalArgSpec.floatDestSel;
+                      
+          dataInMemInt1 <= clearFloatDest(dataInMem1); -- with zeroed dest when load is FP
+          dataInMemFloat1 <= clearIntDest(dataInMem1); -- with zeroed dest when load is Int??
                                                   	       
            -- Source selection and verification
 	       STAGE_MEM1: entity work.GenericStage(Behavioral)
@@ -781,13 +774,13 @@ begin
         begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
             
-            intStoreMask <= getStoreMask(renamedDataLiving) and not floatStoreMask;                                        
-            schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLivingMem)), intStoreMask);
-            dataToStoreValueIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValue, readyRegFlags xor readyRegFlags, fni, ENQUEUE_FN_MAP_SV, true);
+            intStoreMask <= getStoreMask(renamedDataLivingMem) and not floatStoreMask;                                        
+            schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLivingMem)), intStoreMask, false);
+            dataToStoreValueIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValue, fni, ENQUEUE_FN_MAP_SV, true);
             
-            floatStoreMask <= getStoreMask(renamedDataLivingFloat);
-            schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLivingMem), extractData(renamedDataLivingFloat)), floatStoreMask);       
-            dataToStoreValueFloatIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValueFloat, readyFloatFlags xor readyFloatFlags, fniFloat, ENQUEUE_FN_MAP_FLOAT_SV, true);
+            floatStoreMask <= getFloatStoreMask(renamedDataLivingMem, renamedDataLivingFloat);
+            schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLivingMem), extractData(renamedDataLivingFloat)), floatStoreMask, false);       
+            dataToStoreValueFloatIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValueFloat, fniFloat, ENQUEUE_FN_MAP_FLOAT_SV, true);
                     
             IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
@@ -798,7 +791,7 @@ begin
         
                 acceptingOut => iqAcceptingS0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreS0,
-                    sentCancelled => sentCancelledSVI,                
+                sentCancelled => sentCancelledSVI,                
                 prevSendingOK => renamedSending,
                 newArr => dataToStoreValueIQ,--,schArrays(4),
                 fni => fni,
@@ -864,14 +857,14 @@ begin
             
             IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => 8 --IQ_SIZES(4)
+                IQ_SIZE => 8 -- CAREFUL: not IS_FP because doesn't have destination
             )
             port map(
                 clk => clk, reset => '0', en => '0',
         
                 acceptingOut => iqAcceptingSF0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreSF0,
-                    sentCancelled => sentCancelledSVF,                
+                sentCancelled => sentCancelledSVF,                
                 prevSendingOK => renamedSending,
                 newArr => dataToStoreValueFloatIQ,--,schArrays(4),
                 fni => fniFloat,
@@ -939,19 +932,20 @@ begin
         SUBPIPE_FP0: block
             signal dataToFpu0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                  
         begin
-            schedDataF0 <= getSchedData(extractData(TMP_clearOldOperation(TMP_recodeFP(renamedDataLivingFloat))), getFpuMask(renamedDataLivingFloat));
-            dataToQueueF0 <= work.LogicIssue.updateSchedulerArray(schedDataF0, readyFloatFlags xor readyFloatFlags, fniFloat, ENQUEUE_FN_MAP_FLOAT, true);
+            schedDataF0 <= getSchedData(extractData(TMP_recodeFP(renamedDataLivingFloat)), getFpuMask(renamedDataLivingFloat), false);
+            dataToQueueF0 <= work.LogicIssue.updateSchedulerArray(schedDataF0, fniFloat, ENQUEUE_FN_MAP_FLOAT, true);
             
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => 8 --IQ_SIZES(4)
+                IQ_SIZE => 8,
+                IS_FP => true
             )
             port map(
                 clk => clk, reset => '0', en => '0',
         
                 acceptingOut => iqAcceptingF0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreF0,
-                    sentCancelled => sentCancelledF0,                
+                sentCancelled => sentCancelledF0,                
                 prevSendingOK => renamedSending,
                 newArr => dataToQueueF0,--,schArrays(4),
                 fni => fniFloat,
@@ -1078,7 +1072,7 @@ begin
            
          sqValueInput <= -- CAREFUL: This implies that integer StoreData op value is lost when Int and FP are issued simultaneously. This must be prevented by scheduler!
                     (dataToExecFloatStoreValue.full, setInstructionResult(dataToExecFloatStoreValue.ins, dataToExecFloatStoreValue.state.argValues.arg0)) when dataToExecFloatStoreValue.full = '1' 
-            else    (dataToExecIntStoreValue.full, setInstructionResult(dataToExecIntStoreValue.ins, dataToExecIntStoreValue.state.argValues.arg0)); -- TEMP!!
+            else    (dataToExecIntStoreValue.full,   setInstructionResult(dataToExecIntStoreValue.ins,   dataToExecIntStoreValue.state.argValues.arg0)); -- TEMP!!
          
          -- StoreData issue control:
          -- When Int and FP store data issue at the same time, the port conflict is resolved thus:
@@ -1138,48 +1132,46 @@ begin
                 execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
             );        
 
-
-
-                    STAGE_M0_D0F: entity work.GenericStage(Behavioral)
-                    generic map(
-                        COMPARE_TAG => '1'
-                    )
-                    port map(
-                        clk => clk, reset => '0', en => '0',
-                        
-                        prevSending => sendingM0_E2f,
-                        nextAccepting => '1',
-                        
-                        stageDataIn => slotM0_E2f,
-                        acceptingOut => open,
-                        sendingOut => sendingM0_D0f,
-                        stageDataOut => slotM0_D0f,
-                        
-                        execEventSignal => '0',--execEventSignal,
-                        lateEventSignal => '0',
-                        execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
-                    );
-                    
-                    -- After FP_LOAD_DELAY
-                    STAGE_M0_D1F: entity work.GenericStage(Behavioral)
-                    generic map(
-                        COMPARE_TAG => '1'
-                    )
-                    port map(
-                        clk => clk, reset => '0', en => '0',
-                        
-                        prevSending => sendingM0_D0f,
-                        nextAccepting => '1',
-                        
-                        stageDataIn => slotM0_D0f,
-                        acceptingOut => open,
-                        sendingOut => sendingM0_D1f,
-                        stageDataOut => slotM0_D1f,
-                        
-                        execEventSignal => '0',--execEventSignal,
-                        lateEventSignal => '0',
-                        execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
-                    );
+            STAGE_M0_D0F: entity work.GenericStage(Behavioral)
+            generic map(
+                COMPARE_TAG => '1'
+            )
+            port map(
+                clk => clk, reset => '0', en => '0',
+                
+                prevSending => sendingM0_E2f,
+                nextAccepting => '1',
+                
+                stageDataIn => slotM0_E2f,
+                acceptingOut => open,
+                sendingOut => sendingM0_D0f,
+                stageDataOut => slotM0_D0f,
+                
+                execEventSignal => '0',--execEventSignal,
+                lateEventSignal => '0',
+                execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
+            );
+            
+            -- After FP_LOAD_DELAY
+            STAGE_M0_D1F: entity work.GenericStage(Behavioral)
+            generic map(
+                COMPARE_TAG => '1'
+            )
+            port map(
+                clk => clk, reset => '0', en => '0',
+                
+                prevSending => sendingM0_D0f,
+                nextAccepting => '1',
+                
+                stageDataIn => slotM0_D0f,
+                acceptingOut => open,
+                sendingOut => sendingM0_D1f,
+                stageDataOut => slotM0_D1f,
+                
+                execEventSignal => '0',--execEventSignal,
+                lateEventSignal => '0',
+                execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
+            );
 
             STAGE_F0_D0: entity work.GenericStage(Behavioral)
             generic map(
@@ -1201,8 +1193,7 @@ begin
                 execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
             );
 
-
-                  
+                
             -- TEMP:
             SCHED_BLOCK: process(clk)
             begin
@@ -1249,10 +1240,8 @@ begin
                 execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
             ); 
             
-            
-            
+                    
          execOutputs1(0) <= (sendingI0_E0, slotI0_E0(0).ins);
-         
          execOutputs1(2) <= mergePhysDests(slotM0_E2i(0), slotM0_E2f(0)); --  [dest := Int.dest | Float.dest];             
          execOutputs1(3) <= (sendingF0_E2, slotF0_E2(0).ins);
             
@@ -1273,28 +1262,26 @@ begin
             regsSelS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadStoreValue.ins)));
           
           -- Forwarding network
-		  fni.nextTagsM1 <= (0 => slotIssueI0.ins.physicalArgSpec.dest, 2 => --dataOutMem0(0).ins.physicalArgSpec.dest,
-		                                                                      slotM0_E1i(0).ins.physicalArgSpec.dest,
-		                                                                          others => (others => '0'));        
-		  fni.nextTagsM2 <= (                                           2 => slotM0_E0(0).ins.physicalArgSpec.dest, others => (others => '0'));
+		  fni.nextTagsM1 <= (0 => slotIssueI0.ins.physicalArgSpec.dest, 2 => slotM0_E1i(0).ins.physicalArgSpec.dest, others => (others => '0'));        
+		  fni.nextTagsM2 <= (                                           2 => slotM0_E0(0).ins.physicalArgSpec.dest,  others => (others => '0'));
           fni.tags0 <= (execOutputs1(0).ins.physicalArgSpec.dest, execOutputs1(1).ins.physicalArgSpec.dest, slotM0_E2i(0).ins.physicalArgSpec.dest);
           fni.tags1 <= (0 => slotI0_D0(0).ins.physicalArgSpec.dest, 2 => slotM0_D0i(0).ins.physicalArgSpec.dest, others => (others => '0'));
           fni.values0 <= (execOutputs1(0).ins.result, execOutputs1(1).ins.result, execOutputs1(2).ins.result);
           fni.values1 <= (0 => slotI0_D0(0).ins.result, 2 => slotM0_D0i(0).ins.result, others => (others => '0'));                 
                 
-                           
-                regsSelFS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadFloatStoreValue.ins)));
-                regsSelF0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueF0.ins)));
+                       
+            regsSelFS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadFloatStoreValue.ins)));
+            regsSelF0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueF0.ins)));
 
-                -- NOTE: FP load path is 1 cycle longer, so different stages are involved here from those in Int datapath
-                --      TODO: CHECK
-                fniFloat.nextTagsM1 <= (0 => slotF0_E1(0).ins.physicalArgSpec.dest, 2 => slotM0_E2f(0).ins.physicalArgSpec.dest, others => (others => '0'));
-                fniFloat.nextTagsM2 <= (0 => slotF0_E0(0).ins.physicalArgSpec.dest, 2 => slotM0_E1f(0).ins.physicalArgSpec.dest, others => (others => '0'));               
-                fniFloat.tags0 <= (0 => slotF0_E2(0).ins.physicalArgSpec.dest, 2 => slotM0_D0f(0).ins.physicalArgSpec.dest, others => (others => '0'));
-                fniFloat.tags1 <= (0 => slotF0_D0(0).ins.physicalArgSpec.dest, 2 => slotM0_D1f(0).ins.physicalArgSpec.dest, others => (others => '0'));
-                fniFloat.values0 <= (0 => slotF0_E2(0).ins.result, 2 => slotM0_D0f(0).ins.result, others => (others => '0'));
-                fniFloat.values1 <= (0 => slotF0_D0(0).ins.result, 2 => slotM0_D1f(0).ins.result, others => (others => '0'));
-                    
+            -- NOTE: FP load path is 1 cycle longer, so different stages are involved here from those in Int datapath
+            --      TODO: CHECK
+            fniFloat.nextTagsM1 <= (0 => slotF0_E1(0).ins.physicalArgSpec.dest, 2 => slotM0_E2f(0).ins.physicalArgSpec.dest, others => (others => '0'));
+            fniFloat.nextTagsM2 <= (0 => slotF0_E0(0).ins.physicalArgSpec.dest, 2 => slotM0_E1f(0).ins.physicalArgSpec.dest, others => (others => '0'));               
+            fniFloat.tags0 <= (0 => slotF0_E2(0).ins.physicalArgSpec.dest, 2 => slotM0_D0f(0).ins.physicalArgSpec.dest, others => (others => '0'));
+            fniFloat.tags1 <= (0 => slotF0_D0(0).ins.physicalArgSpec.dest, 2 => slotM0_D1f(0).ins.physicalArgSpec.dest, others => (others => '0'));
+            fniFloat.values0 <= (0 => slotF0_E2(0).ins.result, 2 => slotM0_D0f(0).ins.result, others => (others => '0'));
+            fniFloat.values1 <= (0 => slotF0_D0(0).ins.result, 2 => slotM0_D1f(0).ins.result, others => (others => '0'));
+                
 
 		 INT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(WIDTH => 4, WRITE_WIDTH => 1)
@@ -1433,8 +1420,7 @@ begin
                                     
             -- TODO: add remaining stages of Exec area
          end block;
-         
-         
+        
     end block;
 
     renamedDataToBQ <= setFullMask(renamedDataLiving, getBranchMask(renamedDataLiving));
@@ -1490,7 +1476,7 @@ begin
 		en => '0',
 
 		acceptingOut => acceptingSQ,
-			almostFull => almostFullSQ,
+		almostFull => almostFullSQ,
 				
 		prevSending => renamedSending,
 		dataIn => renamedDataToSQ, -- !!!!!
@@ -1521,7 +1507,6 @@ begin
 	);
 
 
-
     LOAD_QUEUE: entity work.StoreQueue(Behavioral)
 	generic map(
 		QUEUE_SIZE => 8,
@@ -1533,7 +1518,7 @@ begin
 		en => '0',
 
 		acceptingOut => acceptingLQ,
-			almostFull => almostFullLQ,
+		almostFull => almostFullLQ,
 				
 		prevSending => renamedSending,
 		dataIn => renamedDataToLQ, -- !!!!!
@@ -1571,7 +1556,6 @@ begin
 		doutadr <= dataFromSB(0).ins.target;
 		dwrite <= sbSending and dataFromSB(0).full and isStoreMemOp(dataFromSB(0).ins);
 		dout <= dataFromSB(0).ins.result;
-
 	end block;
 	
 end Behavioral;

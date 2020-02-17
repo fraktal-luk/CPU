@@ -1,22 +1,7 @@
 ----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date:    23:57:56 12/11/2016 
--- Design Name: 
--- Module Name:    MemoryUnit - Behavioral 
--- Project Name: 
--- Target Devices: 
--- Tool versions: 
--- Description: 
---
--- Dependencies: 
---
--- Revision: 
--- Revision 0.01 - File Created
--- Additional Comments: 
---
+
 ----------------------------------------------------------------------------------
+
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 
@@ -40,7 +25,7 @@ entity BranchQueue is
 		en: in std_logic;
 
 		acceptingOut: out std_logic;
-			almostFull: out std_logic;
+		almostFull: out std_logic;
 		
 		acceptingBr: out std_logic;
 		
@@ -69,8 +54,10 @@ entity BranchQueue is
 end BranchQueue;
 
 
-architecture Behavioral of BranchQueue is
+architecture Behavioral of BranchQueue is    
 	constant PTR_MASK_SN: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
+    constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
+    constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;
 
 	signal isSending: std_logic := '0';
 
@@ -81,7 +68,7 @@ architecture Behavioral of BranchQueue is
 	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
 	signal dataOutSig, dataOutSigNext, dataOutSigFinal: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-	signal pStart, pStartNext, pTagged, pAll, causingPtr, pAcc: SmallNumber := (others => '0');
+	signal pStart, pStartNext, pTagged, pAll, causingPtr: SmallNumber := (others => '0');
 	   signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
 	   signal recoveryCounter: SmallNumber := (others => '0');
 	   signal isFull, isAlmostFull: std_logic := '0';
@@ -104,6 +91,8 @@ architecture Behavioral of BranchQueue is
 	    variable imBr: std_logic_vector(0 to QUEUE_SIZE-1) := inputMaskBr;	    
     begin
 
+        -- TODO, CHECK: clear newEvent if unneeded? Other controlInfo excpet frontBranch, confirmedBranch, firstBr?
+
         for i in 0 to QUEUE_SIZE-1 loop
            diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;
            
@@ -122,7 +111,8 @@ architecture Behavioral of BranchQueue is
                slot := getNewElem(remv, dataIn); 
                        --dataIn(slv2u(diff(1 downto 0)));         
                res(i).tags := slot.ins.tags;
-               res(i).operation := slot.ins.operation;
+               
+               --res(i).operation := slot.ins.operation;
                res(i).controlInfo.firstBr := '0'; -- This is '1' only for the first branch in group!               
            end if;
         end loop;
@@ -176,7 +166,7 @@ architecture Behavioral of BranchQueue is
                   res(i).virtualArgSpec := DEFAULT_ARG_SPEC;
                   res(i).physicalArgSpec := DEFAULT_ARG_SPEC;
                 
-                  res(i).operation := (System, sysUndef);
+                  --res(i).operation := (System, sysUndef);
     
                   res(i).tags.fetchCtr := (others => '0');
                   res(i).tags.decodeCtr := (others => '0');
@@ -194,7 +184,6 @@ architecture Behavioral of BranchQueue is
     end function;
 
 begin
-
     causingPtr <= getCausingPtr(content, execCausing);
     
 	-- in shifting queue this would be shfited by nSend
@@ -223,11 +212,9 @@ begin
 				                
 	dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
 	selectedDataSlot <= selectBranchDataSlot(content, taggedMask, matchMask, compareAddressInput);
-	
 	matchMask <= getMatchingTags(content, compareAddressInput.ins.tags.renameIndex);
-	--matchMaskUpdate <= getMatchingTags(content, storeValueInput.ins.tags.renameIndex);
 	
-    pStartNext <= addSN(pStart, i2slv(getNumberToSend(dataOutSig, groupCtrInc, committing), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+    pStartNext <= addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE);
 	
 	process (clk)
 	begin
@@ -240,73 +227,56 @@ begin
 			selectedDataOutputSig <= selectedDataSlot;
             dataOutSig <= dataOutSigNext;
             
-                matchMaskUpdate <= matchMask;
+            matchMaskUpdate <= matchMask;
             
             if lateEventSignal = '1' then
                 pTagged <= pStartNext;
             elsif execEventSignal = '1' then
-                pTagged <= addSN(causingPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
-            elsif prevSending = '1' then -- + N
-                pTagged <= addSN(pTagged, i2slv(countOnes(inputMask), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                pTagged <= addIntTrunc(causingPtr, 1, QUEUE_PTR_SIZE);
+            elsif prevSending = '1' then
+                pTagged <= addIntTrunc(pTagged, countOnes(inputMask), QUEUE_PTR_SIZE);                
             end if;
 
             if lateEventSignal = '1' then
                 pAll <= pStartNext;
             elsif execEventSignal = '1' then
-                pAll <= addSN(causingPtr, i2slv(1, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;     -- increment(causingPtr, N_BITS_PTR);        
-            elsif prevSendingBr = '1' then -- + N
-                pAll <= addSN(pAll, i2slv(countOnes(inputMaskBr), SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
+                pAll <= addIntTrunc(causingPtr, 1, QUEUE_PTR_SIZE);       
+            elsif prevSendingBr = '1' then
+                pAll <= addIntTrunc(pAll, countOnes(inputMaskBr), QUEUE_PTR_SIZE);                
             end if;
                
             if lateEventSignal = '1' or execEventSignal = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
-            elsif recoveryCounter /= i2slv(0, SMALL_NUMBER_SIZE) then
-                recoveryCounter <= subSN(recoveryCounter, i2slv(1, SMALL_NUMBER_SIZE));
+            elsif isNonzero(recoveryCounter) = '1' then
+                recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
                
-            isFull <= cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-4, SMALL_NUMBER_SIZE));
-            isAlmostFull <= cmpGreaterUnsignedSN(nFullNext, i2slv(QUEUE_SIZE-8, SMALL_NUMBER_SIZE));
-                
+            isFull <=       cmpGtU(nFullNext, QUEUE_SIZE-4);
+            isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
             nFull <= nFullNext;                     
 		end if;
 	end process;
 
-    N_FULL_NEXT: block
-        constant QUEUE_SIZE_MASK: SmallNumber := i2slv(2*QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
-        signal flowDiff: SmallNumber := (others => '0');            
-    begin
-        nFullNext <=  nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
-                else flowDiff and QUEUE_SIZE_MASK;
-        flowDiff <= subSN(addSN(nFull, nIn), nOut);
-    end block;
+    nFullNext <= nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
+                else subTruncZ(add(nFull, nIn), nOut, QUEUE_CAP_SIZE);
 
     nIn <= i2slv( countOnes(extractFullMask(dataInBr)), SMALL_NUMBER_SIZE ) when prevSendingBr = '1' else (others => '0');
-        
-    QUEUE_MANAGEMENT: block
-        constant TAG_DIFF_SIZE_MASK: SmallNumber := i2slv(QUEUE_SIZE-1, SMALL_NUMBER_SIZE);
-        signal tagDiff: SmallNumber := (others => '0');
-    begin
-       nOut <= i2slv(countOnes(extractFullMask(dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');              
-       nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pAll and fullMask(0) = '1'
-                       else tagDiff and TAG_DIFF_SIZE_MASK;
-       tagDiff <= subSN(pAll, pStartNext);       
-    end block;
+
+    nOut <= i2slv(countOnes(extractFullMask(dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');              
+    nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pAll and fullMask(0) = '1'
+                else subTruncZ(pAll, pStartNext, QUEUE_PTR_SIZE);  -- CAREFUL: nFullRestored can be outside PTR range but it's handled in the other branch
     
     dataOutSigFinal <= getSendingArray(dataOutSig, groupCtrInc, committing);
 
     isSending <= dataOutSigFinal(0).full;
 	acceptingOut <= '1';
-
-    -- Accept when 4 free slot exist
-    pAcc <= subSN(pStart, i2slv(4, SMALL_NUMBER_SIZE)) and PTR_MASK_SN;
 	acceptingBr <= not isAlmostFull;     
  
 	dataOutV <= dataOutSigFinal;                   
 	sendingSQOut <= isSending;
 
 	selectedDataOutput <= selectedDataSlot;
-	almostFull <= '0';
-	
+	almostFull <= '0'; -- TODO: is it deprecated?
 	
     VIEW: block
        signal queueTxt: InstructionTextArray(0 to QUEUE_SIZE-1);

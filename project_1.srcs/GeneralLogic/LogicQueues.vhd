@@ -1,23 +1,3 @@
-----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date: 30.08.2019 21:44:04
--- Design Name: 
--- Module Name: LogicQueues - Behavioral
--- Project Name: 
--- Target Devices: 
--- Tool Versions: 
--- Description: 
--- 
--- Dependencies: 
--- 
--- Revision:
--- Revision 0.01 - File Created
--- Additional Comments:
--- 
-----------------------------------------------------------------------------------
-
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
@@ -34,39 +14,23 @@ use work.PipelineGeneral.all;
 
 
 package LogicQueues is
-
-
 	function getCausingPtr(content: InstructionStateArray; causing: InstructionState) return SmallNumber;
-	
-	function getInputMask(mask, newMask: std_logic_vector; prevSending: std_logic; ptr: SmallNumber; ptrMask: SmallNumber)
-	return std_logic_vector;
-
-	function getSendingMask(content: InstructionStateArray; mask: std_logic_vector;
-	                tag: InsTag) return std_logic_vector;
-
-	function getCancelMask(content: InstructionStateArray; mask: std_logic_vector;
-	                tag: InsTag; robData: InstructionSlotArray) return std_logic_vector;
-    
-    function getWindow(content: InstructionStateArray; mask: std_logic_vector;
-                        p: SmallNumber; n: natural)
-    return InstructionSlotArray;
+	function getInputMask(mask, newMask: std_logic_vector; prevSending: std_logic; ptr: SmallNumber; ptrMask: SmallNumber) return std_logic_vector;
+	function getSendingMask(content: InstructionStateArray; mask: std_logic_vector; tag: InsTag) return std_logic_vector;
+	function getCancelMask(content: InstructionStateArray; mask: std_logic_vector; tag: InsTag; robData: InstructionSlotArray) return std_logic_vector;  
+    function getWindow(content: InstructionStateArray; mask: std_logic_vector; p: SmallNumber; n: natural) return InstructionSlotArray;
     
     function selectBranchDataSlot(content: InstructionStateArray; taggedMask, matchMask: std_logic_vector;
                             compareAddressInput: InstructionSlot)
     return InstructionSlot;
 
-    function getMatchingTags(content: InstructionStateArray; tag: InsTag) return std_logic_vector;
-    
+    function getMatchingTags(content: InstructionStateArray; tag: InsTag) return std_logic_vector;    
     function getNumberToSend(dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1); nextCommitTag: InsTag; committing: std_logic) return integer;
-
-    function getSendingArray(dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1); nextCommitTag: InsTag; committing: std_logic) return InstructionSlotArray;
-
-	
+    function getSendingArray(dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1); nextCommitTag: InsTag; committing: std_logic) return InstructionSlotArray;	
 end package;
 
 
 package body LogicQueues is
-
 
 	function getCausingPtr(content: InstructionStateArray; causing: InstructionState) return SmallNumber is
 	   variable res: SmallNumber := (others => '0');
@@ -76,8 +40,7 @@ package body LogicQueues is
 	           res := i2slv(i, SMALL_NUMBER_SIZE);
 	           exit;
 	       end if;
-	   end loop;
-	   
+	   end loop;   
 	   return res;
 	end function;
 	
@@ -146,16 +109,16 @@ package body LogicQueues is
 	begin
 	   for i in 0 to LEN-1 loop   
            if    getTagLow(content(i).tags.renameIndex) = "10" and
-                 (not robData(3).full or robData(3).ins.controlInfo.hasException or robData(3).ins.controlInfo.specialAction or robData(3).ins.controlInfo.dbtrap) = '1' then
+                 (not robData(3).full or hasSyncEvent(robData(3).ins)) = '1' then
                res(i) := '1';           
            elsif getTagLow(content(i).tags.renameIndex) = "10" and
-                 (not robData(2).full or robData(2).ins.controlInfo.hasException or robData(2).ins.controlInfo.specialAction or robData(2).ins.controlInfo.dbtrap) = '1' then
+                 (not robData(2).full or hasSyncEvent(robData(2).ins)) = '1' then
                res(i) := '1';           
            elsif getTagLow(content(i).tags.renameIndex) = "01" and
-                 (not robData(1).full or robData(1).ins.controlInfo.hasException or robData(1).ins.controlInfo.specialAction or robData(1).ins.controlInfo.dbtrap) = '1' then
+                 (not robData(1).full or hasSyncEvent(robData(1).ins)) = '1' then
                res(i) := '1';
            elsif 
-                 (not robData(0).full or robData(0).ins.controlInfo.hasException or robData(0).ins.controlInfo.specialAction or robData(0).ins.controlInfo.dbtrap) = '1' then
+                 (not robData(0).full or hasSyncEvent(robData(0).ins)) = '1' then
                res(i) := '1';
            end if; 
        end loop;
@@ -192,10 +155,7 @@ package body LogicQueues is
     begin
         for i in 0 to LEN-1 loop 
             res.ins := content(i);
-            if --content(i).tags.renameIndex = compareAddressInput.ins.tags.renameIndex
-                     matchMask(i) = '1'
-                 and taggedMask(i) = '1'
-            then
+            if matchMask(i) = '1' and taggedMask(i) = '1' then
                 res.full := compareAddressInput.full;
                 exit;
             end if;
@@ -271,7 +231,5 @@ package body LogicQueues is
        
        return res;
     end function;
-
-
 
 end package body;

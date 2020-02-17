@@ -1,22 +1,7 @@
 ----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date:    23:12:19 04/24/2016 
--- Design Name: 
--- Module Name:    SubunitHbuffer - Behavioral 
--- Project Name: 
--- Target Devices: 
--- Tool versions: 
--- Description: 
---
--- Dependencies: 
---
--- Revision: 
--- Revision 0.01 - File Created
--- Additional Comments: 
---
+
 ----------------------------------------------------------------------------------
+
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 
@@ -118,7 +103,7 @@ architecture Implem of InstructionBuffer is
                 res(i).ins.result := (others => '0');
                 res(i).ins.target := (others => '0');
                 
-                    res(i).ins.operation := (General, unknown);
+                --    res(i).ins.operation := (General, unknown);
                 
                 res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
             end loop;

@@ -1,21 +1,5 @@
 ----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date: 22.11.2018 00:15:07
--- Design Name: 
--- Module Name: UnitSequencer - Behavioral
--- Project Name: 
--- Target Devices: 
--- Tool Versions: 
--- Description: 
--- 
--- Dependencies: 
--- 
--- Revision:
--- Revision 0.01 - File Created
--- Additional Comments:
--- 
+
 ----------------------------------------------------------------------------------
 
 
@@ -81,7 +65,6 @@ entity UnitSequencer is
     -- Counter outputs
     commitGroupCtrOut: out InsTag;
     commitGroupCtrIncOut: out InsTag;
-    --commitCtrOut: out InsTag;
 
     intAllowOut: out std_logic;
     
@@ -154,191 +137,189 @@ begin
    sysStoreAddress <= dataFromSB.ins.target(4 downto 0);
    sysStoreValue <= dataFromSB.ins.result;
    
-            eventOccurred <= lateEventSending or execEventSignal or frontEventSignal;
-            killPC <= '0';
-        
-            lateEventOut <= lateEventSending;
-            lateEventSetPC <= lateEventSending;
-            lateCausing <= setPointers(stageDataLateCausingOut(0).ins, intPointer, floatPointer);  
-        
-        stageDataToPC(0).full <= sendingToPC;
-        stageDataToPC(0).ins <= newPCData(lateEventSending, stageDataLateCausingOut(0).ins,
-                                            execEventSignal, execCausing,
-                                            frontEventSignal, frontCausing,
-                                            pcNext);
+        eventOccurred <= lateEventSending or execEventSignal or frontEventSignal;
+        killPC <= '0';
+    
+        lateEventOut <= lateEventSending;
+        lateEventSetPC <= lateEventSending;
+        lateCausing <= setPointers(stageDataLateCausingOut(0).ins, intPointer, floatPointer);  
+    
+    stageDataToPC(0).full <= sendingToPC;
+    stageDataToPC(0).ins <= newPCData(lateEventSending, stageDataLateCausingOut(0).ins,
+                                        execEventSignal, execCausing,
+                                        frontEventSignal, frontCausing,
+                                        pcNext);
+            
+    sendingToPC <= running or eventOccurred;
+ 
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if (reset or restartPC) = '1' then
+                running <= '1';
+            elsif killPC = '1' then
+                running <= '0';
+            end if;
+        end if;
+    end process;
+
+
+    SUBUNIT_PC: entity work.GenericStage(Behavioral) port map(
+        clk => clk, reset => resetSig, en => enSig,
                 
-        sendingToPC <= running or eventOccurred;
-     
-        process(clk)
-        begin
+        prevSending => sendingToPC,
+
+        nextAccepting => running, -- In multithreaded implementation it should be '1' for selected thread 
+        stageDataIn => stageDataToPC,
+        
+        acceptingOut => acceptingOutPC,
+        sendingOut => sendingOutPC,
+        stageDataOut => tmpPcOutA,
+        
+        execEventSignal => eventOccurred,
+        lateEventSignal => lateEventSending,
+        execCausing => DEFAULT_INSTRUCTION_STATE
+    );            
+    
+    stageDataOutPC.ip <= tmpPcOutA(0).ins.ip;
+    stageDataOutPC.target <= pcNext; -- CAREFUL: Attaching next address from line predictor. Correct?
+    
+    pcNext <= getNextPC(stageDataOutPC.ip, (others => '0'), '0');
+
+    excInfoUpdate <= lateEventSending       -- TODO: what about dbtrap?
+                                    and (stageDataLateCausingOut(0).ins.controlInfo.hasException or --bool2std(special.ins.operation = (System, sysCall)))
+                                                                               (special.ins.controlInfo.specialAction and bool2std(special.ins.specificOperation.system = opCall)))
+                                    and not stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
+    intInfoUpdate <= lateEventSending and stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
+    ----------------------------------------------------------------------
+    
+    SYS_REGS: block
+    begin
+        CLOCKED: process(clk)
+        begin                    
             if rising_edge(clk) then
-                if (reset or restartPC) = '1' then
-                    running <= '1';
-                elsif killPC = '1' then
-                    running <= '0';
+                -- Reading sys regs
+                sysRegReadValue <= sysRegArray(slv2u(sysRegReadSel));            
+    
+                -- Write from system write instruction
+                if sysStoreAllow = '1' then
+                    sysRegArray(slv2u(sysStoreAddress)) <= sysStoreValue;
                 end if;
-            end if;
-        end process;
     
-    
-        SUBUNIT_PC: entity work.GenericStage(Behavioral) port map(
-            clk => clk, reset => resetSig, en => enSig,
-                    
-            prevSending => sendingToPC,
-    
-            nextAccepting => running, -- In multithreaded implementation it should be '1' for selected thread 
-            stageDataIn => stageDataToPC,
-            
-            acceptingOut => acceptingOutPC,
-            sendingOut => sendingOutPC,
-            stageDataOut => tmpPcOutA,
-            
-            execEventSignal => eventOccurred,
-            lateEventSignal => lateEventSending,
-            execCausing => DEFAULT_INSTRUCTION_STATE
-        );            
-        
-        stageDataOutPC.ip <= tmpPcOutA(0).ins.ip;
-        stageDataOutPC.target <= pcNext; -- CAREFUL: Attaching next address from line predictor. Correct?
-        
-        pcNext <= getNextPC(stageDataOutPC.ip, (others => '0'), '0');
-
-        excInfoUpdate <= lateEventSending 
-                                        and (stageDataLateCausingOut(0).ins.controlInfo.hasException or --bool2std(special.ins.operation = (System, sysCall)))
-                                                                                   (special.ins.controlInfo.specialAction and bool2std(special.ins.specificOperation.system = opCall)))
-                                        and not stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
-        intInfoUpdate <= lateEventSending and stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
-        ----------------------------------------------------------------------
-        
-        SYS_REGS: block
-        begin
-            CLOCKED: process(clk)
-            begin                    
-                if rising_edge(clk) then
-                    -- Reading sys regs
-                    sysRegReadValue <= sysRegArray(slv2u(sysRegReadSel));            
-        
-                    -- Write from system write instruction
-                    if sysStoreAllow = '1' then
-                        sysRegArray(slv2u(sysStoreAddress)) <= sysStoreValue;
-                    end if;
-        
-                    -- Writing specialized fields on events
-                    if lateEventSending = '1' then
-                        currentState <= stageDataLateCausingOut(0).ins.result;
-                        currentState(15 downto 10) <= (others => '0');
-                        currentState(7 downto 2) <= (others => '0');
-                    end if;
-                    
-                    -- NOTE: writing to link registers after sys reg writing gives priority to the former,
-                    --            but committing a sysMtc shouldn't happen in parallel with any control event
-                    -- Writing exc status registers
-                    if excInfoUpdate = '1' then
-                        linkRegExc <= savedPC;
-                        savedStateExc <= savedState;
-                    end if;
-                    
-                    -- Writing int status registers
-                    if intInfoUpdate = '1' then
-                        linkRegInt <= savedPC;
-                        savedStateInt <= savedState;
-                    end if;
-                    
-                    -- Enforcing content of read-only registers
-                    sysRegArray(0) <= (others => '1');--PROCESSOR_ID;
-                    
-                    -- Only some number of system regs exists        
-                    for i in 6 to 31 loop
-                        sysRegArray(i) <= (others => '0');
-                    end loop;                
-                end if;    
-            end process;
-
-            dbtrapOn <= currentState(25);
-        end block;
-        
-        pcDataLiving <= stageDataOutPC;
-        pcSending <= sendingOutPC;
-
-        commitGroupCtrNext <= commitGroupCtrInc when sendingToCommit = '1' else commitGroupCtr;
-        commitGroupCtrIncNext <= i2slv(slv2u(commitGroupCtrInc) + PIPE_WIDTH, TAG_SIZE) when sendingToCommit = '1' else commitGroupCtrInc;
-
-        commitCtrNext <= i2slv(slv2u(commitCtr) + countOnes(effectiveMask), 32) when sendingToCommit = '1' else commitCtr;
-
-    
-        TMP_REGS: block
-            signal putVecInt, putVecFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-            signal nPutInt, nPutFloat: integer := 0;
-        begin
-                putVecInt <= whichPutReg(stageDataToCommit, false);
-                putVecFloat <= whichPutReg(stageDataToCommit, true);
-
-                nPutInt <= countOnes(putVecInt);
-                nPutFloat <= countOnes(putVecFloat);
-
-                intPointerNext <= i2slv(slv2u(intPointer) + nPutInt, SMALL_NUMBER_SIZE) when sendingToCommit = '1' else intPointer;
-                floatPointerNext <= i2slv(slv2u(floatPointer) + nPutFloat, SMALL_NUMBER_SIZE) when sendingToCommit = '1' else floatPointer;
-        end block;
-        
-
-        effectiveMask <= getEffectiveMask(stageDataToCommit);
-            
-        COMMON_SYNCHRONOUS: process(clk)     
-        begin
-            if rising_edge(clk) then
-                commitGroupCtr <= commitGroupCtrNext;
-                commitGroupCtrInc <= commitGroupCtrIncNext;
-                commitCtr <= commitCtrNext;
+                -- Writing specialized fields on events
+                if lateEventSending = '1' then
+                    currentState <= stageDataLateCausingOut(0).ins.result;
+                    currentState(15 downto 10) <= (others => '0');
+                    currentState(7 downto 2) <= (others => '0');
+                end if;
                 
-                    intPointer <= intPointerNext;
-                    floatPointer <= floatPointerNext;
-                    
-                    
-               if sendingFromROB = '1' then
-                   special <= robSpecial;
-               end if;           
-            end if;
-        end process;        
+                -- NOTE: writing to link registers after sys reg writing gives priority to the former,
+                --            but committing a sysMtc shouldn't happen in parallel with any control event
+                -- Writing exc status registers
+                if excInfoUpdate = '1' then
+                    linkRegExc <= savedPC;
+                    savedStateExc <= savedState;
+                end if;
+                
+                -- Writing int status registers
+                if intInfoUpdate = '1' then
+                    linkRegInt <= savedPC;
+                    savedStateInt <= savedState;
+                end if;
+                
+                -- Enforcing content of read-only registers
+                sysRegArray(0) <= (others => '1');--PROCESSOR_ID;
+                
+                -- Only some number of system regs exists        
+                for i in 6 to 31 loop
+                    sysRegArray(i) <= (others => '0');
+                end loop;                
+            end if;    
+        end process;
+
+        dbtrapOn <= currentState(25);
+    end block;
+    
+    pcDataLiving <= stageDataOutPC;
+    pcSending <= sendingOutPC;
+
+    commitGroupCtrNext <= commitGroupCtrInc when sendingToCommit = '1' else commitGroupCtr;
+    commitGroupCtrIncNext <= i2slv(slv2u(commitGroupCtrInc) + PIPE_WIDTH, TAG_SIZE) when sendingToCommit = '1' else commitGroupCtrInc;
+
+    commitCtrNext <= i2slv(slv2u(commitCtr) + countOnes(effectiveMask), 32) when sendingToCommit = '1' else commitCtr;
+
+
+    TMP_REGS: block
+        signal putVecInt, putVecFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        signal nPutInt, nPutFloat: integer := 0;
+    begin
+        putVecInt <= whichPutReg(stageDataToCommit, false);
+        putVecFloat <= whichPutReg(stageDataToCommit, true);
+
+        nPutInt <= countOnes(putVecInt);
+        nPutFloat <= countOnes(putVecFloat);
+
+        intPointerNext <= i2slv(slv2u(intPointer) + nPutInt, SMALL_NUMBER_SIZE) when sendingToCommit = '1' else intPointer;
+        floatPointerNext <= i2slv(slv2u(floatPointer) + nPutFloat, SMALL_NUMBER_SIZE) when sendingToCommit = '1' else floatPointer;
+    end block;
+
+    effectiveMask <= getEffectiveMask(stageDataToCommit);
         
-        sendingToCommit <= sendingFromROB;
+    COMMON_SYNCHRONOUS: process(clk)     
+    begin
+        if rising_edge(clk) then
+           commitGroupCtr <= commitGroupCtrNext;
+           commitGroupCtrInc <= commitGroupCtrIncNext;
+           commitCtr <= commitCtrNext;
+            
+           intPointer <= intPointerNext;
+           floatPointer <= floatPointerNext;
+                                  
+           if sendingFromROB = '1' then
+               special <= robSpecial;
+           end if;           
+        end if;
+    end process;        
+    
+    sendingToCommit <= sendingFromROB;
+    
+    -- Commit stage: in order again                
+    SUBUNIT_COMMIT: entity work.GenericStage(Behavioral)
+    generic map(
+        WIDTH => PIPE_WIDTH
+    )
+    port map(
+        clk => clk, reset => resetSig, en => enSig,
         
-        -- Commit stage: in order again                
-        SUBUNIT_COMMIT: entity work.GenericStage(Behavioral)
-        generic map(
-            WIDTH => PIPE_WIDTH
-        )
-        port map(
-            clk => clk, reset => resetSig, en => enSig,
-            
-            -- Interface with CQ
-            prevSending => sendingToCommit,
-            stageDataIn => stageDataToCommit,
-            acceptingOut => open, -- unused but don't remove
-            
-            -- Interface with hypothetical further stage
-            nextAccepting => '1',
-            sendingOut => sendingOutCommit,
-            stageDataOut => stageDataCommitOutA,
-            
-            -- Event interface
-            execEventSignal => '0', -- CAREFUL: committed cannot be killed!
-            lateEventSignal => '0',    
-            execCausing => execCausing
-        );
+        -- Interface with CQ
+        prevSending => sendingToCommit,
+        stageDataIn => stageDataToCommit,
+        acceptingOut => open, -- unused but don't remove
         
-            -- Tracking of target:
-            --            'target' field of last effective will hold the address of next instruction
-            --            to commit after lastEffective; it will be known with certainty because lastEffective is 
-            --            already committed.
-            --            When committing a taken branch -> fill with target from BQ output
-            --            When committing normal op -> increment by length of the op
-            --            
-            --            The 'target' field will be used to update return address for exc/int
+        -- Interface with hypothetical further stage
+        nextAccepting => '1',
+        sendingOut => sendingOutCommit,
+        stageDataOut => stageDataCommitOutA,
+        
+        -- Event interface
+        execEventSignal => '0', -- CAREFUL: committed cannot be killed!
+        lateEventSignal => '0',    
+        execCausing => execCausing
+    );
+
+    -- Tracking of target:
+    --            'target' field of last effective will hold the address of next instruction
+    --            to commit after lastEffective; it will be known with certainty because lastEffective is 
+    --            already committed.
+    --            When committing a taken branch -> fill with target from BQ output
+    --            When committing normal op -> increment by length of the op
+    --            
+    --            The 'target' field will be used to update return address for exc/int
     stageDataToCommit <= recreateGroup(robDataLiving, dataFromBQV, stageDataLastEffectiveOutA(0).ins.target, commitCtr);
     stageDataLastEffectiveInA(0) <= getNewEffective(sendingToCommit, robDataLiving, dataFromBQV,
                                                                 stageDataLastEffectiveOutA(0).ins, 
                                                                 stageDataLateCausingOut(0).ins,
-                                                                lateEventSending);--, intPointerNext, floatPointerNext);
+                                                                lateEventSending);
                                                                 
     sendingToLastEffective <= sendingToCommit or lateEventSending;
 
@@ -388,12 +369,8 @@ begin
     sendingToLateCausing <= (eventCommitted or intCommitted) and sbEmpty;
     
     newLateCausing <= getLatePCData(stageDataLastEffectiveOutA(0).ins, intCommitted, intTypeCommitted,
-                                        currentState, linkRegExc, linkRegInt, savedStateExc, savedStateInt, special);
-    
+                                        currentState, linkRegExc, linkRegInt, savedStateExc, savedStateInt, special);   
     stageDataLateCausingIn(0) <= (sendingToLateCausing, newLateCausing);
-
-               -- ch0 <= bool2std(newLateCausing.tags.intPointer = intPointer);
-               -- ch1 <= bool2std(stageDataLateCausingOut(0).ins.tags.intPointer = intPointer);
 
     LATE_CAUSING_SLOT: entity work.GenericStage(Behavioral)
     port map(
@@ -443,9 +420,7 @@ begin
     
     commitAccepting <= not eventCommitted and not intCommitted and not lateEventSending; -- Blocked while procesing event
 
-    doneSig <= eventCommitted and bool2std(--special.ins.operation.func = sysSend);
-                                              special.ins.specificOperation.system = opSend);
-    failSig <= eventCommitted and bool2std(--special.ins.operation.func = sysError);
-                                              special.ins.specificOperation.system = opError);
+    doneSig <= eventCommitted and bool2std(special.ins.specificOperation.system = opSend);
+    failSig <= eventCommitted and bool2std(special.ins.specificOperation.system = opError);
                 
 end Behavioral;

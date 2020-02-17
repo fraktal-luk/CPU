@@ -1,10 +1,5 @@
 --
---	Package File Template
---
---	Purpose: This package defines supplemental types, subtypes, 
---		 constants, and functions 
---
---   To use any of the example code shown below, uncomment the lines and modify as necessary
+
 --
 
 library IEEE;
@@ -53,8 +48,7 @@ function updateArgLocs(argValues: InstructionArgValues;
 							  progress: boolean)
 return InstructionArgValues;
 
-function updateSchedulerArray(insArray: SchedulerEntrySlotArray; readyRegFlags: std_logic_vector;
-									fni: ForwardingInfo; fnm: ForwardingMap; progressLocs: boolean)
+function updateSchedulerArray(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo; fnm: ForwardingMap; progressLocs: boolean)
 return SchedulerEntrySlotArray;
 
 end LogicIssue;
@@ -175,11 +169,7 @@ begin
             and ins.physicalArgSpec.floatDestSel = '0') -- ???
     then
         res.ins.physicalArgSpec.dest := (others => '0'); -- Don't allow false notifications of args
-        --res.ins.physicalArgSpec.destAlt := (others => '0'); -- ??
     end if;
-
-	--res.state.argValues.readyNow := ready;
-	--res.state.argValues.locs := locs;
 
 		if res.state.argValues.zero(0) = '1' then
 			res.state.argValues.arg0 := (others => '0');
@@ -196,6 +186,11 @@ begin
 
 	if res.state.argValues.immediate = '1' and USE_IMM then
 		res.state.argValues.arg1 := res.ins.constantArgs.imm;
+		
+		if IMM_AS_REG then
+		    res.state.argValues.arg1(PhysName'length-1 downto 0) := res.ins.physicalArgSpec.args(1);
+		end if;
+		
 		res.state.argValues.arg1(31 downto 17) := (others => res.ins.constantArgs.imm(16)); -- 16b + addditional sign bit
 		res.state.argValues.stored(1) := '1';
 	else
@@ -239,17 +234,17 @@ begin
 	-- Clear 'missing' flag where readyNext indicates.
 	--res.state.argValues.missing := res.state.argValues.missing and not (res.state.argValues.readyNext and not res.state.argValues.zero);
 
-		if res.state.argValues.argLocsPhase(0)(1 downto 0) = "00" and res.state.argValues.stored(0) = '0' then
-			res.state.argValues.arg0 := vals(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
-		elsif res.state.argValues.argLocsPhase(0)(1 downto 0) = "10" and res.state.argValues.stored(0) = '0' then
-			res.state.argValues.arg0 := regValues(0);
-		end if;
+    if res.state.argValues.argLocsPhase(0)(1 downto 0) = "00" and res.state.argValues.stored(0) = '0' then
+        res.state.argValues.arg0 := vals(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
+    elsif res.state.argValues.argLocsPhase(0)(1 downto 0) = "10" and res.state.argValues.stored(0) = '0' then
+        res.state.argValues.arg0 := regValues(0);
+    end if;
 
-		if res.state.argValues.argLocsPhase(1)(1 downto 0) = "00" and res.state.argValues.stored(1) = '0' then
-			res.state.argValues.arg1 := vals(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
-		elsif res.state.argValues.argLocsPhase(1)(1 downto 0) = "10" and res.state.argValues.stored(1) = '0' then -- and res.state.argValues.immediate = '0' then
-			res.state.argValues.arg1 := regValues(1);
-		end if;
+    if res.state.argValues.argLocsPhase(1)(1 downto 0) = "00" and res.state.argValues.stored(1) = '0' then
+        res.state.argValues.arg1 := vals(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
+    elsif res.state.argValues.argLocsPhase(1)(1 downto 0) = "10" and res.state.argValues.stored(1) = '0' then -- and res.state.argValues.immediate = '0' then
+        res.state.argValues.arg1 := regValues(1);
+    end if;
 	
 	return res;
 end function;
@@ -295,14 +290,14 @@ begin
 	
 	-- What is being issued now is marked
     for i in 0 to QUEUE_SIZE-1 loop
-            if selMask(i) = '1' and sends = '1' then
-                xVecS(i).state.argValues.issued := '1';
-            end if;
-            
-            -- Retraction into IQ when sending turns out disallowed
-            if issuedMask(i) = '1' and sentUnexpected = '1' then
-            --    xVecS(i).state.argValues.issued := '0';
-            end if;  
+        if selMask(i) = '1' and sends = '1' then
+            xVecS(i).state.argValues.issued := '1';
+        end if;
+        
+        -- Retraction into IQ when sending turns out disallowed
+        if issuedMask(i) = '1' and sentUnexpected = '1' then
+        --    xVecS(i).state.argValues.issued := '0';
+        end if;  
     end loop;	
 	
 	xVecS(QUEUE_SIZE) := xVecS(QUEUE_SIZE-1);
@@ -352,7 +347,7 @@ begin
 	   res(i).state.argValues.arg2 := (others => '0');
 	       
 	
-       if CLEAR_DEBUG_INFO then
+       if CLEAR_DEBUG_INFO then       
            res(i).ins.ip := (others => '0');
            res(i).ins.bits := (others => '0');
            res(i).ins.tags.fetchCtr := (others => '0');
@@ -362,6 +357,15 @@ begin
            -- TODO: ptrs may be better kept in BQ!
                res(i).ins.tags.intPointer := (others => '0');
                res(i).ins.tags.floatPointer := (others => '0');
+               
+           res(i).ins.classInfo.branchIns := '0';
+           res(i).ins.controlInfo.frontBranch := '0';
+           res(i).ins.controlInfo.confirmedBranch := '0';
+           res(i).ins.controlInfo.specialAction := '0';
+                    
+           if IMM_AS_REG then        
+               res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
+           end if;
        end if;
        
        res(i).ins.result := (others => '0');
@@ -375,7 +379,7 @@ end function;
 
 
 function updateSchedulerStateGeneric(ins: InstructionState; st: SchedulerState;
-										readyRegFlags: std_logic_vector; fni: ForwardingInfo;
+										fni: ForwardingInfo;
 										fnm: ForwardingMap; progressLocs: boolean)
 return SchedulerEntrySlot is
 	variable res: SchedulerEntrySlot := DEFAULT_SCHEDULER_ENTRY_SLOT;
@@ -415,14 +419,6 @@ begin
 		 readyM2 := (isNonzero(cmp0toM2), isNonzero(cmp1toM2), '0');
 		 locsM2 := (findLoc2b(cmp0toM2), findLoc2b(cmp1toM2), (others => '0'));
 
-	if res.state.argValues.newInQueue = '1' then
-		tmp8 := "000000" & ins.tags.renameIndex(1 downto 0);   -- !!!!!!!!!!!!!!!!
-		rrf := readyRegFlags(3*slv2u(tmp8) to 3*slv2u(tmp8) + 2);
-    else
-        rrf := (others => '0');
-    end if;
-
-    rrf := rrf and fnm.maskRR; -- 
 
 	readyBefore := not res.state.argValues.missing;
 
@@ -443,13 +439,12 @@ begin
 end function;
 
 
-function updateSchedulerArray(insArray: SchedulerEntrySlotArray; readyRegFlags: std_logic_vector;
-									fni: ForwardingInfo; fnm: ForwardingMap; progressLocs: boolean)
+function updateSchedulerArray(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo; fnm: ForwardingMap; progressLocs: boolean)
 return SchedulerEntrySlotArray is
 	variable res: SchedulerEntrySlotArray(0 to insArray'length-1);-- := insArray;
 begin
 	for i in insArray'range loop
-		res(i) := updateSchedulerStateGeneric(insArray(i).ins, insArray(i).state, readyRegFlags, fni, fnm, progressLocs);
+		res(i) := updateSchedulerStateGeneric(insArray(i).ins, insArray(i).state, fni, fnm, progressLocs);
 	    res(i).full := (insArray(i).full);
 	end loop;	
 	return res;

@@ -13,6 +13,9 @@ use work.PipelineGeneral.all;
 
 
 entity DispatchBuffer is
+    generic (
+        IS_FP: boolean := false
+    );
     Port ( clk : in STD_LOGIC;
            
            specialAction: in InstructionSlot;
@@ -59,8 +62,7 @@ begin
             end if;
             
             if prevSending = '1' then
-                if --fullMask(0) = '1' and nextAccepting = '0' then -- This means full(0) and not sending
-                   fullMaskNew0 = '1' then
+                if fullMaskNew0 = '1' then
                     queueData1 <= dataIn;
                     special1 <= specialAction;
                     fullMask(1) <= '1';
@@ -80,12 +82,7 @@ begin
             if execEventSignal = '1' or lateEventSignal = '1' then
                 fullMask <= (others => '0');
             end if;
-           
---           for i in 0 to PIPE_WIDTH-1 loop
-               
---           end loop;
-           
-           
+   
            if CLEAR_DEBUG_INFO then
                 for i in 0 to PIPE_WIDTH-1 loop
                    queueData0(i).ins.ip <= (others => '0');
@@ -93,37 +90,97 @@ begin
                    queueData0(i).ins.result <= (others => '0');
                    queueData0(i).ins.target <= (others => '0');
                     
-                   --queueData0(i).ins.constantArgs <= DEFAULT_CONSTANT_ARGS;
-                 
-                   queueData0(i).ins.operation <= (System, sysUndef); --!! Operation must be known to UnitSequencer after commit
-                    
---                         res(j).ops(i).ins.virtualArgSpec.intArgSel := (others => '0');
---                         res(j).ops(i).ins.virtualArgSpec.floatArgSel := (others => '0');
---                         res(j).ops(i).ins.virtualArgSpec.args := (others => (others => '0'));
-        
---                         res(j).ops(i).ins.physicalArgSpec.intArgSel := (others => '0');
---                         res(j).ops(i).ins.physicalArgSpec.floatArgSel := (others => '0');
---                         res(j).ops(i).ins.physicalArgSpec.args := (others => (others => '0'));
-                    
---                         res(j).ops(i).ins.virtualArgSpec.dest := (others => '0');  -- separate RAM
---                         res(j).ops(i).ins.physicalArgSpec.dest := (others => '0'); -- separate RAM
-                    
-                         
-                        -- res(j).ops(i).ins.virtualArgSpec.intDestSel := '0';
-                        -- res(j).ops(i).ins.physicalArgSpec.intDestSel := '0';
-                    
-                    --res(slv2u(j)).ops(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
                      queueData0(i).ins.tags.fetchCtr <= (others => '0');
                      queueData0(i).ins.tags.decodeCtr <= (others => '0');
                      queueData0(i).ins.tags.renameCtr <= (others => '0');
                      if i > 0 then -- As in RegisterManager
                         queueData0(i).ins.tags.renameIndex <= (others => '0');
                      end if;
-                     --    queueData0(i).ins.tags.intPointer <= (others => '0');
-                     --    queueData0(i).ins.tags.floatPointer <= (others => '0');
-        
-        
-                     queueData0(i).ins.tags.commitCtr <= (others => '0');                   
+                     
+                        queueData0(i).ins.tags.intPointer <= (others => '0');
+                        queueData0(i).ins.tags.floatPointer <= (others => '0');
+
+                     queueData0(i).ins.tags.commitCtr <= (others => '0');
+                     
+                     -----
+                   queueData1(i).ins.ip <= (others => '0');
+                     queueData1(i).ins.bits <= (others => '0');
+                     queueData1(i).ins.result <= (others => '0');
+                     queueData1(i).ins.target <= (others => '0');
+                      
+                       queueData1(i).ins.tags.fetchCtr <= (others => '0');
+                       queueData1(i).ins.tags.decodeCtr <= (others => '0');
+                       queueData1(i).ins.tags.renameCtr <= (others => '0');
+                       if i > 0 then -- As in RegisterManager
+                          queueData1(i).ins.tags.renameIndex <= (others => '0');
+                       end if;
+                       
+                          queueData1(i).ins.tags.intPointer <= (others => '0');
+                          queueData1(i).ins.tags.floatPointer <= (others => '0');
+  
+                       queueData1(i).ins.tags.commitCtr <= (others => '0');
+                      ------ 
+
+                           special0.ins.classInfo <= DEFAULT_CLASS_INFO;
+                           
+                           special0.ins.ip <= (others => '0');
+                           special0.ins.bits <= (others => '0');       
+                           special0.ins.target <= (others => '0');
+                           special0.ins.result <= (others => '0');
+                           
+                           special0.ins.tags <= DEFAULT_INSTRUCTION_TAGS;
+                           special0.ins.constantArgs <= DEFAULT_CONSTANT_ARGS;
+                           special0.ins.virtualArgSpec <= DEFAULT_ARG_SPEC;
+                           special0.ins.physicalArgSpec <= DEFAULT_ARG_SPEC;
+
+
+                           special1.ins.classInfo <= DEFAULT_CLASS_INFO;
+                           
+                           special1.ins.ip <= (others => '0');
+                           special1.ins.bits <= (others => '0');       
+                           special1.ins.target <= (others => '0');
+                           special1.ins.result <= (others => '0');
+                           
+                           special1.ins.tags <= DEFAULT_INSTRUCTION_TAGS;
+                           special1.ins.constantArgs <= DEFAULT_CONSTANT_ARGS;
+                           special1.ins.virtualArgSpec <= DEFAULT_ARG_SPEC;
+                           special1.ins.physicalArgSpec <= DEFAULT_ARG_SPEC;
+
+                                            
+                     if IS_FP then
+                        queueData0(i).ins.constantArgs <= DEFAULT_CONSTANT_ARGS;
+                        queueData0(i).ins.specificOperation <= DEFAULT_SPECIFIC_OP;
+                        queueData0(i).ins.virtualArgSpec <= DEFAULT_ARG_SPEC;
+                        
+                        queueData0(i).ins.tags <= DEFAULT_INSTRUCTION_TAGS;
+                        
+                        queueData0(i).ins.controlInfo <= DEFAULT_CONTROL_INFO;
+                        queueData0(i).ins.classInfo <= DEFAULT_CLASS_INFO;
+                        
+                        queueData0(i).ins.physicalArgSpec.intDestSel <= '0';
+                        queueData0(i).ins.physicalArgSpec.floatDestSel <= '0';
+                        queueData0(i).ins.physicalArgSpec.intArgSel <= (others => '0');
+                        queueData0(i).ins.physicalArgSpec.floatArgSel <= (others => '0');
+                        
+                        special0 <= DEFAULT_INSTRUCTION_SLOT;                       
+                        
+                        --
+                        queueData1(i).ins.constantArgs <= DEFAULT_CONSTANT_ARGS;
+                        queueData1(i).ins.specificOperation <= DEFAULT_SPECIFIC_OP;
+                        queueData1(i).ins.virtualArgSpec <= DEFAULT_ARG_SPEC;
+                        
+                        queueData1(i).ins.tags <= DEFAULT_INSTRUCTION_TAGS;
+                        
+                        queueData1(i).ins.controlInfo <= DEFAULT_CONTROL_INFO;
+                        queueData1(i).ins.classInfo <= DEFAULT_CLASS_INFO;
+                        
+                        queueData1(i).ins.physicalArgSpec.intDestSel <= '0';
+                        queueData1(i).ins.physicalArgSpec.floatDestSel <= '0';
+                        queueData1(i).ins.physicalArgSpec.intArgSel <= (others => '0');
+                        queueData1(i).ins.physicalArgSpec.floatArgSel <= (others => '0');
+                        
+                        special1 <= DEFAULT_INSTRUCTION_SLOT;                                                                       
+                     end if;          
                 end loop;
             end if;    
 
@@ -131,8 +188,7 @@ begin
     end process;
     
     sending <= isSending;
-    dataOut <= --queueData0;
-                restoreRenameIndex(queueData0);
+    dataOut <= restoreRenameIndex(queueData0);
     specialOut <= special0;
 
     accepting <= not fullMask(0); -- Don't allow more if anything needed to be buffered!

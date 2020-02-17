@@ -1,23 +1,3 @@
-----------------------------------------------------------------------------------
--- Company: 
--- Engineer: 
--- 
--- Create Date: 04.11.2018 22:35:28
--- Design Name: 
--- Module Name: CoreConfig - Behavioral
--- Project Name: 
--- Target Devices: 
--- Tool Versions: 
--- Description: 
--- 
--- Dependencies: 
--- 
--- Revision:
--- Revision 0.01 - File Created
--- Additional Comments:
--- 
-----------------------------------------------------------------------------------
-
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
@@ -37,14 +17,16 @@ constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');
 
 constant FETCH_WIDTH: positive := PIPE_WIDTH; 
 
---constant FETCH_BLOCK_SIZE: positive := PIPE_WIDTH*2; -- in halfwords
-
 constant IBUFFER_SIZE: positive := 2*FETCH_WIDTH;
 constant ROB_SIZE: positive := 8; 
 
 constant USE_LINE_PREDICTOR: boolean := true;
 
 constant PHYS_REG_BITS: natural := 6 + LOG2_PIPE_WIDTH;
+
+-- CAREFUL, TODO: compute it by log2 from number of phys regs
+constant PHYS_REG_BITS_EFFECTIVE: natural := PHYS_REG_BITS - 1;
+
 constant N_PHYSICAL_REGS: natural := --64 * PIPE_WIDTH;
                                         128;
 constant N_PHYS: natural := N_PHYSICAL_REGS;
@@ -52,12 +34,14 @@ constant N_PHYS: natural := N_PHYSICAL_REGS;
 constant FREE_LIST_SIZE: positive := --N_PHYSICAL_REGS;
                                         256;
 
+-- Optimize immediate field by keeping part of it in physical register field
+constant IMM_AS_REG: boolean := true;
+
 end CoreConfig;
 
 
 
 package body CoreConfig is
-
 
 
 end CoreConfig;
