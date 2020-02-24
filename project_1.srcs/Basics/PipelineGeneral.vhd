@@ -23,6 +23,22 @@ type ForwardingInfo is record
 	nextTagsM2:	PhysNameArray(0 to 2);
 end record;
 
+type ForwardingMatches is record
+    -- src0
+	a0cmp0: std_logic_vector(0 to 2);
+    a0cmp1: std_logic_vector(0 to 2);    
+    a0cmpM1: std_logic_vector(0 to 2);
+    a0cmpM2: std_logic_vector(0 to 2);
+    
+    -- src1
+	a1cmp0: std_logic_vector(0 to 2);
+	a1cmp1: std_logic_vector(0 to 2);	
+	a1cmpM1: std_logic_vector(0 to 2);
+	a1cmpM2: std_logic_vector(0 to 2);
+end record;
+
+type ForwardingMatchesArray is array(integer range <>) of ForwardingMatches; 
+
 type ForwardingMap is record
     maskRR: std_logic_vector(0 to 2);
     maskR1: std_logic_vector(0 to 2);
@@ -40,6 +56,10 @@ constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
 		
 	nextTagsM1 => (others => (others => '0')),
 	nextTagsM2 => (others => (others => '0'))
+);
+
+constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
+    others => (others => '0')
 );
 
 constant DEFAULT_FORWARDING_MAP: ForwardingMap := (

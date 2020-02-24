@@ -61,6 +61,9 @@ architecture Behavioral of IssueQueue is
 	signal anyReadyFull, anyReadyLive, sends, sends_N, sendPossible, sendingKilled, sent, sentKilled, sentUnexpected: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
+    signal fma: ForwardingMatchesArray(0 to IQ_SIZE-1) := (others => DEFAULT_FORWARDING_MATCHES);
+    signal fmaInputStage: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
+
 	-- Select item at first '1', or the last one if all zeros
 	function prioSelect(elems: SchedulerEntrySlotArray; selVec: std_logic_vector) return SchedulerEntrySlot is
 		variable ind, ind0, ind1: std_logic_vector(2 downto 0) := "000";
@@ -198,19 +201,15 @@ architecture Behavioral of IssueQueue is
     	
 begin
 
+	fmaInputStage <= findForwardingMatchesArray(inputStage, fni);    
+    inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
+
     inputStageUpdated <= updateSchedulerArray(inputStage, fni, waitingFM, true);
     
     inputStageNext <= iqInputStageNext(inputStageUpdated, newContent, prevSendingOK, execEventSignal, lateEventSignal);
     inputReadingAny <= prevSendingOK and isNonzero(extractFullMask(newArr));
     inputStageAny <= isNonzero(extractFullMask(inputStage));
     inputStageLivingAny <= inputStageAny and not execEventSignal and not lateEventSignal;
-    -- 
-    
-    -- TEMP: acceptingOut would be '1' when PIPE_WIDTH slots free in the main queue AND not inputStageAny
-    --
-    
-    inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
-
         
 	QUEUE_SYNCHRONOUS: process(clk) 	
 	begin
@@ -250,8 +249,10 @@ begin
                                               );
 					
 	-- TODO: below could be optimized because some code is shared (comparators!)
-	queueContentUpdated <= updateSchedulerArray(queueContent, fni, waitingFM, true);
-	queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, selectionFM, false);
+	fma <= findForwardingMatchesArray(queueContent, fni);
+	
+	queueContentUpdated <= updateSchedulerArray_2(queueContent, fni, fma, waitingFM, true);
+	queueContentUpdatedSel <= updateSchedulerArray_2(queueContent, fni, fma, selectionFM, false);
 
 	readyMask <= extractReadyMaskNew(queueContentUpdatedSel) and fullMask;	
 	readyMaskLive <= readyMask and livingMask;
