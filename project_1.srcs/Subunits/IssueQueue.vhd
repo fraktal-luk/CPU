@@ -204,7 +204,7 @@ begin
 	fmaInputStage <= findForwardingMatchesArray(inputStage, fni);    
     inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
 
-    inputStageUpdated <= updateSchedulerArray(inputStage, fni, waitingFM, true);
+    inputStageUpdated <= updateSchedulerArray_2(inputStage, fni, fmaInputStage, waitingFM, true);
     
     inputStageNext <= iqInputStageNext(inputStageUpdated, newContent, prevSendingOK, execEventSignal, lateEventSignal);
     inputReadingAny <= prevSendingOK and isNonzero(extractFullMask(newArr));
