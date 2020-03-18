@@ -451,8 +451,12 @@ begin
                 
         signal sendingToIntWriteQueue, sendingToFloatWriteQueue, sendingToIntRF, sendingToFloatRF: std_logic := '0';
         signal dataToIntWriteQueue, dataToFloatWriteQueue, dataToIntRF, dataToFloatRF: InstructionSlotArray(0 to 0)
-                                            := (others => DEFAULT_INSTRUCTION_SLOT);                              
+                                            := (others => DEFAULT_INSTRUCTION_SLOT);
+                                            
+        signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);                                                                      
     begin
+        
+              fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedDataI0, fni);
         
         SUBPIPE_ALU: block
            signal dataToAlu, dataToBranch: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);           
@@ -460,7 +464,8 @@ begin
            signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
         begin
             schedDataI0 <= getSchedData(extractData(TMP_recodeALU(renamedDataLiving)), getAluMask(renamedDataLiving), true);
-            dataToQueueI0 <= work.LogicIssue.updateSchedulerArray(schedDataI0, fni, ENQUEUE_FN_MAP, true);
+            dataToQueueI0 <= --work.LogicIssue.updateSchedulerArray(schedDataI0, fni, ENQUEUE_FN_MAP, true);
+                                work.LogicIssue.updateSchedulerArray_2(schedDataI0, fni, fmaInt, ENQUEUE_FN_MAP, true);
             
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
@@ -571,8 +576,8 @@ begin
            memMaskInt <= getMemMask(renamedDataLiving);
      
            schedDataM0 <= getSchedData(removeArg2(extractData(renamedDataLivingMem)), memMaskInt, true);
-           dataToQueueM0 <= work.LogicIssue.updateSchedulerArray(schedDataM0, fni, ENQUEUE_FN_MAP, true);
-                    
+           dataToQueueM0 <= --work.LogicIssue.updateSchedulerArray(schedDataM0, fni, ENQUEUE_FN_MAP, true);
+                                work.LogicIssue.updateSchedulerArray_2(schedDataM0, fni, fmaInt, ENQUEUE_FN_MAP, true);
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
                IQ_SIZE => 8 --IQ_SIZES(4)
