@@ -20,7 +20,8 @@ use work.LogicIssue.all;
 entity IssueQueue is
 	generic(
 		IQ_SIZE: natural := 8;
-		IS_FP: boolean := false
+		IS_FP: boolean := false;
+		ALT_INPUT: boolean := false
 	);
 	port(
 		clk: in std_logic;
@@ -29,6 +30,8 @@ entity IssueQueue is
 		
 		prevSendingOK: in std_logic;
 		newArr: in SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
+		  newArr_Alt: in SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
+		  newArrOut: out SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
 		nextAccepting: in std_logic;
 		lateEventSignal: in std_logic;
 		execEventSignal: in std_logic;
@@ -204,7 +207,10 @@ begin
 	fmaInputStage <= findForwardingMatchesArray(inputStage, fni);    
     inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
 
-    inputStageUpdated <= updateSchedulerArray_2(inputStage, fni, fmaInputStage, waitingFM, true);
+        inputStageUpdated <= updateSchedulerArray_2(inputStage, fni, fmaInputStage, waitingFM, true) when not ALT_INPUT
+                         else newArr_Alt;
+        newArrOut <= inputStageUpdated;
+    
     
     inputStageNext <= iqInputStageNext(inputStageUpdated, newContent, prevSendingOK, execEventSignal, lateEventSignal);
     inputReadingAny <= prevSendingOK and isNonzero(extractFullMask(newArr));

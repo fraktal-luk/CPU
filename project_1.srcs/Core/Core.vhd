@@ -215,7 +215,8 @@ begin
         bpSending => bpSending,
         bpData => bpData,
     
-        renameAccepting => dispatchAccepting,           
+        renameAccepting => --oooAccepting,--
+                            dispatchAccepting,           
         dataLastLiving => frontDataLastLiving,
         lastSending => frontLastSending,
         
@@ -271,9 +272,12 @@ begin
     -- From Rename we send to OOO if it accepts and DB is empty. If DB is not empty, we have to drain it first!
     sendingToDispatchBuffer <= renamedSendingRe and (not oooAccepting or not dbEmpty);
     
-    renamedSending <= (renamedSendingRe and oooAccepting) or sendingFromDispatchBuffer;
-    renamedDataLiving <= renamedDataLivingRe when sendingFromDispatchBuffer = '0' else dispatchBufferDataInt; 
-    renamedDataLivingFloatPre <= renamedDataLivingFloatRe when sendingFromDispatchBuffer = '0' else dispatchBufferDataFloat; 
+    renamedSending <= (renamedSendingRe and oooAccepting)
+                                         or sendingFromDispatchBuffer;
+    renamedDataLiving <= renamedDataLivingRe
+                                         when sendingFromDispatchBuffer = '0' else dispatchBufferDataInt; 
+    renamedDataLivingFloatPre <= renamedDataLivingFloatRe
+                                         when sendingFromDispatchBuffer = '0' else dispatchBufferDataFloat; 
         --renamedDataLivingFloat <= renamedDataLivingFloatPre;
 
         renamedDataLivingFloat <= mergeFP(renamedDataLiving, renamedDataLivingFloatPre);
@@ -288,7 +292,8 @@ begin
     
     renamedDataLivingMem <= TMP_recodeMem(renamedDataLiving);
     
-    specialActionToROB <= specialAction when sendingFromDispatchBuffer = '0' else specialActionDispatchBuffer;
+    specialActionToROB <= specialAction
+                                     when sendingFromDispatchBuffer = '0' else specialActionDispatchBuffer;
 
 
     DISPATCH_BUFFER: entity work.DispatchBuffer
@@ -421,6 +426,8 @@ begin
         signal schedDataM0, dataToQueueM0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);      
         signal schedDataF0, dataToQueueF0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 
+            signal NEW_ARR_DUMMY, newArrShared: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+
         signal dataToIssueStoreValue, dataToRegReadStoreValue, dataToExecIntStoreValue,
                dataToIssueFloatStoreValue, dataToRegReadFloatStoreValue, dataToExecFloatStoreValue,
                dataToExecStoreValue: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
@@ -479,6 +486,8 @@ begin
                 sentCancelled => sentCancelledI0,
                 prevSendingOK => renamedSending,
                 newArr => dataToQueueI0,--,schArrays(4),
+                    newArr_Alt => NEW_ARR_DUMMY,
+                    newArrOut => newArrShared,
                 fni => fni,
                 waitingFM => WAITING_FN_MAP,
                 selectionFM => SELECTION_FN_MAP,
@@ -580,7 +589,8 @@ begin
                                 work.LogicIssue.updateSchedulerArray_2(schedDataM0, fni, fmaInt, ENQUEUE_FN_MAP, true);
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
-               IQ_SIZE => 8 --IQ_SIZES(4)
+               IQ_SIZE => 8 --IQ_SIZES(4),
+               ,ALT_INPUT => false --true
            )
            port map(
                clk => clk, reset => '0', en => '0',
@@ -590,6 +600,7 @@ begin
                sentCancelled => sentCancelledM0,               
                prevSendingOK => renamedSending,
                newArr => dataToQueueM0,--,schArrays(4),
+                    newArr_Alt => newArrShared,
                fni => fni,
                waitingFM => WAITING_FN_MAP,
                selectionFM => SELECTION_FN_MAP,
@@ -799,6 +810,7 @@ begin
                 sentCancelled => sentCancelledSVI,                
                 prevSendingOK => renamedSending,
                 newArr => dataToStoreValueIQ,--,schArrays(4),
+                    newArr_Alt => NEW_ARR_DUMMY,
                 fni => fni,
                 waitingFM => WAITING_FN_MAP_SV,
                 selectionFM => DEFAULT_FORWARDING_MAP,      
@@ -872,6 +884,7 @@ begin
                 sentCancelled => sentCancelledSVF,                
                 prevSendingOK => renamedSending,
                 newArr => dataToStoreValueFloatIQ,--,schArrays(4),
+                    newArr_Alt => NEW_ARR_DUMMY,                
                 fni => fniFloat,
                 waitingFM => WAITING_FN_MAP_FLOAT_SV,
                 selectionFM => DEFAULT_FORWARDING_MAP,      
@@ -953,6 +966,7 @@ begin
                 sentCancelled => sentCancelledF0,                
                 prevSendingOK => renamedSending,
                 newArr => dataToQueueF0,--,schArrays(4),
+                    newArr_Alt => NEW_ARR_DUMMY,                
                 fni => fniFloat,
                 waitingFM => WAITING_FN_MAP_FLOAT,
                 selectionFM => SELECTION_FN_MAP_FLOAT,
