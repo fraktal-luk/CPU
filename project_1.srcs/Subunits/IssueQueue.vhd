@@ -267,7 +267,7 @@ begin
 	killMask <= getKillMask(queueData, fullMask, execCausing, execEventSignal, lateEventSignal);
 	
 	       acceptingForInputStage <= not fullMask(IQ_SIZE-PIPE_WIDTH);
-	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH) and not inputStageAny;
+	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH);-- and not inputStageAny;
 	               
 	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);
 	

@@ -557,8 +557,10 @@ begin
             res(i).state.argValues.immediate := '1';
             res(i).state.argValues.zero(1) := '0';
             
-            if CLEAR_DEBUG_INFO and IMM_AS_REG and HAS_IMM then
+            if IMM_AS_REG and HAS_IMM then
                 res(i).ins.physicalArgSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);
+            end if;
+            if CLEAR_DEBUG_INFO and IMM_AS_REG and HAS_IMM then    
                 res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
             end if;
         end if;

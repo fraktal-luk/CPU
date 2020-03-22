@@ -64,7 +64,9 @@ architecture Behavioral of Core is
             signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
     signal frontDataLastLiving, 
             renamedDataLiving, renamedDataLivingFloatPre, renamedDataLivingFloat, renamedDataLivingFloat_C, renamedDataMerged, renamedDataLivingMem,
+                renamedInt, renamedFloat, renamedIntBuff, renamedFloatBuff,
             renamedDataLivingRe, renamedDataLivingFloatRe, renamedDataMergedRe,
+                renamedDataLivingReMem, renamedDataLivingMemBuff, renamedDataLivingBuff, 
             dispatchBufferDataInt, dispatchBufferDataFloat, dispatchBufferDataMerged,
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -82,7 +84,8 @@ architecture Behavioral of Core is
     --    
 
     signal execEventSignal, lateEventSignal, lateEventSetPC, sendingBranchIns: std_logic := '0';
-    signal robSending, robAccepting, renamedSending, renamedSendingRe, commitAccepting, oooAccepting, sendingToDispatchBuffer, sendingFromDispatchBuffer,
+    signal robSending, robAccepting, renamedSending, renamedSendingRe, commitAccepting, oooAccepting, sendingToDispatchBuffer, sendingFromDispatchBuffer, lsbrAccepting,
+                            renamedSendingBuff,
                 iqAccepting, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0, dispatchAccepting,
                 robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0: std_logic := '0';
     signal commitGroupCtr, commitGroupCtrInc: InsTag := (others => '0');
@@ -215,8 +218,8 @@ begin
         bpSending => bpSending,
         bpData => bpData,
     
-        renameAccepting => --oooAccepting,--
-                            dispatchAccepting,           
+        renameAccepting => oooAccepting,--
+                           -- dispatchAccepting,           
         dataLastLiving => frontDataLastLiving,
         lastSending => frontLastSending,
         
@@ -239,7 +242,7 @@ begin
         frontDataLastLiving => frontDataLastLiving,
         
         renamedDataLiving => renamedDataLivingRe,
-        renamedDataLivingFloat => renamedDataLivingFloatRe,        
+        renamedDataLivingFloat => renamedDataLivingFloatPre,        
         renamedSending => renamedSendingRe,
 
         robDataLiving => dataOutROB,
@@ -268,19 +271,25 @@ begin
     or (robAcceptingMore and iqAcceptingMoreI0 and iqAcceptingMoreM0 and iqAcceptingMoreS0 and iqAcceptingMoreF0 and iqAcceptingMoreSF0 and not almostFullSQ and not almostFullLQ and renameAccepting);
    
     oooAccepting <= robAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0 and acceptingSQ and acceptingLQ;
+    lsbrAccepting <= robAccepting and acceptingSQ and acceptingLQ;
     
     -- From Rename we send to OOO if it accepts and DB is empty. If DB is not empty, we have to drain it first!
-    sendingToDispatchBuffer <= renamedSendingRe and (not oooAccepting or not dbEmpty);
+    sendingToDispatchBuffer <= renamedSendingRe;-- and (not oooAccepting or not dbEmpty);
     
-    renamedSending <= (renamedSendingRe and oooAccepting)
-                                         or sendingFromDispatchBuffer;
+    --renamedSending <= --(renamedSendingRe and oooAccepting);
+                                       --  or sendingFromDispatchBuffer;
+          RenamedSending <= renamedSendingRe;                   
     renamedDataLiving <= renamedDataLivingRe
-                                         when sendingFromDispatchBuffer = '0' else dispatchBufferDataInt; 
-    renamedDataLivingFloatPre <= renamedDataLivingFloatRe
-                                         when sendingFromDispatchBuffer = '0' else dispatchBufferDataFloat; 
+                                         when sendingFromDispatchBuffer = '0' else dispatchBufferDataInt;
+           renamedDataLivingBuff <= dispatchBufferDataInt;
+ 
+    --renamedDataLivingFloatPre <= renamedDataLivingFloatRe;
+                                         --when sendingFromDispatchBuffer = '0' else dispatchBufferDataFloat; 
         --renamedDataLivingFloat <= renamedDataLivingFloatPre;
 
-        renamedDataLivingFloat <= mergeFP(renamedDataLiving, renamedDataLivingFloatPre);
+        renamedDataLivingFloatRe <= mergeFP(renamedDataLivingRe, renamedDataLivingFloatPre);
+        --renamedDataLivingFloat <= mergeFP(renamedDataLiving, renamedDataLivingFloatPre);
+
 
 --            ch0 <= bool2std(renamedDataLivingFloat_C(0) = renamedDataLivingFloat(0));
 --            ch1 <= bool2std(renamedDataLivingFloat_C(1) = renamedDataLivingFloat(1));
@@ -288,20 +297,23 @@ begin
 --            ch3 <= bool2std(renamedDataLivingFloat_C(3) = renamedDataLivingFloat(3));
 
     renamedDataMerged <= --mergeDests(renamedDataLiving, renamedDataLivingFloat);
-                            renamedDataLiving;
+                            renamedDataLivingBuff;
     
-    renamedDataLivingMem <= TMP_recodeMem(renamedDataLiving);
+    renamedDataLivingReMem <= TMP_recodeMem(renamedDataLivingRe);
+    renamedDataLivingMemBuff <= TMP_recodeMem(renamedDataLivingBuff);
     
-    specialActionToROB <= specialAction
-                                     when sendingFromDispatchBuffer = '0' else specialActionDispatchBuffer;
+    specialActionToROB <= --specialAction
+                           --          when sendingFromDispatchBuffer = '0' else 
+                                     specialActionDispatchBuffer;
 
-
+       renamedSendingBuff <= sendingFromDispatchBuffer;
     DISPATCH_BUFFER: entity work.DispatchBuffer
     port map(
         clk => clk,
         
         specialAction => specialAction,
-        nextAccepting => oooAccepting,          
+        nextAccepting => --oooAccepting,
+                           lsbrAccepting,          
         accepting => dispatchAccepting,
         prevSending => sendingToDispatchBuffer,
         dataIn => renamedDataLivingRe,            
@@ -320,10 +332,11 @@ begin
         clk => clk,
         
         specialAction => specialAction,
-        nextAccepting => oooAccepting,          
+        nextAccepting => --oooAccepting,
+                            lsbrAccepting,        
         accepting => open,
         prevSending => sendingToDispatchBuffer,
-        dataIn => renamedDataLivingFloatRe,            
+        dataIn => renamedDataLivingFloatPre,            
         sending => open,--sendingFromDispatchBuffer,
         dataOut => dispatchBufferDataFloat,
         specialOut => open,
@@ -360,7 +373,7 @@ begin
 		inputSpecial => specialActionToROB,
 		
 		inputData => renamedDataMerged,
-		prevSending => renamedSending,
+		prevSending => renamedSendingBuff,
 		acceptingOut => robAccepting,
 		acceptingMore => robAcceptingMore,
 		
@@ -470,7 +483,7 @@ begin
            signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
            signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
         begin
-            schedDataI0 <= getSchedData(extractData(TMP_recodeALU(renamedDataLiving)), getAluMask(renamedDataLiving), true);
+            schedDataI0 <= getSchedData(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe), true);
             dataToQueueI0 <= --work.LogicIssue.updateSchedulerArray(schedDataI0, fni, ENQUEUE_FN_MAP, true);
                                 work.LogicIssue.updateSchedulerArray_2(schedDataI0, fni, fmaInt, ENQUEUE_FN_MAP, true);
             
@@ -582,9 +595,9 @@ begin
            signal sendingIntLoad, sendingFloatLoad: std_logic := '0';
            signal dataToAgu, dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                               
         begin        
-           memMaskInt <= getMemMask(renamedDataLiving);
+           memMaskInt <= getMemMask(renamedDataLivingRe);
      
-           schedDataM0 <= getSchedData(removeArg2(extractData(renamedDataLivingMem)), memMaskInt, true);
+           schedDataM0 <= getSchedData(removeArg2(extractData(renamedDataLivingReMem)), memMaskInt, true);
            dataToQueueM0 <= --work.LogicIssue.updateSchedulerArray(schedDataM0, fni, ENQUEUE_FN_MAP, true);
                                 work.LogicIssue.updateSchedulerArray_2(schedDataM0, fni, fmaInt, ENQUEUE_FN_MAP, true);
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -790,12 +803,12 @@ begin
         begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
             
-            intStoreMask <= getStoreMask(renamedDataLivingMem) and not floatStoreMask;                                        
-            schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLivingMem)), intStoreMask, false);
+            intStoreMask <= getStoreMask(renamedDataLivingReMem) and not floatStoreMask;                                        
+            schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLivingReMem)), intStoreMask, false);
             dataToStoreValueIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValue, fni, ENQUEUE_FN_MAP_SV, true);
             
-            floatStoreMask <= getFloatStoreMask(renamedDataLivingMem, renamedDataLivingFloat);
-            schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLivingMem), extractData(renamedDataLivingFloat)), floatStoreMask, false);       
+            floatStoreMask <= getFloatStoreMask(renamedDataLivingReMem, renamedDataLivingFloatRe);
+            schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLivingReMem), extractData(renamedDataLivingFloatRe)), floatStoreMask, false);       
             dataToStoreValueFloatIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValueFloat, fniFloat, ENQUEUE_FN_MAP_FLOAT_SV, true);
                     
             IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -950,7 +963,7 @@ begin
         SUBPIPE_FP0: block
             signal dataToFpu0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                  
         begin
-            schedDataF0 <= getSchedData(extractData(TMP_recodeFP(renamedDataLivingFloat)), getFpuMask(renamedDataLivingFloat), false);
+            schedDataF0 <= getSchedData(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), getFpuMask(renamedDataLivingFloatRe), false);
             dataToQueueF0 <= work.LogicIssue.updateSchedulerArray(schedDataF0, fniFloat, ENQUEUE_FN_MAP_FLOAT, true);
             
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -1334,7 +1347,7 @@ begin
              stageDataToReserve => frontDataLastLiving,
                  
              newPhysDests => newIntDests,    -- FOR MAPPING
-             stageDataReserved => renamedDataLiving, --stageDataOutRename,
+             stageDataReserved => renamedDataLivingRe, --stageDataOutRename,
                  
              -- TODO: change to ins slot based
              writingMask(0) => sendingToIntRF,
@@ -1399,7 +1412,7 @@ begin
              stageDataToReserve => frontDataLastLiving,
                  
              newPhysDests => newFloatDests,    -- FOR MAPPING
-             stageDataReserved => renamedDataLivingFloat, --stageDataOutRename,
+             stageDataReserved => renamedDataLivingFloatPre, --stageDataOutRename,
                  
              writingMask(0) => sendingToFloatRF,  
              writingData(0) => dataToFloatRF(0).ins,
@@ -1442,9 +1455,9 @@ begin
         
     end block;
 
-    renamedDataToBQ <= setFullMask(renamedDataLiving, getBranchMask(renamedDataLiving));
-    renamedDataToSQ <= setFullMask(renamedDataLivingMem, getStoreMask(renamedDataLivingMem));
-    renamedDataToLQ <= setFullMask(renamedDataLivingMem, getLoadMask(renamedDataLivingMem));
+    renamedDataToBQ <= setFullMask(renamedDataLivingBuff, getBranchMask(renamedDataLivingBuff));
+    renamedDataToSQ <= setFullMask(renamedDataLivingMemBuff, getStoreMask(renamedDataLivingMemBuff));
+    renamedDataToLQ <= setFullMask(renamedDataLivingMemBuff, getLoadMask(renamedDataLivingMemBuff));
 
     BRANCH_QUEUE: entity work.BranchQueue
 	generic map(
@@ -1460,7 +1473,7 @@ begin
 		
 		acceptingBr => bqAccepting,
 		
-		prevSending => renamedSending,
+		prevSending => renamedSendingBuff,
 	    prevSendingBr => bpSending,
 		dataIn => renamedDataToBQ,
 		dataInBr => bpData,
@@ -1497,7 +1510,7 @@ begin
 		acceptingOut => acceptingSQ,
 		almostFull => almostFullSQ,
 				
-		prevSending => renamedSending,
+		prevSending => renamedSendingBuff,
 		dataIn => renamedDataToSQ, -- !!!!!
 
         -- interface with Exec
@@ -1539,7 +1552,7 @@ begin
 		acceptingOut => acceptingLQ,
 		almostFull => almostFullLQ,
 				
-		prevSending => renamedSending,
+		prevSending => renamedSendingBuff,
 		dataIn => renamedDataToLQ, -- !!!!!
 
         -- interface with Exec
