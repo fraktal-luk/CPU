@@ -54,23 +54,23 @@ begin
         if rising_edge(clk) then
             
             if isSending = '1' then
-                queueData0 <= queueData1;
-                special0 <= special1;
+                --queueData0 <= queueData1;
+                --special0 <= special1;
                 --fullMask(0) <= fullMask(1);
-                fullMaskNew0 := fullMask(1);
-                fullMask(1) <= '0';
+                fullMaskNew0 := '0';--fullMask(1);
+                --fullMask(1) <= '0';
             end if;
             
             if prevSending = '1' then
-                if fullMaskNew0 = '1' then
-                    queueData1 <= dataIn;
-                    special1 <= specialAction;
-                    fullMask(1) <= '1';
-                else
+                --if fullMaskNew0 = '1' then
+                --    queueData1 <= dataIn;
+                --    special1 <= specialAction;
+                --    fullMask(1) <= '1';
+                --else
                     queueData0 <= dataIn;
                     special0 <= specialAction;
                     fullMaskNew0 := '1';
-                end if;
+                --end if;
                 
                 if fullMask(0) = '1' and fullMask(1) = '1' then -- If buffer full but putting more
                     report "DispatchBuffer overflow!" severity failure;
@@ -191,6 +191,6 @@ begin
     dataOut <= restoreRenameIndex(queueData0);
     specialOut <= special0;
 
-    accepting <= not fullMask(0); -- Don't allow more if anything needed to be buffered!
+    accepting <= '1';--not fullMask(0); -- Don't allow more if anything needed to be buffered!
     empty <= not fullMask(0); -- CAREFUL: same as accepting but accepting refers to stage BEFORE Rename while empty is needed by flow FROM Rename
 end Behavioral;
