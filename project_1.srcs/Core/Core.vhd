@@ -85,7 +85,7 @@ architecture Behavioral of Core is
 
     signal execEventSignal, lateEventSignal, lateEventSetPC, sendingBranchIns: std_logic := '0';
     signal robSending, robAccepting, renamedSending, renamedSendingRe, commitAccepting, oooAccepting, sendingToDispatchBuffer, sendingFromDispatchBuffer, lsbrAccepting,
-                            renamedSendingBuff,
+                            renamedSendingBuff, queuesAccepting, queuesAcceptingMore,
                 iqAccepting, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0, dispatchAccepting,
                 robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0: std_logic := '0';
     signal commitGroupCtr, commitGroupCtrInc: InsTag := (others => '0');
@@ -270,15 +270,21 @@ begin
         and robAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0 and acceptingSQ and acceptingLQ and renameAccepting)
     or (robAcceptingMore and iqAcceptingMoreI0 and iqAcceptingMoreM0 and iqAcceptingMoreS0 and iqAcceptingMoreF0 and iqAcceptingMoreSF0 and not almostFullSQ and not almostFullLQ and renameAccepting);
    
-    oooAccepting <= robAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0 and acceptingSQ and acceptingLQ;
+    oooAccepting <= --robAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0 and acceptingSQ and acceptingLQ;
+                    queuesAcceptingMore and renameAccepting;
     lsbrAccepting <= robAccepting and acceptingSQ and acceptingLQ;
+    
+    queuesAccepting <= lsbrAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0; 
+    
+        queuesAcceptingMore <= robAcceptingMore and iqAcceptingMoreI0 and iqAcceptingMoreM0 and iqAcceptingMoreS0 and iqAcceptingMoreF0 and iqAcceptingMoreSF0 and not almostFullSQ and not almostFullLQ;
+        
     
     -- From Rename we send to OOO if it accepts and DB is empty. If DB is not empty, we have to drain it first!
     sendingToDispatchBuffer <= renamedSendingRe;-- and (not oooAccepting or not dbEmpty);
     
     --renamedSending <= --(renamedSendingRe and oooAccepting);
                                        --  or sendingFromDispatchBuffer;
-          RenamedSending <= renamedSendingRe;                   
+          renamedSending <= renamedSendingRe;                   
     renamedDataLiving <= renamedDataLivingRe
                                          when sendingFromDispatchBuffer = '0' else dispatchBufferDataInt;
            renamedDataLivingBuff <= dispatchBufferDataInt;
@@ -313,7 +319,8 @@ begin
         
         specialAction => specialAction,
         nextAccepting => --oooAccepting,
-                           lsbrAccepting,          
+                           --lsbrAccepting,
+                             queuesAccepting,      
         accepting => dispatchAccepting,
         prevSending => sendingToDispatchBuffer,
         dataIn => renamedDataLivingRe,            
@@ -493,6 +500,8 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
+
+                queuesAccepting => queuesAccepting,
         
                 acceptingOut => iqAcceptingI0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreI0,
@@ -607,6 +616,8 @@ begin
            )
            port map(
                clk => clk, reset => '0', en => '0',
+       
+               queuesAccepting => queuesAccepting,
        
                acceptingOut => iqAcceptingM0,--iqAcceptingI0rr(4),
                acceptingMore => iqAcceptingMoreM0,
@@ -817,6 +828,8 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
+
+                queuesAccepting => queuesAccepting,
         
                 acceptingOut => iqAcceptingS0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreS0,
@@ -891,7 +904,9 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-        
+
+                queuesAccepting => queuesAccepting,
+       
                 acceptingOut => iqAcceptingSF0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreSF0,
                 sentCancelled => sentCancelledSVF,                
@@ -973,6 +988,8 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
+
+                queuesAccepting => queuesAccepting,
         
                 acceptingOut => iqAcceptingF0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreF0,

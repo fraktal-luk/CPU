@@ -46,6 +46,8 @@ entity IssueQueue is
 		acceptingMore: out std_logic;
 		acceptingOut: out std_logic;
 		
+		queuesAccepting: in std_logic;
+		
 		anyReady: out std_logic;
 		schedulerOut: out SchedulerEntrySlot;
 		sending: out std_logic
@@ -160,18 +162,22 @@ architecture Behavioral of IssueQueue is
 	--		signal ch0, ch1, ch2: std_logic := '0';
 		
    signal inputStagePreRR, inputStage, inputStageUpdated, inputStageNext: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-   signal inputStageAny, inputStageLivingAny, inputReadingAny: std_logic := '0';
+   signal inputStageAny, inputStageLivingAny, inputReadingAny, inputStageSending: std_logic := '0';
    signal inputStageMoving, acceptingForInputStage: std_logic := '0'; -- This is when the content shifts to the main part of queue
    
    constant readyRegFlagsZ: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
 	   
-	function iqInputStageNext(content, newContent: SchedulerEntrySlotArray; prevSending, execEventSignal, lateEventSignal: std_logic) return SchedulerEntrySlotArray is
+	function iqInputStageNext(content, newContent: SchedulerEntrySlotArray; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerEntrySlotArray is
 	   variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := content;
 	begin
-	   if prevSending = '1' and execEventSignal = '0' and lateEventSignal = '0' then
+	   if execEventSignal = '1' or lateEventSignal = '1' then
+	       for i in 0 to PIPE_WIDTH-1 loop
+               res(i).full := '0';
+           end loop; 	       
+	   elsif prevSending = '1' then
 	       res := newContent;
 	       
-	   else -- Clearing everything - sent to main queue
+	   elsif isSending = '1' then -- Clearing everything - sent to main queue
 	       for i in 0 to PIPE_WIDTH-1 loop
 	           res(i).full := '0';
 	       end loop;    
@@ -211,8 +217,9 @@ begin
                          else newArr_Alt;
         newArrOut <= inputStageUpdated;
     
+    inputStageSending <= inputStageAny and queuesAccepting and not execEventSignal and not lateEventSignal;
     
-    inputStageNext <= iqInputStageNext(inputStageUpdated, newContent, prevSendingOK, execEventSignal, lateEventSignal);
+    inputStageNext <= iqInputStageNext(inputStageUpdated, newContent, prevSendingOK, inputStageSending, execEventSignal, lateEventSignal);
     inputReadingAny <= prevSendingOK and isNonzero(extractFullMask(newArr));
     inputStageAny <= isNonzero(extractFullMask(inputStage));
     inputStageLivingAny <= inputStageAny and not execEventSignal and not lateEventSignal;
@@ -251,7 +258,7 @@ begin
                                               remainMask, fullMask, livingMask, selMask, issuedMask,                                             
                                               sends, sent,
                                               sentUnexpected,
-                                              inputStageLivingAny
+                                              inputStageSending
                                               );
 					
 	-- TODO: below could be optimized because some code is shared (comparators!)
