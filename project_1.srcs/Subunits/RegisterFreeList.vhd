@@ -41,7 +41,6 @@ entity RegisterFreeList is
 end RegisterFreeList;
 
 
-
 architecture Behavioral of RegisterFreeList is
     signal freeListTakeSel, freeListPutSel, stableUpdateSelDelayed: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     -- Don't remove, it is used by newPhysDestPointer!
@@ -183,24 +182,20 @@ begin
             for i in 0 to 6 loop
                 ind := addIntTrunc(nT, -1, 2);
                 indM := addInt(ind, i + 1);
-                res(i) := listExt(--i + (slv2u(nT)-1 mod 4) + 1);
-                                    slv2u(indM(3 downto 0))); -- 4 bits for 12-element list
-            end loop;
-            
+                res(i) := listExt(slv2u(indM(3 downto 0))); -- 4 bits for 12-element list
+            end loop;          
             return res;
         end function;
 
         function nextMemNoTake(list: PhysNameArray; memData: PhysNameArray; allow: std_logic; nF, nT: SmallNumber) return PhysNameArray is
             variable res: PhysNameArray(0 to 7) := (others => (others => '0'));
             variable ind: SmallNumber := (others => '0');
-            variable notNF: SmallNumber := not nF; -- -nF == not nF + 1; not nF == -nF - 1                    
+            variable notNF: SmallNumber := not nF;               
         begin
             for i in 0 to 7 loop
                 ind := addIntTrunc(notNF, 1 + i, 2);
-                res(i) := memData(--(i - slv2u(nF)) mod 4);
-                                    slv2u(ind(1 downto 0)));
-            end loop;
-            
+                res(i) := memData(slv2u(ind(1 downto 0)));
+            end loop;         
             return res;
         end function;
         
@@ -210,10 +205,8 @@ begin
         begin
             for i in 0 to 7 loop
                 ind := addIntTrunc(subSN(nT, nF), i, 2);
-                res(i) := memData(--(i - slv2u(nF) + slv2u(nT)) mod 4);
-                                    slv2u(ind(1 downto 0)));
-            end loop;
-            
+                res(i) := memData(slv2u(ind(1 downto 0)));
+            end loop;       
             return res;
         end function;            
         
@@ -222,8 +215,7 @@ begin
         begin
             for i in 0 to 7 loop
                 res(i) := cmpLeS(nF, i);
-            end loop;
-            
+            end loop;          
             return res;
         end function;
     
@@ -232,8 +224,7 @@ begin
         begin
             for i in 0 to 7 loop
                 res(i) := cmpLeS(subSN(nF, nT), i);
-            end loop;
-            
+            end loop;        
             return res;
         end function;
                     
