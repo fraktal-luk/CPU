@@ -97,8 +97,8 @@ begin
                         queueData0(i).ins.tags.renameIndex <= (others => '0');
                      end if;
                      
-                        queueData0(i).ins.tags.intPointer <= (others => '0');
-                        queueData0(i).ins.tags.floatPointer <= (others => '0');
+                     --   queueData0(i).ins.tags.intPointer <= (others => '0');
+                     --   queueData0(i).ins.tags.floatPointer <= (others => '0');
 
                      queueData0(i).ins.tags.commitCtr <= (others => '0');
                      
@@ -115,8 +115,8 @@ begin
                           queueData1(i).ins.tags.renameIndex <= (others => '0');
                        end if;
                        
-                          queueData1(i).ins.tags.intPointer <= (others => '0');
-                          queueData1(i).ins.tags.floatPointer <= (others => '0');
+                       --   queueData1(i).ins.tags.intPointer <= (others => '0');
+                       --   queueData1(i).ins.tags.floatPointer <= (others => '0');
   
                        queueData1(i).ins.tags.commitCtr <= (others => '0');
                       ------ 
