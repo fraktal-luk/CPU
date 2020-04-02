@@ -545,6 +545,8 @@ begin
         for j in 0 to 2 loop
             res(i).state.argValues.zero(j) :=         (res(i).ins.physicalArgSpec.intArgSel(j) and not isNonzero(res(i).ins.virtualArgSpec.args(j)(4 downto 0)))
                                                or (not res(i).ins.physicalArgSpec.intArgSel(j) and not res(i).ins.physicalArgSpec.floatArgSel(j));
+                                               
+                res(i).state.argValues.argLocsPhase(j) := "00000010"; -- Like arg in register
         end loop;
 
         -- Set 'missing' flags for non-const arguments
@@ -557,10 +559,8 @@ begin
             res(i).state.argValues.immediate := '1';
             res(i).state.argValues.zero(1) := '0';
             
-            if IMM_AS_REG and HAS_IMM then
-                res(i).ins.physicalArgSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);
-            end if;
-            if CLEAR_DEBUG_INFO and IMM_AS_REG and HAS_IMM then    
+            if CLEAR_DEBUG_INFO and IMM_AS_REG and HAS_IMM then
+                res(i).ins.physicalArgSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);    
                 res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
             end if;
         end if;

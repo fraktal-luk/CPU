@@ -220,68 +220,28 @@ end function;
 
 
 
-function updateArgLocs_2(argValues: InstructionArgValues;
-							  readyBefore, readyReg, ready1, ready0, readyM1, readyM2: std_logic_vector; 
-															 locs1, locs0, locsM1, locsM2: SmallNumberArray;
-							  progress: boolean)
+function updateArgLocs_Issue(argValues: InstructionArgValues; readyBefore: std_logic_vector)
 return InstructionArgValues is
 	variable res: InstructionArgValues := argValues;
 begin
 	for i in 0 to 1 loop
-	   if progress then
-            if readyBefore(i) = '1' then
-                    case res.argLocsPhase(i)(1 downto 0) is
-                        when "11" =>
-                            res.argLocsPhase(i) := "00000000";
-                        when "00" =>
-                            res.argLocsPhase(i) := "00000001";				
-                        when others =>
-                            res.argLocsPhase(i) := "00000010";
-                    end case;
-            elsif readyReg(i) = '1' then
-                res.argLocsPhase(i) := "00000010";
-            elsif ready1(i) = '1' then
-                res.argLocsPipe(i) := locs1(i);
-                    res.argLocsPhase(i) := "00000010";		
-            elsif ready0(i) = '1' then
-                res.argLocsPipe(i) := locs0(i);
-                    res.argLocsPhase(i) := "00000001";		
-            elsif readyM1(i) = '1' then
-                res.argLocsPipe(i) := locsM1(i);
+		if readyBefore(i) = '1' then
+            case res.argLocsPhase(i)(1 downto 0) is
+                when "11" =>
                     res.argLocsPhase(i) := "00000000";
-            elsif readyM2(i) = '1' then
-                res.argLocsPipe(i) := locsM2(i);
-                    res.argLocsPhase(i) := "00000011";
-            end if;
-	   else -- not progress
-            if readyBefore(i) = '1' then
+                when "00" =>
+                    res.argLocsPhase(i) := "00000001";				
+                when others =>
+                    res.argLocsPhase(i) := "00000010";
+            end case;
+		end if;
 
-            elsif readyReg(i) = '1' then
-                res.argLocsPhase(i) := "00000010";
-            elsif ready1(i) = '1' then
-                res.argLocsPipe(i) := locs1(i);
-                    res.argLocsPhase(i) := "00000001";		
-            elsif ready0(i) = '1' then
-                res.argLocsPipe(i) := locs0(i);
-                    res.argLocsPhase(i) := "00000000";
-            elsif readyM1(i) = '1' then
-                res.argLocsPipe(i) := locsM1(i);
-                    res.argLocsPhase(i) := "00000011";				
-            elsif readyM2(i) = '1' then
-                res.argLocsPipe(i) := locsM2(i);
-                    report "Slow wakeup can be used only for waiting ops!" severity error;
-                    res.argLocsPhase(i) := "00000011";
-            end if;
-            
-        end if;
-        
 		res.argLocsPhase(i)(7 downto 2) := "000000";
 		res.argLocsPipe(i)(7 downto 2) := "000000";
 	end loop;
 
 	return res;
 end function;
-
 
 
 function updateArgLocs_3(argValues: InstructionArgValues;
@@ -405,7 +365,7 @@ begin
     end if;
 
     ready := (others => '1');--not res.state.argValues.missing;
-    res.state.argValues := updateArgLocs(res.state.argValues, ready, Z3, Z3, Z3, Z3, Z3, ZZ3, ZZ3, ZZ3, ZZ3, true);
+    res.state.argValues := updateArgLocs_Issue(res.state.argValues, ready);
 
 	return res;
 end function;

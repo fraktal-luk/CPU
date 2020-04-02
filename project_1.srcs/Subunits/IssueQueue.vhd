@@ -59,11 +59,12 @@ architecture Behavioral of IssueQueue is
 	signal queueData: InstructionStateArray(0 to IQ_SIZE-1)  := (others => DEFAULT_INSTRUCTION_STATE);
 	signal fullMask, fullMaskNext, killMask, livingMask, readyMask, readyMaskLive, stayMask, selMask, issuedMask, remainMask: std_logic_vector(0 to IQ_SIZE-1) := (others=>'0');	
 
-	signal queueContent, queueContentNext, queueContent_N, queueContentNext_N: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-	signal queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-	signal newContent, newContentRR, newSchedData: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	signal newContent, newContentRR, newSchedData, inputStagePreRR, inputStage, inputStageUpdated, inputStageNext:
+	                                                                                   SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 				
-	signal anyReadyFull, anyReadyLive, sends, sends_N, sendPossible, sendingKilled, sent, sentKilled, sentUnexpected: std_logic := '0';
+	signal anyReadyFull, anyReadyLive, sends, sendPossible, sendingKilled, sent, sentKilled, sentUnexpected, inputStageAny, inputStageLivingAny,
+	               inputReadingAny, inputStageSending, inputStageMoving, acceptingForInputStage: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
     signal fma: ForwardingMatchesArray(0 to IQ_SIZE-1) := (others => DEFAULT_FORWARDING_MATCHES);
@@ -110,19 +111,12 @@ architecture Behavioral of IssueQueue is
 	function TMP_clearDestIfEmpty(elem: SchedulerEntrySlot; sends: std_logic; IS_FP: boolean) return SchedulerEntrySlot is
 		variable res: SchedulerEntrySlot := elem;
 	begin
-	
-           if sends = '1' then
-               --res.ins.physicalArgSpec.intDestSel := bool2std(not IS_FP) and isNonzero(res.ins.physicalArgSpec.dest);
-               --res.ins.physicalArgSpec.floatDestSel := bool2std(IS_FP);	       
-           else
-               res.ins.physicalArgSpec.intDestSel := '0';
-               res.ins.physicalArgSpec.floatDestSel := '0';
-           end if;
-	
-		if sends = '0' then
+        if sends = '0' then
+            res.ins.physicalArgSpec.intDestSel := '0';
+            res.ins.physicalArgSpec.floatDestSel := '0';
 			res.ins.physicalArgSpec.dest := (others => '0');
 		end if;
-		
+
 	    -- Clear unused fields
         res.ins.bits := (others => '0');
         res.ins.result := (others => '0');
@@ -159,14 +153,7 @@ architecture Behavioral of IssueQueue is
 		end loop;
 		return res;
     end function;
-	--		signal ch0, ch1, ch2: std_logic := '0';
-		
-   signal inputStagePreRR, inputStage, inputStageUpdated, inputStageNext: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-   signal inputStageAny, inputStageLivingAny, inputReadingAny, inputStageSending: std_logic := '0';
-   signal inputStageMoving, acceptingForInputStage: std_logic := '0'; -- This is when the content shifts to the main part of queue
-   
-   constant readyRegFlagsZ: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
-	   
+
 	function iqInputStageNext(content, newContent: SchedulerEntrySlotArray; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerEntrySlotArray is
 	   variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := content;
 	begin
@@ -175,8 +162,7 @@ architecture Behavioral of IssueQueue is
                res(i).full := '0';
            end loop; 	       
 	   elsif prevSending = '1' then
-	       res := newContent;
-	       
+	       res := newContent;	       
 	   elsif isSending = '1' then -- Clearing everything - sent to main queue
 	       for i in 0 to PIPE_WIDTH-1 loop
 	           res(i).full := '0';
@@ -188,23 +174,12 @@ architecture Behavioral of IssueQueue is
 	
 	function updateRR(newContent: SchedulerEntrySlotArray; rr: std_logic_vector) return SchedulerEntrySlotArray is
 	   variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := newContent;
-       variable rrf, readyBefore: std_logic_vector(0 to 2) := (others=>'0');
-	   constant Z3: std_logic_vector(0 to 2) := (others => '0');
-       constant ZZ3: SmallNumberArray(0 to 2) := (others=>(others=>'0'));       	   
+       variable rrf: std_logic_vector(0 to 2) := (others=>'0');      	   
 	begin
-	
 	   for i in 0 to PIPE_WIDTH-1 loop
-	       readyBefore := not res(i).state.argValues.missing;
-	       rrf := rr(3*i to 3*i + 2);
-	       res(i).state.argValues := updateArgLocs(res(i).state.argValues,
-                                                   readyBefore, rrf,
-                                                   Z3, Z3, Z3, Z3,
-                                                   ZZ3, ZZ3, ZZ3, ZZ3,
-                                                   true);
-                                                   
-            res(i).state.argValues.missing := res(i).state.argValues.missing and not rrf;	       
-	   end loop;
-	   
+	       rrf := rr(3*i to 3*i + 2);                                              
+           res(i).state.argValues.missing := res(i).state.argValues.missing and not rrf;	       
+	   end loop;   
 	   return res;
 	end function;
     	
