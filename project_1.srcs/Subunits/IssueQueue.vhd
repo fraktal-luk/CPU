@@ -188,7 +188,7 @@ begin
 	fmaInputStage <= findForwardingMatchesArray(inputStage, fni);    
     inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
 
-        inputStageUpdated <= updateSchedulerArray_2(inputStage, fni, fmaInputStage, waitingFM, true, false) when not ALT_INPUT
+        inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, true, false) when not ALT_INPUT
                          else newArr_Alt;
         newArrOut <= inputStageUpdated;
     
@@ -239,8 +239,8 @@ begin
 	-- TODO: below could be optimized because some code is shared (comparators!)
 	fma <= findForwardingMatchesArray(queueContent, fni);
 	
-	queueContentUpdated <= updateSchedulerArray_2(queueContent, fni, fma, waitingFM, true, false);
-	queueContentUpdatedSel <= updateSchedulerArray_2(queueContent, fni, fma, selectionFM, false, false);
+	queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, waitingFM, true, false);
+	queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, selectionFM, false, false);
 
 	readyMask <= extractReadyMaskNew(queueContentUpdatedSel) and fullMask;	
 	readyMaskLive <= readyMask and livingMask;
