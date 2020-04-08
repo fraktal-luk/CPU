@@ -39,25 +39,19 @@ function extractReadyMaskNew(entryVec: SchedulerEntrySlotArray) return std_logic
 
 
 function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector;
-
 function findLoc2b(cmp: std_logic_vector) return SmallNumber;
 
-function updateArgLocs(argValues: InstructionArgValues;
-							  readyBefore, readyReg, ready1, ready0, readyM1, readyM2: std_logic_vector; 
-															 locs1, locs0, locsM1, locsM2: SmallNumberArray;
-							  progress: boolean)
-return InstructionArgValues;
+function updateSchedulerArray_2(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; progressLocs, dynamic: boolean)
+return SchedulerEntrySlotArray;
+
+--function updateSchedulerArray_3(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; progressLocs: boolean)
+--return SchedulerEntrySlotArray;
+
+function findForwardingMatchesArray(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo) return ForwardingMatchesArray;
+
 
 function updateSchedulerArray(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo; fnm: ForwardingMap; progressLocs: boolean)
 return SchedulerEntrySlotArray;
-
-function updateSchedulerArray_2(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; progressLocs: boolean)
-return SchedulerEntrySlotArray;
-
-function updateSchedulerArray_3(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; progressLocs: boolean)
-return SchedulerEntrySlotArray;
-
-function findForwardingMatchesArray(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo) return ForwardingMatchesArray;
 
 end LogicIssue;
 
@@ -121,6 +115,7 @@ begin
                 res(i) := "11111110";                       
             end if;
         end if;
+        res(i)(7 downto 2) := (others => '0');
     end loop;
 
     return res;
@@ -146,18 +141,18 @@ begin
     return res;
 end function;
 
-function getWakeupVector(fnm: ForwardingMap; wf: SmallNumberArray; ready1, ready0, readyM1, readyM2: std_logic_vector) return std_logic_vector is
+function getWakeupVector(fnm: ForwardingMap; wf: SmallNumberArray; maskR1, maskR0, maskM1, maskM2, ready1, ready0, readyM1, readyM2: std_logic_vector) return std_logic_vector is
     variable res: std_logic_vector(0 to 2) := (others => '0');
 begin
     for i in res'range loop
-            if fnm.maskM2(i) = '1' then
-                res(i) := readyM2(i);
-            elsif fnm.maskM1(i) = '1' then
-                res(i) := readyM1(i);        
+            if fnm.maskR1(i) = '1' then
+                res(i) := ready1(i);
             elsif fnm.maskR0(i) = '1' then
                 res(i) := ready0(i);
+            elsif fnm.maskM1(i) = '1' then
+                res(i) := readyM1(i);                       
             else
-                res(i) := ready1(i);        
+                res(i) := readyM2(i);  
             end if;
     end loop;
 
@@ -210,67 +205,6 @@ begin
 end function;
 
 
-function updateArgLocs(argValues: InstructionArgValues;
-							  readyBefore, readyReg, ready1, ready0, readyM1, readyM2: std_logic_vector; 
-															 locs1, locs0, locsM1, locsM2: SmallNumberArray;
-							  progress: boolean)
-return InstructionArgValues is
-	variable res: InstructionArgValues := argValues;
-begin
-	for i in 0 to 1 loop
-		if readyBefore(i) = '1' then
-			if progress then
-				case res.argLocsPhase(i)(1 downto 0) is
-					when "11" =>
-						res.argLocsPhase(i) := "00000000";
-					when "00" =>
-						res.argLocsPhase(i) := "00000001";				
-					when others =>
-						res.argLocsPhase(i) := "00000010";
-				end case;
-			end if;
-		elsif readyReg(i) = '1' then
-			res.argLocsPhase(i) := "00000010";
-		elsif ready1(i) = '1' then
-			res.argLocsPipe(i) := locs1(i);
-			if progress then
-				res.argLocsPhase(i) := "00000010";		
-			else
-				res.argLocsPhase(i) := "00000001";				
-			end if;
-		elsif ready0(i) = '1' then
-			res.argLocsPipe(i) := locs0(i);
-			if progress then
-				res.argLocsPhase(i) := "00000001";		
-			else
-				res.argLocsPhase(i) := "00000000";				
-			end if;			
-		elsif readyM1(i) = '1' then
-			res.argLocsPipe(i) := locsM1(i);
-			if progress then
-				res.argLocsPhase(i) := "00000000";		
-			else
-				res.argLocsPhase(i) := "00000011";				
-			end if;
-		elsif readyM2(i) = '1' then
-			res.argLocsPipe(i) := locsM2(i);
-			if progress then
-				res.argLocsPhase(i) := "00000011";		
-			else
-				report "Slow wakeup can be used only for waiting ops!" severity error;
-				res.argLocsPhase(i) := "00000011";				
-			end if;
-		end if;
-
-		res.argLocsPhase(i)(7 downto 2) := "000000";
-		res.argLocsPipe(i)(7 downto 2) := "000000";
-	end loop;
-
-	return res;
-end function;
-
-
-
 function updateArgLocs_Issue(argValues: InstructionArgValues; readyBefore: std_logic_vector)
 return InstructionArgValues is
 	variable res: InstructionArgValues := argValues;
@@ -295,7 +229,7 @@ begin
 end function;
 
 
-function updateArgLocs_3(argValues: InstructionArgValues;
+function updateArgLocs_2(argValues: InstructionArgValues;
                               readyBefore: std_logic_vector;
                               wakeupPhases: SmallNumberArray;
 							  wakeupVec0, wakeupVec1: std_logic_vector;
@@ -353,7 +287,7 @@ end function;
 
 
 
-function updateArgLocs_4(argValues: InstructionArgValues;
+function updateArgLocs_3(argValues: InstructionArgValues;
                               readyBefore: std_logic_vector;
                               wakeupPhases0, wakeupPhases1: SmallNumberArray;
 							  wakeupVec0, wakeupVec1: std_logic_vector;
@@ -643,6 +577,273 @@ begin
 end function;
 
 
+
+function updateSchedulerStateGeneric_2(ins: InstructionState; st: SchedulerState;
+										fni: ForwardingInfo;
+										fm: ForwardingMatches;
+										fnm: ForwardingMap; progressLocs, dynamic: boolean)
+return SchedulerEntrySlot is
+	variable res: SchedulerEntrySlot := DEFAULT_SCHEDULER_ENTRY_SLOT;
+	variable tmp8: SmallNumber := (others => '0');
+	variable cmp0toM2, cmp0toM1, cmp0toR0, cmp0toR1, cmp1toM2, cmp1toM1, cmp1toR0, cmp1toR1,
+				rrf, readyR0, readyR1, nextReady, readyM2, readyBefore, wakeupVec0, wakeupVec1, readyNew: std_logic_vector(0 to 2) := (others=>'0');
+	variable locs, locs0, locs1, nextLocs, locsM2, wakeupPhases, wakeupPhases0, wakeupPhases1: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
+	
+begin
+	res.ins := ins;	
+	res.state := st;       
+        		
+    cmp0toR0 := fm.a0cmp0 and fnm.maskR0;
+    cmp1toR0 := fm.a1cmp0 and fnm.maskR0;
+    cmp0toR1 := fm.a0cmp1 and fnm.maskR1;
+    cmp1toR1 := fm.a1cmp1 and fnm.maskR1;
+    cmp0toM1 := fm.a0cmpM1 and fnm.maskM1;
+    cmp1toM1 := fm.a1cmpM1 and fnm.maskM1;
+    cmp0toM2 := fm.a0cmpM2 and fnm.maskM2;
+    cmp1toM2 := fm.a1cmpM2 and fnm.maskM2;	
+        		
+    readyR0 := (isNonzero(cmp0toR0), isNonzero(cmp1toR0), '0');
+    readyR1 := (isNonzero(cmp0toR1), isNonzero(cmp1toR1), '0');
+    locs0 := (findLoc2b(cmp0toR0), findLoc2b(cmp1toR0), (others => '0'));
+    locs1 := (findLoc2b(cmp0toR1), findLoc2b(cmp1toR1), (others => '0'));
+
+    nextReady := (isNonzero(cmp0toM1), isNonzero(cmp1toM1), '0');
+    nextLocs := (findLoc2b(cmp0toM1), findLoc2b(cmp1toM1), (others => '0'));
+    readyM2 := (isNonzero(cmp0toM2), isNonzero(cmp1toM2), '0');
+    locsM2 := (findLoc2b(cmp0toM2), findLoc2b(cmp1toM2), (others => '0'));
+
+    if dynamic then
+        wakeupPhases0 := getWakeupPhaseDynamic(fnm, cmp0toR1, cmp0toR0, cmp0toM1, cmp0toM2, progressLocs);
+        wakeupPhases1 := getWakeupPhaseDynamic(fnm, cmp1toR1, cmp1toR0, cmp1toM1, cmp1toM2, progressLocs);
+        --    wakeupPhases0 := (others => (others => '0'));
+        --    wakeupPhases1 := (others => (others => '0'));
+            
+        wakeupVec0 := getWakeupVector(fnm, wakeupPhases, cmp0toR1, cmp0toR0, cmp0toM1, cmp0toM2, cmp0toR1, cmp0toR0, cmp0toM1, cmp0toM2);
+        wakeupVec1 := getWakeupVector(fnm, wakeupPhases, cmp1toR1, cmp1toR0, cmp1toM1, cmp1toM2, cmp1toR1, cmp1toR0, cmp1toM1, cmp1toM2);
+    else
+        wakeupPhases0 := getWakeupPhaseDynamic(fnm, fnm.maskR1, fnm.maskR0, fnm.maskM1, fnm.maskM2, progressLocs);
+        wakeupPhases1 := getWakeupPhaseDynamic(fnm, fnm.maskR1, fnm.maskR0, fnm.maskM1, fnm.maskM2, progressLocs);
+    
+        wakeupVec0 := getWakeupVector(fnm, wakeupPhases, fnm.maskR1, fnm.maskR0, fnm.maskM1, fnm.maskM2, cmp0toR1, cmp0toR0, cmp0toM1, cmp0toM2);
+        wakeupVec1 := getWakeupVector(fnm, wakeupPhases, fnm.maskR1, fnm.maskR0, fnm.maskM1, fnm.maskM2, cmp1toR1, cmp1toR0, cmp1toM1, cmp1toM2);
+    end if;
+    
+	readyBefore := not res.state.argValues.missing;
+
+    readyNew := (isNonzero(wakeupVec0), isNonzero(wakeupVec1), '0');
+
+	-- Update arg tracking
+	res.state.argValues := updateArgLocs_3(    res.state.argValues,
+												readyBefore,
+												wakeupPhases0,
+												wakeupPhases1,
+												wakeupVec0,
+												wakeupVec1,
+												progressLocs
+												);
+	-- tag broadcast stages for each Int Exec subpipe:
+	--  pipe    I0  I1  M0
+	--  phase   -1  --  -1
+	-- 
+	-- for FP:
+	-- pipe    F0       M0
+	-- phase   -2   --  -2 
+	---
+	-- getWakeupReady(map, readyR1, readyR0, nextReady, readyM2); -- combined readyX ( [readyM1(0), '0', readyM1(2)] or [i -> ready{wakeupPhase(i)}(i)]
+	-- getWakeupPhase(map);  -- constant per IQ; where earliest bit is set in map 
+	-- 
+	-- 
+															
+	res.state.argValues.missing := res.state.argValues.missing and not readyNew;
+	
+	return res;
+end function;
+
+
+
+function updateSchedulerStateGeneric_3(ins: InstructionState; st: SchedulerState;
+										fni: ForwardingInfo;
+										fm: ForwardingMatches;
+										fnm: ForwardingMap; progressLocs: boolean)
+return SchedulerEntrySlot is
+	variable res: SchedulerEntrySlot := DEFAULT_SCHEDULER_ENTRY_SLOT;
+	variable tmp8: SmallNumber := (others => '0');
+	variable cmp0toM2, cmp0toM1, cmp0toR0, cmp0toR1, cmp1toM2, cmp1toM1, cmp1toR0, cmp1toR1,
+				rrf, readyR0, readyR1, nextReady, readyM2, readyBefore, wakeupVec0, wakeupVec1, readyNew: std_logic_vector(0 to 2) := (others=>'0');
+	variable locs, locs0, locs1, nextLocs, locsM2, wakeupPhases, wakeupPhases0, wakeupPhases1: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
+	
+begin
+	res.ins := ins;	
+	res.state := st;
+			
+    cmp0toR0 := fm.a0cmp0 and fnm.maskR0;
+    cmp1toR0 := fm.a1cmp0 and fnm.maskR0;
+    cmp0toR1 := fm.a0cmp1 and fnm.maskR1;
+    cmp1toR1 := fm.a1cmp1 and fnm.maskR1;
+    cmp0toM1 := fm.a0cmpM1 and fnm.maskM1;
+    cmp1toM1 := fm.a1cmpM1 and fnm.maskM1;
+    cmp0toM2 := fm.a0cmpM2 and fnm.maskM2;
+    cmp1toM2 := fm.a1cmpM2 and fnm.maskM2;	
+            
+    readyR0 := (isNonzero(cmp0toR0), isNonzero(cmp1toR0), '0');
+    readyR1 := (isNonzero(cmp0toR1), isNonzero(cmp1toR1), '0');
+    locs0 := (findLoc2b(cmp0toR0), findLoc2b(cmp1toR0), (others => '0'));
+    locs1 := (findLoc2b(cmp0toR1), findLoc2b(cmp1toR1), (others => '0'));
+
+    nextReady := (isNonzero(cmp0toM1), isNonzero(cmp1toM1), '0');
+    nextLocs := (findLoc2b(cmp0toM1), findLoc2b(cmp1toM1), (others => '0'));
+    readyM2 := (isNonzero(cmp0toM2), isNonzero(cmp1toM2), '0');
+    locsM2 := (findLoc2b(cmp0toM2), findLoc2b(cmp1toM2), (others => '0'));
+
+    wakeupPhases0 := getWakeupPhaseDynamic(fnm, cmp0toR1, cmp0toR0, cmp0toM1, cmp0toM2, progressLocs);
+    wakeupPhases1 := getWakeupPhaseDynamic(fnm, cmp1toR1, cmp1toR0, cmp1toM1, cmp1toM2, progressLocs);
+
+    wakeupVec0 := getWakeupVector(fnm, wakeupPhases, cmp0toR1, cmp0toR0, cmp0toM1, cmp0toM2, cmp0toR1, cmp0toR0, cmp0toM1, cmp0toM2);
+    wakeupVec1 := getWakeupVector(fnm, wakeupPhases, cmp1toR1, cmp1toR0, cmp1toM1, cmp1toM2, cmp1toR1, cmp1toR0, cmp1toM1, cmp1toM2);
+    
+	readyBefore := not res.state.argValues.missing;
+
+    readyNew := (isNonzero(wakeupVec0), isNonzero(wakeupVec1), '0');
+
+	-- Update arg tracking
+	res.state.argValues := updateArgLocs_3(    res.state.argValues,
+												readyBefore,
+												wakeupPhases0,
+												wakeupPhases1,
+												wakeupVec0,
+												wakeupVec1,
+												progressLocs
+												);
+	-- tag broadcast stages for each Int Exec subpipe:
+	--  pipe    I0  I1  M0
+	--  phase   -1  --  -1
+	-- 
+	-- for FP:
+	-- pipe    F0       M0
+	-- phase   -2   --  -2 
+	---
+	-- getWakeupReady(map, readyR1, readyR0, nextReady, readyM2); -- combined readyX ( [readyM1(0), '0', readyM1(2)] or [i -> ready{wakeupPhase(i)}(i)]
+	-- getWakeupPhase(map);  -- constant per IQ; where earliest bit is set in map 
+	-- 
+	-- 
+															
+	res.state.argValues.missing := res.state.argValues.missing and not readyNew;
+	
+	return res;
+end function;
+
+function updateSchedulerArray_2(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; progressLocs, dynamic: boolean)
+return SchedulerEntrySlotArray is
+	variable res: SchedulerEntrySlotArray(0 to insArray'length-1);-- := insArray;
+begin
+	for i in insArray'range loop
+		res(i) := updateSchedulerStateGeneric_2(insArray(i).ins, insArray(i).state, fni, fma(i), fnm, progressLocs, dynamic);
+	    res(i).full := (insArray(i).full);
+	end loop;	
+	return res;
+end function;
+
+
+
+--function updateSchedulerArray_3(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; progressLocs: boolean)
+--return SchedulerEntrySlotArray is
+--	variable res: SchedulerEntrySlotArray(0 to insArray'length-1);-- := insArray;
+--begin
+--	for i in insArray'range loop
+--		res(i) := updateSchedulerStateGeneric_2(insArray(i).ins, insArray(i).state, fni, fma(i), fnm, progressLocs, dynamic);
+--	    res(i).full := (insArray(i).full);
+--	end loop;	
+--	return res;
+--end function;
+
+function findForwardingMatches(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo) return ForwardingMatches is
+    variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
+begin
+	res.a0cmp0 := findRegTag(ins.physicalArgSpec.args(0), fni.tags0);
+    res.a1cmp0 := findRegTag(ins.physicalArgSpec.args(1), fni.tags0);
+    res.a0cmp1 := findRegTag(ins.physicalArgSpec.args(0), fni.tags1);
+    res.a1cmp1 := findRegTag(ins.physicalArgSpec.args(1), fni.tags1);
+    res.a0cmpM1 := findRegTag(ins.physicalArgSpec.args(0), fni.nextTagsM1);
+    res.a1cmpM1 := findRegTag(ins.physicalArgSpec.args(1), fni.nextTagsM1);
+    res.a0cmpM2 := findRegTag(ins.physicalArgSpec.args(0), fni.nextTagsM2);
+    res.a1cmpM2 := findRegTag(ins.physicalArgSpec.args(1), fni.nextTagsM2);     
+    
+    return res;
+end function;
+
+function findForwardingMatchesArray(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo) return ForwardingMatchesArray is
+    variable res: ForwardingMatchesArray(insArray'range) := (others => DEFAULT_FORWARDING_MATCHES);
+begin
+    for i in insArray'range loop
+        res(i) := findForwardingMatches(insArray(i).ins, insArray(i).state, fni);
+    end loop;
+    return res;
+end function;
+
+
+
+
+
+
+function updateArgLocs(argValues: InstructionArgValues;
+							  readyBefore, readyReg, ready1, ready0, readyM1, readyM2: std_logic_vector; 
+															 locs1, locs0, locsM1, locsM2: SmallNumberArray;
+							  progress: boolean)
+return InstructionArgValues is
+	variable res: InstructionArgValues := argValues;
+begin
+	for i in 0 to 1 loop
+		if readyBefore(i) = '1' then
+			if progress then
+				case res.argLocsPhase(i)(1 downto 0) is
+					when "11" =>
+						res.argLocsPhase(i) := "00000000";
+					when "00" =>
+						res.argLocsPhase(i) := "00000001";				
+					when others =>
+						res.argLocsPhase(i) := "00000010";
+				end case;
+			end if;
+		elsif readyReg(i) = '1' then
+			res.argLocsPhase(i) := "00000010";
+		elsif ready1(i) = '1' then
+			res.argLocsPipe(i) := locs1(i);
+			if progress then
+				res.argLocsPhase(i) := "00000010";		
+			else
+				res.argLocsPhase(i) := "00000001";				
+			end if;
+		elsif ready0(i) = '1' then
+			res.argLocsPipe(i) := locs0(i);
+			if progress then
+				res.argLocsPhase(i) := "00000001";		
+			else
+				res.argLocsPhase(i) := "00000000";				
+			end if;			
+		elsif readyM1(i) = '1' then
+			res.argLocsPipe(i) := locsM1(i);
+			if progress then
+				res.argLocsPhase(i) := "00000000";		
+			else
+				res.argLocsPhase(i) := "00000011";				
+			end if;
+		elsif readyM2(i) = '1' then
+			res.argLocsPipe(i) := locsM2(i);
+			if progress then
+				res.argLocsPhase(i) := "00000011";		
+			else
+				report "Slow wakeup can be used only for waiting ops!" severity error;
+				res.argLocsPhase(i) := "00000011";				
+			end if;
+		end if;
+
+		res.argLocsPhase(i)(7 downto 2) := "000000";
+		res.argLocsPipe(i)(7 downto 2) := "000000";
+	end loop;
+
+	return res;
+end function;
+ 
 function updateSchedulerStateGeneric(ins: InstructionState; st: SchedulerState;
 										fni: ForwardingInfo;
 										fnm: ForwardingMap; progressLocs: boolean)
@@ -716,205 +917,5 @@ begin
 end function;
 
 
-
-function updateSchedulerStateGeneric_2(ins: InstructionState; st: SchedulerState;
-										fni: ForwardingInfo;
-										fm: ForwardingMatches;
-										fnm: ForwardingMap; progressLocs: boolean)
-return SchedulerEntrySlot is
-	variable res: SchedulerEntrySlot := DEFAULT_SCHEDULER_ENTRY_SLOT;
-	variable tmp8: SmallNumber := (others => '0');
-	variable cmp0toM2, cmp0toM1, cmp0toR0, cmp0toR1, cmp1toM2, cmp1toM1, cmp1toR0, cmp1toR1,
-				rrf, readyR0, readyR1, nextReady, readyM2, readyBefore, wakeupVec0, wakeupVec1, readyNew: std_logic_vector(0 to 2) := (others=>'0');
-	variable locs, locs0, locs1, nextLocs, locsM2, wakeupPhases: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
-	
-begin
-	res.ins := ins;	
-	res.state := st;		
-	
---		cmp0toR0 := findRegTag(ins.physicalArgSpec.args(0), fni.tags0);
---		cmp1toR0 := findRegTag(ins.physicalArgSpec.args(1), fni.tags0);
---		cmp0toR1 := findRegTag(ins.physicalArgSpec.args(0), fni.tags1);
---		cmp1toR1 := findRegTag(ins.physicalArgSpec.args(1), fni.tags1);
---		cmp0toM1 := findRegTag(ins.physicalArgSpec.args(0), fni.nextTagsM1);
---        cmp1toM1 := findRegTag(ins.physicalArgSpec.args(1), fni.nextTagsM1);
---		cmp0toM2 := findRegTag(ins.physicalArgSpec.args(0), fni.nextTagsM2);
---        cmp1toM2 := findRegTag(ins.physicalArgSpec.args(1), fni.nextTagsM2);        
-        		
-            cmp0toR0 := fm.a0cmp0 and fnm.maskR0;
-            cmp1toR0 := fm.a1cmp0 and fnm.maskR0;
-            cmp0toR1 := fm.a0cmp1 and fnm.maskR1;
-            cmp1toR1 := fm.a1cmp1 and fnm.maskR1;
-            cmp0toM1 := fm.a0cmpM1 and fnm.maskM1;
-            cmp1toM1 := fm.a1cmpM1 and fnm.maskM1;
-            cmp0toM2 := fm.a0cmpM2 and fnm.maskM2;
-            cmp1toM2 := fm.a1cmpM2 and fnm.maskM2;	
-        		
-		 readyR0 := (isNonzero(cmp0toR0), isNonzero(cmp1toR0), '0');
-		 readyR1 := (isNonzero(cmp0toR1), isNonzero(cmp1toR1), '0');
-		 locs0 := (findLoc2b(cmp0toR0), findLoc2b(cmp1toR0), (others => '0'));
-		 locs1 := (findLoc2b(cmp0toR1), findLoc2b(cmp1toR1), (others => '0'));
-
-		 nextReady := (isNonzero(cmp0toM1), isNonzero(cmp1toM1), '0');
-		 nextLocs := (findLoc2b(cmp0toM1), findLoc2b(cmp1toM1), (others => '0'));
-		 readyM2 := (isNonzero(cmp0toM2), isNonzero(cmp1toM2), '0');
-		 locsM2 := (findLoc2b(cmp0toM2), findLoc2b(cmp1toM2), (others => '0'));
-
-    wakeupPhases := getWakeupPhase(fnm, progressLocs);
-
-    wakeupVec0 := getWakeupVector(fnm, wakeupPhases, cmp0toR1, cmp0toR0, cmp0toM1, cmp0toM2);
-    wakeupVec1 := getWakeupVector(fnm, wakeupPhases, cmp1toR1, cmp1toR0, cmp1toM1, cmp1toM2);
-    
-	readyBefore := not res.state.argValues.missing;
-
-    readyNew := (isNonzero(wakeupVec0), isNonzero(wakeupVec1), '0');
-    
-    --ready := getWakeupReady(fnm, false, phases, readyR1, ready);
-
-	-- Update arg tracking
-	res.state.argValues := updateArgLocs_3(    res.state.argValues,
-												readyBefore,
-												wakeupPhases,
-												wakeupVec0,
-												wakeupVec1,
-												progressLocs
-												);
-	-- tag broadcast stages for each Int Exec subpipe:
-	--  pipe    I0  I1  M0
-	--  phase   -1  --  -1
-	-- 
-	-- for FP:
-	-- pipe    F0       M0
-	-- phase   -2   --  -2 
-	---
-	-- getWakeupReady(map, readyR1, readyR0, nextReady, readyM2); -- combined readyX ( [readyM1(0), '0', readyM1(2)] or [i -> ready{wakeupPhase(i)}(i)]
-	-- getWakeupPhase(map);  -- constant per IQ; where earliest bit is set in map 
-	-- 
-	-- 
-															
-	res.state.argValues.missing := res.state.argValues.missing and not readyNew;
-	
-	return res;
-end function;
-
-
-
-function updateSchedulerStateGeneric_3(ins: InstructionState; st: SchedulerState;
-										fni: ForwardingInfo;
-										fm: ForwardingMatches;
-										fnm: ForwardingMap; progressLocs: boolean)
-return SchedulerEntrySlot is
-	variable res: SchedulerEntrySlot := DEFAULT_SCHEDULER_ENTRY_SLOT;
-	variable tmp8: SmallNumber := (others => '0');
-	variable cmp0toM2, cmp0toM1, cmp0toR0, cmp0toR1, cmp1toM2, cmp1toM1, cmp1toR0, cmp1toR1,
-				rrf, readyR0, readyR1, nextReady, readyM2, readyBefore, wakeupVec0, wakeupVec1, readyNew: std_logic_vector(0 to 2) := (others=>'0');
-	variable locs, locs0, locs1, nextLocs, locsM2, wakeupPhases, wakeupPhases0, wakeupPhases1: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
-	
-begin
-	res.ins := ins;	
-	res.state := st;				
-            cmp0toR0 := fm.a0cmp0 and fnm.maskR0;
-            cmp1toR0 := fm.a1cmp0 and fnm.maskR0;
-            cmp0toR1 := fm.a0cmp1 and fnm.maskR1;
-            cmp1toR1 := fm.a1cmp1 and fnm.maskR1;
-            cmp0toM1 := fm.a0cmpM1 and fnm.maskM1;
-            cmp1toM1 := fm.a1cmpM1 and fnm.maskM1;
-            cmp0toM2 := fm.a0cmpM2 and fnm.maskM2;
-            cmp1toM2 := fm.a1cmpM2 and fnm.maskM2;	
-        		
-		 readyR0 := (isNonzero(cmp0toR0), isNonzero(cmp1toR0), '0');
-		 readyR1 := (isNonzero(cmp0toR1), isNonzero(cmp1toR1), '0');
-		 locs0 := (findLoc2b(cmp0toR0), findLoc2b(cmp1toR0), (others => '0'));
-		 locs1 := (findLoc2b(cmp0toR1), findLoc2b(cmp1toR1), (others => '0'));
-
-		 nextReady := (isNonzero(cmp0toM1), isNonzero(cmp1toM1), '0');
-		 nextLocs := (findLoc2b(cmp0toM1), findLoc2b(cmp1toM1), (others => '0'));
-		 readyM2 := (isNonzero(cmp0toM2), isNonzero(cmp1toM2), '0');
-		 locsM2 := (findLoc2b(cmp0toM2), findLoc2b(cmp1toM2), (others => '0'));
-
-    wakeupPhases0 := getWakeupPhaseDynamic(fnm, cmp0toR1, cmp0toR0, cmp0toM1, cmp0toM2, progressLocs);
-    wakeupPhases1 := getWakeupPhaseDynamic(fnm, cmp1toR1, cmp1toR0, cmp1toM1, cmp1toM2, progressLocs);
-
-    wakeupVec0 := getWakeupVectorDynamic(fnm, fm, wakeupPhases, cmp0toR1, cmp0toR0, cmp0toM1, cmp0toM2);
-    wakeupVec1 := getWakeupVectorDynamic(fnm, fm, wakeupPhases, cmp1toR1, cmp1toR0, cmp1toM1, cmp1toM2);
-    
-	readyBefore := not res.state.argValues.missing;
-
-    readyNew := (isNonzero(wakeupVec0), isNonzero(wakeupVec1), '0');
-
-	-- Update arg tracking
-	res.state.argValues := updateArgLocs_4(    res.state.argValues,
-												readyBefore,
-												wakeupPhases0,
-												wakeupPhases1,
-												wakeupVec0,
-												wakeupVec1,
-												progressLocs
-												);
-	-- tag broadcast stages for each Int Exec subpipe:
-	--  pipe    I0  I1  M0
-	--  phase   -1  --  -1
-	-- 
-	-- for FP:
-	-- pipe    F0       M0
-	-- phase   -2   --  -2 
-	---
-	-- getWakeupReady(map, readyR1, readyR0, nextReady, readyM2); -- combined readyX ( [readyM1(0), '0', readyM1(2)] or [i -> ready{wakeupPhase(i)}(i)]
-	-- getWakeupPhase(map);  -- constant per IQ; where earliest bit is set in map 
-	-- 
-	-- 
-															
-	res.state.argValues.missing := res.state.argValues.missing and not readyNew;
-	
-	return res;
-end function;
-
-function updateSchedulerArray_2(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; progressLocs: boolean)
-return SchedulerEntrySlotArray is
-	variable res: SchedulerEntrySlotArray(0 to insArray'length-1);-- := insArray;
-begin
-	for i in insArray'range loop
-		res(i) := updateSchedulerStateGeneric_2(insArray(i).ins, insArray(i).state, fni, fma(i), fnm, progressLocs);
-	    res(i).full := (insArray(i).full);
-	end loop;	
-	return res;
-end function;
-
-
-
-function updateSchedulerArray_3(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; progressLocs: boolean)
-return SchedulerEntrySlotArray is
-	variable res: SchedulerEntrySlotArray(0 to insArray'length-1);-- := insArray;
-begin
-	for i in insArray'range loop
-		res(i) := updateSchedulerStateGeneric_3(insArray(i).ins, insArray(i).state, fni, fma(i), fnm, progressLocs);
-	    res(i).full := (insArray(i).full);
-	end loop;	
-	return res;
-end function;
-
-function findForwardingMatches(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo) return ForwardingMatches is
-    variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
-begin
-	res.a0cmp0 := findRegTag(ins.physicalArgSpec.args(0), fni.tags0);
-    res.a1cmp0 := findRegTag(ins.physicalArgSpec.args(1), fni.tags0);
-    res.a0cmp1 := findRegTag(ins.physicalArgSpec.args(0), fni.tags1);
-    res.a1cmp1 := findRegTag(ins.physicalArgSpec.args(1), fni.tags1);
-    res.a0cmpM1 := findRegTag(ins.physicalArgSpec.args(0), fni.nextTagsM1);
-    res.a1cmpM1 := findRegTag(ins.physicalArgSpec.args(1), fni.nextTagsM1);
-    res.a0cmpM2 := findRegTag(ins.physicalArgSpec.args(0), fni.nextTagsM2);
-    res.a1cmpM2 := findRegTag(ins.physicalArgSpec.args(1), fni.nextTagsM2);     
-    
-    return res;
-end function;
-
-function findForwardingMatchesArray(insArray: SchedulerEntrySlotArray; fni: ForwardingInfo) return ForwardingMatchesArray is
-    variable res: ForwardingMatchesArray(insArray'range) := (others => DEFAULT_FORWARDING_MATCHES);
-begin
-    for i in insArray'range loop
-        res(i) := findForwardingMatches(insArray(i).ins, insArray(i).state, fni);
-    end loop;
-    return res;
-end function;
 
 end LogicIssue;

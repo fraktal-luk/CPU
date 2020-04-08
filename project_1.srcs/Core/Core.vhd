@@ -409,7 +409,7 @@ begin
         begin
             schedDataI0 <= getSchedData(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe), true);
             dataToQueueI0 <= --work.LogicIssue.updateSchedulerArray(schedDataI0, fni, ENQUEUE_FN_MAP, true);
-                             work.LogicIssue.updateSchedulerArray_3(schedDataI0, fni, fmaInt, ENQUEUE_FN_MAP, true);
+                             work.LogicIssue.updateSchedulerArray_2(schedDataI0, fni, fmaInt, ENQUEUE_FN_MAP, true, true);
                              
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
@@ -524,7 +524,7 @@ begin
      
            schedDataM0 <= getSchedData(removeArg2(extractData(renamedDataLivingReMem)), memMaskInt, true);
            dataToQueueM0 <= --work.LogicIssue.updateSchedulerArray(schedDataM0, fni, ENQUEUE_FN_MAP, true);
-                            work.LogicIssue.updateSchedulerArray_3(schedDataM0, fni, fmaInt, ENQUEUE_FN_MAP, true);
+                            work.LogicIssue.updateSchedulerArray_2(schedDataM0, fni, fmaInt, ENQUEUE_FN_MAP, true, true);
                            
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
@@ -740,12 +740,12 @@ begin
             intStoreMask <= getStoreMask(renamedDataLivingReMem) and not floatStoreMask;                                        
             schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLivingReMem)), intStoreMask, false);
             --dataToStoreValueIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValue, fni, ENQUEUE_FN_MAP_SV, true);
-            dataToStoreValueIQ <= work.LogicIssue.updateSchedulerArray_3(schedDataStoreValue, fni, fmaIntSV, ENQUEUE_FN_MAP_SV, true);
+            dataToStoreValueIQ <= work.LogicIssue.updateSchedulerArray_2(schedDataStoreValue, fni, fmaIntSV, ENQUEUE_FN_MAP_SV, true, true);
             
             floatStoreMask <= getFloatStoreMask(renamedDataLivingReMem, renamedDataLivingFloatRe);
             schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLivingReMem), extractData(renamedDataLivingFloatRe)), floatStoreMask, false);       
             --dataToStoreValueFloatIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValueFloat, fniFloat, ENQUEUE_FN_MAP_FLOAT_SV, true);
-            dataToStoreValueFloatIQ <= work.LogicIssue.updateSchedulerArray_3(schedDataStoreValueFloat, fniFloat, fmaFloatSV, ENQUEUE_FN_MAP_FLOAT_SV, true);
+            dataToStoreValueFloatIQ <= work.LogicIssue.updateSchedulerArray_2(schedDataStoreValueFloat, fniFloat, fmaFloatSV, ENQUEUE_FN_MAP_FLOAT_SV, true, true);
                     
                     chsvi <= bool2std(dataToStoreValueIQ_N = dataToStoreValueIQ);
                     chsvf <= bool2std(dataToStoreValueFloatIQ_N = dataToStoreValueFloatIQ);
@@ -912,7 +912,7 @@ begin
         
             schedDataF0 <= getSchedData(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), getFpuMask(renamedDataLivingFloatRe), false);
             --dataToQueueF0 <= work.LogicIssue.updateSchedulerArray(schedDataF0, fniFloat, ENQUEUE_FN_MAP_FLOAT, true);
-            dataToQueueF0 <= work.LogicIssue.updateSchedulerArray_3(schedDataF0, fniFloat, fmaF0, ENQUEUE_FN_MAP_FLOAT, true);
+            dataToQueueF0 <= work.LogicIssue.updateSchedulerArray_2(schedDataF0, fniFloat, fmaF0, ENQUEUE_FN_MAP_FLOAT, true, true);
             
                     chf <= bool2std(dataToQueueF0 = dataToQueueF0_N);
             
