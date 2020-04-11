@@ -107,29 +107,25 @@ architecture Behavioral of IssueQueue is
 			return ch1;
 		end if;
 	end function;
-	
-	function TMP_clearDestIfEmpty(elem: SchedulerEntrySlot; sends: std_logic; IS_FP: boolean) return SchedulerEntrySlot is
-		variable res: SchedulerEntrySlot := elem;
-	begin
-        if sends = '0' then
-            res.ins.physicalArgSpec.intDestSel := '0';
-            res.ins.physicalArgSpec.floatDestSel := '0';
-			res.ins.physicalArgSpec.dest := (others => '0');
-		end if;
 
+
+	function clearOutput(elem: SchedulerEntrySlot) return SchedulerEntrySlot is
+		variable res: SchedulerEntrySlot := elem;
+    begin
 	    -- Clear unused fields
         res.ins.bits := (others => '0');
         res.ins.result := (others => '0');
         res.ins.target := (others => '0');        
-
+    
         res.ins.controlInfo.completed := '0';
         res.ins.controlInfo.completed2 := '0';
         res.ins.ip := (others => '0');
     
         res.ins.controlInfo.newEvent := '0';
         res.ins.controlInfo.hasInterrupt := '0';
-        --res.ins.controlInfo.exceptionCode := (others => '0');	
-		return res;
+        --res.ins.controlInfo.exceptionCode := (others => '0');        
+    
+	   return res;
 	end function;
 	
 	function TMP_setUntil(selVec: std_logic_vector; nextAccepting: std_logic) return std_logic_vector is
@@ -218,7 +214,7 @@ begin
 	sends <= anyReadyLive and nextAccepting; -- CHECK: can we use full instead of living?
 	sendPossible <= anyReadyFull and nextAccepting; -- Includes ops that would send but are killed
 	
-	dispatchDataNew <= TMP_clearDestIfEmpty(prioSelect(queueContentUpdatedSel, readyMask), sends, IS_FP);
+	dispatchDataNew <= clearOutput(clearDestIfEmpty(prioSelect(queueContentUpdatedSel, readyMask), not sends));
 	stayMask <= TMP_setUntil(readyMask, nextAccepting);
 
     newContent <= newArr;

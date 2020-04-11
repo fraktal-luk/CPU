@@ -202,7 +202,7 @@ end record;
 type InstructionState is record
 	controlInfo: InstructionControlInfo;
 	ip: Mword;
-	bits: word; -- instruction word
+	bits: Word; -- instruction word
 	tags: InstructionTags;
 	specificOperation: SpecificOp;
 	classInfo: InstructionClassInfo;

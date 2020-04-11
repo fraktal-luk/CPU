@@ -435,6 +435,11 @@ begin
        if CLEAR_DEBUG_INFO then       
            res(i).ins.ip := (others => '0');
            res(i).ins.bits := (others => '0');
+           
+           res(i).ins.result := (others => '0');
+           res(i).ins.target := (others => '0');
+            
+           res(i).ins.tags.commitCtr := (others => '0');           
            res(i).ins.tags.fetchCtr := (others => '0');
            res(i).ins.tags.decodeCtr := (others => '0');
            res(i).ins.tags.renameCtr := (others => '0');
@@ -451,12 +456,7 @@ begin
            if IMM_AS_REG then        
                res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
            end if;
-       end if;
-       
-       res(i).ins.result := (others => '0');
-       res(i).ins.target := (others => '0');
-        
-       res(i).ins.tags.commitCtr := (others => '0');		
+       end if;	
 	end loop;
 
 	return res;

@@ -89,17 +89,7 @@ begin
 
                     queueData0(i).ins.tags.commitCtr <= (others => '0');
 
-                    special0.ins.classInfo <= DEFAULT_CLASS_INFO;
-                           
-                    special0.ins.ip <= (others => '0');
-                    special0.ins.bits <= (others => '0');       
-                    special0.ins.target <= (others => '0');
-                    special0.ins.result <= (others => '0');
-                           
-                    special0.ins.tags <= DEFAULT_INSTRUCTION_TAGS;
-                    special0.ins.constantArgs <= DEFAULT_CONSTANT_ARGS;
-                    special0.ins.virtualArgSpec <= DEFAULT_ARG_SPEC;
-                    special0.ins.physicalArgSpec <= DEFAULT_ARG_SPEC;
+
                                             
                     if IS_FP then
                        queueData0(i).ins.constantArgs <= DEFAULT_CONSTANT_ARGS;
@@ -114,10 +104,24 @@ begin
                        queueData0(i).ins.physicalArgSpec.intDestSel <= '0';
                        queueData0(i).ins.physicalArgSpec.floatDestSel <= '0';
                        queueData0(i).ins.physicalArgSpec.intArgSel <= (others => '0');
-                       queueData0(i).ins.physicalArgSpec.floatArgSel <= (others => '0');
-                        
-                       special0 <= DEFAULT_INSTRUCTION_SLOT;                                                                      
-                    end if;          
+                       queueData0(i).ins.physicalArgSpec.floatArgSel <= (others => '0');                        
+                    end if;
+                    
+                    special0.ins.classInfo <= DEFAULT_CLASS_INFO;
+                           
+                    special0.ins.ip <= (others => '0');
+                    special0.ins.bits <= (others => '0');       
+                    special0.ins.target <= (others => '0');
+                    special0.ins.result <= (others => '0');
+                           
+                    special0.ins.tags <= DEFAULT_INSTRUCTION_TAGS;
+                    special0.ins.constantArgs <= DEFAULT_CONSTANT_ARGS;
+                    special0.ins.virtualArgSpec <= DEFAULT_ARG_SPEC;
+                    special0.ins.physicalArgSpec <= DEFAULT_ARG_SPEC;
+                    
+                    if IS_FP then
+                        special0 <= DEFAULT_INSTRUCTION_SLOT;                                                                      
+                    end if;                            
                 end loop;
             end if;    
 

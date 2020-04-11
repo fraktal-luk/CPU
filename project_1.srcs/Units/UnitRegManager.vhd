@@ -135,11 +135,11 @@ architecture Behavioral of UnitRegManager is
             for i in 0 to PIPE_WIDTH-1 loop
 				-- KEEP renameIndex + argSpec + specificOperation
 			
-                res(i).ins.ip := (others => '0');
-                res(i).ins.bits := (others => '0');
-                res(i).ins.target := (others => '0');                    
-                res(i).ins.result := (others => '0');                    
-                
+--                res(i).ins.ip := (others => '0');
+--                res(i).ins.bits := (others => '0');
+--                res(i).ins.target := (others => '0');                    
+--                res(i).ins.result := (others => '0');                    
+                res := clearAbstractInfo(res);
                 
                     res(i).ins.specificOperation.arith := opAnd;
                     res(i).ins.specificOperation.memory := opLoad;
