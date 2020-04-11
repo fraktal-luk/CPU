@@ -39,9 +39,9 @@ end DispatchBuffer;
 
 
 architecture Behavioral of DispatchBuffer is
-    signal queueData0, queueData1: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
-    signal special0, special1: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-    signal fullMask: std_logic_vector(0 to 1) := (others => '0');
+    signal queueData0: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
+    signal special0: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+    signal fullMask: std_logic_vector(0 to 0) := (others => '0');
     signal isSending: std_logic := '0';
     
     function TMP_clearSlot(isl: InstructionSlot; i: integer; fp: boolean) return InstructionSlot is
@@ -54,43 +54,25 @@ architecture Behavioral of DispatchBuffer is
             res.ins.tags.renameIndex := (others => '0');
          end if;
                                  
-         if fp then
-            -- Leave only physical arg names (dest, args)?
-            res.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
-            res.ins.specificOperation := DEFAULT_SPECIFIC_OP;
-            res.ins.virtualArgSpec := DEFAULT_ARG_SPEC;
-            
-            res.ins.tags := DEFAULT_INSTRUCTION_TAGS;
-             
-            res.ins.controlInfo := DEFAULT_CONTROL_INFO;
-            res.ins.classInfo := DEFAULT_CLASS_INFO;
-
-            res.ins.physicalArgSpec.intDestSel := '0';
-            res.ins.physicalArgSpec.floatDestSel := '0';
-            res.ins.physicalArgSpec.intArgSel := (others => '0');
-            res.ins.physicalArgSpec.floatArgSel := (others => '0');                        
+         if fp then            
+            res.ins := DEFAULT_INS_STATE;
+            res.ins.physicalArgSpec.dest := isl.ins.physicalArgSpec.dest;
+            res.ins.physicalArgSpec.args := isl.ins.physicalArgSpec.args; 
          end if;
    
         return res;
     end function;
     
-    function TMP_clearSpecial(isl: InstructionSlot) return InstructionSlot is
-        variable res: InstructionSlot := isl;
+    function TMP_clearSpecialSlot(isl: InstructionSlot) return InstructionSlot is
+        variable res: InstructionSlot := DEFAULT_INS_SLOT;
     begin
-        -- Leave only controlInfo and operation? 
-    
-        res.ins.classInfo := DEFAULT_CLASS_INFO;
-
-        res := clearAbstractInfo(res);
+        res.full := isl.full;
         
-        res.ins.tags := DEFAULT_INSTRUCTION_TAGS;
-        res.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
-        res.ins.virtualArgSpec := DEFAULT_ARG_SPEC;
-        res.ins.physicalArgSpec := DEFAULT_ARG_SPEC;
-        
-        if IS_FP then
-            res := DEFAULT_INSTRUCTION_SLOT;                                                                      
-        end if;   
+        if not IS_FP then
+            res.ins.controlInfo := isl.ins.controlInfo;
+            res.ins.specificOperation := isl.ins.specificOperation; -- TODO: leave only Special part?
+        end if;
+         
         return res;
     end function;
       
@@ -116,10 +98,6 @@ begin
                 queueDataTemp0 := dataIn;
                 specialTemp0 := specialAction;
                 fullMaskNew0 := '1';
-            
-                if fullMask(0) = '1' and fullMask(1) = '1' then -- If buffer full but putting more
-                    report "DispatchBuffer overflow!" severity failure;
-                end if;
             end if;
             
             fullMask(0) <= fullMaskNew0;
@@ -133,7 +111,7 @@ begin
                     queueDataTemp0(i) := TMP_clearSlot(queueDataTemp0(i), i, IS_FP);                           
                 end loop;
                 
-                specialTemp0 := TMP_clearSpecial(specialTemp0);
+                specialTemp0 := TMP_clearSpecialSlot(specialTemp0);
                 
                 queueData0 <= queueDataTemp0;
                 special0 <= specialTemp0;

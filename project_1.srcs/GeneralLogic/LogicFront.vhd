@@ -219,21 +219,8 @@ begin
           res(0).ins.specificOperation.float := opMove;
           res(0).ins.specificOperation.system := opNone;
 
-          res(i).ins.ip := (others => '0');
-          res(i).ins.bits := (others => '0');
+          res(i) := clearRawInfo(res(i));
           
-          -- CAREFUL: BQ content depends on this
-          --res(i).ins.target := (others => '0');
-          --res(i).ins.result := (others => '0'); 
-          
---          --res(i).ins.classInfo := DEFAULT_CLASS_INFO; 
-
---          --res(i).ins.constantArgs := DEFAULT_CONSTANT_ARGS;
---          --res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
---          --res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;
-        
---          --res(i).ins.specificOperation := DEFAULT_SPECIFIC_OP;
-           
           res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;        
        end if;	   
 	end loop;
@@ -281,22 +268,12 @@ function prepareForBQ(insVec: InstructionSlotArray) return InstructionSlotArray 
 begin
 	for i in insVec'range loop
 	   res(i).full := BRANCH_MASK(i) and insVec(i).full; -- TODO: getBranchMask already check for 'full' - remove it here?   
-		
-       if CLEAR_DEBUG_INFO then
-           res(i).ins.ip := (others => '0');
-           res(i).ins.bits := (others => '0');
-           
-           res(i).ins.classInfo := DEFAULT_CLASS_INFO; 
-           
-           -- target and result are stored in BQ
 
-           res(i).ins.constantArgs := DEFAULT_CONSTANT_ARGS;
-           res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
-           res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;
-         
-           res(i).ins.specificOperation := DEFAULT_SPECIFIC_OP;
-            
-           res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
+       if CLEAR_DEBUG_INFO then -- Otherwise everything remains
+           res(i).ins := DEFAULT_INS_STATE;
+           res(i).ins.controlInfo := insVec(i).ins.controlInfo;
+           res(i).ins.target := insVec(i).ins.target;
+           res(i).ins.result := insVec(i).ins.result;
 	   end if;
 	end loop;
 	

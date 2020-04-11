@@ -191,9 +191,7 @@ type InstructionArgValues is record
 	locsM2: SmallNumberArray(0 to 2);
 	missing: std_logic_vector(0 to 2);
 	stored:  std_logic_vector(0 to 2);
-	arg0: Mword;
-	arg1: Mword;
-	arg2: Mword;
+	args: MwordArray(0 to 2);
 	
 	argLocsPipe: SmallNumberArray(0 to 2);
 	argLocsPhase: SmallNumberArray(0 to 2);
@@ -295,11 +293,14 @@ end record;
 
 type InstructionTextArray is array(integer range <>) of InstructionText;
 
+subtype Str40 is string(1 to 40);
+type AStr40 is array(0 to 2) of Str40;
+
 type SchedEntryText is record
     stateTxt: string(1 to 40);
-    arg0: string(1 to 40);
-    arg1: string(1 to 40);
-    arg2: string(1 to 40);
+    args: AStr40;
+--    arg1: string(1 to 40);
+--    arg2: string(1 to 40);
 end record;
 
 type SchedEntryTextArray is array(integer range <>) of SchedEntryText;
@@ -456,9 +457,7 @@ begin
 			  locsM2 => (others => (others => '0')),
 			  missing => (others=>'0'),
 			  stored => (others => '0'),
-			  arg0 => (others=>'0'),
-			  arg1 => (others=>'0'),
-			  arg2 => (others=>'0'),
+			  args => (others => (others=>'0')),
 		      argLocsPipe => (others => (others => '0')),
 			  argLocsPhase => (others => (others => '0'))
 			  );
@@ -758,35 +757,35 @@ begin
         res.stateTxt(1 to 6) := "Waits ";
     end if;
 
-    res.arg0(1 to 3) := "0: ";
-    res.arg0(12 to 13) := ", ";
-    res.arg0(4 to 11) := (others => '-');
+    res.args(0)(1 to 3) := "0: ";
+    res.args(0)(12 to 13) := ", ";
+    res.args(0)(4 to 11) := (others => '-');
     if se.argValues.missing(0) = '1' then
         
         res.stateTxt(7) := '1';
     else
         if se.argValues.zero(0) = '1' then
-            res.arg0(14) := 'Z';
+            res.args(0)(14) := 'Z';
         else
-            res.arg0(14 to 18) := std_logic'image(se.argValues.argLocsPipe(0)(1))(2) & std_logic'image(se.argValues.argLocsPipe(0)(0))(2)
+            res.args(0)(14 to 18) := std_logic'image(se.argValues.argLocsPipe(0)(1))(2) & std_logic'image(se.argValues.argLocsPipe(0)(0))(2)
                                &  ':'
                                &  std_logic'image(se.argValues.argLocsPhase(0)(0))(2) & std_logic'image(se.argValues.argLocsPhase(0)(0))(2);
         end if;
         res.stateTxt(7) := '0';
     end if;
 
-    res.arg1(1 to 3) := "1: ";
-    res.arg1(12 to 13) := ", ";
-    res.arg1(4 to 11) := (others => '-');
+    res.args(1)(1 to 3) := "1: ";
+    res.args(1)(12 to 13) := ", ";
+    res.args(1)(4 to 11) := (others => '-');
     if se.argValues.missing(1) = '1' then
         res.stateTxt(8) := '1';
     else
         if se.argValues.zero(1) = '1' then
-            res.arg1(14) := 'Z';
+            res.args(1)(14) := 'Z';
         elsif se.argValues.immediate = '1' then
-            res.arg1(14) := 'I';
+            res.args(1)(14) := 'I';
         else
-            res.arg1(14 to 18) := std_logic'image(se.argValues.argLocsPipe(1)(1))(2) & std_logic'image(se.argValues.argLocsPipe(1)(0))(2)
+            res.args(1)(14 to 18) := std_logic'image(se.argValues.argLocsPipe(1)(1))(2) & std_logic'image(se.argValues.argLocsPipe(1)(0))(2)
                            &  ':'
                            &  std_logic'image(se.argValues.argLocsPhase(1)(0))(2) & std_logic'image(se.argValues.argLocsPhase(1)(0))(2);        
         end if;

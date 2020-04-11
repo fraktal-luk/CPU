@@ -252,6 +252,8 @@ begin
         empty => dbEmpty            
     );
 
+
+    -- SEEMS UNUSED: stays for debug purpose
     DISPATCH_BUFFER_FP: entity work.DispatchBuffer
     generic map(IS_FP => true)
     port map(
@@ -1042,8 +1044,8 @@ begin
         
            
          sqValueInput <= -- CAREFUL: This implies that integer StoreData op value is lost when Int and FP are issued simultaneously. This must be prevented by scheduler!
-                    (dataToExecFloatStoreValue.full, setInstructionResult(dataToExecFloatStoreValue.ins, dataToExecFloatStoreValue.state.argValues.arg0)) when dataToExecFloatStoreValue.full = '1' 
-            else    (dataToExecIntStoreValue.full,   setInstructionResult(dataToExecIntStoreValue.ins,   dataToExecIntStoreValue.state.argValues.arg0)); -- TEMP!!
+                    (dataToExecFloatStoreValue.full, setInstructionResult(dataToExecFloatStoreValue.ins, dataToExecFloatStoreValue.state.argValues.args(0))) when dataToExecFloatStoreValue.full = '1' 
+            else    (dataToExecIntStoreValue.full,   setInstructionResult(dataToExecIntStoreValue.ins,   dataToExecIntStoreValue.state.argValues.args(0))); -- TEMP!!
          
          -- StoreData issue control:
          -- When Int and FP store data issue at the same time, the port conflict is resolved thus:

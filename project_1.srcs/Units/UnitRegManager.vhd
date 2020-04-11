@@ -227,6 +227,7 @@ architecture Behavioral of UnitRegManager is
                                 depVec: DependencyVec
                                 ) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+        variable tmpArgSpec: InstructionArgSpec := DEFAULT_ARG_SPEC;
     begin
         -- Assign src registers
         for i in 0 to PIPE_WIDTH-1 loop
@@ -262,14 +263,10 @@ architecture Behavioral of UnitRegManager is
             end if;
             
             if CLEAR_DEBUG_INFO then
-                res(i).ins.specificOperation := DEFAULT_SPECIFIC_OP;
-                
-                res(i).ins.tags.renameIndex := (others => '0');
-                res(i).ins.controlInfo := DEFAULT_CONTROL_INFO;
-                res(i).ins.classInfo := DEFAULT_CLASS_INFO;
-                
-                res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
-                res(i).ins.constantArgs := DEFAULT_CONSTANT_ARGS;               
+                -- Leave only physicalArgs
+                tmpArgSpec := res(i).ins.physicalArgSpec;
+                res(i).ins := DEFAULT_INS_STATE;
+                res(i).ins.physicalArgSpec := tmpArgSpec;             
             end if;
             
         end loop;

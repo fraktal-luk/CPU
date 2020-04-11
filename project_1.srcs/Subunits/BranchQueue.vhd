@@ -110,9 +110,7 @@ architecture Behavioral of BranchQueue is
            if im(i) = '1' then
                slot := getNewElem(remv, dataIn); 
                        --dataIn(slv2u(diff(1 downto 0)));         
-               res(i).tags := slot.ins.tags;
-               
-               --res(i).operation := slot.ins.operation;
+               res(i).tags := slot.ins.tags;               
                res(i).controlInfo.firstBr := '0'; -- This is '1' only for the first branch in group!               
            end if;
         end loop;
@@ -151,32 +149,18 @@ architecture Behavioral of BranchQueue is
            then
                res(i).target := storeValueInput.ins.target;
                res(i).controlInfo.confirmedBranch := storeValueInput.ins.controlInfo.confirmedBranch;
-                   res(i).controlInfo.newEvent := storeValueInput.ins.controlInfo.newEvent;
+               res(i).controlInfo.newEvent := storeValueInput.ins.controlInfo.newEvent;
            end if;
            
-           if CLEAR_DEBUG_INFO then         
-                  res(i).ip := (others => '0');
-                  res(i).bits := (others => '0');
-               --    res(i).classInfo := DEFAULT_CLASS_INFO;              
-                                
-                  --res(slv2u(endPtr)).ops(i).ins.result := (others => '0');
-                  --res(slv2u(endPtr)).ops(i).ins.target := (others => '0');
-                   
-                  res(i).constantArgs := DEFAULT_CONSTANT_ARGS;
-                  res(i).virtualArgSpec := DEFAULT_ARG_SPEC;
-                  res(i).physicalArgSpec := DEFAULT_ARG_SPEC;
-                
-                  --res(i).operation := (System, sysUndef);
-    
-                  res(i).tags.fetchCtr := (others => '0');
-                  res(i).tags.decodeCtr := (others => '0');
-                  res(i).tags.renameCtr := (others => '0');
-                  
-                  -- TODO: ptrs may be better here than go through IQ!
-                  --res(i).tags.intPointer := (others => '0');
-                  --res(i).tags.floatPointer := (others => '0');
-    
-                  res(i).tags.commitCtr := (others => '0');
+           if CLEAR_DEBUG_INFO then
+              res(i) := clearRawInfo(res(i));
+              res(i) := clearDbCounters(res(i));
+              
+              res(i).specificOperation := DEFAULT_SPECIFIC_OP;
+
+              res(i).constantArgs := DEFAULT_CONSTANT_ARGS;
+              res(i).virtualArgSpec := DEFAULT_ARG_SPEC;
+              res(i).physicalArgSpec := DEFAULT_ARG_SPEC;
              end if;                    
         end loop;
 

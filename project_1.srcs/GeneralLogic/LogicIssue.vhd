@@ -257,36 +257,36 @@ begin
     end if;
 
 		if res.state.argValues.zero(0) = '1' then
-			res.state.argValues.arg0 := (others => '0');
+			res.state.argValues.args(0) := (others => '0');
 			res.state.argValues.stored(0) := '1';
 		elsif res.state.argValues.argLocsPhase(0)(1 downto 0) = "00" then
-			res.state.argValues.arg0 := fni.values0(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
+			res.state.argValues.args(0) := fni.values0(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
 			res.state.argValues.stored(0) := '1';
 		else --elsif res.state.argValues.argPhase(1 downto 0) := "01" then
-			res.state.argValues.arg0 := fni.values1(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
+			res.state.argValues.args(0) := fni.values1(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
 			if res.state.argValues.argLocsPhase(0)(1 downto 0) = "01" then
 				res.state.argValues.stored(0) := '1';
 		    end if;
 		end if;
 
 	if res.state.argValues.immediate = '1' and USE_IMM then
-		res.state.argValues.arg1 := res.ins.constantArgs.imm;
+		res.state.argValues.args(1) := res.ins.constantArgs.imm;
 		
 		if IMM_AS_REG then
-		    res.state.argValues.arg1(PhysName'length-1 downto 0) := res.ins.physicalArgSpec.args(1);
+		    res.state.argValues.args(1)(PhysName'length-1 downto 0) := res.ins.physicalArgSpec.args(1);
 		end if;
 		
-		res.state.argValues.arg1(31 downto 17) := (others => res.ins.constantArgs.imm(16)); -- 16b + addditional sign bit
+		res.state.argValues.args(1)(31 downto 17) := (others => res.ins.constantArgs.imm(16)); -- 16b + addditional sign bit
 		res.state.argValues.stored(1) := '1';
 	else
 		if res.state.argValues.zero(1) = '1' then
-			res.state.argValues.arg1 := (others => '0');
+			res.state.argValues.args(1) := (others => '0');
 			res.state.argValues.stored(1) := '1';
 		elsif res.state.argValues.argLocsPhase(1)(1 downto 0) = "00" then
-			res.state.argValues.arg1 := fni.values0(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
+			res.state.argValues.args(1) := fni.values0(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
 			res.state.argValues.stored(1) := '1';
 		else --elsif res.state.argValues.argPhase(1 downto 0) := "01" then
-			res.state.argValues.arg1 := fni.values1(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
+			res.state.argValues.args(1) := fni.values1(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
 			if res.state.argValues.argLocsPhase(1)(1 downto 0) = "01" then
                 res.state.argValues.stored(1) := '1';
             end if;				
@@ -320,15 +320,15 @@ begin
 	--res.state.argValues.missing := res.state.argValues.missing and not (res.state.argValues.readyNext and not res.state.argValues.zero);
 
     if res.state.argValues.argLocsPhase(0)(1 downto 0) = "00" and res.state.argValues.stored(0) = '0' then
-        res.state.argValues.arg0 := vals(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
+        res.state.argValues.args(0) := vals(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
     elsif res.state.argValues.argLocsPhase(0)(1 downto 0) = "10" and res.state.argValues.stored(0) = '0' then
-        res.state.argValues.arg0 := regValues(0);
+        res.state.argValues.args(0) := regValues(0);
     end if;
 
     if res.state.argValues.argLocsPhase(1)(1 downto 0) = "00" and res.state.argValues.stored(1) = '0' then
-        res.state.argValues.arg1 := vals(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
+        res.state.argValues.args(1) := vals(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
     elsif res.state.argValues.argLocsPhase(1)(1 downto 0) = "10" and res.state.argValues.stored(1) = '0' then -- and res.state.argValues.immediate = '0' then
-        res.state.argValues.arg1 := regValues(1);
+        res.state.argValues.args(1) := regValues(1);
     end if;
 	
 	return res;
@@ -427,9 +427,7 @@ begin
 	   res(i).state := iqDataNextS(i).state;
 	
 	   res(i).state.argValues.stored := (others => '0');
-	   res(i).state.argValues.arg0 := (others => '0');
-	   res(i).state.argValues.arg1 := (others => '0');
-	   res(i).state.argValues.arg2 := (others => '0');
+	   res(i).state.argValues.args := (others => (others => '0'));
 	   
        if CLEAR_DEBUG_INFO then
            res(i).ins := clearAbstractInfo(res(i).ins);           
