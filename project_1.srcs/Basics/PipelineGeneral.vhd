@@ -264,6 +264,9 @@ function clearAbstractInfo(ins: InstructionSlot) return InstructionSlot;
 function clearRawInfo(ia: InstructionSlotArray) return InstructionSlotArray;
 function clearFollowInfo(ia: InstructionSlotArray) return InstructionSlotArray;
 function clearAbstractInfo(ia: InstructionSlotArray) return InstructionSlotArray;
+
+function clearDbCounters(ins: InstructionState) return InstructionState;      -- ip, bits; this is raw program data 
+function clearDbCounters(isl: InstructionSlot) return InstructionSlot;
          
 end package;
 
@@ -325,6 +328,22 @@ begin
 end function;
 
 
+function clearDbCounters(ins: InstructionState) return InstructionState is
+    variable res: InstructionState := ins;
+begin
+    res.tags.fetchCtr := (others => '0');
+    res.tags.decodeCtr := (others => '0');
+    res.tags.renameCtr := (others => '0');
+    res.tags.commitCtr := (others => '0');    
+    return res;
+end function;
+
+function clearDbCounters(isl: InstructionSlot) return InstructionSlot is
+    variable res: InstructionSlot := isl;
+begin   
+    res.ins := clearDbCounters(res.ins);
+    return res;
+end function;
 
 
 function clearRawInfo(ins: InstructionSlot) return InstructionSlot is

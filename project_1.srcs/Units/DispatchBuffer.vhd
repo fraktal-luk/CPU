@@ -42,24 +42,79 @@ architecture Behavioral of DispatchBuffer is
     signal queueData0, queueData1: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
     signal special0, special1: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     signal fullMask: std_logic_vector(0 to 1) := (others => '0');
-    signal isSending: std_logic := '0';   
+    signal isSending: std_logic := '0';
+    
+    function TMP_clearSlot(isl: InstructionSlot; i: integer; fp: boolean) return InstructionSlot is
+        variable res: InstructionSlot := isl;
+    begin 
+         res := clearAbstractInfo(res);
+         res := clearDbCounters(res);   
+
+         if i > 0 then -- As in RegisterManager
+            res.ins.tags.renameIndex := (others => '0');
+         end if;
+                                 
+         if fp then
+            -- Leave only physical arg names (dest, args)?
+            res.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
+            res.ins.specificOperation := DEFAULT_SPECIFIC_OP;
+            res.ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+            
+            res.ins.tags := DEFAULT_INSTRUCTION_TAGS;
+             
+            res.ins.controlInfo := DEFAULT_CONTROL_INFO;
+            res.ins.classInfo := DEFAULT_CLASS_INFO;
+
+            res.ins.physicalArgSpec.intDestSel := '0';
+            res.ins.physicalArgSpec.floatDestSel := '0';
+            res.ins.physicalArgSpec.intArgSel := (others => '0');
+            res.ins.physicalArgSpec.floatArgSel := (others => '0');                        
+         end if;
+   
+        return res;
+    end function;
+    
+    function TMP_clearSpecial(isl: InstructionSlot) return InstructionSlot is
+        variable res: InstructionSlot := isl;
+    begin
+        -- Leave only controlInfo and operation? 
+    
+        res.ins.classInfo := DEFAULT_CLASS_INFO;
+
+        res := clearAbstractInfo(res);
+        
+        res.ins.tags := DEFAULT_INSTRUCTION_TAGS;
+        res.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
+        res.ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+        res.ins.physicalArgSpec := DEFAULT_ARG_SPEC;
+        
+        if IS_FP then
+            res := DEFAULT_INSTRUCTION_SLOT;                                                                      
+        end if;   
+        return res;
+    end function;
+      
 begin
     
     isSending <= nextAccepting and fullMask(0) and not (execEventSignal or lateEventSignal);
     
     SYNCH: process (clk)
         variable fullMaskNew0: std_logic := '0';
+        variable queueDataTemp0: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
+        variable specialTemp0: InstructionSlot := DEFAULT_INS_SLOT;
     begin
         fullMaskNew0 := fullMask(0);
         if rising_edge(clk) then
+            queueDataTemp0 := queueData0;
+            specialTemp0 := special0;
             
             if isSending = '1' then
                 fullMaskNew0 := '0';
             end if;
             
             if prevSending = '1' then
-                queueData0 <= dataIn;
-                special0 <= specialAction;
+                queueDataTemp0 := dataIn;
+                specialTemp0 := specialAction;
                 fullMaskNew0 := '1';
             
                 if fullMask(0) = '1' and fullMask(1) = '1' then -- If buffer full but putting more
@@ -74,55 +129,14 @@ begin
             end if;
    
            if CLEAR_DEBUG_INFO then
-                for i in 0 to PIPE_WIDTH-1 loop
-                   queueData0(i).ins.ip <= (others => '0');
-                   queueData0(i).ins.bits <= (others => '0');
-                   queueData0(i).ins.result <= (others => '0');
-                   queueData0(i).ins.target <= (others => '0');
-                    
-                    queueData0(i).ins.tags.fetchCtr <= (others => '0');
-                    queueData0(i).ins.tags.decodeCtr <= (others => '0');
-                    queueData0(i).ins.tags.renameCtr <= (others => '0');
-                    if i > 0 then -- As in RegisterManager
-                       queueData0(i).ins.tags.renameIndex <= (others => '0');
-                    end if;
-
-                    queueData0(i).ins.tags.commitCtr <= (others => '0');
-
-
-                                            
-                    if IS_FP then
-                       queueData0(i).ins.constantArgs <= DEFAULT_CONSTANT_ARGS;
-                       queueData0(i).ins.specificOperation <= DEFAULT_SPECIFIC_OP;
-                       queueData0(i).ins.virtualArgSpec <= DEFAULT_ARG_SPEC;
-                       
-                       queueData0(i).ins.tags <= DEFAULT_INSTRUCTION_TAGS;
-                        
-                       queueData0(i).ins.controlInfo <= DEFAULT_CONTROL_INFO;
-                       queueData0(i).ins.classInfo <= DEFAULT_CLASS_INFO;
-                        
-                       queueData0(i).ins.physicalArgSpec.intDestSel <= '0';
-                       queueData0(i).ins.physicalArgSpec.floatDestSel <= '0';
-                       queueData0(i).ins.physicalArgSpec.intArgSel <= (others => '0');
-                       queueData0(i).ins.physicalArgSpec.floatArgSel <= (others => '0');                        
-                    end if;
-                    
-                    special0.ins.classInfo <= DEFAULT_CLASS_INFO;
-                           
-                    special0.ins.ip <= (others => '0');
-                    special0.ins.bits <= (others => '0');       
-                    special0.ins.target <= (others => '0');
-                    special0.ins.result <= (others => '0');
-                           
-                    special0.ins.tags <= DEFAULT_INSTRUCTION_TAGS;
-                    special0.ins.constantArgs <= DEFAULT_CONSTANT_ARGS;
-                    special0.ins.virtualArgSpec <= DEFAULT_ARG_SPEC;
-                    special0.ins.physicalArgSpec <= DEFAULT_ARG_SPEC;
-                    
-                    if IS_FP then
-                        special0 <= DEFAULT_INSTRUCTION_SLOT;                                                                      
-                    end if;                            
+                for i in 0 to PIPE_WIDTH-1 loop                    
+                    queueDataTemp0(i) := TMP_clearSlot(queueDataTemp0(i), i, IS_FP);                           
                 end loop;
+                
+                specialTemp0 := TMP_clearSpecial(specialTemp0);
+                
+                queueData0 <= queueDataTemp0;
+                special0 <= specialTemp0;
             end if;    
 
         end if;

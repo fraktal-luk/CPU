@@ -430,29 +430,20 @@ begin
 	   res(i).state.argValues.arg0 := (others => '0');
 	   res(i).state.argValues.arg1 := (others => '0');
 	   res(i).state.argValues.arg2 := (others => '0');
-	       
-	
-       if CLEAR_DEBUG_INFO then       
-           res(i).ins.ip := (others => '0');
-           res(i).ins.bits := (others => '0');
+	   
+       if CLEAR_DEBUG_INFO then
+           res(i).ins := clearAbstractInfo(res(i).ins);           
+           res(i).ins := clearDbCounters(res(i).ins);
            
-           res(i).ins.result := (others => '0');
-           res(i).ins.target := (others => '0');
-            
-           res(i).ins.tags.commitCtr := (others => '0');           
-           res(i).ins.tags.fetchCtr := (others => '0');
-           res(i).ins.tags.decodeCtr := (others => '0');
-           res(i).ins.tags.renameCtr := (others => '0');
-           
-           -- TODO: ptrs may be better kept in BQ!
-               res(i).ins.tags.intPointer := (others => '0');
-               res(i).ins.tags.floatPointer := (others => '0');
+           --  These ptrs are kept in BQ
+           res(i).ins.tags.intPointer := (others => '0');
+           res(i).ins.tags.floatPointer := (others => '0');
                
            res(i).ins.classInfo.branchIns := '0';
            res(i).ins.controlInfo.frontBranch := '0';
            res(i).ins.controlInfo.confirmedBranch := '0';
            res(i).ins.controlInfo.specialAction := '0';
-                    
+
            if IMM_AS_REG then        
                res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
            end if;
