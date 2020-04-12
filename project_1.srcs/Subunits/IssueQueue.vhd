@@ -20,7 +20,8 @@ use work.LogicIssue.all;
 entity IssueQueue is
 	generic(
 		IQ_SIZE: natural := 8;
-		IS_FP: boolean := false
+		IS_FP: boolean := false;
+		ALT_INPUT: boolean := false
 	);
 	port(
 		clk: in std_logic;
@@ -29,6 +30,8 @@ entity IssueQueue is
 		
 		prevSendingOK: in std_logic;
 		newArr: in SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
+		  newArr_Alt: in SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
+		  newArrOut: out SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
 		nextAccepting: in std_logic;
 		lateEventSignal: in std_logic;
 		execEventSignal: in std_logic;
@@ -43,6 +46,8 @@ entity IssueQueue is
 		acceptingMore: out std_logic;
 		acceptingOut: out std_logic;
 		
+		queuesAccepting: in std_logic;
+		
 		anyReady: out std_logic;
 		schedulerOut: out SchedulerEntrySlot;
 		sending: out std_logic
@@ -54,12 +59,16 @@ architecture Behavioral of IssueQueue is
 	signal queueData: InstructionStateArray(0 to IQ_SIZE-1)  := (others => DEFAULT_INSTRUCTION_STATE);
 	signal fullMask, fullMaskNext, killMask, livingMask, readyMask, readyMaskLive, stayMask, selMask, issuedMask, remainMask: std_logic_vector(0 to IQ_SIZE-1) := (others=>'0');	
 
-	signal queueContent, queueContentNext, queueContent_N, queueContentNext_N: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-	signal queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-	signal newContent, newContentRR, newSchedData: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	signal newContent, newContentRR, newSchedData, inputStagePreRR, inputStage, inputStageUpdated, inputStageNext:
+	                                                                                   SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 				
-	signal anyReadyFull, anyReadyLive, sends, sends_N, sendPossible, sendingKilled, sent, sentKilled, sentUnexpected: std_logic := '0';
+	signal anyReadyFull, anyReadyLive, sends, sendPossible, sendingKilled, sent, sentKilled, sentUnexpected, inputStageAny, inputStageLivingAny,
+	               inputReadingAny, inputStageSending, inputStageMoving, acceptingForInputStage: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+
+    signal fma: ForwardingMatchesArray(0 to IQ_SIZE-1) := (others => DEFAULT_FORWARDING_MATCHES);
+    signal fmaInputStage: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
 
 	-- Select item at first '1', or the last one if all zeros
 	function prioSelect(elems: SchedulerEntrySlotArray; selVec: std_logic_vector) return SchedulerEntrySlot is
@@ -98,36 +107,25 @@ architecture Behavioral of IssueQueue is
 			return ch1;
 		end if;
 	end function;
-	
-	function TMP_clearDestIfEmpty(elem: SchedulerEntrySlot; sends: std_logic; IS_FP: boolean) return SchedulerEntrySlot is
+
+
+	function clearOutput(elem: SchedulerEntrySlot) return SchedulerEntrySlot is
 		variable res: SchedulerEntrySlot := elem;
-	begin
-	
-           if sends = '1' then
-               --res.ins.physicalArgSpec.intDestSel := bool2std(not IS_FP) and isNonzero(res.ins.physicalArgSpec.dest);
-               --res.ins.physicalArgSpec.floatDestSel := bool2std(IS_FP);	       
-           else
-               res.ins.physicalArgSpec.intDestSel := '0';
-               res.ins.physicalArgSpec.floatDestSel := '0';
-           end if;
-	
-		if sends = '0' then
-			res.ins.physicalArgSpec.dest := (others => '0');
-		end if;
-		
+    begin
 	    -- Clear unused fields
         res.ins.bits := (others => '0');
         res.ins.result := (others => '0');
         res.ins.target := (others => '0');        
-
+    
         res.ins.controlInfo.completed := '0';
         res.ins.controlInfo.completed2 := '0';
         res.ins.ip := (others => '0');
     
         res.ins.controlInfo.newEvent := '0';
         res.ins.controlInfo.hasInterrupt := '0';
-        --res.ins.controlInfo.exceptionCode := (others => '0');	
-		return res;
+        --res.ins.controlInfo.exceptionCode := (others => '0');        
+    
+	   return res;
 	end function;
 	
 	function TMP_setUntil(selVec: std_logic_vector; nextAccepting: std_logic) return std_logic_vector is
@@ -151,21 +149,17 @@ architecture Behavioral of IssueQueue is
 		end loop;
 		return res;
     end function;
-	--		signal ch0, ch1, ch2: std_logic := '0';
-		
-   signal inputStagePreRR, inputStage, inputStageUpdated, inputStageNext: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-   signal inputStageAny, inputStageLivingAny, inputReadingAny: std_logic := '0';
-   signal inputStageMoving, acceptingForInputStage: std_logic := '0'; -- This is when the content shifts to the main part of queue
-   
-   constant readyRegFlagsZ: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
-	   
-	function iqInputStageNext(content, newContent: SchedulerEntrySlotArray; prevSending, execEventSignal, lateEventSignal: std_logic) return SchedulerEntrySlotArray is
+
+	function iqInputStageNext(content, newContent: SchedulerEntrySlotArray; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerEntrySlotArray is
 	   variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := content;
 	begin
-	   if prevSending = '1' and execEventSignal = '0' and lateEventSignal = '0' then
-	       res := newContent;
-	       
-	   else -- Clearing everything - sent to main queue
+	   if execEventSignal = '1' or lateEventSignal = '1' then
+	       for i in 0 to PIPE_WIDTH-1 loop
+               res(i).full := '0';
+           end loop; 	       
+	   elsif prevSending = '1' then
+	       res := newContent;	       
+	   elsif isSending = '1' then -- Clearing everything - sent to main queue
 	       for i in 0 to PIPE_WIDTH-1 loop
 	           res(i).full := '0';
 	       end loop;    
@@ -176,41 +170,30 @@ architecture Behavioral of IssueQueue is
 	
 	function updateRR(newContent: SchedulerEntrySlotArray; rr: std_logic_vector) return SchedulerEntrySlotArray is
 	   variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := newContent;
-       variable rrf, readyBefore: std_logic_vector(0 to 2) := (others=>'0');
-	   constant Z3: std_logic_vector(0 to 2) := (others => '0');
-       constant ZZ3: SmallNumberArray(0 to 2) := (others=>(others=>'0'));       	   
+       variable rrf: std_logic_vector(0 to 2) := (others=>'0');      	   
 	begin
-	
 	   for i in 0 to PIPE_WIDTH-1 loop
-	       readyBefore := not res(i).state.argValues.missing;
-	       rrf := rr(3*i to 3*i + 2);
-	       res(i).state.argValues := updateArgLocs(res(i).state.argValues,
-                                                   readyBefore, rrf,
-                                                   Z3, Z3, Z3, Z3,
-                                                   ZZ3, ZZ3, ZZ3, ZZ3,
-                                                   true);
-                                                   
-            res(i).state.argValues.missing := res(i).state.argValues.missing and not rrf;	       
-	   end loop;
-	   
+	       rrf := rr(3*i to 3*i + 2);                                              
+           res(i).state.argValues.missing := res(i).state.argValues.missing and not rrf;	       
+	   end loop;   
 	   return res;
 	end function;
     	
 begin
 
-    inputStageUpdated <= updateSchedulerArray(inputStage, fni, waitingFM, true);
+	fmaInputStage <= findForwardingMatchesArray(inputStage, fni);    
+    inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
+
+        inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, true, false) when not ALT_INPUT
+                         else newArr_Alt;
+        newArrOut <= inputStageUpdated;
     
-    inputStageNext <= iqInputStageNext(inputStageUpdated, newContent, prevSendingOK, execEventSignal, lateEventSignal);
+    inputStageSending <= inputStageAny and queuesAccepting and not execEventSignal and not lateEventSignal;
+    
+    inputStageNext <= iqInputStageNext(inputStageUpdated, newContent, prevSendingOK, inputStageSending, execEventSignal, lateEventSignal);
     inputReadingAny <= prevSendingOK and isNonzero(extractFullMask(newArr));
     inputStageAny <= isNonzero(extractFullMask(inputStage));
     inputStageLivingAny <= inputStageAny and not execEventSignal and not lateEventSignal;
-    -- 
-    
-    -- TEMP: acceptingOut would be '1' when PIPE_WIDTH slots free in the main queue AND not inputStageAny
-    --
-    
-    inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
-
         
 	QUEUE_SYNCHRONOUS: process(clk) 	
 	begin
@@ -231,7 +214,7 @@ begin
 	sends <= anyReadyLive and nextAccepting; -- CHECK: can we use full instead of living?
 	sendPossible <= anyReadyFull and nextAccepting; -- Includes ops that would send but are killed
 	
-	dispatchDataNew <= TMP_clearDestIfEmpty(prioSelect(queueContentUpdatedSel, readyMask), sends, IS_FP);
+	dispatchDataNew <= clearOutput(clearDestIfEmpty(prioSelect(queueContentUpdatedSel, readyMask), not sends));
 	stayMask <= TMP_setUntil(readyMask, nextAccepting);
 
     newContent <= newArr;
@@ -246,12 +229,14 @@ begin
                                               remainMask, fullMask, livingMask, selMask, issuedMask,                                             
                                               sends, sent,
                                               sentUnexpected,
-                                              inputStageLivingAny
+                                              inputStageSending
                                               );
 					
 	-- TODO: below could be optimized because some code is shared (comparators!)
-	queueContentUpdated <= updateSchedulerArray(queueContent, fni, waitingFM, true);
-	queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, selectionFM, false);
+	fma <= findForwardingMatchesArray(queueContent, fni);
+	
+	queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, waitingFM, true, false);
+	queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, selectionFM, false, false);
 
 	readyMask <= extractReadyMaskNew(queueContentUpdatedSel) and fullMask;	
 	readyMaskLive <= readyMask and livingMask;
@@ -260,7 +245,7 @@ begin
 	killMask <= getKillMask(queueData, fullMask, execCausing, execEventSignal, lateEventSignal);
 	
 	       acceptingForInputStage <= not fullMask(IQ_SIZE-PIPE_WIDTH);
-	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH) and not inputStageAny;
+	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH);-- and not inputStageAny;
 	               
 	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);
 	

@@ -98,13 +98,7 @@ architecture Implem of InstructionBuffer is
         
         if CLEAR_DEBUG_INFO then    
             for i in 0 to IBUFFER_SIZE-1 loop
-                res(i).ins.ip := (others => '0');
-                res(i).ins.bits := (others => '0');                
-                res(i).ins.result := (others => '0');
-                res(i).ins.target := (others => '0');
-                
-                --    res(i).ins.operation := (General, unknown);
-                
+                res(i).ins := clearAbstractInfo(res(i).ins);
                 res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
             end loop;
         end if;

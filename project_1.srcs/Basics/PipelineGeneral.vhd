@@ -23,6 +23,22 @@ type ForwardingInfo is record
 	nextTagsM2:	PhysNameArray(0 to 2);
 end record;
 
+type ForwardingMatches is record
+    -- src0
+	a0cmp0: std_logic_vector(0 to 2);
+    a0cmp1: std_logic_vector(0 to 2);    
+    a0cmpM1: std_logic_vector(0 to 2);
+    a0cmpM2: std_logic_vector(0 to 2);
+    
+    -- src1
+	a1cmp0: std_logic_vector(0 to 2);
+	a1cmp1: std_logic_vector(0 to 2);	
+	a1cmpM1: std_logic_vector(0 to 2);
+	a1cmpM2: std_logic_vector(0 to 2);
+end record;
+
+type ForwardingMatchesArray is array(integer range <>) of ForwardingMatches; 
+
 type ForwardingMap is record
     maskRR: std_logic_vector(0 to 2);
     maskR1: std_logic_vector(0 to 2);
@@ -42,46 +58,141 @@ constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
 	nextTagsM2 => (others => (others => '0'))
 );
 
+constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
+    others => (others => '0')
+);
+
 constant DEFAULT_FORWARDING_MAP: ForwardingMap := (
     others => (others => '0')
 );
 
+     
+constant WAITING_FN_MAP: ForwardingMap := (
+    maskRR => "110",   -- arg2 is unused   
+    maskR1 => "000",  
+    maskR0 => "000",
+    maskM1 => "101",
+    maskM2 => "010"
+);        
 
-function compactMask(vec: std_logic_vector) return std_logic_vector;
-function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector;
+constant ENQUEUE_FN_MAP: ForwardingMap := (
+    maskRR => "000",      
+    maskR1 => "111",  
+    maskR0 => "111",
+    maskM1 => "111",
+    maskM2 => "010"
+);
+
+constant SELECTION_FN_MAP: ForwardingMap := (
+    maskRR => "110",   -- arg2 is unused   
+    maskR1 => "000",  
+    maskR0 => "000",
+    maskM1 => "101",
+    maskM2 => "000"
+);
+
+constant ENQUEUE_FN_MAP_SV: ForwardingMap := (
+    maskRR => "000",      
+    maskR1 => "111",  
+    maskR0 => "111",
+    maskM1 => "000",
+    maskM2 => "000"
+);
+
+constant WAITING_FN_MAP_SV: ForwardingMap := (
+    maskRR => "100",
+    maskR1 => "000",  
+    maskR0 => "111",
+    maskM1 => "000",
+    maskM2 => "000"
+);
+
+
+-- FP store data
+constant ENQUEUE_FN_MAP_FLOAT_SV: ForwardingMap := (
+    maskRR => "000",      
+    maskR1 => "111",  
+    maskR0 => "111",
+    maskM1 => "000",
+    maskM2 => "000"
+);
+
+constant WAITING_FN_MAP_FLOAT_SV: ForwardingMap := (
+    maskRR => "100",   -- arg2 is unused   
+    maskR1 => "000",  
+    maskR0 => "111",
+    maskM1 => "000",
+    maskM2 => "000"
+);
+
+-- FP cluster
+constant WAITING_FN_MAP_FLOAT: ForwardingMap := (
+    maskRR => "111",   
+    maskR1 => "000",  
+    maskR0 => "000",
+    maskM1 => "000",
+    maskM2 => "111"
+);        
+
+constant ENQUEUE_FN_MAP_FLOAT: ForwardingMap := (
+    maskRR => "000",      
+    maskR1 => "111",  
+    maskR0 => "111",
+    maskM1 => "111",
+    maskM2 => "111"
+);
+
+constant SELECTION_FN_MAP_FLOAT: ForwardingMap := (
+    maskRR => "111",
+    maskR1 => "000",  
+    maskR0 => "000",
+    maskM1 => "000",
+    maskM2 => "000"
+);
+
+
+function compactMask(vec: std_logic_vector) return std_logic_vector; -- WARNING: only for 4 elements
+--function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector;  PRIVATE
 
 function getNewElem(remv: std_logic_vector; newContent: InstructionSlotArray) return InstructionSlot;
 function getNewElemSch(remv: std_logic_vector; newContent: SchedulerEntrySlotArray)
 return SchedulerEntrySlot;
 
-
-function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionState;
-function setInstructionTarget(ins: InstructionState; target: Mword) return InstructionState;
+-- general InstructionState handling 
+function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionState; -- UNUSED
+function setInstructionTarget(ins: InstructionState; target: Mword) return InstructionState; -- UNUSED
 function setInstructionResult(ins: InstructionState; result: Mword) return InstructionState;
+--
+-- dest handling
+function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray;
+function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray;
+function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
 
-function getAddressIncrement(ins: InstructionState) return Mword;
+function clearDestIfEmpty(elem: SchedulerEntrySlot; empty: std_logic) return SchedulerEntrySlot;
 
-function compareTagBefore(tagA, tagB: InsTag) return std_logic;
-function compareTagAfter(tagA, tagB: InsTag) return std_logic;
 
 function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector;
-
 function extractFullMask(queueContent: SchedulerEntrySlotArray) return std_logic_vector;
 
 function extractData(queueContent: InstructionSlotArray) return InstructionStateArray;
-
 function extractData(queueContent: SchedulerEntrySlotArray) return InstructionStateArray;
 
-function killByTag(before, ei, int: std_logic) return std_logic;
+function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
+
+
+--function killByTag(before, ei, int: std_logic) return std_logic; PRIVATE
 
 function getKillMask(content: InstructionStateArray; fullMask: std_logic_vector;
 							causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector;
 
+function getExceptionMask(insVec: InstructionSlotArray) return std_logic_vector;
+
+
 function stageArrayNext(livingContent, newContent: InstructionSlotArray; full, sending, receiving, kill: std_logic)
 return InstructionSlotArray;
 
-
+-- general op tag handling
 function getTagHigh(tag: std_logic_vector) return std_logic_vector;
 function getTagLow(tag: std_logic_vector) return std_logic_vector;
 function getTagHighSN(tag: InsTag) return SmallNumber;
@@ -92,121 +203,23 @@ function alignAddress(adr: std_logic_vector) return std_logic_vector;
 function clearLowBits(vec: std_logic_vector; n: integer) return std_logic_vector;
 function getLowBits(vec: std_logic_vector; n: integer) return std_logic_vector;
 
-function getExceptionMask(insVec: InstructionSlotArray) return std_logic_vector;
+function compareTagBefore(tagA, tagB: InsTag) return std_logic;
+function compareTagAfter(tagA, tagB: InsTag) return std_logic;
+--
 
 function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector; HAS_IMM: boolean) return SchedulerEntrySlotArray;
 
-function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
-function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector;
-function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector;
-function getFloatStoreMask(insVec, insVecF: InstructionSlotArray) return std_logic_vector;
-function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
-function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector;
-function getMemMask(insVec: InstructionSlotArray) return std_logic_vector;
-
-function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
-
-function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray;
-function prepareForStoreValueFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray;
-
-function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
-     
-        constant WAITING_FN_MAP: ForwardingMap := (
-            maskRR => "110",   -- arg2 is unused   
-            maskR1 => "000",  
-            maskR0 => "000",
-            maskM1 => "101",
-            maskM2 => "010"
-        );        
-
-        constant ENQUEUE_FN_MAP: ForwardingMap := (
-            maskRR => "000",      
-            maskR1 => "111",  
-            maskR0 => "111",
-            maskM1 => "111",
-            maskM2 => "010"
-        );
-
-        constant SELECTION_FN_MAP: ForwardingMap := (
-            maskRR => "110",   -- arg2 is unused   
-            maskR1 => "000",  
-            maskR0 => "000",
-            maskM1 => "101",
-            maskM2 => "000"
-        );
-        
-        constant ENQUEUE_FN_MAP_SV: ForwardingMap := (
-            maskRR => "000",      
-            maskR1 => "111",  
-            maskR0 => "111",
-            maskM1 => "000",
-            maskM2 => "000"
-        );
-
-        constant WAITING_FN_MAP_SV: ForwardingMap := (
-            maskRR => "100",
-            maskR1 => "000",  
-            maskR0 => "111",
-            maskM1 => "000",
-            maskM2 => "000"
-        );
-
-
-        -- FP store data
-        constant ENQUEUE_FN_MAP_FLOAT_SV: ForwardingMap := (
-            maskRR => "000",      
-            maskR1 => "111",  
-            maskR0 => "111",
-            maskM1 => "000",
-            maskM2 => "000"
-        );
-        
-        constant WAITING_FN_MAP_FLOAT_SV: ForwardingMap := (
-            maskRR => "100",   -- arg2 is unused   
-            maskR1 => "000",  
-            maskR0 => "111",
-            maskM1 => "000",
-            maskM2 => "000"
-        );
-
-        -- FP cluster
-        constant WAITING_FN_MAP_FLOAT: ForwardingMap := (
-            maskRR => "111",   
-            maskR1 => "000",  
-            maskR0 => "000",
-            maskM1 => "000",
-            maskM2 => "111"
-        );        
-
-        constant ENQUEUE_FN_MAP_FLOAT: ForwardingMap := (
-            maskRR => "000",      
-            maskR1 => "111",  
-            maskR0 => "111",
-            maskM1 => "111",
-            maskM2 => "111"
-        );
-
-        constant SELECTION_FN_MAP_FLOAT: ForwardingMap := (
-            maskRR => "111",
-            maskR1 => "000",  
-            maskR0 => "000",
-            maskM1 => "000",
-            maskM2 => "000"
-        );
-
-
-function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray;
-function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray;
-function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
 
 function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray;
 function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return SchedulerEntrySlotArray;
 
 function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot;
 
-function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray;
-function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
-function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
+
+
+function getAddressIncrement(ins: InstructionState) return Mword;
+
+function hasSyncEvent(ins: InstructionState) return std_logic;
 
 function isBranchIns(ins: InstructionState) return std_logic;
 
@@ -217,13 +230,178 @@ function isStoreMemOp(ins: InstructionState) return std_logic;
 function isLoadSysOp(ins: InstructionState) return std_logic;
 function isStoreSysOp(ins: InstructionState) return std_logic;
 
-function hasSyncEvent(ins: InstructionState) return std_logic;
-                
+-- sorting subpipelines
+function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getFloatStoreMask(insVec, insVecF: InstructionSlotArray) return std_logic_vector;
+function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getMemMask(insVec: InstructionSlotArray) return std_logic_vector;
+
+function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray;
+function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
+function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
+
+function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray;
+function prepareForStoreValueFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray;
+
+function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
+
+
+function clearRawInfo(ins: InstructionState) return InstructionState;      -- ip, bits; this is raw program data 
+function clearFollowInfo(ins: InstructionState) return InstructionState;  -- result, target; they are about what follows
+function clearAbstractInfo(ins: InstructionState) return InstructionState; -- ip, bits, result, target; because they are independent of implementation -> abstract
+
+function clearRawInfo(ia: InstructionStateArray) return InstructionStateArray;
+function clearFollowInfo(ia: InstructionStateArray) return InstructionStateArray;
+function clearAbstractInfo(ia: InstructionStateArray) return InstructionStateArray;
+
+function clearRawInfo(ins: InstructionSlot) return InstructionSlot;
+function clearFollowInfo(ins: InstructionSlot) return InstructionSlot;
+function clearAbstractInfo(ins: InstructionSlot) return InstructionSlot;
+
+function clearRawInfo(ia: InstructionSlotArray) return InstructionSlotArray;
+function clearFollowInfo(ia: InstructionSlotArray) return InstructionSlotArray;
+function clearAbstractInfo(ia: InstructionSlotArray) return InstructionSlotArray;
+
+function clearDbCounters(ins: InstructionState) return InstructionState;      -- ip, bits; this is raw program data 
+function clearDbCounters(isl: InstructionSlot) return InstructionSlot;
+         
 end package;
 
 
 
 package body PipelineGeneral is
+
+function clearRawInfo(ins: InstructionState) return InstructionState is
+    variable res: InstructionState := ins;
+begin
+    res.ip := (others => '0');
+    res.bits := (others => '0');
+    return res;
+end function;
+
+function clearFollowInfo(ins: InstructionState) return InstructionState is
+    variable res: InstructionState := ins;
+begin
+    res.target := (others => '0');
+    res.result := (others => '0');
+    return res;
+end function;
+
+function clearAbstractInfo(ins: InstructionState) return InstructionState is
+    variable res: InstructionState := ins;
+begin
+    res.ip := (others => '0');
+    res.bits := (others => '0');
+    res.target := (others => '0');
+    res.result := (others => '0');
+    return res;
+end function;
+
+function clearRawInfo(ia: InstructionStateArray) return InstructionStateArray is
+   variable res: InstructionStateArray(ia'range) := ia;
+begin
+    for i in ia'range loop
+        res(i) := clearRawInfo(res(i));
+    end loop;
+    return res;
+end function;
+
+function clearFollowInfo(ia: InstructionStateArray) return InstructionStateArray is
+   variable res: InstructionStateArray(ia'range) := ia;
+begin
+    for i in ia'range loop
+        res(i) := clearRawInfo(res(i));
+    end loop;
+    return res;
+end function;
+
+function clearAbstractInfo(ia: InstructionStateArray) return InstructionStateArray is
+   variable res: InstructionStateArray(ia'range) := ia;
+begin
+    for i in ia'range loop
+        res(i) := clearAbstractInfo(res(i));
+    end loop;
+    return res;
+end function;
+
+
+function clearDbCounters(ins: InstructionState) return InstructionState is
+    variable res: InstructionState := ins;
+begin
+    res.tags.fetchCtr := (others => '0');
+    res.tags.decodeCtr := (others => '0');
+    res.tags.renameCtr := (others => '0');
+    res.tags.commitCtr := (others => '0');    
+    return res;
+end function;
+
+function clearDbCounters(isl: InstructionSlot) return InstructionSlot is
+    variable res: InstructionSlot := isl;
+begin   
+    res.ins := clearDbCounters(res.ins);
+    return res;
+end function;
+
+
+function clearRawInfo(ins: InstructionSlot) return InstructionSlot is
+    variable res: InstructionSlot := ins;
+begin
+    res.ins.ip := (others => '0');
+    res.ins.bits := (others => '0');
+    return res;
+end function;
+
+function clearFollowInfo(ins: InstructionSlot) return InstructionSlot is
+    variable res: InstructionSlot := ins;
+begin
+    res.ins.target := (others => '0');
+    res.ins.result := (others => '0');
+    return res;
+end function;
+
+function clearAbstractInfo(ins: InstructionSlot) return InstructionSlot is
+    variable res: InstructionSlot := ins;
+begin
+    res.ins.ip := (others => '0');
+    res.ins.bits := (others => '0');
+    res.ins.target := (others => '0');
+    res.ins.result := (others => '0');
+    return res;
+end function;
+
+function clearRawInfo(ia: InstructionSlotArray) return InstructionSlotArray is
+   variable res: InstructionSlotArray(ia'range) := ia;
+begin
+    for i in ia'range loop
+        res(i) := clearRawInfo(res(i));
+    end loop;
+    return res;
+end function;
+
+function clearFollowInfo(ia: InstructionSlotArray) return InstructionSlotArray is
+   variable res: InstructionSlotArray(ia'range) := ia;
+begin
+    for i in ia'range loop
+        res(i) := clearRawInfo(res(i));
+    end loop;
+    return res;
+end function;
+
+function clearAbstractInfo(ia: InstructionSlotArray) return InstructionSlotArray is
+   variable res: InstructionSlotArray(ia'range) := ia;
+begin
+    for i in ia'range loop
+        res(i) := clearAbstractInfo(res(i));
+    end loop;
+    return res;
+end function;
+
+-----
+
+
 
 function compactMask(vec: std_logic_vector) return std_logic_vector is
     variable res: std_logic_vector(0 to 3) := (others => '0');
@@ -245,6 +423,7 @@ begin
     return res;
 end function;
 
+-- REFAC
 function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector is
     variable res: std_logic_vector(1 downto 0) := "00";
     variable m6: std_logic_vector(0 to 5) := mr & mi;
@@ -525,6 +704,8 @@ begin
         for j in 0 to 2 loop
             res(i).state.argValues.zero(j) :=         (res(i).ins.physicalArgSpec.intArgSel(j) and not isNonzero(res(i).ins.virtualArgSpec.args(j)(4 downto 0)))
                                                or (not res(i).ins.physicalArgSpec.intArgSel(j) and not res(i).ins.physicalArgSpec.floatArgSel(j));
+                                               
+                res(i).state.argValues.argLocsPhase(j) := "00000010"; -- Like arg in register
         end loop;
 
         -- Set 'missing' flags for non-const arguments
@@ -538,16 +719,16 @@ begin
             res(i).state.argValues.zero(1) := '0';
             
             if CLEAR_DEBUG_INFO and IMM_AS_REG and HAS_IMM then
-                res(i).ins.physicalArgSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);
+                res(i).ins.physicalArgSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);    
                 res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
             end if;
         end if;
 
         if CLEAR_DEBUG_INFO then
-            res(i).ins.ip := (others => '0');			
+            res(i).ins.ip := (others => '0');
+            res(i).ins.bits := (others => '0');
             res(i).ins.target := (others => '0');
             res(i).ins.result := (others => '0');
-            res(i).ins.bits := (others => '0');
         end if;
 
     end loop;
@@ -761,6 +942,18 @@ function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot is
     variable res: InstructionSlot := insS0;
 begin
     res.ins.physicalArgSpec.dest := insS0.ins.physicalArgSpec.dest or insS1.ins.physicalArgSpec.dest;
+    return res;
+end function;
+
+function clearDestIfEmpty(elem: SchedulerEntrySlot; empty: std_logic) return SchedulerEntrySlot is
+    variable res: SchedulerEntrySlot := elem;
+begin
+    if empty = '1' then
+        res.ins.physicalArgSpec.intDestSel := '0';
+        res.ins.physicalArgSpec.floatDestSel := '0';
+        res.ins.physicalArgSpec.dest := (others => '0');
+    end if;
+
     return res;
 end function;
         

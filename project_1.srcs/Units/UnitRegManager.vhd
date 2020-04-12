@@ -134,25 +134,20 @@ architecture Behavioral of UnitRegManager is
         if CLEAR_DEBUG_INFO then
             for i in 0 to PIPE_WIDTH-1 loop
 				-- KEEP renameIndex + argSpec + specificOperation
-			
-                res(i).ins.ip := (others => '0');
-                res(i).ins.bits := (others => '0');
-                res(i).ins.target := (others => '0');                    
-                res(i).ins.result := (others => '0');                    
+                   
+                res(i) := clearAbstractInfo(res(i));
                 
+                -- Reduce operation to raw bits (remove redundancy)
+                res(i).ins.specificOperation.arith := opAnd;
+                res(i).ins.specificOperation.memory := opLoad;
+                res(i).ins.specificOperation.float := opMove;
+                res(i).ins.specificOperation.system := opNone;
                 
-                    res(i).ins.specificOperation.arith := opAnd;
-                    res(i).ins.specificOperation.memory := opLoad;
-                    res(i).ins.specificOperation.float := opMove;
-                    res(i).ins.specificOperation.system := opNone;
-                
-                res(i).ins.tags.fetchCtr := (others => '0');
-                res(i).ins.tags.decodeCtr := (others => '0');
-                res(i).ins.tags.renameCtr := (others => '0');
+                res(i) := clearDbCounters(res(i));
+
                 if i > 0 then -- High bits are the same as in slot 0, low bits are constant equal to i
                     res(i).ins.tags.renameIndex := (others => '0');
                 end if;
-                res(i).ins.tags.commitCtr := (others => '0');
                 
                 -- TODO: this is unused anyway
                 res(i).ins.controlInfo.newEvent := '0';
@@ -232,6 +227,7 @@ architecture Behavioral of UnitRegManager is
                                 depVec: DependencyVec
                                 ) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+        variable tmpArgSpec: InstructionArgSpec := DEFAULT_ARG_SPEC;
     begin
         -- Assign src registers
         for i in 0 to PIPE_WIDTH-1 loop
@@ -267,14 +263,10 @@ architecture Behavioral of UnitRegManager is
             end if;
             
             if CLEAR_DEBUG_INFO then
-                res(i).ins.specificOperation := DEFAULT_SPECIFIC_OP;
-                
-                res(i).ins.tags.renameIndex := (others => '0');
-                res(i).ins.controlInfo := DEFAULT_CONTROL_INFO;
-                res(i).ins.classInfo := DEFAULT_CLASS_INFO;
-                
-                res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
-                res(i).ins.constantArgs := DEFAULT_CONSTANT_ARGS;               
+                -- Leave only physicalArgs
+                tmpArgSpec := res(i).ins.physicalArgSpec;
+                res(i).ins := DEFAULT_INS_STATE;
+                res(i).ins.physicalArgSpec := tmpArgSpec;             
             end if;
             
         end loop;

@@ -110,8 +110,8 @@ architecture Behavioral of StoreQueue is
         variable diff: SmallNumber := (others => '0');
 	    variable remv: std_logic_vector(0 to 2) := "000";
 	    variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
-	    constant IS_STORE_OP: boolean := isStoreOp(storeAddressInput.ins) = '1';
-	    constant IS_LOAD_OP: boolean := isLoadOp(storeAddressInput.ins) = '1';
+	    constant IS_STORE_OP: boolean := std2bool(isStoreOp(storeAddressInput.ins));
+	    constant IS_LOAD_OP: boolean := std2bool(isLoadOp(storeAddressInput.ins));
     begin
 
         for i in 0 to QUEUE_SIZE-1 loop
@@ -134,7 +134,6 @@ architecture Behavioral of StoreQueue is
                         --dataIn(slv2u(diff(1 downto 0)));
                 res(i) := slot.ins;          
                 res(i).tags := slot.ins.tags;
-                --res(i).operation := (General, unknown);
                 res(i).specificOperation := slot.ins.specificOperation;
                 res(i).controlInfo.completed := '0';
                 res(i).controlInfo.completed2 := '0';
@@ -254,43 +253,43 @@ architecture Behavioral of StoreQueue is
         return res;
     end function;
 
-		-- To check what in the LoadQueue has an error
-		function findOldestMatch(content: InstructionStateArray;
-										 newerLQ, cmpMask: std_logic_vector; pStart: SmallNumber;
-										 ins: InstructionState)
-		return std_logic_vector is
-			constant LEN: integer := cmpMask'length;
-			variable res, newer, areAtOrAfter: std_logic_vector(0 to LEN-1) := (others => '0');
-			variable indices, rawIndices: SmallNumberArray(0 to LEN-1) := (others => (others => '0'));
-			variable matchAtOrAfter: std_logic := '0';
-			
-			variable tmpVec: std_logic_vector(0 to LEN-1) := (others => '0');
-		begin
-			-- From qs we must check which are newer than ins
-			newer := newerLQ;-- TMP_cmpTagsAfter(content, ins.tags.renameIndex) and whichAddressCompleted(content); -- Only those with known address 
-			areAtOrAfter := not setToOnes(newer, slv2u(pStart));
-			-- Use priority enc. to find first in the newer ones. But they may be divided:
-			--		V  1 1 1 0 0 0 0 1 1 1 and cmp  V
-			--		   0 1 0 0 0 0 0 1 0 1
-			-- and then there are 2 runs of bits and those at the enc must be ignored (r newer than first run)
-			
-			-- So, elems at the end are ignored when those conditions cooccur:
-			--		pStart > ins.groupTag and [match exists that match.groupTag < ins.groupTag]
-			tmpVec := cmpMask and newer and areAtOrAfter;
-			matchAtOrAfter := isNonzero(tmpVec);
-			
-			if matchAtOrAfter = '1' then
-				-- Ignore those before
-				tmpVec := cmpMask and newer and areAtOrAfter;
-				res := getFirstOne(tmpVec);
-			else
-				-- Don't ignore any matches
-				tmpVec := cmpMask and newer;
-				res := getFirstOne(tmpVec);
-			end if;
-			
-			return res;
-		end function;
+    -- To check what in the LoadQueue has an error
+    function findOldestMatch(content: InstructionStateArray;
+                                     newerLQ, cmpMask: std_logic_vector; pStart: SmallNumber;
+                                     ins: InstructionState)
+    return std_logic_vector is
+        constant LEN: integer := cmpMask'length;
+        variable res, newer, areAtOrAfter: std_logic_vector(0 to LEN-1) := (others => '0');
+        variable indices, rawIndices: SmallNumberArray(0 to LEN-1) := (others => (others => '0'));
+        variable matchAtOrAfter: std_logic := '0';
+        
+        variable tmpVec: std_logic_vector(0 to LEN-1) := (others => '0');
+    begin
+        -- From qs we must check which are newer than ins
+        newer := newerLQ;-- TMP_cmpTagsAfter(content, ins.tags.renameIndex) and whichAddressCompleted(content); -- Only those with known address 
+        areAtOrAfter := not setToOnes(newer, slv2u(pStart));
+        -- Use priority enc. to find first in the newer ones. But they may be divided:
+        --		V  1 1 1 0 0 0 0 1 1 1 and cmp  V
+        --		   0 1 0 0 0 0 0 1 0 1
+        -- and then there are 2 runs of bits and those at the enc must be ignored (r newer than first run)
+        
+        -- So, elems at the end are ignored when those conditions cooccur:
+        --		pStart > ins.groupTag and [match exists that match.groupTag < ins.groupTag]
+        tmpVec := cmpMask and newer and areAtOrAfter;
+        matchAtOrAfter := isNonzero(tmpVec);
+        
+        if matchAtOrAfter = '1' then
+            -- Ignore those before
+            tmpVec := cmpMask and newer and areAtOrAfter;
+            res := getFirstOne(tmpVec);
+        else
+            -- Don't ignore any matches
+            tmpVec := cmpMask and newer;
+            res := getFirstOne(tmpVec);
+        end if;
+        
+        return res;
+    end function;
     
     function selectWithMask(content: InstructionStateArray; mask: std_logic_vector; compareValid: std_logic) return InstructionSlot is
         variable res: InstructionSlot := ('0', content(0));
@@ -373,10 +372,10 @@ begin
 			content <= contentNext;
 	        committedMask <= committedMaskNext;
 			
-             cancelledMask <= cancelledMaskNext;
+            cancelledMask <= cancelledMaskNext;
         
-             newerRegLQ <= newerNextLQ;
-             olderRegSQ <= olderNextSQ;
+            newerRegLQ <= newerNextLQ;
+            olderRegSQ <= olderNextSQ;
 			
 			selectedDataOutputSig <= selectedDataSlot;
             dataOutSig <= dataOutSigNext;
