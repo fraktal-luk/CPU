@@ -169,10 +169,6 @@ BEGIN
        variable testName, suiteName: line;
        file suiteFile: text open read_mode is "suite_names.txt";
        file testFile: text;
-       
-            file tmpOutFile: text open write_mode is "tmpResult.txt";
-            variable outputLine: line;
-            variable tmpStr: string(1 to 51);
    begin
 	
 	  wait for 110 ns;
@@ -208,27 +204,16 @@ BEGIN
               testProgram(512/4) <= ins6L(j, -512);-- TEMP! 
               testProgram(384/4) <= ins655655(ext2, 0, 0, send, 0, 0);
               testProgram(384/4 + 1) <= ins6L(j, 0); -- idle loop          
-                       
-                       -----------
-                         ---------
-                                wait until rising_edge (clk);                                                           
-                                                           
-                         for i in 0 to 100 loop 
-                              tmpStr := disasmWithAddress(i, testProgram(i));
-                              write(outputLine, tmpStr); 
-                              writeline(tmpOutFile, outputLine);
-                        end loop;
-                              report "File written";
-                          wait;
-                         -------------------
-                         ----------------
-                       
-              --wait until rising_edge(clk);         
+
+        
               testToDo <= '1';
               int0b <= '1';
               wait until rising_edge(clk);
               testToDo <= '0';
               int0b <= '0';
+    
+              disasmToFile(testName.all & "_disasm.txt", testProgram);
+                    
               report "Waiting for completion...";
     
               loop
@@ -267,6 +252,9 @@ BEGIN
       wait until rising_edge(clk);
       testToDo <= '0';
       int0b <= '0';
+      
+      disasmToFile("error_disasm.txt", testProgram);
+      
       report "Waiting for completion...";
  
       wait until rising_edge(clk);
@@ -288,7 +276,7 @@ BEGIN
 
       report "Now test exception return";
 
-	  progB := readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\" & "events" & ".txt" );
+	  progB := readSourceFile("events.txt" );
       machineCode <= processProgram(progB);
       wait until rising_edge(clk);
 
@@ -305,6 +293,8 @@ BEGIN
       wait until rising_edge(clk);
       testToDo <= '0';
       int0b <= '0';
+      
+      disasmToFile("events_disasm.txt", testProgram);      
       report "Waiting for completion...";
 
      wait until rising_edge(clk);
@@ -324,7 +314,7 @@ BEGIN
 
       report "Now test interrupts";
 
-	  progB := readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\" & "events2" & ".txt");
+	  progB := readSourceFile( "events2.txt");
       machineCode <= processProgram(progB);
       wait until rising_edge(clk);
 
@@ -344,6 +334,8 @@ BEGIN
       wait until rising_edge(clk);
       testToDo <= '0';
       int0b <= '0';
+      
+      disasmToFile("events2_disasm.txt", testProgram);      
       report "Waiting for completion...";
 
 

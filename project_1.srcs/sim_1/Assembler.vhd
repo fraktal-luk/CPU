@@ -91,25 +91,28 @@ constant OPCONT_TABLE_EXT1: OpcontArray := (
 
 constant OPCONT_TABLE_EXT2: OpcontArray := (
       0 => retE,   -- 000000
-        1 => retI,    -- 000001
-        2 => halt,   -- 000010
-        3 => sync,   -- 000011
-        4 => replay,     -- 000100
-        5 => error,    -- 000101
-        6 => call,      -- 000110
-        7 => send,     -- 000111
-        
-        8 => mfc,     -- 001000
-        9 => mtc,     -- 001001
-        10 => fmov,    -- 001010
-        11 => forr,    -- 001011
-        
+      1 => retI,    -- 000001
+      2 => halt,   -- 000010
+      3 => sync,   -- 000011
+      4 => replay,     -- 000100
+      5 => error,    -- 000101
+      6 => call,      -- 000110
+      7 => send,     -- 000111
+  
+      8 => mfc,     -- 001000
+      9 => mtc,     -- 001001
+      10 => fmov,    -- 001010
+      11 => forr,    -- 001011
+
     others => none 
 );
 
 
 function disasmWithAddress(a: natural; w: Word) return string;
 function disasmWord(w: Word) return string;
+
+procedure disasmToFile(name: string; arr: WordArray);
+
 
 end Assembler;
 
@@ -598,7 +601,7 @@ begin
             res(13 to 15) := reg2str(0, bFP);
             res(16 to 17) := ", ";
 
-            res(18 to 25) := padTo(integer'image(qc), 24-17+1);
+            res(18 to 25) := padTo(integer'image(imm), 24-17+1);
         -- FP 1 source
         when fmov => 
             res(8 to 10) := reg2str(qa, aFP);
@@ -676,6 +679,20 @@ begin
     
     return res;   
 end function;
+
+
+procedure disasmToFile(name: string; arr: WordArray) is
+    file outFile: text open write_mode is name;
+    variable outputLine: line;
+    variable tmpStr: string(1 to 51);
+begin                            
+    for i in 0 to arr'length-1 loop 
+       tmpStr := disasmWithAddress(i, arr(i));
+       write(outputLine, tmpStr); 
+       writeline(outFile, outputLine);
+    end loop;
+
+end procedure;
 
 
 end Assembler;
