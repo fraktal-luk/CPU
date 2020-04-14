@@ -39,6 +39,78 @@ function processProgram(p: ProgramBuffer) return WordArray;
 
     type TMP_StrArray is array(integer range <>) of string(1 to 10);
 
+
+type OpcodeArray is array(0 to 63) of ProcOpcode;
+type OpcontArray is array(0 to 63) of ProcOpcont;
+
+constant OPCODE_TABLE: OpcodeArray := (
+      0 => andI,   -- 000000
+      1 => orI,    -- 000001
+      2 => addI,   -- 000010
+      3 => subI,   -- 000011
+      4 => jz,     -- 000100
+      5 => jnz,    -- 000101
+      6 => j,      -- 000110
+      7 => jl,     -- 000111
+
+      8 => ld,     -- 001000
+      9 => st,     -- 001001
+     10 => ldf,    -- 001010
+     11 => stf,    -- 001011
+     12 => ext0,   -- 001100
+     13 => ext1,   -- 001101
+     14 => ext2,   -- 001110
+     15 => fop,    -- 001111
+    
+    others => undef
+);
+
+
+constant OPCONT_TABLE_EXT0: OpcontArray := (
+      0 => andR,   -- 000000
+      1 => orR,    -- 000001
+      2 => shlC,   -- 000010
+      3 => shaC,   -- 000011
+      4 => addR,     -- 000100
+      5 => subR,    -- 000101
+      6 => muls,      -- 000110
+      7 => mulu,     -- 000111
+
+      8 => divs,     -- 001000
+      9 => divu,     -- 001001
+    
+    others => none 
+);
+
+constant OPCONT_TABLE_EXT1: OpcontArray := (
+      0 => jzR,   -- 000000
+      1 => jnzR,    -- 000001
+    
+    others => none 
+);
+
+constant OPCONT_TABLE_EXT2: OpcontArray := (
+      0 => retE,   -- 000000
+        1 => retI,    -- 000001
+        2 => halt,   -- 000010
+        3 => sync,   -- 000011
+        4 => replay,     -- 000100
+        5 => error,    -- 000101
+        6 => call,      -- 000110
+        7 => send,     -- 000111
+        
+        8 => mfc,     -- 001000
+        9 => mtc,     -- 001001
+        10 => fmov,    -- 001010
+        11 => forr,    -- 001011
+        
+    others => none 
+);
+
+
+function disasmWithAddress(a: natural; w: Word) return string;
+function disasmWord(w: Word) return string;
+
 end Assembler;
 
 
@@ -68,21 +140,14 @@ begin
     loop
         ln := null;
         readline(src, ln);
-        --report "lie read";
 
         if ln = null or ln'length = 0 then
-            --report "File ended";
             exit;
         end if;
-
-        --report ln.all;
 
         str := (others => cr);
         for i in 1 to 100 loop
             read(ln, ch, good);
-            --report boolean'image(good);
-            --report character'image(ch);
-            
             if not good then
                 str(i-1) := ' ';
                 exit;
@@ -94,8 +159,6 @@ begin
             str(i) := ch;
         end loop;  
         
-        --report str;
-        
         -- We need to save the label (if any) of this line for branch reference, and produce hex value for instruction.
         -- The latter is not possible until we have all the labels, so it must be done in steps.
         
@@ -104,25 +167,25 @@ begin
         --  - label starts with '@'
         --  - if not label, cut line into alphanumeric groups, don't care about commas etc.
 
-            ind := 1;
-            grp := 0;
-            words := (others => (others => cr));      
-            while str(ind) /= cr and grp < words'length loop -- keep last char as end sign
-                while str(ind) = ' ' or str(ind) = ','  or str(ind) = ht loop 
-                    -- skipping wspace
-                    ind := ind + 1;
-                end loop;
-                
-                blockStart := ind - 1;
-                while isAlphanum(str(ind)) or str(ind) = '-' loop -- and not tab nor cr!
-                    -- Copy to current group
-                    words(grp)(ind - blockStart) := str(ind); -- May overflow the word, but nvm                 
-                    ind := ind + 1;
-                end loop;
-                -- Inc group index
-                grp := grp + 1;
+        ind := 1;
+        grp := 0;
+        words := (others => (others => cr));      
+        while str(ind) /= cr and grp < words'length loop -- keep last char as end sign
+            while str(ind) = ' ' or str(ind) = ','  or str(ind) = ht loop 
+                -- skipping wspace
+                ind := ind + 1;
             end loop;
             
+            blockStart := ind - 1;
+            while isAlphanum(str(ind)) or str(ind) = '-' loop -- and not tab nor cr!
+                -- Copy to current group
+                words(grp)(ind - blockStart) := str(ind); -- May overflow the word, but nvm                 
+                ind := ind + 1;
+            end loop;
+            -- Inc group index
+            grp := grp + 1;
+        end loop;
+        
         -- Convert words to line structure
         program(lineNum) := words;
         
@@ -167,29 +230,16 @@ end function;
 function processInstruction(ar: GroupBuffer; num: integer; labels: TMP_StrArray) return word is
     variable mnem: ProcMnemonic;
     variable res: word := (others => '0');
-    variable vals: --WordArray(0 to ar'length-1) := (others => (others => '0'));
-                    IntArray(0 to ar'length-1) := (others => -1);
+    variable vals: IntArray(0 to ar'length-1) := (others => -1);
     variable x: integer := 0;
 begin
-
-    -- First elem must be opcode. Find it in opcode list list
-    -- ...
-    -- 
-        
-    -- ("or_r", "r1", "r2", "r3") -> (fmt655655, ext0, 1, 2, orR, 3)
-    -- Just use a "switch" with all mnemonics!
-    
-    -- Find a member of ProcMnemonic that matches the string (up to trailing non alnums) and return it
-    -- Then use the retur value as selector 
-    --report "Which opcode?";
-
-    
+    -- First elem must be opcode. Find it in opcode list
     mnem := undef;
     for m in ProcMnemonic loop
         if matches(ar(0), ProcMnemonic'image(m)) then
             mnem := m;
         end if;
-    end loop;    
+    end loop;
     
     -- Convert other arg to numbers
     for i in 1 to ar'length-1 loop
@@ -214,9 +264,7 @@ begin
             x := -1;
         end if;
         
-        vals(i) := x;--i2slv(x, 32);
-        
-        --        report integer'image(x);
+        vals(i) := x;
     end loop;
     
 
@@ -322,11 +370,10 @@ begin
 end function;
 
 function processProgram(p: ProgramBuffer) return WordArray is
-    variable dummy: boolean;
-    variable insIndex, j: integer := 0; -- Actual number of instruction
+    variable insIndex: integer := 0; -- Actual number of instruction
     variable labels: TMP_StrArray(0 to p'length-1) := (others => (others => cr));
     variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
-    variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext1, 0, 0, error, 0, 0));
+    variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext2, 0, 0, error, 0, 0));
 begin
     for i in 0 to p'length-1 loop
     
@@ -347,11 +394,287 @@ begin
            null;
         else -- instruction        
            commands(i) := processInstruction(pSqueezed(i), i, labels);
-           --j := j + 1;
         end if;
     end loop;    
     
     return commands;
+end function;
+
+
+
+
+function padTo(s: string; n: natural) return string is
+    variable res: string(1 to n) := (others => ' ');
+    constant LEN: natural := s'length;
+begin
+    if LEN < n then
+        res(1 to LEN) := s;
+    else
+        res := s(1 to n);    
+    end if;
+    
+    return res;
+end function;
+
+function reg2str(n: natural; fp: boolean) return string is
+    variable res: string(1 to 3) := "r00";
+begin
+    assert n < 32 report "Register number too large: " & natural'image(n) severity error;
+
+    if fp then
+        res(1) := 'f';
+    end if;
+    
+    if n < 10 then
+        res(3 to 3) := natural'image(n);
+    else
+        res(2 to 3) := natural'image(n);    
+    end if;
+    
+    return res;
+end function;
+
+
+function disasm655H(w: Word; opc: ProcOpcode) return string is
+    variable res: string(1 to 24) := (others => ' ');
+    variable qa, qb, qc, qd, imm: integer;
+    variable aFP: boolean := false; 
+begin
+    qa := slv2u(w(25 downto 21));
+    qb := slv2u(w(20 downto 16));
+    qc := slv2u(w(9 downto 5));
+    qd := slv2u(w(4 downto 0));
+    
+    imm := slv2s(w(15 downto 0));
+    
+    case opc is
+        when ldf | stf =>
+            aFP := true;
+        when others =>
+    end case;
+
+    res(1 to 5) := padTo(ProcOpcode'image(opc), 5);
+    res(8 to 10) := reg2str(qa, aFP);
+    res(11 to 12) := ", ";
+    res(13 to 15) := reg2str(qb, false);
+    res(16 to 17) := ", ";
+    
+    res(18 to 25) := padTo(integer'image(imm), 24-17+1);
+    
+    return res;
+end function;
+
+
+function disasmJump(w: Word; opc: ProcOpcode) return string is
+    variable res: string(1 to 24) := (others => ' ');
+    variable qa, qb, qc, qd, imm: integer;
+    variable aFP: boolean := false;
+    variable immStart, immSize: natural := 0;
+begin
+    qa := slv2u(w(25 downto 21));
+    qb := slv2u(w(20 downto 16));
+    qc := slv2u(w(9 downto 5));
+    qd := slv2u(w(4 downto 0));
+    
+    
+    res(1 to 5) := padTo(ProcOpcode'image(opc), 5);
+    
+    case opc is
+        when j =>
+            imm := slv2s(w(25 downto 0));
+            immSize := 10;
+            
+            res(8 to 10) := reg2str(qa, aFP);
+            res(11 to 12) := ", ";
+            immStart := 14;            
+        when jz | jnz | jl =>
+            imm := slv2s(w(20 downto 0));
+            immSize := 7;
+            immStart := 8;
+        when others =>
+    end case;
+
+    res(immStart to immStart - 1 + immSize) := padTo(integer'image(imm), immSize);
+    
+    return res;
+end function;
+
+
+function disasmExt0(w: Word; opc: ProcOpcode) return string is
+    variable res: string(1 to 24) := (others => ' ');
+    variable qa, qb, qc, qd, imm: integer;
+    variable aFP, bFP, cFP, dFP: boolean := false;
+    variable immStart, immSize: natural := 0;
+    variable opct: ProcOpcont;
+begin
+    qa := slv2u(w(25 downto 21));
+    qb := slv2u(w(20 downto 16));
+    qc := slv2u(w(9 downto 5));
+    qd := slv2u(w(4 downto 0));
+    
+    imm := slv2s(w(9 downto 0));
+    
+    opct := OPCONT_TABLE_EXT0(slv2u(w(15 downto 10)));
+
+    res(1 to 5) := padTo(ProcOpcont'image(opct), 5);
+    res(8 to 10) := reg2str(qa, aFP);
+    res(11 to 12) := ", ";
+    res(13 to 15) := reg2str(qb, bFP);
+    res(16 to 17) := ", ";
+    
+    case opct is
+        -- 2 sources
+        when andR | orR | addR | subR | divs | divu | muls | mulu =>             
+            res(18 to 20) := reg2str(qc, cFP);
+                     
+        when shlC | shaC =>
+        
+            res(18 to 25) := padTo(integer'image(imm), 24-17+1);
+        when others =>
+    end case;
+    
+    return res;
+end function;
+
+function disasmExt1(w: Word; opc: ProcOpcode) return string is
+    variable res: string(1 to 24) := (others => ' ');
+    variable qa, qb, qc, qd, imm: integer;
+    variable aFP, bFP, cFP, dFP: boolean := false;
+    variable immStart, immSize: natural := 0;
+    variable opct: ProcOpcont;
+begin
+    qa := slv2u(w(25 downto 21));
+    qb := slv2u(w(20 downto 16));
+    qc := slv2u(w(9 downto 5));
+    qd := slv2u(w(4 downto 0));
+    
+    imm := slv2s(w(9 downto 0));
+    
+    opct := OPCONT_TABLE_EXT1(slv2u(w(15 downto 10)));
+
+    res(1 to 5) := padTo(ProcOpcont'image(opct), 5);
+    res(8 to 10) := reg2str(qa, aFP);
+    res(11 to 12) := ", ";
+    res(13 to 15) := reg2str(qb, bFP);
+    res(16 to 17) := ", ";
+    
+    case opct is
+        -- 2 sources
+        when jzR | jnzR =>             
+            res(18 to 20) := reg2str(qc, cFP);
+        when others =>
+    end case;
+    
+    return res;
+end function;
+
+function disasmExt2(w: Word; opc: ProcOpcode) return string is
+    variable res: string(1 to 24) := (others => ' ');
+    variable qa, qb, qc, qd, imm: integer;
+    variable aFP, bFP, cFP, dFP: boolean := false;
+    variable immStart, immSize: natural := 0;
+    variable opct: ProcOpcont;
+begin
+    qa := slv2u(w(25 downto 21));
+    qb := slv2u(w(20 downto 16));
+    qc := slv2u(w(9 downto 5));
+    qd := slv2u(w(4 downto 0));
+    
+    imm := slv2s(w(9 downto 0));
+    
+    opct := OPCONT_TABLE_EXT2(slv2u(w(15 downto 10)));
+
+    res(1 to 5) := padTo(ProcOpcont'image(opct), 5);
+
+    case opct is
+        -- 0 sources
+        when retE | retI | halt | sync | replay | error | call | send =>
+        
+        -- system move
+        when mfc | mtc =>
+
+            res(8 to 10) := reg2str(qa, aFP);
+            res(11 to 12) := ", ";
+            res(13 to 15) := reg2str(0, bFP);
+            res(16 to 17) := ", ";
+
+            res(18 to 25) := padTo(integer'image(qc), 24-17+1);
+        -- FP 1 source
+        when fmov => 
+            res(8 to 10) := reg2str(qa, aFP);
+            res(11 to 12) := ", ";
+            res(13 to 15) := reg2str(qb, bFP);
+            res(16 to 17) := ", ";
+                    
+        -- FP 2 sources
+        when forr =>             
+            res(18 to 20) := reg2str(qc, cFP);
+
+        when others =>
+    end case;
+    
+    return res;
+end function;
+
+
+
+function disasmWord(w: Word) return string is
+    variable res: string(1 to 24) := (others => ' ');
+    variable ind: integer := -1;
+    variable opc: ProcOpcode;
+begin
+    
+    ind := slv2u(w(31 downto 26)); 
+    opc := OPCODE_TABLE(ind);
+    
+    case opc is
+        -- format 655H
+        when andI | orI | addI | subI | ld | st | ldf | stf =>
+            return disasm655H(w, opc);
+        -- constant jumps
+        when j | jz | jnz | jl =>
+            return disasmJump(w, opc);
+        
+        when ext0 =>
+            return disasmExt0(w, opc);
+
+        when ext1 =>
+            return disasmExt1(w, opc);
+            
+        when ext2 =>
+            return disasmExt2(w, opc);
+                                    
+        when others =>
+            res(1 to 3) := "???";
+    end case;
+      
+
+    return res;
+end function;
+
+
+function disasmWithAddress(a: natural; w: Word) return string is
+    variable res: string(1 to 1 + 10 + 10 + 30) := (others => ' ');
+    variable aw: Word := i2slv(a, 32);
+    constant HEX_TAB: string(1 to 16) := "0123456789abcdef";
+    variable c: character;
+begin
+    for i in 0 to 7 loop
+        c := HEX_TAB(1 + (slv2u(aw(31 - 4*i downto 31 - 4*i - 3))));
+        res(1 + i) := c;
+    end loop;
+    
+    res(1 + 8 to 1 + 9) := ": ";
+    
+    for i in 0 to 7 loop
+        c := HEX_TAB(1 + (slv2u(w(31 - 4*i downto 31 - 4*i - 3))));
+        res(1 + 10 + i) := c;
+    end loop;    
+    
+    res(19 to 21) := "   ";
+    res(22 to 22 + 24-1) := disasmWord(w);
+    
+    return res;   
 end function;
 
 

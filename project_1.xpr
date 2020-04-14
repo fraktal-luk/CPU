@@ -33,7 +33,7 @@
     <Option Name="EnableBDX" Val="FALSE"/>
     <Option Name="DSAVendor" Val="xilinx"/>
     <Option Name="DSANumComputeUnits" Val="60"/>
-    <Option Name="WTXSimLaunchSim" Val="2460"/>
+    <Option Name="WTXSimLaunchSim" Val="2503"/>
     <Option Name="WTModelSimLaunchSim" Val="0"/>
     <Option Name="WTQuestaLaunchSim" Val="0"/>
     <Option Name="WTIesLaunchSim" Val="0"/>
@@ -254,20 +254,6 @@
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PSRCDIR/Dev/TmpLogicFront.vhd">
-        <FileInfo>
-          <Attr Name="UserDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="simulation"/>
-        </FileInfo>
-      </File>
-      <File Path="$PSRCDIR/Subunits/SimpleSlotLogic.vhd">
-        <FileInfo>
-          <Attr Name="UserDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="simulation"/>
-        </FileInfo>
-      </File>
       <Config>
         <Option Name="DesignMode" Val="RTL"/>
         <Option Name="TopModule" Val="Core"/>
@@ -300,6 +286,26 @@
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
+      <File Path="$PSRCDIR/sim_1/TestCode/suite_names.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/branch_conditional.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/loads1.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/sf_0.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/tests_all.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/branches2.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/fp0.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/stores1.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/src.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/sys_regs.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/alu.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/branch_link.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/loop2.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/branch_register.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/branches.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/sf_1.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/events2.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/loop.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/events.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/loads_fp.txt"/>
       <Config>
         <Option Name="DesignMode" Val="RTL"/>
         <Option Name="TopModule" Val="CoreTB"/>
@@ -350,12 +356,12 @@
         <StratHandle Name="Flow_PerfOptimized_high" Flow="Vivado Synthesis 2018"/>
         <Step Id="synth_design">
           <Option Id="ResourceSharing">2</Option>
-          <Option Id="ReTiming">1</Option>
           <Option Id="RepFanoutThreshold">400</Option>
+          <Option Id="ReTiming">1</Option>
           <Option Id="NoCombineLuts">1</Option>
+          <Option Id="FsmExtraction">1</Option>
           <Option Id="ShregMinSize">5</Option>
           <Option Id="KeepEquivalentRegisters">1</Option>
-          <Option Id="FsmExtraction">1</Option>
         </Step>
       </Strategy>
       <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
@@ -367,12 +373,12 @@
         <StratHandle Name="Flow_PerfOptimized_high" Flow="Vivado Synthesis 2018"/>
         <Step Id="synth_design">
           <Option Id="ResourceSharing">2</Option>
-          <Option Id="ReTiming">1</Option>
           <Option Id="RepFanoutThreshold">400</Option>
+          <Option Id="ReTiming">1</Option>
           <Option Id="NoCombineLuts">1</Option>
+          <Option Id="FsmExtraction">1</Option>
           <Option Id="ShregMinSize">5</Option>
           <Option Id="KeepEquivalentRegisters">1</Option>
-          <Option Id="FsmExtraction">1</Option>
         </Step>
       </Strategy>
       <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>

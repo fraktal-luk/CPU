@@ -167,9 +167,14 @@ BEGIN
    stim_proc: process
        variable progB: ProgramBuffer;
        variable testName, suiteName: line;
-       file suiteFile: text open read_mode is "C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\suite_names.txt";
+       file suiteFile: text open read_mode is "suite_names.txt";
        file testFile: text;
-   begin		
+       
+            file tmpOutFile: text open write_mode is "tmpResult.txt";
+            variable outputLine: line;
+            variable tmpStr: string(1 to 51);
+   begin
+	
 	  wait for 110 ns;
       
       loop
@@ -183,8 +188,7 @@ BEGIN
           
           report "Starting suite: " & suiteName.all;
           
-          file_open(testFile, "C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\" & suiteName.all & ".txt", read_mode);
-          
+          file_open(testFile, suiteName.all & ".txt", read_mode);
           loop
               testName := null;	  
               readline(testFile, testName);
@@ -195,15 +199,29 @@ BEGIN
               end if;
     
               report "Now to run: " & testName.all;
-              progB := readSourceFile("C:\Users\frakt_000\HDL\ProcessorProj\CPU\project_1.srcs\sim_1\TestCode\" & testName.all & ".txt");
+              progB := readSourceFile(testName.all & ".txt");
               machineCode <= processProgram(progB);
-              
+               
               wait until rising_edge(clk);
               
               testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
               testProgram(512/4) <= ins6L(j, -512);-- TEMP! 
               testProgram(384/4) <= ins655655(ext2, 0, 0, send, 0, 0);
               testProgram(384/4 + 1) <= ins6L(j, 0); -- idle loop          
+                       
+                       -----------
+                         ---------
+                                wait until rising_edge (clk);                                                           
+                                                           
+                         for i in 0 to 100 loop 
+                              tmpStr := disasmWithAddress(i, testProgram(i));
+                              write(outputLine, tmpStr); 
+                              writeline(tmpOutFile, outputLine);
+                        end loop;
+                              report "File written";
+                          wait;
+                         -------------------
+                         ----------------
                        
               --wait until rising_edge(clk);         
               testToDo <= '1';
