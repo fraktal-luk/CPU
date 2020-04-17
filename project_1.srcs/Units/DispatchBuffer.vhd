@@ -112,11 +112,10 @@ begin
                 end loop;
                 
                 specialTemp0 := TMP_clearSpecialSlot(specialTemp0);
-                
-                queueData0 <= queueDataTemp0;
-                special0 <= specialTemp0;
             end if;    
 
+            queueData0 <= queueDataTemp0;
+            special0 <= specialTemp0;               
         end if;
     end process;
     

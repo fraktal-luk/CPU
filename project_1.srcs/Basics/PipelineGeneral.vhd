@@ -713,17 +713,23 @@ begin
                                        or (res(i).ins.physicalArgSpec.floatArgSel);
         
         -- Handle possible immediate arg
-        if res(i).ins.constantArgs.immSel = '1' then
+        if HAS_IMM and res(i).ins.constantArgs.immSel = '1' then
             res(i).state.argValues.missing(1) := '0';
             res(i).state.argValues.immediate := '1';
             res(i).state.argValues.zero(1) := '0';
             
-            if CLEAR_DEBUG_INFO and IMM_AS_REG and HAS_IMM then
+            if IMM_AS_REG then
                 res(i).ins.physicalArgSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);    
-                res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
+                if CLEAR_DEBUG_INFO then
+                    res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
+                end if;
             end if;
         end if;
-
+        
+        if not HAS_IMM then
+            res(i).ins.constantArgs.imm := (others => '0');            
+        end if;
+        
         if CLEAR_DEBUG_INFO then
             res(i).ins.ip := (others => '0');
             res(i).ins.bits := (others => '0');
