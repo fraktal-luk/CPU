@@ -67,7 +67,7 @@ function findLog2(n: positive) return natural;
 constant OP_TYPE_BITS: natural := findLog2(SubpipeType'pos(SubpipeType'high) - SubpipeType'pos(SubpipeType'low) + 1);
 constant OP_VALUE_BITS: natural := getSpecificOpSize;
 
-	constant SYS_OP_SIZE: natural := findLog2(SysOp'pos(SysOp'high) - SysOp'pos(SysOp'low) + 1); 
+constant SYS_OP_SIZE: natural := findLog2(SysOp'pos(SysOp'high) - SysOp'pos(SysOp'low) + 1); 
 
 
 
@@ -303,8 +303,6 @@ type AStr40 is array(0 to 2) of Str40;
 type SchedEntryText is record
     stateTxt: string(1 to 40);
     args: AStr40;
---    arg1: string(1 to 40);
---    arg2: string(1 to 40);
 end record;
 
 type SchedEntryTextArray is array(integer range <>) of SchedEntryText;
@@ -322,21 +320,16 @@ function schedEntrySlotArrayTextIns(insVec: SchedulerEntrySlotArray; mem: std_lo
 function schedEntrySlotArrayTextState(insVec: SchedulerEntrySlotArray) return SchedEntryTextArray;
 
 
-
-        type StrArray is array(0 to PIPE_WIDTH-1) of string(1 to 51);
-
-        type FetchStageView is record
-            full: std_logic;
-            texts: StrArray;            
-        end record;
+type StrArray is array(integer range <>) of string(1 to 51);
         
-        type GenericStageView is record
-            full: std_logic;
-            texts: StrArray;            
-        end record;
-        
-        function createFetchStageView(stageOutputScalar: InstructionSlot; fetchLine: WordArray) return FetchStageView;
-        function createGenericStageView(stageOutput: InstructionSlotArray) return GenericStageView;
+subtype FetchStageView is StrArray(0 to FETCH_WIDTH-1);
+
+subtype GenericStageView is StrArray(0 to PIPE_WIDTH-1);
+
+
+function createFetchStageView(stageOutputScalar: InstructionSlot; fetchLine: WordArray) return StrArray;
+function createGenericStageView(stageOutput: InstructionSlotArray) return StrArray;
+function createGenericStageView(stageOutput: SchedulerEntrySlotArray) return StrArray;
 
 end InstructionState;
 
@@ -843,27 +836,48 @@ end function;
 
 
 
-function createFetchStageView(stageOutputScalar: InstructionSlot; fetchLine: WordArray) return FetchStageView is
+function createFetchStageView(stageOutputScalar: InstructionSlot; fetchLine: WordArray) return StrArray is
     variable res: FetchStageView;
+    variable adrHi, adrLo: Mword := stageOutputScalar.ins.ip; 
 begin
-    res.full := stageOutputScalar.full;
+    adrHi(ALIGN_BITS-1 downto 0) := (others => '0');
+    adrLo(MWORD_SIZE-1 downto ALIGN_BITS) := (others => '0');    
+
+    --res.full := stageOutputScalar.full;
     for i in 0 to fetchLine'length-1 loop
-        res.texts(i) := disasmWithAddress(slv2u(stageOutputScalar.ins.ip) + 4*i, fetchLine(i));
+        if stageOutputScalar.full = '1' and slv2u(adrLo) <= 4*i then
+            res(i) := disasmWithAddress(slv2u(adrHi) + 4*i, fetchLine(i));
+        end if;
     end loop;
     
     return res;
 end function;
 
-function createGenericStageView(stageOutput: InstructionSlotArray) return GenericStageView is
-    variable res: GenericStageView;
+function createGenericStageView(stageOutput: InstructionSlotArray) return StrArray is
+    variable res: StrArray(stageOutput'range);
 begin
     --res.full := stageOutputScalar.full;
     for i in 0 to stageOutput'length-1 loop
-        res.texts(i) := disasmWithAddress(slv2u(stageOutput(i).ins.ip) + 4*i, stageOutput(i).ins.bits);
+        if stageOutput(i).full = '1' then
+            res(i) := disasmWithAddress(slv2u(stageOutput(i).ins.ip), stageOutput(i).ins.bits);
+        end if;
     end loop;
     
     return res;
-end function;  
+end function;
+
+function createGenericStageView(stageOutput: SchedulerEntrySlotArray) return StrArray is
+    variable res: StrArray(stageOutput'range);
+begin
+    --res.full := stageOutputScalar.full;
+    for i in 0 to stageOutput'length-1 loop
+        if stageOutput(i).full = '1' then
+            res(i) := disasmWithAddress(slv2u(stageOutput(i).ins.ip), stageOutput(i).ins.bits);
+        end if;
+    end loop;
+    
+    return res;
+end function;
 
 
 end InstructionState;

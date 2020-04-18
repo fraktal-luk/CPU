@@ -101,8 +101,13 @@ constant OPCONT_TABLE_EXT2: OpcontArray := (
   
       8 => mfc,     -- 001000
       9 => mtc,     -- 001001
-      10 => fmov,    -- 001010
-      11 => forr,    -- 001011
+
+    others => none 
+);
+
+constant OPCONT_TABLE_FP: OpcontArray := (
+       0 => fmov,    -- 000000
+       1 => forr,    -- 000001
 
     others => none 
 );
@@ -619,6 +624,42 @@ begin
     return res;
 end function;
 
+function disasmFP(w: Word; opc: ProcOpcode) return string is
+    variable res: string(1 to 24) := (others => ' ');
+    variable qa, qb, qc, qd, imm: integer;
+    variable aFP, bFP, cFP, dFP: boolean := true;
+    variable immStart, immSize: natural := 0;
+    variable opct: ProcOpcont;
+begin
+    qa := slv2u(w(25 downto 21));
+    qb := slv2u(w(20 downto 16));
+    qc := slv2u(w(9 downto 5));
+    qd := slv2u(w(4 downto 0));
+    
+    imm := slv2s(w(9 downto 0));
+    
+    opct := OPCONT_TABLE_FP(slv2u(w(15 downto 10)));
+
+    res(1 to 5) := padTo(ProcOpcont'image(opct), 5);
+
+    res(8 to 10) := reg2str(qa, aFP);
+    res(11 to 12) := ", ";
+    res(13 to 15) := reg2str(qb, bFP);
+    res(16 to 17) := ", ";
+
+    case opct is
+        when fmov => 
+            
+        -- FP 2 sources
+        when forr =>             
+            res(18 to 20) := reg2str(qc, cFP);
+
+        when others =>
+    end case;
+    
+    return res;
+end function;
+
 
 
 function disasmWord(w: Word) return string is
@@ -646,6 +687,9 @@ begin
             
         when ext2 =>
             return disasmExt2(w, opc);
+
+        when fop =>
+            return disasmFP(w, opc);
                                     
         when others =>
             res(1 to 3) := "???";

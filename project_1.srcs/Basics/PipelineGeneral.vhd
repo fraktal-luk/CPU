@@ -179,6 +179,7 @@ function extractData(queueContent: SchedulerEntrySlotArray) return InstructionSt
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
+function makeSlotArray(ia: InstructionStateArray; fm: std_logic_vector) return InstructionSlotArray;
 
 --function killByTag(before, ei, int: std_logic) return std_logic; PRIVATE
 
@@ -831,6 +832,17 @@ begin
     
     return res;
 end function;
+
+function makeSlotArray(ia: InstructionStateArray; fm: std_logic_vector) return InstructionSlotArray is
+    variable res: InstructionSlotArray(ia'range) := (others => DEFAULT_INS_SLOT);
+begin
+    for i in res'range loop
+        res(i) := (fm(i), ia(i));
+    end loop;
+    return res;
+end function;
+
+
 
 
 function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray is

@@ -394,7 +394,7 @@ begin
    
     COMMITTED_VIEW: block -- CAREFUL, TODO: include replaced intPointer and floatPointer in this view 
        signal committedText: GenericStageView;
-       signal lastEffectiveText, lateCausingText: GenericStageView;
+       signal lastEffectiveText, lateCausingText: StrArray(0 to 0);
     begin
        committedText <= createGenericStageView(stageDataCommitOutA);
        lastEffectiveText <= createGenericStageView(stageDataLastEffectiveOutA);

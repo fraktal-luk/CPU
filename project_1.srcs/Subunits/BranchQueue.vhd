@@ -263,9 +263,12 @@ begin
 	almostFull <= '0'; -- TODO: is it deprecated?
 	
     VIEW: block
-       signal queueTxt: InstructionTextArray(0 to QUEUE_SIZE-1);
+       signal queueTxt: --InstructionTextArray(0 to QUEUE_SIZE-1);
+                        StrArray(0 to QUEUE_SIZE-1);
+       signal queueContent: InstructionSlotArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INS_SLOT);
     begin
-       queueTxt <= insStateArrayText(content, fullMask, '0');
+            queueContent <= makeSlotArray(content, fullMask);
+       queueTxt <= createGenericStageView(queueContent);
     end block;
 
 end Behavioral;

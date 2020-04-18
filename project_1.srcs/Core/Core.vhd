@@ -254,9 +254,14 @@ begin
 
 
     RENAMED_VIEW: block
-        signal renamedIntTextRe, renamedFloatTextRe, renamedMergedText: GenericStageView;   
+        signal renamedIntTextRe, renamedFloatTextRe, renamedMergedText, renamedTextBQ, renamedTextLQ, renamedTextSQ: GenericStageView;   
     begin
         renamedMergedText <= createGenericStageView(renamedDataMerged);
+        
+        renamedTextBQ <= createGenericStageView(renamedDataToBQ);
+        renamedTextLQ <= createGenericStageView(renamedDataToLQ);
+        renamedTextSQ <= createGenericStageView(renamedDataToSQ);
+        
         
         renamedIntTextRe <= createGenericStageView(renamedDataLivingRe);
         renamedFloatTextRe <= createGenericStageView(renamedDataLivingFloatRe);
@@ -340,7 +345,8 @@ begin
         ----
         signal schedDataI0, dataToQueueI0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
         signal schedDataM0, dataToQueueM0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);      
-        signal schedDataF0, dataToQueueF0, dataToQueueF0_N: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+        signal schedDataF0, dataToQueueF0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+        signal schedDataStoreValue, schedDataStoreValueFloat: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 
             signal NEW_ARR_DUMMY, newArrShared: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 
@@ -702,7 +708,7 @@ begin
         readyRegFlagsSV <= (readyRegFlags(2), '0', '0', readyRegFlags(5), '0', '0', readyRegFlags(8), '0', '0', readyRegFlags(11), '0', '0');
 
         SUBPIPES_STORE_VALUE: block
-            signal dataToStoreValueIQ, dataToStoreValueFloatIQ, schedDataStoreValue, schedDataStoreValueFloat:
+            signal dataToStoreValueIQ, dataToStoreValueFloatIQ:
                         SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);             
             signal fmaIntSV, fmaFloatSV: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
         begin
@@ -1197,13 +1203,7 @@ begin
          -- TODO: include mem hit in 'full' flag! Should merge some info from Float path??
          
          execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins);
-    
-         EXEC_OUTPUTS_VIEW: block
-            signal execOutputsText1, execOutputsText2: InstructionTextArray(0 to 3);       
-         begin
-            execOutputsText1 <= insSlotArrayText(execOutputs1, '0');
-            execOutputsText2 <= insSlotArrayText(execOutputs2, '0');            
-         end block;
+
      
          regsSelI0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotSelI0.ins)));
          regsSelM0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotSelM0.ins)));        
@@ -1335,9 +1335,8 @@ begin
              writingData(0) => dataToFloatRF(0).ins,
              readyRegFlagsNext => readyFloatFlagsNext -- FOR IQs
          );
-
-                  
-         process(clk)
+               
+         READY_REG_FLAGS: process(clk)
          begin
             if rising_edge(clk) then
                 readyRegFlags <= readyRegFlagsNext;
@@ -1346,12 +1345,28 @@ begin
          end process;
          
          sysRegSending <= sysRegRead;
+
+
+         EXEC_OUTPUTS_VIEW: block
+            signal execOutputsText1, execOutputsText2: InstructionTextArray(0 to 3);       
+         begin
+            execOutputsText1 <= insSlotArrayText(execOutputs1, '0');
+            execOutputsText2 <= insSlotArrayText(execOutputs2, '0');            
+         end block;
          
          VIEW: block
             signal issueTextI0, issueTextM0, issueTextSVI, issueTextSVF, issueTextF0: SchedEntryText;
             signal slotTextRegReadF0: SchedEntryText;            
             signal slotTextI0_E0, slotTextI0_E1, slotTextI0_E2, slotTextM0_E0, slotTextM0_E1i, slotTextM0_E2i, slotTextM0_E1f, slotTextM0_E2f: InstructionText;
+            
+            signal iqInputI0, iqInputI1, iqInputM0, iqInputSVI, iqInputSVF, iqInputF0: GenericStageView;
          begin
+                iqInputI0 <= createGenericStageView(schedDataI0);
+                iqInputM0 <= createGenericStageView(schedDataM0);
+                iqInputSVI <= createGenericStageView(schedDataStoreValue);
+                iqInputSVF <= createGenericStageView(schedDataStoreValueFloat);
+                iqInputF0 <= createGenericStageView(schedDataF0);
+         
             issueTextI0 <= getSchedStateText(slotIssueI0.state, slotIssueI0.full);
             issueTextM0 <= getSchedStateText(slotIssueM0.state, slotIssueM0.full);
             
@@ -1370,7 +1385,7 @@ begin
             -- TODO: add remaining stages of Exec area
          end block;
         
-    end block;
+    end block; -- TEMP_EXEC
 
     renamedDataToBQ <= setFullMask(renamedDataLivingBuff, getBranchMask(renamedDataLivingBuff));
     renamedDataToSQ <= setFullMask(renamedDataLivingMemBuff, getStoreMask(renamedDataLivingMemBuff));
