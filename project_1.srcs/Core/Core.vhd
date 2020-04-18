@@ -63,7 +63,7 @@ architecture Behavioral of Core is
     --        signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
     signal frontDataLastLiving, 
             renamedDataLivingFloatPre, renamedDataMerged, renamedDataLivingMem, renamedDataLivingRe, renamedDataLivingFloatRe,
-            renamedDataLivingReMem, renamedDataLivingMemBuff, renamedDataLivingBuff, dispatchBufferDataInt, dispatchBufferDataFloat,
+            renamedDataLivingReMem, renamedDataLivingMemBuff, renamedDataLivingBuff, dispatchBufferDataInt,-- dispatchBufferDataFloat,
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -253,37 +253,13 @@ begin
     );
 
 
-    -- SEEMS UNUSED: stays for debug purpose
-    DISPATCH_BUFFER_FP: entity work.DispatchBuffer
-    generic map(IS_FP => true)
-    port map(
-        clk => clk,
-        
-        specialAction => specialAction,
-        nextAccepting => lsbrAccepting,        
-        accepting => open,
-        prevSending => renamedSending,
-        dataIn => renamedDataLivingFloatPre,            
-        sending => open,
-        dataOut => dispatchBufferDataFloat,
-        specialOut => open,
-        
-        execEventSignal => execEventSignal,
-        lateEventSignal => lateEventSignal,        
-        empty => open            
-    );
-
     RENAMED_VIEW: block
-        signal renamedIntTextRe, renamedFloatTextRe, renamedMergedTextRe: InstructionTextArray(0 to PIPE_WIDTH-1);   
-        signal renamedIntText, renamedFloatText, renamedMergedText: InstructionTextArray(0 to PIPE_WIDTH-1);
+        signal renamedIntTextRe, renamedFloatTextRe, renamedMergedText: GenericStageView;   
     begin
-        --renamedIntText <= insSlotArrayText(renamedDataLiving, '0');
-        --renamedFloatText <= insSlotArrayText(renamedDataLivingFloat, '0');
-        renamedMergedText <= insSlotArrayText(renamedDataMerged, '0');
+        renamedMergedText <= createGenericStageView(renamedDataMerged);
         
-        renamedIntTextRe <= insSlotArrayText(renamedDataLivingRe, '0');
-        renamedFloatTextRe <= insSlotArrayText(renamedDataLivingFloatRe, '0');
-        --renamedMergedTextRe <= insSlotArrayText(renamedDataMergedRe, '0');        
+        renamedIntTextRe <= createGenericStageView(renamedDataLivingRe);
+        renamedFloatTextRe <= createGenericStageView(renamedDataLivingFloatRe);
     end block;
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
@@ -311,9 +287,9 @@ begin
 	);
 
     ROB_OUT_VIEW: block
-        signal robOutText: InstructionTextArray(0 to PIPE_WIDTH-1);
+        signal robOutText: GenericStageView;
     begin
-        robOutText <= insSlotArrayText(dataOutROB, '0');
+        robOutText <= createGenericStageView(dataOutROB);
     end block;
 
     TEMP_EXEC: block

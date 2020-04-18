@@ -8,6 +8,10 @@ use work.ArchDefs.all;
 
 use work.CoreConfig.all;
 
+        use work.Assembler.disasmWithAddress;
+        use std.textio.all;
+
+
 
 package InstructionState is
 	
@@ -316,6 +320,23 @@ function insSlotArrayText(insVec: InstructionSlotArray; mem: std_logic) return I
 function getSchedStateText(se: SchedulerState; full: std_logic) return SchedEntryText;
 function schedEntrySlotArrayTextIns(insVec: SchedulerEntrySlotArray; mem: std_logic) return InstructionTextArray;
 function schedEntrySlotArrayTextState(insVec: SchedulerEntrySlotArray) return SchedEntryTextArray;
+
+
+
+        type StrArray is array(0 to PIPE_WIDTH-1) of string(1 to 51);
+
+        type FetchStageView is record
+            full: std_logic;
+            texts: StrArray;            
+        end record;
+        
+        type GenericStageView is record
+            full: std_logic;
+            texts: StrArray;            
+        end record;
+        
+        function createFetchStageView(stageOutputScalar: InstructionSlot; fetchLine: WordArray) return FetchStageView;
+        function createGenericStageView(stageOutput: InstructionSlotArray) return GenericStageView;
 
 end InstructionState;
 
@@ -819,5 +840,30 @@ begin
     end loop;
     return res;
 end function;
+
+
+
+function createFetchStageView(stageOutputScalar: InstructionSlot; fetchLine: WordArray) return FetchStageView is
+    variable res: FetchStageView;
+begin
+    res.full := stageOutputScalar.full;
+    for i in 0 to fetchLine'length-1 loop
+        res.texts(i) := disasmWithAddress(slv2u(stageOutputScalar.ins.ip) + 4*i, fetchLine(i));
+    end loop;
+    
+    return res;
+end function;
+
+function createGenericStageView(stageOutput: InstructionSlotArray) return GenericStageView is
+    variable res: GenericStageView;
+begin
+    --res.full := stageOutputScalar.full;
+    for i in 0 to stageOutput'length-1 loop
+        res.texts(i) := disasmWithAddress(slv2u(stageOutput(i).ins.ip) + 4*i, stageOutput(i).ins.bits);
+    end loop;
+    
+    return res;
+end function;  
+
 
 end InstructionState;

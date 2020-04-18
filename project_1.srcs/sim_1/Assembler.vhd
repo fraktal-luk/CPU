@@ -486,14 +486,14 @@ begin
         when j =>
             imm := slv2s(w(25 downto 0));
             immSize := 10;
-            
-            res(8 to 10) := reg2str(qa, aFP);
-            res(11 to 12) := ", ";
-            immStart := 14;            
+            immStart := 8;           
         when jz | jnz | jl =>
             imm := slv2s(w(20 downto 0));
             immSize := 7;
-            immStart := 8;
+
+            res(8 to 10) := reg2str(qa, aFP);
+            res(11 to 12) := ", ";
+            immStart := 14;
         when others =>
     end case;
 
@@ -662,6 +662,8 @@ function disasmWithAddress(a: natural; w: Word) return string is
     constant HEX_TAB: string(1 to 16) := "0123456789abcdef";
     variable c: character;
 begin
+    -- synthesis translate_off
+
     for i in 0 to 7 loop
         c := HEX_TAB(1 + (slv2u(aw(31 - 4*i downto 31 - 4*i - 3))));
         res(1 + i) := c;
@@ -676,6 +678,8 @@ begin
     
     res(19 to 21) := "   ";
     res(22 to 22 + 24-1) := disasmWord(w);
+    
+    -- synthesis translate_on
     
     return res;   
 end function;

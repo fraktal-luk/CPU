@@ -44,6 +44,7 @@ architecture Behavioral of DispatchBuffer is
     signal fullMask: std_logic_vector(0 to 0) := (others => '0');
     signal isSending: std_logic := '0';
     
+    -- TODO: remove IS_FP (UNUSED) unless turns out useful
     function TMP_clearSlot(isl: InstructionSlot; i: integer; fp: boolean) return InstructionSlot is
         variable res: InstructionSlot := isl;
     begin 

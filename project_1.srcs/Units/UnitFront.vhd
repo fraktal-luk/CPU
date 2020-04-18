@@ -69,9 +69,9 @@ architecture Behavioral of UnitFront is
 	signal stageDataOutFetch0, stageDataOutFetch1, stageDataInEarlyBranch, earlyBranchDataOutA: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     --                              earlyBranchMultiDataOutA UNUSED!
-	signal earlyBranchMultiDataInA, earlyBranchMultiDataOutA: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+	signal earlyBranchMultiDataInA, earlyBranchMultiDataOutA, ibufDataOut: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	
-	signal dataToBranchTransfer: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+	signal dataToBranchTransfer, dataBranchTransferOut: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	signal fetchCounter, fetchCounterNext: Word := (others => '0');
 begin
 	killAll <= execEventSignal or lateEventSignal;
@@ -214,14 +214,14 @@ begin
 		
 		acceptingOut => bufferAccepting,
 		sendingOut => sendingOutBuffer,
-		stageDataOut => dataLastLiving,
+		stageDataOut => ibufDataOut,
 		
 		execEventSignal => killAll,
 		execCausing => DEFAULT_INSTRUCTION_STATE		
 	);
 
 	lastSending <= sendingOutBuffer;
-	
+	dataLastLiving <= ibufDataOut;
 	frontAccepting <= '1';
 
 	frontCausing <= frontCausingSig;
@@ -229,6 +229,8 @@ begin
 	sendingToBranchTransfer <= sendingOutFetch1 and not fetchStall;
 
 	dataToBranchTransfer <= prepareForBQ(earlyBranchMultiDataInA);
+
+    bpData <= dataBranchTransferOut;
 
     SUBUNIT_BRANCH_TRANSFER: entity work.GenericStage(Behavioral)
 	generic map(
@@ -243,7 +245,7 @@ begin
 		
 		acceptingOut => open,
 		sendingOut => bpSending,
-		stageDataOut => bpData,
+		stageDataOut => dataBranchTransferOut,
 		
 		execEventSignal => killAll,
 		lateEventSignal => killAll,
@@ -251,10 +253,23 @@ begin
 	);
 
     VIEW: block
-        signal insBufInput: InstructionTextArray(0 to PIPE_WIDTH-1);
+        signal insBufInput, stagePreBuffer, branchTransferData, stageOut: GenericStageView;
+        signal stageFetch0, stageFetch1: FetchStageView;     
     begin
-        insBufInput <= insSlotArrayText(earlyBranchMultiDataInA, '0');
+        insBufInput <= createGenericStageView(earlyBranchMultiDataInA);
         
+        -- predictedAddress!
+        --stageDataOutFetch0/1
+        --fetchLine0/1
+        --sendingOutFetch0/1
+        stageFetch0 <= createFetchStageView(stageDataOutFetch0(0), fetchedLine0);
+        stageFetch1 <= createFetchStageView(stageDataOutFetch1(0), fetchedLine1);        
+        
+        stagePreBuffer <= createGenericStageView(earlyBranchMultiDataOutA);
+        
+        branchTransferData <= createGenericStageView(dataBranchTransferOut);
+        
+        stageOut <= createGenericStageView(ibufDataOut);
     end block;
 
 end Behavioral;

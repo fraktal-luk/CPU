@@ -393,12 +393,12 @@ begin
     );
    
     COMMITTED_VIEW: block -- CAREFUL, TODO: include replaced intPointer and floatPointer in this view 
-       signal committedText: InstructionTextArray(0 to PIPE_WIDTH-1);
-       signal lastEffectiveText, lateCausingText: InstructionTextArray(0 to 0);
+       signal committedText: GenericStageView;
+       signal lastEffectiveText, lateCausingText: GenericStageView;
     begin
-       committedText <= insSlotArrayText(stageDataCommitOutA, '0');
-       lastEffectiveText <= insSlotArrayText(stageDataLastEffectiveOutA, '0');
-       lateCausingText <= insSlotArrayText(stageDataLateCausingOut, '0');
+       committedText <= createGenericStageView(stageDataCommitOutA);
+       lastEffectiveText <= createGenericStageView(stageDataLastEffectiveOutA);
+       lateCausingText <= createGenericStageView(stageDataLateCausingOut);
     end block;
    
     EVENT_LINK_INFO: process(clk)
