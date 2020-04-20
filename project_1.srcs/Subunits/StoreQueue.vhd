@@ -439,10 +439,13 @@ begin
 	committedSending <= isDraining;
 	committedDataOut <= (0 => dataDrainSigNC(0), others => DEFAULT_INSTRUCTION_SLOT);
 	
-    VIEW: block
-       signal queueTxt: InstructionTextArray(0 to QUEUE_SIZE-1);
+	VIEW: if VIEW_ON generate
+        use work.Viewing.all;
+      
+       signal queueTxt: --InstructionTextArray(0 to QUEUE_SIZE-1);
+                        StrArray(0 to QUEUE_SIZE-1);
     begin
-       queueTxt <= insStateArrayText(content, fullOrCommittedMask, '1');
-    end block;
+       queueTxt <= createGenericStageView(makeSlotArray(content, fullOrCommittedMask));
+    end generate;
 	
 end Behavioral;

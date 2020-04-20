@@ -391,15 +391,18 @@ begin
         lateEventSignal => '0',    
         execCausing => DEFAULT_INSTRUCTION_STATE
     );
-   
-    COMMITTED_VIEW: block -- CAREFUL, TODO: include replaced intPointer and floatPointer in this view 
+
+
+	COMMITTED_VIEW: if VIEW_ON generate
+	       use work.Viewing.all;	        
+        -- CAREFUL, TODO: include replaced intPointer and floatPointer in this view 
        signal committedText: GenericStageView;
        signal lastEffectiveText, lateCausingText: StrArray(0 to 0);
     begin
        committedText <= createGenericStageView(stageDataCommitOutA);
        lastEffectiveText <= createGenericStageView(stageDataLastEffectiveOutA);
        lateCausingText <= createGenericStageView(stageDataLateCausingOut);
-    end block;
+    end generate;
    
     EVENT_LINK_INFO: process(clk)
     begin

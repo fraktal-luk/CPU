@@ -258,11 +258,21 @@ begin
 	sending <= sends;
 	   sentCancelled <= sentKilled;
 	   
-	   VIEW: block   
+	   VIEW: if VIEW_ON generate
+	       use work.Viewing.all;
+	     
            signal queueTextIns: InstructionTextArray(0 to IQ_SIZE-1);
-           signal queueTextState: SchedEntryTextArray(0 to IQ_SIZE-1);           
+           signal queueTextState: SchedEntryTextArray(0 to IQ_SIZE-1); 
+           
+           signal queueTxt: --InstructionTextArray(0 to QUEUE_SIZE-1);
+                             StrArray(0 to IQ_SIZE-1);
+           signal inputStageTxt: StrArray(0 to PIPE_WIDTH-1);         
        begin
            queueTextIns <= schedEntrySlotArrayTextIns(queueContent, '0');
            queueTextState <= schedEntrySlotArrayTextState(queueContent);
-	   end block;
+
+           queueTxt <= createGenericStageView(makeSlotArray(queueData, fullMask));
+           inputStageTxt <= createGenericStageView(inputStage);
+	   end generate;
+	   	   
 end Behavioral;

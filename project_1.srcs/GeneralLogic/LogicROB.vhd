@@ -135,7 +135,11 @@ end function;
 function getRobView(arr: ReorderBufferArray) return RobText is
     variable str: string(1 to 70);
     variable res: RobText;
+    
+    use work.Viewing.all; -- TEMP!
 begin
+
+
     for i in 0 to ROB_SIZE-1 loop
         --res(i) := "1 [ 1 #99494944 or ; 1 #84995595 jnz   ; 0  #5059555    ; ---------- ]";
                 -- C [ CCE #num ; CCE #num ; CCE #num ; CCE #num ]

@@ -252,7 +252,8 @@ begin
 		execCausing => DEFAULT_INSTRUCTION_STATE
 	);
 
-    VIEW: block
+	VIEW: if VIEW_ON generate
+	   use work.Viewing.all;
         signal insBufInput, stagePreBuffer, branchTransferData, stageOut: GenericStageView;
         signal stageFetch0, stageFetch1: FetchStageView;     
     begin
@@ -270,6 +271,6 @@ begin
         branchTransferData <= createGenericStageView(dataBranchTransferOut);
         
         stageOut <= createGenericStageView(ibufDataOut);
-    end block;
+    end generate;
 
 end Behavioral;

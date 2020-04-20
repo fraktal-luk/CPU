@@ -122,10 +122,11 @@ begin
 		end if;
 	end process;
 	
-	VIEW: block
+	VIEW: if VIEW_ON generate
+       use work.Viewing.all;
 	   signal queueTxt: InstructionTextArray(0 to IBUFFER_SIZE-1);
 	begin
 	   queueTxt <= insSlotArrayText(queueData, '0');
-	end block;	
+	end generate;	
 
 end Implem;

@@ -253,7 +253,9 @@ begin
     );
 
 
-    RENAMED_VIEW: block
+    RENAMED_VIEW: if VIEW_ON generate
+        use work.Viewing.all;
+        
         signal renamedIntTextRe, renamedFloatTextRe, renamedMergedText, renamedTextBQ, renamedTextLQ, renamedTextSQ: GenericStageView;   
     begin
         renamedMergedText <= createGenericStageView(renamedDataMerged);
@@ -265,7 +267,7 @@ begin
         
         renamedIntTextRe <= createGenericStageView(renamedDataLivingRe);
         renamedFloatTextRe <= createGenericStageView(renamedDataLivingFloatRe);
-    end block;
+    end generate;
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(
@@ -291,11 +293,14 @@ begin
 		outputSpecial => specialOutROB		
 	);
 
-    ROB_OUT_VIEW: block
+    ROB_OUT_VIEW:
+        if VIEW_ON generate
+        use work.Viewing.all;
+          
         signal robOutText: GenericStageView;
     begin
         robOutText <= createGenericStageView(dataOutROB);
-    end block;
+    end generate;
 
     TEMP_EXEC: block
         use work.LogicExec.all;
@@ -1347,14 +1352,19 @@ begin
          sysRegSending <= sysRegRead;
 
 
-         EXEC_OUTPUTS_VIEW: block
+         EXEC_OUTPUTS_VIEW:
+             if VIEW_ON generate
+             use work.Viewing.all;
+                    
             signal execOutputsText1, execOutputsText2: InstructionTextArray(0 to 3);       
          begin
             execOutputsText1 <= insSlotArrayText(execOutputs1, '0');
             execOutputsText2 <= insSlotArrayText(execOutputs2, '0');            
-         end block;
+         end generate;
          
-         VIEW: block
+	   VIEW: if VIEW_ON generate
+             use work.Viewing.all;
+           
             signal issueTextI0, issueTextM0, issueTextSVI, issueTextSVF, issueTextF0: SchedEntryText;
             signal slotTextRegReadF0: SchedEntryText;            
             signal slotTextI0_E0, slotTextI0_E1, slotTextI0_E2, slotTextM0_E0, slotTextM0_E1i, slotTextM0_E2i, slotTextM0_E1f, slotTextM0_E2f: InstructionText;
@@ -1383,7 +1393,7 @@ begin
             slotTextM0_E2f <= insSlotArrayText(slotM0_E2f, '0')(0);
                                     
             -- TODO: add remaining stages of Exec area
-         end block;
+         end generate;
         
     end block; -- TEMP_EXEC
 

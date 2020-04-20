@@ -296,10 +296,37 @@ begin
 	sendingOut <= isSending;
 	outputSpecial <= replaceConstantInformationSpecial(outputSpecialReg, constantFromBuf3);
 	
-	VIEW: block
+	VIEW: if VIEW_ON generate
+	   use work.Viewing.all;
+	
+	   type StageTextArray is array (integer range <>) of StrArray(0 to PIPE_WIDTH-1);
+	   
+	   signal robView: StageTextArray(0 to ROB_SIZE-1);
+	   
 	   signal robTxt: RobText;
+	   
+	   subtype RobSlotText is string(1 to 80);
+	   type RobSlotArray is array(integer range <>) of RobSlotText;
+	   --signal rsa: RobSlotArray(0 to ROB_SIZE-1);
+	   
+	   function createRobView(content: ReorderBufferArray) return StageTextArray is
+	       variable res: StageTextArray(0 to ROB_SIZE-1);
+	   begin
+	       for i in 0 to ROB_SIZE-1 loop
+	           if content(i).full = '1' then
+	               res(i) := createGenericStageView(content(i).ops);    
+	           end if;
+	       end loop;
+	       
+	       -- TODO: special actions!
+	       
+	       return res;
+	   end function;
+	   
 	begin
 	   robTxt <= getRobView(content);
-	end block;
+	   
+	       robView <= createRobView(content);
 
+    end generate;
 end Behavioral;
