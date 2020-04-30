@@ -113,13 +113,16 @@ architecture Behavioral of IssueQueue is
 		variable res: SchedulerEntrySlot := elem;
     begin
 	    -- Clear unused fields
-        res.ins.bits := (others => '0');
-        res.ins.result := (others => '0');
-        res.ins.target := (others => '0');        
-    
+--        res.ins.ip := (others => '0');	    
+--        res.ins.bits := (others => '0');
+--        res.ins.result := (others => '0');
+--        res.ins.target := (others => '0');        
+        if CLEAR_DEBUG_INFO then
+            res.ins := clearAbstractInfo(res.ins);
+        end if;
+
         res.ins.controlInfo.completed := '0';
         res.ins.controlInfo.completed2 := '0';
-        res.ins.ip := (others => '0');
     
         res.ins.controlInfo.newEvent := '0';
         res.ins.controlInfo.hasInterrupt := '0';
@@ -244,7 +247,7 @@ begin
 	
 	killMask <= getKillMask(queueData, fullMask, execCausing, execEventSignal, lateEventSignal);
 	
-	       acceptingForInputStage <= not fullMask(IQ_SIZE-PIPE_WIDTH);
+	acceptingForInputStage <= not fullMask(IQ_SIZE-PIPE_WIDTH);
 	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH);-- and not inputStageAny;
 	               
 	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);
@@ -256,23 +259,16 @@ begin
 	
 	schedulerOut <= (sends, dispatchDataNew.ins, dispatchDataNew.state);
 	sending <= sends;
-	   sentCancelled <= sentKilled;
-	   
-	   VIEW: if VIEW_ON generate
-	       use work.Viewing.all;
-	     
-           signal queueTextIns: InstructionTextArray(0 to IQ_SIZE-1);
-           signal queueTextState: SchedEntryTextArray(0 to IQ_SIZE-1); 
-           
-           signal queueTxt: --InstructionTextArray(0 to QUEUE_SIZE-1);
-                             StrArray(0 to IQ_SIZE-1);
-           signal inputStageTxt: StrArray(0 to PIPE_WIDTH-1);         
-       begin
-           queueTextIns <= schedEntrySlotArrayTextIns(queueContent, '0');
-           queueTextState <= schedEntrySlotArrayTextState(queueContent);
+    sentCancelled <= sentKilled;
+    
+    VIEW: if VIEW_ON generate
+        use work.Viewing.all;
 
-           queueTxt <= createGenericStageView(makeSlotArray(queueData, fullMask));
-           inputStageTxt <= createGenericStageView(inputStage);
-	   end generate;
+        signal queueTxt: StrArray(0 to IQ_SIZE-1);
+        signal inputStageTxt: StrArray(0 to PIPE_WIDTH-1);         
+    begin
+        queueTxt <= createGenericStageView(queueContent);
+        inputStageTxt <= createGenericStageView(inputStage);
+    end generate;
 	   	   
 end Behavioral;

@@ -124,9 +124,9 @@ begin
 	
 	VIEW: if VIEW_ON generate
        use work.Viewing.all;
-	   signal queueTxt: InstructionTextArray(0 to IBUFFER_SIZE-1);
+	   signal queueTxt: StrArray(0 to IBUFFER_SIZE-1);
 	begin
-	   queueTxt <= insSlotArrayText(queueData, '0');
+	   queueTxt <= createGenericStageView(queueData);
 	end generate;	
 
 end Implem;

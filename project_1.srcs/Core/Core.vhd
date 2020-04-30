@@ -86,7 +86,9 @@ architecture Behavioral of Core is
     signal dataFromSB: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
     
     signal specialAction, specialActionBuffOut, specialOutROB: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-
+    
+    signal cycleCounter: Word := (others => '0');
+    
     function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := dataInt;
     begin
@@ -97,6 +99,13 @@ architecture Behavioral of Core is
         return res;
     end function;    
 begin
+
+    MONITOR: process (clk)
+    begin
+        if rising_edge(clk) then
+            cycleCounter <= addInt(cycleCounter, 1);
+        end if;
+    end process;
 
     intSignal <= int0 or int1;
     intType <= (int0, int1);
@@ -253,22 +262,6 @@ begin
     );
 
 
-    RENAMED_VIEW: if VIEW_ON generate
-        use work.Viewing.all;
-        
-        signal renamedIntTextRe, renamedFloatTextRe, renamedMergedText, renamedTextBQ, renamedTextLQ, renamedTextSQ: GenericStageView;   
-    begin
-        renamedMergedText <= createGenericStageView(renamedDataMerged);
-        
-        renamedTextBQ <= createGenericStageView(renamedDataToBQ);
-        renamedTextLQ <= createGenericStageView(renamedDataToLQ);
-        renamedTextSQ <= createGenericStageView(renamedDataToSQ);
-        
-        
-        renamedIntTextRe <= createGenericStageView(renamedDataLivingRe);
-        renamedFloatTextRe <= createGenericStageView(renamedDataLivingFloatRe);
-    end generate;
-
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(
 		clk => clk, reset => '0', en => '0',
@@ -293,17 +286,43 @@ begin
 		outputSpecial => specialOutROB		
 	);
 
-    ROB_OUT_VIEW:
-        if VIEW_ON generate
+
+    MAIN_VIEW: if VIEW_ON generate
         use work.Viewing.all;
-          
-        signal robOutText: GenericStageView;
+        
+        signal renamedIntTextRe, renamedFloatTextRe, renamedMergedText, renamedTextBQ, renamedTextLQ, renamedTextSQ: GenericStageView;
+        
+        signal robOutText: GenericStageView;          
     begin
+        renamedMergedText <= createGenericStageView(renamedDataMerged);
+        
+        renamedTextBQ <= createGenericStageView(renamedDataToBQ);
+        renamedTextLQ <= createGenericStageView(renamedDataToLQ);
+        renamedTextSQ <= createGenericStageView(renamedDataToSQ);
+        
+        
+        renamedIntTextRe <= createGenericStageView(renamedDataLivingRe);
+        renamedFloatTextRe <= createGenericStageView(renamedDataLivingFloatRe);
+        
+        
         robOutText <= createGenericStageView(dataOutROB);
+        
+        
+            process (clk)
+            begin
+                if cmpGtU(cycleCounter, 10) = '1' then --and cmpLtU(cycleCounter, 1000) = '1' then                    
+                    report "V: " & sprintDisasm(renamedDataMerged(0).ins);
+                    report "P: " & sprintPhysDisasm(renamedDataMerged(0).ins);
+                    report "T: " & sprintTags(renamedDataMerged(0).ins); 
+                    report "C: " & sprintControl(renamedDataMerged(0).ins); 
+                end if;              
+            end process;      
     end generate;
 
     TEMP_EXEC: block
         use work.LogicExec.all;
+        
+        -- TODO? Change syntax to array per subpipe rather then independent vars for each stage? Consider forking pipes like Mem 
         
         -- Selection from IQ and state after Issue stage
         signal slotSelI0, slotIssueI0,
@@ -1352,46 +1371,51 @@ begin
          sysRegSending <= sysRegRead;
 
 
-         EXEC_OUTPUTS_VIEW:
-             if VIEW_ON generate
-             use work.Viewing.all;
-                    
-            signal execOutputsText1, execOutputsText2: InstructionTextArray(0 to 3);       
-         begin
-            execOutputsText1 <= insSlotArrayText(execOutputs1, '0');
-            execOutputsText2 <= insSlotArrayText(execOutputs2, '0');            
-         end generate;
-         
 	   VIEW: if VIEW_ON generate
-             use work.Viewing.all;
+            use work.Viewing.all;
            
-            signal issueTextI0, issueTextM0, issueTextSVI, issueTextSVF, issueTextF0: SchedEntryText;
-            signal slotTextRegReadF0: SchedEntryText;            
-            signal slotTextI0_E0, slotTextI0_E1, slotTextI0_E2, slotTextM0_E0, slotTextM0_E1i, slotTextM0_E2i, slotTextM0_E1f, slotTextM0_E2f: InstructionText;
+            signal issueTextI0, issueTextM0, issueTextSVI, issueTextSVF, issueTextF0: StrArray(0 to 0);
+            signal slotTextRegReadF0: StrArray(0 to 0);            
+            signal slotTextI0_E0, slotTextI0_E1, slotTextI0_E2, slotTextM0_E0, slotTextM0_E1i, slotTextM0_E2i, slotTextM0_E1f, slotTextM0_E2f: StrArray(0 to 0);
             
             signal iqInputI0, iqInputI1, iqInputM0, iqInputSVI, iqInputSVF, iqInputF0: GenericStageView;
+            signal execOutputsText1, execOutputsText2: StrArray(0 to 3);-- InstructionTextArray(0 to 3);       
          begin
+            execOutputsText1 <= createGenericStageView(execOutputs1);
+            execOutputsText2 <= createGenericStageView(execOutputs2);
+            
+            
                 iqInputI0 <= createGenericStageView(schedDataI0);
                 iqInputM0 <= createGenericStageView(schedDataM0);
                 iqInputSVI <= createGenericStageView(schedDataStoreValue);
                 iqInputSVF <= createGenericStageView(schedDataStoreValueFloat);
                 iqInputF0 <= createGenericStageView(schedDataF0);
          
-            issueTextI0 <= getSchedStateText(slotIssueI0.state, slotIssueI0.full);
-            issueTextM0 <= getSchedStateText(slotIssueM0.state, slotIssueM0.full);
+            issueTextI0 <= createGenericStageView(SchedulerEntrySlotArray'(0 => slotIssueI0));
+            issueTextM0 <= createGenericStageView(SchedulerEntrySlotArray'(0 => slotIssueM0));
             
-            slotTextRegReadF0 <= getSchedStateText(slotRegReadF0.state, slotRegReadF0.full);
+            slotTextRegReadF0 <= createGenericStageView(SchedulerEntrySlotArray'(0 => slotRegReadF0));
 
-            slotTextI0_E0 <= insSlotArrayText(slotI0_E0, '0')(0);
-            slotTextI0_E1 <= insSlotArrayText(slotI0_E1, '0')(0);
-            slotTextI0_E2 <= insSlotArrayText(slotI0_E2, '0')(0);
+            slotTextI0_E0 <= createGenericStageView(slotI0_E0);
+            slotTextI0_E1 <= createGenericStageView(slotI0_E1);
+            slotTextI0_E2 <= createGenericStageView(slotI0_E2);
 
-            slotTextM0_E0 <= insSlotArrayText(slotM0_E0, '0')(0);
-            slotTextM0_E1i <= insSlotArrayText(slotM0_E1i, '0')(0);
-            slotTextM0_E1f <= insSlotArrayText(slotM0_E1f, '0')(0);
-            slotTextM0_E2i <= insSlotArrayText(slotM0_E2i, '0')(0);
-            slotTextM0_E2f <= insSlotArrayText(slotM0_E2f, '0')(0);
-                                    
+            slotTextM0_E0 <= createGenericStageView(slotM0_E0);
+            slotTextM0_E1i <= createGenericStageView(slotM0_E1i);
+            slotTextM0_E1f <= createGenericStageView(slotM0_E1f);
+            slotTextM0_E2i <= createGenericStageView(slotM0_E2i);
+            slotTextM0_E2f <= createGenericStageView(slotM0_E2f);
+
+
+            process (clk)
+            begin
+                if rising_edge(clk) then
+                    if cmpGtU(cycleCounter, 30) = '1' then --and cmpLtU(cycleCounter, 100) = '1' then
+                        report "M1: " & sprintTransfer(slotM0_E1i(0));
+                        report "M2: " & sprintTransfer(slotM0_E2i(0));
+                    end if;
+                end if;
+            end process;                                     
             -- TODO: add remaining stages of Exec area
          end generate;
         

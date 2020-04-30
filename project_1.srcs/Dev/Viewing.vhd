@@ -7,9 +7,9 @@ use work.ArchDefs.all;
 
 use work.CoreConfig.all;
 
-        use work.Assembler.disasmWithAddress;
-        use std.textio.all;
-        
+use work.Assembler.disasmWithAddress;
+use std.textio.all;
+   
 use work.InstructionState.all;
 
 
@@ -36,22 +36,12 @@ end record;
 type SchedEntryTextArray is array(integer range <>) of SchedEntryText;
 
 function w2hex(w: Word) return string;
-function insText(ins: InstructionState; isMem: std_logic) return InstructionText;
 
-function insSlotText(insSlot: InstructionSlot; mem: std_logic) return InstructionText;
-
-function insStateArrayText(insVec: InstructionStateArray; mask: std_logic_vector; mem: std_logic) return InstructionTextArray;
-function insSlotArrayText(insVec: InstructionSlotArray; mem: std_logic) return InstructionTextArray;
-
-function getSchedStateText(se: SchedulerState; full: std_logic) return SchedEntryText;
-function schedEntrySlotArrayTextIns(insVec: SchedulerEntrySlotArray; mem: std_logic) return InstructionTextArray;
-function schedEntrySlotArrayTextState(insVec: SchedulerEntrySlotArray) return SchedEntryTextArray;
 
 
 type StrArray is array(integer range <>) of string(1 to 51);
-        
+    
 subtype FetchStageView is StrArray(0 to FETCH_WIDTH-1);
-
 subtype GenericStageView is StrArray(0 to PIPE_WIDTH-1);
 
 
@@ -60,10 +50,85 @@ function createGenericStageView(stageOutput: InstructionSlotArray) return StrArr
 function createGenericStageView(stageOutput: SchedulerEntrySlotArray) return StrArray;
 
 
+
+
+    function sprintDisasm(ins: InstructionState) return string;
+
+    function sprintPhysDisasm(ins: InstructionState) return string;
+
+    function sprintTags(ins: InstructionState) return string;
+
+    function sprintControl(ins: InstructionState) return string;
+
+    function sprintTransfer(ins: InstructionState) return string;
+
+    function sprintStatus(ins: InstructionState) return string;
+
+
+    function sprintDisasm(isl: InstructionSlot) return string;
+
+    function sprintPhysDisasm(isl: InstructionSlot) return string;
+
+    function sprintTags(isl: InstructionSlot) return string;
+
+    function sprintControl(isl: InstructionSlot) return string;
+
+    function sprintTransfer(isl: InstructionSlot) return string;
+
+    function sprintStatus(isl: InstructionSlot) return string;
+
 end package;
 
 
 package body Viewing is
+
+
+function createFetchStageView(stageOutputScalar: InstructionSlot; fetchLine: WordArray) return StrArray is
+    variable res: FetchStageView;
+    variable adrHi, adrLo: Mword := stageOutputScalar.ins.ip; 
+begin
+    adrHi(ALIGN_BITS-1 downto 0) := (others => '0');
+    adrLo(MWORD_SIZE-1 downto ALIGN_BITS) := (others => '0');    
+
+    --res.full := stageOutputScalar.full;
+    for i in 0 to fetchLine'length-1 loop
+        if stageOutputScalar.full = '1' and slv2u(adrLo) <= 4*i then
+            res(i) := disasmWithAddress(slv2u(adrHi) + 4*i, fetchLine(i));
+        end if;
+    end loop;
+    
+    return res;
+end function;
+
+function createGenericStageView(stageOutput: InstructionSlotArray) return StrArray is
+    variable res: StrArray(stageOutput'range);
+begin
+    --res.full := stageOutputScalar.full;
+    for i in 0 to stageOutput'length-1 loop
+        if stageOutput(i).full = '1' then
+            res(i) := disasmWithAddress(slv2u(stageOutput(i).ins.ip), stageOutput(i).ins.bits);
+        end if;
+    end loop;
+    
+    return res;
+end function;
+
+function createGenericStageView(stageOutput: SchedulerEntrySlotArray) return StrArray is
+    variable res: StrArray(stageOutput'range);
+begin
+    --res.full := stageOutputScalar.full;
+    for i in 0 to stageOutput'length-1 loop
+        if stageOutput(i).full = '1' then
+            res(i) := disasmWithAddress(slv2u(stageOutput(i).ins.ip), stageOutput(i).ins.bits);
+        end if;
+    end loop;
+    
+    return res;
+end function;
+
+
+--------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------
 
 
 function reg2txt(reg: std_logic_vector) return string is
@@ -145,6 +210,270 @@ begin
     return res;
 end function;
 
+ 
+ 
+function sprintTags(ins: InstructionState) return string is
+    variable res: string(1 to 5*(8) + (5-1)*2);
+    variable ri: word := (others => '0');
+begin
+    ri(TAG_SIZE-1 downto 0) := ins.tags.renameIndex; 
+    return w2hex(ri) & ",F:" & w2hex(ins.tags.fetchCtr) & ",D:" & w2hex(ins.tags.decodeCtr)& ",R:" & w2hex(ins.tags.renameCtr)& ",C:" & w2hex(ins.tags.commitCtr);
+    
+    --return res;
+end function;
+
+
+
+function opName(op: SpecificOp) return string is
+    variable res: string(1 to 10);
+begin
+    case op.subpipe is
+        when ALU => 
+            res(3 to 10) := strExt(ArithOp'image(op.arith), 8);
+        when Mem => 
+            res(3 to 10) := strExt(MemOp'image(op.memory), 8);
+        when FP => 
+            res(3 to 10) := strExt(FpOp'image(op.float), 8);
+        when others => 
+            res(3 to 10) := strExt(SysOp'image(op.system), 8);                                                              
+    end case;
+    res(1 to 3) := strExt(SubpipeType'image(op.subpipe), 3);
+    res(4) := ':';    
+    return res;
+end function;
+
+
+
+function destText(ins: InstructionState) return string is
+begin
+    if ins.virtualArgSpec.intDestSel = '1' then
+        return "r" & reg2txt(ins.virtualArgSpec.dest);
+    elsif ins.virtualArgSpec.floatDestSel = '1' then
+        return "v" & reg2txt(ins.virtualArgSpec.dest);
+    else
+        return "---";
+    end if;
+end function;
+
+function srcText(ins: InstructionState; i: natural) return string is
+begin
+    if i = 1 and ins.constantArgs.immSel = '1' then
+        return "imm";
+    end if;
+
+    if ins.virtualArgSpec.intArgSel(i) = '1' then
+        return "r" & reg2txt(ins.virtualArgSpec.args(i));
+    elsif ins.virtualArgSpec.floatArgSel(i) = '1' then
+        return "v" & reg2txt(ins.virtualArgSpec.args(i));
+    else
+        return "---";
+    end if;
+end function;
+
+
+function sprintDisasm(ins: InstructionState) return string is
+   variable res: string(1 to 5*(8) + (5-1)*2);    
+begin
+   return opName(ins.specificOperation) & "  " & destText(ins) & ", " & srcText(ins, 0)& ", " & srcText(ins, 1) & ", " & srcText(ins, 2) & ", " & w2hex(ins.constantArgs.imm);
+
+   --return res; 
+end function;
+
+
+function physDestText(ins: InstructionState) return string is
+begin
+    if ins.physicalArgSpec.intDestSel = '1' then
+        return "r" & reg2txt(ins.physicalArgSpec.dest);
+    elsif ins.physicalArgSpec.floatDestSel = '1' then
+        return "v" & reg2txt(ins.physicalArgSpec.dest);
+    else
+        return "---";
+    end if;end function;
+
+function physSrcText(ins: InstructionState; i: natural) return string is
+begin
+    if i = 1 and ins.constantArgs.immSel = '1' then
+        return "imm";
+    end if;
+    
+    if ins.physicalArgSpec.intArgSel(i) = '1' then
+        return "r" & physReg2txt(ins.physicalArgSpec.args(i));
+    elsif ins.physicalArgSpec.floatArgSel(i) = '1' then
+        return "v" & physReg2txt(ins.physicalArgSpec.args(i));
+    else
+        return "---";
+    end if;
+end function;
+
+
+function sprintPhysDisasm(ins: InstructionState) return string is
+   variable res: string(1 to 5*(8) + (5-1)*2);    
+begin
+   return opName(ins.specificOperation) & "  " & physDestText(ins) & ", " & physSrcText(ins, 0)& ", " & physSrcText(ins, 1) & ", " & physSrcText(ins, 2) & ", " & w2hex(ins.constantArgs.imm);
+
+   --return res; 
+end function;
+
+
+function sprintControl(ins: InstructionState) return string is
+    variable condStr: string(1 to 9);
+    variable trg: string(1 to 8) := (others => '-');
+    variable re:  string(1 to 2) := "  ";
+begin
+-- 
+    --control: 		j nz(i65) -> (+0x10) = 0x477ad644 (T)
+    --control:		j  z(i22) -> (i73)   = ?????????  (N)   -- register value not ready
+    --control:      j         -> (-0x30) = 0x55409000 (T)
+    --control:		none (+4) -								 -- adr increment
+    --control:		exc Ov    -> 0x00000200
+    --              0.......8 ->
+    
+    
+    ---- for jumps the predicted dir can be also attached to mnemonic in disasm:
+    --		jz+ r15, @L2
+    --		jz+- r15, @L2   -- ? the Exec direction shown too?
+    
+    if ins.controlInfo.refetch = '1' then
+        re(2) := 'R';
+    end if;
+    
+    condStr := "none (+4)";
+    if ins.controlInfo.hasException = '1' then
+        condStr := "Exc      ";
+        trg := w2hex(EXC_BASE); -- TODO: adjust when exceptions develop
+    elsif ins.controlInfo.specialAction = '1' then
+        condStr := "Spe      ";
+        
+    elsif ins.specificOperation.subpipe = ALU then
+        trg := w2hex(ins.target);
+        case ins.specificOperation.arith is 
+            when opJ | opJl=>
+                condStr := "j        ";              
+            when opJz => 
+                condStr := "j  z(" & srcText(ins, 0) & ")";
+            when opJnz =>
+                condStr := "j nz(" & srcText(ins, 0) & ")";                
+            when others =>
+                trg := (others => '-');
+        end case;
+        
+    end if;
+
+    if true then
+        return condStr & " -> " & trg & re;
+    end if;
+end function;
+
+
+
+function sprintTransfer(ins: InstructionState) return string is
+    variable ires, itarg: string(1 to 8) := (others => ' ');
+    variable mid: string(1 to 2) := "  ";
+    variable name: string(1 to 4) := "none";
+    variable c1, c2: string(1 to 2) := "  ";
+    variable ctrl: string(1 to 5) := "     ";
+begin
+    if ins.specificOperation.subpipe = Mem then
+        c1(1) := std_logic'image(ins.controlInfo.completed)(2);
+        c2(1) := std_logic'image(ins.controlInfo.completed2)(2);
+        c1(2) := ':';
+        c2(2) := ':';
+
+        if ins.controlInfo.sqMiss = '1' then
+            ctrl(2) := 'F';
+        end if;
+        if ins.controlInfo.tlbMiss = '1' then
+            ctrl(3) := 'T';
+        end if;
+        if ins.controlInfo.dataMiss = '1' then
+            ctrl(4) := 'D';
+        end if;
+        if ins.controlInfo.orderViolation = '1' then
+            ctrl(5) := 'O';
+        end if;        
+                
+        case ins.specificOperation.memory is
+            when opLoad =>
+                name := "ldm ";
+                ires := w2hex(ins.result);
+                mid := " @";
+                itarg := w2hex(ins.target);
+            when opStore =>    
+                name := "stm ";
+                ires := w2hex(ins.result);
+                mid := "->";
+                itarg := w2hex(ins.target);
+            when opLoadSys =>
+                name := "lds ";
+                ires := w2hex(ins.result);
+                mid := " @";
+                itarg := w2hex(ins.target);
+            when opStoreSys =>
+                name := "sts ";
+                ires := w2hex(ins.result);
+                mid := "->";
+                itarg := w2hex(ins.target);
+            when others =>
+                name := "??? ";
+                --return "??? " & w2hex(ins.result) & "  " & w2hex(ins.target);
+        end case;
+    end if;
+    
+    return name & c2 & ires & mid & c1 & itarg & ctrl;
+end function;
+
+
+function sprintStatus(ins: InstructionState) return string is
+    
+begin
+    
+end function;
+
+
+
+function eraseIfEmpty(full: std_logic; str: string) return string is
+    variable res: string(str'range) := str;
+begin
+    if full /= '1' then
+        res := (others => ' ');
+    end if;
+    return res;
+end function;
+
+
+    function sprintDisasm(isl: InstructionSlot) return string is
+    begin
+        return eraseIfEmpty(isl.full, sprintDisasm(isl.ins));
+    end function;
+
+    function sprintPhysDisasm(isl: InstructionSlot) return string is
+    begin
+        return eraseIfEmpty(isl.full, sprintPhysDisasm(isl.ins));    
+    end function;    
+
+    function sprintTags(isl: InstructionSlot) return string is
+    begin
+        return eraseIfEmpty(isl.full, sprintTags(isl.ins));    
+    end function;    
+
+    function sprintControl(isl: InstructionSlot) return string is
+    begin
+        return eraseIfEmpty(isl.full, sprintControl(isl.ins));    
+    end function;    
+
+    function sprintTransfer(isl: InstructionSlot) return string is
+    begin
+        return eraseIfEmpty(isl.full, sprintTransfer(isl.ins));    
+    end function;    
+
+    function sprintStatus(isl: InstructionSlot) return string is
+    begin
+        return eraseIfEmpty(isl.full, sprintStatus(isl.ins));    
+    end function;    
+
+
+
+
 
 function insText(ins: InstructionState; isMem: std_logic) return InstructionText is
     variable dest, src0, src1, src2: string(1 to 3) := (others => '*');
@@ -154,6 +483,9 @@ function insText(ins: InstructionState; isMem: std_logic) return InstructionText
     variable destSymbol: string(1 to 1);
     variable srcSymbols: string(1 to 3);
 begin
+        
+        -- tagStr := w2hex(ins.tags.fetchCtr)
+
     -- Tag text; fetchCtr/decodeCtr/renameCtr/renameIndex
     tagStr(1 to 8) := w2hex(ins.tags.fetchCtr);
     tagStr(9) := '/';
@@ -294,36 +626,7 @@ begin
     return res;
 end function;
 
-function insSlotText(insSlot: InstructionSlot; mem: std_logic) return InstructionText is
-    variable res: InstructionText;
-begin    
-        if insSlot.full = '1' then
-            res := insText(insSlot.ins, mem);
-        end if;
-    return res;
-end function;
 
-function insSlotArrayText(insVec: InstructionSlotArray; mem: std_logic) return InstructionTextArray is
-    variable res: InstructionTextArray(insVec'range);
-begin    
-    for i in res'range loop
-        if insVec(i).full = '1' then
-            res(i) := insText(insVec(i).ins, mem);
-        end if;
-    end loop;
-    return res;
-end function;
-
-function insStateArrayText(insVec: InstructionStateArray; mask: std_logic_vector; mem: std_logic) return InstructionTextArray is
-    variable res: InstructionTextArray(insVec'range);
-begin    
-    for i in res'range loop
-        if mask(i) = '1' then
-            res(i) := insText(insVec(i), mem);
-        end if;
-    end loop;
-    return res;
-end function;
 
 function getSchedStateText(se: SchedulerState; full: std_logic) return SchedEntryText is
     variable res: SchedEntryText; 
@@ -380,73 +683,6 @@ begin
     return res;
 end function;
 
-
-function schedEntrySlotArrayTextIns(insVec: SchedulerEntrySlotArray; mem: std_logic) return InstructionTextArray is
-    variable res: InstructionTextArray(insVec'range);
-begin    
-    for i in res'range loop
-        if insVec(i).full = '1' then
-            res(i) := insText(insVec(i).ins, mem);
-        end if;
-    end loop;
-    return res;
-end function;
-
-function schedEntrySlotArrayTextState(insVec: SchedulerEntrySlotArray) return SchedEntryTextArray is
-    variable res: SchedEntryTextArray(insVec'range);
-begin    
-    for i in res'range loop
-        if insVec(i).full = '1' then
-            res(i) := getSchedStateText(insVec(i).state, '1');
-        end if;
-    end loop;
-    return res;
-end function;
-
-
-
-function createFetchStageView(stageOutputScalar: InstructionSlot; fetchLine: WordArray) return StrArray is
-    variable res: FetchStageView;
-    variable adrHi, adrLo: Mword := stageOutputScalar.ins.ip; 
-begin
-    adrHi(ALIGN_BITS-1 downto 0) := (others => '0');
-    adrLo(MWORD_SIZE-1 downto ALIGN_BITS) := (others => '0');    
-
-    --res.full := stageOutputScalar.full;
-    for i in 0 to fetchLine'length-1 loop
-        if stageOutputScalar.full = '1' and slv2u(adrLo) <= 4*i then
-            res(i) := disasmWithAddress(slv2u(adrHi) + 4*i, fetchLine(i));
-        end if;
-    end loop;
-    
-    return res;
-end function;
-
-function createGenericStageView(stageOutput: InstructionSlotArray) return StrArray is
-    variable res: StrArray(stageOutput'range);
-begin
-    --res.full := stageOutputScalar.full;
-    for i in 0 to stageOutput'length-1 loop
-        if stageOutput(i).full = '1' then
-            res(i) := disasmWithAddress(slv2u(stageOutput(i).ins.ip), stageOutput(i).ins.bits);
-        end if;
-    end loop;
-    
-    return res;
-end function;
-
-function createGenericStageView(stageOutput: SchedulerEntrySlotArray) return StrArray is
-    variable res: StrArray(stageOutput'range);
-begin
-    --res.full := stageOutputScalar.full;
-    for i in 0 to stageOutput'length-1 loop
-        if stageOutput(i).full = '1' then
-            res(i) := disasmWithAddress(slv2u(stageOutput(i).ins.ip), stageOutput(i).ins.bits);
-        end if;
-    end loop;
-    
-    return res;
-end function;
 
 end package body;
 

@@ -118,6 +118,7 @@ function disasmWord(w: Word) return string;
 
 procedure disasmToFile(name: string; arr: WordArray);
 
+function padTo(s: string; n: natural) return string;
 
 end Assembler;
 
