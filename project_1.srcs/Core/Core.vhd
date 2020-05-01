@@ -307,16 +307,31 @@ begin
         
         robOutText <= createGenericStageView(dataOutROB);
         
-        
-            process (clk)
-            begin
+       
+        process (clk)
+        begin
+           if rising_edge(clk) then 
                 if cmpGtU(cycleCounter, 10) = '1' then --and cmpLtU(cycleCounter, 1000) = '1' then                    
                     report "V: " & sprintDisasm(renamedDataMerged(0).ins);
                     report "P: " & sprintPhysDisasm(renamedDataMerged(0).ins);
                     report "T: " & sprintTags(renamedDataMerged(0).ins); 
                     report "C: " & sprintControl(renamedDataMerged(0).ins); 
-                end if;              
-            end process;      
+                end if;
+                
+                -- Events
+                if lateEventSignal = '1' then
+                    report "Event(L): " & sprintControl(lateCausing);
+                end if;
+                if execEventSignal = '1' then
+                    report "Event(E): " & sprintControl(execCausing);
+                end if;
+                if frontEventSignal = '1' then
+                    report "Event(F): " & sprintControl(frontCausing);
+                end if;            
+             end if;           
+        end process;
+        
+        
     end generate;
 
     TEMP_EXEC: block
@@ -380,6 +395,8 @@ begin
         signal sendingToIssueStoreValue, sendingToRegReadStoreValue, sendingStoreValue, sendingToIssueFloatStoreValue: std_logic := '0';
         signal sentCancelledI0, sentCancelledI1, sentCancelledM0, sentCancelledM1, sentCancelledF0, sentCancelledSVI, sentCancelledSVF: std_logic := '0';
 
+       signal emptyI0, emptyI1, emptyM0, emptyM1, emptySVI, emptySVF, emptyF0: std_logic := '0';  
+
        --==============----------
        signal intStoreMask, floatStoreMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');            
        signal memMask, memMaskInt, memMaskFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
@@ -390,7 +407,7 @@ begin
        signal dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
        signal memLoadValue: Mword := (others => '0'); -- MEM
       ----==============----------
-        
+       
        signal regsSelI0,           regsSelM0, regsSelS0, regsSelFloatA, regsSelFloatC, regsSelFS0, regsSelF0: PhysNameArray(0 to 2) := (others => (others => '0'));
        signal regValsI0, regValsB, regValsM0, regValsS0, regValsE, regValsFloatA, regValsFloatB, regValsFloatC, regValsFS0, regValsF0: MwordArray(0 to 2) := (others => (others => '0'));
        signal readyRegFlags, readyRegFlagsNext, readyRegFlagsSV, readyFloatFlags, readyFloatFlagsNext, readyRegFlagsFloatSV: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
@@ -442,6 +459,7 @@ begin
                 execCausing => execCausing,
                 lateEventSignal => lateEventSignal,
                 execEventSignal => execEventSignal,
+                empty => emptyI0,
                 anyReady => open,--iqReadyArr(4),
                 schedulerOut => slotSelI0,--dataToIssueAlu,
                 sending => sendingSelI0 --sendingToIssueAlu
@@ -556,6 +574,7 @@ begin
                execCausing => execCausing,
                lateEventSignal => lateEventSignal,
                execEventSignal => execEventSignal,
+               empty => emptyM0,
                anyReady => open,--iqReadyArr(4),
                schedulerOut => slotSelM0,
                sending => sendingSelM0
@@ -772,6 +791,7 @@ begin
                 execCausing => execCausing,
                 lateEventSignal => lateEventSignal,
                 execEventSignal => execEventSignal,
+                empty => emptySVI,
                 anyReady => open,--iqReadyArr(4),
                 schedulerOut => dataToIssueStoreValue,
                 sending => sendingToIssueStoreValue
@@ -848,6 +868,7 @@ begin
                 execCausing => execCausing,
                 lateEventSignal => lateEventSignal,
                 execEventSignal => execEventSignal,
+                empty => emptySVF,
                 anyReady => open,--iqReadyArr(4),
                 schedulerOut => dataToIssueFloatStoreValue,--open,--dataToIssueStoreValue,
                 sending => sendingToIssueFloatStoreValue --open --sendingToIssueStoreValue
@@ -935,6 +956,7 @@ begin
                 execCausing => execCausing,
                 lateEventSignal => lateEventSignal,
                 execEventSignal => execEventSignal,
+                empty => emptyF0,
                 anyReady => open,--iqReadyArr(4),
                 schedulerOut => slotSelF0,--dataToIssueAlu,
                 sending => sendingSelF0 --sendingToIssueAlu
@@ -1379,7 +1401,33 @@ begin
             signal slotTextI0_E0, slotTextI0_E1, slotTextI0_E2, slotTextM0_E0, slotTextM0_E1i, slotTextM0_E2i, slotTextM0_E1f, slotTextM0_E2f: StrArray(0 to 0);
             
             signal iqInputI0, iqInputI1, iqInputM0, iqInputSVI, iqInputSVF, iqInputF0: GenericStageView;
-            signal execOutputsText1, execOutputsText2: StrArray(0 to 3);-- InstructionTextArray(0 to 3);       
+            signal execOutputsText1, execOutputsText2: StrArray(0 to 3);-- InstructionTextArray(0 to 3);
+            
+            signal lastSentI0, lastSentM0, lastSentSVI, lastSentSVF, lastSentF0: Mword := (others => '0');
+            signal lastCompI0, lastCompM0, lastCompSVI, lastCompSVF, lastCompF0: Mword := (others => '0');
+            
+            type SubpipeMonitor is record
+                empty: std_logic;
+                lastSent: Mword;
+                lastComp: Mword;
+            end record;
+            
+            constant DEFAULT_SUBPIPE_MONITOR: SubpipeMonitor := ('0', (others => '0'), (others => '0'));
+            
+            function updateSubpipeMonitor(sm: SubpipeMonitor; empty: std_logic; cycleCtr: Mword; sent, comp: std_logic) return SubpipeMonitor is
+                variable res: SubpipeMonitor := sm;
+            begin
+                res.empty := empty;
+                if sent = '1' then
+                    res.lastSent := cycleCtr;
+                end if;
+                if comp = '1' then
+                    res.lastComp := cycleCtr;
+                end if;
+                return res;
+            end function;
+            
+            signal monitorI0, monitorM0, monitorSVI, monitorSVF, monitorF0: SubpipeMonitor := DEFAULT_SUBPIPE_MONITOR; 
          begin
             execOutputsText1 <= createGenericStageView(execOutputs1);
             execOutputsText2 <= createGenericStageView(execOutputs2);
@@ -1414,6 +1462,15 @@ begin
                         report "M1: " & sprintTransfer(slotM0_E1i(0));
                         report "M2: " & sprintTransfer(slotM0_E2i(0));
                     end if;
+                    
+                    -- Issue & complete monitoring
+                    -- sendingSel* - from IQ;  sendingIssue* - form Issue stage
+                    monitorI0 <= updateSubpipeMonitor(monitorI0, emptyI0, cycleCounter, sendingSelI0, '0');
+                    monitorM0 <= updateSubpipeMonitor(monitorM0, emptyM0, cycleCounter, sendingSelM0, '0');
+                    monitorSVI <= updateSubpipeMonitor(monitorSVI, emptySVI, cycleCounter, sendingToIssueStoreValue, '0');
+                    monitorSVF <= updateSubpipeMonitor(monitorSVF, emptySVF, cycleCounter, sendingToIssueFloatStoreValue, '0');
+                    monitorF0 <= updateSubpipeMonitor(monitorF0, emptyF0, cycleCounter, sendingSelF0, '0'); 
+                    
                 end if;
             end process;                                     
             -- TODO: add remaining stages of Exec area

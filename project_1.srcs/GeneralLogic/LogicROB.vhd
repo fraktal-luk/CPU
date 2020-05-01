@@ -107,7 +107,7 @@ begin
                 res(k).ins.controlInfo.newEvent := '1'; --- !!!
                 res(k).ins.controlInfo.confirmedBranch := '1';
             end if;
-                                                 
+
             if execResult.ins.controlInfo.hasException = '1' then
                 res(k).ins.controlInfo.newEvent := '1'; --- !!!
                 res(k).ins.controlInfo.hasException := '1';

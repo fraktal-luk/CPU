@@ -316,7 +316,7 @@ end function;
 
 
 function sprintControl(ins: InstructionState) return string is
-    variable condStr: string(1 to 9);
+    variable condStr: string(1 to 11);
     variable trg: string(1 to 8) := (others => '-');
     variable re:  string(1 to 2) := "  ";
 begin
@@ -339,28 +339,41 @@ begin
     
     condStr := "none (+4)";
     if ins.controlInfo.hasException = '1' then
-        condStr := "Exc      ";
+        condStr := "Exc        ";
         trg := w2hex(EXC_BASE); -- TODO: adjust when exceptions develop
     elsif ins.controlInfo.specialAction = '1' then
-        condStr := "Spe      ";
+        condStr := "Spe        ";
         
     elsif ins.specificOperation.subpipe = ALU then
         trg := w2hex(ins.target);
+        if ins.controlInfo.frontBranch = '1' then
+            condStr(10) := '+';
+        else
+            condStr(10) := '-';
+        end if;
+        if ins.controlInfo.confirmedBranch = '1' then
+            condStr(11) := '+';
+        else
+            condStr(11) := '-';
+        end if;
+        
         case ins.specificOperation.arith is 
-            when opJ | opJl=>
-                condStr := "j        ";              
+            when opJ | opJl =>
+                condStr := "j          ";              
             when opJz => 
-                condStr := "j  z(" & srcText(ins, 0) & ")";
+                condStr := "j  z(" & srcText(ins, 0) & ")  ";
             when opJnz =>
-                condStr := "j nz(" & srcText(ins, 0) & ")";                
+                condStr := "j nz(" & srcText(ins, 0) & ")  ";                
             when others =>
+                condStr(10 to 11) := "  ";
                 trg := (others => '-');
         end case;
         
     end if;
-
+    
+    -- CAREFUL: not using the -+ signs because they'd need info on whether they are already evaluated
     if true then
-        return condStr & " -> " & trg & re;
+        return condStr(1 to 9) & " -> " & trg & re;
     end if;
 end function;
 
@@ -424,9 +437,30 @@ end function;
 
 
 function sprintStatus(ins: InstructionState) return string is
-    
+    variable comp: string(1 to 2) := "00";
+    variable ctrl: string(1 to 3) := "   ";
 begin
-    
+    if ins.controlInfo.completed = '1' then
+        comp(1) := '1';
+    end if;
+    if ins.controlInfo.completed2 = '1' then
+        comp(2) := '1';
+    end if;
+ 
+     if ins.controlInfo.frontBranch = '1' then
+        ctrl(1) := 'F';
+    end if;   
+    if ins.controlInfo.confirmedBranch = '1' then
+        ctrl(2) := 'C';
+    end if;
+
+    if ins.controlInfo.specialAction = '1' then
+        ctrl(3) := 'S';
+    end if;
+    if ins.controlInfo.hasException = '1' then
+        ctrl(4) := 'E';
+    end if;
+
 end function;
 
 

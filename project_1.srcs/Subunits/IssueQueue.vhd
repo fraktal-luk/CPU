@@ -48,6 +48,8 @@ entity IssueQueue is
 		
 		queuesAccepting: in std_logic;
 		
+		empty: out std_logic;
+		
 		anyReady: out std_logic;
 		schedulerOut: out SchedulerEntrySlot;
 		sending: out std_logic
@@ -260,6 +262,9 @@ begin
 	schedulerOut <= (sends, dispatchDataNew.ins, dispatchDataNew.state);
 	sending <= sends;
     sentCancelled <= sentKilled;
+    
+    -- CAREFUL! If queue becomes noncollapsing, we'll need to see all full bits! 
+    empty <= not fullMask(0); -- not isNonzero(fullMask);
     
     VIEW: if VIEW_ON generate
         use work.Viewing.all;
