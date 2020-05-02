@@ -312,7 +312,6 @@ begin
                         -- for each element of input vec
                         if freeListPutSel(i) = '1' then
                             indPut := addInt(indPut, 1);
-                            assert isNonzero(physCommitFreedDelayed(i)) = '1' report "Putting 0 to free list!" severity failure;
                         end if;    
                     end loop;
                     listPtrPut <= indPut;
@@ -336,7 +335,90 @@ begin
             end if;
         end process;            
         
-        assert physPtrTake /= physPtrPut report "Error: free list can overflow!" severity failure;
+        VIEW: if VIEW_ON generate
+            use work.Viewing.all;
+            
+            signal vFree, vUsed: std_logic_vector(0 to N_PHYS-1) := (others => '0');
+            signal newTaken, newPut: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+            
+            -- CAREFUL, TODO: this assumes some endianness, maybe needed universal
+            function TMP_w2b(wa: WordArray) return ByteArray is
+                constant LEN: natural := wa'length;
+                variable res: ByteArray(0 to 4*LEN-1);
+            begin
+                for i in 0 to LEN-1 loop 
+                    res(4*i to 4*i + 3) := (wa(i)(31 downto 24), wa(i)(23 downto 16), wa(i)(15 downto 8), wa(i)(7 downto 0));    
+                end loop;
+                return res;
+            end function;
+            
+            function getFreeVec(listContent32: WordArray; physStart, physEnd: SmallNumber;
+                                listFront: PhysNameArray; numFront: SmallNumber; listBack: PhysNameArray; numBack: SmallNumber)
+            return std_logic_vector is
+                variable res: std_logic_vector(0 to N_PHYS-1) := (others => '0');
+                constant wa: WordArray(0 to 2*listContent32'length-1) := listContent32 & listContent32;
+                constant tmpByteArray: ByteArray(0 to 2*FREE_LIST_SIZE-1) := TMP_w2b(wa); -- 2x for easy range extraction
+                variable pStart, pEnd: natural;
+            begin
+            
+                --tmpByteArray := TMP_w2b(listContent32);
+                pStart := slv2u(physStart);
+                pEnd := slv2u(physEnd);
+                
+                if pStart > pEnd then
+                    pEnd := pEnd + FREE_LIST_SIZE;
+                    
+                   --         report "!!!! " & integer'image(pStart) & "  " & integer'image(pEnd) & "   " & integer'image(tmpByteArray'length);
+                end if;
+                --tempByteArray(pStart to pEnd-1);
+                
+                for i in pStart to pEnd-1 loop
+                    res(slv2u(tmpByteArray(i))) := '1';
+                end loop;
+                
+                for i in 0 to slv2s(numFront)-1 loop -- CAREFUL: numFront can be negative
+                    res(slv2u(listFront(i))) := '1';
+                end loop;
+                
+                for i in 0 to slv2s(numBack)-1 loop -- CAREFUL: numBack can be negative
+                    res(slv2u(listBack(i))) := '1';                    
+                end loop;                            
+                return res;
+            end function;
+            
+            signal numFree: natural := 0;
+        begin
+            
+            process(clk)
+
+            begin
+                if rising_edge(clk) then
+                    
+                    -- Watch what is taken from the list, how it is rewinded, and what is put at the end
+                    
+                    -- There can be no 0 in the list!
+                    for i in 0 to slv2s(numFront)-1 loop
+                        assert std2bool(isNonzero(listFront(i))) report "Has 0 in free list!" severity failure;                    
+                    end loop;
+                    for i in 0 to slv2s(numBack)-1 loop
+                        assert std2bool(isNonzero(listBack(i))) report "Put 0 to free list!" severity failure;
+                    end loop;
+                                        
+                    vFree <= getFreeVec(listContent32, physPtrTake, physPtrPut, listFront, numFront, listBack, numBack);
+                    
+                    assert physPtrTake /= physPtrPut report "Error: free list can overflow!" severity failure;
+                    
+                    -- Num of free regs may be overstated after rewind when physical pointer gets decremented more than the virtual one!
+                    -- Beyond the time of recovery we can't tolerate less than 32 occupied regs
+                    assert (numFree <= N_PHYS-32 or std2bool(isNonzero(recoveryCounter))) report "Impossible number of free regs" severity failure; 
+                    -- NOTE: For FP no phys reg 0 so 1 less free but it cancels out on both sides ((TODO?) unless -1 added to numFree)
+                end if;
+            end process;
+            
+            numFree <= countOnes(vFree); -- CAREFUL (TODO?): for FP physical reg 0 is not used so number actually -1  
+
+     
+        end generate;
         
     end block;
 
