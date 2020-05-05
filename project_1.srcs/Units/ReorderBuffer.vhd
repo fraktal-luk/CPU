@@ -327,6 +327,13 @@ begin
 	   robTxt <= getRobView(content);
 	   
 	       robView <= createRobView(content);
-
+        
+        process(clk)
+        begin
+            if rising_edge(clk) then 
+                report "R(0): " & sprintRobRow(content(0).ops);
+            end if;
+        end process;
+        
     end generate;
 end Behavioral;

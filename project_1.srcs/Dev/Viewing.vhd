@@ -77,6 +77,10 @@ function createGenericStageView(stageOutput: SchedulerEntrySlotArray) return Str
 
     function sprintStatus(isl: InstructionSlot) return string;
 
+    function sprintArgs(sl: SchedulerEntrySlot) return string;
+    
+    function sprintRobRow(ia: InstructionSlotArray) return string;
+    
 end package;
 
 
@@ -504,6 +508,114 @@ end function;
     begin
         return eraseIfEmpty(isl.full, sprintStatus(isl.ins));    
     end function;    
+
+
+        function argLocText(sl: SchedulerEntrySlot; i: natural) return string is
+            variable sub, phase: string(1 to 2) := "  ";
+        begin
+            if sl.state.argValues.missing(i) = '1' then
+                return "    M";
+            elsif sl.state.argValues.zero(i) = '1' then
+                return "    Z";
+            elsif i = 1 and sl.state.argValues.immediate = '1' then
+                return "    I";
+            else
+                case sl.state.argValues.argLocsPipe(i)(1 downto 0) is
+                    when "11" => 
+                        sub := " 3";
+                    when "00" =>
+                        sub := " 0";
+                    when "01" =>
+                        sub := " 1";
+                    when "10" => 
+                        sub := " 2";
+                    when others =>
+                
+                end case;        
+            
+                case sl.state.argValues.argLocsPhase(i)(1 downto 0) is
+                    when "11" => 
+                        phase := "-1";
+                    when "00" =>
+                        phase := " 0";
+                    when "01" =>
+                        phase := " 1";
+                    when "10" => 
+                        phase := " 2";
+                    when others =>
+                    
+                end case;
+                
+                return sub & ":" & phase; 
+            end if;
+            
+            return "";        
+        end function;
+         
+
+    function sprintArgsInternal(sl: SchedulerEntrySlot) return string is
+        variable tmp: string(1 to 10);
+    begin
+        --if isl.ins.virtualArgSpec.intDestSel = '1' then
+        return  destText(sl.ins) & ":" & physDestText(sl.ins) & " <- " &
+        --elsif isl.ins.virtualArgSpec.floatDestSel = '1' then
+                srcText(sl.ins, 0) & ":" & physSrcText(sl.ins, 0) & " [" & argLocText(sl, 0) & "], " &
+                srcText(sl.ins, 1) & ":" & physSrcText(sl.ins, 1) & " [" & argLocText(sl, 1) & "], " &
+                srcText(sl.ins, 2) & ":" & physSrcText(sl.ins, 2) & " [" & argLocText(sl, 2) & "]";
+        --end if;
+        
+        --return "";
+    end function;
+
+
+    function sprintArgs(sl: SchedulerEntrySlot) return string is
+    begin
+        return eraseIfEmpty(sl.full, sprintArgsInternal(sl));
+    end function;
+
+
+    function sprintRobRow(ia: InstructionSlotArray) return string is
+        variable res: string(1 to 50) := (others => ' ');
+        variable tmpStr: string(1 to 8);
+        variable ind: natural := 11;
+        variable renameIndexW: Word := (others => '0');
+    begin
+        renameIndexW(TAG_SIZE-1 downto 0) := ia(0).ins.tags.renameIndex;
+        res(1 to 8) := w2hex(renameIndexW);
+        res(9 to 10) := ": ";
+        for i in 0 to PIPE_WIDTH-1 loop
+            tmpStr := (others => ' ');
+            if ia(i).full = '1' then
+                tmpStr(1 to 2) := "00";
+                if ia(i).ins.controlInfo.completed = '1' then
+                    tmpStr(1) := '1';
+                end if;
+                if ia(i).ins.controlInfo.completed2 = '1' then
+                    tmpStr(2) := '1';
+                end if;
+                if ia(i).ins.controlInfo.frontBranch = '1' then
+                    tmpStr(3) := 'F';
+                end if;
+                if ia(i).ins.controlInfo.confirmedBranch = '1' then
+                    tmpStr(4) := 'C';
+                end if;                                 
+                
+                if ia(i).ins.controlInfo.hasException = '1' then
+                    tmpStr(5) := 'E';
+                end if;
+                
+                if ia(i).ins.controlInfo.orderViolation = '1' then
+                    tmpStr(6) := 'V';
+                end if;                
+            end if;    
+
+            res(ind to ind + tmpStr'length-1) := tmpStr;
+            res(ind + tmpStr'length to ind + tmpStr'length+1) := ", ";
+            ind := ind + tmpStr'length + 2;
+        end loop;
+        
+        return res;
+    end function;
 
 
 

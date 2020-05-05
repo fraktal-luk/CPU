@@ -114,13 +114,19 @@ begin
                 eventFound := true;
             end if;
 
-            if execResult.ins.controlInfo.specialAction = '1' then
+            if execResult.ins.controlInfo.specialAction = '1' then -- TODO: remove it, not handled by Exec engine/
                 res(k).ins.controlInfo.newEvent := '1'; --- !!!
                 res(k).ins.controlInfo.specialAction := '1';
                 res(k).ins.controlInfo.refetch := '1';
                 eventFound := true;
             end if;
-                            
+
+--            -- CAREFUL: this is handled in SQ. Probably not implemented here, but can/should be done for debugging
+--            if execResult.ins.controlInfo.orderViolation = '1' then
+--                res(k).ins.controlInfo.newEvent := '1'; --- !!!
+--                res(k).ins.controlInfo.orderViolation := '1';
+--            end if;
+
             if num = 1 then
                 res(k).ins.controlInfo.completed2 := '1';
             else

@@ -216,6 +216,8 @@ begin
 	fullMask <= extractFullMask(queueContent);
     queueData <= extractData(queueContent);
 
+    fullMaskNext <= extractFullMask(queueContentNext);
+
 	sends <= anyReadyLive and nextAccepting; -- CHECK: can we use full instead of living?
 	sendPossible <= anyReadyFull and nextAccepting; -- Includes ops that would send but are killed
 	
@@ -270,8 +272,85 @@ begin
         use work.Viewing.all;
 
         signal queueTxt: StrArray(0 to IQ_SIZE-1);
-        signal inputStageTxt: StrArray(0 to PIPE_WIDTH-1);         
+        signal inputStageTxt: StrArray(0 to PIPE_WIDTH-1);
+        
+        signal prevReadyMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+        
+        signal flowSig: IntArray(0 to IQ_SIZE-1) := (others => -1);
+        
+        subtype ReadyVec is std_logic_vector(0 to 2);
+        type WakeupTable is array(0 to IQ_SIZE-1) of ReadyVec;
+        signal wakeup, wakeupSel: WakeupTable := (others => (others => '0'));    
     begin
+        -- Monitor:
+        -- fma - forward matches array
+        
+        -- compare readyMask with previous one, remember that some may have shifted and some not 
+        -- 
+        process (clk)
+            variable tmpFull, newFull: natural := 0;
+            variable flow: IntArray(0 to IQ_SIZE-1) := (others => -1);
+            variable thisReadyVec, prevReadyVec: std_logic_vector(0 to 2) := (others => '0');          
+        begin
+            if rising_edge(clk) then
+                tmpFull := countOnes(fullMask);
+                newFull := countOnes(fullMaskNext); 
+            
+                prevReadyMask <= readyMask;
+                
+                if std2bool(isNonzero(issuedMask)) then -- something is removed
+                    tmpFull := tmpFull - 1;
+                end if;
+
+                flow := (others => -1);
+                
+                for i in 0 to IQ_SIZE-1 loop
+                    if remainMask(i) = '1' then
+                        flow(i) := 0; -- remaining
+                    else
+                        flow(i) := 1; -- moved
+                    end if;
+                    
+                    if i >= tmpFull then
+                        flow(i) := 2; -- new
+                    end if;
+                    if i >= newFull then
+                        flow(i) := -1; -- empty
+                    end if;
+                    
+                        if killMask(i) = '1' then
+                            flow(i) := -2; -- killed
+                        end if;
+                end loop;                
+                
+                flowSig <= flow;
+                
+                
+                -- Look at wakeups and check where they come from and for which register
+                for i in 0 to IQ_SIZE-1 loop
+                    for j in 0 to 2 loop
+                        if wakeup(i)(j) = '1' then
+                            -- fma(i).
+                            -- ...
+                        end if;
+                        
+                        if wakeupSel(i)(j) = '1' then
+                            -- 
+                            -- ...
+                        end if;                        
+                    end loop;
+                end loop;
+                
+                        report "Q: " & sprintArgs(queueContent(0));
+                
+            end if;
+        end process;
+        
+        WAKEUP_VECS: for i in 0 to IQ_SIZE-1 generate
+            wakeup(i) <= not queueContentUpdated(i).state.argValues.missing and queueContent(i).state.argValues.missing when fullMask(i) = '1' else (others => '0');
+            wakeupSel(i) <= not queueContentUpdatedSel(i).state.argValues.missing and queueContent(i).state.argValues.missing when fullMask(i) = '1' else (others => '0');        
+        end generate;
+        
         queueTxt <= createGenericStageView(queueContent);
         inputStageTxt <= createGenericStageView(inputStage);
     end generate;

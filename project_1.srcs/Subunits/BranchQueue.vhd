@@ -91,7 +91,8 @@ architecture Behavioral of BranchQueue is
 	    variable imBr: std_logic_vector(0 to QUEUE_SIZE-1) := inputMaskBr;	    
     begin
 
-        -- TODO, CHECK: clear newEvent if unneeded? Other controlInfo excpet frontBranch, confirmedBranch, firstBr?
+        -- TODO, CHECK: clear newEvent if unneeded? Other controlInfo except frontBranch, confirmedBranch, firstBr?
+        -- TODO: add 'completed' flag for debug?  
 
         for i in 0 to QUEUE_SIZE-1 loop
            diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;
