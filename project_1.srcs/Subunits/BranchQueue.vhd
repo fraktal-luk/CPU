@@ -268,10 +268,12 @@ begin
       
        signal queueTxt: --InstructionTextArray(0 to QUEUE_SIZE-1);
                         StrArray(0 to QUEUE_SIZE-1);
-       --signal queueContent: InstructionSlotArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INS_SLOT);
+
+       signal queueText: InsStringArray(0 to QUEUE_SIZE-1);
     begin
-        --    queueContent <= ;
-       queueTxt <= createGenericStageView(makeSlotArray(content, fullMask));
+           queueTxt <= createGenericStageView(makeSlotArray(content, fullMask));
+       
+       queueText <= getInsStringArray(makeSlotArray(content, fullMask), control);       
     end generate;
 
 end Behavioral;

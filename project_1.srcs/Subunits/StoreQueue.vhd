@@ -440,12 +440,16 @@ begin
 	committedDataOut <= (0 => dataDrainSigNC(0), others => DEFAULT_INSTRUCTION_SLOT);
 	
 	VIEW: if VIEW_ON generate
-        use work.Viewing.all;
+       use work.Viewing.all;
       
        signal queueTxt: --InstructionTextArray(0 to QUEUE_SIZE-1);
                         StrArray(0 to QUEUE_SIZE-1);
+                        
+       signal queueText: InsStringArray(0 to QUEUE_SIZE-1);
     begin
-       queueTxt <= createGenericStageView(makeSlotArray(content, fullOrCommittedMask));
+           queueTxt <= createGenericStageView(makeSlotArray(content, fullOrCommittedMask));
+       
+       queueText <= getInsStringArray(makeSlotArray(content, fullOrCommittedMask), transfer);
     end generate;
 	
 end Behavioral;

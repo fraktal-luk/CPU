@@ -323,15 +323,20 @@ begin
 	       return res;
 	   end function;
 	   
+	   signal robText: InsStringArray(0 to ROB_SIZE-1) := (others => (others => ' '));
 	begin
 	   robTxt <= getRobView(content);
 	   
 	       robView <= createRobView(content);
         
+        ROB_TEXT: for i in 0 to ROB_SIZE-1 generate
+            robText(i) <= sprintRobRow(content(i).ops);
+        end generate;
+        
         process(clk)
         begin
             if rising_edge(clk) then 
-                report "R(0): " & sprintRobRow(content(0).ops);
+                --report "R(0): " & sprintRobRow(content(0).ops);
             end if;
         end process;
         

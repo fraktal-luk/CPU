@@ -7,7 +7,7 @@ use work.ArchDefs.all;
 
 use work.CoreConfig.all;
 
-use work.Assembler.disasmWithAddress;
+use work.Assembler.all;
 use std.textio.all;
    
 use work.InstructionState.all;
@@ -51,6 +51,12 @@ function createGenericStageView(stageOutput: SchedulerEntrySlotArray) return Str
 
 
 
+type InsPrintFormat is (none, disasm, physDisasm, tags, control, transfer, status, args);
+
+constant INS_STR_SIZE: natural := 51;
+subtype InsString is string(1 to INS_STR_SIZE);
+type InsStringArray is array(integer range <>) of InsString;
+
 
     function sprintDisasm(ins: InstructionState) return string;
 
@@ -79,12 +85,89 @@ function createGenericStageView(stageOutput: SchedulerEntrySlotArray) return Str
 
     function sprintArgs(sl: SchedulerEntrySlot) return string;
     
-    function sprintRobRow(ia: InstructionSlotArray) return string;
+    function sprintRobRow(ia: InstructionSlotArray) return InsString;
+
+function getInsString(isl: InstructionSlot; fmt: InsPrintFormat) return InsString;
+
+function getInsStringArray(ia: InstructionSlotArray; fmt: InsPrintFormat) return InsStringArray;
+
+function getInsStringArray(sa: SchedulerEntrySlotArray; fmt: InsPrintFormat) return InsStringArray;
+
     
 end package;
 
 
 package body Viewing is
+
+
+
+function getInsString(isl: InstructionSlot; fmt: InsPrintFormat) return InsString is
+    variable res: InsString := (others => ' ');
+begin
+        case fmt is
+            when disasm =>
+                res := padTo(sprintDisasm(isl), INS_STR_SIZE);
+            when physDisasm =>
+                res := padTo(sprintPhysDisasm(isl), INS_STR_SIZE);
+            when tags =>
+                res := padTo(sprintDisasm(isl), INS_STR_SIZE);
+            when control =>
+                res := padTo(sprintControl(isl), INS_STR_SIZE);
+            when transfer =>
+                res := padTo(sprintTransfer(isl), INS_STR_SIZE);                                                        
+            when status =>
+                res := padTo(sprintStatus(isl), INS_STR_SIZE);                                                        
+                            
+            when others =>
+        end case;
+    
+    return res;
+end function;
+
+
+
+function getInsStringArray(ia: InstructionSlotArray; fmt: InsPrintFormat) return InsStringArray is
+    variable res: InsStringArray(0 to ia'length-1) := (others => (others => ' '));
+begin
+    for i in 0 to ia'length-1 loop
+        case fmt is
+            when disasm =>
+                res(i) := padTo(sprintDisasm(ia(i)), INS_STR_SIZE);
+            when physDisasm =>
+                res(i) := padTo(sprintPhysDisasm(ia(i)), INS_STR_SIZE);
+            when tags =>
+                res(i) := padTo(sprintDisasm(ia(i)), INS_STR_SIZE);
+            when control =>
+                res(i) := padTo(sprintControl(ia(i)), INS_STR_SIZE);
+            when transfer =>
+                res(i) := padTo(sprintTransfer(ia(i)), INS_STR_SIZE);                                                        
+            when status =>
+                res(i) := padTo(sprintStatus(ia(i)), INS_STR_SIZE);                                                        
+                            
+            when others =>
+        end case;
+        
+    end loop;
+    
+    return res;
+end function;
+
+
+function getInsStringArray(sa: SchedulerEntrySlotArray; fmt: InsPrintFormat) return InsStringArray is
+    variable res: InsStringArray(0 to sa'length-1) := (others => (others => ' '));
+begin
+    for i in 0 to sa'length-1 loop
+        case fmt is
+            when args =>
+                res(i) := padTo(sprintArgs(sa(i)), INS_STR_SIZE); 
+                                            
+            when others =>
+        end case;
+        
+    end loop;
+    
+    return res;
+end function;
 
 
 function createFetchStageView(stageOutputScalar: InstructionSlot; fetchLine: WordArray) return StrArray is
@@ -574,8 +657,8 @@ end function;
     end function;
 
 
-    function sprintRobRow(ia: InstructionSlotArray) return string is
-        variable res: string(1 to 50) := (others => ' ');
+    function sprintRobRow(ia: InstructionSlotArray) return InsString is
+        variable res: InsString := (others => ' ');
         variable tmpStr: string(1 to 8);
         variable ind: natural := 11;
         variable renameIndexW: Word := (others => '0');

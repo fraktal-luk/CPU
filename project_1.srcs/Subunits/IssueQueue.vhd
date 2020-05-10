@@ -278,6 +278,8 @@ begin
         
         signal flowSig: IntArray(0 to IQ_SIZE-1) := (others => -1);
         
+        signal iqText: InsStringArray(0 to IQ_SIZE-1) := (others => (others => ' '));
+        
         subtype ReadyVec is std_logic_vector(0 to 2);
         type WakeupTable is array(0 to IQ_SIZE-1) of ReadyVec;
         signal wakeup, wakeupSel: WakeupTable := (others => (others => '0'));    
@@ -341,10 +343,12 @@ begin
                     end loop;
                 end loop;
                 
-                        report "Q: " & sprintArgs(queueContent(0));
+               --         report "Q: " & sprintArgs(queueContent(0));
                 
             end if;
         end process;
+        
+        iqText <= getInsStringArray(queueContent, args);
         
         WAKEUP_VECS: for i in 0 to IQ_SIZE-1 generate
             wakeup(i) <= not queueContentUpdated(i).state.argValues.missing and queueContent(i).state.argValues.missing when fullMask(i) = '1' else (others => '0');

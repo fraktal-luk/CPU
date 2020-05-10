@@ -290,11 +290,24 @@ begin
     MAIN_VIEW: if VIEW_ON generate
         use work.Viewing.all;
         
+        signal frontEv, execEv, lateEv: InstructionSlot := DEFAULT_INS_SLOT;
+        
+        signal frontEvStr, execEvStr, lateEvStr: InsString := (others => ' ');
+        
+        signal renamedText: InsStringArray(0 to PIPE_WIDTH-1) := (others => (others => ' '));
+        
         signal renamedIntTextRe, renamedFloatTextRe, renamedMergedText, renamedTextBQ, renamedTextLQ, renamedTextSQ: GenericStageView;
         
         signal robOutText: GenericStageView;          
     begin
+        frontEv <= (frontEventSignal, frontCausing);
+        execEv  <= (execEventSignal,  execCausing);
+        lateEv  <= (lateEventSignal,  lateCausing);
+    
+
         renamedMergedText <= createGenericStageView(renamedDataMerged);
+        
+            renamedText <= getInsStringArray(renamedDataMerged, physDisasm);
         
         renamedTextBQ <= createGenericStageView(renamedDataToBQ);
         renamedTextLQ <= createGenericStageView(renamedDataToLQ);
@@ -307,28 +320,22 @@ begin
         
         robOutText <= createGenericStageView(dataOutROB);
         
-       
+
+                frontEvStr <= getInsString(frontEv, control);
+                execEvStr <= getInsString(execEv, control);
+                lateEvStr <= getInsString(lateEv, control);
+                       
         process (clk)
         begin
            if rising_edge(clk) then 
-                if cmpGtU(cycleCounter, 10) = '1' then --and cmpLtU(cycleCounter, 1000) = '1' then                    
-                    report "V: " & sprintDisasm(renamedDataMerged(0).ins);
-                    report "P: " & sprintPhysDisasm(renamedDataMerged(0).ins);
-                    report "T: " & sprintTags(renamedDataMerged(0).ins); 
-                    report "C: " & sprintControl(renamedDataMerged(0).ins); 
-                end if;
-                
-                -- Events
-                if lateEventSignal = '1' then
-                    report "Event(L): " & sprintControl(lateCausing);
-                end if;
-                if execEventSignal = '1' then
-                    report "Event(E): " & sprintControl(execCausing);
-                end if;
-                if frontEventSignal = '1' then
-                    report "Event(F): " & sprintControl(frontCausing);
-                end if;            
-             end if;           
+--                if cmpGtU(cycleCounter, 10) = '1' then --and cmpLtU(cycleCounter, 1000) = '1' then                    
+--                    report "V: " & sprintDisasm(renamedDataMerged(0).ins);
+--                    report "P: " & sprintPhysDisasm(renamedDataMerged(0).ins);
+--                    report "T: " & sprintTags(renamedDataMerged(0).ins); 
+--                    report "C: " & sprintControl(renamedDataMerged(0).ins); 
+--                end if;                
+                          
+             end if;
         end process;
         
         
@@ -1427,6 +1434,8 @@ begin
                 return res;
             end function;
             
+            signal slotM0_E1iText, slotM0_E2iText: InsString := (others=> ' ');
+            
             signal monitorI0, monitorM0, monitorSVI, monitorSVF, monitorF0: SubpipeMonitor := DEFAULT_SUBPIPE_MONITOR; 
          begin
             execOutputsText1 <= createGenericStageView(execOutputs1);
@@ -1455,13 +1464,16 @@ begin
             slotTextM0_E2f <= createGenericStageView(slotM0_E2f);
 
 
+            slotM0_E1iText <= getInsString(slotM0_E1i(0), transfer);
+            slotM0_E2iText <= getInsString(slotM0_E2i(0), transfer);
+
             process (clk)
             begin
                 if rising_edge(clk) then
-                    if cmpGtU(cycleCounter, 30) = '1' then --and cmpLtU(cycleCounter, 100) = '1' then
-                        report "M1: " & sprintTransfer(slotM0_E1i(0));
-                        report "M2: " & sprintTransfer(slotM0_E2i(0));
-                    end if;
+--                    if cmpGtU(cycleCounter, 30) = '1' then --and cmpLtU(cycleCounter, 100) = '1' then
+--                        report "M1: " & sprintTransfer(slotM0_E1i(0));
+--                        report "M2: " & sprintTransfer(slotM0_E2i(0));
+--                    end if;
                     
                     -- Issue & complete monitoring
                     -- sendingSel* - from IQ;  sendingIssue* - form Issue stage
