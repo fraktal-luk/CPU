@@ -114,11 +114,7 @@ architecture Behavioral of IssueQueue is
 	function clearOutput(elem: SchedulerEntrySlot) return SchedulerEntrySlot is
 		variable res: SchedulerEntrySlot := elem;
     begin
-	    -- Clear unused fields
---        res.ins.ip := (others => '0');	    
---        res.ins.bits := (others => '0');
---        res.ins.result := (others => '0');
---        res.ins.target := (others => '0');        
+	    -- Clear unused fields       
         if CLEAR_DEBUG_INFO then
             res.ins := clearAbstractInfo(res.ins);
         end if;
@@ -128,7 +124,6 @@ architecture Behavioral of IssueQueue is
     
         res.ins.controlInfo.newEvent := '0';
         res.ins.controlInfo.hasInterrupt := '0';
-        --res.ins.controlInfo.exceptionCode := (others => '0');        
     
 	   return res;
 	end function;
@@ -150,7 +145,7 @@ architecture Behavioral of IssueQueue is
         variable res: std_logic_vector(0 to elems'length-1) := (others => '0');
 	begin
 		for i in 0 to elems'length-1 loop
-		    res(i) := elems(i).state.argValues.issued;
+		    res(i) := elems(i).state.issued;
 		end loop;
 		return res;
     end function;
@@ -179,7 +174,7 @@ architecture Behavioral of IssueQueue is
 	begin
 	   for i in 0 to PIPE_WIDTH-1 loop
 	       rrf := rr(3*i to 3*i + 2);                                              
-           res(i).state.argValues.missing := res(i).state.argValues.missing and not rrf;	       
+           res(i).state.missing := res(i).state.missing and not rrf;	       
 	   end loop;   
 	   return res;
 	end function;
@@ -320,9 +315,9 @@ begin
                         flow(i) := -1; -- empty
                     end if;
                     
-                        if killMask(i) = '1' then
-                            flow(i) := -2; -- killed
-                        end if;
+                    if killMask(i) = '1' then
+                        flow(i) := -2; -- killed
+                    end if;
                 end loop;                
                 
                 flowSig <= flow;
@@ -343,16 +338,14 @@ begin
                     end loop;
                 end loop;
                 
-               --         report "Q: " & sprintArgs(queueContent(0));
-                
             end if;
         end process;
         
         iqText <= getInsStringArray(queueContent, args);
         
         WAKEUP_VECS: for i in 0 to IQ_SIZE-1 generate
-            wakeup(i) <= not queueContentUpdated(i).state.argValues.missing and queueContent(i).state.argValues.missing when fullMask(i) = '1' else (others => '0');
-            wakeupSel(i) <= not queueContentUpdatedSel(i).state.argValues.missing and queueContent(i).state.argValues.missing when fullMask(i) = '1' else (others => '0');        
+            wakeup(i) <= not queueContentUpdated(i).state.missing and queueContent(i).state.missing when fullMask(i) = '1' else (others => '0');
+            wakeupSel(i) <= not queueContentUpdatedSel(i).state.missing and queueContent(i).state.missing when fullMask(i) = '1' else (others => '0');        
         end generate;
         
         queueTxt <= createGenericStageView(queueContent);

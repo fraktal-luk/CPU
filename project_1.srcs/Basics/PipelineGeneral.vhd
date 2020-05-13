@@ -549,7 +549,7 @@ begin
 end function;
 
 function extractData(queueContent: InstructionSlotArray) return InstructionStateArray is
-	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => defaultInstructionState);
+	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => DEFAULT_INS_STATE);
 begin
 	for i in res'range loop
 		res(i) := queueContent(i).ins;
@@ -559,7 +559,7 @@ end function;
 
 
 function extractData(queueContent: SchedulerEntrySlotArray) return InstructionStateArray is
-	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => defaultInstructionState);
+	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => DEFAULT_INS_STATE);
 begin
 	for i in res'range loop
 		res(i) := queueContent(i).ins;
@@ -703,21 +703,21 @@ begin
         -- CAREFUL, TODO: define precisely what 'zero' designation means
         -- Set state markers: "zero" bit; only valid for Int args because FP doesn't use HW zero
         for j in 0 to 2 loop
-            res(i).state.argValues.zero(j) :=         (res(i).ins.physicalArgSpec.intArgSel(j) and not isNonzero(res(i).ins.virtualArgSpec.args(j)(4 downto 0)))
+            res(i).state.zero(j) :=         (res(i).ins.physicalArgSpec.intArgSel(j) and not isNonzero(res(i).ins.virtualArgSpec.args(j)(4 downto 0)))
                                                or (not res(i).ins.physicalArgSpec.intArgSel(j) and not res(i).ins.physicalArgSpec.floatArgSel(j));
                                                
-                res(i).state.argValues.argLocsPhase(j) := "00000010"; -- Like arg in register
+                res(i).state.argLocsPhase(j) := "00000010"; -- Like arg in register
         end loop;
 
         -- Set 'missing' flags for non-const arguments
-        res(i).state.argValues.missing := (res(i).ins.physicalArgSpec.intArgSel and not res(i).state.argValues.zero)
+        res(i).state.missing := (res(i).ins.physicalArgSpec.intArgSel and not res(i).state.zero)
                                        or (res(i).ins.physicalArgSpec.floatArgSel);
         
         -- Handle possible immediate arg
         if HAS_IMM and res(i).ins.constantArgs.immSel = '1' then
-            res(i).state.argValues.missing(1) := '0';
-            res(i).state.argValues.immediate := '1';
-            res(i).state.argValues.zero(1) := '0';
+            res(i).state.missing(1) := '0';
+            res(i).state.immediate := '1';
+            res(i).state.zero(1) := '0';
             
             if IMM_AS_REG then
                 res(i).ins.physicalArgSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);    

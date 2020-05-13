@@ -181,8 +181,6 @@ begin
 		execCausing => DEFAULT_INSTRUCTION_STATE
 	);
 
-	--frontKill <= frontBranchEvent;
-
 	frontBranchEvent <= earlyBranchDataOutA(0).ins.controlInfo.newEvent;
 	frontEventSignal <= frontBranchEvent;
 	frontCausingSig <= earlyBranchDataOutA(0).ins;
@@ -255,17 +253,30 @@ begin
 	VIEW: if VIEW_ON generate
 	   use work.Viewing.all;
         signal insBufInput, stagePreBuffer, branchTransferData, stageOut: GenericStageView;
-        signal stageFetch0, stageFetch1: FetchStageView;     
+        signal stageFetch0, stageFetch1: FetchStageView;
+        
+        function expandToSlotArray(ia: InstructionSlotArray; wa: WordArray) return InstructionSlotArray is
+            variable res: InstructionSlotArray(wa'range) := (others => DEFAULT_INS_SLOT);
+            variable adrHi, adrLo: Mword := ia(0).ins.ip; 
+        begin
+            adrHi(ALIGN_BITS-1 downto 0) := (others => '0');
+            adrLo(MWORD_SIZE-1 downto ALIGN_BITS) := (others => '0');    
+        
+            for i in 0 to wa'length-1 loop
+                res(i).ins.bits := wa(i);
+                res(i).ins.ip := i2slv(slv2u(adrHi) + 4*i, 32);
+                if ia(0).full = '1' and slv2u(adrLo) <= 4*i then
+                    res(i).full := '1';
+                end if;
+            end loop;
+            
+            return res;
+        end function;  
     begin
         insBufInput <= createGenericStageView(earlyBranchMultiDataInA);
-        
-        -- predictedAddress!
-        --stageDataOutFetch0/1
-        --fetchLine0/1
-        --sendingOutFetch0/1
-        stageFetch0 <= createFetchStageView(stageDataOutFetch0(0), fetchedLine0);
-        stageFetch1 <= createFetchStageView(stageDataOutFetch1(0), fetchedLine1);        
-        
+
+        stageFetch0 <= createGenericStageView(expandToSlotArray(stageDataOutFetch0, fetchedLine0));
+        stageFetch1 <= createGenericStageView(expandToSlotArray(stageDataOutFetch1, fetchedLine1));
         stagePreBuffer <= createGenericStageView(earlyBranchMultiDataOutA);
         
         branchTransferData <= createGenericStageView(dataBranchTransferOut);

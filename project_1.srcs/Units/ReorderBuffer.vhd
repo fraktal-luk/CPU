@@ -163,9 +163,6 @@ architecture Behavioral of ReorderBuffer is
 	   
 	   return res;
 	end function;
-	
-        signal num0, num1: integer := 0;
-
 
 	signal startPtr, startPtrNext, endPtr, acmPtr, causingPtr: SmallNumber := (others => '0');
 	
@@ -175,8 +172,6 @@ architecture Behavioral of ReorderBuffer is
     attribute ram_style: string;
     --attribute ram_style of constantBuf, constantBuf2, constantBuf3: signal is "block";	
 begin
-        num1 <= slv2u(constantFromBuf3(SYS_OP_SIZE - 1 + 16 downto 16));	
-        num0 <= SysOp'pos(outputSpecialReg.ins.specificOperation.system);
 
 	execEvent <= execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
 	causingPtr <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
@@ -301,13 +296,9 @@ begin
 	
 	   type StageTextArray is array (integer range <>) of StrArray(0 to PIPE_WIDTH-1);
 	   
-	   signal robView: StageTextArray(0 to ROB_SIZE-1);
-	   
-	   signal robTxt: RobText;
-	   
+	   signal robView: StageTextArray(0 to ROB_SIZE-1);	   
 	   subtype RobSlotText is string(1 to 80);
 	   type RobSlotArray is array(integer range <>) of RobSlotText;
-	   --signal rsa: RobSlotArray(0 to ROB_SIZE-1);
 	   
 	   function createRobView(content: ReorderBufferArray) return StageTextArray is
 	       variable res: StageTextArray(0 to ROB_SIZE-1);
@@ -324,10 +315,8 @@ begin
 	   end function;
 	   
 	   signal robText: InsStringArray(0 to ROB_SIZE-1) := (others => (others => ' '));
-	begin
-	   robTxt <= getRobView(content);
-	   
-	       robView <= createRobView(content);
+	begin	   
+	    robView <= createRobView(content);
         
         ROB_TEXT: for i in 0 to ROB_SIZE-1 generate
             robText(i) <= sprintRobRow(content(i).ops);
@@ -336,7 +325,7 @@ begin
         process(clk)
         begin
             if rising_edge(clk) then 
-                --report "R(0): " & sprintRobRow(content(0).ops);
+
             end if;
         end process;
         

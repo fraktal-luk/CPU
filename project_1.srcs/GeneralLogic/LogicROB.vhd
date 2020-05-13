@@ -35,10 +35,6 @@ function updateOpGroup(ops: InstructionSlotArray; execResult: InstructionSlot; n
 return InstructionSlotArray;
 
 function groupCompleted(insVec: InstructionSlotArray) return std_logic;
-
-type RobText is array(0 to ROB_SIZE-1) of string(1 to 70);
-
-function getRobView(arr: ReorderBufferArray) return RobText;
    
 end package;
 
@@ -138,53 +134,5 @@ begin
     return res;
 end function;
 
-function getRobView(arr: ReorderBufferArray) return RobText is
-    variable str: string(1 to 70);
-    variable res: RobText;
-    
-    use work.Viewing.all; -- TEMP!
-begin
-
-
-    for i in 0 to ROB_SIZE-1 loop
-        --res(i) := "1 [ 1 #99494944 or ; 1 #84995595 jnz   ; 0  #5059555    ; ---------- ]";
-                -- C [ CCE #num ; CCE #num ; CCE #num ; CCE #num ]
-        str := (others => ' ');
-                
-        if arr(i).full = '1' then
-            str(1) := std_logic'image(groupCompleted(arr(i).ops))(2);
-        else
-            str(1) := '-';
-            res(i) := str;
-            next;
-        end if;
-        
-        str(2 to 4) := " [ ";
-        
-        for j in 0 to PIPE_WIDTH-1 loop
-            if arr(i).ops(j).full = '1' then
-                str(5 + 16*j) := std_logic'image(arr(i).ops(j).ins.controlInfo.completed)(2);
-                str(6 + 16*j) := std_logic'image(arr(i).ops(j).ins.controlInfo.completed2)(2);
-                str(7 + 16*j) := ' ';
-                if arr(i).ops(j).ins.controlInfo.hasException = '1' then
-                    str(7 + 16*j) := 'E';
-                end if;
-                str(8 + 16*j) := '#';
-                str(9 + 16*j to 16 + 16*j) := w2hex(arr(i).ops(j).ins.tags.fetchCtr);  
-            else
-                str(5 + 16*j to 16 + 16*j) := (others => ' ');
-            end if;
-            str(17 + 16*j to 19 + 16*j) := " ; ";
-        end loop;    
-            
-        str(18 + 16*(PIPE_WIDTH-1)) := ']';     
-        str(18 + 16*(PIPE_WIDTH-1) + 2) := std_logic'image(arr(i).special.full)(2);
-        
-        res(i) := str;
-        
-    end loop;
-    
-    return res;
-end function; 
     
 end package body;

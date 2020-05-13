@@ -307,8 +307,6 @@ begin
 
         renamedMergedText <= createGenericStageView(renamedDataMerged);
         
-            renamedText <= getInsStringArray(renamedDataMerged, physDisasm);
-        
         renamedTextBQ <= createGenericStageView(renamedDataToBQ);
         renamedTextLQ <= createGenericStageView(renamedDataToLQ);
         renamedTextSQ <= createGenericStageView(renamedDataToSQ);
@@ -328,11 +326,7 @@ begin
         process (clk)
         begin
            if rising_edge(clk) then 
---                if cmpGtU(cycleCounter, 10) = '1' then --and cmpLtU(cycleCounter, 1000) = '1' then                    
---                    report "V: " & sprintDisasm(renamedDataMerged(0).ins);
---                    report "P: " & sprintPhysDisasm(renamedDataMerged(0).ins);
---                    report "T: " & sprintTags(renamedDataMerged(0).ins); 
---                    report "C: " & sprintControl(renamedDataMerged(0).ins); 
+--                if cmpGtU(cycleCounter, 10) = '1' then --and cmpLtU(cycleCounter, 1000) = '1' then
 --                end if;                
                           
              end if;
@@ -1079,8 +1073,8 @@ begin
         
            
          sqValueInput <= -- CAREFUL: This implies that integer StoreData op value is lost when Int and FP are issued simultaneously. This must be prevented by scheduler!
-                    (dataToExecFloatStoreValue.full, setInstructionResult(dataToExecFloatStoreValue.ins, dataToExecFloatStoreValue.state.argValues.args(0))) when dataToExecFloatStoreValue.full = '1' 
-            else    (dataToExecIntStoreValue.full,   setInstructionResult(dataToExecIntStoreValue.ins,   dataToExecIntStoreValue.state.argValues.args(0))); -- TEMP!!
+                    (dataToExecFloatStoreValue.full, setInstructionResult(dataToExecFloatStoreValue.ins, dataToExecFloatStoreValue.state.args(0))) when dataToExecFloatStoreValue.full = '1' 
+            else    (dataToExecIntStoreValue.full,   setInstructionResult(dataToExecIntStoreValue.ins,   dataToExecIntStoreValue.state.args(0))); -- TEMP!!
          
          -- StoreData issue control:
          -- When Int and FP store data issue at the same time, the port conflict is resolved thus:
@@ -1471,8 +1465,6 @@ begin
             begin
                 if rising_edge(clk) then
 --                    if cmpGtU(cycleCounter, 30) = '1' then --and cmpLtU(cycleCounter, 100) = '1' then
---                        report "M1: " & sprintTransfer(slotM0_E1i(0));
---                        report "M2: " & sprintTransfer(slotM0_E2i(0));
 --                    end if;
                     
                     -- Issue & complete monitoring

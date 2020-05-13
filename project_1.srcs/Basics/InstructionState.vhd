@@ -15,35 +15,36 @@ subtype PhysName is SmallNumber;
 type PhysNameArray is array(natural range <>) of PhysName;
 
 
-    type ExecUnit is (General, ALU, MAC, Divide, Jump, Memory, System, FPU );
-    type ExecFunc is (unknown,
-    
-                            arithAdd, arithSub, arithSha,
-                            logicAnd, logicOr, logicShl,
-                            
-                            mulS, mulU, 
-                        
-                            divS, divU,
-                            
-                            load, store,
-                            
-                            jump,
-                            jumpZ,
-                            jumpNZ,
-                            
-                            sysRetI, sysRetE,
-                            sysHalt,
-                            sysSync, sysReplay,
-                            sysMTC, sysMFC, -- move to/from control
-                            sysError,
-                            sysCall,
-                            sysSend,
-                            
-                            fpuMov,
-                            fpuOr,
-                            
-                            sysUndef
-                            );	
+type ExecUnit is (General, ALU, MAC, Divide, Jump, Memory, System, FPU );
+type ExecFunc is (
+                unknown,
+
+                arithAdd, arithSub, arithSha,
+                logicAnd, logicOr, logicShl,
+                
+                mulS, mulU, 
+            
+                divS, divU,
+                
+                load, store,
+                
+                jump,
+                jumpZ,
+                jumpNZ,
+                
+                sysRetI, sysRetE,
+                sysHalt,
+                sysSync, sysReplay,
+                sysMTC, sysMFC, -- move to/from control
+                sysError,
+                sysCall,
+                sysSend,
+                
+                fpuMov,
+                fpuOr,
+                
+                sysUndef
+);	
 
 
 --------------
@@ -63,9 +64,7 @@ function findLog2(n: positive) return natural;
 constant OP_TYPE_BITS: natural := findLog2(SubpipeType'pos(SubpipeType'high) - SubpipeType'pos(SubpipeType'low) + 1);
 constant OP_VALUE_BITS: natural := getSpecificOpSize;
 
-constant SYS_OP_SIZE: natural := findLog2(SysOp'pos(SysOp'high) - SysOp'pos(SysOp'low) + 1); 
-
-
+constant SYS_OP_SIZE: natural := findLog2(SysOp'pos(SysOp'high) - SysOp'pos(SysOp'low) + 1);
 
 type SpecificOp is record
     subpipe: SubpipeType;
@@ -133,31 +132,6 @@ type InstructionConstantArgs is record
 	imm: word;
 end record;
 
-type InstructionVirtualArgs is record
-	sel: std_logic_vector(0 to 2);
-	s0: RegName;
-	s1: RegName;
-	s2: RegName;
-end record;
-
-type InstructionVirtualDestArgs is record
-	sel: std_logic_vector(0 to 0);
-	d0: RegName;
-end record;
-
-type InstructionPhysicalArgs is record
-	sel: std_logic_vector(0 to 2);
-	s0: PhysName;
-	s1: PhysName;
-	s2: PhysName;
-end record;
-
-type InstructionPhysicalDestArgs is record
-	sel: std_logic_vector(0 to 0);
-	d0: PhysName;
-end record;
-
-
 type InstructionArgSpec is record
     intDestSel: std_logic;
     floatDestSel: std_logic;
@@ -176,26 +150,6 @@ type InstructionTags is record
     floatPointer: SmallNumber;
     commitCtr: Word;
 end record;
-		
-
-type InstructionArgValues is record
-	issued: std_logic;
-	newInQueue: std_logic;
-	immediate: std_logic;
-	zero: std_logic_vector(0 to 2);
-	readyNow: std_logic_vector(0 to 2);
-	readyNext: std_logic_vector(0 to 2);
-	readyM2:	std_logic_vector(0 to 2);
-	locs: SmallNumberArray(0 to 2);
-	nextLocs: SmallNumberArray(0 to 2);
-	locsM2: SmallNumberArray(0 to 2);
-	missing: std_logic_vector(0 to 2);
-	stored:  std_logic_vector(0 to 2);
-	args: MwordArray(0 to 2);
-	
-	argLocsPipe: SmallNumberArray(0 to 2);
-	argLocsPhase: SmallNumberArray(0 to 2);
-end record;
 
 type InstructionState is record
 	controlInfo: InstructionControlInfo;
@@ -213,27 +167,43 @@ end record;
 
 type InstructionStateArray is array(integer range <>) of InstructionState;
 
+constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
+                                    completed => '0',
+                                    completed2 => '0',
+                                    newEvent => '0',
+                                    hasInterrupt => '0',
+                                    hasException => '0',
+                                    refetch => '0',
+                                    frontBranch => '0',
+                                    confirmedBranch => '0',												    											
+                                    specialAction => '0',
+                                    dbtrap => '0',
+                                    orderViolation => '0',
+                                    tlbMiss => '0',
+                                    dataMiss => '0',
+                                    sqMiss => '0',
+                                    firstBr => '0'
+                                 );
 
-function defaultControlInfo return InstructionControlInfo;
-function defaultClassInfo return InstructionClassInfo;
-function defaultConstantArgs return InstructionConstantArgs;
-function defaultArgValues return InstructionArgValues;
+constant DEFAULT_CLASS_INFO: InstructionClassInfo := ( 
+                                    short => '0',
+                                    mainCluster => '0',
+                                    secCluster => '0',
+                                    fpRename => '0',
+                                    branchIns => '0'									
+                                  );
 
-function defaultInstructionState return InstructionState;
 
-constant DEFAULT_CONTROL_INFO: InstructionControlInfo := defaultControlInfo;
-constant DEFAULT_CLASS_INFO: InstructionClassInfo := defaultClassInfo;
-constant DEFAULT_CONSTANT_ARGS: InstructionConstantArgs := defaultConstantArgs;
-constant DEFAULT_ARG_VALUES: InstructionArgValues := defaultArgValues;
+constant DEFAULT_CONSTANT_ARGS: InstructionConstantArgs := ('0', (others=>'0'));
 
-constant DEFAULT_ARG_SPEC: InstructionArgSpec := InstructionArgSpec'(
+constant DEFAULT_ARG_SPEC: InstructionArgSpec := (
 			intDestSel => '0',
 			floatDestSel => '0',
 			dest => (others => '0'),
 			intArgSel => (others => '0'),
 			floatArgSel => (others => '0'),
 			args => ((others => '0'), (others => '0'), (others => '0'))
-			);
+);
 
 constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
 			fetchCtr => (others => '0'),
@@ -245,8 +215,22 @@ constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
 			commitCtr => (others => '0')
 );
 
-constant DEFAULT_INSTRUCTION_STATE: InstructionState := defaultInstructionState;
-constant DEFAULT_INS_STATE: InstructionState := defaultInstructionState;
+constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
+	controlInfo => DEFAULT_CONTROL_INFO,
+	ip => (others => '0'),
+	bits => (others=>'0'),
+	
+	specificOperation => DEFAULT_SPECIFIC_OP,
+	tags => DEFAULT_INSTRUCTION_TAGS,
+	classInfo => DEFAULT_CLASS_INFO,
+	constantArgs => DEFAULT_CONSTANT_ARGS,
+	virtualArgSpec => DEFAULT_ARG_SPEC,
+	physicalArgSpec => DEFAULT_ARG_SPEC,
+	result => (others => '0'),
+	target => (others => '0')
+);
+
+constant DEFAULT_INS_STATE: InstructionState := DEFAULT_INSTRUCTION_STATE;
 	
 -- Created to enable *Array				
 type InstructionSlot is record 
@@ -254,19 +238,51 @@ type InstructionSlot is record
 	ins: InstructionState;
 end record;
 	
-constant DEFAULT_INSTRUCTION_SLOT: InstructionSlot := ('0', defaultInstructionState);
-constant DEFAULT_INS_SLOT: InstructionSlot := ('0', defaultInstructionState);
+constant DEFAULT_INSTRUCTION_SLOT: InstructionSlot := ('0', DEFAULT_INSTRUCTION_STATE);
+constant DEFAULT_INS_SLOT: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 
 -- NOTE: index can be negative to enable logical division into 2 different ranges 
 type InstructionSlotArray is array(integer range <>) of InstructionSlot;
 
 
 type SchedulerState is record
-	argValues: InstructionArgValues;
+	issued: std_logic;
+    newInQueue: std_logic;
+    immediate: std_logic;
+    zero: std_logic_vector(0 to 2);
+    readyNow: std_logic_vector(0 to 2);
+    readyNext: std_logic_vector(0 to 2);
+    readyM2:    std_logic_vector(0 to 2);
+    locs: SmallNumberArray(0 to 2);
+    nextLocs: SmallNumberArray(0 to 2);
+    locsM2: SmallNumberArray(0 to 2);
+    missing: std_logic_vector(0 to 2);
+    stored:  std_logic_vector(0 to 2);
+    args: MwordArray(0 to 2);
+    
+    argLocsPipe: SmallNumberArray(0 to 2);
+    argLocsPhase: SmallNumberArray(0 to 2);	
 end record;
 
-constant DEFAULT_SCHEDULER_STATE: SchedulerState := (argValues => DEFAULT_ARG_VALUES);
-constant DEFAULT_SCHED_STATE: SchedulerState := (argValues => DEFAULT_ARG_VALUES);
+constant DEFAULT_SCHEDULER_STATE: SchedulerState := ( 
+              issued => '0',
+	          newInQueue => '0',
+			  immediate => '0',
+			  zero => (others => '0'),
+			  readyNow => (others=>'0'),
+			  readyNext => (others=>'0'),
+			  readyM2 => (others => '0'),
+			  locs => (others => (others => '0')),
+			  nextLocs => (others => (others => '0')),
+			  locsM2 => (others => (others => '0')),
+			  missing => (others=>'0'),
+			  stored => (others => '0'),
+			  args => (others => (others=>'0')),
+		      argLocsPipe => (others => (others => '0')),
+			  argLocsPhase => (others => (others => '0'))
+			  );
+
+constant DEFAULT_SCHED_STATE: SchedulerState := DEFAULT_SCHEDULER_STATE;
 																				
 type SchedulerEntrySlot is record
 	full: std_logic;
@@ -373,80 +389,5 @@ begin
     return findLog2(maxAll);
 end function;
 	
-
-function defaultControlInfo return InstructionControlInfo is
-begin
-	return InstructionControlInfo'(
-                                    completed => '0',
-                                    completed2 => '0',
-                                    newEvent => '0',
-                                    hasInterrupt => '0',
-                                    hasException => '0',
-                                    refetch => '0',
-                                    frontBranch => '0',
-                                    confirmedBranch => '0',												    											
-                                    specialAction => '0',
-                                    dbtrap => '0',
-                                    orderViolation => '0',
-                                    tlbMiss => '0',
-                                    dataMiss => '0',
-                                    sqMiss => '0',
-                                    firstBr => '0'
-                                 );
-end function;
-
-function defaultClassInfo return InstructionClassInfo is
-begin
-	return InstructionClassInfo'( short => '0',
-                                    mainCluster => '0',
-                                    secCluster => '0',
-                                    fpRename => '0',
-                                    branchIns => '0'									
-                                  );
-end function;
-
-function defaultConstantArgs return InstructionConstantArgs is
-begin
-	return InstructionConstantArgs'('0', (others=>'0'));
-end function;
-
-function defaultArgValues return InstructionArgValues is
-begin
-	return (  issued => '0',
-	          newInQueue => '0',
-			  immediate => '0',
-			  zero => (others => '0'),
-			  readyNow => (others=>'0'),
-			  readyNext => (others=>'0'),
-			  readyM2 => (others => '0'),
-			  locs => (others => (others => '0')),
-			  nextLocs => (others => (others => '0')),
-			  locsM2 => (others => (others => '0')),
-			  missing => (others=>'0'),
-			  stored => (others => '0'),
-			  args => (others => (others=>'0')),
-		      argLocsPipe => (others => (others => '0')),
-			  argLocsPhase => (others => (others => '0'))
-			  );
-end function;
-
-function defaultInstructionState return InstructionState is
-	variable res: InstructionState;
-begin 
-	res.controlInfo := defaultControlInfo;
-	res.ip := (others => '0');
-	res.bits := (others=>'0');
-	
-	res.specificOperation := DEFAULT_SPECIFIC_OP;
-	res.tags := DEFAULT_INSTRUCTION_TAGS;
-	res.classInfo := defaultClassInfo;
-	res.constantArgs := defaultConstantArgs;
-	res.virtualArgSpec := DEFAULT_ARG_SPEC;
-	res.physicalArgSpec := DEFAULT_ARG_SPEC;
-	res.result := (others => '0');
-	res.target := (others => '0');
-	return res;
-end function;
-
 
 end InstructionState;

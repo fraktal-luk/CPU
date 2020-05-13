@@ -86,10 +86,10 @@ package body LogicExec is
 		return res;	
 	end function;
 
-	function resolveBranchCondition(av: InstructionArgValues; op: ArithOp) return std_logic is
+	function resolveBranchCondition(ss: SchedulerState; op: ArithOp) return std_logic is
 		variable isZero: std_logic;
 	begin
-		isZero := not isNonzero(av.args(0));
+		isZero := not isNonzero(ss.args(0));
 			
 		if op = opJ then
 			return '1';
@@ -116,8 +116,8 @@ package body LogicExec is
 		-- j taken		: if not taken goto return, if taken equal
 		-- j not taken : if not taken ok, if taken goto dest
 
-        targetMatch := bool2std(queueData.target = st.argValues.args(1));
-		branchTaken := resolveBranchCondition(st.argValues, ins.specificOperation.arith);
+        targetMatch := bool2std(queueData.target = st.args(1));
+		branchTaken := resolveBranchCondition(st, ins.specificOperation.arith);
 
 		if queueData.controlInfo.frontBranch = '1' and branchTaken = '0' then						
 			res.controlInfo.newEvent := '1';
@@ -126,7 +126,7 @@ package body LogicExec is
 			res.controlInfo.newEvent := '1';
 			res.controlInfo.confirmedBranch := '1';			
 			if ins.constantArgs.immSel = '0' then -- if branch reg			
-				trueTarget := st.argValues.args(1);
+				trueTarget := st.args(1);
 			else
 				trueTarget := queueData.target;
 			end if;
@@ -137,7 +137,7 @@ package body LogicExec is
 				if targetMatch = '0' then
 					res.controlInfo.newEvent := '1';	-- Need to correct the target!	
 				end if;
-				trueTarget := st.argValues.args(1); -- reg destination
+				trueTarget := st.args(1); -- reg destination
 			else
 				trueTarget := queueData.target;			
 			end if;
@@ -167,9 +167,9 @@ package body LogicExec is
 		variable tempBits: std_logic_vector(95 downto 0) := (others => '0'); -- TEMP! for 32b only
 	    variable shiftedBytes: std_logic_vector(39 downto 0) := (others => '0');
 	begin
-		arg0 := st.argValues.args(0);
-		arg1 := st.argValues.args(1);
-		arg2 := st.argValues.args(2);
+		arg0 := st.args(0);
+		arg1 := st.args(1);
+		arg2 := st.args(2);
 
 		if ins.specificOperation.arith = opSub then
 			argAddSub := not arg1;
@@ -265,9 +265,9 @@ package body LogicExec is
        variable res: InstructionState := ins;
 	begin
         if ins.specificOperation.float = opOr then
-           res.result := st.argValues.args(0) or st.argValues.args(1);
+           res.result := st.args(0) or st.args(1);
         elsif ins.specificOperation.float = opMove then
-           res.result := st.argValues.args(0);
+           res.result := st.args(0);
         else
            
 		end if;
@@ -284,7 +284,7 @@ package body LogicExec is
         if fromDLQ = '1' then
             return dlqData;
         else
-            res.result := add(st.argValues.args(0), st.argValues.args(1));
+            res.result := add(st.args(0), st.args(1));
             return res;
         end if;
     end function;

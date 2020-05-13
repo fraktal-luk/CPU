@@ -39,7 +39,7 @@ end LogicFront;
 package body LogicFront is
 
 function getInstructionClassInfo(ins: InstructionState) return InstructionClassInfo is
-	variable ci: InstructionClassInfo := defaultClassInfo;
+	variable ci: InstructionClassInfo := DEFAULT_CLASS_INFO;
 begin 
     -- Which clusters?
     ci.mainCluster := '1';
@@ -63,8 +63,8 @@ end function;
 function decodeInstruction(inputState: InstructionState) return InstructionState is
 	variable res: InstructionState := inputState;
     variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
-	variable tmpVirtualArgs: InstructionVirtualArgs;
-	variable tmpVirtualDestArgs: InstructionVirtualDestArgs;
+	--variable tmpVirtualArgs: InstructionVirtualArgs;
+	--variable tmpVirtualDestArgs: InstructionVirtualDestArgs;
 begin
 	decodedIns := decodeFromWord(inputState.bits);
 	

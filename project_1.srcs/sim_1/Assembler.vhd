@@ -27,6 +27,7 @@ use std.textio.all;
 use work.BasicTypes.all;
 use work.ArchDefs.all;
 
+use work.CpuText.all;
 
 package Assembler is
 
@@ -37,7 +38,9 @@ function readSourceFile(name: string) return ProgramBuffer;
 
 function processProgram(p: ProgramBuffer) return WordArray;
 
-    type TMP_StrArray is array(integer range <>) of string(1 to 10);
+constant MAX_LABEL_SIZE: natural := 20;
+
+type LabelArray is array(integer range <>) of string(1 to MAX_LABEL_SIZE);
 
 
 type OpcodeArray is array(0 to 63) of ProcOpcode;
@@ -117,8 +120,6 @@ function disasmWithAddress(a: natural; w: Word) return string;
 function disasmWord(w: Word) return string;
 
 procedure disasmToFile(name: string; arr: WordArray);
-
-function padTo(s: string; n: natural) return string;
 
 end Assembler;
 
@@ -224,7 +225,7 @@ begin
 end function;
 
 
-function findLabel(s: string; labels: TMP_StrArray) return integer is
+function findLabel(s: string; labels: LabelArray) return integer is
 begin
     for i in labels'range loop
         if matches(s, labels(i)) then
@@ -236,7 +237,7 @@ begin
 end function;
 
 
-function processInstruction(ar: GroupBuffer; num: integer; labels: TMP_StrArray) return word is
+function processInstruction(ar: GroupBuffer; num: integer; labels: LabelArray) return word is
     variable mnem: ProcMnemonic;
     variable res: word := (others => '0');
     variable vals: IntArray(0 to ar'length-1) := (others => -1);
@@ -380,7 +381,7 @@ end function;
 
 function processProgram(p: ProgramBuffer) return WordArray is
     variable insIndex: integer := 0; -- Actual number of instruction
-    variable labels: TMP_StrArray(0 to p'length-1) := (others => (others => cr));
+    variable labels: LabelArray(0 to p'length-1) := (others => (others => cr));
     variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
     variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext2, 0, 0, error, 0, 0));
 begin
@@ -409,21 +410,6 @@ begin
     return commands;
 end function;
 
-
-
-
-function padTo(s: string; n: natural) return string is
-    variable res: string(1 to n) := (others => ' ');
-    constant LEN: natural := s'length;
-begin
-    if LEN < n then
-        res(1 to LEN) := s;
-    else
-        res := s(1 to n);    
-    end if;
-    
-    return res;
-end function;
 
 function reg2str(n: natural; fp: boolean) return string is
     variable res: string(1 to 3) := "r00";
@@ -462,13 +448,13 @@ begin
         when others =>
     end case;
 
-    res(1 to 5) := padTo(ProcOpcode'image(opc), 5);
+    res(1 to 5) := padLeft(ProcOpcode'image(opc), 5);
     res(8 to 10) := reg2str(qa, aFP);
     res(11 to 12) := ", ";
     res(13 to 15) := reg2str(qb, false);
     res(16 to 17) := ", ";
     
-    res(18 to 25) := padTo(integer'image(imm), 24-17+1);
+    res(18 to 25) := padLeft(integer'image(imm), 24-17+1);
     
     return res;
 end function;
@@ -486,7 +472,7 @@ begin
     qd := slv2u(w(4 downto 0));
     
     
-    res(1 to 5) := padTo(ProcOpcode'image(opc), 5);
+    res(1 to 5) := padLeft(ProcOpcode'image(opc), 5);
     
     case opc is
         when j =>
@@ -503,7 +489,7 @@ begin
         when others =>
     end case;
 
-    res(immStart to immStart - 1 + immSize) := padTo(integer'image(imm), immSize);
+    res(immStart to immStart - 1 + immSize) := padLeft(integer'image(imm), immSize);
     
     return res;
 end function;
@@ -525,7 +511,7 @@ begin
     
     opct := OPCONT_TABLE_EXT0(slv2u(w(15 downto 10)));
 
-    res(1 to 5) := padTo(ProcOpcont'image(opct), 5);
+    res(1 to 5) := padLeft(ProcOpcont'image(opct), 5);
     res(8 to 10) := reg2str(qa, aFP);
     res(11 to 12) := ", ";
     res(13 to 15) := reg2str(qb, bFP);
@@ -538,7 +524,7 @@ begin
                      
         when shlC | shaC =>
         
-            res(18 to 25) := padTo(integer'image(imm), 24-17+1);
+            res(18 to 25) := padLeft(integer'image(imm), 24-17+1);
         when others =>
     end case;
     
@@ -561,7 +547,7 @@ begin
     
     opct := OPCONT_TABLE_EXT1(slv2u(w(15 downto 10)));
 
-    res(1 to 5) := padTo(ProcOpcont'image(opct), 5);
+    res(1 to 5) := padLeft(ProcOpcont'image(opct), 5);
     res(8 to 10) := reg2str(qa, aFP);
     res(11 to 12) := ", ";
     res(13 to 15) := reg2str(qb, bFP);
@@ -593,7 +579,7 @@ begin
     
     opct := OPCONT_TABLE_EXT2(slv2u(w(15 downto 10)));
 
-    res(1 to 5) := padTo(ProcOpcont'image(opct), 5);
+    res(1 to 5) := padLeft(ProcOpcont'image(opct), 5);
 
     case opct is
         -- 0 sources
@@ -607,7 +593,7 @@ begin
             res(13 to 15) := reg2str(0, bFP);
             res(16 to 17) := ", ";
 
-            res(18 to 25) := padTo(integer'image(imm), 24-17+1);
+            res(18 to 25) := padLeft(integer'image(imm), 24-17+1);
         -- FP 1 source
         when fmov => 
             res(8 to 10) := reg2str(qa, aFP);
@@ -641,7 +627,7 @@ begin
     
     opct := OPCONT_TABLE_FP(slv2u(w(15 downto 10)));
 
-    res(1 to 5) := padTo(ProcOpcont'image(opct), 5);
+    res(1 to 5) := padLeft(ProcOpcont'image(opct), 5);
 
     res(8 to 10) := reg2str(qa, aFP);
     res(11 to 12) := ", ";
@@ -707,23 +693,12 @@ function disasmWithAddress(a: natural; w: Word) return string is
     constant HEX_TAB: string(1 to 16) := "0123456789abcdef";
     variable c: character;
 begin
-    -- synthesis translate_off
-
-    for i in 0 to 7 loop
-        c := HEX_TAB(1 + (slv2u(aw(31 - 4*i downto 31 - 4*i - 3))));
-        res(1 + i) := c;
-    end loop;
-    
-    res(1 + 8 to 1 + 9) := ": ";
-    
-    for i in 0 to 7 loop
-        c := HEX_TAB(1 + (slv2u(w(31 - 4*i downto 31 - 4*i - 3))));
-        res(1 + 10 + i) := c;
-    end loop;    
-    
+    -- synthesis translate_off   
+    res(1 to 8) := w2hex(aw);
+    res(1 + 8 to 1 + 9) := ": "; res(10) := cr;
+    res(11 to 18) := w2hex(w);
     res(19 to 21) := "   ";
     res(22 to 22 + 24-1) := disasmWord(w);
-    
     -- synthesis translate_on
     
     return res;   

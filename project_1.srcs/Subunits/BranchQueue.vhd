@@ -264,14 +264,12 @@ begin
 	almostFull <= '0'; -- TODO: is it deprecated?
 	
 	VIEW: if VIEW_ON generate
-        use work.Viewing.all;
+       use work.Viewing.all;
       
-       signal queueTxt: --InstructionTextArray(0 to QUEUE_SIZE-1);
-                        StrArray(0 to QUEUE_SIZE-1);
-
+       signal queueTxt: StrArray(0 to QUEUE_SIZE-1);
        signal queueText: InsStringArray(0 to QUEUE_SIZE-1);
     begin
-           queueTxt <= createGenericStageView(makeSlotArray(content, fullMask));
+       queueTxt <= createGenericStageView(makeSlotArray(content, fullMask));
        
        queueText <= getInsStringArray(makeSlotArray(content, fullMask), control);       
     end generate;
