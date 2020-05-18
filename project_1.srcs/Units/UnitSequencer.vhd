@@ -66,6 +66,11 @@ entity UnitSequencer is
     commitGroupCtrOut: out InsTag;
     commitGroupCtrIncOut: out InsTag;
 
+    committedOut: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+    committedSending: out std_logic;
+    
+    lastEffectiveOut: out InstructionSlot;
+
     intAllowOut: out std_logic;
     
     intAckOut: out std_logic;
@@ -425,5 +430,19 @@ begin
 
     doneSig <= eventCommitted and bool2std(special.ins.specificOperation.system = opSend);
     failSig <= eventCommitted and bool2std(special.ins.specificOperation.system = opError);
-                
+    
+    OUTPUT_VIEWING: if VIEW_ON generate
+        committedOut <= stageDataCommitOutA;
+        committedSending <= sendingOutCommit;
+        
+        lastEffectiveOut <= stageDataLastEffectiveOutA(0);
+    end generate;
+    
+    NO_OUTPUT_VIEWING: if VIEW_ON generate
+        committedOut <= (others => DEFAULT_INS_SLOT);
+        committedSending <= '0';
+        
+        lastEffectiveOut <= DEFAULT_INS_SLOT;
+    end generate;    
+            
 end Behavioral;

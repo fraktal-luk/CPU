@@ -86,6 +86,11 @@ architecture Behavioral of Core is
     signal dataFromSB: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
     
     signal specialAction, specialActionBuffOut, specialOutROB: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+
+    signal committedOut: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal committedSending: std_logic := '0';
+    
+    signal lastEffectiveOut: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     signal cycleCounter: Word := (others => '0');
     
@@ -157,6 +162,11 @@ begin
 
         commitGroupCtrOut => commitGroupCtr,
         commitGroupCtrIncOut => commitGroupCtrInc,
+        
+        committedOut => committedOut,
+        committedSending => committedSending,
+        
+        lastEffectiveOut => lastEffectiveOut,
         
         doneSig => oaux(0),
         failSig => oaux(1)
@@ -294,7 +304,8 @@ begin
         
         signal frontEvStr, execEvStr, lateEvStr: InsString := (others => ' ');
         
-        signal renamedText: InsStringArray(0 to PIPE_WIDTH-1) := (others => (others => ' '));
+        signal renamedText, committedText: InsStringArray(0 to PIPE_WIDTH-1) := (others => (others => ' '));
+        signal lastEffectiveText: InsString := (others => ' ');
         
         signal renamedIntTextRe, renamedFloatTextRe, renamedMergedText, renamedTextBQ, renamedTextLQ, renamedTextSQ: GenericStageView;
         
@@ -306,6 +317,11 @@ begin
     
 
         renamedMergedText <= createGenericStageView(renamedDataMerged);
+        
+            renamedText <= getInsStringArray(renamedDataMerged, physDisasm);
+            committedText <= getInsStringArray(committedOut, physDisasm);
+        
+            lastEffectiveText <= getInsString(lastEffectiveOut, physDisasm);
         
         renamedTextBQ <= createGenericStageView(renamedDataToBQ);
         renamedTextLQ <= createGenericStageView(renamedDataToLQ);
