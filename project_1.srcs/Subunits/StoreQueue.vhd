@@ -442,11 +442,8 @@ begin
 	VIEW: if VIEW_ON generate
        use work.Viewing.all;
       
-       signal queueTxt: StrArray(0 to QUEUE_SIZE-1);                      
        signal queueText: InsStringArray(0 to QUEUE_SIZE-1);
-    begin
-       queueTxt <= createGenericStageView(makeSlotArray(content, fullOrCommittedMask));
-       
+    begin       
        queueText <= getInsStringArray(makeSlotArray(content, fullOrCommittedMask), transfer);
     end generate;
 	

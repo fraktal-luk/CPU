@@ -20,24 +20,18 @@ use work.InstructionState.all;
 
 package Viewing is
 
-type StrArray is array(integer range <>) of string(1 to 51);
-    
-subtype FetchStageView is StrArray(0 to FETCH_WIDTH-1);
-subtype GenericStageView is StrArray(0 to PIPE_WIDTH-1);
 
-
-function createGenericStageView(stageOutput: InstructionSlotArray) return StrArray;
-function createGenericStageView(stageOutput: SchedulerEntrySlotArray) return StrArray;
-
-
-
-type InsPrintFormat is (none, disasm, physDisasm, tags, control, transfer, status, args);
+type InsPrintFormat is (hex, disasm, physDisasm, tags, control, transfer, status, args);
 
 constant INS_STR_SIZE: natural := 51;
 subtype InsString is string(1 to INS_STR_SIZE);
 type InsStringArray is array(integer range <>) of InsString;
 
+subtype FetchStageView is InsStringArray(0 to FETCH_WIDTH-1);
+subtype GenericStageView is InsStringArray(0 to PIPE_WIDTH-1);
 
+
+function sprintHex(ins: InstructionState) return string;
 function sprintDisasm(ins: InstructionState) return string;
 function sprintPhysDisasm(ins: InstructionState) return string;
 function sprintTags(ins: InstructionState) return string;
@@ -46,6 +40,7 @@ function sprintTransfer(ins: InstructionState) return string;
 function sprintStatus(ins: InstructionState) return string;
 
 
+function sprintHex(isl: InstructionSlot) return string;
 function sprintDisasm(isl: InstructionSlot) return string;
 function sprintPhysDisasm(isl: InstructionSlot) return string;
 function sprintTags(isl: InstructionSlot) return string;
@@ -55,10 +50,18 @@ function sprintStatus(isl: InstructionSlot) return string;
 function sprintArgs(sl: SchedulerEntrySlot) return string;    
 function sprintRobRow(ia: InstructionSlotArray) return InsString;
 
+
+function getInsString(isl: InstructionSlot) return InsString;
+function getInsString(ssl: SchedulerEntrySlot) return InsString;
+
 function getInsString(isl: InstructionSlot; fmt: InsPrintFormat) return InsString;
+function getInsString(ssl: SchedulerEntrySlot; fmt: InsPrintFormat) return InsString;
+
+
+function getInsStringArray(ia: InstructionSlotArray) return InsStringArray;
+function getInsStringArray(sa: SchedulerEntrySlotArray) return InsStringArray;
 
 function getInsStringArray(ia: InstructionSlotArray; fmt: InsPrintFormat) return InsStringArray;
-
 function getInsStringArray(sa: SchedulerEntrySlotArray; fmt: InsPrintFormat) return InsStringArray;
   
 end package;
@@ -67,27 +70,49 @@ end package;
 package body Viewing is
 
 
+function getInsString(isl: InstructionSlot) return InsString is
+begin
+    return getInsString(isl, hex);
+end function;
+
+function getInsString(ssl: SchedulerEntrySlot) return InsString is
+begin
+    return getInsString(ssl, hex);
+end function;
+
 function getInsString(isl: InstructionSlot; fmt: InsPrintFormat) return InsString is
     variable res: InsString := (others => ' ');
 begin
-        case fmt is
-            when disasm =>
-                res := padLeft(sprintDisasm(isl), INS_STR_SIZE);
-            when physDisasm =>
-                res := padLeft(sprintPhysDisasm(isl), INS_STR_SIZE);
-            when tags =>
-                res := padLeft(sprintDisasm(isl), INS_STR_SIZE);
-            when control =>
-                res := padLeft(sprintControl(isl), INS_STR_SIZE);
-            when transfer =>
-                res := padLeft(sprintTransfer(isl), INS_STR_SIZE);                                                        
-            when status =>
-                res := padLeft(sprintStatus(isl), INS_STR_SIZE);                                                        
-                            
-            when others =>
-        end case;
+    case fmt is
+        when hex =>
+            res := padLeft(sprintHex(isl), INS_STR_SIZE);        
+        when disasm =>
+            res := padLeft(sprintDisasm(isl), INS_STR_SIZE);
+        when physDisasm =>
+            res := padLeft(sprintPhysDisasm(isl), INS_STR_SIZE);
+        when tags =>
+            res := padLeft(sprintDisasm(isl), INS_STR_SIZE);
+        when control =>
+            res := padLeft(sprintControl(isl), INS_STR_SIZE);
+        when transfer =>
+            res := padLeft(sprintTransfer(isl), INS_STR_SIZE);                                                        
+        when status =>
+            res := padLeft(sprintStatus(isl), INS_STR_SIZE);                                                        
+                        
+        when others =>
+    end case;
     
     return res;
+end function;
+
+function getInsString(ssl: SchedulerEntrySlot; fmt: InsPrintFormat) return InsString is
+    variable isl: InstructionSlot := (ssl.full, ssl.ins);
+begin
+    if fmt = args then
+        return padLeft(sprintArgs(ssl), INS_STR_SIZE);
+    else
+        return getInsString(isl, fmt);
+    end if;
 end function;
 
 
@@ -96,23 +121,7 @@ function getInsStringArray(ia: InstructionSlotArray; fmt: InsPrintFormat) return
     variable res: InsStringArray(0 to ia'length-1) := (others => (others => ' '));
 begin
     for i in 0 to ia'length-1 loop
-        case fmt is
-            when disasm =>
-                res(i) := padLeft(sprintDisasm(ia(i)), INS_STR_SIZE);
-            when physDisasm =>
-                res(i) := padLeft(sprintPhysDisasm(ia(i)), INS_STR_SIZE);
-            when tags =>
-                res(i) := padLeft(sprintDisasm(ia(i)), INS_STR_SIZE);
-            when control =>
-                res(i) := padLeft(sprintControl(ia(i)), INS_STR_SIZE);
-            when transfer =>
-                res(i) := padLeft(sprintTransfer(ia(i)), INS_STR_SIZE);                                                        
-            when status =>
-                res(i) := padLeft(sprintStatus(ia(i)), INS_STR_SIZE);                                                        
-                            
-            when others =>
-        end case;
-        
+        res(i) := getInsString(ia(i), fmt);
     end loop;
     
     return res;
@@ -123,67 +132,32 @@ function getInsStringArray(sa: SchedulerEntrySlotArray; fmt: InsPrintFormat) ret
     variable res: InsStringArray(0 to sa'length-1) := (others => (others => ' '));
 begin
     for i in 0 to sa'length-1 loop
-        case fmt is
-            when args =>
-                res(i) := padLeft(sprintArgs(sa(i)), INS_STR_SIZE); 
-                                            
-            when others =>
-        end case;
-        
+        res(i) := getInsString(sa(i), fmt);       
     end loop;
     
     return res;
 end function;
 
 
-function createGenericStageView(stageOutput: InstructionSlotArray) return StrArray is
-    variable res: StrArray(stageOutput'range);
-begin
-    for i in 0 to stageOutput'length-1 loop
-        if stageOutput(i).full = '1' then
-            res(i) := disasmWithAddress(slv2u(stageOutput(i).ins.ip), stageOutput(i).ins.bits);
-        end if;
-    end loop;
-    
-    return res;
+function getInsStringArray(ia: InstructionSlotArray) return InsStringArray is
+begin  
+    return getInsStringArray(ia, hex);
 end function;
 
-function createGenericStageView(stageOutput: SchedulerEntrySlotArray) return StrArray is
-    variable res: StrArray(stageOutput'range);
+function getInsStringArray(sa: SchedulerEntrySlotArray) return InsStringArray is
 begin
-    for i in 0 to stageOutput'length-1 loop
-        if stageOutput(i).full = '1' then
-            res(i) := disasmWithAddress(slv2u(stageOutput(i).ins.ip), stageOutput(i).ins.bits);
-        end if;
-    end loop;
-    
-    return res;
+    return getInsStringArray(sa, hex);
 end function;
 
 
 function tag2hex(t: InsTag) return string is
-    constant letters: string(1 to 16) := "0123456789abcdef";
-    variable res: string(1 to 3) := (others => '0');
 begin
---    res(1) := letters(slv2u(t(8 downto 8)) + 1);
---    res(2) := letters(slv2u(t(7 downto 4)) + 1);
---    res(3) := letters(slv2u(t(3 downto 0)) + 1);    
---    return res;
-    
     return slv2hex(t);
 end function;
 
 function strExt(str: string; n: positive) return string is 
-    variable res: string(1 to n) := (others => ' ');
 begin
     return padLeft(str, n);
---    for i in 1 to str'length loop
---        if i > n then
---            exit;
---        end if;
---        res(i) := str(i);
---    end loop;
---    return res;
 end function;
 
 
@@ -218,7 +192,6 @@ end function;
  
  
 function sprintTags(ins: InstructionState) return string is
-    variable res: string(1 to 5*(8) + (5-1)*2);
     variable ri: word := (others => '0');
 begin
     ri(TAG_SIZE-1 downto 0) := ins.tags.renameIndex; 
@@ -274,8 +247,13 @@ begin
 end function;
 
 
+function sprintHex(ins: InstructionState) return string is
+begin
+   return disasmWithAddress(slv2u(ins.ip), ins.bits);
+end function;
+
+
 function sprintDisasm(ins: InstructionState) return string is
-   variable res: string(1 to 5*(8) + (5-1)*2);    
 begin
    return opName(ins.specificOperation) & "  " & destText(ins) & ", " & srcText(ins, 0)& ", " & srcText(ins, 1) & ", " & srcText(ins, 2) & ", " & w2hex(ins.constantArgs.imm);
 end function;
@@ -371,6 +349,7 @@ begin
     end if;
     
     -- CAREFUL: not using the -+ signs because they'd need info on whether they are already evaluated
+    -- TODO? use completed and completed2 as indicators of evaluated front and Exec branch (Debug only!)
     if true then
         return condStr(1 to 9) & " -> " & trg & re;
     end if;
@@ -474,6 +453,11 @@ begin
 end function;
 
 
+function sprintHex(isl: InstructionSlot) return string is
+begin
+    return eraseIfEmpty(isl.full, sprintHex(isl.ins));
+end function;
+
 function sprintDisasm(isl: InstructionSlot) return string is
 begin
     return eraseIfEmpty(isl.full, sprintDisasm(isl.ins));
@@ -549,7 +533,6 @@ end function;
      
 
 function sprintArgsInternal(sl: SchedulerEntrySlot) return string is
-    variable tmp: string(1 to 10);
 begin
     return  destText(sl.ins) & ":" & physDestText(sl.ins) & " <- " &
             srcText(sl.ins, 0) & ":" & physSrcText(sl.ins, 0) & " [" & argLocText(sl, 0) & "], " &

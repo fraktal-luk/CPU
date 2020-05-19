@@ -273,15 +273,15 @@ begin
             return res;
         end function;  
     begin
-        insBufInput <= createGenericStageView(earlyBranchMultiDataInA);
+        insBufInput <= getInsStringArray(earlyBranchMultiDataInA);
 
-        stageFetch0 <= createGenericStageView(expandToSlotArray(stageDataOutFetch0, fetchedLine0));
-        stageFetch1 <= createGenericStageView(expandToSlotArray(stageDataOutFetch1, fetchedLine1));
-        stagePreBuffer <= createGenericStageView(earlyBranchMultiDataOutA);
+        stageFetch0 <= getInsStringArray(expandToSlotArray(stageDataOutFetch0, fetchedLine0));
+        stageFetch1 <= getInsStringArray(expandToSlotArray(stageDataOutFetch1, fetchedLine1));
+        stagePreBuffer <= getInsStringArray(earlyBranchMultiDataOutA);
         
-        branchTransferData <= createGenericStageView(dataBranchTransferOut);
+        branchTransferData <= getInsStringArray(dataBranchTransferOut);
         
-        stageOut <= createGenericStageView(ibufDataOut);
+        stageOut <= getInsStringArray(ibufDataOut);
     end generate;
 
 end Behavioral;

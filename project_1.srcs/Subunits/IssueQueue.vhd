@@ -265,19 +265,18 @@ begin
     
     VIEW: if VIEW_ON generate
         use work.Viewing.all;
-
-        signal queueTxt: StrArray(0 to IQ_SIZE-1);
-        signal inputStageTxt: StrArray(0 to PIPE_WIDTH-1);
         
-        signal prevReadyMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
-        
+        signal prevReadyMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');      
         signal flowSig: IntArray(0 to IQ_SIZE-1) := (others => -1);
-        
-        signal iqText: InsStringArray(0 to IQ_SIZE-1) := (others => (others => ' '));
-        
+
         subtype ReadyVec is std_logic_vector(0 to 2);
         type WakeupTable is array(0 to IQ_SIZE-1) of ReadyVec;
-        signal wakeup, wakeupSel: WakeupTable := (others => (others => '0'));    
+        signal wakeup, wakeupSel: WakeupTable := (others => (others => '0'));
+        
+        
+        signal queueText: InsStringArray(0 to IQ_SIZE-1);
+        signal inputStageText: InsStringArray(0 to PIPE_WIDTH-1);
+        signal iqText: InsStringArray(0 to IQ_SIZE-1) := (others => (others => ' '));            
     begin
         -- Monitor:
         -- fma - forward matches array
@@ -341,15 +340,15 @@ begin
             end if;
         end process;
         
-        iqText <= getInsStringArray(queueContent, args);
         
         WAKEUP_VECS: for i in 0 to IQ_SIZE-1 generate
             wakeup(i) <= not queueContentUpdated(i).state.missing and queueContent(i).state.missing when fullMask(i) = '1' else (others => '0');
             wakeupSel(i) <= not queueContentUpdatedSel(i).state.missing and queueContent(i).state.missing when fullMask(i) = '1' else (others => '0');        
         end generate;
-        
-        queueTxt <= createGenericStageView(queueContent);
-        inputStageTxt <= createGenericStageView(inputStage);
+
+        iqText <= getInsStringArray(queueContent, args);        
+        queueText <= getInsStringArray(queueContent);
+        inputStageText <= getInsStringArray(inputStage);
     end generate;
 	   	   
 end Behavioral;

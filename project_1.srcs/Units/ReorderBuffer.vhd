@@ -294,7 +294,7 @@ begin
 	VIEW: if VIEW_ON generate
 	   use work.Viewing.all;
 	
-	   type StageTextArray is array (integer range <>) of StrArray(0 to PIPE_WIDTH-1);
+	   type StageTextArray is array (integer range <>) of InsStringArray(0 to PIPE_WIDTH-1);
 	   
 	   signal robView: StageTextArray(0 to ROB_SIZE-1);	   
 	   subtype RobSlotText is string(1 to 80);
@@ -305,7 +305,7 @@ begin
 	   begin
 	       for i in 0 to ROB_SIZE-1 loop
 	           if content(i).full = '1' then
-	               res(i) := createGenericStageView(content(i).ops);    
+	               res(i) := getInsStringArray(content(i).ops);    
 	           end if;
 	       end loop;
 	       

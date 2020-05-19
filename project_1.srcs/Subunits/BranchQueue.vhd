@@ -69,9 +69,9 @@ architecture Behavioral of BranchQueue is
 	signal dataOutSig, dataOutSigNext, dataOutSigFinal: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
 	signal pStart, pStartNext, pTagged, pAll, causingPtr: SmallNumber := (others => '0');
-	   signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
-	   signal recoveryCounter: SmallNumber := (others => '0');
-	   signal isFull, isAlmostFull: std_logic := '0';
+    signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
+    signal recoveryCounter: SmallNumber := (others => '0');
+    signal isFull, isAlmostFull: std_logic := '0';
 	
 
     function getNewContentBr(content: InstructionStateArray; dataIn, dataInBr: InstructionSlotArray;
@@ -266,11 +266,8 @@ begin
 	VIEW: if VIEW_ON generate
        use work.Viewing.all;
       
-       signal queueTxt: StrArray(0 to QUEUE_SIZE-1);
        signal queueText: InsStringArray(0 to QUEUE_SIZE-1);
-    begin
-       queueTxt <= createGenericStageView(makeSlotArray(content, fullMask));
-       
+    begin       
        queueText <= getInsStringArray(makeSlotArray(content, fullMask), control);       
     end generate;
 

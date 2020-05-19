@@ -316,23 +316,23 @@ begin
         lateEv  <= (lateEventSignal,  lateCausing);
     
 
-        renamedMergedText <= createGenericStageView(renamedDataMerged);
+        renamedMergedText <= getInsStringArray(renamedDataMerged);
         
             renamedText <= getInsStringArray(renamedDataMerged, physDisasm);
             committedText <= getInsStringArray(committedOut, physDisasm);
         
             lastEffectiveText <= getInsString(lastEffectiveOut, physDisasm);
         
-        renamedTextBQ <= createGenericStageView(renamedDataToBQ);
-        renamedTextLQ <= createGenericStageView(renamedDataToLQ);
-        renamedTextSQ <= createGenericStageView(renamedDataToSQ);
+        renamedTextBQ <= getInsStringArray(renamedDataToBQ);
+        renamedTextLQ <= getInsStringArray(renamedDataToLQ);
+        renamedTextSQ <= getInsStringArray(renamedDataToSQ);
         
         
-        renamedIntTextRe <= createGenericStageView(renamedDataLivingRe);
-        renamedFloatTextRe <= createGenericStageView(renamedDataLivingFloatRe);
+        renamedIntTextRe <= getInsStringArray(renamedDataLivingRe);
+        renamedFloatTextRe <= getInsStringArray(renamedDataLivingFloatRe);
         
         
-        robOutText <= createGenericStageView(dataOutROB);
+        robOutText <= getInsStringArray(dataOutROB);
         
 
                 frontEvStr <= getInsString(frontEv, control);
@@ -1109,7 +1109,9 @@ begin
          allowIssueStoreDataInt <= not (issuedStoreDataInt and issuedStoreDataFP);
          allowIssueStoreDataFP <= allowIssueStoreDataInt;
          
-         -------------------------------------------  
+         -------------------------------------------
+         --DELAY_STAGES: block
+         --begin
             STAGE_I0_D0: entity work.GenericStage(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
@@ -1210,7 +1212,7 @@ begin
                 lateEventSignal => '0',
                 execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
             );
-
+        --end block; -- DELAY_STAGES
                 
             -- TEMP:
             SCHED_BLOCK: process(clk)
@@ -1413,33 +1415,36 @@ begin
 	   VIEW: if VIEW_ON generate
             use work.Viewing.all;
            
-            signal issueTextI0, issueTextM0, issueTextSVI, issueTextSVF, issueTextF0: StrArray(0 to 0);
-            signal slotTextRegReadF0: StrArray(0 to 0);            
-            signal slotTextI0_E0, slotTextI0_E1, slotTextI0_E2, slotTextM0_E0, slotTextM0_E1i, slotTextM0_E2i, slotTextM0_E1f, slotTextM0_E2f: StrArray(0 to 0);
+            signal cycleCount: Mword := (others => '0');
+            
+            signal issueTextI0, issueTextM0, issueTextSVI, issueTextSVF, issueTextF0: InsStringArray(0 to 0);
+            signal slotTextRegReadF0: InsStringArray(0 to 0);            
+            signal slotTextI0_E0, slotTextI0_E1, slotTextI0_E2, slotTextM0_E0, slotTextM0_E1i, slotTextM0_E2i, slotTextM0_E1f, slotTextM0_E2f: InsStringArray(0 to 0);
             
             signal iqInputI0, iqInputI1, iqInputM0, iqInputSVI, iqInputSVF, iqInputF0: GenericStageView;
-            signal execOutputsText1, execOutputsText2: StrArray(0 to 3);-- InstructionTextArray(0 to 3);
-            
-            signal lastSentI0, lastSentM0, lastSentSVI, lastSentSVF, lastSentF0: Mword := (others => '0');
-            signal lastCompI0, lastCompM0, lastCompSVI, lastCompSVF, lastCompF0: Mword := (others => '0');
-            
+            signal execOutputsText1, execOutputsText2: InsStringArray(0 to 3);
+ 
             type SubpipeMonitor is record
                 empty: std_logic;
-                lastSent: Mword;
-                lastComp: Mword;
+                lastSent: integer;
+                lastComp: integer;
             end record;
             
-            constant DEFAULT_SUBPIPE_MONITOR: SubpipeMonitor := ('0', (others => '0'), (others => '0'));
+            constant DEFAULT_SUBPIPE_MONITOR: SubpipeMonitor := ('0', -1, -1);
             
             function updateSubpipeMonitor(sm: SubpipeMonitor; empty: std_logic; cycleCtr: Mword; sent, comp: std_logic) return SubpipeMonitor is
                 variable res: SubpipeMonitor := sm;
             begin
                 res.empty := empty;
                 if sent = '1' then
-                    res.lastSent := cycleCtr;
+                    res.lastSent := 0;
+                elsif res.lastSent >= 0 then
+                    res.lastSent := res.lastSent + 1;
                 end if;
                 if comp = '1' then
-                    res.lastComp := cycleCtr;
+                    res.lastComp := 0;
+                elsif res.lastComp >= 0 then
+                    res.lastComp := res.lastComp + 1;
                 end if;
                 return res;
             end function;
@@ -1448,30 +1453,36 @@ begin
             
             signal monitorI0, monitorM0, monitorSVI, monitorSVF, monitorF0: SubpipeMonitor := DEFAULT_SUBPIPE_MONITOR; 
          begin
-            execOutputsText1 <= createGenericStageView(execOutputs1);
-            execOutputsText2 <= createGenericStageView(execOutputs2);
+            cycleCount <= cycleCounter;
+            
+            execOutputsText1 <= getInsStringArray(execOutputs1);
+            execOutputsText2 <= getInsStringArray(execOutputs2);
             
             
-                iqInputI0 <= createGenericStageView(schedDataI0);
-                iqInputM0 <= createGenericStageView(schedDataM0);
-                iqInputSVI <= createGenericStageView(schedDataStoreValue);
-                iqInputSVF <= createGenericStageView(schedDataStoreValueFloat);
-                iqInputF0 <= createGenericStageView(schedDataF0);
+            iqInputI0 <= getInsStringArray(schedDataI0);
+            iqInputM0 <= getInsStringArray(schedDataM0);
+            iqInputSVI <= getInsStringArray(schedDataStoreValue);
+            iqInputSVF <= getInsStringArray(schedDataStoreValueFloat);
+            iqInputF0 <= getInsStringArray(schedDataF0);
          
-            issueTextI0 <= createGenericStageView(SchedulerEntrySlotArray'(0 => slotIssueI0));
-            issueTextM0 <= createGenericStageView(SchedulerEntrySlotArray'(0 => slotIssueM0));
+            issueTextI0 <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotIssueI0));
+            issueTextM0 <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotIssueM0));
+            issueTextSVI <= getInsStringArray(SchedulerEntrySlotArray'(0 => dataToRegReadStoreValue));
+            issueTextSVF <= getInsStringArray(SchedulerEntrySlotArray'(0 => dataToRegReadFloatStoreValue));
+            issueTextF0 <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotIssueF0));
+
             
-            slotTextRegReadF0 <= createGenericStageView(SchedulerEntrySlotArray'(0 => slotRegReadF0));
+            slotTextRegReadF0 <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotRegReadF0));
 
-            slotTextI0_E0 <= createGenericStageView(slotI0_E0);
-            slotTextI0_E1 <= createGenericStageView(slotI0_E1);
-            slotTextI0_E2 <= createGenericStageView(slotI0_E2);
+            slotTextI0_E0 <= getInsStringArray(slotI0_E0);
+            slotTextI0_E1 <= getInsStringArray(slotI0_E1);
+            slotTextI0_E2 <= getInsStringArray(slotI0_E2);
 
-            slotTextM0_E0 <= createGenericStageView(slotM0_E0);
-            slotTextM0_E1i <= createGenericStageView(slotM0_E1i);
-            slotTextM0_E1f <= createGenericStageView(slotM0_E1f);
-            slotTextM0_E2i <= createGenericStageView(slotM0_E2i);
-            slotTextM0_E2f <= createGenericStageView(slotM0_E2f);
+            slotTextM0_E0 <= getInsStringArray(slotM0_E0);
+            slotTextM0_E1i <= getInsStringArray(slotM0_E1i);
+            slotTextM0_E1f <= getInsStringArray(slotM0_E1f);
+            slotTextM0_E2i <= getInsStringArray(slotM0_E2i);
+            slotTextM0_E2f <= getInsStringArray(slotM0_E2f);
 
 
             slotM0_E1iText <= getInsString(slotM0_E1i(0), transfer);
@@ -1485,11 +1496,11 @@ begin
                     
                     -- Issue & complete monitoring
                     -- sendingSel* - from IQ;  sendingIssue* - form Issue stage
-                    monitorI0 <= updateSubpipeMonitor(monitorI0, emptyI0, cycleCounter, sendingSelI0, '0');
-                    monitorM0 <= updateSubpipeMonitor(monitorM0, emptyM0, cycleCounter, sendingSelM0, '0');
+                    monitorI0 <= updateSubpipeMonitor(monitorI0, emptyI0, cycleCounter, sendingSelI0, sendingI0_D0);
+                    monitorM0 <= updateSubpipeMonitor(monitorM0, emptyM0, cycleCounter, sendingSelM0, sendingM0_D0i or sendingM0_D0f);
                     monitorSVI <= updateSubpipeMonitor(monitorSVI, emptySVI, cycleCounter, sendingToIssueStoreValue, '0');
                     monitorSVF <= updateSubpipeMonitor(monitorSVF, emptySVF, cycleCounter, sendingToIssueFloatStoreValue, '0');
-                    monitorF0 <= updateSubpipeMonitor(monitorF0, emptyF0, cycleCounter, sendingSelF0, '0'); 
+                    monitorF0 <= updateSubpipeMonitor(monitorF0, emptyF0, cycleCounter, sendingSelF0, sendingF0_D0); 
                     
                 end if;
             end process;                                     

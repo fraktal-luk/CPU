@@ -402,11 +402,11 @@ begin
 	       use work.Viewing.all;	        
         -- CAREFUL, TODO: include replaced intPointer and floatPointer in this view 
        signal committedText: GenericStageView;
-       signal lastEffectiveText, lateCausingText: StrArray(0 to 0);
+       signal lastEffectiveText, lateCausingText: InsStringArray(0 to 0);
     begin
-       committedText <= createGenericStageView(stageDataCommitOutA);
-       lastEffectiveText <= createGenericStageView(stageDataLastEffectiveOutA);
-       lateCausingText <= createGenericStageView(stageDataLateCausingOut);
+       committedText <= getInsStringArray(stageDataCommitOutA);
+       lastEffectiveText <= getInsStringArray(stageDataLastEffectiveOutA);
+       lateCausingText <= getInsStringArray(stageDataLateCausingOut);
     end generate;
    
     EVENT_LINK_INFO: process(clk)
@@ -438,11 +438,11 @@ begin
         lastEffectiveOut <= stageDataLastEffectiveOutA(0);
     end generate;
     
-    NO_OUTPUT_VIEWING: if VIEW_ON generate
-        committedOut <= (others => DEFAULT_INS_SLOT);
-        committedSending <= '0';
+--    NO_OUTPUT_VIEWING: if not VIEW_ON generate
+--        committedOut <= (others => DEFAULT_INS_SLOT);
+--        committedSending <= '0';
         
-        lastEffectiveOut <= DEFAULT_INS_SLOT;
-    end generate;    
+--        lastEffectiveOut <= DEFAULT_INS_SLOT;
+--    end generate;    
             
 end Behavioral;
