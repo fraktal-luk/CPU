@@ -258,9 +258,10 @@ begin
         signal putVecInt, putVecFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
         signal nPutInt, nPutFloat: integer := 0;
     begin
-        putVecInt <= whichPutReg(stageDataToCommit, false);
-        putVecFloat <= whichPutReg(stageDataToCommit, true);
-
+        putVecInt <= whichPutReg(--stageDataToCommit, false);
+                                 robDataLiving, false);
+        putVecFloat <= whichPutReg(--stageDataToCommit, true);
+                                   robDataLiving, true);
         nPutInt <= countOnes(putVecInt);
         nPutFloat <= countOnes(putVecFloat);
 
@@ -268,7 +269,8 @@ begin
         floatPointerNext <= i2slv(slv2u(floatPointer) + nPutFloat, SMALL_NUMBER_SIZE) when sendingToCommit = '1' else floatPointer;
     end block;
 
-    effectiveMask <= getEffectiveMask(stageDataToCommit);
+    effectiveMask <= getEffectiveMask(--stageDataToCommit);
+                                      robDataLiving);
         
     COMMON_SYNCHRONOUS: process(clk)     
     begin
@@ -288,29 +290,33 @@ begin
     
     sendingToCommit <= sendingFromROB;
     
-    -- Commit stage: in order again                
-    SUBUNIT_COMMIT: entity work.GenericStage(Behavioral)
-    generic map(
-        WIDTH => PIPE_WIDTH
-    )
-    port map(
-        clk => clk, reset => resetSig, en => enSig,
-        
-        -- Interface with CQ
-        prevSending => sendingToCommit,
-        stageDataIn => stageDataToCommit,
-        acceptingOut => open, -- unused but don't remove
-        
-        -- Interface with hypothetical further stage
-        nextAccepting => '1',
-        sendingOut => sendingOutCommit,
-        stageDataOut => stageDataCommitOutA,
-        
-        -- Event interface
-        execEventSignal => '0', -- CAREFUL: committed cannot be killed!
-        lateEventSignal => '0',    
-        execCausing => execCausing
-    );
+    COMMIT_STAGE: if VIEW_ON generate
+        stageDataToCommit <= recreateGroup(robDataLiving, dataFromBQV, stageDataLastEffectiveOutA(0).ins.target, commitCtr);
+
+        -- Commit stage: in order again                
+        SUBUNIT_COMMIT: entity work.GenericStage(Behavioral)
+        generic map(
+            WIDTH => PIPE_WIDTH
+        )
+        port map(
+            clk => clk, reset => resetSig, en => enSig,
+            
+            -- Interface with CQ
+            prevSending => sendingToCommit,
+            stageDataIn => stageDataToCommit,
+            acceptingOut => open, -- unused but don't remove
+            
+            -- Interface with hypothetical further stage
+            nextAccepting => '1',
+            sendingOut => sendingOutCommit,
+            stageDataOut => stageDataCommitOutA,
+            
+            -- Event interface
+            execEventSignal => '0', -- CAREFUL: committed cannot be killed!
+            lateEventSignal => '0',    
+            execCausing => execCausing
+        );
+    end generate;
 
     -- Tracking of target:
     --            'target' field of last effective will hold the address of next instruction
@@ -320,7 +326,6 @@ begin
     --            When committing normal op -> increment by length of the op
     --            
     --            The 'target' field will be used to update return address for exc/int
-    stageDataToCommit <= recreateGroup(robDataLiving, dataFromBQV, stageDataLastEffectiveOutA(0).ins.target, commitCtr);
     stageDataLastEffectiveInA(0) <= getNewEffective(sendingToCommit, robDataLiving, dataFromBQV,
                                                                 stageDataLastEffectiveOutA(0).ins, 
                                                                 stageDataLateCausingOut(0).ins,
