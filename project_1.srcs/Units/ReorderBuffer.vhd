@@ -104,10 +104,10 @@ architecture Behavioral of ReorderBuffer is
 	           ptr1 := getTagHighSN(execInfo1(j).ins.tags.renameIndex) and PTR_MASK_SN;
                ptr2 := getTagHighSN(execInfo2(j).ins.tags.renameIndex) and PTR_MASK_SN;
 	           if ptr1 = iv then
-	               res(i).ops := updateOpGroup(res(i).ops, execInfo1(j), 0);
+	               res(i).ops := updateOpGroup(res(i).ops, execInfo1(j), 0, j = 2); -- [2] is Mem subpipe
 	           end if;
 	           if ptr2 = iv then
-	               res(i).ops := updateOpGroup(res(i).ops, execInfo2(j), 1);
+	               res(i).ops := updateOpGroup(res(i).ops, execInfo2(j), 1, false);
 	           end if;
 	       end loop;
 	       

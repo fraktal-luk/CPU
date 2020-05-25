@@ -333,6 +333,7 @@ package body LogicExec is
              if storeForwardIns.controlInfo.completed2 = '0' then
                  res.controlInfo.sqMiss := '1';
                  res.controlInfo.specialAction := '1';
+                 res.controlInfo.newEvent := '1';
              end if;
          else
             res.result := memLoadValue;
@@ -342,6 +343,7 @@ package body LogicExec is
          if isStoreMemOp(ins) = '1' and lqSelectedOutput.full = '1' then
             res.controlInfo.orderViolation := '1';
             res.controlInfo.specialAction := '1';
+            res.controlInfo.newEvent := '1';
          end if;
 
         -- TODO: remember about miss/hit status and reason of miss if relevant!

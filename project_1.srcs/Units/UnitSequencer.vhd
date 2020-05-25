@@ -326,7 +326,7 @@ begin
     --            When committing normal op -> increment by length of the op
     --            
     --            The 'target' field will be used to update return address for exc/int
-    stageDataLastEffectiveInA(0) <= getNewEffective(sendingToCommit, robDataLiving, dataFromBQV,
+    stageDataLastEffectiveInA(0) <= getNewEffective(sendingToCommit, robDataLiving, dataFromBQV, effectiveMask,
                                                                 stageDataLastEffectiveOutA(0).ins, 
                                                                 stageDataLateCausingOut(0).ins,
                                                                 lateEventSending);

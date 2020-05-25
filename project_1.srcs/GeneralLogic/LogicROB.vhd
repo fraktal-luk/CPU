@@ -31,7 +31,7 @@ constant DEFAULT_ROB_ARRAY: ReorderBufferArray := (others => DEFAULT_ROB_ENTRY);
 
 function getMaskBetween(nBits: integer; startP, endP: SmallNumber; full: std_logic) return std_logic_vector;
 
-function updateOpGroup(ops: InstructionSlotArray; execResult: InstructionSlot; num: natural)
+function updateOpGroup(ops: InstructionSlotArray; execResult: InstructionSlot; num: natural; allowMem: boolean)
 return InstructionSlotArray;
 
 function groupCompleted(insVec: InstructionSlotArray) return std_logic;
@@ -79,7 +79,7 @@ begin
     return res;
 end function;
 
-function updateOpGroup(ops: InstructionSlotArray; execResult: InstructionSlot; num: natural)
+function updateOpGroup(ops: InstructionSlotArray; execResult: InstructionSlot; num: natural; allowMem: boolean)
 return InstructionSlotArray is
     variable res: InstructionSlotArray(0 to ops'length-1) := ops;
     variable il: SmallNumber := getTagLowSN(execResult.ins.tags.renameIndex);
@@ -105,16 +105,17 @@ begin
             end if;
 
             if execResult.ins.controlInfo.hasException = '1' then
-                res(k).ins.controlInfo.newEvent := '1'; --- !!!
+                --res(k).ins.controlInfo.newEvent := '1'; --- !!!
                 res(k).ins.controlInfo.hasException := '1';
                 eventFound := true;
             end if;
 
-            if execResult.ins.controlInfo.specialAction = '1' then -- TODO: remove it, not handled by Exec engine/
-                res(k).ins.controlInfo.newEvent := '1'; --- !!!
+            -- Only if this is Memory subpipe:
+            if allowMem and execResult.ins.controlInfo.specialAction = '1' then -- TODO: remove it, not handled by Exec engine/
+                --res(k).ins.controlInfo.newEvent := '1'; --- !!!
                 res(k).ins.controlInfo.specialAction := '1';
                 res(k).ins.controlInfo.refetch := '1';
-                eventFound := true;
+                --eventFound := true;
             end if;
 
 --            -- CAREFUL: this is handled in SQ. Probably not implemented here, but can/should be done for debugging
