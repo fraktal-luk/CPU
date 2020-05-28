@@ -46,7 +46,9 @@ package LogicExec is
                                       sysLoadReady: std_logic; sysLoadValue: Mword;
                                       storeForwardSending: std_logic; storeForwardIns: InstructionState;
                                       lqSelectedOutput: InstructionSlot
-                                        ) return InstructionState;	
+                                        ) return InstructionState;
+                                        
+    function getStoreDataOp(ss: SchedulerEntrySlot) return SchedulerEntrySlot;                                            
 end LogicExec;
 
 
@@ -149,6 +151,23 @@ package body LogicExec is
 		res.result := queueData.result;
 		res.tags.intPointer := queueData.tags.intPointer;
 		res.tags.floatPointer := queueData.tags.floatPointer;
+		
+		if CLEAR_DEBUG_INFO then
+		    res := clearDbCounters(res);
+		    res := clearRawInfo(res);
+		    res.constantArgs := DEFAULT_CONSTANT_ARGS;
+		    res.classInfo := DEFAULT_CLASS_INFO;
+		    
+		    res.specificOperation := DEFAULT_SPECIFIC_OP;
+		      
+		    res.virtualArgSpec.intArgSel := (others => '0');
+		    res.virtualArgSpec.floatArgSel := (others => '0');
+		    res.virtualArgSpec.args := (others => (others => '0'));
+		    
+		    res.physicalArgSpec.intArgSel := (others => '0');
+		    res.physicalArgSpec.floatArgSel := (others => '0');
+		    res.physicalArgSpec.args := (others => (others => '0'));
+		end if;
 							
 		return res;
 	end function;
@@ -255,6 +274,25 @@ package body LogicExec is
 			res.controlInfo.hasException := '1';
 		end if;      		
 		res.result := result;
+
+		if CLEAR_DEBUG_INFO then
+		    res := clearDbCounters(res);
+		    res := clearRawInfo(res);
+		    res.constantArgs := DEFAULT_CONSTANT_ARGS;
+		    res.classInfo := DEFAULT_CLASS_INFO;
+
+            res.specificOperation := DEFAULT_SPECIFIC_OP;
+
+		    res.virtualArgSpec.intArgSel := (others => '0');
+		    res.virtualArgSpec.floatArgSel := (others => '0');
+		    res.virtualArgSpec.args := (others => (others => '0'));
+		    
+		    res.physicalArgSpec.intArgSel := (others => '0');
+		    res.physicalArgSpec.floatArgSel := (others => '0');
+		    res.physicalArgSpec.args := (others => (others => '0'));
+		    
+		    res.target := (others => '0');
+		end if;
 		
 		return res;
 	end function;
@@ -272,6 +310,23 @@ package body LogicExec is
            
 		end if;
 
+		if CLEAR_DEBUG_INFO then
+		    res := clearDbCounters(res);
+		    res := clearRawInfo(res);
+		    res.constantArgs := DEFAULT_CONSTANT_ARGS;
+		    res.classInfo := DEFAULT_CLASS_INFO;
+		    	    
+		    res.virtualArgSpec.intArgSel := (others => '0');
+		    res.virtualArgSpec.floatArgSel := (others => '0');
+		    res.virtualArgSpec.args := (others => (others => '0'));
+		    
+		    res.physicalArgSpec.intArgSel := (others => '0');
+		    res.physicalArgSpec.floatArgSel := (others => '0');
+		    res.physicalArgSpec.args := (others => (others => '0'));
+		    
+		    res.target := (others => '0');
+		end if;
+
 		return res;
 	end function;
 
@@ -282,11 +337,30 @@ package body LogicExec is
         variable res: InstructionState := ins;
     begin
         if fromDLQ = '1' then
-            return dlqData;
+            res := dlqData;
         else
             res.result := add(st.args(0), st.args(1));
-            return res;
+            --return res;
         end if;
+
+		if CLEAR_DEBUG_INFO then
+		    res := clearDbCounters(res);
+		    res := clearRawInfo(res);
+		    res.constantArgs := DEFAULT_CONSTANT_ARGS;
+		    res.classInfo := DEFAULT_CLASS_INFO;
+		    	    
+		    res.virtualArgSpec.intArgSel := (others => '0');
+		    res.virtualArgSpec.floatArgSel := (others => '0');
+		    res.virtualArgSpec.args := (others => (others => '0'));
+		    
+		    res.physicalArgSpec.intArgSel := (others => '0');
+		    res.physicalArgSpec.floatArgSel := (others => '0');
+		    res.physicalArgSpec.args := (others => (others => '0'));
+		    
+		    res.target := (others => '0');
+		end if;
+        
+        return res;
     end function;
     
     
@@ -350,4 +424,27 @@ package body LogicExec is
         res := setAddressCompleted(res, '1'); -- TEMP
         return res;
     end function;
+    
+    function getStoreDataOp(ss: SchedulerEntrySlot) return SchedulerEntrySlot is
+        variable res: SchedulerEntrySlot := ss;
+    begin
+    
+        if CLEAR_DEBUG_INFO then
+		    res.ins := clearDbCounters(res.ins);
+            res.ins := clearRawInfo(res.ins);
+            
+            res.ins.specificOperation := DEFAULT_SPECIFIC_OP;
+            
+            res.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
+            res.ins.classInfo := DEFAULT_CLASS_INFO;
+                    
+            res.ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+            res.ins.physicalArgSpec := DEFAULT_ARG_SPEC;
+            
+            res.ins.target := (others => '0');
+            res.ins.result := (others => '0');
+        end if;
+        
+        return res;
+    end function;    
 end LogicExec;

@@ -553,7 +553,7 @@ begin
             );
             
             execEventSignal <= dataFromBranch.ins.controlInfo.newEvent and sendingBranch;
-            execCausing <= dataFromBranch.ins;
+            execCausing <= clearDbCausing(dataFromBranch.ins);
             bqUpdate <= dataFromBranch;
         end block;
          
@@ -935,8 +935,8 @@ begin
                 regValues => regValsFS0     
             );
     
-            dataToExecStoreValue <= dataToExecFloatStoreValue when dataToExecFloatStoreValue.full = '1'
-                            else    dataToExecIntStoreValue;
+            dataToExecStoreValue <= getStoreDataOp(dataToExecFloatStoreValue) when dataToExecFloatStoreValue.full = '1'
+                            else    getStoreDataOp(dataToExecIntStoreValue);
         end block;
 
         
@@ -1089,8 +1089,9 @@ begin
         
            
          sqValueInput <= -- CAREFUL: This implies that integer StoreData op value is lost when Int and FP are issued simultaneously. This must be prevented by scheduler!
-                    (dataToExecFloatStoreValue.full, setInstructionResult(dataToExecFloatStoreValue.ins, dataToExecFloatStoreValue.state.args(0))) when dataToExecFloatStoreValue.full = '1' 
-            else    (dataToExecIntStoreValue.full,   setInstructionResult(dataToExecIntStoreValue.ins,   dataToExecIntStoreValue.state.args(0))); -- TEMP!!
+           --        (dataToExecFloatStoreValue.full, setInstructionResult(dataToExecFloatStoreValue.ins, dataToExecFloatStoreValue.state.args(0))) when dataToExecFloatStoreValue.full = '1' 
+           -- else    (dataToExecIntStoreValue.full,   setInstructionResult(dataToExecIntStoreValue.ins,   dataToExecIntStoreValue.state.args(0))); -- TEMP!!
+                    (dataToExecStoreValue.full, setInstructionResult(dataToExecStoreValue.ins, dataToExecStoreValue.state.args(0)));
          
          -- StoreData issue control:
          -- When Int and FP store data issue at the same time, the port conflict is resolved thus:

@@ -299,7 +299,29 @@ begin
 
     ready := (others => '1');--not res.state.missing;
     res.state := updateArgLocs_Issue(res.state, ready);
+    
+    if CLEAR_DEBUG_INFO then
+        res.ins := clearDbCounters(res.ins);
+        res.ins := clearAbstractInfo(res.ins);
+        
+        res.ins.controlInfo := DEFAULT_CONTROL_INFO;
 
+        res.ins.classInfo := DEFAULT_CLASS_INFO;
+        res.ins.constantArgs.imm := (others => '0');
+        
+        res.ins.virtualArgSpec.args := (others => (others => '0'));
+        res.ins.virtualArgSpec.intArgSel := (others => '0');
+        res.ins.virtualArgSpec.floatArgSel := (others => '0');
+
+        
+--        -- This breaks store tests:        
+--        if not DELAY_ONLY then
+--            res.ins.physicalArgSpec.args := (others => (others => '0'));
+--            res.ins.physicalArgSpec.intArgSel := (others => '0');
+--            res.ins.physicalArgSpec.floatArgSel := (others => '0');
+--        end if;      
+    end if;
+    
 	return res;
 end function;
 

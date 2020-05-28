@@ -138,6 +138,13 @@ architecture Behavioral of ReorderBuffer is
 	function replaceConstantInformation(insVec: InstructionSlotArray; constInfo, constInfo2, constInfo3: Word) return InstructionSlotArray is
 	   variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
 	begin
+	   if CLEAR_DEBUG_INFO then
+           for i in 0 to PIPE_WIDTH-1 loop
+	           res(i).ins := DEFAULT_INSTRUCTION_STATE;
+	           res(i).ins.controlInfo := insVec(i).ins.controlInfo;
+	       end loop;       
+	   end if;
+	
 	   for i in 0 to PIPE_WIDTH-1 loop
 	       res(i).ins.physicalArgSpec.dest := constInfo(8*i + 7 downto 8*i);
 	       res(i).ins.virtualArgSpec.dest := "000" & constInfo2(5*i + 4 downto 5*i);
@@ -147,6 +154,7 @@ architecture Behavioral of ReorderBuffer is
 	       
 	       res(i).ins.physicalArgSpec.intDestSel := constInfo3(1 + 2*i);
 	       res(i).ins.physicalArgSpec.floatDestSel := constInfo3(9 + 2*i);
+	              
 	   end loop;
 	   
 	   return res;
@@ -159,7 +167,14 @@ architecture Behavioral of ReorderBuffer is
 	   num := slv2u(constInfo(SYS_OP_SIZE - 1 + 16 downto 16));	   
 	   
 	   res.ins.specificOperation.subpipe := None;
-	   res.ins.specificOperation.system := SysOp'val(num);	   
+	   res.ins.specificOperation.system := SysOp'val(num); 
+	   
+	   if CLEAR_DEBUG_INFO then
+	       res.ins := DEFAULT_INS_STATE;
+	       res.ins.controlInfo := special.ins.controlInfo;
+	       res.ins.specificOperation.subpipe := None;
+	       res.ins.specificOperation.system := SysOp'val(num);
+	   end if;
 	   
 	   return res;
 	end function;

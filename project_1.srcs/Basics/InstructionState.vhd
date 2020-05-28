@@ -354,7 +354,8 @@ begin
         end if;
         i := i + 1;
         pow2 := 2*pow2;
-    end loop;    
+    end loop;
+    return 0;    
 end function;
 
 function getSpecificOpSize return positive is

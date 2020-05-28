@@ -183,7 +183,7 @@ begin
 
 	frontBranchEvent <= earlyBranchDataOutA(0).ins.controlInfo.newEvent;
 	frontEventSignal <= frontBranchEvent;
-	frontCausingSig <= earlyBranchDataOutA(0).ins;
+	frontCausingSig <= clearDbCausing(earlyBranchDataOutA(0).ins);
 	
 	SAVE_PRED_TARGET: process(clk)
 	begin

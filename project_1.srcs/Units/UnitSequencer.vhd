@@ -147,7 +147,7 @@ begin
     
         lateEventOut <= lateEventSending;
         lateEventSetPC <= lateEventSending;
-        lateCausing <= setPointers(stageDataLateCausingOut(0).ins, intPointer, floatPointer);  
+        lateCausing <= clearDbCausing(setPointers(stageDataLateCausingOut(0).ins, intPointer, floatPointer));  
     
     stageDataToPC(0).full <= sendingToPC;
     stageDataToPC(0).ins <= newPCData(lateEventSending, stageDataLateCausingOut(0).ins,

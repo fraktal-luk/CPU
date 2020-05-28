@@ -86,8 +86,8 @@ begin
         variable queueDataTemp0: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
         variable specialTemp0: InstructionSlot := DEFAULT_INS_SLOT;
     begin
-        fullMaskNew0 := fullMask(0);
         if rising_edge(clk) then
+            fullMaskNew0 := fullMask(0);        
             queueDataTemp0 := queueData0;
             specialTemp0 := special0;
             

@@ -126,7 +126,7 @@ begin
 	elsif execEvent = '1' then		
 		res.ip := execCausing.target;
 	elsif frontEvent = '1' then
-		res.ip := frontCausing.target;	
+		res.ip := frontCausing.target;
 	else	-- Go to the next line
 		res.ip := pcNext;
 	end if;	

@@ -268,7 +268,9 @@ function clearAbstractInfo(ia: InstructionSlotArray) return InstructionSlotArray
 
 function clearDbCounters(ins: InstructionState) return InstructionState;      -- ip, bits; this is raw program data 
 function clearDbCounters(isl: InstructionSlot) return InstructionSlot;
-         
+
+function clearDbCausing(ins: InstructionState) return InstructionState;
+
 end package;
 
 
@@ -1096,5 +1098,21 @@ function hasSyncEvent(ins: InstructionState) return std_logic is
 begin
     return  ins.controlInfo.hasException or ins.controlInfo.specialAction or ins.controlInfo.dbtrap; 
 end function;
-         
+
+
+function clearDbCausing(ins: InstructionState) return InstructionState is
+    variable res: InstructionState := ins;
+begin
+    if CLEAR_DEBUG_INFO then
+        res := DEFAULT_INS_STATE;
+        
+        res.tags.renameIndex := ins.tags.renameIndex;
+        res.tags.intPointer := ins.tags.intPointer;
+        res.tags.floatPointer := ins.tags.floatPointer;
+        
+        res.target := ins.target;
+    end if;
+    return res;
+end function;
+
 end package body;
