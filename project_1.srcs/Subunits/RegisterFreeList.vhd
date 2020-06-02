@@ -294,6 +294,7 @@ begin
                 
                 memData <= listContent32(slv2u(effectivePhysPtrTake)/4);                        
                 numFront <= numFrontVar;
+                    numFront(7 downto 5) <= (others => numFrontVar(4));
                 
                 listBackExt(0 to 7) := listBack;
                 numBackVar := numBack;
@@ -323,7 +324,8 @@ begin
                 end if;                        
                 
                 listBack <= listBackExt(0 to 7);
-                numBack <= numBackVar;
+                    listBack(7) <= (others => '0'); -- slot 7 never filled because when full >= 4, 4 elems are always removed
+                numBack <= numBackVar  and X"07"; -- Only 3 bits needed because list never gets 8 full
                                     
                 -- CHECK: 3 cycles to restore?
                 if freeListRewind = '1' then
