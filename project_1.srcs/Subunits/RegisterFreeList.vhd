@@ -122,7 +122,6 @@ architecture Behavioral of RegisterFreeList is
 		
 begin
     physCommitFreedDelayed <= selAndCompactPhysDests(physStableDelayed, physCommitDestsDelayed, stableUpdateSelDelayed, freeListPutSel);
-
     physCommitDestsDelayed <= getPhysicalDests(stageDataToRelease);
     
     -- CAREFUL: excluding overridden dests here means that we don't bypass phys names when getting
@@ -133,19 +132,19 @@ begin
                                       -- NOTE: if those conditions are not satisfied, putting the allocated reg
     
     -- CAREFUL! Because there's a delay of 1 cycle to read FreeList, we need to do reading
-    --				before actual instrucion goes to Rename, and pointer shows to new registers for next
+    --				before actual instruction goes to Rename, and pointer shows to new registers for next
     --				instruction, not those that are visible on output. So after every rewinding
     --				we must send a signal to read and advance the pointer.
     --				Rewinding has 2 specific moemnts: the event signal, and renameLockRelease,
     --				so on the former the rewinded pointer is written, and on the latter incremented and read.
     --				We also need to do that before the first instruction is executed (that's why resetSig here).
     freeListTakeAllow <= takeAllow;
+    freeListPutAllow <= sendingToRelease;
+    freeListRewind <= rewind;
     
     freeListTakeSel <= whichTakeReg(stageDataToReserve, IS_FP); -- CAREFUL: must agree with Sequencer signals
-    freeListPutAllow <= sendingToRelease;
     -- Releasing a register every time (but not always prev stable!)
     freeListPutSel <= whichPutReg(stageDataToRelease, IS_FP);-- CAREFUL: this chooses which ops put anyth. at all
-    freeListRewind <= rewind;
     
     freeListWriteTag <= causingPointer;
     

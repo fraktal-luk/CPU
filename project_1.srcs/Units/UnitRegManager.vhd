@@ -406,30 +406,33 @@ begin
         lateEventSignal => '0',    
         execCausing => execCausing
     );
-    
-    SUBUNIT_COMMIT_FLOAT: entity work.GenericStage(Behavioral)
-    generic map(
-        WIDTH => PIPE_WIDTH
-    )
-    port map(
-        clk => clk, reset => '0', en => '0',
         
-        -- Interface with CQ
-        prevSending => sendingFromROB,
-        stageDataIn => robDataLiving,
-        acceptingOut => open, -- unused but don't remove
+            sendingCommitFloat <= sendingCommitInt;
+            stageDataCommitFloat <= stageDataCommitInt;
+            
+--    SUBUNIT_COMMIT_FLOAT: entity work.GenericStage(Behavioral)
+--    generic map(
+--        WIDTH => PIPE_WIDTH
+--    )
+--    port map(
+--        clk => clk, reset => '0', en => '0',
         
-        -- Interface with hypothetical further stage
-        nextAccepting => '1',
-        sendingOut => sendingCommitFloat,
-        stageDataOut => stageDataCommitFloat,
+--        -- Interface with CQ
+--        prevSending => sendingFromROB,
+--        stageDataIn => robDataLiving,
+--        acceptingOut => open, -- unused but don't remove
         
-        -- Event interface
-        execEventSignal => '0', -- CAREFUL: committed cannot be killed!
-        lateEventSignal => '0',    
-        execCausing => execCausing
-    );
-    
+--        -- Interface with hypothetical further stage
+--        nextAccepting => '1',
+--        sendingOut => sendingCommitFloat,
+--        stageDataOut => stageDataCommitFloat,
+        
+--        -- Event interface
+--        execEventSignal => '0', -- CAREFUL: committed cannot be killed!
+--        lateEventSignal => '0',    
+--        execCausing => execCausing
+--    );
+
     INT_MAPPER: entity work.RegisterMapper
     port map(
         clk => clk, en => '0', reset => '0',
