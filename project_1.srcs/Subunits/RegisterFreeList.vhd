@@ -333,6 +333,8 @@ begin
                 elsif isNonzero(recoveryCounter) = '1' then
                     recoveryCounter <= addInt(recoveryCounter, -1);
                 end if;
+                
+                    recoveryCounter(7 downto 2) <= (others => '0'); -- Only 2 bits needed here
             end if;
         end process;            
         

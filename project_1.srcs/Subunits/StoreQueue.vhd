@@ -396,7 +396,9 @@ begin
             elsif isNonzero(recoveryCounter) = '1' then
                 recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
-	                
+	        
+	           recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here
+	        
 	        isFull <= cmpGtU(nFullNext, QUEUE_SIZE-4);
             isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
 

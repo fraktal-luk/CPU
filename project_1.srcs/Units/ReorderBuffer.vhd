@@ -256,6 +256,8 @@ begin
                 recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
             
+                recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here
+            
             nFull <= nFullNext;
             
             -- CAREFUL: here we assure that the buffer is never full (so isFull incidcates 1 free slot). So startPtr = endPtr always indicates emptiness
