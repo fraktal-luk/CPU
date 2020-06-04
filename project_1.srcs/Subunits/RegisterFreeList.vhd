@@ -42,7 +42,7 @@ end RegisterFreeList;
 
 
 architecture Behavioral of RegisterFreeList is
-    signal freeListTakeSel, freeListPutSel, stableUpdateSelDelayed: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+    signal freeListTakeSel, freeListPutSel, stableUpdateSelDelayed, overridden: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     -- Don't remove, it is used by newPhysDestPointer!
     signal freeListTakeNumTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal freeListTakeAllow, freeListPutAllow, freeListRewind: std_logic := '0';
@@ -120,16 +120,38 @@ architecture Behavioral of RegisterFreeList is
 	   return res;
 	end function;
 		
+		
+		signal mfull, vsels, psels, ovm, ovm2, excm, upd2: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+		
+		signal ch0, ch1: std_logic := '0';
 begin
+        mfull <= extractFullMask(stageDataToRelease);
+
+        vsels <= getVirtualFloatDestSels(stageDataToRelease) when IS_FP else getVirtualIntDestSels(stageDataToRelease);
+        psels <= getPhysicalFloatDestSels(stageDataToRelease) when IS_FP else getPhysicalIntDestSels(stageDataToRelease);
+        
+        ovm <= findOverriddenDests(stageDataToRelease, IS_FP);
+        excm <= getExceptionMask(stageDataToRelease) and mfull;
+
+        ovm2 <= findOverriddenDests2(stageDataToRelease, IS_FP);
+
+        upd2 <= psels and not ovm2;
+
+        --    ch0 <= bool2std(freeListPutSel = vsels);
+        --    ch1 <= bool2std(stableUpdateSelDelayed = upd2);
+
+        overridden <= findOverriddenDests2(stageDataToRelease, IS_FP);
+
     physCommitFreedDelayed <= selAndCompactPhysDests(physStableDelayed, physCommitDestsDelayed, stableUpdateSelDelayed, freeListPutSel);
     physCommitDestsDelayed <= getPhysicalDests(stageDataToRelease);
     
     -- CAREFUL: excluding overridden dests here means that we don't bypass phys names when getting
-    --				physStableDelayed! >> Related code in top module
-    stableUpdateSelDelayed <=  freeListPutSel -- NOTE: putting *previous stable* register if: full, has dest, not exception.
-                       and not getExceptionMask(stageDataToRelease)
-                       and not findOverriddenDests(stageDataToRelease, IS_FP); -- CAREFUL: and must not be overridden!
-                                      -- NOTE: if those conditions are not satisfied, putting the allocated reg
+--    --				physStableDelayed! >> Related code in top module
+--    stableUpdateSelDelayed <=  freeListPutSel -- NOTE: putting *previous stable* register if: full, has dest, not exception.
+--                       and not getExceptionMask(stageDataToRelease)
+--                       and not findOverriddenDests(stageDataToRelease, IS_FP); -- CAREFUL: and must not be overridden!
+--                                      -- NOTE: if those conditions are not satisfied, putting the allocated reg
+        stableUpdateSelDelayed <= psels and not overridden;
     
     -- CAREFUL! Because there's a delay of 1 cycle to read FreeList, we need to do reading
     --				before actual instruction goes to Rename, and pointer shows to new registers for next
@@ -144,7 +166,8 @@ begin
     
     freeListTakeSel <= whichTakeReg(stageDataToReserve, IS_FP); -- CAREFUL: must agree with Sequencer signals
     -- Releasing a register every time (but not always prev stable!)
-    freeListPutSel <= whichPutReg(stageDataToRelease, IS_FP);-- CAREFUL: this chooses which ops put anyth. at all
+    freeListPutSel <= --whichPutReg(stageDataToRelease, IS_FP);-- CAREFUL: this chooses which ops put anyth. at all
+                        vsels;
     
     freeListWriteTag <= causingPointer;
     

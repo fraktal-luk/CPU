@@ -22,6 +22,8 @@ constant ROB_SIZE: positive := 8;
 
 constant USE_LINE_PREDICTOR: boolean := true;
 
+constant CLEAR_DEST_SEL_ON_EMPTY: boolean := false; -- When op gets empty, sets *DestSel to 0
+
 constant PHYS_REG_BITS: natural := 6 + LOG2_PIPE_WIDTH;
 
 -- CAREFUL, TODO: compute it by log2 from number of phys regs

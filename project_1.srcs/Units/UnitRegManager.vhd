@@ -49,7 +49,7 @@ end UnitRegManager;
 
 architecture Behavioral of UnitRegManager is
     signal stageDataRenameIn, stageDataRenameInFloat, renamedDataLivingPre, renamedDataLivingFloatPre,
-                stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+               stageDataToCommit, stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, sendingCommitInt, sendingCommitFloat, renameLockState, renameLockEnd, renameLockRelease: std_logic := '0';
  
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG; -- This is rewinded on events
@@ -273,6 +273,34 @@ architecture Behavioral of UnitRegManager is
             
         return res;
     end function;
+
+        function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray is
+            variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+            variable found: boolean := false;
+        begin
+            
+            for i in 0 to PIPE_WIDTH-1 loop
+                if insVec(i).full = '0' or found then
+                    res(i).full := '0';
+                    res(i).ins.virtualArgSpec.intDestSel := '0';
+                    res(i).ins.virtualArgSpec.floatDestSel := '0';                        
+                end if;            
+            
+                if insVec(i).ins.controlInfo.hasException = '1' or insVec(i).ins.controlInfo.specialAction = '1' then
+                    found := true;
+                end if;
+                
+                if insVec(i).full = '0' or found then
+                    res(i).ins.physicalArgSpec.intDestSel := '0';
+                    res(i).ins.physicalArgSpec.floatDestSel := '0';                        
+                else
+                    res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
+                    res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;  
+                end if;
+            end loop;
+            
+            return res;
+        end function;
     
 begin
     eventSig <= execEventSignal or lateEventSignal;
@@ -384,6 +412,8 @@ begin
         end if;    
     end process;
     
+    stageDataToCommit <= setDestFlags(robDataLiving);
+    
     SUBUNIT_COMMIT_INT: entity work.GenericStage(Behavioral)
     generic map(
         WIDTH => PIPE_WIDTH
@@ -393,7 +423,7 @@ begin
         
         -- Interface with CQ
         prevSending => sendingFromROB,
-        stageDataIn => robDataLiving,
+        stageDataIn => stageDataToCommit,
         acceptingOut => open, -- unused but don't remove
         
         -- Interface with hypothetical further stage

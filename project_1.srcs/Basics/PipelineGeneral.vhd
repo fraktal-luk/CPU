@@ -603,6 +603,10 @@ begin
 	elsif sending = '1' or full = '0' then -- take empty
 		-- CAREFUL: clearing result tags for empty slots
 		for i in 0 to LEN-1 loop
+		    if CLEAR_DEST_SEL_ON_EMPTY then
+		       res(i).ins.physicalArgSpec.intDestSel := '0';
+		       res(i).ins.virtualArgSpec.floatDestSel := '0';
+		    end if;
 			res(i).ins.physicalArgSpec.dest := (others => '0');
 			res(i).ins.controlInfo.newEvent := '0';
 		end loop;
