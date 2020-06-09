@@ -108,7 +108,9 @@ begin
         end if;
     end if;		
    
-   res.target := res.ip;
+    res.target := res.ip;
+            res.ip := --(others => 'U');
+                      commitCausing.target;  
 	return res;
 end function;
 
@@ -129,7 +131,7 @@ begin
 		res.ip := frontCausing.target;
 	else	-- Go to the next line
 		res.ip := pcNext;
-	end if;	
+	end if;
 
 	return res;
 end function;
@@ -309,6 +311,7 @@ end function;
 
 function anyEvent(insVec: InstructionSlotArray) return std_logic is
     variable effectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := getEffectiveMask(insVec);
+                                                                   -- extractFullMask(insVec);
 begin
     for i in 0 to PIPE_WIDTH-1 loop
         if (effectiveMask(i) = '1') and hasSyncEvent(insVec(i).ins) = '1' then
