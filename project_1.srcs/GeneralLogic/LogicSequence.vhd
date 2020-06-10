@@ -204,6 +204,8 @@ end function;
 function getEffectiveMask(newContent: InstructionSlotArray) return std_logic_vector is
     variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
+        return extractFullMask(newContent);
+
     -- Seeking from right side cause we need the last one 
     for i in newContent'range loop
         if newContent(i).full /= '1' then -- Count only full instructions
@@ -311,7 +313,7 @@ end function;
 
 function anyEvent(insVec: InstructionSlotArray) return std_logic is
     variable effectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := getEffectiveMask(insVec);
-                                                                   -- extractFullMask(insVec);
+                                                                    --extractFullMask(insVec);
 begin
     for i in 0 to PIPE_WIDTH-1 loop
         if (effectiveMask(i) = '1') and hasSyncEvent(insVec(i).ins) = '1' then

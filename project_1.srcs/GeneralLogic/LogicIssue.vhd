@@ -459,10 +459,12 @@ begin
            res(i).ins.tags.intPointer := (others => '0');
            res(i).ins.tags.floatPointer := (others => '0');
                
-           res(i).ins.classInfo.branchIns := '0';
-           res(i).ins.controlInfo.frontBranch := '0';
-           res(i).ins.controlInfo.confirmedBranch := '0';
-           res(i).ins.controlInfo.specialAction := '0';
+           --res(i).ins.classInfo.branchIns := '0';
+           --res(i).ins.controlInfo.frontBranch := '0';
+           --res(i).ins.controlInfo.confirmedBranch := '0';
+           --res(i).ins.controlInfo.specialAction := '0';
+
+           res(i).ins.controlInfo := DEFAULT_CONTROL_INFO;
 
            if IMM_AS_REG then        
                res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');

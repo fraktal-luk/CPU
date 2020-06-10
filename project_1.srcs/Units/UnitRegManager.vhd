@@ -297,6 +297,7 @@ architecture Behavioral of UnitRegManager is
                     res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
                     res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;  
                 end if;
+                    found := false;
             end loop;
             
             return res;

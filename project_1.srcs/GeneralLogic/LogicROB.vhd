@@ -115,7 +115,7 @@ begin
                 --res(k).ins.controlInfo.newEvent := '1'; --- !!!
                 res(k).ins.controlInfo.specialAction := '1';
                 res(k).ins.controlInfo.refetch := '1';
-                --eventFound := true;
+                eventFound := true;
             end if;
 
 --            -- CAREFUL: this is handled in SQ. Probably not implemented here, but can/should be done for debugging
