@@ -273,35 +273,6 @@ architecture Behavioral of UnitRegManager is
             
         return res;
     end function;
-
-        function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray is
-            variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-            variable found: boolean := false;
-        begin
-            
-            for i in 0 to PIPE_WIDTH-1 loop
-                if insVec(i).full = '0' or found then
-                    res(i).full := '0';
-                    res(i).ins.virtualArgSpec.intDestSel := '0';
-                    res(i).ins.virtualArgSpec.floatDestSel := '0';                        
-                end if;            
-            
-                if insVec(i).ins.controlInfo.hasException = '1' or insVec(i).ins.controlInfo.specialAction = '1' then
-                    found := true;
-                end if;
-                
-                if insVec(i).full = '0' or found then
-                    res(i).ins.physicalArgSpec.intDestSel := '0';
-                    res(i).ins.physicalArgSpec.floatDestSel := '0';                        
-                else
-                    res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
-                    res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;  
-                end if;
-                    found := false;
-            end loop;
-            
-            return res;
-        end function;
     
 begin
     eventSig <= execEventSignal or lateEventSignal;
@@ -414,6 +385,7 @@ begin
     end process;
     
     stageDataToCommit <= setDestFlags(robDataLiving);
+                         --   robDataLiving;
     
     SUBUNIT_COMMIT_INT: entity work.GenericStage(Behavioral)
     generic map(
@@ -476,7 +448,7 @@ begin
         newPhysDests => newIntDests,    -- MAPPING (from FREE LIST)
         
         sendingToCommit => sendingFromROB,
-        stageDataToCommit => robDataLiving,
+        stageDataToCommit => stageDataToCommit,
         physCommitDests_TMP => (others => (others => '0')), -- CAREFUL: useless input?
         
         prevNewPhysDests => open,
@@ -499,7 +471,7 @@ begin
         newPhysDests => newFloatDests,    -- MAPPING (from FREE LIST)
         
         sendingToCommit => sendingFromROB,
-        stageDataToCommit => robDataLiving,
+        stageDataToCommit => stageDataToCommit,
         physCommitDests_TMP => (others => (others => '0')), -- CAREFUL: useless input?
         
         prevNewPhysDests => open,

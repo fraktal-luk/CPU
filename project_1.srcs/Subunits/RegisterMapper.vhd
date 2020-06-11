@@ -53,7 +53,7 @@ architecture Behavioral of RegisterMapper is
 	
 	signal newestMap, stableMap, newestMapNext, stableMapNext: PhysNameArray(0 to 31) := initMap;
     
-    signal reserve, commit: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+    signal reserve, commit, psels: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     signal selectReserve, selectCommit, selectStable: RegNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal selectNewest: RegNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
@@ -162,8 +162,11 @@ begin
 
     stableMapNext <= getNextMap(stableMap, stableMap, writeCommit, selMaskS0, selMaskS1, selMaskS2, selMaskS3, '0');
 
+        psels <= getPhysicalFloatDestSels(stageDataToCommit) when IS_FP else getPhysicalIntDestSels(stageDataToCommit);
+
 	reserve <= whichTakeReg(stageDataToReserve, IS_FP);
-	commit <= whichPutReg(stageDataToCommit, IS_FP) and not getExceptionMask(stageDataToCommit);
+	commit <= --whichPutReg(stageDataToCommit, IS_FP) and not getExceptionMask(stageDataToCommit);
+	           psels;
 	
 	selectReserve <= getVirtualDests(stageDataToReserve);
 	selectCommit <= getVirtualDests(stageDataToCommit);

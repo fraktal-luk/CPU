@@ -261,7 +261,10 @@ begin
         signal nPutInt, nPutFloat: integer := 0;
     begin
         putVecInt <= whichPutReg(robDataLiving, false);
+                     --getVirtualIntDestSels(stageDataToCommit);
         putVecFloat <= whichPutReg(robDataLiving, true);
+                     --getVirtualFloatDestSels(stageDataToCommit);
+        
         nPutInt <= countOnes(putVecInt);
         nPutFloat <= countOnes(putVecFloat);
 

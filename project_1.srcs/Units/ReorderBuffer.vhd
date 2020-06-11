@@ -149,11 +149,11 @@ architecture Behavioral of ReorderBuffer is
 	       res(i).ins.physicalArgSpec.dest := constInfo(8*i + 7 downto 8*i);
 	       res(i).ins.virtualArgSpec.dest := "000" & constInfo2(5*i + 4 downto 5*i);
 	       
-	       res(i).ins.virtualArgSpec.intDestSel := constInfo3(0 + 2*i);
-	       res(i).ins.virtualArgSpec.floatDestSel := constInfo3(8 + 2*i);
+	       res(i).ins.virtualArgSpec.intDestSel := constInfo3(4 + i);
+	       res(i).ins.virtualArgSpec.floatDestSel := constInfo3(0 + i);
 	       
-	       res(i).ins.physicalArgSpec.intDestSel := constInfo3(1 + 2*i);
-	       res(i).ins.physicalArgSpec.floatDestSel := constInfo3(9 + 2*i);
+	       --res(i).ins.physicalArgSpec.intDestSel := constInfo3(4 + i);
+	       --res(i).ins.physicalArgSpec.floatDestSel := constInfo3(0 + i);
 	              
 	   end loop;
 	   
@@ -202,15 +202,25 @@ begin
     inputConstant2(19 downto 0) <= inputData(3).ins.virtualArgSpec.dest(4 downto 0) & inputData(2).ins.virtualArgSpec.dest(4 downto 0)
                     & inputData(1).ins.virtualArgSpec.dest(4 downto 0) & inputData(0).ins.virtualArgSpec.dest(4 downto 0);
     
-    inputConstant3(7 downto 0) <=  inputData(3).ins.physicalArgSpec.intDestSel & inputData(3).ins.virtualArgSpec.intDestSel
-                                 & inputData(2).ins.physicalArgSpec.intDestSel & inputData(2).ins.virtualArgSpec.intDestSel
-                                 & inputData(1).ins.physicalArgSpec.intDestSel & inputData(1).ins.virtualArgSpec.intDestSel
-                                 & inputData(0).ins.physicalArgSpec.intDestSel & inputData(0).ins.virtualArgSpec.intDestSel;
+    inputConstant3(15 downto 8) <=  inputData(3).ins.physicalArgSpec.intDestSel --& inputData(3).ins.physicalArgSpec.floatDestSel
+                                 & inputData(2).ins.physicalArgSpec.intDestSel --& inputData(2).ins.physicalArgSpec.floatDestSel
+                                 & inputData(1).ins.physicalArgSpec.intDestSel --& inputData(1).ins.physicalArgSpec.floatDestSel
+                                 & inputData(0).ins.physicalArgSpec.intDestSel --& inputData(0).ins.physicalArgSpec.floatDestSel;
+
+                                 & inputData(3).ins.physicalArgSpec.floatDestSel
+                                 & inputData(2).ins.physicalArgSpec.floatDestSel
+                                 & inputData(1).ins.physicalArgSpec.floatDestSel
+                                 & inputData(0).ins.physicalArgSpec.floatDestSel;
     
-    inputConstant3(15 downto 8) <=  inputData(3).ins.physicalArgSpec.floatDestSel & inputData(3).ins.virtualArgSpec.floatDestSel
-                                  & inputData(2).ins.physicalArgSpec.floatDestSel & inputData(2).ins.virtualArgSpec.floatDestSel
-                                  & inputData(1).ins.physicalArgSpec.floatDestSel & inputData(1).ins.virtualArgSpec.floatDestSel
-                                  & inputData(0).ins.physicalArgSpec.floatDestSel & inputData(0).ins.virtualArgSpec.floatDestSel;
+    inputConstant3(7 downto 0) <=  inputData(3).ins.virtualArgSpec.intDestSel --& inputData(3).ins.virtualArgSpec.floatDestSel
+                                  & inputData(2).ins.virtualArgSpec.intDestSel --& inputData(2).ins.virtualArgSpec.floatDestSel
+                                  & inputData(1).ins.virtualArgSpec.intDestSel --& inputData(1).ins.virtualArgSpec.floatDestSel
+                                  & inputData(0).ins.virtualArgSpec.intDestSel --& inputData(0).ins.virtualArgSpec.floatDestSel;
+
+                                  & inputData(3).ins.virtualArgSpec.floatDestSel
+                                  & inputData(2).ins.virtualArgSpec.floatDestSel
+                                  & inputData(1).ins.virtualArgSpec.floatDestSel
+                                  & inputData(0).ins.virtualArgSpec.floatDestSel;
 
     inputConstant3(SYS_OP_SIZE - 1 + 16 downto 16) <= i2slv(SysOp'pos(inputSpecial.ins.specificOperation.system), SYS_OP_SIZE);
 
@@ -303,7 +313,7 @@ begin
 	
     acmPtr <= addIntTrunc(endPtr, 1, ROB_PTR_SIZE);
     acceptingMore <= not isAlmostFull;
-	outputData <= replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2, constantFromBuf3);
+	outputData <= ( replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2, constantFromBuf3));
 
 	sendingOut <= isSending;
 	outputSpecial <= replaceConstantInformationSpecial(outputSpecialReg, constantFromBuf3);
