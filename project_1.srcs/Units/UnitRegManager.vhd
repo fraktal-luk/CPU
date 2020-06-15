@@ -480,11 +480,26 @@ begin
         prevStablePhysDests => physStableFloat,  -- FOR MAPPING (to FREE LIST)
         stablePhysSources => open           
     );
-    
-    causingPtrInt <=      lateCausing.tags.intPointer when lateEventSignal = '1'
-                else execCausing.tags.intPointer;
-    causingPtrFloat <=    lateCausing.tags.floatPointer when lateEventSignal = '1'
-                else execCausing.tags.floatPointer;
+
+
+        LATE_TAG_YES: if TMP_LATE_TAG generate
+            causingPtrInt <=   --  lateCausing.tags.intPointer when lateEventSignal = '1'
+                        --else execCausing.tags.intPointer;
+                            execCausing.tags.intPointer;
+            causingPtrFloat <= --  lateCausing.tags.floatPointer when lateEventSignal = '1'
+                        --else execCausing.tags.floatPointer;
+                            execCausing.tags.floatPointer;
+        end generate;
+
+        LATE_TAG_NO: if not TMP_LATE_TAG generate    
+            causingPtrInt <=     lateCausing.tags.intPointer when lateEventSignal = '1'
+                        else execCausing.tags.intPointer;
+                         --   execCausing.tags.intPointer;
+            causingPtrFloat <=   lateCausing.tags.floatPointer when lateEventSignal = '1'
+                        else execCausing.tags.floatPointer;
+                         --   execCausing.tags.floatPointer;
+        end generate;
+
                             
     INT_FREE_LIST: entity work.RegisterFreeList(Behavioral)
     port map(
@@ -493,6 +508,8 @@ begin
         en => '0',
         
         rewind => eventSig,
+            execEventSignal => execEventSignal,
+            lateEventSignal => lateEventSignal,
         causingPointer => causingPtrInt,
         
         sendingToReserve => frontLastSending, 
@@ -517,6 +534,8 @@ begin
         en => '0',
         
         rewind => eventSig,
+            execEventSignal => execEventSignal,
+            lateEventSignal => lateEventSignal,        
         causingPointer => causingPtrFloat,
         
         sendingToReserve => frontLastSending, 

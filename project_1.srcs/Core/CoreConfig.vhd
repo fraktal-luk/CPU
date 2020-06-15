@@ -39,6 +39,8 @@ constant FREE_LIST_SIZE: positive := --N_PHYSICAL_REGS;
 -- Optimize immediate field by keeping part of it in physical register field
 constant IMM_AS_REG: boolean := true;
 
+    constant TMP_LATE_TAG: boolean := false;
+
 end CoreConfig;
 
 

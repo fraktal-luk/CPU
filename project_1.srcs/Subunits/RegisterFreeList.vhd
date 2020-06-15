@@ -23,6 +23,8 @@ entity RegisterFreeList is
 		en: in std_logic;
 		
 		rewind: in std_logic;
+		  execEventSignal: in std_logic;
+		  lateEventSignal: in std_logic;
 		causingPointer: in SmallNumber;
 		
 		sendingToReserve: in std_logic;
@@ -42,7 +44,7 @@ end RegisterFreeList;
 
 
 architecture Behavioral of RegisterFreeList is
-    signal freeListTakeSel, freeListPutSel, stableUpdateSelDelayed, overridden: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+    signal freeListTakeSel, freeListPutSel, stableUpdateSelDelayed, stableTakeUpdate, overridden: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     -- Don't remove, it is used by newPhysDestPointer!
     signal freeListTakeNumTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal freeListTakeAllow, freeListPutAllow, freeListRewind: std_logic := '0';
@@ -153,6 +155,8 @@ begin
 --                                      -- NOTE: if those conditions are not satisfied, putting the allocated reg
         stableUpdateSelDelayed <= psels and not overridden;
     
+        stableTakeUpdate <= vsels; -- Those which commit any register that won't ever be rewound
+    
     -- CAREFUL! Because there's a delay of 1 cycle to read FreeList, we need to do reading
     --				before actual instruction goes to Rename, and pointer shows to new registers for next
     --				instruction, not those that are visible on output. So after every rewinding
@@ -177,7 +181,7 @@ begin
     IMPL: block
         signal listContent32: WordArray(0 to FREE_LIST_SIZE/4 - 1) := initList32;
         
-        signal listPtrTake: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
+        signal listPtrTake, listPtrTakeStable, causingTag: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
         signal listPtrPut: SmallNumber := i2slv(N_PHYS - 32 - FP_1, SMALL_NUMBER_SIZE);
         
         signal listFront, listBack: PhysNameArray(0 to 7) := (others => (others => '0'));
@@ -277,6 +281,14 @@ begin
         needTake <= cmpLeS(numFront, addInt(numToTake, 4));
         numToTake <= i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE) when freeListTakeAllow = '1' else (others => '0');
 
+        LATE_TAG_YES: if TMP_LATE_TAG generate
+            causingTag <= listPtrTakeStable when lateEventSignal = '1' else causingPointer;
+        end generate;
+
+        LATE_TAG_NO: if not TMP_LATE_TAG generate
+            causingTag <= freeListWriteTag;
+        end generate;
+        
         SYNCHRONOUS: process(clk)
             variable indPut, indTake: SmallNumber := (others => '0');
             variable nTaken, nPut, numFrontVar, numBackVar: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
@@ -292,9 +304,9 @@ begin
                 numFrontVar := numFront;
                 
                 if freeListRewind = '1' then
-                    listPtrTake <= freeListWriteTag; -- Indexing TMP                            
-                    physPtrTake(SMALL_NUMBER_SIZE-1 downto 2) <= freeListWriteTag(SMALL_NUMBER_SIZE-1 downto 2);                         
-                    tmpTag2(1 downto 0) := freeListWriteTag(1 downto 0);
+                    listPtrTake <= causingTag; -- Indexing TMP                            
+                    physPtrTake(SMALL_NUMBER_SIZE-1 downto 2) <= causingTag(SMALL_NUMBER_SIZE-1 downto 2);                         
+                    tmpTag2(1 downto 0) := causingTag(1 downto 0);
                     numFrontVar := subSN(i2slv(0, SMALL_NUMBER_SIZE), tmpTag2); -- TODO: find simpler notation for uminus
                     memRead <= '0';
                 else
@@ -303,7 +315,7 @@ begin
                 
                 if freeListTakeAllow = '1' and freeListRewind = '0' then
                     numFrontVar := subSN(numFrontVar, nTaken);
-                    listPtrTake <= addSN(listPtrTake, nTaken);                            
+                    listPtrTake <= addSN(listPtrTake, nTaken);                           
                 end if;
                 
                 if freeListRewind = '0' then
@@ -338,7 +350,8 @@ begin
                         end if;    
                     end loop;
                     listPtrPut <= indPut;
-
+                        listPtrTakeStable <= addInt(listPtrTakeStable, countOnes(stableTakeUpdate));
+                        
                     for i in 0 to PIPE_WIDTH-1 loop
                         listBackExt(slv2u(numBackVar) + i) := physCommitFreedDelayed(i);
                     end loop;

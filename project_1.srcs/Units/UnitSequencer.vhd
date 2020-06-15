@@ -216,26 +216,29 @@ begin
     
                 -- Writing specialized fields on events
                 if lateEventSending = '1' then
-                    currentState <= stageDataLateCausingOut(0).ins.result;
-                    currentState(15 downto 10) <= (others => '0');
-                    currentState(7 downto 2) <= (others => '0');
+                    currentState <= stageDataLateCausingOut(0).ins.result;                    
                 end if;
                 
                 -- NOTE: writing to link registers after sys reg writing gives priority to the former,
                 --            but committing a sysMtc shouldn't happen in parallel with any control event
                 if excInfoUpdate = '1' then
                     linkRegExc <= stageDataLateCausingOut(0).ins.ip;
-                    savedStateExc <= savedState;
+                    savedStateExc <= --savedState;
+                                        currentState;
                 end if;
                 
                 if intInfoUpdate = '1' then
                     linkRegInt <= stageDataLateCausingOut(0).ins.ip;
-                    savedStateInt <= savedState;
+                    savedStateInt <= --savedState;
+                                        currentState;
                 end if;
                 
                 -- Enforcing content of read-only registers
                 sysRegArray(0) <= (others => '1');--PROCESSOR_ID;
-                
+
+                currentState(23 downto 16) <= (others => '0');
+                currentState(15 downto 10) <= (others => '0'); -- bits of state reg always set to 0
+                currentState(7 downto 2) <= (others => '0');               
                 -- Only some number of system regs exists        
                 for i in 6 to 31 loop
                     sysRegArray(i) <= (others => '0');
