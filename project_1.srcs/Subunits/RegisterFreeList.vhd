@@ -23,6 +23,8 @@ entity RegisterFreeList is
 		en: in std_logic;
 		
 		rewind: in std_logic;
+		  execEventSignal: in std_logic;
+		  lateEventSignal: in std_logic;
 		causingPointer: in SmallNumber;
 		
 		sendingToReserve: in std_logic;
@@ -42,7 +44,7 @@ end RegisterFreeList;
 
 
 architecture Behavioral of RegisterFreeList is
-    signal freeListTakeSel, freeListPutSel, stableUpdateSelDelayed: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+    signal freeListTakeSel, freeListPutSel, stableUpdateSelDelayed, stableTakeUpdate, overridden: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     -- Don't remove, it is used by newPhysDestPointer!
     signal freeListTakeNumTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal freeListTakeAllow, freeListPutAllow, freeListRewind: std_logic := '0';
@@ -120,32 +122,56 @@ architecture Behavioral of RegisterFreeList is
 	   return res;
 	end function;
 		
+		
+		signal mfull, vsels, psels, ovm, ovm2, excm, upd2: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+		
+		signal ch0, ch1: std_logic := '0';
 begin
-    physCommitFreedDelayed <= selAndCompactPhysDests(physStableDelayed, physCommitDestsDelayed, stableUpdateSelDelayed, freeListPutSel);
+        mfull <= extractFullMask(stageDataToRelease);
 
+        vsels <= getVirtualFloatDestSels(stageDataToRelease) when IS_FP else getVirtualIntDestSels(stageDataToRelease);
+        psels <= getPhysicalFloatDestSels(stageDataToRelease) when IS_FP else getPhysicalIntDestSels(stageDataToRelease);
+        
+        ovm <= findOverriddenDests(stageDataToRelease, IS_FP);
+        excm <= getExceptionMask(stageDataToRelease) and mfull;
+
+        ovm2 <= findOverriddenDests2(stageDataToRelease, IS_FP);
+
+        upd2 <= psels and not ovm2;
+
+        --    ch0 <= bool2std(freeListPutSel = vsels);
+        --    ch1 <= bool2std(stableUpdateSelDelayed = upd2);
+
+        overridden <= findOverriddenDests2(stageDataToRelease, IS_FP);
+
+    physCommitFreedDelayed <= selAndCompactPhysDests(physStableDelayed, physCommitDestsDelayed, stableUpdateSelDelayed, freeListPutSel);
     physCommitDestsDelayed <= getPhysicalDests(stageDataToRelease);
     
     -- CAREFUL: excluding overridden dests here means that we don't bypass phys names when getting
-    --				physStableDelayed! >> Related code in top module
-    stableUpdateSelDelayed <=  freeListPutSel -- NOTE: putting *previous stable* register if: full, has dest, not exception.
-                       and not getExceptionMask(stageDataToRelease)
-                       and not findOverriddenDests(stageDataToRelease, IS_FP); -- CAREFUL: and must not be overridden!
-                                      -- NOTE: if those conditions are not satisfied, putting the allocated reg
+--    --				physStableDelayed! >> Related code in top module
+--    stableUpdateSelDelayed <=  freeListPutSel -- NOTE: putting *previous stable* register if: full, has dest, not exception.
+--                       and not getExceptionMask(stageDataToRelease)
+--                       and not findOverriddenDests(stageDataToRelease, IS_FP); -- CAREFUL: and must not be overridden!
+--                                      -- NOTE: if those conditions are not satisfied, putting the allocated reg
+        stableUpdateSelDelayed <= psels and not overridden;
+    
+        stableTakeUpdate <= vsels; -- Those which commit any register that won't ever be rewound
     
     -- CAREFUL! Because there's a delay of 1 cycle to read FreeList, we need to do reading
-    --				before actual instrucion goes to Rename, and pointer shows to new registers for next
+    --				before actual instruction goes to Rename, and pointer shows to new registers for next
     --				instruction, not those that are visible on output. So after every rewinding
     --				we must send a signal to read and advance the pointer.
     --				Rewinding has 2 specific moemnts: the event signal, and renameLockRelease,
     --				so on the former the rewinded pointer is written, and on the latter incremented and read.
     --				We also need to do that before the first instruction is executed (that's why resetSig here).
     freeListTakeAllow <= takeAllow;
+    freeListPutAllow <= sendingToRelease;
+    freeListRewind <= rewind;
     
     freeListTakeSel <= whichTakeReg(stageDataToReserve, IS_FP); -- CAREFUL: must agree with Sequencer signals
-    freeListPutAllow <= sendingToRelease;
     -- Releasing a register every time (but not always prev stable!)
-    freeListPutSel <= whichPutReg(stageDataToRelease, IS_FP);-- CAREFUL: this chooses which ops put anyth. at all
-    freeListRewind <= rewind;
+    freeListPutSel <= --whichPutReg(stageDataToRelease, IS_FP);-- CAREFUL: this chooses which ops put anyth. at all
+                        vsels;
     
     freeListWriteTag <= causingPointer;
     
@@ -155,7 +181,7 @@ begin
     IMPL: block
         signal listContent32: WordArray(0 to FREE_LIST_SIZE/4 - 1) := initList32;
         
-        signal listPtrTake: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
+        signal listPtrTake, listPtrTakeStable, causingTag: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
         signal listPtrPut: SmallNumber := i2slv(N_PHYS - 32 - FP_1, SMALL_NUMBER_SIZE);
         
         signal listFront, listBack: PhysNameArray(0 to 7) := (others => (others => '0'));
@@ -255,6 +281,14 @@ begin
         needTake <= cmpLeS(numFront, addInt(numToTake, 4));
         numToTake <= i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE) when freeListTakeAllow = '1' else (others => '0');
 
+        LATE_TAG_YES: if TMP_LATE_TAG generate
+            causingTag <= listPtrTakeStable when lateEventSignal = '1' else causingPointer;
+        end generate;
+
+        LATE_TAG_NO: if not TMP_LATE_TAG generate
+            causingTag <= freeListWriteTag;
+        end generate;
+        
         SYNCHRONOUS: process(clk)
             variable indPut, indTake: SmallNumber := (others => '0');
             variable nTaken, nPut, numFrontVar, numBackVar: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
@@ -270,9 +304,9 @@ begin
                 numFrontVar := numFront;
                 
                 if freeListRewind = '1' then
-                    listPtrTake <= freeListWriteTag; -- Indexing TMP                            
-                    physPtrTake(SMALL_NUMBER_SIZE-1 downto 2) <= freeListWriteTag(SMALL_NUMBER_SIZE-1 downto 2);                         
-                    tmpTag2(1 downto 0) := freeListWriteTag(1 downto 0);
+                    listPtrTake <= causingTag; -- Indexing TMP                            
+                    physPtrTake(SMALL_NUMBER_SIZE-1 downto 2) <= causingTag(SMALL_NUMBER_SIZE-1 downto 2);                         
+                    tmpTag2(1 downto 0) := causingTag(1 downto 0);
                     numFrontVar := subSN(i2slv(0, SMALL_NUMBER_SIZE), tmpTag2); -- TODO: find simpler notation for uminus
                     memRead <= '0';
                 else
@@ -281,7 +315,7 @@ begin
                 
                 if freeListTakeAllow = '1' and freeListRewind = '0' then
                     numFrontVar := subSN(numFrontVar, nTaken);
-                    listPtrTake <= addSN(listPtrTake, nTaken);                            
+                    listPtrTake <= addSN(listPtrTake, nTaken);                           
                 end if;
                 
                 if freeListRewind = '0' then
@@ -295,6 +329,7 @@ begin
                 
                 memData <= listContent32(slv2u(effectivePhysPtrTake)/4);                        
                 numFront <= numFrontVar;
+                    numFront(7 downto 5) <= (others => numFrontVar(4));
                 
                 listBackExt(0 to 7) := listBack;
                 numBackVar := numBack;
@@ -312,11 +347,11 @@ begin
                         -- for each element of input vec
                         if freeListPutSel(i) = '1' then
                             indPut := addInt(indPut, 1);
-                            assert isNonzero(physCommitFreedDelayed(i)) = '1' report "Putting 0 to free list!" severity failure;
                         end if;    
                     end loop;
                     listPtrPut <= indPut;
-
+                        listPtrTakeStable <= addInt(listPtrTakeStable, countOnes(stableTakeUpdate));
+                        
                     for i in 0 to PIPE_WIDTH-1 loop
                         listBackExt(slv2u(numBackVar) + i) := physCommitFreedDelayed(i);
                     end loop;
@@ -325,7 +360,8 @@ begin
                 end if;                        
                 
                 listBack <= listBackExt(0 to 7);
-                numBack <= numBackVar;
+                    listBack(7) <= (others => '0'); -- slot 7 never filled because when full >= 4, 4 elems are always removed
+                numBack <= numBackVar  and X"07"; -- Only 3 bits needed because list never gets 8 full
                                     
                 -- CHECK: 3 cycles to restore?
                 if freeListRewind = '1' then
@@ -333,10 +369,95 @@ begin
                 elsif isNonzero(recoveryCounter) = '1' then
                     recoveryCounter <= addInt(recoveryCounter, -1);
                 end if;
+                
+                    recoveryCounter(7 downto 2) <= (others => '0'); -- Only 2 bits needed here
             end if;
         end process;            
         
-        assert physPtrTake /= physPtrPut report "Error: free list can overflow!" severity failure;
+        VIEW: if VIEW_ON generate
+            use work.Viewing.all;
+            
+            signal vFree, vUsed: std_logic_vector(0 to N_PHYS-1) := (others => '0');
+            signal newTaken, newPut: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+            
+            -- CAREFUL, TODO: this assumes some endianness, maybe needed universal
+            function TMP_w2b(wa: WordArray) return ByteArray is
+                constant LEN: natural := wa'length;
+                variable res: ByteArray(0 to 4*LEN-1);
+            begin
+                for i in 0 to LEN-1 loop 
+                    res(4*i to 4*i + 3) := (wa(i)(31 downto 24), wa(i)(23 downto 16), wa(i)(15 downto 8), wa(i)(7 downto 0));    
+                end loop;
+                return res;
+            end function;
+            
+            function getFreeVec(listContent32: WordArray; physStart, physEnd: SmallNumber;
+                                listFront: PhysNameArray; numFront: SmallNumber; listBack: PhysNameArray; numBack: SmallNumber)
+            return std_logic_vector is
+                variable res: std_logic_vector(0 to N_PHYS-1) := (others => '0');
+                constant wa: WordArray(0 to 2*listContent32'length-1) := listContent32 & listContent32;
+                constant tmpByteArray: ByteArray(0 to 2*FREE_LIST_SIZE-1) := TMP_w2b(wa); -- 2x for easy range extraction
+                variable pStart, pEnd: natural;
+            begin
+            
+                --tmpByteArray := TMP_w2b(listContent32);
+                pStart := slv2u(physStart);
+                pEnd := slv2u(physEnd);
+                
+                if pStart > pEnd then
+                    pEnd := pEnd + FREE_LIST_SIZE;
+                    
+                   --         report "!!!! " & integer'image(pStart) & "  " & integer'image(pEnd) & "   " & integer'image(tmpByteArray'length);
+                end if;
+                --tempByteArray(pStart to pEnd-1);
+                
+                for i in pStart to pEnd-1 loop
+                    res(slv2u(tmpByteArray(i))) := '1';
+                end loop;
+                
+                for i in 0 to slv2s(numFront)-1 loop -- CAREFUL: numFront can be negative
+                    res(slv2u(listFront(i))) := '1';
+                end loop;
+                
+                for i in 0 to slv2s(numBack)-1 loop -- CAREFUL: numBack can be negative
+                    res(slv2u(listBack(i))) := '1';                    
+                end loop;                            
+                return res;
+            end function;
+            
+            signal numFree: natural := 0;
+        begin
+            
+            process(clk)
+
+            begin
+                if rising_edge(clk) then
+                    
+                    -- Watch what is taken from the list, how it is rewinded, and what is put at the end
+                    
+                    -- There can be no 0 in the list!
+                    for i in 0 to slv2s(numFront)-1 loop
+                        assert std2bool(isNonzero(listFront(i))) report "Has 0 in free list!" severity failure;                    
+                    end loop;
+                    for i in 0 to slv2s(numBack)-1 loop
+                        assert std2bool(isNonzero(listBack(i))) report "Put 0 to free list!" severity failure;
+                    end loop;
+                                        
+                    vFree <= getFreeVec(listContent32, physPtrTake, physPtrPut, listFront, numFront, listBack, numBack);
+                    
+                    assert physPtrTake /= physPtrPut report "Error: free list can overflow!" severity failure;
+                    
+                    -- Num of free regs may be overstated after rewind when physical pointer gets decremented more than the virtual one!
+                    -- Beyond the time of recovery we can't tolerate less than 32 occupied regs
+                    assert (numFree <= N_PHYS-32 or std2bool(isNonzero(recoveryCounter))) report "Impossible number of free regs" severity failure; 
+                    -- NOTE: For FP no phys reg 0 so 1 less free but it cancels out on both sides ((TODO?) unless -1 added to numFree)
+                end if;
+            end process;
+            
+            numFree <= countOnes(vFree); -- CAREFUL (TODO?): for FP physical reg 0 is not used so number actually -1  
+
+     
+        end generate;
         
     end block;
 

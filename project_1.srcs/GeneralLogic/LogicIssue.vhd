@@ -149,9 +149,9 @@ begin
 end function;
 
 
-function updateArgLocs_Issue(argValues: InstructionArgValues; readyBefore: std_logic_vector)
-return InstructionArgValues is
-	variable res: InstructionArgValues := argValues;
+function updateArgLocs_Issue(ss: SchedulerState; readyBefore: std_logic_vector)
+return SchedulerState is
+	variable res: SchedulerState := ss;
 begin
 	for i in 0 to 1 loop
 		if readyBefore(i) = '1' then
@@ -173,13 +173,13 @@ begin
 end function;
 
 
-function updateArgLocs(argValues: InstructionArgValues;
+function updateArgLocs(ss: SchedulerState;
                               readyBefore: std_logic_vector;
                               wakeupPhases0, wakeupPhases1: SmallNumberArray;
 							  wakeupVec0, wakeupVec1: std_logic_vector;
 							  progress: boolean)
-return InstructionArgValues is
-	variable res: InstructionArgValues := argValues;
+return SchedulerState is
+	variable res: SchedulerState := ss;
 	variable wakeupVec: std_logic_vector(0 to 2) := (others => '0');
 	variable wakeupPhases: SmallNumberArray(0 to 2) := (others => (others => '0'));  
 begin
@@ -256,50 +256,72 @@ begin
         res.ins.physicalArgSpec.dest := (others => '0'); -- Don't allow false notifications of args
     end if;
 
-		if res.state.argValues.zero(0) = '1' then
-			res.state.argValues.args(0) := (others => '0');
-			res.state.argValues.stored(0) := '1';
-		elsif res.state.argValues.argLocsPhase(0)(1 downto 0) = "00" then
-			res.state.argValues.args(0) := fni.values0(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
-			res.state.argValues.stored(0) := '1';
-		else --elsif res.state.argValues.argPhase(1 downto 0) := "01" then
-			res.state.argValues.args(0) := fni.values1(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
-			if res.state.argValues.argLocsPhase(0)(1 downto 0) = "01" then
-				res.state.argValues.stored(0) := '1';
+		if res.state.zero(0) = '1' then
+			res.state.args(0) := (others => '0');
+			res.state.stored(0) := '1';
+		elsif res.state.argLocsPhase(0)(1 downto 0) = "00" then
+			res.state.args(0) := fni.values0(slv2u(res.state.argLocsPipe(0)(1 downto 0)));
+			res.state.stored(0) := '1';
+		else --elsif res.state.argPhase(1 downto 0) := "01" then
+			res.state.args(0) := fni.values1(slv2u(res.state.argLocsPipe(0)(1 downto 0)));
+			if res.state.argLocsPhase(0)(1 downto 0) = "01" then
+				res.state.stored(0) := '1';
 		    end if;
 		end if;
 
-	if res.state.argValues.immediate = '1' and USE_IMM then
-		res.state.argValues.args(1) := res.ins.constantArgs.imm;
+	if res.state.immediate = '1' and USE_IMM then
+		res.state.args(1) := res.ins.constantArgs.imm;
 		
 		if IMM_AS_REG then
-		    res.state.argValues.args(1)(PhysName'length-1 downto 0) := res.ins.physicalArgSpec.args(1);
+		    res.state.args(1)(PhysName'length-1 downto 0) := res.ins.physicalArgSpec.args(1);
 		end if;
 		
-		res.state.argValues.args(1)(31 downto 17) := (others => res.ins.constantArgs.imm(16)); -- 16b + addditional sign bit
-		res.state.argValues.stored(1) := '1';
+		res.state.args(1)(31 downto 17) := (others => res.ins.constantArgs.imm(16)); -- 16b + addditional sign bit
+		res.state.stored(1) := '1';
 	else
-		if res.state.argValues.zero(1) = '1' then
-			res.state.argValues.args(1) := (others => '0');
-			res.state.argValues.stored(1) := '1';
-		elsif res.state.argValues.argLocsPhase(1)(1 downto 0) = "00" then
-			res.state.argValues.args(1) := fni.values0(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
-			res.state.argValues.stored(1) := '1';
-		else --elsif res.state.argValues.argPhase(1 downto 0) := "01" then
-			res.state.argValues.args(1) := fni.values1(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
-			if res.state.argValues.argLocsPhase(1)(1 downto 0) = "01" then
-                res.state.argValues.stored(1) := '1';
+		if res.state.zero(1) = '1' then
+			res.state.args(1) := (others => '0');
+			res.state.stored(1) := '1';
+		elsif res.state.argLocsPhase(1)(1 downto 0) = "00" then
+			res.state.args(1) := fni.values0(slv2u(res.state.argLocsPipe(1)(1 downto 0)));
+			res.state.stored(1) := '1';
+		else --elsif res.state.argPhase(1 downto 0) := "01" then
+			res.state.args(1) := fni.values1(slv2u(res.state.argLocsPipe(1)(1 downto 0)));
+			if res.state.argLocsPhase(1)(1 downto 0) = "01" then
+                res.state.stored(1) := '1';
             end if;				
 		end if;
 	end if;
 
     if REGS_ONLY or DELAY_ONLY then
-        res.state.argValues.stored := (others => '0');
+        res.state.stored := (others => '0');
     end if;
 
-    ready := (others => '1');--not res.state.argValues.missing;
-    res.state.argValues := updateArgLocs_Issue(res.state.argValues, ready);
+    ready := (others => '1');--not res.state.missing;
+    res.state := updateArgLocs_Issue(res.state, ready);
+    
+    if CLEAR_DEBUG_INFO then
+        res.ins := clearDbCounters(res.ins);
+        res.ins := clearAbstractInfo(res.ins);
+        
+        res.ins.controlInfo := DEFAULT_CONTROL_INFO;
 
+        res.ins.classInfo := DEFAULT_CLASS_INFO;
+        res.ins.constantArgs.imm := (others => '0');
+        
+        res.ins.virtualArgSpec.args := (others => (others => '0'));
+        res.ins.virtualArgSpec.intArgSel := (others => '0');
+        res.ins.virtualArgSpec.floatArgSel := (others => '0');
+
+        
+--        -- This breaks store tests:        
+--        if not DELAY_ONLY then
+--            res.ins.physicalArgSpec.args := (others => (others => '0'));
+--            res.ins.physicalArgSpec.intArgSel := (others => '0');
+--            res.ins.physicalArgSpec.floatArgSel := (others => '0');
+--        end if;      
+    end if;
+    
 	return res;
 end function;
 
@@ -317,18 +339,18 @@ begin
 	res.state := st;
 
 	-- Clear 'missing' flag where readyNext indicates.
-	--res.state.argValues.missing := res.state.argValues.missing and not (res.state.argValues.readyNext and not res.state.argValues.zero);
+	--res.state.missing := res.state.missing and not (res.state.readyNext and not res.state.zero);
 
-    if res.state.argValues.argLocsPhase(0)(1 downto 0) = "00" and res.state.argValues.stored(0) = '0' then
-        res.state.argValues.args(0) := vals(slv2u(res.state.argValues.argLocsPipe(0)(1 downto 0)));
-    elsif res.state.argValues.argLocsPhase(0)(1 downto 0) = "10" and res.state.argValues.stored(0) = '0' then
-        res.state.argValues.args(0) := regValues(0);
+    if res.state.argLocsPhase(0)(1 downto 0) = "00" and res.state.stored(0) = '0' then
+        res.state.args(0) := vals(slv2u(res.state.argLocsPipe(0)(1 downto 0)));
+    elsif res.state.argLocsPhase(0)(1 downto 0) = "10" and res.state.stored(0) = '0' then
+        res.state.args(0) := regValues(0);
     end if;
 
-    if res.state.argValues.argLocsPhase(1)(1 downto 0) = "00" and res.state.argValues.stored(1) = '0' then
-        res.state.argValues.args(1) := vals(slv2u(res.state.argValues.argLocsPipe(1)(1 downto 0)));
-    elsif res.state.argValues.argLocsPhase(1)(1 downto 0) = "10" and res.state.argValues.stored(1) = '0' then -- and res.state.argValues.immediate = '0' then
-        res.state.argValues.args(1) := regValues(1);
+    if res.state.argLocsPhase(1)(1 downto 0) = "00" and res.state.stored(1) = '0' then
+        res.state.args(1) := vals(slv2u(res.state.argLocsPipe(1)(1 downto 0)));
+    elsif res.state.argLocsPhase(1)(1 downto 0) = "10" and res.state.stored(1) = '0' then -- and res.state.immediate = '0' then
+        res.state.args(1) := regValues(1);
     end if;
 	
 	return res;
@@ -339,7 +361,7 @@ function extractReadyMaskNew(entryVec: SchedulerEntrySlotArray) return std_logic
 	variable res: std_logic_vector(entryVec'range);
 begin	
 	for i in res'range loop
-		res(i) := not isNonzero(entryVec(i).state.argValues.missing(0 to 1))      and not entryVec(i).state.argValues.issued;
+		res(i) := not isNonzero(entryVec(i).state.missing(0 to 1))      and not entryVec(i).state.issued;
 	end loop;
 	return res;
 end function;
@@ -368,7 +390,7 @@ return SchedulerEntrySlotArray is
 begin
 	-- Important, new instrucitons in queue must be marked!	
 	for i in 0 to PIPE_WIDTH-1 loop
-		dataNewDataS(i).state.argValues.newInQueue := '1';
+		dataNewDataS(i).state.newInQueue := '1';
 	end loop;
   
 	xVecS := queueContent & dataNewDataS;
@@ -376,18 +398,18 @@ begin
 	-- What is being issued now is marked
     for i in 0 to QUEUE_SIZE-1 loop
         if selMask(i) = '1' and sends = '1' then
-            xVecS(i).state.argValues.issued := '1';
+            xVecS(i).state.issued := '1';
         end if;
         
         -- Retraction into IQ when sending turns out disallowed
         if issuedMask(i) = '1' and sentUnexpected = '1' then
-        --    xVecS(i).state.argValues.issued := '0';
+        --    xVecS(i).state.issued := '0';
         end if;  
     end loop;	
 	
 	xVecS(QUEUE_SIZE) := xVecS(QUEUE_SIZE-1);
 	for i in 0 to QUEUE_SIZE + PIPE_WIDTH - 1 loop
-		xVecS(i).state.argValues.newInQueue := '0';
+		xVecS(i).state.newInQueue := '0';
 	end loop;
 
 	for i in 0 to QUEUE_SIZE-2 loop
@@ -426,8 +448,8 @@ begin
 
 	   res(i).state := iqDataNextS(i).state;
 	
-	   res(i).state.argValues.stored := (others => '0');
-	   res(i).state.argValues.args := (others => (others => '0'));
+	   res(i).state.stored := (others => '0');
+	   res(i).state.args := (others => (others => '0'));
 	   
        if CLEAR_DEBUG_INFO then
            res(i).ins := clearAbstractInfo(res(i).ins);           
@@ -437,10 +459,12 @@ begin
            res(i).ins.tags.intPointer := (others => '0');
            res(i).ins.tags.floatPointer := (others => '0');
                
-           res(i).ins.classInfo.branchIns := '0';
-           res(i).ins.controlInfo.frontBranch := '0';
-           res(i).ins.controlInfo.confirmedBranch := '0';
-           res(i).ins.controlInfo.specialAction := '0';
+           --res(i).ins.classInfo.branchIns := '0';
+           --res(i).ins.controlInfo.frontBranch := '0';
+           --res(i).ins.controlInfo.confirmedBranch := '0';
+           --res(i).ins.controlInfo.specialAction := '0';
+
+           res(i).ins.controlInfo := DEFAULT_CONTROL_INFO;
 
            if IMM_AS_REG then        
                res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
@@ -501,12 +525,12 @@ begin
         wakeupVec1 := getWakeupVector(fnm, wakeupPhases, fnm.maskR1, fnm.maskR0, fnm.maskM1, fnm.maskM2, cmp1toR1, cmp1toR0, cmp1toM1, cmp1toM2);
     end if;
     
-	readyBefore := not res.state.argValues.missing;
+	readyBefore := not res.state.missing;
 
     readyNew := (isNonzero(wakeupVec0), isNonzero(wakeupVec1), '0');
 
 	-- Update arg tracking
-	res.state.argValues := updateArgLocs(    res.state.argValues,
+	res.state := updateArgLocs(    res.state,
 												readyBefore,
 												wakeupPhases0,
 												wakeupPhases1,
@@ -527,7 +551,7 @@ begin
 	-- 
 	-- 
 															
-	res.state.argValues.missing := res.state.argValues.missing and not readyNew;
+	res.state.missing := res.state.missing and not readyNew;
 	
 	return res;
 end function;

@@ -8,7 +8,7 @@ use work.ArchDefs.all;
 package CoreConfig is
 
 constant CLEAR_DEBUG_INFO: boolean := true;
-
+constant VIEW_ON: boolean := false;
 
 constant LOG2_PIPE_WIDTH: natural := 0 + 2;
 constant PIPE_WIDTH: positive := 2**LOG2_PIPE_WIDTH;
@@ -21,6 +21,8 @@ constant IBUFFER_SIZE: positive := 2*FETCH_WIDTH;
 constant ROB_SIZE: positive := 8; 
 
 constant USE_LINE_PREDICTOR: boolean := true;
+
+constant CLEAR_DEST_SEL_ON_EMPTY: boolean := false; -- When op gets empty, sets *DestSel to 0
 
 constant PHYS_REG_BITS: natural := 6 + LOG2_PIPE_WIDTH;
 
@@ -36,6 +38,8 @@ constant FREE_LIST_SIZE: positive := --N_PHYSICAL_REGS;
 
 -- Optimize immediate field by keeping part of it in physical register field
 constant IMM_AS_REG: boolean := true;
+
+    constant TMP_LATE_TAG: boolean := false;
 
 end CoreConfig;
 

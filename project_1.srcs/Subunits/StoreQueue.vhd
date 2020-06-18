@@ -396,7 +396,9 @@ begin
             elsif isNonzero(recoveryCounter) = '1' then
                 recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
-	                
+	        
+	           recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here
+	        
 	        isFull <= cmpGtU(nFullNext, QUEUE_SIZE-4);
             isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
 
@@ -439,10 +441,12 @@ begin
 	committedSending <= isDraining;
 	committedDataOut <= (0 => dataDrainSigNC(0), others => DEFAULT_INSTRUCTION_SLOT);
 	
-    VIEW: block
-       signal queueTxt: InstructionTextArray(0 to QUEUE_SIZE-1);
-    begin
-       queueTxt <= insStateArrayText(content, fullOrCommittedMask, '1');
-    end block;
+	VIEW: if VIEW_ON generate
+       use work.Viewing.all;
+      
+       signal queueText: InsStringArray(0 to QUEUE_SIZE-1);
+    begin       
+       queueText <= getInsStringArray(makeSlotArray(content, fullOrCommittedMask), transfer);
+    end generate;
 	
 end Behavioral;

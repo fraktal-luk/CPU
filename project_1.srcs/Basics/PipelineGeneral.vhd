@@ -179,6 +179,7 @@ function extractData(queueContent: SchedulerEntrySlotArray) return InstructionSt
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
+function makeSlotArray(ia: InstructionStateArray; fm: std_logic_vector) return InstructionSlotArray;
 
 --function killByTag(before, ei, int: std_logic) return std_logic; PRIVATE
 
@@ -267,7 +268,12 @@ function clearAbstractInfo(ia: InstructionSlotArray) return InstructionSlotArray
 
 function clearDbCounters(ins: InstructionState) return InstructionState;      -- ip, bits; this is raw program data 
 function clearDbCounters(isl: InstructionSlot) return InstructionSlot;
-         
+
+function clearDbCausing(ins: InstructionState) return InstructionState;
+
+-- For setting dest sel flags in stages after ROB!
+function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray;
+
 end package;
 
 
@@ -548,7 +554,7 @@ begin
 end function;
 
 function extractData(queueContent: InstructionSlotArray) return InstructionStateArray is
-	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => defaultInstructionState);
+	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => DEFAULT_INS_STATE);
 begin
 	for i in res'range loop
 		res(i) := queueContent(i).ins;
@@ -558,7 +564,7 @@ end function;
 
 
 function extractData(queueContent: SchedulerEntrySlotArray) return InstructionStateArray is
-	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => defaultInstructionState);
+	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => DEFAULT_INS_STATE);
 begin
 	for i in res'range loop
 		res(i) := queueContent(i).ins;
@@ -600,6 +606,10 @@ begin
 	elsif sending = '1' or full = '0' then -- take empty
 		-- CAREFUL: clearing result tags for empty slots
 		for i in 0 to LEN-1 loop
+		    if CLEAR_DEST_SEL_ON_EMPTY then
+		       res(i).ins.physicalArgSpec.intDestSel := '0';
+		       res(i).ins.virtualArgSpec.floatDestSel := '0';
+		    end if;
 			res(i).ins.physicalArgSpec.dest := (others => '0');
 			res(i).ins.controlInfo.newEvent := '0';
 		end loop;
@@ -702,28 +712,34 @@ begin
         -- CAREFUL, TODO: define precisely what 'zero' designation means
         -- Set state markers: "zero" bit; only valid for Int args because FP doesn't use HW zero
         for j in 0 to 2 loop
-            res(i).state.argValues.zero(j) :=         (res(i).ins.physicalArgSpec.intArgSel(j) and not isNonzero(res(i).ins.virtualArgSpec.args(j)(4 downto 0)))
+            res(i).state.zero(j) :=         (res(i).ins.physicalArgSpec.intArgSel(j) and not isNonzero(res(i).ins.virtualArgSpec.args(j)(4 downto 0)))
                                                or (not res(i).ins.physicalArgSpec.intArgSel(j) and not res(i).ins.physicalArgSpec.floatArgSel(j));
                                                
-                res(i).state.argValues.argLocsPhase(j) := "00000010"; -- Like arg in register
+                res(i).state.argLocsPhase(j) := "00000010"; -- Like arg in register
         end loop;
 
         -- Set 'missing' flags for non-const arguments
-        res(i).state.argValues.missing := (res(i).ins.physicalArgSpec.intArgSel and not res(i).state.argValues.zero)
+        res(i).state.missing := (res(i).ins.physicalArgSpec.intArgSel and not res(i).state.zero)
                                        or (res(i).ins.physicalArgSpec.floatArgSel);
         
         -- Handle possible immediate arg
-        if res(i).ins.constantArgs.immSel = '1' then
-            res(i).state.argValues.missing(1) := '0';
-            res(i).state.argValues.immediate := '1';
-            res(i).state.argValues.zero(1) := '0';
+        if HAS_IMM and res(i).ins.constantArgs.immSel = '1' then
+            res(i).state.missing(1) := '0';
+            res(i).state.immediate := '1';
+            res(i).state.zero(1) := '0';
             
-            if CLEAR_DEBUG_INFO and IMM_AS_REG and HAS_IMM then
+            if IMM_AS_REG then
                 res(i).ins.physicalArgSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);    
-                res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
+                if CLEAR_DEBUG_INFO then
+                    res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
+                end if;
             end if;
         end if;
-
+        
+        if not HAS_IMM then
+            res(i).ins.constantArgs.imm := (others => '0');            
+        end if;
+        
         if CLEAR_DEBUG_INFO then
             res(i).ins.ip := (others => '0');
             res(i).ins.bits := (others => '0');
@@ -825,6 +841,17 @@ begin
     
     return res;
 end function;
+
+function makeSlotArray(ia: InstructionStateArray; fm: std_logic_vector) return InstructionSlotArray is
+    variable res: InstructionSlotArray(ia'range) := (others => DEFAULT_INS_SLOT);
+begin
+    for i in res'range loop
+        res(i) := (fm(i), ia(i));
+    end loop;
+    return res;
+end function;
+
+
 
 
 function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray is
@@ -1013,7 +1040,7 @@ end function;
 function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
-    for i in res'range loop   
+    for i in res'range loop
         res(i).ins.specificOperation.memory := MemOp'val(slv2u(res(i).ins.specificOperation.bits));
     end loop;
 
@@ -1025,6 +1052,8 @@ function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray 
 begin
     for i in res'range loop
         res(i).ins.specificOperation.float := FpOp'val(slv2u(res(i).ins.specificOperation.bits));
+            res(i).ins.virtualArgSpec.intDestSel := '0';          
+            res(i).ins.physicalArgSpec.intDestSel := '0';        
     end loop;
     return res;
 end function;
@@ -1033,7 +1062,9 @@ function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
     for i in res'range loop     
-        res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));            
+        res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
+            res(i).ins.virtualArgSpec.floatDestSel := '0';          
+            res(i).ins.physicalArgSpec.floatDestSel := '0';          
     end loop;  
     return res;
 end function;
@@ -1078,5 +1109,51 @@ function hasSyncEvent(ins: InstructionState) return std_logic is
 begin
     return  ins.controlInfo.hasException or ins.controlInfo.specialAction or ins.controlInfo.dbtrap; 
 end function;
-         
+
+
+function clearDbCausing(ins: InstructionState) return InstructionState is
+    variable res: InstructionState := ins;
+begin
+    if CLEAR_DEBUG_INFO then
+        res := DEFAULT_INS_STATE;
+        
+        res.tags.renameIndex := ins.tags.renameIndex;
+        res.tags.intPointer := ins.tags.intPointer;
+        res.tags.floatPointer := ins.tags.floatPointer;
+        
+        res.target := ins.target;
+    end if;
+    return res;
+end function;
+
+
+function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+    variable found: boolean := false;
+begin
+    
+    for i in 0 to PIPE_WIDTH-1 loop
+        if insVec(i).full = '0' or found then
+            res(i).full := '0';
+            res(i).ins.virtualArgSpec.intDestSel := '0';
+            res(i).ins.virtualArgSpec.floatDestSel := '0';                        
+        end if;            
+    
+        if insVec(i).ins.controlInfo.hasException = '1' or insVec(i).ins.controlInfo.specialAction = '1' then
+            found := true;
+        end if;
+        
+        if insVec(i).full = '0' or found then
+            res(i).ins.physicalArgSpec.intDestSel := '0';
+            res(i).ins.physicalArgSpec.floatDestSel := '0';                        
+        else
+            res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
+            res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;  
+        end if;
+            found := false;
+    end loop;
+    
+    return res;
+end function;
+
 end package body;

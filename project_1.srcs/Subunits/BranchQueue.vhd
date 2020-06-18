@@ -69,9 +69,9 @@ architecture Behavioral of BranchQueue is
 	signal dataOutSig, dataOutSigNext, dataOutSigFinal: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
 	signal pStart, pStartNext, pTagged, pAll, causingPtr: SmallNumber := (others => '0');
-	   signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
-	   signal recoveryCounter: SmallNumber := (others => '0');
-	   signal isFull, isAlmostFull: std_logic := '0';
+    signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
+    signal recoveryCounter: SmallNumber := (others => '0');
+    signal isFull, isAlmostFull: std_logic := '0';
 	
 
     function getNewContentBr(content: InstructionStateArray; dataIn, dataInBr: InstructionSlotArray;
@@ -91,7 +91,8 @@ architecture Behavioral of BranchQueue is
 	    variable imBr: std_logic_vector(0 to QUEUE_SIZE-1) := inputMaskBr;	    
     begin
 
-        -- TODO, CHECK: clear newEvent if unneeded? Other controlInfo excpet frontBranch, confirmedBranch, firstBr?
+        -- TODO, CHECK: clear newEvent if unneeded? Other controlInfo except frontBranch, confirmedBranch, firstBr?
+        -- TODO: add 'completed' flag for debug?  
 
         for i in 0 to QUEUE_SIZE-1 loop
            diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;
@@ -234,7 +235,9 @@ begin
             elsif isNonzero(recoveryCounter) = '1' then
                 recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
-               
+            
+                recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here
+            
             isFull <=       cmpGtU(nFullNext, QUEUE_SIZE-4);
             isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
             nFull <= nFullNext;                     
@@ -262,10 +265,12 @@ begin
 	selectedDataOutput <= selectedDataSlot;
 	almostFull <= '0'; -- TODO: is it deprecated?
 	
-    VIEW: block
-       signal queueTxt: InstructionTextArray(0 to QUEUE_SIZE-1);
-    begin
-       queueTxt <= insStateArrayText(content, fullMask, '0');
-    end block;
+	VIEW: if VIEW_ON generate
+       use work.Viewing.all;
+      
+       signal queueText: InsStringArray(0 to QUEUE_SIZE-1);
+    begin       
+       queueText <= getInsStringArray(makeSlotArray(content, fullMask), control);       
+    end generate;
 
 end Behavioral;

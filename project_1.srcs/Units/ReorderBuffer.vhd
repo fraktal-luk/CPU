@@ -104,10 +104,10 @@ architecture Behavioral of ReorderBuffer is
 	           ptr1 := getTagHighSN(execInfo1(j).ins.tags.renameIndex) and PTR_MASK_SN;
                ptr2 := getTagHighSN(execInfo2(j).ins.tags.renameIndex) and PTR_MASK_SN;
 	           if ptr1 = iv then
-	               res(i).ops := updateOpGroup(res(i).ops, execInfo1(j), 0);
+	               res(i).ops := updateOpGroup(res(i).ops, execInfo1(j), 0, j = 2); -- [2] is Mem subpipe
 	           end if;
 	           if ptr2 = iv then
-	               res(i).ops := updateOpGroup(res(i).ops, execInfo2(j), 1);
+	               res(i).ops := updateOpGroup(res(i).ops, execInfo2(j), 1, false);
 	           end if;
 	       end loop;
 	       
@@ -138,15 +138,23 @@ architecture Behavioral of ReorderBuffer is
 	function replaceConstantInformation(insVec: InstructionSlotArray; constInfo, constInfo2, constInfo3: Word) return InstructionSlotArray is
 	   variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
 	begin
+	   if CLEAR_DEBUG_INFO then
+           for i in 0 to PIPE_WIDTH-1 loop
+	           res(i).ins := DEFAULT_INSTRUCTION_STATE;
+	           res(i).ins.controlInfo := insVec(i).ins.controlInfo;
+	       end loop;       
+	   end if;
+	
 	   for i in 0 to PIPE_WIDTH-1 loop
 	       res(i).ins.physicalArgSpec.dest := constInfo(8*i + 7 downto 8*i);
 	       res(i).ins.virtualArgSpec.dest := "000" & constInfo2(5*i + 4 downto 5*i);
 	       
-	       res(i).ins.virtualArgSpec.intDestSel := constInfo3(0 + 2*i);
-	       res(i).ins.virtualArgSpec.floatDestSel := constInfo3(8 + 2*i);
+	       res(i).ins.virtualArgSpec.intDestSel := constInfo3(4 + i);
+	       res(i).ins.virtualArgSpec.floatDestSel := constInfo3(0 + i);
 	       
-	       res(i).ins.physicalArgSpec.intDestSel := constInfo3(1 + 2*i);
-	       res(i).ins.physicalArgSpec.floatDestSel := constInfo3(9 + 2*i);
+	       --res(i).ins.physicalArgSpec.intDestSel := constInfo3(4 + i);
+	       --res(i).ins.physicalArgSpec.floatDestSel := constInfo3(0 + i);
+	              
 	   end loop;
 	   
 	   return res;
@@ -159,13 +167,17 @@ architecture Behavioral of ReorderBuffer is
 	   num := slv2u(constInfo(SYS_OP_SIZE - 1 + 16 downto 16));	   
 	   
 	   res.ins.specificOperation.subpipe := None;
-	   res.ins.specificOperation.system := SysOp'val(num);	   
+	   res.ins.specificOperation.system := SysOp'val(num); 
+	   
+	   if CLEAR_DEBUG_INFO then
+	       res.ins := DEFAULT_INS_STATE;
+	       res.ins.controlInfo := special.ins.controlInfo;
+	       res.ins.specificOperation.subpipe := None;
+	       res.ins.specificOperation.system := SysOp'val(num);
+	   end if;
 	   
 	   return res;
 	end function;
-	
-        signal num0, num1: integer := 0;
-
 
 	signal startPtr, startPtrNext, endPtr, acmPtr, causingPtr: SmallNumber := (others => '0');
 	
@@ -175,8 +187,6 @@ architecture Behavioral of ReorderBuffer is
     attribute ram_style: string;
     --attribute ram_style of constantBuf, constantBuf2, constantBuf3: signal is "block";	
 begin
-        num1 <= slv2u(constantFromBuf3(SYS_OP_SIZE - 1 + 16 downto 16));	
-        num0 <= SysOp'pos(outputSpecialReg.ins.specificOperation.system);
 
 	execEvent <= execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
 	causingPtr <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
@@ -192,15 +202,25 @@ begin
     inputConstant2(19 downto 0) <= inputData(3).ins.virtualArgSpec.dest(4 downto 0) & inputData(2).ins.virtualArgSpec.dest(4 downto 0)
                     & inputData(1).ins.virtualArgSpec.dest(4 downto 0) & inputData(0).ins.virtualArgSpec.dest(4 downto 0);
     
-    inputConstant3(7 downto 0) <=  inputData(3).ins.physicalArgSpec.intDestSel & inputData(3).ins.virtualArgSpec.intDestSel
-                                 & inputData(2).ins.physicalArgSpec.intDestSel & inputData(2).ins.virtualArgSpec.intDestSel
-                                 & inputData(1).ins.physicalArgSpec.intDestSel & inputData(1).ins.virtualArgSpec.intDestSel
-                                 & inputData(0).ins.physicalArgSpec.intDestSel & inputData(0).ins.virtualArgSpec.intDestSel;
+    inputConstant3(15 downto 8) <=  inputData(3).ins.physicalArgSpec.intDestSel --& inputData(3).ins.physicalArgSpec.floatDestSel
+                                 & inputData(2).ins.physicalArgSpec.intDestSel --& inputData(2).ins.physicalArgSpec.floatDestSel
+                                 & inputData(1).ins.physicalArgSpec.intDestSel --& inputData(1).ins.physicalArgSpec.floatDestSel
+                                 & inputData(0).ins.physicalArgSpec.intDestSel --& inputData(0).ins.physicalArgSpec.floatDestSel;
+
+                                 & inputData(3).ins.physicalArgSpec.floatDestSel
+                                 & inputData(2).ins.physicalArgSpec.floatDestSel
+                                 & inputData(1).ins.physicalArgSpec.floatDestSel
+                                 & inputData(0).ins.physicalArgSpec.floatDestSel;
     
-    inputConstant3(15 downto 8) <=  inputData(3).ins.physicalArgSpec.floatDestSel & inputData(3).ins.virtualArgSpec.floatDestSel
-                                  & inputData(2).ins.physicalArgSpec.floatDestSel & inputData(2).ins.virtualArgSpec.floatDestSel
-                                  & inputData(1).ins.physicalArgSpec.floatDestSel & inputData(1).ins.virtualArgSpec.floatDestSel
-                                  & inputData(0).ins.physicalArgSpec.floatDestSel & inputData(0).ins.virtualArgSpec.floatDestSel;
+    inputConstant3(7 downto 0) <=  inputData(3).ins.virtualArgSpec.intDestSel --& inputData(3).ins.virtualArgSpec.floatDestSel
+                                  & inputData(2).ins.virtualArgSpec.intDestSel --& inputData(2).ins.virtualArgSpec.floatDestSel
+                                  & inputData(1).ins.virtualArgSpec.intDestSel --& inputData(1).ins.virtualArgSpec.floatDestSel
+                                  & inputData(0).ins.virtualArgSpec.intDestSel --& inputData(0).ins.virtualArgSpec.floatDestSel;
+
+                                  & inputData(3).ins.virtualArgSpec.floatDestSel
+                                  & inputData(2).ins.virtualArgSpec.floatDestSel
+                                  & inputData(1).ins.virtualArgSpec.floatDestSel
+                                  & inputData(0).ins.virtualArgSpec.floatDestSel;
 
     inputConstant3(SYS_OP_SIZE - 1 + 16 downto 16) <= i2slv(SysOp'pos(inputSpecial.ins.specificOperation.system), SYS_OP_SIZE);
 
@@ -245,6 +265,8 @@ begin
             elsif isNonzero(recoveryCounter) = '1' then
                 recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
+            
+                recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here
             
             nFull <= nFullNext;
             
@@ -291,15 +313,48 @@ begin
 	
     acmPtr <= addIntTrunc(endPtr, 1, ROB_PTR_SIZE);
     acceptingMore <= not isAlmostFull;
-	outputData <= replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2, constantFromBuf3);
+	outputData <= ( replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2, constantFromBuf3));
 
 	sendingOut <= isSending;
 	outputSpecial <= replaceConstantInformationSpecial(outputSpecialReg, constantFromBuf3);
 	
-	VIEW: block
-	   signal robTxt: RobText;
-	begin
-	   robTxt <= getRobView(content);
-	end block;
+	VIEW: if VIEW_ON generate
+	   use work.Viewing.all;
+	
+	   type StageTextArray is array (integer range <>) of InsStringArray(0 to PIPE_WIDTH-1);
+	   
+	   signal robView: StageTextArray(0 to ROB_SIZE-1);	   
+	   subtype RobSlotText is string(1 to 80);
+	   type RobSlotArray is array(integer range <>) of RobSlotText;
+	   
+	   function createRobView(content: ReorderBufferArray) return StageTextArray is
+	       variable res: StageTextArray(0 to ROB_SIZE-1);
+	   begin
+	       for i in 0 to ROB_SIZE-1 loop
+	           if content(i).full = '1' then
+	               res(i) := getInsStringArray(content(i).ops);    
+	           end if;
+	       end loop;
+	       
+	       -- TODO: special actions!
+	       
+	       return res;
+	   end function;
+	   
+	   signal robText: InsStringArray(0 to ROB_SIZE-1) := (others => (others => ' '));
+	begin	   
+	    robView <= createRobView(content);
+        
+        ROB_TEXT: for i in 0 to ROB_SIZE-1 generate
+            robText(i) <= sprintRobRow(content(i).ops);
+        end generate;
+        
+        process(clk)
+        begin
+            if rising_edge(clk) then 
 
+            end if;
+        end process;
+        
+    end generate;
 end Behavioral;

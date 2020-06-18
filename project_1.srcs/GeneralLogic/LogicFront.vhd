@@ -39,7 +39,7 @@ end LogicFront;
 package body LogicFront is
 
 function getInstructionClassInfo(ins: InstructionState) return InstructionClassInfo is
-	variable ci: InstructionClassInfo := defaultClassInfo;
+	variable ci: InstructionClassInfo := DEFAULT_CLASS_INFO;
 begin 
     -- Which clusters?
     ci.mainCluster := '1';
@@ -63,8 +63,8 @@ end function;
 function decodeInstruction(inputState: InstructionState) return InstructionState is
 	variable res: InstructionState := inputState;
     variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
-	variable tmpVirtualArgs: InstructionVirtualArgs;
-	variable tmpVirtualDestArgs: InstructionVirtualDestArgs;
+	--variable tmpVirtualArgs: InstructionVirtualArgs;
+	--variable tmpVirtualDestArgs: InstructionVirtualDestArgs;
 begin
 	decodedIns := decodeFromWord(inputState.bits);
 	
@@ -233,6 +233,10 @@ function findEarlyTakenJump(ins: InstructionState; insVec: InstructionSlotArray)
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if insVec(i).full = '1' and insVec(i).ins.controlInfo.frontBranch = '1' then
+		    if not CLEAR_DEBUG_INFO then
+		       res := insVec(i).ins; 
+		    end if;
+		
 		    res.controlInfo.newEvent := insVec(i).ins.controlInfo.newEvent; -- CAREFUL: event only if needs redirection, but break group at any taken jump 
             res.controlInfo.frontBranch := '1';
             res.target := insVec(i).ins.target; -- Correcting target within subsequent fetch line is still needed even if no redirection!

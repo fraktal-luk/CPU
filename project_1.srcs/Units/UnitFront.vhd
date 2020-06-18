@@ -69,9 +69,9 @@ architecture Behavioral of UnitFront is
 	signal stageDataOutFetch0, stageDataOutFetch1, stageDataInEarlyBranch, earlyBranchDataOutA: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     --                              earlyBranchMultiDataOutA UNUSED!
-	signal earlyBranchMultiDataInA, earlyBranchMultiDataOutA: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+	signal earlyBranchMultiDataInA, earlyBranchMultiDataOutA, ibufDataOut: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	
-	signal dataToBranchTransfer: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+	signal dataToBranchTransfer, dataBranchTransferOut: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	signal fetchCounter, fetchCounterNext: Word := (others => '0');
 begin
 	killAll <= execEventSignal or lateEventSignal;
@@ -181,11 +181,9 @@ begin
 		execCausing => DEFAULT_INSTRUCTION_STATE
 	);
 
-	--frontKill <= frontBranchEvent;
-
 	frontBranchEvent <= earlyBranchDataOutA(0).ins.controlInfo.newEvent;
 	frontEventSignal <= frontBranchEvent;
-	frontCausingSig <= earlyBranchDataOutA(0).ins;
+	frontCausingSig <= clearDbCausing(earlyBranchDataOutA(0).ins);
 	
 	SAVE_PRED_TARGET: process(clk)
 	begin
@@ -214,14 +212,14 @@ begin
 		
 		acceptingOut => bufferAccepting,
 		sendingOut => sendingOutBuffer,
-		stageDataOut => dataLastLiving,
+		stageDataOut => ibufDataOut,
 		
 		execEventSignal => killAll,
 		execCausing => DEFAULT_INSTRUCTION_STATE		
 	);
 
 	lastSending <= sendingOutBuffer;
-	
+	dataLastLiving <= ibufDataOut;
 	frontAccepting <= '1';
 
 	frontCausing <= frontCausingSig;
@@ -229,6 +227,8 @@ begin
 	sendingToBranchTransfer <= sendingOutFetch1 and not fetchStall;
 
 	dataToBranchTransfer <= prepareForBQ(earlyBranchMultiDataInA);
+
+    bpData <= dataBranchTransferOut;
 
     SUBUNIT_BRANCH_TRANSFER: entity work.GenericStage(Behavioral)
 	generic map(
@@ -243,18 +243,45 @@ begin
 		
 		acceptingOut => open,
 		sendingOut => bpSending,
-		stageDataOut => bpData,
+		stageDataOut => dataBranchTransferOut,
 		
 		execEventSignal => killAll,
 		lateEventSignal => killAll,
 		execCausing => DEFAULT_INSTRUCTION_STATE
 	);
 
-    VIEW: block
-        signal insBufInput: InstructionTextArray(0 to PIPE_WIDTH-1);
-    begin
-        insBufInput <= insSlotArrayText(earlyBranchMultiDataInA, '0');
+	VIEW: if VIEW_ON generate
+	   use work.Viewing.all;
+        signal insBufInput, stagePreBuffer, branchTransferData, stageOut: GenericStageView;
+        signal stageFetch0, stageFetch1: FetchStageView;
         
-    end block;
+        function expandToSlotArray(ia: InstructionSlotArray; wa: WordArray) return InstructionSlotArray is
+            variable res: InstructionSlotArray(wa'range) := (others => DEFAULT_INS_SLOT);
+            variable adrHi, adrLo: Mword := ia(0).ins.ip; 
+        begin
+            adrHi(ALIGN_BITS-1 downto 0) := (others => '0');
+            adrLo(MWORD_SIZE-1 downto ALIGN_BITS) := (others => '0');    
+        
+            for i in 0 to wa'length-1 loop
+                res(i).ins.bits := wa(i);
+                res(i).ins.ip := i2slv(slv2u(adrHi) + 4*i, 32);
+                if ia(0).full = '1' and slv2u(adrLo) <= 4*i then
+                    res(i).full := '1';
+                end if;
+            end loop;
+            
+            return res;
+        end function;  
+    begin
+        insBufInput <= getInsStringArray(earlyBranchMultiDataInA);
+
+        stageFetch0 <= getInsStringArray(expandToSlotArray(stageDataOutFetch0, fetchedLine0));
+        stageFetch1 <= getInsStringArray(expandToSlotArray(stageDataOutFetch1, fetchedLine1));
+        stagePreBuffer <= getInsStringArray(earlyBranchMultiDataOutA);
+        
+        branchTransferData <= getInsStringArray(dataBranchTransferOut);
+        
+        stageOut <= getInsStringArray(ibufDataOut);
+    end generate;
 
 end Behavioral;

@@ -46,7 +46,9 @@ package LogicExec is
                                       sysLoadReady: std_logic; sysLoadValue: Mword;
                                       storeForwardSending: std_logic; storeForwardIns: InstructionState;
                                       lqSelectedOutput: InstructionSlot
-                                        ) return InstructionState;	
+                                        ) return InstructionState;
+                                        
+    function getStoreDataOp(ss: SchedulerEntrySlot) return SchedulerEntrySlot;                                            
 end LogicExec;
 
 
@@ -86,10 +88,10 @@ package body LogicExec is
 		return res;	
 	end function;
 
-	function resolveBranchCondition(av: InstructionArgValues; op: ArithOp) return std_logic is
+	function resolveBranchCondition(ss: SchedulerState; op: ArithOp) return std_logic is
 		variable isZero: std_logic;
 	begin
-		isZero := not isNonzero(av.args(0));
+		isZero := not isNonzero(ss.args(0));
 			
 		if op = opJ then
 			return '1';
@@ -116,8 +118,8 @@ package body LogicExec is
 		-- j taken		: if not taken goto return, if taken equal
 		-- j not taken : if not taken ok, if taken goto dest
 
-        targetMatch := bool2std(queueData.target = st.argValues.args(1));
-		branchTaken := resolveBranchCondition(st.argValues, ins.specificOperation.arith);
+        targetMatch := bool2std(queueData.target = st.args(1));
+		branchTaken := resolveBranchCondition(st, ins.specificOperation.arith);
 
 		if queueData.controlInfo.frontBranch = '1' and branchTaken = '0' then						
 			res.controlInfo.newEvent := '1';
@@ -126,7 +128,7 @@ package body LogicExec is
 			res.controlInfo.newEvent := '1';
 			res.controlInfo.confirmedBranch := '1';			
 			if ins.constantArgs.immSel = '0' then -- if branch reg			
-				trueTarget := st.argValues.args(1);
+				trueTarget := st.args(1);
 			else
 				trueTarget := queueData.target;
 			end if;
@@ -137,7 +139,7 @@ package body LogicExec is
 				if targetMatch = '0' then
 					res.controlInfo.newEvent := '1';	-- Need to correct the target!	
 				end if;
-				trueTarget := st.argValues.args(1); -- reg destination
+				trueTarget := st.args(1); -- reg destination
 			else
 				trueTarget := queueData.target;			
 			end if;
@@ -149,6 +151,23 @@ package body LogicExec is
 		res.result := queueData.result;
 		res.tags.intPointer := queueData.tags.intPointer;
 		res.tags.floatPointer := queueData.tags.floatPointer;
+		
+		if CLEAR_DEBUG_INFO then
+		    res := clearDbCounters(res);
+		    res := clearRawInfo(res);
+		    res.constantArgs := DEFAULT_CONSTANT_ARGS;
+		    res.classInfo := DEFAULT_CLASS_INFO;
+		    
+		    res.specificOperation := DEFAULT_SPECIFIC_OP;
+		      
+		    res.virtualArgSpec.intArgSel := (others => '0');
+		    res.virtualArgSpec.floatArgSel := (others => '0');
+		    res.virtualArgSpec.args := (others => (others => '0'));
+		    
+		    res.physicalArgSpec.intArgSel := (others => '0');
+		    res.physicalArgSpec.floatArgSel := (others => '0');
+		    res.physicalArgSpec.args := (others => (others => '0'));
+		end if;
 							
 		return res;
 	end function;
@@ -167,9 +186,9 @@ package body LogicExec is
 		variable tempBits: std_logic_vector(95 downto 0) := (others => '0'); -- TEMP! for 32b only
 	    variable shiftedBytes: std_logic_vector(39 downto 0) := (others => '0');
 	begin
-		arg0 := st.argValues.args(0);
-		arg1 := st.argValues.args(1);
-		arg2 := st.argValues.args(2);
+		arg0 := st.args(0);
+		arg1 := st.args(1);
+		arg2 := st.args(2);
 
 		if ins.specificOperation.arith = opSub then
 			argAddSub := not arg1;
@@ -255,6 +274,25 @@ package body LogicExec is
 			res.controlInfo.hasException := '1';
 		end if;      		
 		res.result := result;
+
+		if CLEAR_DEBUG_INFO then
+		    res := clearDbCounters(res);
+		    res := clearRawInfo(res);
+		    res.constantArgs := DEFAULT_CONSTANT_ARGS;
+		    res.classInfo := DEFAULT_CLASS_INFO;
+
+            res.specificOperation := DEFAULT_SPECIFIC_OP;
+
+		    res.virtualArgSpec.intArgSel := (others => '0');
+		    res.virtualArgSpec.floatArgSel := (others => '0');
+		    res.virtualArgSpec.args := (others => (others => '0'));
+		    
+		    res.physicalArgSpec.intArgSel := (others => '0');
+		    res.physicalArgSpec.floatArgSel := (others => '0');
+		    res.physicalArgSpec.args := (others => (others => '0'));
+		    
+		    res.target := (others => '0');
+		end if;
 		
 		return res;
 	end function;
@@ -265,11 +303,28 @@ package body LogicExec is
        variable res: InstructionState := ins;
 	begin
         if ins.specificOperation.float = opOr then
-           res.result := st.argValues.args(0) or st.argValues.args(1);
+           res.result := st.args(0) or st.args(1);
         elsif ins.specificOperation.float = opMove then
-           res.result := st.argValues.args(0);
+           res.result := st.args(0);
         else
            
+		end if;
+
+		if CLEAR_DEBUG_INFO then
+		    res := clearDbCounters(res);
+		    res := clearRawInfo(res);
+		    res.constantArgs := DEFAULT_CONSTANT_ARGS;
+		    res.classInfo := DEFAULT_CLASS_INFO;
+		    	    
+		    res.virtualArgSpec.intArgSel := (others => '0');
+		    res.virtualArgSpec.floatArgSel := (others => '0');
+		    res.virtualArgSpec.args := (others => (others => '0'));
+		    
+		    res.physicalArgSpec.intArgSel := (others => '0');
+		    res.physicalArgSpec.floatArgSel := (others => '0');
+		    res.physicalArgSpec.args := (others => (others => '0'));
+		    
+		    res.target := (others => '0');
 		end if;
 
 		return res;
@@ -282,11 +337,30 @@ package body LogicExec is
         variable res: InstructionState := ins;
     begin
         if fromDLQ = '1' then
-            return dlqData;
+            res := dlqData;
         else
-            res.result := add(st.argValues.args(0), st.argValues.args(1));
-            return res;
+            res.result := add(st.args(0), st.args(1));
+            --return res;
         end if;
+
+		if CLEAR_DEBUG_INFO then
+		    res := clearDbCounters(res);
+		    res := clearRawInfo(res);
+		    res.constantArgs := DEFAULT_CONSTANT_ARGS;
+		    res.classInfo := DEFAULT_CLASS_INFO;
+		    	    
+		    res.virtualArgSpec.intArgSel := (others => '0');
+		    res.virtualArgSpec.floatArgSel := (others => '0');
+		    res.virtualArgSpec.args := (others => (others => '0'));
+		    
+		    res.physicalArgSpec.intArgSel := (others => '0');
+		    res.physicalArgSpec.floatArgSel := (others => '0');
+		    res.physicalArgSpec.args := (others => (others => '0'));
+		    
+		    res.target := (others => '0');
+		end if;
+        
+        return res;
     end function;
     
     
@@ -333,6 +407,7 @@ package body LogicExec is
              if storeForwardIns.controlInfo.completed2 = '0' then
                  res.controlInfo.sqMiss := '1';
                  res.controlInfo.specialAction := '1';
+                 res.controlInfo.newEvent := '1';
              end if;
          else
             res.result := memLoadValue;
@@ -342,10 +417,34 @@ package body LogicExec is
          if isStoreMemOp(ins) = '1' and lqSelectedOutput.full = '1' then
             res.controlInfo.orderViolation := '1';
             res.controlInfo.specialAction := '1';
+            res.controlInfo.newEvent := '1';
          end if;
 
         -- TODO: remember about miss/hit status and reason of miss if relevant!
         res := setAddressCompleted(res, '1'); -- TEMP
         return res;
     end function;
+    
+    function getStoreDataOp(ss: SchedulerEntrySlot) return SchedulerEntrySlot is
+        variable res: SchedulerEntrySlot := ss;
+    begin
+    
+        if CLEAR_DEBUG_INFO then
+		    res.ins := clearDbCounters(res.ins);
+            res.ins := clearRawInfo(res.ins);
+            
+            res.ins.specificOperation := DEFAULT_SPECIFIC_OP;
+            
+            res.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
+            res.ins.classInfo := DEFAULT_CLASS_INFO;
+                    
+            res.ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+            res.ins.physicalArgSpec := DEFAULT_ARG_SPEC;
+            
+            res.ins.target := (others => '0');
+            res.ins.result := (others => '0');
+        end if;
+        
+        return res;
+    end function;    
 end LogicExec;

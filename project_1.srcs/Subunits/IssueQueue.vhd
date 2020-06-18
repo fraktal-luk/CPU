@@ -48,6 +48,8 @@ entity IssueQueue is
 		
 		queuesAccepting: in std_logic;
 		
+		empty: out std_logic;
+		
 		anyReady: out std_logic;
 		schedulerOut: out SchedulerEntrySlot;
 		sending: out std_logic
@@ -112,18 +114,16 @@ architecture Behavioral of IssueQueue is
 	function clearOutput(elem: SchedulerEntrySlot) return SchedulerEntrySlot is
 		variable res: SchedulerEntrySlot := elem;
     begin
-	    -- Clear unused fields
-        res.ins.bits := (others => '0');
-        res.ins.result := (others => '0');
-        res.ins.target := (others => '0');        
-    
+	    -- Clear unused fields       
+        if CLEAR_DEBUG_INFO then
+            res.ins := clearAbstractInfo(res.ins);
+        end if;
+
         res.ins.controlInfo.completed := '0';
         res.ins.controlInfo.completed2 := '0';
-        res.ins.ip := (others => '0');
     
         res.ins.controlInfo.newEvent := '0';
         res.ins.controlInfo.hasInterrupt := '0';
-        --res.ins.controlInfo.exceptionCode := (others => '0');        
     
 	   return res;
 	end function;
@@ -145,7 +145,7 @@ architecture Behavioral of IssueQueue is
         variable res: std_logic_vector(0 to elems'length-1) := (others => '0');
 	begin
 		for i in 0 to elems'length-1 loop
-		    res(i) := elems(i).state.argValues.issued;
+		    res(i) := elems(i).state.issued;
 		end loop;
 		return res;
     end function;
@@ -174,7 +174,7 @@ architecture Behavioral of IssueQueue is
 	begin
 	   for i in 0 to PIPE_WIDTH-1 loop
 	       rrf := rr(3*i to 3*i + 2);                                              
-           res(i).state.argValues.missing := res(i).state.argValues.missing and not rrf;	       
+           res(i).state.missing := res(i).state.missing and not rrf;	       
 	   end loop;   
 	   return res;
 	end function;
@@ -211,6 +211,8 @@ begin
 	fullMask <= extractFullMask(queueContent);
     queueData <= extractData(queueContent);
 
+    fullMaskNext <= extractFullMask(queueContentNext);
+
 	sends <= anyReadyLive and nextAccepting; -- CHECK: can we use full instead of living?
 	sendPossible <= anyReadyFull and nextAccepting; -- Includes ops that would send but are killed
 	
@@ -244,7 +246,7 @@ begin
 	
 	killMask <= getKillMask(queueData, fullMask, execCausing, execEventSignal, lateEventSignal);
 	
-	       acceptingForInputStage <= not fullMask(IQ_SIZE-PIPE_WIDTH);
+	acceptingForInputStage <= not fullMask(IQ_SIZE-PIPE_WIDTH);
 	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH);-- and not inputStageAny;
 	               
 	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);
@@ -256,13 +258,97 @@ begin
 	
 	schedulerOut <= (sends, dispatchDataNew.ins, dispatchDataNew.state);
 	sending <= sends;
-	   sentCancelled <= sentKilled;
-	   
-	   VIEW: block   
-           signal queueTextIns: InstructionTextArray(0 to IQ_SIZE-1);
-           signal queueTextState: SchedEntryTextArray(0 to IQ_SIZE-1);           
-       begin
-           queueTextIns <= schedEntrySlotArrayTextIns(queueContent, '0');
-           queueTextState <= schedEntrySlotArrayTextState(queueContent);
-	   end block;
+    sentCancelled <= sentKilled;
+    
+    -- CAREFUL! If queue becomes noncollapsing, we'll need to see all full bits! 
+    empty <= not fullMask(0); -- not isNonzero(fullMask);
+    
+    VIEW: if VIEW_ON generate
+        use work.Viewing.all;
+        
+        signal prevReadyMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');      
+        signal flowSig: IntArray(0 to IQ_SIZE-1) := (others => -1);
+
+        subtype ReadyVec is std_logic_vector(0 to 2);
+        type WakeupTable is array(0 to IQ_SIZE-1) of ReadyVec;
+        signal wakeup, wakeupSel: WakeupTable := (others => (others => '0'));
+        
+        
+        signal queueText: InsStringArray(0 to IQ_SIZE-1);
+        signal inputStageText: InsStringArray(0 to PIPE_WIDTH-1);
+        signal iqText: InsStringArray(0 to IQ_SIZE-1) := (others => (others => ' '));            
+    begin
+        -- Monitor:
+        -- fma - forward matches array
+        
+        -- compare readyMask with previous one, remember that some may have shifted and some not 
+        -- 
+        process (clk)
+            variable tmpFull, newFull: natural := 0;
+            variable flow: IntArray(0 to IQ_SIZE-1) := (others => -1);
+            variable thisReadyVec, prevReadyVec: std_logic_vector(0 to 2) := (others => '0');          
+        begin
+            if rising_edge(clk) then
+                tmpFull := countOnes(fullMask);
+                newFull := countOnes(fullMaskNext); 
+            
+                prevReadyMask <= readyMask;
+                
+                if std2bool(isNonzero(issuedMask)) then -- something is removed
+                    tmpFull := tmpFull - 1;
+                end if;
+
+                flow := (others => -1);
+                
+                for i in 0 to IQ_SIZE-1 loop
+                    if remainMask(i) = '1' then
+                        flow(i) := 0; -- remaining
+                    else
+                        flow(i) := 1; -- moved
+                    end if;
+                    
+                    if i >= tmpFull then
+                        flow(i) := 2; -- new
+                    end if;
+                    if i >= newFull then
+                        flow(i) := -1; -- empty
+                    end if;
+                    
+                    if killMask(i) = '1' then
+                        flow(i) := -2; -- killed
+                    end if;
+                end loop;                
+                
+                flowSig <= flow;
+                
+                
+                -- Look at wakeups and check where they come from and for which register
+                for i in 0 to IQ_SIZE-1 loop
+                    for j in 0 to 2 loop
+                        if wakeup(i)(j) = '1' then
+                            -- fma(i).
+                            -- ...
+                        end if;
+                        
+                        if wakeupSel(i)(j) = '1' then
+                            -- 
+                            -- ...
+                        end if;                        
+                    end loop;
+                end loop;
+                
+            end if;
+        end process;
+        
+        
+        WAKEUP_VECS: for i in 0 to IQ_SIZE-1 generate
+            wakeup(i) <= not queueContentUpdated(i).state.missing and queueContent(i).state.missing when fullMask(i) = '1' else (others => '0');
+            wakeupSel(i) <= not queueContentUpdatedSel(i).state.missing and queueContent(i).state.missing when fullMask(i) = '1' else (others => '0');        
+        end generate;
+
+        iqText <= getInsStringArray(queueContent, args);        
+        queueText <= getInsStringArray(queueContent);
+        inputStageText <= getInsStringArray(inputStage);
+    end generate;
+	   	   
 end Behavioral;

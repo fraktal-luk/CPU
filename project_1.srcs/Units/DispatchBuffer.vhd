@@ -44,6 +44,7 @@ architecture Behavioral of DispatchBuffer is
     signal fullMask: std_logic_vector(0 to 0) := (others => '0');
     signal isSending: std_logic := '0';
     
+    -- TODO: remove IS_FP (UNUSED) unless turns out useful
     function TMP_clearSlot(isl: InstructionSlot; i: integer; fp: boolean) return InstructionSlot is
         variable res: InstructionSlot := isl;
     begin 
@@ -85,8 +86,8 @@ begin
         variable queueDataTemp0: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
         variable specialTemp0: InstructionSlot := DEFAULT_INS_SLOT;
     begin
-        fullMaskNew0 := fullMask(0);
         if rising_edge(clk) then
+            fullMaskNew0 := fullMask(0);        
             queueDataTemp0 := queueData0;
             specialTemp0 := special0;
             
@@ -112,11 +113,10 @@ begin
                 end loop;
                 
                 specialTemp0 := TMP_clearSpecialSlot(specialTemp0);
-                
-                queueData0 <= queueDataTemp0;
-                special0 <= specialTemp0;
             end if;    
 
+            queueData0 <= queueDataTemp0;
+            special0 <= specialTemp0;               
         end if;
     end process;
     

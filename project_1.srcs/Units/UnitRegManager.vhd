@@ -49,7 +49,7 @@ end UnitRegManager;
 
 architecture Behavioral of UnitRegManager is
     signal stageDataRenameIn, stageDataRenameInFloat, renamedDataLivingPre, renamedDataLivingFloatPre,
-                stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+               stageDataToCommit, stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, sendingCommitInt, sendingCommitFloat, renameLockState, renameLockEnd, renameLockRelease: std_logic := '0';
  
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG; -- This is rewinded on events
@@ -384,6 +384,9 @@ begin
         end if;    
     end process;
     
+    stageDataToCommit <= setDestFlags(robDataLiving);
+                         --   robDataLiving;
+    
     SUBUNIT_COMMIT_INT: entity work.GenericStage(Behavioral)
     generic map(
         WIDTH => PIPE_WIDTH
@@ -393,7 +396,7 @@ begin
         
         -- Interface with CQ
         prevSending => sendingFromROB,
-        stageDataIn => robDataLiving,
+        stageDataIn => stageDataToCommit,
         acceptingOut => open, -- unused but don't remove
         
         -- Interface with hypothetical further stage
@@ -406,30 +409,33 @@ begin
         lateEventSignal => '0',    
         execCausing => execCausing
     );
-    
-    SUBUNIT_COMMIT_FLOAT: entity work.GenericStage(Behavioral)
-    generic map(
-        WIDTH => PIPE_WIDTH
-    )
-    port map(
-        clk => clk, reset => '0', en => '0',
         
-        -- Interface with CQ
-        prevSending => sendingFromROB,
-        stageDataIn => robDataLiving,
-        acceptingOut => open, -- unused but don't remove
+            sendingCommitFloat <= sendingCommitInt;
+            stageDataCommitFloat <= stageDataCommitInt;
+            
+--    SUBUNIT_COMMIT_FLOAT: entity work.GenericStage(Behavioral)
+--    generic map(
+--        WIDTH => PIPE_WIDTH
+--    )
+--    port map(
+--        clk => clk, reset => '0', en => '0',
         
-        -- Interface with hypothetical further stage
-        nextAccepting => '1',
-        sendingOut => sendingCommitFloat,
-        stageDataOut => stageDataCommitFloat,
+--        -- Interface with CQ
+--        prevSending => sendingFromROB,
+--        stageDataIn => robDataLiving,
+--        acceptingOut => open, -- unused but don't remove
         
-        -- Event interface
-        execEventSignal => '0', -- CAREFUL: committed cannot be killed!
-        lateEventSignal => '0',    
-        execCausing => execCausing
-    );
-    
+--        -- Interface with hypothetical further stage
+--        nextAccepting => '1',
+--        sendingOut => sendingCommitFloat,
+--        stageDataOut => stageDataCommitFloat,
+        
+--        -- Event interface
+--        execEventSignal => '0', -- CAREFUL: committed cannot be killed!
+--        lateEventSignal => '0',    
+--        execCausing => execCausing
+--    );
+
     INT_MAPPER: entity work.RegisterMapper
     port map(
         clk => clk, en => '0', reset => '0',
@@ -442,7 +448,7 @@ begin
         newPhysDests => newIntDests,    -- MAPPING (from FREE LIST)
         
         sendingToCommit => sendingFromROB,
-        stageDataToCommit => robDataLiving,
+        stageDataToCommit => stageDataToCommit,
         physCommitDests_TMP => (others => (others => '0')), -- CAREFUL: useless input?
         
         prevNewPhysDests => open,
@@ -465,7 +471,7 @@ begin
         newPhysDests => newFloatDests,    -- MAPPING (from FREE LIST)
         
         sendingToCommit => sendingFromROB,
-        stageDataToCommit => robDataLiving,
+        stageDataToCommit => stageDataToCommit,
         physCommitDests_TMP => (others => (others => '0')), -- CAREFUL: useless input?
         
         prevNewPhysDests => open,
@@ -474,11 +480,26 @@ begin
         prevStablePhysDests => physStableFloat,  -- FOR MAPPING (to FREE LIST)
         stablePhysSources => open           
     );
-    
-    causingPtrInt <=      lateCausing.tags.intPointer when lateEventSignal = '1'
-                else execCausing.tags.intPointer;
-    causingPtrFloat <=    lateCausing.tags.floatPointer when lateEventSignal = '1'
-                else execCausing.tags.floatPointer;
+
+
+        LATE_TAG_YES: if TMP_LATE_TAG generate
+            causingPtrInt <=   --  lateCausing.tags.intPointer when lateEventSignal = '1'
+                        --else execCausing.tags.intPointer;
+                            execCausing.tags.intPointer;
+            causingPtrFloat <= --  lateCausing.tags.floatPointer when lateEventSignal = '1'
+                        --else execCausing.tags.floatPointer;
+                            execCausing.tags.floatPointer;
+        end generate;
+
+        LATE_TAG_NO: if not TMP_LATE_TAG generate    
+            causingPtrInt <=     lateCausing.tags.intPointer when lateEventSignal = '1'
+                        else execCausing.tags.intPointer;
+                         --   execCausing.tags.intPointer;
+            causingPtrFloat <=   lateCausing.tags.floatPointer when lateEventSignal = '1'
+                        else execCausing.tags.floatPointer;
+                         --   execCausing.tags.floatPointer;
+        end generate;
+
                             
     INT_FREE_LIST: entity work.RegisterFreeList(Behavioral)
     port map(
@@ -487,6 +508,8 @@ begin
         en => '0',
         
         rewind => eventSig,
+            execEventSignal => execEventSignal,
+            lateEventSignal => lateEventSignal,
         causingPointer => causingPtrInt,
         
         sendingToReserve => frontLastSending, 
@@ -511,6 +534,8 @@ begin
         en => '0',
         
         rewind => eventSig,
+            execEventSignal => execEventSignal,
+            lateEventSignal => lateEventSignal,        
         causingPointer => causingPtrFloat,
         
         sendingToReserve => frontLastSending, 
