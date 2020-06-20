@@ -27,7 +27,6 @@ function whichTakeReg(insVec: InstructionSlotArray; fp: boolean) return std_logi
 function whichPutReg(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector;
 
 function findOverriddenDests(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector;
-function findOverriddenDests2(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector;
 
 
 function getPhysicalIntDestSels(insVec: InstructionSlotArray) return std_logic_vector;
@@ -42,7 +41,7 @@ package body LogicRenaming is
 
 
 function getVirtualArgs(insVec: InstructionSlotArray) return RegNameArray is
-    variable res: RegNameArray(0 to 3*insVec'length-1) := (others=>(others=>'0'));
+    variable res: RegNameArray(0 to 3*insVec'length-1) := (others => (others => '0'));
 begin
     for i in insVec'range loop
         res(3*i+0) := insVec(i).ins.virtualArgSpec.args(0)(4 downto 0);
@@ -123,9 +122,6 @@ end function;
 
 
 
-
-
-
 function whichTakeReg(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector is
     variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
@@ -149,34 +145,11 @@ end function;
 
 function findOverriddenDests(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector is
 	variable res: std_logic_vector(insVec'range) := (others => '0');
-	variable em: std_logic_vector(insVec'range) := (others => '0');
 begin
-	em := getExceptionMask(insVec);
 	for i in insVec'range loop
 		for j in insVec'range loop
-			if 		j > i and insVec(j).full = '1' and em(j) = '0' -- CAREFUL: if exception, doesn't write
-			    and 
-			         ((insVec(j).ins.virtualArgSpec.intDestSel = '1' and not fp) or (insVec(j).ins.virtualArgSpec.floatDestSel = '1' and fp)) -- Overrides only if really uses a destination!
-				and insVec(i).ins.virtualArgSpec.dest(4 downto 0) = insVec(j).ins.virtualArgSpec.dest(4 downto 0)
-			then				
-				res(i) := '1';
-			end if;
-		end loop;
-	end loop;			
-	return res;
-end function;
-
-
-function findOverriddenDests2(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector is
-	variable res: std_logic_vector(insVec'range) := (others => '0');
-	--variable em: std_logic_vector(insVec'range) := (others => '0');
-begin
-	--em := getExceptionMask(insVec);
-	for i in insVec'range loop
-		for j in insVec'range loop
-			if 		j > i --and insVec(j).full = '1' and em(j) = '0' -- CAREFUL: if exception, doesn't write
-			    and 
-			         ((insVec(j).ins.virtualArgSpec.intDestSel = '1' and not fp) or (insVec(j).ins.virtualArgSpec.floatDestSel = '1' and fp)) -- Overrides only if really uses a destination!
+			if 		j > i
+			    and ((insVec(j).ins.virtualArgSpec.intDestSel = '1' and not fp) or (insVec(j).ins.virtualArgSpec.floatDestSel = '1' and fp)) -- Overrides only if really uses a destination!
 				and insVec(i).ins.virtualArgSpec.dest(4 downto 0) = insVec(j).ins.virtualArgSpec.dest(4 downto 0)
 			then				
 				res(i) := '1';

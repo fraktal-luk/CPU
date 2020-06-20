@@ -25,7 +25,7 @@ entity RegisterFreeList is
 		rewind: in std_logic;
 		  execEventSignal: in std_logic;
 		  lateEventSignal: in std_logic;
-		causingPointer: in SmallNumber;
+		causingPointer: in SmallNumber; -- CAREFUL: this is just for Exec events, late events are handled differently
 		
 		sendingToReserve: in std_logic;
 		takeAllow: in std_logic;
@@ -48,7 +48,6 @@ architecture Behavioral of RegisterFreeList is
     -- Don't remove, it is used by newPhysDestPointer!
     signal freeListTakeNumTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal freeListTakeAllow, freeListPutAllow, freeListRewind: std_logic := '0';
-    signal freeListWriteTag: SmallNumber := (others => '0');
     
     signal physCommitFreedDelayed, physCommitDestsDelayed, newPhysDestsSync, newPhysDestsAsync: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal recoveryCounter: SmallNumber := (others => '0');
@@ -123,39 +122,20 @@ architecture Behavioral of RegisterFreeList is
 	end function;
 		
 		
-		signal mfull, vsels, psels, ovm, ovm2, excm, upd2: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+    signal vsels, psels: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 		
-		signal ch0, ch1: std_logic := '0';
+	--	signal ch0, ch1: std_logic := '0';
 begin
-        mfull <= extractFullMask(stageDataToRelease);
+    vsels <= getVirtualFloatDestSels(stageDataToRelease) when IS_FP else getVirtualIntDestSels(stageDataToRelease);
+    psels <= getPhysicalFloatDestSels(stageDataToRelease) when IS_FP else getPhysicalIntDestSels(stageDataToRelease);
 
-        vsels <= getVirtualFloatDestSels(stageDataToRelease) when IS_FP else getVirtualIntDestSels(stageDataToRelease);
-        psels <= getPhysicalFloatDestSels(stageDataToRelease) when IS_FP else getPhysicalIntDestSels(stageDataToRelease);
-        
-        ovm <= findOverriddenDests(stageDataToRelease, IS_FP);
-        excm <= getExceptionMask(stageDataToRelease) and mfull;
-
-        ovm2 <= findOverriddenDests2(stageDataToRelease, IS_FP);
-
-        upd2 <= psels and not ovm2;
-
-        --    ch0 <= bool2std(freeListPutSel = vsels);
-        --    ch1 <= bool2std(stableUpdateSelDelayed = upd2);
-
-        overridden <= findOverriddenDests2(stageDataToRelease, IS_FP);
+    overridden <= findOverriddenDests(stageDataToRelease, IS_FP);
 
     physCommitFreedDelayed <= selAndCompactPhysDests(physStableDelayed, physCommitDestsDelayed, stableUpdateSelDelayed, freeListPutSel);
     physCommitDestsDelayed <= getPhysicalDests(stageDataToRelease);
     
-    -- CAREFUL: excluding overridden dests here means that we don't bypass phys names when getting
---    --				physStableDelayed! >> Related code in top module
---    stableUpdateSelDelayed <=  freeListPutSel -- NOTE: putting *previous stable* register if: full, has dest, not exception.
---                       and not getExceptionMask(stageDataToRelease)
---                       and not findOverriddenDests(stageDataToRelease, IS_FP); -- CAREFUL: and must not be overridden!
---                                      -- NOTE: if those conditions are not satisfied, putting the allocated reg
-        stableUpdateSelDelayed <= psels and not overridden;
-    
-        stableTakeUpdate <= vsels; -- Those which commit any register that won't ever be rewound
+    stableUpdateSelDelayed <= psels and not overridden;  -- CAREFUL: excluding overridden dests
+    stableTakeUpdate <= vsels; -- Those which commit any register that won't ever be rewound
     
     -- CAREFUL! Because there's a delay of 1 cycle to read FreeList, we need to do reading
     --				before actual instruction goes to Rename, and pointer shows to new registers for next
@@ -169,11 +149,8 @@ begin
     freeListRewind <= rewind;
     
     freeListTakeSel <= whichTakeReg(stageDataToReserve, IS_FP); -- CAREFUL: must agree with Sequencer signals
-    -- Releasing a register every time (but not always prev stable!)
-    freeListPutSel <= --whichPutReg(stageDataToRelease, IS_FP);-- CAREFUL: this chooses which ops put anyth. at all
-                        vsels;
-    
-    freeListWriteTag <= causingPointer;
+    -- Releasing a register every time any dest exists (but not always prev stable!)
+    freeListPutSel <= vsels;
     
     newPhysDests <= newPhysDestsAsync;
     newPhysDestPointer <= freeListTakeNumTags(0);
@@ -190,13 +167,11 @@ begin
         signal physPtrPut: SmallNumber := i2slv(N_PHYS - 32 - FP_1, SMALL_NUMBER_SIZE);
     
         signal numFront, numBack, numToTake: SmallNumber := (others => '0');
-        signal memRead, needTake: std_logic := '0';
+        signal memRead, needTake, doTake: std_logic := '0';
         
-        signal listFrontNext: PhysNameArray(0 to 7) := (others => (others => '0'));
         signal memTemp: PhysNameArray(0 to 3) := (others => (others => '0'));
-        signal doTake: std_logic := '0';
 
-        signal listFrontNextShift, listFrontNextMemNoTake, listFrontNextMemTake: PhysNameArray(0 to 7) := (others => (others => '0'));
+        signal listFrontNext, listFrontNextShift, listFrontNextMemNoTake, listFrontNextMemTake: PhysNameArray(0 to 7) := (others => (others => '0'));
         signal overNF, overNFmNT: std_logic_vector(0 to 7) := (others => '0');
 
         function nextShift(list: PhysNameArray; memData: PhysNameArray; allow: std_logic; nF, nT: SmallNumber) return PhysNameArray is
@@ -281,26 +256,20 @@ begin
         needTake <= cmpLeS(numFront, addInt(numToTake, 4));
         numToTake <= i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE) when freeListTakeAllow = '1' else (others => '0');
 
-        LATE_TAG_YES: if TMP_LATE_TAG generate
-            causingTag <= listPtrTakeStable when lateEventSignal = '1' else causingPointer;
-        end generate;
-
-        LATE_TAG_NO: if not TMP_LATE_TAG generate
-            causingTag <= freeListWriteTag;
-        end generate;
+        causingTag <= listPtrTakeStable when lateEventSignal = '1' else causingPointer;
         
         SYNCHRONOUS: process(clk)
-            variable indPut, indTake: SmallNumber := (others => '0');
             variable nTaken, nPut, numFrontVar, numBackVar: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
             variable physPtrTakeVar, physPtrPutVar, tmpTag2: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
             variable listBackExt: PhysNameArray(0 to 11) := (others => (others => '0'));
         begin
             if rising_edge(clk) then
+                
+                ----------------------------------------------------------------------
+                -- Front side
                 listFront <= listFrontNext;
             
-                indPut := listPtrPut;                                
                 nTaken := i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE);
-                nPut := i2slv(countOnes(freeListPutSel), SMALL_NUMBER_SIZE);
                 numFrontVar := numFront;
                 
                 if freeListRewind = '1' then
@@ -319,18 +288,19 @@ begin
                 end if;
                 
                 if freeListRewind = '0' then
-                     if cmpLeS(numFrontVar, 4) = '1' then
-                        if memRead = '1' then                            
-                            numFrontVar := addInt(numFrontVar, 4); 
-                        end if;
+                     if cmpLeS(numFrontVar, 4) = '1' and memRead = '1' then
+                         numFrontVar := addInt(numFrontVar, 4); 
                      end if;               
                      memRead <= '1';
                 end if;
                 
                 memData <= listContent32(slv2u(effectivePhysPtrTake)/4);                        
                 numFront <= numFrontVar;
-                    numFront(7 downto 5) <= (others => numFrontVar(4));
+                numFront(7 downto 5) <= (others => numFrontVar(4));
                 
+
+                ----------------------------------------------------------------------                
+                -- Back side
                 listBackExt(0 to 7) := listBack;
                 numBackVar := numBack;
     
@@ -341,26 +311,22 @@ begin
                     numBackVar := addInt(numBackVar, -4);               
                     physPtrPut <= addInt(physPtrPut, 4);         
                 end if;                        
+
+                nPut := i2slv(countOnes(freeListPutSel), SMALL_NUMBER_SIZE);
                 
-                if freeListPutAllow = '1' then
-                    for i in 0 to PIPE_WIDTH-1 loop
-                        -- for each element of input vec
-                        if freeListPutSel(i) = '1' then
-                            indPut := addInt(indPut, 1);
-                        end if;    
-                    end loop;
-                    listPtrPut <= indPut;
-                        listPtrTakeStable <= addInt(listPtrTakeStable, countOnes(stableTakeUpdate));
-                        
+                if freeListPutAllow = '1' then    
+                    listPtrPut <= addInt(listPtrPut, countOnes(freeListPutSel));
+                    listPtrTakeStable <= addInt(listPtrTakeStable, countOnes(stableTakeUpdate));
+
                     for i in 0 to PIPE_WIDTH-1 loop
                         listBackExt(slv2u(numBackVar) + i) := physCommitFreedDelayed(i);
                     end loop;
-                    
+
                     numBackVar := addSN(numBackVar, nPut);                 
                 end if;                        
                 
                 listBack <= listBackExt(0 to 7);
-                    listBack(7) <= (others => '0'); -- slot 7 never filled because when full >= 4, 4 elems are always removed
+                listBack(7) <= (others => '0'); -- slot 7 never filled because when full >= 4, 4 elems are always removed
                 numBack <= numBackVar  and X"07"; -- Only 3 bits needed because list never gets 8 full
                                     
                 -- CHECK: 3 cycles to restore?
@@ -370,7 +336,7 @@ begin
                     recoveryCounter <= addInt(recoveryCounter, -1);
                 end if;
                 
-                    recoveryCounter(7 downto 2) <= (others => '0'); -- Only 2 bits needed here
+                recoveryCounter(7 downto 2) <= (others => '0'); -- Only 2 bits needed here
             end if;
         end process;            
         
@@ -398,18 +364,13 @@ begin
                 constant wa: WordArray(0 to 2*listContent32'length-1) := listContent32 & listContent32;
                 constant tmpByteArray: ByteArray(0 to 2*FREE_LIST_SIZE-1) := TMP_w2b(wa); -- 2x for easy range extraction
                 variable pStart, pEnd: natural;
-            begin
-            
-                --tmpByteArray := TMP_w2b(listContent32);
+            begin            
                 pStart := slv2u(physStart);
                 pEnd := slv2u(physEnd);
                 
                 if pStart > pEnd then
-                    pEnd := pEnd + FREE_LIST_SIZE;
-                    
-                   --         report "!!!! " & integer'image(pStart) & "  " & integer'image(pEnd) & "   " & integer'image(tmpByteArray'length);
+                    pEnd := pEnd + FREE_LIST_SIZE;                    
                 end if;
-                --tempByteArray(pStart to pEnd-1);
                 
                 for i in pStart to pEnd-1 loop
                     res(slv2u(tmpByteArray(i))) := '1';

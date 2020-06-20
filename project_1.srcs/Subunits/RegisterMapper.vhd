@@ -162,11 +162,10 @@ begin
 
     stableMapNext <= getNextMap(stableMap, stableMap, writeCommit, selMaskS0, selMaskS1, selMaskS2, selMaskS3, '0');
 
-        psels <= getPhysicalFloatDestSels(stageDataToCommit) when IS_FP else getPhysicalIntDestSels(stageDataToCommit);
+    psels <= getPhysicalFloatDestSels(stageDataToCommit) when IS_FP else getPhysicalIntDestSels(stageDataToCommit);
 
 	reserve <= whichTakeReg(stageDataToReserve, IS_FP);
-	commit <= --whichPutReg(stageDataToCommit, IS_FP) and not getExceptionMask(stageDataToCommit);
-	           psels;
+	commit <= psels;
 	
 	selectReserve <= getVirtualDests(stageDataToReserve);
 	selectCommit <= getVirtualDests(stageDataToCommit);

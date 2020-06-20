@@ -181,11 +181,12 @@ architecture Behavioral of ReorderBuffer is
 
 	signal startPtr, startPtrNext, endPtr, acmPtr, causingPtr: SmallNumber := (others => '0');
 	
-	signal constantBuf, constantBuf2, constantBuf3: WordArray(0 to ROB_SIZE-1) := (others => (others => '0'));
-	signal inputConstant, inputConstant2, inputConstant3, constantFromBuf, constantFromBuf2, constantFromBuf3: Word := (others => '0');
+	signal constantBuf, constantBuf2, constantBuf3, mem0, mem1: WordArray(0 to ROB_SIZE-1) := (others => (others => '0'));
+	signal inputConstant, inputConstant2, inputConstant3, constantFromBuf, constantFromBuf2, constantFromBuf3, iw0, iw1, ow0, ow1: Word := (others => '0');
 	
     attribute ram_style: string;
     --attribute ram_style of constantBuf, constantBuf2, constantBuf3: signal is "block";	
+    --attribute ram_style of mem0, mem1: signal is "block";	
 begin
 
 	execEvent <= execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
@@ -224,6 +225,14 @@ begin
 
     inputConstant3(SYS_OP_SIZE - 1 + 16 downto 16) <= i2slv(SysOp'pos(inputSpecial.ins.specificOperation.system), SYS_OP_SIZE);
 
+        iw0 <= inputConstant;
+        iw1 <= inputConstant3(SYS_OP_SIZE-1+16 downto 16) & inputConstant3(7 downto 0) & inputConstant2(19 downto 0);
+        
+        constantFromBuf <= ow0;
+        constantFromBuf2(19 downto 0) <= ow1(19 downto 0);
+        constantFromBuf3(7 downto 0) <= ow1(27 downto 20);
+        constantFromBuf3(SYS_OP_SIZE-1+16 downto 16) <= ow1(31 downto 28);
+
     CONSTANT_MEM: process (clk)
     begin
         if rising_edge(clk) then
@@ -231,11 +240,18 @@ begin
                 constantBuf(slv2u(endPtr)) <= inputConstant;
                 constantBuf2(slv2u(endPtr)) <= inputConstant2;
                 constantBuf3(slv2u(endPtr)) <= inputConstant3;
+                
+                mem0(slv2u(endPtr)) <= iw0;
+                mem1(slv2u(endPtr)) <= iw1;
+                
             end if;
             
-            constantFromBuf <= constantBuf(slv2u(startPtrNext));
-            constantFromBuf2 <= constantBuf2(slv2u(startPtrNext));            
-            constantFromBuf3 <= constantBuf3(slv2u(startPtrNext));            
+            --constantFromBuf <= constantBuf(slv2u(startPtrNext));
+            --constantFromBuf2 <= constantBuf2(slv2u(startPtrNext));            
+            --constantFromBuf3 <= constantBuf3(slv2u(startPtrNext)); 
+            
+            ow0 <= mem0(slv2u(startPtrNext));
+            ow1 <= mem1(slv2u(startPtrNext));                        
         end if;
     end process;
 
