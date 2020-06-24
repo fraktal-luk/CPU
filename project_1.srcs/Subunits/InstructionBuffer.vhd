@@ -51,7 +51,8 @@ architecture Implem of InstructionBuffer is
 	
 	signal queueData, queueDataNext: InstructionSlotArray(0 to IBUFFER_SIZE-1)
 								:= (others => DEFAULT_INSTRUCTION_SLOT);
-
+    signal sending: std_logic := '0';
+    
     function bufferDataNext(content: InstructionSlotArray; newContent: InstructionSlotArray;
                             nextAccepting, prevSending, kill: std_logic)
     return InstructionSlotArray is
@@ -105,6 +106,9 @@ architecture Implem of InstructionBuffer is
 
         return res;
     end function;
+    
+    subtype PipeStage is InstructionSlotArray(0 to PIPE_WIDTH-1);
+    type PipeStageArray is array(natural range <>) of PipeStage;
 
 begin
     
@@ -112,7 +116,7 @@ begin
     
     acceptingOut <= not queueData(IBUFFER_SIZE-4).full;
     
-    sendingOut <= nextAccepting and queueData(0).full and not execEventSignal; -- Send if nonempty & not killed
+    sending <= nextAccepting and queueData(0).full and not execEventSignal; -- Send if nonempty & not killed
     stageDataOut <= queueData(0 to 3);
     
 	BUFF_CLOCKED: process(clk)
@@ -128,5 +132,61 @@ begin
 	begin
 	   queueTxt <= getInsStringArray(queueData);
 	end generate;	
+
+    NEW_IMPL: block
+        signal mem: PipeStageArray(0 to 7) := (others => (others => DEFAULT_INS_SLOT));
+        signal full: std_logic_vector(0 to 7) := (others => '0');
+        signal pStart, pEnd: SmallNumber := (others => '0');
+        signal dataOutFull, dataOutFilling, dataOutStalled, isSending, isReading, memWriting, memReading, memBypassing, memDraining: std_logic := '0';
+        signal memEmpty: std_logic := '1';
+        
+        signal dataOut: PipeStage := (others => DEFAULT_INS_SLOT);
+    begin
+            dataOutStalled <= dataOutFull and not isSending;
+            
+            -- This means writing and keeping it there for later, not writing and using at the same time.
+            -- Actual storage of value can happen also when bypassing - but is not used later.
+            memWriting <= prevSending and (dataOutStalled or not memEmpty); -- Writing to emty mem: when dataOut stalled
+                                                                            -- Writing to non empty mem: when prevSending and mem already full            
+            memBypassing <= prevSending and not memWriting;
+
+            memReading <= (isSending or not dataOutFull) and not memEmpty;
+            
+            memDraining <= memReading and not memWriting and bool2std(addIntTrunc(pStart, 1, 3) = pEnd);
+            
+        --isReading <= --(isSending and not memEmpty) or (not dataOutFull and prevSending);
+        --              (isSending or not dataOutFull) and (not memEmpty or prevSending);
+        isSending <= dataOutFull and nextAccepting;
+        CLOCKED: process (clk)
+        begin
+            if rising_edge(clk) then
+                dataOutFull <= (memReading or memBypassing or dataOutStalled);
+            
+                if memWriting = '1' then
+                    memEmpty <= '0';
+                elsif memDraining = '1' then    
+                    memEmpty <= '1';
+                end if;
+            
+                if prevSending = '1' then
+                    mem(slv2u(pEnd)) <= stageDataIn;
+                    pEnd <= addIntTrunc(pEnd, 1, 3); -- TMP: 3 bits                
+                end if;
+                
+                --dataOutFull <= '0';
+                if memReading = '1' or memBypassing = '1' then
+                    if pStart = pEnd then -- memEmpty, bypassing
+                        dataOut <= stageDataIn;
+                    else
+                        dataOut <= mem(slv2u(pStart));                                       
+                    end if;
+                    pStart <= addIntTrunc(pStart, 1, 3); -- TMP: 3 bits                    
+                end if;
+            end if;
+        end process;
+        
+    end block;
+
+    sendingOut <= sending;
 
 end Implem;
