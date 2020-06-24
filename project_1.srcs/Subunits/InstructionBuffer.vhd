@@ -59,11 +59,12 @@ architecture Implem of InstructionBuffer is
         constant LEN: positive := content'length;
         variable res: InstructionSlotArray(0 to LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
         variable fullMask, fillMask, remainingMask, nextMask: std_logic_vector(0 to LEN-1) := (others => '0');
-        variable remainingMaskExt: std_logic_vector(0 to LEN + 3) := (others => '0');
+        variable remainingMaskExt: std_logic_vector(0 to LEN + FETCH_WIDTH - 1) := (others => '0');
         variable inputMask, inputMaskComp: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
     begin
         fullMask := extractFullMask(content);
         inputMask := extractFullMask(newContent);
+        
         
         inputMaskComp := compactMask(inputMask);
         
@@ -106,13 +107,136 @@ architecture Implem of InstructionBuffer is
 
         return res;
     end function;
+
+    -- Not compacting, just treating each input group as 4-wide, only adjusting to left within fetch group
+    function bufferDataNext_New(content: InstructionSlotArray; newContent: InstructionSlotArray;
+                            nextAccepting, prevSending, kill: std_logic)
+    return InstructionSlotArray is
+        constant LEN: positive := content'length;
+        variable res: InstructionSlotArray(0 to LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+        variable fullMask, fillMask, remainingMask, nextMask: std_logic_vector(0 to LEN-1) := (others => '0');
+        variable remainingMaskExt: std_logic_vector(0 to LEN + 3) := (others => '0');
+        variable inputMask, inputMaskComp, inputMaskAdj: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
+        variable inputMaskTmp: std_logic_vector(0to 2*FETCH_WIDTH-1) := (others => '0');
+        variable newContentAdj: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INS_SLOT);
+        variable newContentTmp: InstructionSlotArray(0 to 2*FETCH_WIDTH-1) := newContent & newContent;
+        variable nShift, j: integer := 0;
+        variable fillHere: boolean := false;
+    begin
+    
+        fullMask := extractFullMask(content);
+        inputMask := extractFullMask(newContent);
+
+        remainingMaskExt(0 to LEN-1) := fullMask;
+        
+        inputMaskTmp(0 to FETCH_WIDTH-1) := inputMask;
+    
+        inputMaskComp := compactMask(inputMask);        
+    
+        nShift := getFirstOnePosition(inputMask);
+        if isNonzero(inputMask) = '0' then
+            nShift := 0;
+        end if; 
+        
+        for i in 0 to FETCH_WIDTH-1 loop
+            newContentAdj(i) := newContentTmp(nShift + i);
+            inputMaskAdj(i) := inputMaskTmp(nShift + i);
+        end loop;
+
+        
+--        if nextAccepting = '1' then -- sending; shift mask by 4
+--            remainingMaskExt(0 to LEN - 1) := fullMask;
+--            remainingMaskExt(0 to 3) := (others => '1');
+--        else
+--            remainingMaskExt(4 to LEN + 3) := fullMask;
+--            remainingMaskExt(0 to 3) := (others => '1');
+--        end if;
+        
+        for i in 0 to LEN/FETCH_WIDTH - 1 loop
+            fillHere := false;
+            j := i*FETCH_WIDTH;
+            if nextAccepting = '1' then
+                remainingMask(j) := remainingMaskExt(j + FETCH_WIDTH);
+            else
+                remainingMask(j) := remainingMaskExt(j);
+            end if;
+            
+            if remainingMask(j) = '0' then
+                if prevSending = '1' and j = 0 then
+                    fillHere := true; 
+                elsif prevSending = '1' and j > 0 and remainingMask(j - FETCH_WIDTH) = '1' then
+                    fillHere := true;
+                end if;
+            end if;
+  
+            if fillHere then
+                for k in 0 to FETCH_WIDTH-1 loop
+                    res(j + k) := newContentAdj(k);
+                    res(j + k).ins.controlInfo.newEvent := '0';                  
+                end loop;
+            elsif nextAccepting = '1' and j + FETCH_WIDTH < LEN then
+                for k in 0 to FETCH_WIDTH-1 loop
+                    res(j + k) := content(j + k + FETCH_WIDTH);                   
+                end loop;
+            elsif nextAccepting = '1' and j + FETCH_WIDTH >= LEN then
+                for k in 0 to FETCH_WIDTH-1 loop
+                    res(j + k).full := '0';                   
+                end loop;                  
+            else
+                for k in 0 to FETCH_WIDTH-1 loop
+                    res(j + k) := content(j + k);                   
+                end loop;                    
+            end if;
+            --end if;
+            
+        end loop;
+
+        for i in 0 to LEN-1 loop
+            if kill = '1' then
+                res(i).full := '0';
+            end if;
+        end loop;
+
+        
+--            for i in 0 to LEN-1 loop      
+--                if remainingMaskExt(i + 4) = '1' then  -- !! equivalent to remainingMask(i), where '1' for i < 0    
+--                    if nextAccepting = '1' and i + 4 < LEN then
+--                        res(i).ins := content(i+4).ins;
+--                    else
+--                        res(i).ins := content(i).ins;
+--                    end if;
+--                else
+--                    res(i) := getNewElem(remainingMaskExt(i+1 to i+3), newContentAdj);
+--                end if;
+                
+--                res(i).ins.controlInfo.newEvent := '0'; -- Separating front events from exec events
+--                                             --  Meanwhile, branch taken/not taken state must be retained         
+--                fillMask(i) := '0';
+--                for k in 0 to 3 loop -- Further beyond end requires more ful inputs to be filled:
+--                    --                            !! equiv to remainingMask(-1-k), where '1' for k < 0
+--                    fillMask(i) := fillMask(i) or (remainingMaskExt(i + 3-k) and inputMaskComp(k));
+--                end loop;
+                
+--                res(i).full := (remainingMaskExt(i + 4) or (fillMask(i) and prevSending)) and not kill;
+--            end loop;
+        
+        if CLEAR_DEBUG_INFO then    
+            for i in 0 to IBUFFER_SIZE-1 loop
+                res(i).ins := clearAbstractInfo(res(i).ins);
+                res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
+            end loop;
+        end if;
+
+        return res;
+    end function;
+
     
     subtype PipeStage is InstructionSlotArray(0 to PIPE_WIDTH-1);
     type PipeStageArray is array(natural range <>) of PipeStage;
 
 begin
     
-    queueDataNext <= bufferDataNext(queueData, stageDataIn, nextAccepting, prevSending, execEventSignal);
+    queueDataNext <= bufferDataNext_New(queueData, stageDataIn, nextAccepting, prevSending, execEventSignal);
     
     acceptingOut <= not queueData(IBUFFER_SIZE-4).full;
     
@@ -137,26 +261,29 @@ begin
         signal mem: PipeStageArray(0 to 7) := (others => (others => DEFAULT_INS_SLOT));
         signal full: std_logic_vector(0 to 7) := (others => '0');
         signal pStart, pEnd: SmallNumber := (others => '0');
-        signal dataOutFull, dataOutFilling, dataOutStalled, isSending, isReading, memWriting, memReading, memBypassing, memDraining: std_logic := '0';
+        signal dataOutFull, dataOutFilling, dataOutStalled, isSending, isReading, memWriting, memReading, memBypassing, memDraining, isAccepting: std_logic := '0';
         signal memEmpty: std_logic := '1';
         
         signal dataOut: PipeStage := (others => DEFAULT_INS_SLOT);
     begin
+    
             dataOutStalled <= dataOutFull and not isSending;
             
             -- This means writing and keeping it there for later, not writing and using at the same time.
             -- Actual storage of value can happen also when bypassing - but is not used later.
             memWriting <= prevSending and (dataOutStalled or not memEmpty); -- Writing to emty mem: when dataOut stalled
                                                                             -- Writing to non empty mem: when prevSending and mem already full            
-            memBypassing <= prevSending and not memWriting;
+            memBypassing <= prevSending and not memWriting
+                                                        and not execEventSignal;
 
-            memReading <= (isSending or not dataOutFull) and not memEmpty;
+            memReading <= (isSending or not dataOutFull) and not memEmpty
+                                                                     and not execEventSignal;
             
             memDraining <= memReading and not memWriting and bool2std(addIntTrunc(pStart, 1, 3) = pEnd);
             
         --isReading <= --(isSending and not memEmpty) or (not dataOutFull and prevSending);
         --              (isSending or not dataOutFull) and (not memEmpty or prevSending);
-        isSending <= dataOutFull and nextAccepting;
+        isSending <= dataOutFull and nextAccepting and not execEventSignal;
         CLOCKED: process (clk)
         begin
             if rising_edge(clk) then
@@ -181,6 +308,13 @@ begin
                         dataOut <= mem(slv2u(pStart));                                       
                     end if;
                     pStart <= addIntTrunc(pStart, 1, 3); -- TMP: 3 bits                    
+                end if;
+                
+                if execEventSignal = '1' then
+                    dataOutFull <= '0';
+                    memEmpty <= '1';
+                    pStart <= pStart;
+                    pEnd <= pStart;
                 end if;
             end if;
         end process;
