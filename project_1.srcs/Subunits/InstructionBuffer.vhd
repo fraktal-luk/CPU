@@ -53,6 +53,8 @@ architecture Implem of InstructionBuffer is
 								:= (others => DEFAULT_INSTRUCTION_SLOT);
     signal sending: std_logic := '0';
     
+    signal fullMask: std_logic_vector(0 to IBUFFER_SIZE-1) := (others => '0');
+    
     function bufferDataNext(content: InstructionSlotArray; newContent: InstructionSlotArray;
                             nextAccepting, prevSending, kill: std_logic)
     return InstructionSlotArray is
@@ -230,11 +232,34 @@ architecture Implem of InstructionBuffer is
         return res;
     end function;
 
+
+    function adjustStage(content: InstructionSlotArray)
+    return InstructionSlotArray is
+        constant LEN: positive := content'length;
+        variable res: InstructionSlotArray(0 to LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+        variable contentExt: InstructionSlotArray(0 to 2*LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+        variable fullMask: std_logic_vector(0 to LEN-1) := (others => '0');
+        variable nShift, j: integer := 0;
+    begin
+        contentExt(0 to LEN-1) := content;
+        fullMask := extractFullMask(content);
+        nShift := getFirstOnePosition(fullMask);
+        if isNonzero(fullMask) = '0' then
+            nShift := 0;
+        end if; 
+        
+        for i in 0 to LEN-1 loop
+            res(i) := contentExt(nShift + i);
+        end loop;
+        
+        return res;    
+    end function;
     
     subtype PipeStage is InstructionSlotArray(0 to PIPE_WIDTH-1);
     type PipeStageArray is array(natural range <>) of PipeStage;
 
 begin
+    fullMask <= extractFullMask(queueData);
     
     queueDataNext <= bufferDataNext_New(queueData, stageDataIn, nextAccepting, prevSending, execEventSignal);
     
@@ -258,14 +283,36 @@ begin
 	end generate;	
 
     NEW_IMPL: block
-        signal mem: PipeStageArray(0 to 7) := (others => (others => DEFAULT_INS_SLOT));
-        signal full: std_logic_vector(0 to 7) := (others => '0');
-        signal pStart, pEnd: SmallNumber := (others => '0');
+        signal mem: PipeStageArray(0 to 3) := (others => (others => DEFAULT_INS_SLOT));
+        signal full: std_logic_vector(0 to 3) := (others => '0');
+        signal pStart, pEnd, nFullGroups: SmallNumber := (others => '0');
         signal dataOutFull, dataOutFilling, dataOutStalled, isSending, isReading, memWriting, memReading, memBypassing, memDraining, isAccepting: std_logic := '0';
         signal memEmpty: std_logic := '1';
         
         signal dataOut: PipeStage := (others => DEFAULT_INS_SLOT);
+        
+            signal ch0, ch1: std_logic := '0';
+        
+        -- TODO! Left adjusting!
+        function formatInput(insVec: PipeStage) return PipeStage is
+            variable res: PipeStage := insVec;
+        begin
+            for i in res'range loop
+                res(i).ins.controlInfo.newEvent := '0';
+                
+                if CLEAR_DEBUG_INFO then    
+                    res(i).ins := clearAbstractInfo(res(i).ins);
+                    res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
+                end if;   
+            end loop;
+            
+            res := adjustStage(res);
+            
+            return res;
+        end function; 
     begin
+                ch0 <= bool2std(dataOut(0) = queueData(0));
+                ch1 <= bool2std(dataOut(1) = queueData(1));
     
             dataOutStalled <= dataOutFull and not isSending;
             
@@ -279,13 +326,20 @@ begin
             memReading <= (isSending or not dataOutFull) and not memEmpty
                                                                      and not execEventSignal;
             
-            memDraining <= memReading and not memWriting and bool2std(addIntTrunc(pStart, 1, 3) = pEnd);
+            memDraining <= memReading and not memWriting and bool2std(addIntTrunc(pStart, 1, 2) = pEnd);
+            
+                isAccepting <= bool2std(pStart /= pEnd) or memEmpty;
             
         --isReading <= --(isSending and not memEmpty) or (not dataOutFull and prevSending);
         --              (isSending or not dataOutFull) and (not memEmpty or prevSending);
         isSending <= dataOutFull and nextAccepting and not execEventSignal;
+        
+            nFullGroups <=      i2slv(4, SMALL_NUMBER_SIZE) when memEmpty = '0' and pEnd = pStart
+                        else subTruncZ(pEnd, pStart, 2); -- range 0:4
+        
         CLOCKED: process (clk)
         begin
+        
             if rising_edge(clk) then
                 dataOutFull <= (memReading or memBypassing or dataOutStalled);
             
@@ -296,18 +350,18 @@ begin
                 end if;
             
                 if prevSending = '1' then
-                    mem(slv2u(pEnd)) <= stageDataIn;
-                    pEnd <= addIntTrunc(pEnd, 1, 3); -- TMP: 3 bits                
+                    mem(slv2u(pEnd)) <= formatInput(stageDataIn);
+                    pEnd <= addIntTrunc(pEnd, 1, 2); -- TMP: 3 bits                
                 end if;
                 
                 --dataOutFull <= '0';
                 if memReading = '1' or memBypassing = '1' then
                     if pStart = pEnd then -- memEmpty, bypassing
-                        dataOut <= stageDataIn;
+                        dataOut <= formatInput(stageDataIn);
                     else
                         dataOut <= mem(slv2u(pStart));                                       
                     end if;
-                    pStart <= addIntTrunc(pStart, 1, 3); -- TMP: 3 bits                    
+                    pStart <= addIntTrunc(pStart, 1, 2); -- TMP: 2 bits                    
                 end if;
                 
                 if execEventSignal = '1' then
@@ -315,6 +369,8 @@ begin
                     memEmpty <= '1';
                     pStart <= pStart;
                     pEnd <= pStart;
+                    
+                    --nFullGroups <= (others => '0');                    
                 end if;
             end if;
         end process;

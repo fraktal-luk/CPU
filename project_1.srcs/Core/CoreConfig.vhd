@@ -17,7 +17,7 @@ constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');
 
 constant FETCH_WIDTH: positive := PIPE_WIDTH; 
 
-constant IBUFFER_SIZE: positive := 2*FETCH_WIDTH;
+constant IBUFFER_SIZE: positive := 5*FETCH_WIDTH;
 constant ROB_SIZE: positive := 8; 
 
 constant USE_LINE_PREDICTOR: boolean := true;
