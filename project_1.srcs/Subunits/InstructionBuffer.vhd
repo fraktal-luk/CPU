@@ -263,10 +263,14 @@ begin
     
     queueDataNext <= bufferDataNext_New(queueData, stageDataIn, nextAccepting, prevSending, execEventSignal);
     
-    acceptingOut <= not queueData(IBUFFER_SIZE-4).full;
     
     sending <= nextAccepting and queueData(0).full and not execEventSignal; -- Send if nonempty & not killed
-    stageDataOut <= queueData(0 to 3);
+
+    X_YES: if false generate
+        acceptingOut <= not queueData(IBUFFER_SIZE-4).full;
+        stageDataOut <= queueData(0 to 3);
+        sendingOut <= sending;
+    end generate;
     
 	BUFF_CLOCKED: process(clk)
 	begin					
@@ -284,16 +288,21 @@ begin
 
     NEW_IMPL: block
         signal mem: PipeStageArray(0 to 3) := (others => (others => DEFAULT_INS_SLOT));
+            signal memImm: DwordArray(0 to 3) := (others => (others => '0'));
+            signal immRead: Dword := (others => '0');
+            
         signal full: std_logic_vector(0 to 3) := (others => '0');
         signal pStart, pEnd, nFullGroups: SmallNumber := (others => '0');
         signal dataOutFull, dataOutFilling, dataOutStalled, isSending, isReading, memWriting, memReading, memBypassing, memDraining, isAccepting: std_logic := '0';
         signal memEmpty: std_logic := '1';
         
-        signal dataOut: PipeStage := (others => DEFAULT_INS_SLOT);
+        signal dataOut, dataMemRead: PipeStage := (others => DEFAULT_INS_SLOT);
         
-            signal ch0, ch1: std_logic := '0';
+            signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8, ch9, cha: std_logic := '0';
+
+        attribute ram_style: string;
+        attribute ram_style of mem: signal is "distributed";	
         
-        -- TODO! Left adjusting!
         function formatInput(insVec: PipeStage) return PipeStage is
             variable res: PipeStage := insVec;
         begin
@@ -309,10 +318,21 @@ begin
             res := adjustStage(res);
             
             return res;
-        end function; 
+        end function;
+        
+        function TEST_memRead(insVec: PipeStage; d: Dword) return PipeStage is
+            variable res: PipeStage := insVec;
+        begin
+            for i in 0 to 3 loop
+                res(i).ins.constantArgs.imm(15 downto 0) := d(15 + 16*(3-i) downto 16*(3-i));
+            end loop;
+            return res;
+        end function;
     begin
-                ch0 <= bool2std(dataOut(0) = queueData(0));
-                ch1 <= bool2std(dataOut(1) = queueData(1));
+                ch0 <= bool2std(dataOut(0) = queueData(0)) or not queueData(0).full;
+                ch1 <= bool2std(dataOut(1) = queueData(1)) or not queueData(1).full;
+                ch2 <= bool2std(dataOut(2) = queueData(2)) or not queueData(2).full;
+                ch3 <= bool2std(dataOut(3) = queueData(3)) or not queueData(3).full;
     
             dataOutStalled <= dataOutFull and not isSending;
             
@@ -337,6 +357,11 @@ begin
             nFullGroups <=      i2slv(4, SMALL_NUMBER_SIZE) when memEmpty = '0' and pEnd = pStart
                         else subTruncZ(pEnd, pStart, 2); -- range 0:4
         
+        
+                dataMemRead <= mem(slv2u(pStart));
+                               -- TEST_memRead(mem(slv2u(pStart)), immRead);
+                immRead <= memImm(slv2u(pStart));
+                
         CLOCKED: process (clk)
         begin
         
@@ -351,15 +376,17 @@ begin
             
                 if prevSending = '1' then
                     mem(slv2u(pEnd)) <= formatInput(stageDataIn);
+                    --    memImm(slv2u(pEnd)) <= stageDataIn(0).ins.constantArgs.imm & stageDataIn(1).ins.constantArgs.imm & stageDataIn(2).ins.constantArgs.imm & stageDataIn(3).ins.constantArgs.imm;
                     pEnd <= addIntTrunc(pEnd, 1, 2); -- TMP: 3 bits                
                 end if;
                 
                 --dataOutFull <= '0';
                 if memReading = '1' or memBypassing = '1' then
-                    if pStart = pEnd then -- memEmpty, bypassing
+                    if --pStart = pEnd then -- memEmpty, bypassing
+                            memBypassing = '1' then  -- CAREFUL: this correct a serious error
                         dataOut <= formatInput(stageDataIn);
                     else
-                        dataOut <= mem(slv2u(pStart));                                       
+                        dataOut <= dataMemRead;                                     
                     end if;
                     pStart <= addIntTrunc(pStart, 1, 2); -- TMP: 2 bits                    
                 end if;
@@ -372,11 +399,21 @@ begin
                     
                     --nFullGroups <= (others => '0');                    
                 end if;
+                
+                --pStart(SMALL_NUMBER_SIZE-1 downto 2) <= (others => '0');
+                --pEnd(SMALL_NUMBER_SIZE-1 downto 2) <= (others => '0');
             end if;
         end process;
+
+        Y_YES: if true generate
+            acceptingOut <= isAccepting;
+            stageDataOut <= dataOut;
+            sendingOut <= isSending;
+        end generate;
+        
+            ch4 <= bool2std(isAccepting = not queueData(IBUFFER_SIZE-4).full);
+            ch5 <= bool2std(isSending = sending);
         
     end block;
-
-    sendingOut <= sending;
 
 end Implem;
