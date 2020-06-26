@@ -258,6 +258,7 @@ architecture Implem of InstructionBuffer is
     subtype PipeStage is InstructionSlotArray(0 to PIPE_WIDTH-1);
     type PipeStageArray is array(natural range <>) of PipeStage;
 
+
 begin
     fullMask <= extractFullMask(queueData);
     
@@ -296,12 +297,9 @@ begin
         signal dataOutFull, dataOutFilling, dataOutStalled, isSending, isReading, memWriting, memReading, memBypassing, memDraining, isAccepting: std_logic := '0';
         signal memEmpty: std_logic := '1';
         
-        signal dataOut, dataMemRead: PipeStage := (others => DEFAULT_INS_SLOT);
+        signal stageDataInFormatted, dataOut, dataMemRead: PipeStage := (others => DEFAULT_INS_SLOT);
         
             signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8, ch9, cha: std_logic := '0';
-
-        attribute ram_style: string;
-        attribute ram_style of mem: signal is "distributed";	
         
         function formatInput(insVec: PipeStage) return PipeStage is
             variable res: PipeStage := insVec;
@@ -328,6 +326,156 @@ begin
             end loop;
             return res;
         end function;
+        
+        
+--            controlInfo:
+--                frontBranch
+--                confirmedBranch
+--                specialAction
+            
+--            classInfo:
+--                mainCluster
+--                secCluster
+--                fpRename
+--                branchIns
+                
+--            virtualArgSpec:
+--                intDestSel, floatDestSel, dest
+--                intArgSel, floatArgSel, args
+
+--            constantArgs:
+--                immSel
+--                imm
+                
+--            specificOperation:
+--                ...
+
+        
+
+        -- TODO: this can also hold 'full' flag of the slot!
+        function packInfo(ins: InstructionState) return Word is
+            variable res: Word := (others => '0');
+            variable b: Byte := (others => '0');
+        begin
+            res(7 downto 0) := ins.controlInfo.frontBranch & ins.controlInfo.confirmedBranch & ins.controlInfo.specialAction & ins.constantArgs.immSel
+                             & ins.classInfo.mainCluster  & ins.classInfo.secCluster  & ins.classInfo.fpRename  & ins.classInfo.branchIns;           
+            return res;
+        end function;
+        
+        function unpackInfo(w: Word; ins: InstructionState) return InstructionState is
+            variable res: InstructionState := ins;
+            variable b: Byte := (others => '0');
+        begin
+            
+            res.controlInfo.frontBranch := w(7);
+            res.controlInfo.confirmedBranch := w(6);
+            res.controlInfo.specialAction := w(5);
+            
+            res.constantArgs.immSel := w(4);
+            
+            res.classInfo.mainCluster := w(3);
+            res.classInfo.secCluster := w(2);
+            res.classInfo.fpRename := w(1);
+            res.classInfo.branchIns := w(0);
+                                
+            return res;
+        end function;
+
+        
+        -- CAREFUL: only virtual because 5 bits per reg!
+        function packArgSpec(argSpec: InstructionArgSpec) return Word is
+            variable res: Word := (others => '0');
+            variable b: Byte := (others => '0');
+        begin
+            b := argSpec.intDestSel & argSpec.floatDestSel & '0' & argSpec.dest(4 downto 0);
+            res(31 downto 24) := b;
+            
+            for i in 0 to 2 loop
+                b := argSpec.intArgSel(i) & argSpec.floatArgSel(i) & '0' & argSpec.args(i)(4 downto 0);
+                res(23 - i*8 downto 16 - i*8) := b;
+            end loop;
+            
+            return res;
+        end function;
+        
+        function unpackArgSpec(w: Word) return InstructionArgSpec is
+            variable res: InstructionArgSpec := DEFAULT_ARG_SPEC;
+            variable b: Byte := (others => '0');
+        begin
+            b := w(31 downto 24);
+            res.intDestSel := b(7);
+            res.floatDestSel := b(6);
+            res.dest := "000" & b(4 downto 0);
+            
+            for i in 0 to 2 loop
+                b := w(23 - i*8 downto 16 - i*8);
+                res.intArgSel(i) := b(7);
+                res.floatArgSel(i) := b(6);
+                res.args(i) := "000" & b(4 downto 0);
+            end loop;
+            
+            return res;
+        end function;
+        
+        
+        
+        
+        function packGroupInfo(insVec: PipeStage) return WordArray is
+           variable res: WordArray(0 to 3) := (others => (others => '0'));
+        begin
+            for i in 0 to 3 loop
+                res(i) := packInfo(insVec(i).ins);
+            end loop;
+            
+            return res;
+        end function;        
+
+        function unpackGroupInfo(insVec: PipeStage; wa: WordArray) return PipeStage is
+            variable res: PipeStage := insVec;
+        begin
+            for i in 0 to 3 loop
+                res(i).ins := unpackInfo(wa(i), insVec(i).ins);
+            end loop;
+                        
+            return res;
+        end function;  
+
+
+        function packGroupArgs(insVec: PipeStage) return WordArray is
+           variable res: WordArray(0 to 3) := (others => (others => '0'));
+        begin
+            for i in 0 to 3 loop
+                res(i) := packArgSpec(insVec(i).ins.virtualArgSpec);
+            end loop;
+             
+            return res;
+        end function;        
+
+        function unpackGroupArgs(insVec: PipeStage; wa: WordArray) return PipeStage is
+            variable res: PipeStage := insVec;
+        begin
+            for i in 0 to 3 loop
+                 --   assert res(i).ins.virtualArgSpec = unpackArgSpec(packArgSpec(res(i).ins.virtualArgSpec)) report "YYYYYY! " & integer'image(i);
+                res(i).ins.virtualArgSpec := unpackArgSpec(wa(i));
+            end loop;
+                        
+            return res;
+        end function; 
+    
+        
+        type WAA is array(0 to 3) of WordArray(0 to 3);
+        
+        signal argMem,infoMem: WAA := (others => (others => (others => '0')));
+        --signal infoMem: WordArray(0 to 3) := (others => (others => '0')); 
+            
+        attribute ram_style: string;
+        attribute ram_style of mem: signal is "distributed";    
+        
+        attribute ram_style of infoMem: signal is "distributed";    
+        attribute ram_style of argMem: signal is "distributed";    
+        attribute ram_style of memImm: signal is "distributed";    
+                    
+            signal chWord0, chWord1: Word := (others => '0');   
     begin
                 ch0 <= bool2std(dataOut(0) = queueData(0)) or not queueData(0).full;
                 ch1 <= bool2std(dataOut(1) = queueData(1)) or not queueData(1).full;
@@ -358,10 +506,20 @@ begin
                         else subTruncZ(pEnd, pStart, 2); -- range 0:4
         
         
-                dataMemRead <= mem(slv2u(pStart));
-                               -- TEST_memRead(mem(slv2u(pStart)), immRead);
+                dataMemRead <= --mem(slv2u(pStart));
+                                 unpackGroupInfo(  
+                                      unpackGroupArgs( 
+                                           TEST_memRead(mem(slv2u(pStart)), immRead),
+                                           argMem(slv2u(pStart))) ,
+                                      infoMem(slv2u(pStart)));
+                                --TEST_memRead(mem(slv2u(pStart)), immRead);
                 immRead <= memImm(slv2u(pStart));
-                
+           
+                        chWord0 <= packArgSpec(dataMemRead(0).ins.virtualArgSpec);
+                        chWord1 <= argMem(slv2u(pStart))(0);
+           
+           
+           stageDataInFormatted <= formatInput(stageDataIn);     
         CLOCKED: process (clk)
         begin
         
@@ -375,8 +533,11 @@ begin
                 end if;
             
                 if prevSending = '1' then
-                    mem(slv2u(pEnd)) <= formatInput(stageDataIn);
-                    --    memImm(slv2u(pEnd)) <= stageDataIn(0).ins.constantArgs.imm & stageDataIn(1).ins.constantArgs.imm & stageDataIn(2).ins.constantArgs.imm & stageDataIn(3).ins.constantArgs.imm;
+                    mem(slv2u(pEnd)) <= stageDataInFormatted;
+                        memImm(slv2u(pEnd)) <= stageDataInFormatted(0).ins.constantArgs.imm(15 downto 0) & stageDataInFormatted(1).ins.constantArgs.imm(15 downto 0)
+                                             & stageDataInFormatted(2).ins.constantArgs.imm(15 downto 0) & stageDataInFormatted(3).ins.constantArgs.imm(15 downto 0);
+                        argMem(slv2u(pEnd)) <= packGroupArgs(stageDataInFormatted);
+                        infoMem(slv2u(pEnd)) <= packGroupInfo(stageDataInFormatted);
                     pEnd <= addIntTrunc(pEnd, 1, 2); -- TMP: 3 bits                
                 end if;
                 
@@ -384,7 +545,7 @@ begin
                 if memReading = '1' or memBypassing = '1' then
                     if --pStart = pEnd then -- memEmpty, bypassing
                             memBypassing = '1' then  -- CAREFUL: this correct a serious error
-                        dataOut <= formatInput(stageDataIn);
+                        dataOut <= stageDataInFormatted;
                     else
                         dataOut <= dataMemRead;                                     
                     end if;
