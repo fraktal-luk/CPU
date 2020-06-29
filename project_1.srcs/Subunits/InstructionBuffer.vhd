@@ -296,7 +296,7 @@ begin
             signal memArgs1: DwordArray(0 to 3) := (others => (others => '0'));
             signal argsRead, groupArgs: WordArray(0 to 3) := (others => (others => '0'));
             
-            signal memInfo: WordArray(0 to 3) := (others => (others => '0'));
+            signal memInfo, memOperation: WordArray(0 to 3) := (others => (others => '0'));
             
         signal full: std_logic_vector(0 to 3) := (others => '0');
         signal pStart, pEnd, nFullGroups: SmallNumber := (others => '0');
@@ -425,6 +425,51 @@ begin
         
         
         
+        function packOps(insVec: PipeStage) return Word is
+           variable res: Word := (others => '0');
+           variable b: Byte := (others => '0');
+        begin
+            for i in 0 to 3 loop
+                b(7 downto 6) := i2slv(SubpipeType'pos(insVec(i).ins.specificOperation.subpipe), 2);
+                b(OP_VALUE_BITS-1 downto 0) := insVec(i).ins.specificOperation.bits; 
+                res(31 - 8*i downto 24 - 8*i) := b;--packInfo(insVec(i).ins);
+            end loop;
+            
+            return res;
+        end function;
+        
+        function unpackOps(insVec: PipeStage; wa: Word) return PipeStage is
+            variable res: PipeStage := insVec;
+            variable b: Byte := (others => '0');            
+        begin
+            for i in 0 to 3 loop
+                b := wa(31 - 8*i downto 24 - 8*i);
+                res(i).ins.specificOperation := DEFAULT_SPECIFIC_OP;
+                res(i).ins.specificOperation.bits := b(OP_VALUE_BITS-1 downto 0);
+                res(i).ins.specificOperation.subpipe := SubpipeType'val(slv2u(b(7 downto 6)));
+                --        report integer'image(OP_VALUE_BITS) & " !!!!";
+                case res(i).ins.specificOperation.subpipe is
+                    when ALU =>
+                        res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
+                    
+                    when None =>
+                        res(i).ins.specificOperation.system := SysOp'val(slv2u(res(i).ins.specificOperation.bits));
+                    
+                    when FP =>
+                        res(i).ins.specificOperation.float := FpOp'val(slv2u(res(i).ins.specificOperation.bits));
+                    
+                    when others =>
+                        res(i).ins.specificOperation.memory := MemOp'val(slv2u(res(i).ins.specificOperation.bits));
+                end case;
+                
+                     --    assert res(i).ins.specificOperation = insVec(i).ins.specificOperation   report " o no !!!!";
+                
+            end loop;
+                        
+            return res;
+        end function; 
+        
+               
         
         function packGroupInfo(insVec: PipeStage) return Word is
            variable res: Word := (others => '0');
@@ -517,11 +562,14 @@ begin
         
         
                 dataMemRead <= --mem(slv2u(pStart));
-                                 unpackGroupInfo(  
-                                      unpackGroupArgs( 
-                                           TEST_memRead(mem(slv2u(pStart)), immRead),
-                                           argsRead), --argMem(slv2u(pStart))) ,
-                                      memInfo(slv2u(pStart)));
+                                unpackOps(
+                                     unpackGroupInfo(  
+                                          unpackGroupArgs( 
+                                               TEST_memRead(mem(slv2u(pStart)), immRead),
+                                               argsRead), --argMem(slv2u(pStart))) ,
+                                          memInfo(slv2u(pStart))),
+                                      memOperation(slv2u(pStart))
+                                 );
                                 --TEST_memRead(mem(slv2u(pStart)), immRead);
                 immRead <= memImm(slv2u(pStart));
            
@@ -557,6 +605,8 @@ begin
                         
                         memArgs0(slv2u(pEnd)) <= groupArgs(0) & groupArgs(1); 
                         memArgs1(slv2u(pEnd)) <= groupArgs(2) & groupArgs(3); 
+
+                        memOperation(slv2u(pEnd)) <= packOps(stageDataInFormatted); 
                         
                         
                     pEnd <= addIntTrunc(pEnd, 1, 2); -- TMP: 3 bits                
