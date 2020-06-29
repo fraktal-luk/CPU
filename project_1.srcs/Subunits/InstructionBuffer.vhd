@@ -292,6 +292,12 @@ begin
             signal memImm: DwordArray(0 to 3) := (others => (others => '0'));
             signal immRead: Dword := (others => '0');
             
+            signal memArgs0: DwordArray(0 to 3) := (others => (others => '0'));
+            signal memArgs1: DwordArray(0 to 3) := (others => (others => '0'));
+            signal argsRead, groupArgs: WordArray(0 to 3) := (others => (others => '0'));
+            
+            signal memInfo: WordArray(0 to 3) := (others => (others => '0'));
+            
         signal full: std_logic_vector(0 to 3) := (others => '0');
         signal pStart, pEnd, nFullGroups: SmallNumber := (others => '0');
         signal dataOutFull, dataOutFilling, dataOutStalled, isSending, isReading, memWriting, memReading, memBypassing, memDraining, isAccepting: std_logic := '0';
@@ -353,8 +359,8 @@ begin
         
 
         -- TODO: this can also hold 'full' flag of the slot!
-        function packInfo(ins: InstructionState) return Word is
-            variable res: Word := (others => '0');
+        function packInfo(ins: InstructionState) return Byte is
+            variable res: Byte := (others => '0');
             variable b: Byte := (others => '0');
         begin
             res(7 downto 0) := ins.controlInfo.frontBranch & ins.controlInfo.confirmedBranch & ins.controlInfo.specialAction & ins.constantArgs.immSel
@@ -362,7 +368,7 @@ begin
             return res;
         end function;
         
-        function unpackInfo(w: Word; ins: InstructionState) return InstructionState is
+        function unpackInfo(w: Byte; ins: InstructionState) return InstructionState is
             variable res: InstructionState := ins;
             variable b: Byte := (others => '0');
         begin
@@ -420,21 +426,21 @@ begin
         
         
         
-        function packGroupInfo(insVec: PipeStage) return WordArray is
-           variable res: WordArray(0 to 3) := (others => (others => '0'));
+        function packGroupInfo(insVec: PipeStage) return Word is
+           variable res: Word := (others => '0');
         begin
             for i in 0 to 3 loop
-                res(i) := packInfo(insVec(i).ins);
+                res(31 - 8*i downto 24 - 8*i) := packInfo(insVec(i).ins);
             end loop;
             
             return res;
         end function;        
 
-        function unpackGroupInfo(insVec: PipeStage; wa: WordArray) return PipeStage is
+        function unpackGroupInfo(insVec: PipeStage; wa: Word) return PipeStage is
             variable res: PipeStage := insVec;
         begin
             for i in 0 to 3 loop
-                res(i).ins := unpackInfo(wa(i), insVec(i).ins);
+                res(i).ins := unpackInfo(wa(31 - 8*i downto 24 - 8*i), insVec(i).ins);
             end loop;
                         
             return res;
@@ -474,6 +480,10 @@ begin
         attribute ram_style of infoMem: signal is "distributed";    
         attribute ram_style of argMem: signal is "distributed";    
         attribute ram_style of memImm: signal is "distributed";    
+
+        attribute ram_style of memArgs0: signal is "distributed";    
+        attribute ram_style of memArgs1: signal is "distributed";    
+        attribute ram_style of memInfo: signal is "distributed";    
                     
             signal chWord0, chWord1: Word := (others => '0');   
     begin
@@ -510,14 +520,20 @@ begin
                                  unpackGroupInfo(  
                                       unpackGroupArgs( 
                                            TEST_memRead(mem(slv2u(pStart)), immRead),
-                                           argMem(slv2u(pStart))) ,
-                                      infoMem(slv2u(pStart)));
+                                           argsRead), --argMem(slv2u(pStart))) ,
+                                      memInfo(slv2u(pStart)));
                                 --TEST_memRead(mem(slv2u(pStart)), immRead);
                 immRead <= memImm(slv2u(pStart));
            
                         chWord0 <= packArgSpec(dataMemRead(0).ins.virtualArgSpec);
                         chWord1 <= argMem(slv2u(pStart))(0);
            
+           
+                                groupArgs <= packGroupArgs(stageDataInFormatted);
+                                   argsRead(0) <= memArgs0(slv2u(pStart))(63 downto 32);
+                                   argsRead(1) <= memArgs0(slv2u(pStart))(31 downto 0);
+                                   argsRead(2) <= memArgs1(slv2u(pStart))(63 downto 32);
+                                   argsRead(3) <= memArgs1(slv2u(pStart))(31 downto 0);
            
            stageDataInFormatted <= formatInput(stageDataIn);     
         CLOCKED: process (clk)
@@ -536,8 +552,13 @@ begin
                     mem(slv2u(pEnd)) <= stageDataInFormatted;
                         memImm(slv2u(pEnd)) <= stageDataInFormatted(0).ins.constantArgs.imm(15 downto 0) & stageDataInFormatted(1).ins.constantArgs.imm(15 downto 0)
                                              & stageDataInFormatted(2).ins.constantArgs.imm(15 downto 0) & stageDataInFormatted(3).ins.constantArgs.imm(15 downto 0);
-                        argMem(slv2u(pEnd)) <= packGroupArgs(stageDataInFormatted);
-                        infoMem(slv2u(pEnd)) <= packGroupInfo(stageDataInFormatted);
+                        --argMem(slv2u(pEnd)) <= packGroupArgs(stageDataInFormatted);
+                        memInfo(slv2u(pEnd)) <= packGroupInfo(stageDataInFormatted);
+                        
+                        memArgs0(slv2u(pEnd)) <= groupArgs(0) & groupArgs(1); 
+                        memArgs1(slv2u(pEnd)) <= groupArgs(2) & groupArgs(3); 
+                        
+                        
                     pEnd <= addIntTrunc(pEnd, 1, 2); -- TMP: 3 bits                
                 end if;
                 
