@@ -7,8 +7,8 @@ use work.ArchDefs.all;
 
 package CoreConfig is
 
-constant CLEAR_DEBUG_INFO: boolean := true;
-constant VIEW_ON: boolean := false;
+constant CLEAR_DEBUG_INFO: boolean := false;
+constant VIEW_ON: boolean := true;
 
 constant LOG2_PIPE_WIDTH: natural := 0 + 2;
 constant PIPE_WIDTH: positive := 2**LOG2_PIPE_WIDTH;

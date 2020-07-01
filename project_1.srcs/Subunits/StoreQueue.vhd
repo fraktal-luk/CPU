@@ -65,18 +65,18 @@ architecture Behavioral of StoreQueue is
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
     constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;
 
-	signal isSending, isDraining: std_logic := '0';							
+	signal isSending, isDraining, isDrainingPrev: std_logic := '0';							
 
 	signal content, contentNext: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INSTRUCTION_STATE);
 	signal fullMask, taggedMask, killMask, livingMask, frontMask, sendingMask, inputMask, drainMask, drainMaskNext,
 			 committedMask, committedMaskNext, fullMaskNext, taggedMaskNext, sqCmpMask, lqCmpMask, addressMatchMask,
 			 cancelMask, cancelledMask, cancelledMaskNext,
-			 scMask, drainMaskNC: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+			 scMask, drainMaskNC, drainMaskNCPrev: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 	
 	signal taggedLivingMask, fullOrCommittedMask, matchedMask,
 	           newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
-	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+	signal selectedDataSlot, selectedDataOutputSig, dataDrainSigPrev: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	signal dataOutSig, dataOutSigNext, dataOutSigFinal, dataDrainSig, dataDrainSigNC: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	
 	signal pStart, pStartNext, pDrain, pDrainNext, pTagged, pAll, causingPtr: SmallNumber := (others => '0');	
@@ -363,7 +363,8 @@ begin
 	taggedMaskNext <= (taggedLivingMask and not sendingMask) or inputMask;
 	committedMaskNext <= (committedMask or sendingMask) and not drainMask;
 
-	fullOrCommittedMask <= taggedMask or committedMask;
+	fullOrCommittedMask <= taggedMask or committedMask
+	                                                    or drainMaskNCPrev;
 	   
 	-- TODO: this won't work if the queue is allowed to become full of 'committed'. If it could, change to [set '1' on drainP when startP ~= drainP]
 	drainMask <= committedMask and not (committedMask(QUEUE_SIZE-1) & committedMask(0 to QUEUE_SIZE-2)); -- First '1' bit of committedMask
@@ -391,7 +392,7 @@ begin
             TMP_drain <= bool2std(TMP_drainPtr /= slv2u(pStart));
             
                 ch0 <= bool2std(isDraining = TMP_drain);
-                ch1 <= bool2std(TMP_drainValue = dataDrainSig(0).ins.result) or not dataDrainSig(0).full;
+                ch1 <= bool2std(TMP_drainValue = dataDrainSigPrev.ins.result) or not dataDrainSigPrev.full;
                 ch2 <= bool2std(TMP_selectValue = selectedDataOutputSig.ins.result) or not selectedDataOutputSig.full;
                  
             
@@ -427,7 +428,11 @@ begin
             taggedMask <= taggedMaskNext;
 			content <= contentNext;
 	        committedMask <= committedMaskNext;
-			
+			     
+			     drainMaskNCPrev <= drainMask;
+                 dataDrainSigPrev <= dataDrainSigNC(0);
+                 isDrainingPrev <= isDraining;
+
             cancelledMask <= cancelledMaskNext;
         
             newerRegLQ <= newerNextLQ;
@@ -446,7 +451,7 @@ begin
                 end if;
                 
                 if true then    
-                    TMP_selectValue<= storeValues(TMP_selectPtr mod QUEUE_SIZE);
+                    TMP_selectValue <= storeValues(TMP_selectPtr mod QUEUE_SIZE);
                 end if;
             
             pDrain <= pDrainNext;        
@@ -507,13 +512,15 @@ begin
 	selectedDataOutput <= --selectedDataOutputSig;
 	                       (selectedDataOutputSig.full, setInstructionResult(selectedDataOutputSig.ins, TMP_selectValue));
 	
-	committedEmpty <= not isNonzero(committedMask);
-	committedSending <= isDraining;
+	committedEmpty <= not isNonzero(committedMask or drainMaskNCPrev);
+	committedSending <= --isDraining;
+	                       isDrainingPrev;
 	--committedDataOut <= (0 => dataDrainSigNC(0), others => DEFAULT_INSTRUCTION_SLOT);
 	committedDataOut(1 to PIPE_WIDTH-1) <= (others => DEFAULT_INSTRUCTION_SLOT);
-	committedDataOut(0) <= (dataDrainSigNC(0).full, --setInstructionResult(dataDrainSigNC(0).ins, TMP_drainValue));
-	                                                dataDrainSigNC(0).ins); -- TODO
-	
+	committedDataOut(0) <= --(dataDrainSigNC(0).full, --setInstructionResult(dataDrainSigNC(0).ins, TMP_drainValue));
+	                       --                         --dataDrainSigNC(0).ins); -- TODO
+	                         (dataDrainSigPrev.full, setInstructionResult(dataDrainSigPrev.ins, TMP_drainValue));                      
+	               	               
 	VIEW: if VIEW_ON generate
        use work.Viewing.all;
       
