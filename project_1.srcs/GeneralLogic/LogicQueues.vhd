@@ -24,7 +24,10 @@ package LogicQueues is
                             compareAddressInput: InstructionSlot)
     return InstructionSlot;
 
-    function getMatchingTags(content: InstructionStateArray; tag: InsTag) return std_logic_vector;    
+    function getMatchingTags(content: InstructionStateArray; tag: InsTag) return std_logic_vector;
+    
+    function getMatchingIndex(content: InstructionStateArray; tag: InsTag) return natural;
+      
     function getNumberToSend(dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1); nextCommitTag: InsTag; committing: std_logic) return integer;
     function getSendingArray(dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1); nextCommitTag: InsTag; committing: std_logic) return InstructionSlotArray;	
 end package;
@@ -170,6 +173,17 @@ package body LogicQueues is
             res(i) := bool2std(content(i).tags.renameIndex = tag);
         end loop;
         return res;
+    end function;
+    
+    -- NOTE, TODO: can start loop from 1 and return 0 by default because every branch writing to the mem must already have a slot allocated!
+    function getMatchingIndex(content: InstructionStateArray; tag: InsTag) return natural is
+    begin
+        for i in content'range loop
+            if content(i).tags.renameIndex = tag then
+                return i;
+            end if;
+        end loop;
+        return 0;
     end function;
     
     function getNumberToSend(dataOutSig: InstructionSlotArray(0 to PIPE_WIDTH-1); nextCommitTag: InsTag; committing: std_logic) return integer is

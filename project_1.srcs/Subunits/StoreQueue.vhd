@@ -174,6 +174,35 @@ architecture Behavioral of StoreQueue is
 
         return res;
     end function;
+    
+    function getStoreDataIndex(content: InstructionStateArray; dataIn: InstructionSlotArray;
+                                taggedMask: std_logic_vector;
+				                prevSending: std_logic;
+				                inputMask: std_logic_vector;
+				                pTagged: SmallNumber;
+				                storeValueInput, storeAddressInput: InstructionSlot;
+				                isLQ: boolean; matchingNewerLoads: std_logic_vector
+				                )
+    return natural is
+        variable res: InstructionStateArray(0 to QUEUE_SIZE-1) := content;
+        variable slot: InstructionSlot;
+        variable diff: SmallNumber := (others => '0');
+	    variable remv: std_logic_vector(0 to 2) := "000";
+	    variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
+	    constant IS_STORE_OP: boolean := std2bool(isStoreOp(storeAddressInput.ins));
+	    constant IS_LOAD_OP: boolean := std2bool(isLoadOp(storeAddressInput.ins));
+    begin
+        -- Update target after mem execution
+        for i in 0 to QUEUE_SIZE-1 loop
+           if content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
+           then
+               return i;
+           end if;
+                                
+        end loop;
+
+        return 0;
+    end function;
 
 
 	function TMP_cmpTagsBefore(content: InstructionStateArray; tag: InsTag)
@@ -303,7 +332,16 @@ architecture Behavioral of StoreQueue is
         
         return res;
     end function;
-
+    
+        signal matchIndex, storeIndex: natural range 0 to QUEUE_SIZE-1 := 0;
+        --signal doUpdate: std_logic := '0';
+        signal storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
+        signal TMP_drain: std_logic := '0';
+        signal TMP_drainPtr, TMP_selectPtr: natural := 0;
+        signal TMP_drainValue, TMP_selectValue: Mword := (others => '0');
+        
+        
+        signal ch0, ch1, ch2, ch3: std_logic := '0';
 begin
     causingPtr <= getCausingPtr(content, execCausing);
     
@@ -340,7 +378,23 @@ begin
 				                compareAddressInput,
 				                IS_LOAD_QUEUE, newerLQ
 				                                    );
-
+            storeIndex <= 				getStoreDataIndex(content, dataIn,
+                                                                    taggedMask,
+                                                                    prevSending,
+                                                                    inputMask,                             
+                                                                    pTagged,
+                                                                    storeValueInput,
+                                                                    compareAddressInput,
+                                                                    IS_LOAD_QUEUE, newerLQ
+                                                                                        );
+            
+            TMP_drain <= bool2std(TMP_drainPtr /= slv2u(pStart));
+            
+                ch0 <= bool2std(isDraining = TMP_drain);
+                ch1 <= bool2std(TMP_drainValue = dataDrainSig(0).ins.result) or not dataDrainSig(0).full;
+                ch2 <= bool2std(TMP_selectValue = selectedDataOutputSig.ins.result) or not selectedDataOutputSig.full;
+                 
+            
     drainMaskNC <= drainMask and not cancelledMask;
  
 	dataDrainSig <= getWindow(content, drainMask, pDrain, PIPE_WIDTH);				                
@@ -359,6 +413,8 @@ begin
 	matchedMask <= findOldestMatch(content, newerLQ, taggedMask,           pStart, compareAddressInput.ins) when IS_LOAD_QUEUE 
 	                                                 -- TODO: above - not necessary to find oldest, each younger load can be "poisoned" and cause an event on Commit
 	         else  findNewestMatch(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
+	
+	   TMP_selectPtr <= getFirstOnePosition(matchedMask);
 	
 	selectedDataSlot <= selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
     pStartNext <= addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE);
@@ -379,7 +435,20 @@ begin
 			
 			selectedDataOutputSig <= selectedDataSlot;
             dataOutSig <= dataOutSigNext;
-
+            
+                if storeValueInput.full = '1' then
+                    storeValues(storeIndex) <= storeValueInput.ins.result;
+                end if;
+            
+                if TMP_drain = '1' then
+                    TMP_drainValue <= storeValues(TMP_drainPtr);
+                    TMP_drainPtr <= (TMP_drainPtr + 1) mod QUEUE_SIZE;
+                end if;
+                
+                if true then    
+                    TMP_selectValue<= storeValues(TMP_selectPtr mod QUEUE_SIZE);
+                end if;
+            
             pDrain <= pDrainNext;        
             pStart <= pStartNext;
             
@@ -435,11 +504,15 @@ begin
 	dataOutV <= dataOutSigFinal;	
 	sendingSQOut <= isSending;
 
-	selectedDataOutput <= selectedDataOutputSig;
+	selectedDataOutput <= --selectedDataOutputSig;
+	                       (selectedDataOutputSig.full, setInstructionResult(selectedDataOutputSig.ins, TMP_selectValue));
 	
 	committedEmpty <= not isNonzero(committedMask);
 	committedSending <= isDraining;
-	committedDataOut <= (0 => dataDrainSigNC(0), others => DEFAULT_INSTRUCTION_SLOT);
+	--committedDataOut <= (0 => dataDrainSigNC(0), others => DEFAULT_INSTRUCTION_SLOT);
+	committedDataOut(1 to PIPE_WIDTH-1) <= (others => DEFAULT_INSTRUCTION_SLOT);
+	committedDataOut(0) <= (dataDrainSigNC(0).full, --setInstructionResult(dataDrainSigNC(0).ins, TMP_drainValue));
+	                                                dataDrainSigNC(0).ins); -- TODO
 	
 	VIEW: if VIEW_ON generate
        use work.Viewing.all;

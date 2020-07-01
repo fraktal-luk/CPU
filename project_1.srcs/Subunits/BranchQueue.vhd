@@ -168,6 +168,10 @@ architecture Behavioral of BranchQueue is
         return res;
     end function;
 
+        signal matchIndex, matchIndexUpdate: natural range 0 to QUEUE_SIZE-1 := 0;
+        signal doUpdate: std_logic := '0';
+        signal writtenTargets: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
+
 begin
     causingPtr <= getCausingPtr(content, execCausing);
     
@@ -198,6 +202,7 @@ begin
 	dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
 	selectedDataSlot <= selectBranchDataSlot(content, taggedMask, matchMask, compareAddressInput);
 	matchMask <= getMatchingTags(content, compareAddressInput.ins.tags.renameIndex);
+	   matchIndex <= getMatchingIndex(content, compareAddressInput.ins.tags.renameIndex);
 	
     pStartNext <= addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE);
 	
@@ -213,6 +218,12 @@ begin
             dataOutSig <= dataOutSigNext;
             
             matchMaskUpdate <= matchMask;
+               matchIndexUpdate <= matchIndex;
+               doUpdate <= compareAddressInput.full;
+            
+               if doUpdate = '1' then
+                  writtenTargets(matchIndexUpdate) <= storeValueInput.ins.target;       
+               end if;
             
             if lateEventSignal = '1' then
                 pTagged <= pStartNext;
