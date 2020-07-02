@@ -337,7 +337,7 @@ architecture Behavioral of StoreQueue is
         --signal doUpdate: std_logic := '0';
         signal storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
         signal TMP_drain: std_logic := '0';
-        signal TMP_drainPtr, TMP_selectPtr: natural := 0;
+        signal TMP_drainPtr, TMP_selectPtr: SmallNumber := (others => '0');
         signal TMP_drainValue, TMP_selectValue: Mword := (others => '0');
         
         
@@ -389,7 +389,7 @@ begin
                                                                     IS_LOAD_QUEUE, newerLQ
                                                                                         );
             
-            TMP_drain <= bool2std(TMP_drainPtr /= slv2u(pStart));
+            TMP_drain <= bool2std(TMP_drainPtr /= pStart);
             
                 ch0 <= bool2std(isDraining = TMP_drain);
                 ch1 <= bool2std(TMP_drainValue = dataDrainSigPrev.ins.result) or not dataDrainSigPrev.full;
@@ -415,7 +415,7 @@ begin
 	                                                 -- TODO: above - not necessary to find oldest, each younger load can be "poisoned" and cause an event on Commit
 	         else  findNewestMatch(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
 	
-	   TMP_selectPtr <= getFirstOnePosition(matchedMask);
+	   TMP_selectPtr <= i2slv(getFirstOnePosition(matchedMask), SMALL_NUMBER_SIZE) and PTR_MASK_SN;
 	
 	selectedDataSlot <= selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
     pStartNext <= addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE);
@@ -446,12 +446,12 @@ begin
                 end if;
             
                 if TMP_drain = '1' then
-                    TMP_drainValue <= storeValues(TMP_drainPtr);
-                    TMP_drainPtr <= (TMP_drainPtr + 1) mod QUEUE_SIZE;
+                    TMP_drainValue <= storeValues(slv2u(TMP_drainPtr));
+                    TMP_drainPtr <= addIntTrunc(TMP_drainPtr, 1, QUEUE_PTR_SIZE);
                 end if;
                 
                 if true then    
-                    TMP_selectValue <= storeValues(TMP_selectPtr mod QUEUE_SIZE);
+                    TMP_selectValue <= storeValues(slv2u(TMP_selectPtr));
                 end if;
             
             pDrain <= pDrainNext;        
