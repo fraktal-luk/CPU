@@ -82,6 +82,7 @@ function alignLeft(vec: std_logic_vector) return std_logic_vector;
 -- Those 2 functions must work together: if returned slv at returned index is '0', then OFC it means "nothing" 
 function getFirstOne(readySlots: std_logic_vector) return std_logic_vector;
 function getFirstOnePosition(readySlots: std_logic_vector) return integer;
+function getLastOnePosition(readySlots: std_logic_vector) return integer;
 
 function isNonzero(vec: std_logic_vector) return std_logic;
 
@@ -541,6 +542,18 @@ function getFirstOnePosition(readySlots: std_logic_vector) return integer is
 	variable res: integer := -1;
 begin
 	for i in readySlots'range loop
+		if readySlots(i) = '1' then
+			res := i;
+			exit;
+		end if;
+	end loop;
+	return res;
+end function;
+
+function getLastOnePosition(readySlots: std_logic_vector) return integer is
+	variable res: integer := -1;
+begin
+	for i in readySlots'reverse_range loop
 		if readySlots(i) = '1' then
 			res := i;
 			exit;

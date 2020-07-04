@@ -183,8 +183,8 @@ architecture Behavioral of StoreQueue is
 				                storeValueInput, storeAddressInput: InstructionSlot;
 				                isLQ: boolean; matchingNewerLoads: std_logic_vector
 				                )
-    return natural is
-        variable res: InstructionStateArray(0 to QUEUE_SIZE-1) := content;
+    return SmallNumber is
+        --variable res: InstructionStateArray(0 to QUEUE_SIZE-1) := content;
         variable slot: InstructionSlot;
         variable diff: SmallNumber := (others => '0');
 	    variable remv: std_logic_vector(0 to 2) := "000";
@@ -196,12 +196,12 @@ architecture Behavioral of StoreQueue is
         for i in 0 to QUEUE_SIZE-1 loop
            if content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
            then
-               return i;
+               return i2slv(i, SMALL_NUMBER_SIZE) and PTR_MASK_SN;
            end if;
                                 
         end loop;
 
-        return 0;
+        return (others => '0');
     end function;
 
 
@@ -320,6 +320,78 @@ architecture Behavioral of StoreQueue is
         return res;
     end function;
     
+    function findNewestMatchIndex(content: InstructionStateArray;
+                                         olderSQ, cmpMask: std_logic_vector; pStart: SmallNumber;
+                                         ins: InstructionState)
+    return SmallNumber is
+        constant LEN: integer := cmpMask'length;
+        variable res1, res2, older, before: std_logic_vector(0 to LEN-1) := (others => '0');
+        variable indices, rawIndices: SmallNumberArray(0 to LEN-1) := (others => (others => '0'));
+        variable matchBefore: std_logic := '0';       
+        variable tmpVec, tmpVec1, tmpVec2: std_logic_vector(0 to LEN-1) := (others => '0');
+        
+        variable res: SmallNumber := (others => '0');
+    begin
+        -- From qs we must check which are older than ins
+        --older := olderSQ;-- TMP_cmpTagsBefore(content, ins.tags.renameIndex) and whichAddressCompleted(content); -- only those with known address
+        before := setToOnes(olderSQ, slv2u(pStart));
+        -- Use priority enc. to find last in the older ones. But they may be divided:
+        --        V  1 1 1 0 0 0 0 1 1 1 and cmp  V
+        --           0 1 0 0 0 0 0 1 0 1
+        -- and then there are 2 runs of bits and those at the enc must be ignored (r older than first run)
+        
+        -- If there's a match before pStart, it is younger than those at or after pStart
+        tmpVec1 := cmpMask and olderSQ;
+        tmpVec2 := cmpMask and olderSQ and before;
+            tmpVec := cmpMask and olderSQ and before;
+        matchBefore := isNonzero(tmpVec2);
+
+        if matchBefore = '1' then -- Ignore those after            
+            res := i2slv(getLastOnePosition(tmpVec2), SMALL_NUMBER_SIZE);
+        else -- Don't ignore any matches           
+            res := i2slv(getLastOnePosition(tmpVec1), SMALL_NUMBER_SIZE);
+        end if;
+
+        return res and PTR_MASK_SN;
+    end function;
+
+    function findNewestMatchIndex2(content: InstructionStateArray;
+                                         olderSQ, cmpMask: std_logic_vector; pStart: SmallNumber;
+                                         ins: InstructionState)
+    return SmallNumber is
+        constant LEN: integer := cmpMask'length;
+        variable res1, res2, older, before: std_logic_vector(0 to LEN-1) := (others => '0');
+        variable indices, rawIndices: SmallNumberArray(0 to LEN-1) := (others => (others => '0'));
+        variable matchBefore: std_logic := '0';       
+        variable tmpVec, tmpVec1, tmpVec2: std_logic_vector(0 to LEN-1) := (others => '0');
+        variable tmpVecExt: std_logic_vector(0 to 2*LEN-1) := (others => '0');
+        
+        variable res: SmallNumber := (others => '0');
+        variable nShift, nPos: natural := 0;
+    begin
+        -- Shift by pStart
+        nShift := slv2u(pStart);
+        
+        tmpVec := olderSQ and cmpMask;
+        tmpVecExt := tmpVec & tmpVec;
+        
+        for i in 0 to LEN-1 loop
+            tmpVec1(i) := tmpVecExt(i + nShift);
+        end loop;
+        
+        -- Find first index
+        for i in LEN-1 downto 0 loop
+            if tmpVec1(i) = '1' then
+                res := i2slv(i, SMALL_NUMBER_SIZE);
+                exit;
+            end if;
+        end loop;
+        -- Add pStart
+        res := add(res, pStart);
+
+        return res and PTR_MASK_SN;
+    end function;
+    
     function selectWithMask(content: InstructionStateArray; mask: std_logic_vector; compareValid: std_logic) return InstructionSlot is
         variable res: InstructionSlot := ('0', content(0));
     begin       
@@ -334,10 +406,11 @@ architecture Behavioral of StoreQueue is
     end function;
     
         signal matchIndex, storeIndex: natural range 0 to QUEUE_SIZE-1 := 0;
+        signal storePtr: SmallNumber := (others => '0');
         --signal doUpdate: std_logic := '0';
         signal storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
         signal TMP_drain: std_logic := '0';
-        signal TMP_drainPtr, TMP_selectPtr: SmallNumber := (others => '0');
+        signal TMP_drainPtr, TMP_selectPtr, TMP_selectPtr2: SmallNumber := (others => '0');
         signal TMP_drainValue, TMP_selectValue: Mword := (others => '0');
         
         
@@ -379,7 +452,7 @@ begin
 				                compareAddressInput,
 				                IS_LOAD_QUEUE, newerLQ
 				                                    );
-            storeIndex <= 				getStoreDataIndex(content, dataIn,
+            storePtr <= 				getStoreDataIndex(content, dataIn,
                                                                     taggedMask,
                                                                     prevSending,
                                                                     inputMask,                             
@@ -394,7 +467,7 @@ begin
                 ch0 <= bool2std(isDraining = TMP_drain);
                 ch1 <= bool2std(TMP_drainValue = dataDrainSigPrev.ins.result) or not dataDrainSigPrev.full;
                 ch2 <= bool2std(TMP_selectValue = selectedDataOutputSig.ins.result) or not selectedDataOutputSig.full;
-                 
+                ch3 <= bool2std(TMP_selectPtr2 = TMP_selectPtr);
             
     drainMaskNC <= drainMask and not cancelledMask;
  
@@ -415,7 +488,10 @@ begin
 	                                                 -- TODO: above - not necessary to find oldest, each younger load can be "poisoned" and cause an event on Commit
 	         else  findNewestMatch(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
 	
-	   TMP_selectPtr <= i2slv(getFirstOnePosition(matchedMask), SMALL_NUMBER_SIZE) and PTR_MASK_SN;
+	   --TMP_selectPtr2 <= i2slv(getFirstOnePosition(matchedMask), SMALL_NUMBER_SIZE) and PTR_MASK_SN;
+	    TMP_selectPtr2 <=   findNewestMatchIndex(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
+	    TMP_selectPtr <=   findNewestMatchIndex2(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
+	
 	
 	selectedDataSlot <= selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
     pStartNext <= addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE);
@@ -442,7 +518,7 @@ begin
             dataOutSig <= dataOutSigNext;
             
                 if storeValueInput.full = '1' then
-                    storeValues(storeIndex) <= storeValueInput.ins.result;
+                    storeValues(slv2u(storePtr)) <= storeValueInput.ins.result;
                 end if;
             
                 if TMP_drain = '1' then
