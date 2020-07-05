@@ -405,6 +405,15 @@ architecture Behavioral of StoreQueue is
         return res;
     end function;
     
+    function selectMatched(content: InstructionStateArray; mask: std_logic_vector; compareValid: std_logic; index: SmallNumber) return InstructionSlot is
+        variable res: InstructionSlot := ('0', content(0));
+    begin 
+        res.full := compareValid and isNonzero(mask);
+        res.ins := content(slv2u(index));
+        
+        return res;
+    end function;
+    
         signal matchIndex, storeIndex: natural range 0 to QUEUE_SIZE-1 := 0;
         signal storePtr: SmallNumber := (others => '0');
         --signal doUpdate: std_logic := '0';
@@ -486,14 +495,16 @@ begin
 	addressMatchMask <= getMatchedAddresses(content, compareAddressInput);	
 	matchedMask <= findOldestMatch(content, newerLQ, taggedMask,           pStart, compareAddressInput.ins) when IS_LOAD_QUEUE 
 	                                                 -- TODO: above - not necessary to find oldest, each younger load can be "poisoned" and cause an event on Commit
-	         else  findNewestMatch(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
-	
+	         else  --findNewestMatch(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
+	               olderSQ and fullOrCommittedMask;
+	               
 	   --TMP_selectPtr2 <= i2slv(getFirstOnePosition(matchedMask), SMALL_NUMBER_SIZE) and PTR_MASK_SN;
 	    TMP_selectPtr2 <=   findNewestMatchIndex(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
 	    TMP_selectPtr <=   findNewestMatchIndex2(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
 	
 	
-	selectedDataSlot <= selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
+	selectedDataSlot <= --selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
+	                    selectMatched(content, matchedMask, compareAddressInput.full, TMP_selectPtr); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
     pStartNext <= addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE);
     pDrainNext <= pDrain when isDraining = '0' else addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE);
             	
