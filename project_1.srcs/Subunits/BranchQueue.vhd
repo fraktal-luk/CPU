@@ -168,10 +168,133 @@ architecture Behavioral of BranchQueue is
         return res;
     end function;
 
+    function getNewContentRT(content: InstructionStateArray; dataIn, dataInBr: InstructionSlotArray;
+                                taggedMask, fullMask: std_logic_vector;
+				                prevSending, prevSendingBr: std_logic;
+				                inputMask, inputMaskBr: std_logic_vector;
+				                pTagged, pAll: SmallNumber;
+				                matchMaskUpdate: std_logic_vector;
+				                storeValueInput: InstructionSlot
+				                )
+    return InstructionStateArray is
+        variable res: InstructionStateArray(0 to QUEUE_SIZE-1) := content;
+        variable slot: InstructionSlot;
+        variable diff: SmallNumber := (others => '0');
+	    variable remv: std_logic_vector(0 to 2) := "000";
+	    variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
+	    variable imBr: std_logic_vector(0 to QUEUE_SIZE-1) := inputMaskBr;	    
+    begin
+
+        for i in 0 to QUEUE_SIZE-1 loop
+           diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;
+           
+           case diff(1 downto 0) is
+               when "00" =>
+                    remv := "111";
+               when "01" =>
+                    remv := "110";
+               when "10" =>
+                    remv := "100";
+               when others =>
+                    remv := "000";                                                                                       
+           end case;
+           
+           if im(i) = '1' then
+               slot := getNewElem(remv, dataIn); 
+                       --dataIn(slv2u(diff(1 downto 0)));         
+               res(i).tags.renameIndex := slot.ins.tags.renameIndex;               
+               res(i).controlInfo.firstBr := '0'; -- This is '1' only for the first branch in group!               
+           end if;
+        end loop;
+
+        -- Set firstBr bit for the first entry in new group
+        if prevSending = '1' then
+            res(slv2u(pTagged)).controlInfo.firstBr := '1';
+        end if;
+
+        for i in 0 to QUEUE_SIZE-1 loop
+           diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pAll) and PTR_MASK_SN;
+           
+           case diff(1 downto 0) is
+               when "00" =>
+                    remv := "111";
+               when "01" =>
+                    remv := "110";
+               when "10" =>
+                    remv := "100";
+               when others =>
+                    remv := "000";                                                                                       
+           end case;
+           
+           if imBr(i) = '1' then
+              slot := getNewElem(remv, dataInBr);
+                     --dataInBr(slv2u(diff(1 downto 0)));  
+              res(i) := slot.ins;
+              
+              if CLEAR_DEBUG_INFO then
+                 res(i) := DEFAULT_INS_STATE;
+                 res(i).tags.renameIndex := slot.ins.tags.renameIndex;
+              end if;
+                   
+           end if;
+        end loop;
+
+        return res;
+    end function;
+
+
+
+
+    function findMatchIndex(mask: std_logic_vector)
+    return SmallNumber is
+        variable res: SmallNumber := (others => '0');
+        variable nShift, nPos: natural := 0;
+    begin
+        res := i2slv(getFirstOnePosition(mask), SMALL_NUMBER_SIZE);
+        
+        return res and PTR_MASK_SN;
+    end function;
+    
+    function findSendingSlotIndex(content: InstructionStateArray; pStart: SmallNumber; ctrInc: InsTag) return SmallNumber is
+        variable res: SmallNumber := (others => '0');
+        variable mask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+        variable tmpVecExt: std_logic_vector(0 to 2*QUEUE_SIZE-1) := (others => '0');
+        variable tmpVec, tmpVec1, tmpVec2: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');        
+        variable nShift, nPos: natural := 0;   
+    begin
+        for i in 0 to QUEUE_SIZE-1 loop
+            mask(i) := bool2std(getTagHighSN(content(i).tags.renameIndex) = getTagHighSN(ctrInc));       
+        end loop;
+        
+        -- Shift by pStart
+        nShift := slv2u(pStart);
+        
+        tmpVecExt := mask & mask;
+        
+        for i in 0 to QUEUE_SIZE-1 loop
+            tmpVec1(i) := tmpVecExt(i + nShift);
+        end loop;        
+        
+        for i in QUEUE_SIZE-1 downto 0 loop
+            if tmpVec1(i) = '1' then
+                res := i2slv(i, SMALL_NUMBER_SIZE);
+                exit;
+            end if;
+        end loop;
+        -- Add pStart
+        res := add(res, pStart);
+
+        return res and PTR_MASK_SN;        
+    end function;
+    
+        
+        signal TMP_updatePtr, TMP_sendingPtr: SmallNumber := (others => '0');
+        
         signal matchIndex, matchIndexUpdate: natural range 0 to QUEUE_SIZE-1 := 0;
         signal doUpdate: std_logic := '0';
         signal writtenTargets: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
-
+    
+    signal registerTargetTable, contentNextRT: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INS_STATE);
 begin
     causingPtr <= getCausingPtr(content, execCausing);
     
@@ -198,6 +321,16 @@ begin
 				                pTagged, pAll,
 				                matchMaskUpdate,
 				                storeValueInput);
+
+        contentNextRT <=
+                    getNewContentRT(registerTargetTable, dataIn, dataInBr,
+                                    taggedMask, fullMask,
+                                    prevSending, prevSendingBr,
+                                    inputMask, inputMaskBr,				             
+                                    pTagged, pAll,
+                                    matchMaskUpdate,
+                                    storeValueInput);
+
 				                
 	dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
 	selectedDataSlot <= selectBranchDataSlot(content, taggedMask, matchMask, compareAddressInput);
@@ -275,6 +408,25 @@ begin
 
 	selectedDataOutput <= selectedDataSlot;
 	almostFull <= '0'; -- TODO: is it deprecated?
+	
+	
+	   TMP_updatePtr <= findMatchIndex(matchMaskUpdate);
+
+        TMP_sendingPtr <= findSendingSlotIndex(content, pStart, groupCtrInc);
+
+	   TMP_REG_TARGETS: process (clk)
+	       variable nReceiving: natural := 0;
+	   begin
+	       if rising_edge(clk) then
+	           registerTargetTable <= contentNextRT;
+	           
+	           if storeValueInput.full = '1' then
+	               registerTargetTable(slv2u(TMP_updatePtr)).target <= storeValueInput.ins.target;
+	           end if;
+	           
+	       end if;
+	
+	   end process;
 	
 	VIEW: if VIEW_ON generate
        use work.Viewing.all;
