@@ -289,12 +289,18 @@ architecture Behavioral of BranchQueue is
     
         
         signal TMP_updatePtr, TMP_sendingPtr: SmallNumber := (others => '0');
+        signal TMP_sendingTarget: Mword := (others => '0');
         
         signal matchIndex, matchIndexUpdate: natural range 0 to QUEUE_SIZE-1 := 0;
         signal doUpdate: std_logic := '0';
         signal writtenTargets: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
     
     signal registerTargetTable, contentNextRT: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INS_STATE);
+
+    -- TODO: deduplicate from Ibuffer    
+    subtype PipeStage is InstructionSlotArray(0 to PIPE_WIDTH-1);
+    type PipeStageArray is array(natural range <>) of PipeStage;
+    
 begin
     causingPtr <= getCausingPtr(content, execCausing);
     
@@ -424,9 +430,108 @@ begin
 	               registerTargetTable(slv2u(TMP_updatePtr)).target <= storeValueInput.ins.target;
 	           end if;
 	           
+	           TMP_sendingTarget <= registerTargetTable(slv2u(TMP_sendingPtr)).target;
+	           
 	       end if;
 	
 	   end process;
+	
+	ALL_BRANCHES: block
+	   signal allBranches: PipeStageArray(0 to QUEUE_SIZE-1) := (others => (others => DEFAULT_INS_SLOT));
+	    
+	   signal startPtr, startPtrNext, endPtr, taggedPtr, matchedPtr: natural := 0;
+	   signal allBranchOutput: PipeStage := (others => DEFAULT_INS_SLOT);
+	   signal accepting, committingBr: std_logic := '0';
+	   
+	   signal memEmpty, taggedEmpty: std_logic := '1';
+	   
+	   function getMatchingSlot(content: PipeStageArray; tag: InsTag; startPtr: natural) return natural is
+	       variable res: natural := 0;
+	       variable mask, maskTmp: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0'); 
+	       variable maskExt: std_logic_vector(0 to 2*QUEUE_SIZE-1) := (others => '0'); 
+	   begin
+	       for i in 0 to QUEUE_SIZE-1 loop
+	           if getTagHigh(content(i)(0).ins.tags.renameIndex) = getTagHigh(tag) then
+	               mask(i) := '1';
+	           end if;
+	       end loop;
+	       maskExt := mask & mask;
+	       
+	       for i in 0 to QUEUE_SIZE-1 loop
+	           maskTmp(i) := maskExt(i + startPtr);
+	       end loop;
+	       
+	       for i in 0 to QUEUE_SIZE-1 loop
+               if maskTmp(i) = '1' then
+                   res := i + startPtr;
+               end if;
+           end loop;	       
+
+	       return res;
+	   end function;
+	   
+	begin
+	       matchedPtr <= getMatchingSlot(allBranches, storeValueInput.ins.tags.renameIndex, startPtr); -- TODO: use compareAddressInput with 1 cycle delay?
+	
+	       committingBr <= committing and -- TODO: include signal that is true only when group begin committed uses a slot in this queue
+	                                       bool2std(getTagHighSN(allBranchOutput(0).ins.tags.renameIndex) = getTagHighSN(groupCtrInc))
+	                                       and not taggedEmpty;
+	   
+	   accepting <= bool2std(startPtr /= ((endPtr + 1) mod QUEUE_SIZE));
+	   --accepting <= bool2std(startPtr /= endPtr) or memEmpty;
+	   
+	   startPtrNext <= (startPtr + 1) mod QUEUE_SIZE when committingBr = '1' else startPtr;
+	   
+	   SYNCH: process (clk)
+	   begin
+	       if rising_edge(clk) then
+	           if lateEventSignal = '1' then
+	               endPtr <= startPtr;
+	               taggedPtr <= startPtr;
+	               memEmpty <= '1';
+	               taggedEmpty <= '1';
+	           elsif execEventSignal = '1' then
+	               endPtr <= (matchedPtr + 1) mod QUEUE_SIZE; -- !!!
+	               taggedPtr <= (matchedPtr + 1) mod QUEUE_SIZE; -- !!!
+	               memEmpty <= '0'; -- ???
+	               taggedEmpty <= '0';
+	           else
+	               if prevSendingBr = '1' and isNonzero(extractFullMask(dataInBr)) = '1' then
+                       allBranches(endPtr) <= dataInBr;
+                       endPtr <= (endPtr + 1) mod QUEUE_SIZE;
+                       memEmpty <= '0';
+                   end if;
+                   
+                   if prevSending = '1' and isNonzero(extractFullMask(dataIn)) = '1' then
+                       allBranches(taggedPtr)(0).ins.tags.renameIndex <= dataIn(0).ins.tags.renameIndex;
+                       taggedPtr <= (taggedPtr + 1) mod QUEUE_SIZE;
+                       taggedEmpty <= '0';                       
+                   end if;
+	           end if;
+	           
+	           if true then
+	              allBranchOutput <= allBranches(startPtrNext);
+	              	              
+	           end if;
+	           
+	           if committingBr = '1' and (prevSending = '0' or isNonzero(extractFullMask(dataIn)) = '0')  and startPtrNext = endPtr then -- that is memDraining
+	               memEmpty <= '1';
+	           end if;
+	           
+	           if committingBr = '1' and (prevSendingBr = '0' or isNonzero(extractFullMask(dataInBr)) = '0') and startPtrNext = taggedPtr then -- that is memDraining
+                   taggedEmpty <= '1';
+               end if;
+               	           
+	           startPtr <= startPtrNext;
+--	           if committing = '1' then
+--	               startPtr <= startPtr + 1;
+--	           end if;
+	       end if;
+	   end process;
+	   
+	end block;
+	
+	
 	
 	VIEW: if VIEW_ON generate
        use work.Viewing.all;

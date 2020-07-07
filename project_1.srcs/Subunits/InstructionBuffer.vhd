@@ -252,7 +252,7 @@ architecture Implem of InstructionBuffer is
             res(i) := contentExt(nShift + i);
         end loop;
         
-        return res;    
+        return res;
     end function;
     
     subtype PipeStage is InstructionSlotArray(0 to PIPE_WIDTH-1);
