@@ -35,10 +35,16 @@ return InstructionSlotArray;
 -- UNUSED
 function clearControlEvents(ins: InstructionState) return InstructionState;
 
-function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray;
+function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray; bqTargetData: InstructionSlot;
 								 lastEffectiveIns, lateTargetIns: InstructionState;
 								 evtPhase2: std_logic)
 return InstructionSlot;
+
+function getNewEffective2(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray; bqTargetData: InstructionSlot;
+								 lastEffectiveIns, lateTargetIns: InstructionState;
+								 evtPhase2: std_logic)
+return InstructionSlot;
+
 
 function anyEvent(insVec: InstructionSlotArray) return std_logic;
 
@@ -201,7 +207,7 @@ begin
 end function;
 
 
-function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray;-- effectiveMask: std_logic_vector;
+function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray; bqTargetData: InstructionSlot;
 						 lastEffectiveIns, lateTargetIns: InstructionState; evtPhase2: std_logic)
 return InstructionSlot is
 	variable res: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -240,6 +246,82 @@ begin
     targetInc(LOG2_PIPE_WIDTH + 2 downto 2) := sub(lastEffectiveInd, lastConfirmedBranchInd);
     
     res.ins.target := add(branchTarget, targetInc);
+    
+    if CLEAR_DEBUG_INFO then
+        res.ins.ip := (others => '0');
+        res.ins.bits := (others => '0');
+        res.ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+        res.ins.physicalArgSpec := DEFAULT_ARG_SPEC;
+        
+        res.ins.classInfo := DEFAULT_CLASS_INFO;
+        res.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
+        
+        res.ins.specificOperation.arith := ArithOp'(opAnd);
+        res.ins.specificOperation.memory := MemOp'(opLoad);
+        res.ins.specificOperation.float := FpOp'(opMove);
+        
+        res.ins.tags := DEFAULT_INSTRUCTION_TAGS;
+    end if;    
+	return res;
+end function;
+
+function getNewEffective2(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray; bqTargetData: InstructionSlot;
+						 lastEffectiveIns, lateTargetIns: InstructionState; evtPhase2: std_logic)
+return InstructionSlot is
+	variable res: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+	variable insToLastEffective: InstructionState;	
+	variable branchTarget: Mword := lastEffectiveIns.target;
+	variable targetInc: Mword := (others => '0');
+	variable lastConfirmedBranchInd, lastEffectiveInd: std_logic_vector(LOG2_PIPE_WIDTH downto 0) := (others => '0');
+	variable anyConfirmed: boolean := false;
+begin
+    lastConfirmedBranchInd := i2slv(-1, LOG2_PIPE_WIDTH+1);
+	insToLastEffective := getLastEffective(robDataLiving);
+	
+	   for i in PIPE_WIDTH-1 downto 0 loop
+	       if robDataLiving(i).full = '1' then
+	           targetInc := i2slv(i, MWORD_SIZE);
+	           exit;
+	       end if;
+	   end loop;
+	   
+	   for i in 0 to PIPE_WIDTH-1 loop 
+	       if dataFromBQV(i).full = '1' and dataFromBQV(i).ins.controlInfo.confirmedBranch = '1' then
+	           anyConfirmed := true;
+	       end if;
+	   end loop;
+	   
+	if evtPhase2 = '1' then
+	   res := ('1', lateTargetIns);
+	   return res;
+	end if;
+	
+    res := (sendingToCommit, insToLastEffective);	
+
+--    for i in robDataLiving'range loop
+--        if robDataLiving(i).full = '1' then
+--            lastEffectiveInd := i2slv(4*i, LOG2_PIPE_WIDTH+1); -- CAREFUL: only for 4b instructions
+--        end if;			
+--    end loop;
+    
+    -- Find taken jumps in BQ group and select last as target
+    branchTarget := lastEffectiveIns.target;
+--    -- Now last effective and taken target from BQ
+--    for i in 0 to PIPE_WIDTH-1 loop        
+--        if dataFromBQV(i).full = '1' and dataFromBQV(i).ins.controlInfo.confirmedBranch = '1' then
+--            --branchTarget := dataFromBQV(i).ins.target;
+--            lastConfirmedBranchInd := '0' & dataFromBQV(i).ins.tags.renameIndex(LOG2_PIPE_WIDTH-1 downto 0);  
+--        end if;
+--    end loop;
+    
+    -- CAREFUL: works only for 32b instructions
+    --targetInc(LOG2_PIPE_WIDTH + 2 downto 2) := sub(lastEffectiveInd, lastConfirmedBranchInd);
+    
+    if bqTargetData.full = '1' and anyConfirmed then -- TODO, CHECK: bqTargetData.full will always be '1' if anyConfirmed?
+        res.ins.target := bqTargetData.ins.target;
+    else
+        res.ins.target := add(branchTarget, targetInc);        
+    end if;
     
     if CLEAR_DEBUG_INFO then
         res.ins.ip := (others => '0');

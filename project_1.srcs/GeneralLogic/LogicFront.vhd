@@ -271,7 +271,7 @@ function prepareForBQ(insVec: InstructionSlotArray) return InstructionSlotArray 
 	constant BRANCH_MASK: std_logic_vector(insVec'range) := getBranchMask(insVec);
 begin
 	for i in insVec'range loop
-	   res(i).full := BRANCH_MASK(i) and insVec(i).full; -- TODO: getBranchMask already check for 'full' - remove it here?   
+	   res(i).full := BRANCH_MASK(i) and insVec(i).full; -- TODO: getBranchMask already check for 'full' - remove it here?
 
        if CLEAR_DEBUG_INFO then -- Otherwise everything remains
            res(i).ins := DEFAULT_INS_STATE;
@@ -280,6 +280,10 @@ begin
            res(i).ins.result := insVec(i).ins.result;
 	   end if;
 	end loop;
+	   
+	   -- TEMP! for new BQ development
+	   -- Left align this group
+	   res(0).ins.tags.renameIndex(1 downto 0) := i2slv(getFirstOnePosition(extractFullMask(insVec)), 2);
 	
 	return res;
 end function;

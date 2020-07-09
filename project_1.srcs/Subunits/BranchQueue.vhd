@@ -49,7 +49,11 @@ entity BranchQueue is
 		
 		nextAccepting: in std_logic;		
 		sendingSQOut: out std_logic;
-		dataOutV: out InstructionSlotArray(0 to PIPE_WIDTH-1)
+		dataOutV: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+		
+		committedEmpty: out std_logic;
+        committedSending: out std_logic;
+        committedDataOut: out InstructionSlot		
 	);
 end BranchQueue;
 
@@ -418,7 +422,7 @@ begin
 	
 	   TMP_updatePtr <= findMatchIndex(matchMaskUpdate);
 
-        TMP_sendingPtr <= findSendingSlotIndex(content, pStart, groupCtrInc);
+        TMP_sendingPtr <= findSendingSlotIndex(content, pStartNext, groupCtrInc);
 
 	   TMP_REG_TARGETS: process (clk)
 	       variable nReceiving: natural := 0;
@@ -438,12 +442,19 @@ begin
 	
 	ALL_BRANCHES: block
 	   signal allBranches: PipeStageArray(0 to QUEUE_SIZE-1) := (others => (others => DEFAULT_INS_SLOT));
-	    
-	   signal startPtr, startPtrNext, endPtr, taggedPtr, matchedPtr: natural := 0;
+	   signal allGroupTargets: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INS_STATE);
+	   
+	   signal startPtr, startPtrNext, endPtr, taggedPtr, cmpMatchedPtr, storingMatchedPtr: natural := 0;
 	   signal allBranchOutput: PipeStage := (others => DEFAULT_INS_SLOT);
+	   signal allGroupTargetOutput: InstructionState := DEFAULT_INS_STATE;
+	   
+	   signal comparedMatchingSlot, selectedSlot: InstructionSlot := DEFAULT_INS_SLOT;
+	   
 	   signal accepting, committingBr: std_logic := '0';
 	   
 	   signal memEmpty, taggedEmpty: std_logic := '1';
+	   
+	           signal ch0, ch1, ch2, ch3: std_logic := '0';
 	   
 	   function getMatchingSlot(content: PipeStageArray; tag: InsTag; startPtr: natural) return natural is
 	       variable res: natural := 0;
@@ -464,14 +475,57 @@ begin
 	       for i in 0 to QUEUE_SIZE-1 loop
                if maskTmp(i) = '1' then
                    res := i + startPtr;
+                   exit;
                end if;
            end loop;	       
 
+	       return res mod QUEUE_SIZE;
+	   end function;
+	   
+--	   function findCmpSlot(allBranches: PipeStageArray; compareAddressInput: InstructionSlot) return InstructionSlot is
+--	       variable res: InstructionSlot := DEFAULT_INS_SLOT;
+--	   begin
+--	       for i in 0 to QUEUE_SIZE-1 loop
+--	           if getTagHigh(compareAddressInput.ins.tags.renameIndex) = getTagHigh(allBranches(i)(0).ins.tags.renameIndex) then
+	               
+--	           end if;
+--	       end loop;
+	       
+--	       return res;
+--	   end function;
+	   
+	   function getMatchedSlot(allBranches: PipeStageArray; slotPtr: natural; cmpAdrSlot: InstructionSlot) return InstructionSlot is
+	       variable res: InstructionSlot := DEFAULT_INS_SLOT;
+	       variable lowPtr: natural := 0;
+	   begin
+	       lowPtr := slv2u(getTagLow(cmpAdrSlot.ins.tags.renameIndex));
+	       res := allBranches(slotPtr)(lowPtr);
+	       res.full := cmpAdrSlot.full;
 	       return res;
 	   end function;
 	   
+	       function TMP_leftAlign(insVec: InstructionSlotArray) return InstructionSlotArray is
+	           variable res: InstructionSlotArray(insVec'range) := insVec;
+	           variable resExt: InstructionSlotArray(0 to 2*PIPE_WIDTH-1) := insVec & insVec;
+	           variable nShift: natural := slv2u(insVec(0).ins.tags.renameIndex(1 downto 0)); 
+	       begin
+	           for i in 0 to PIPE_WIDTH-1 loop
+	               res(i) := resExt(i + nShift);
+	           end loop;
+	           
+	           return res;
+	       end function;
+	   
 	begin
-	       matchedPtr <= getMatchingSlot(allBranches, storeValueInput.ins.tags.renameIndex, startPtr); -- TODO: use compareAddressInput with 1 cycle delay?
+	        --   selectedDataSlot <= comparedMatchingSlot; -- !!!!!
+	
+	
+	       comparedMatchingSlot <= --findCmpSlot(allBranches, compareAddressInput);
+	                               getMatchedSlot(allBranches, cmpMatchedPtr, compareAddressInput);
+	
+	       cmpMatchedPtr <= getMatchingSlot(allBranches, compareAddressInput.ins.tags.renameIndex, startPtr);
+	
+	       storingMatchedPtr <= getMatchingSlot(allBranches, storeValueInput.ins.tags.renameIndex, startPtr); -- TODO: use compareAddressInput with 1 cycle delay?
 	
 	       committingBr <= committing and -- TODO: include signal that is true only when group begin committed uses a slot in this queue
 	                                       bool2std(getTagHighSN(allBranchOutput(0).ins.tags.renameIndex) = getTagHighSN(groupCtrInc))
@@ -482,28 +536,37 @@ begin
 	   
 	   startPtrNext <= (startPtr + 1) mod QUEUE_SIZE when committingBr = '1' else startPtr;
 	   
+	   
+	             ch0 <= bool2std(selectedDataSlot.ins.result = comparedMatchingSlot.ins.result) or not selectedDataSlot.full;
+	             --ch1 <= bool2std(selectedDataSlot.ins.target = comparedMatchingSlot.ins.target) or not selectedDataSlot.full;
+	             ch1 <= bool2std(selectedDataSlot = comparedMatchingSlot) or not selectedDataSlot.full;
+	   
 	   SYNCH: process (clk)
 	   begin
 	       if rising_edge(clk) then
+	           selectedSlot <= comparedMatchingSlot;
+	       
 	           if lateEventSignal = '1' then
 	               endPtr <= startPtr;
 	               taggedPtr <= startPtr;
 	               memEmpty <= '1';
 	               taggedEmpty <= '1';
 	           elsif execEventSignal = '1' then
-	               endPtr <= (matchedPtr + 1) mod QUEUE_SIZE; -- !!!
-	               taggedPtr <= (matchedPtr + 1) mod QUEUE_SIZE; -- !!!
+	               endPtr <= (storingMatchedPtr + 1) mod QUEUE_SIZE; -- !!!
+	               taggedPtr <= (storingMatchedPtr + 1) mod QUEUE_SIZE; -- !!!
 	               memEmpty <= '0'; -- ???
 	               taggedEmpty <= '0';
 	           else
 	               if prevSendingBr = '1' and isNonzero(extractFullMask(dataInBr)) = '1' then
-                       allBranches(endPtr) <= dataInBr;
+                       allBranches(endPtr) <= TMP_leftAlign(dataInBr);
+                       allGroupTargets(endPtr) <= DEFAULT_INS_STATE;
                        endPtr <= (endPtr + 1) mod QUEUE_SIZE;
                        memEmpty <= '0';
                    end if;
                    
                    if prevSending = '1' and isNonzero(extractFullMask(dataIn)) = '1' then
                        allBranches(taggedPtr)(0).ins.tags.renameIndex <= dataIn(0).ins.tags.renameIndex;
+                       allGroupTargets(taggedPtr).tags.renameIndex <= dataIn(0).ins.tags.renameIndex;
                        taggedPtr <= (taggedPtr + 1) mod QUEUE_SIZE;
                        taggedEmpty <= '0';                       
                    end if;
@@ -511,8 +574,13 @@ begin
 	           
 	           if true then
 	              allBranchOutput <= allBranches(startPtrNext);
-	              	              
+	              allGroupTargetOutput <= allGroupTargets(startPtrNext);	              
 	           end if;
+	           
+	               if storeValueInput.full = '1' then
+	                   allGroupTargets(storingMatchedPtr).target <= storeValueInput.ins.target;
+	               end if;
+
 	           
 	           if committingBr = '1' and (prevSending = '0' or isNonzero(extractFullMask(dataIn)) = '0')  and startPtrNext = endPtr then -- that is memDraining
 	               memEmpty <= '1';
@@ -528,7 +596,9 @@ begin
 --	           end if;
 	       end if;
 	   end process;
-	   
+	       
+	       
+	       committedDataOut <= (committingBr, allGroupTargetOutput);
 	end block;
 	
 	
