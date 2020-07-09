@@ -343,7 +343,7 @@ begin
 
 				                
 	dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
-	selectedDataSlot <= selectBranchDataSlot(content, taggedMask, matchMask, compareAddressInput);
+	--selectedDataSlot <= selectBranchDataSlot(content, taggedMask, matchMask, compareAddressInput);
 	matchMask <= getMatchingTags(content, compareAddressInput.ins.tags.renameIndex);
 	   matchIndex <= getMatchingIndex(content, compareAddressInput.ins.tags.renameIndex);
 	
@@ -517,7 +517,7 @@ begin
 	       end function;
 	   
 	begin
-	        --   selectedDataSlot <= comparedMatchingSlot; -- !!!!!
+	           selectedDataSlot <= comparedMatchingSlot; -- !!!!!
 	
 	
 	       comparedMatchingSlot <= --findCmpSlot(allBranches, compareAddressInput);
@@ -566,6 +566,11 @@ begin
                    
                    if prevSending = '1' and isNonzero(extractFullMask(dataIn)) = '1' then
                        allBranches(taggedPtr)(0).ins.tags.renameIndex <= dataIn(0).ins.tags.renameIndex;
+                       for i in 0 to PIPE_WIDTH-1 loop
+                           allBranches(taggedPtr)(i).ins.tags.intPointer <= dataIn(i).ins.tags.intPointer;
+                           allBranches(taggedPtr)(i).ins.tags.floatPointer <= dataIn(i).ins.tags.floatPointer;
+                       end loop;
+                       
                        allGroupTargets(taggedPtr).tags.renameIndex <= dataIn(0).ins.tags.renameIndex;
                        taggedPtr <= (taggedPtr + 1) mod QUEUE_SIZE;
                        taggedEmpty <= '0';                       

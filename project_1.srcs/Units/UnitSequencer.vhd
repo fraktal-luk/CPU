@@ -299,14 +299,15 @@ begin
         --            When committing a taken branch -> fill with target from BQ output
         --            When committing normal op -> increment by length of the op
         --            The 'target' field will be used to update return address for exc/int
-        stageDataLastEffectiveInA(0) <= getNewEffective(sendingToCommit, robDataLiving, dataFromBQV, bqTargetData,
+        stageDataLastEffectiveInA_T(0) <= getNewEffective(sendingToCommit, robDataLiving, dataFromBQV, bqTargetData,
                                                         stageDataLastEffectiveOutA(0).ins, stageDataLateCausingOut(0).ins, lateEventSending);
                                                         
-                   stageDataLastEffectiveInA_T(0) <= getNewEffective2(sendingToCommit, robDataLiving, dataFromBQV, bqTargetData,
+                   stageDataLastEffectiveInA(0) <= getNewEffective2(sendingToCommit, robDataLiving, dataFromBQV, bqTargetData,
                                                         stageDataLastEffectiveOutA(0).ins, stageDataLateCausingOut(0).ins, lateEventSending);
                     
                     
-                        ch0 <= bool2std(stageDataLastEffectiveInA(0).ins.target = stageDataLastEffectiveInA(0).ins.target) or not stageDataLastEffectiveInA(0).full;
+                        ch0 <= bool2std(stageDataLastEffectiveInA(0).ins = stageDataLastEffectiveInA_T(0).ins) or not stageDataLastEffectiveInA(0).full;
+                        ch1 <= bool2std(stageDataLastEffectiveInA(0).ins.result = stageDataLastEffectiveInA_T(0).ins.result) or not stageDataLastEffectiveInA(0).full;
                                                                                              
         sendingToLastEffective <= sendingToCommit or lateEventSending;
     

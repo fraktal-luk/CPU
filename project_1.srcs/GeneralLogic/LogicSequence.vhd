@@ -280,7 +280,7 @@ begin
 	
 	   for i in PIPE_WIDTH-1 downto 0 loop
 	       if robDataLiving(i).full = '1' then
-	           targetInc := i2slv(i, MWORD_SIZE);
+	           targetInc := i2slv(4*(i+1), MWORD_SIZE);  -- CAREFUL: only for 4b instructions
 	           exit;
 	       end if;
 	   end loop;
