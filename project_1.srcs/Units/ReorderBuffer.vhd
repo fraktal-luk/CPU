@@ -48,7 +48,7 @@ end ReorderBuffer;
 architecture Behavioral of ReorderBuffer is
     signal outputDataReg: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal outputSpecialReg: InstructionSlot := DEFAULT_INS_SLOT;
-	signal fullMask, completedMask, completedMaskNext: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
+	signal fullMask, completedMask, completedMaskNext, killMask: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
 
     signal content, contentNext: ReorderBufferArray := DEFAULT_ROB_ARRAY;
 
@@ -188,7 +188,8 @@ architecture Behavioral of ReorderBuffer is
     --attribute ram_style of constantBuf, constantBuf2, constantBuf3: signal is "block";	
     --attribute ram_style of mem0, mem1: signal is "block";	
 begin
-
+            killMask <=  getMaskBetween(ROB_SIZE, causingPtr, endPtr, '0'); 
+            
 	execEvent <= execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
 	causingPtr <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
 	

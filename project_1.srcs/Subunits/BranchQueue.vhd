@@ -409,11 +409,10 @@ begin
     
     dataOutSigFinal <= getSendingArray(dataOutSig, groupCtrInc, committing);
 
-    isSending <= dataOutSigFinal(0).full;
+    --isSending <= dataOutSigFinal(0).full;
 	acceptingOut <= '1';
-	acceptingBr <= not isAlmostFull;     
  
-	dataOutV <= dataOutSigFinal;                   
+	--dataOutV <= dataOutSigFinal;                   
 	sendingSQOut <= isSending;
 
 	selectedDataOutput <= selectedDataSlot;
@@ -518,7 +517,8 @@ begin
 	   
 	begin
 	           selectedDataSlot <= comparedMatchingSlot; -- !!!!!
-	
+	           dataOutV <= allBranchOutput; -- !!!
+	           isSending <= committingBr;
 	
 	       comparedMatchingSlot <= --findCmpSlot(allBranches, compareAddressInput);
 	                               getMatchedSlot(allBranches, cmpMatchedPtr, compareAddressInput);
@@ -531,7 +531,7 @@ begin
 	                                       bool2std(getTagHighSN(allBranchOutput(0).ins.tags.renameIndex) = getTagHighSN(groupCtrInc))
 	                                       and not taggedEmpty;
 	   
-	   accepting <= bool2std(startPtr /= ((endPtr + 1) mod QUEUE_SIZE));
+	   accepting <= bool2std(startPtr /= ((endPtr + 2) mod QUEUE_SIZE)) and bool2std(startPtr /= ((endPtr + 1) mod QUEUE_SIZE)); -- Need 2 reserve slots because one group could be on the way
 	   --accepting <= bool2std(startPtr /= endPtr) or memEmpty;
 	   
 	   startPtrNext <= (startPtr + 1) mod QUEUE_SIZE when committingBr = '1' else startPtr;
@@ -559,7 +559,7 @@ begin
 	           else
 	               if prevSendingBr = '1' and isNonzero(extractFullMask(dataInBr)) = '1' then
                        allBranches(endPtr) <= TMP_leftAlign(dataInBr);
-                       allGroupTargets(endPtr) <= DEFAULT_INS_STATE;
+                       --allGroupTargets(endPtr) <= DEFAULT_INS_STATE;
                        endPtr <= (endPtr + 1) mod QUEUE_SIZE;
                        memEmpty <= '0';
                    end if;
@@ -584,14 +584,15 @@ begin
 	           
 	               if storeValueInput.full = '1' then
 	                   allGroupTargets(storingMatchedPtr).target <= storeValueInput.ins.target;
+	                   allGroupTargets(storingMatchedPtr).controlInfo <= storeValueInput.ins.controlInfo;
 	               end if;
 
 	           
-	           if committingBr = '1' and (prevSending = '0' or isNonzero(extractFullMask(dataIn)) = '0')  and startPtrNext = endPtr then -- that is memDraining
+	           if committingBr = '1' and (prevSendingBr = '0' or isNonzero(extractFullMask(dataInBr)) = '0')  and startPtrNext = endPtr then -- that is memDraining
 	               memEmpty <= '1';
 	           end if;
 	           
-	           if committingBr = '1' and (prevSendingBr = '0' or isNonzero(extractFullMask(dataInBr)) = '0') and startPtrNext = taggedPtr then -- that is memDraining
+	           if committingBr = '1' and (prevSending = '0' or isNonzero(extractFullMask(dataIn)) = '0') and startPtrNext = taggedPtr then -- that is memDraining
                    taggedEmpty <= '1';
                end if;
                	           
@@ -604,6 +605,9 @@ begin
 	       
 	       
 	       committedDataOut <= (committingBr, allGroupTargetOutput);
+	       
+	       --acceptingBr <= not isAlmostFull;	       
+	       acceptingBr <= accepting;
 	end block;
 	
 	
