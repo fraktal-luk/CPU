@@ -72,8 +72,8 @@ architecture Behavioral of BranchQueue is
     signal isFull, isAlmostFull: std_logic := '0';
 
     -- TODO: deduplicate from Ibuffer    
-    subtype PipeStage is InstructionSlotArray(0 to PIPE_WIDTH-1);
-    type PipeStageArray is array(natural range <>) of PipeStage;
+--    subtype PipeStage is InstructionSlotArray(0 to PIPE_WIDTH-1);
+--    type PipeStageArray is array(natural range <>) of PipeStage;
 begin
 
 	SYNCH: process (clk)
@@ -152,17 +152,17 @@ begin
 	       return res;
 	   end function;
    
-       function TMP_leftAlign(insVec: InstructionSlotArray) return InstructionSlotArray is
-           variable res: InstructionSlotArray(insVec'range) := insVec;
-           variable resExt: InstructionSlotArray(0 to 2*PIPE_WIDTH-1) := insVec & insVec;
-           variable nShift: natural := slv2u(insVec(0).ins.tags.renameIndex(1 downto 0)); 
-       begin
-           for i in 0 to PIPE_WIDTH-1 loop
-               res(i) := resExt(i + nShift);
-           end loop;
+--       function TMP_leftAlign(insVec: InstructionSlotArray) return InstructionSlotArray is
+--           variable res: InstructionSlotArray(insVec'range) := insVec;
+--           variable resExt: InstructionSlotArray(0 to 2*PIPE_WIDTH-1) := insVec & insVec;
+--           variable nShift: natural := slv2u(insVec(0).ins.tags.renameIndex(1 downto 0)); 
+--       begin
+--           for i in 0 to PIPE_WIDTH-1 loop
+--               res(i) := resExt(i + nShift);
+--           end loop;
            
-           return res;
-       end function;
+--           return res;
+--       end function;
 	   
 	   function TMP_usesBQ(robData: PipeStage) return std_logic is
 	   begin
@@ -173,6 +173,9 @@ begin
 	       end loop;
 	       return '0';
 	   end function;
+	   
+	   
+	   signal trg0, trg1, trg2, trg3: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 	   
 	   signal TMP_committingBr: std_logic := '0';
 	begin
@@ -215,7 +218,8 @@ begin
 	               taggedEmpty <= '0';
 	           else
 	               if prevSendingBr = '1' and isNonzero(extractFullMask(dataInBr)) = '1' then
-                       allBranches(slv2u(pEnd)) <= TMP_leftAlign(dataInBr);
+                       allBranches(slv2u(pEnd)) <= --TMP_leftAlign(dataInBr);
+                                                    dataInBr;
                        ipArray(slv2u(pEnd)) <= dataInBr(0).ins.ip;
                        pEnd <= addIntTrunc(pEnd, 1, QUEUE_PTR_SIZE);
                        memEmpty <= '0';

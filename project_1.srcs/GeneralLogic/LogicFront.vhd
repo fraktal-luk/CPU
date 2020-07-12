@@ -30,7 +30,7 @@ function getEarlyEvent(inputIns: Instructionstate; earlyBranchMultiDataInA: Inst
                        predictedAddress: Mword; fetchStall: std_logic)
 return InstructionState;
 	
-function prepareForBQ(insVec: InstructionSlotArray) return InstructionSlotArray;
+function prepareForBQ(ins: InstructionSlot; insVec: InstructionSlotArray) return InstructionSlotArray;
 
 end LogicFront;
 
@@ -220,6 +220,7 @@ begin
           res(0).ins.specificOperation.system := opNone;
 
           res(i) := clearRawInfo(res(i));
+          --res(i).bits := (others => '0');
           
           res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;        
        end if;	   
@@ -265,26 +266,42 @@ begin
     return res;
 end function;
 
-function prepareForBQ(insVec: InstructionSlotArray) return InstructionSlotArray is
-	variable res: InstructionSlotArray(insVec'range) := insVec;
+function prepareForBQ(ins: InstructionSlot; insVec: InstructionSlotArray) return InstructionSlotArray is
+	variable res, insVecSh: InstructionSlotArray(insVec'range) := insVec;
 	variable result, target: Mword;
-	constant BRANCH_MASK: std_logic_vector(insVec'range) := getBranchMask(insVec);
+	variable branchMask: std_logic_vector(insVec'range) := (others => '0');
+	variable nSh: natural := 0;
 begin
+    insVecSh := insVec;
+    branchMask := getBranchMask(insVecSh);
+    
+        --ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS);
+        nSh := slv2u(ins.ins.ip(ALIGN_BITS-1 downto 2));
+        for i in 0 to PIPE_WIDTH-1 loop
+            if i + nSh >= PIPE_WIDTH-1 then
+                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS), 1);
+                insVecSh(i).ins.result(ALIGN_BITS-1 downto 0) := (others => '0');
+            else
+                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS);
+                insVecSh(i).ins.result(ALIGN_BITS-1 downto 2) := i2slv(i + nSh + 1, ALIGN_BITS-2);                           
+            end if;
+            
+        end loop;
+    
+    
 	for i in insVec'range loop
-	   res(i).full := BRANCH_MASK(i) and insVec(i).full; -- TODO: getBranchMask already check for 'full' - remove it here?
-
+	   res(i).full := branchMask(i) and insVecSh(i).full; -- TODO: getBranchMask already check for 'full' - remove it here?
+       
        if CLEAR_DEBUG_INFO then -- Otherwise everything remains
            res(i).ins := DEFAULT_INS_STATE;
-           res(i).ins.controlInfo := insVec(i).ins.controlInfo;
-           res(i).ins.target := insVec(i).ins.target;
-           res(i).ins.result := insVec(i).ins.result;
+           --     res(i).ins.ip := insVecSh(i).ins.ip;
+           
+           res(i).ins.controlInfo := insVecSh(i).ins.controlInfo;
+           res(i).ins.target := insVecSh(i).ins.target;
+           res(i).ins.result := insVecSh(i).ins.result;
 	   end if;
 	end loop;
-	   
-	   -- TEMP! for new BQ development
-	   -- Left align this group
-	   res(0).ins.tags.renameIndex(1 downto 0) := i2slv(getFirstOnePosition(extractFullMask(insVec)), 2);
-	
+
 	return res;
 end function;
 

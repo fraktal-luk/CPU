@@ -300,6 +300,13 @@ constant DEFAULT_SCH_ENTRY_SLOT: SchedulerEntrySlot := (full => '0',
 type SchedulerEntrySlotArray is array(integer range <>) of SchedulerEntrySlot;
 
 
+    
+subtype PipeStage is InstructionSlotArray(0 to PIPE_WIDTH-1);
+type PipeStageArray is array(natural range <>) of PipeStage;
+
+constant DEFAULT_PIPE_STAGE: PipeStage := (others => DEFAULT_INS_SLOT); 
+
+
 end InstructionState;
 
 
