@@ -300,8 +300,20 @@ begin
            res(i).ins.target := insVecSh(i).ins.target;
            res(i).ins.result := insVecSh(i).ins.result;
 	   end if;
+	   
+	       if res(i).ins.controlInfo.frontBranch = '1' then
+	           res(i).ins.ip := res(i).ins.result;
+	       else
+	           res(i).ins.ip := res(i).ins.target;
+	       end if;
+	   
 	end loop;
 
+    
+        -- TMP!
+    --    res(0).ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) := ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS);
+    --    res(1).ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS), 1);
+    
 	return res;
 end function;
 

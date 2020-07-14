@@ -113,7 +113,12 @@ begin
 	   
 	   signal targetArray, ipArray: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 	   signal targetOutput, ipOutputA: Mword := (others => '0');
-
+        
+        signal trg0, trg1, trg2, trg3: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
+        signal res0, res1, res2, res3: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
+        signal trgs, ress: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+       
+        
 	   function getMatchingPtr(content: PipeStageArray; tag: InsTag; startPtr: SmallNumber) return SmallNumber is
 	       variable res: SmallNumber := (others => '0');
 	       variable mask, maskTmp: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0'); 
@@ -141,7 +146,7 @@ begin
 	   end function;
 
 	   
-	   function getMatchedSlot(allBranches: PipeStageArray; slotPtr: SmallNumber; cmpAdrSlot: InstructionSlot; startIP: Mword) return InstructionSlot is
+	   function getMatchedSlot(allBranches: PipeStageArray; slotPtr: SmallNumber; cmpAdrSlot: InstructionSlot; trgs, ress: MwordArray) return InstructionSlot is
 	       variable res: InstructionSlot := DEFAULT_INS_SLOT;
 	       variable lowPtr: natural := 0;
 	   begin
@@ -149,6 +154,10 @@ begin
 	       res := allBranches(slv2u(slotPtr))(lowPtr);
 	       res.full := cmpAdrSlot.full;
 	           --res.ip(MWORD_SIZE-1 downto ALIGN_BITS) := startIP(MWORD_SIZE-1 downto ALIGN_BITS);
+	           res.ins.ip := trgs(lowPtr);
+	               -- !!! this doesn't work for register branches
+	               res.ins.result := ress(lowPtr);
+	               res.ins.target := trgs(lowPtr);
 	       return res;
 	   end function;
    
@@ -175,7 +184,7 @@ begin
 	   end function;
 	   
 	   
-	   signal trg0, trg1, trg2, trg3: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
+	   --signal trg0, trg1, trg2, trg3: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 	   
 	   signal TMP_committingBr: std_logic := '0';
 	begin
@@ -184,8 +193,11 @@ begin
        dataOutV <= allBranchOutput; -- !!!
        isSending <= committingBr;
 
-       comparedMatchingSlot <= getMatchedSlot(allBranches, pSelect, compareAddressInput, ipOutputA);
-       ipOutputA <= ipArray(slv2u(pSelect));
+       comparedMatchingSlot <= getMatchedSlot(allBranches, pSelect, compareAddressInput, trgs, ress);
+        
+            ipOutputA <= ipArray(slv2u(pSelect));
+            trgs <= (trg0(slv2u(pSelect)), trg1(slv2u(pSelect)), trg2(slv2u(pSelect)), trg3(slv2u(pSelect)));
+            ress <= (res0(slv2u(pSelect)), res1(slv2u(pSelect)), res2(slv2u(pSelect)), res3(slv2u(pSelect)));
             
        pSelect <= getMatchingPtr(allBranches, compareAddressInput.ins.tags.renameIndex, pStart);
 
@@ -220,7 +232,19 @@ begin
 	               if prevSendingBr = '1' and isNonzero(extractFullMask(dataInBr)) = '1' then
                        allBranches(slv2u(pEnd)) <= --TMP_leftAlign(dataInBr);
                                                     dataInBr;
-                       ipArray(slv2u(pEnd)) <= dataInBr(0).ins.ip;
+                            ipArray(slv2u(pEnd)) <= dataInBr(0).ins.ip;
+                            
+                            trg0(slv2u(pEnd)) <= dataInBr(0).ins.target;
+                            trg1(slv2u(pEnd)) <= dataInBr(1).ins.target;
+                            trg2(slv2u(pEnd)) <= dataInBr(2).ins.target;
+                            trg3(slv2u(pEnd)) <= dataInBr(3).ins.target;
+                            
+                            res0(slv2u(pEnd)) <= dataInBr(0).ins.result;
+                            res1(slv2u(pEnd)) <= dataInBr(1).ins.result;
+                            res2(slv2u(pEnd)) <= dataInBr(2).ins.result;
+                            res3(slv2u(pEnd)) <= dataInBr(3).ins.result;
+                            
+                       
                        pEnd <= addIntTrunc(pEnd, 1, QUEUE_PTR_SIZE);
                        memEmpty <= '0';
                    end if;

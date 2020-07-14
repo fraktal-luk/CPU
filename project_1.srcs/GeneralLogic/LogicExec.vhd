@@ -124,6 +124,7 @@ package body LogicExec is
 		if queueData.controlInfo.frontBranch = '1' and branchTaken = '0' then						
 			res.controlInfo.newEvent := '1';
 			trueTarget := queueData.result;
+			                        -- ip;
 		elsif queueData.controlInfo.frontBranch = '0' and branchTaken = '1' then					
 			res.controlInfo.newEvent := '1';
 			res.controlInfo.confirmedBranch := '1';			
@@ -131,6 +132,7 @@ package body LogicExec is
 				trueTarget := st.args(1);
 			else
 				trueTarget := queueData.target;
+				                        --ip;
 			end if;
 		elsif queueData.controlInfo.frontBranch = '0' and branchTaken = '0' then
 			trueTarget := queueData.result;
@@ -141,7 +143,8 @@ package body LogicExec is
 				end if;
 				trueTarget := st.args(1); -- reg destination
 			else
-				trueTarget := queueData.target;			
+				trueTarget := queueData.target;
+				                         --ip;		
 			end if;
 			res.controlInfo.confirmedBranch := '1';			
 		end if;
@@ -167,7 +170,11 @@ package body LogicExec is
 		    res.physicalArgSpec.intArgSel := (others => '0');
 		    res.physicalArgSpec.floatArgSel := (others => '0');
 		    res.physicalArgSpec.args := (others => (others => '0'));
+		    
+		    res.result := (others => '0');
 		end if;
+					
+			--		res.ip := queueData.ip;
 							
 		return res;
 	end function;
