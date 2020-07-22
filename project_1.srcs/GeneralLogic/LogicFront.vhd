@@ -181,7 +181,7 @@ begin
         end if;
     
         branchIns(i) := regularJump or longJump or regJump;
-        res(i).ins.target := add(res(i).ins.ip, tempOffset);	-- !! Only for BQ		
+        res(i).ins.target := add(res(i).ins.ip, tempOffset);	-- !! Only for BQ
     end loop;
     
     -- Find if any branch predicted
@@ -212,6 +212,10 @@ begin
 
 	for i in 0 to FETCH_WIDTH-1 loop
 	   res(i).full := fullOut(i);
+
+            if res(i).full = '1' and res(i).ins.classInfo.branchIns = '1' then
+                res(0).ins.controlInfo.firstBr := '1'; -- TMP, indicating that group has a branch
+            end if;
 	   
        if CLEAR_DEBUG_INFO then
           res(0).ins.specificOperation.arith := opAnd;

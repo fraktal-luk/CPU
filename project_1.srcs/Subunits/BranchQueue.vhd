@@ -203,7 +203,8 @@ begin
 
        -- TODO: introduce bit in ROB which indicated whether the ROB entry uses a slot in this queue  
        committingBr <= committing and bool2std(getTagHighSN(allBranchOutput(0).ins.tags.renameIndex) = getTagHighSN(groupCtrInc))
-                                       and not taggedEmpty;
+                                      --  robData(0).ins.controlInfo.firstBr
+                                      and not taggedEmpty;
    
             TMP_committingBr <= TMP_usesBQ(robData) and committing;
    
@@ -230,8 +231,8 @@ begin
 	               taggedEmpty <= '0';
 	           else
 	               if prevSendingBr = '1' and isNonzero(extractFullMask(dataInBr)) = '1' then
-                       allBranches(slv2u(pEnd)) <= --TMP_leftAlign(dataInBr);
-                                                    dataInBr;
+	                                          -- dataInBr(0).ins.controlInfo.firstBr = '1' then
+                       allBranches(slv2u(pEnd)) <= dataInBr;
                             ipArray(slv2u(pEnd)) <= dataInBr(0).ins.ip;
                             
                             trg0(slv2u(pEnd)) <= dataInBr(0).ins.target;
@@ -250,6 +251,7 @@ begin
                    end if;
                    
                    if prevSending = '1' and isNonzero(extractFullMask(dataIn)) = '1' then
+                                            --    dataIn(0).ins.controlInfo.firstBr = '1' then
                        allBranches(slv2u(pTagged))(0).ins.tags.renameIndex <= dataIn(0).ins.tags.renameIndex;
                        for i in 0 to PIPE_WIDTH-1 loop
                            allBranches(slv2u(pTagged))(i).ins.tags.intPointer <= dataIn(i).ins.tags.intPointer;
@@ -276,10 +278,12 @@ begin
 
 	           
 	           if committingBr = '1' and (prevSendingBr = '0' or isNonzero(extractFullMask(dataInBr)) = '0')  and pStartNext = pEnd then -- that is memDraining
+	                                                             --  dataInBr(0).ins.controlInfo.firstBr = '0')  and pStartNext = pEnd then -- that is memDraining
 	               memEmpty <= '1';
 	           end if;
 	           
 	           if committingBr = '1' and (prevSending = '0' or isNonzero(extractFullMask(dataIn)) = '0') and pStartNext = pEnd then -- that is memDraining
+	                                                           --    dataIn(0).ins.controlInfo.firstBr = '0')  and pStartNext = pEnd then -- that is memDraining
                    taggedEmpty <= '1';
                end if;
                	           

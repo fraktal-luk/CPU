@@ -154,7 +154,9 @@ architecture Behavioral of UnitRegManager is
                 res(i).ins.controlInfo.orderViolation := '0';
                 res(i).ins.controlInfo.tlbMiss := '0';
                 res(i).ins.controlInfo.sqMiss := '0';
-                res(i).ins.controlInfo.firstBr := '0';
+                if i /= 0 then -- TMP!
+                    res(i).ins.controlInfo.firstBr := '0';
+                end if;
             end loop;           
         end if;
 

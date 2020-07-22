@@ -301,7 +301,10 @@ begin
     for i in 0 to LEN-1 loop
         res(i) := contentExt(nShift + i);
     end loop;
-    
+        
+        -- TMP!
+        res(0).ins.controlInfo.firstBr := content(0).ins.controlInfo.firstBr;
+        
     return res;
 end function;
 
