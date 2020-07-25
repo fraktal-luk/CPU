@@ -91,7 +91,7 @@ architecture Behavioral of UnitSequencer is
     signal stageDataOutPC: InstructionState := DEFAULT_INSTRUCTION_STATE;
     signal sendingToPC, sendingOutPC, acceptingOutPC, sendingToLastEffective, running: std_logic := '0';
     signal stageDataLateCausingOut: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);    
-    signal sendingToLateCausing, committingEvent, sendingToCommit, sendingOutCommit, acceptingOutCommit: std_logic := '0';
+    signal sendingToLateCausing, committingEvent, sendingToCommit, sendingOutCommit, acceptingOutCommit, lockCommit, unlockCommit, commitLocked: std_logic := '0';
     signal stageDataToCommit, stageDataOutCommit: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);                              
     signal commitGroupCtr, commitGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
     signal commitGroupCtrInc, commitGroupCtrIncNext: InsTag := INITIAL_GROUP_TAG_INC;
@@ -344,13 +344,20 @@ begin
                 
                 if committingEvent = '1' then
                     eventCommitted <= '1';
+                        commitLocked <= '1';
                 end if;
                 if (intSignal and not committingEvent) = '1' then
                     intCommitted <= '1';
                     intTypeCommitted <= intType;
+                        commitLocked <= '1';
                 elsif (intSignal and committingEvent) = '1' then
                     intSuppressed <= '1';
+                        commitLocked <= '1';
                 end if;
+                
+                    if lateEventSending = '1' then
+                        commitLocked <= '0';
+                    end if;
             end if;
         end process;
         
@@ -399,8 +406,9 @@ begin
     commitGroupCtrOut <= commitGroupCtr;
     commitGroupCtrIncOut <= commitGroupCtrInc;
     
-    commitAccepting <= not eventCommitted and not intCommitted and not lateEventSending; -- Blocked while procesing event
-
+    commitAccepting <= --not eventCommitted and not intCommitted and not lateEventSending; -- Blocked while procesing event
+                       not commitLocked; 
+                        
     doneSig <= eventCommitted and bool2std(special.ins.specificOperation.system = opSend);
     failSig <= eventCommitted and bool2std(special.ins.specificOperation.system = opError);
     

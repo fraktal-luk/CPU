@@ -52,7 +52,7 @@ architecture Behavioral of ReorderBuffer is
 
     signal content, contentNext: ReorderBufferArray := DEFAULT_ROB_ARRAY;
 
-	signal isSending, isEmpty: std_logic := '0';
+	signal isSending, isEmpty, outputCompleted, outputEmpty: std_logic := '0';
 	signal execEvent: std_logic := '0'; -- depends on input in slot referring to branch ops
 
     constant ROB_HAS_RESET: std_logic := '0';
@@ -184,6 +184,8 @@ architecture Behavioral of ReorderBuffer is
 	signal constantBuf, constantBuf2, constantBuf3, mem0, mem1: WordArray(0 to ROB_SIZE-1) := (others => (others => '0'));
 	signal inputConstant, inputConstant2, inputConstant3, constantFromBuf, constantFromBuf2, constantFromBuf3, iw0, iw1, ow0, ow1: Word := (others => '0');
 	
+	   signal ch0, ch1, ch2, ch3: std_logic := '0';
+	
     attribute ram_style: string;
     --attribute ram_style of constantBuf, constantBuf2, constantBuf3: signal is "block";	
     --attribute ram_style of mem0, mem1: signal is "block";	
@@ -302,6 +304,8 @@ begin
             completedMask <= completedMaskNext;
             outputDataReg <= content(slv2u(startPtrNext)).ops;
             outputSpecialReg <= content(slv2u(startPtrNext)).special;
+            
+                outputEmpty <= bool2std(startPtrNext = endPtr) or lateEventSignal; 
 		end if;		
 	end process;
  
@@ -321,14 +325,20 @@ begin
 	   
 	FULL_MASK: for i in 0 to ROB_SIZE-1 generate
 	   fullMask(i) <= content(i).full;
-       completedMaskNext(i) <= groupCompleted(content(i).ops) and fullMask(i) and not isEmpty and not lateEventSignal;
+       completedMaskNext(i) <= groupCompleted(content(i).ops) and fullMask(i)
+                                    and not isEmpty and not lateEventSignal;
 	end generate;
 	
-    isSending <= completedMask(slv2u(startPtr)) and nextAccepting and not isEmpty;
+	       outputCompleted <= groupCompleted(outputDataReg);
+	
+    isSending <=    completedMask(slv2u(startPtr)) and nextAccepting and not isEmpty when not TMP_PARAM_ROB_OUTPUT
+                else  outputCompleted and nextAccepting and not outputEmpty;
+
+        ch0 <= bool2std(isSending = (outputCompleted and nextAccepting and not outputEmpty));
 
 	acceptingOut <= not isFull;
 	
-    acmPtr <= addIntTrunc(endPtr, 1, ROB_PTR_SIZE);
+    --acmPtr <= addIntTrunc(endPtr, 1, ROB_PTR_SIZE);
     acceptingMore <= not isAlmostFull;
 	outputData <= ( replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2, constantFromBuf3));
 

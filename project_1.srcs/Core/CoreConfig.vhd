@@ -39,6 +39,11 @@ constant FREE_LIST_SIZE: positive := --N_PHYSICAL_REGS;
 -- Optimize immediate field by keeping part of it in physical register field
 constant IMM_AS_REG: boolean := true;
 
+
+    
+    constant TMP_PARAM_ROB_OUTPUT: boolean := true;
+    constant TMP_PARAM_USE_FIRSTBR_FLAG: boolean := true;
+    
 end CoreConfig;
 
 
