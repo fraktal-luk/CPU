@@ -111,7 +111,7 @@ package body LogicQueues is
 	   variable res: std_logic_vector(0 to content'length-1) := (others => '0');
 	begin
 	   for i in 0 to LEN-1 loop   
-           if    getTagLow(content(i).tags.renameIndex) = "10" and
+           if    getTagLow(content(i).tags.renameIndex) = "11" and
                  (not robData(3).full or hasSyncEvent(robData(3).ins)) = '1' then
                res(i) := '1';           
            elsif getTagLow(content(i).tags.renameIndex) = "10" and
