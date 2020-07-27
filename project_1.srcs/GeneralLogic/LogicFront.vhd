@@ -51,7 +51,7 @@ begin
         and (ins.specificOperation.arith = opJ or ins.specificOperation.arith = opJz or ins.specificOperation.arith = opJnz) then
         ci.branchIns := '1';
     end if;
-
+    
     if ins.specificOperation.subpipe = none then  
         ci.mainCluster := '0';
         ci.secCluster := '0';

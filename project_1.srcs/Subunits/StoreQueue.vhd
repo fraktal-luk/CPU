@@ -79,7 +79,8 @@ architecture Behavioral of StoreQueue is
 	signal selectedDataSlot, selectedDataOutputSig, dataDrainSigPrev: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	signal dataOutSig, dataOutSigNext, dataOutSigFinal, dataDrainSig, dataDrainSigNC: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	
-	signal pStart, pStartNext, pDrain, pDrainNext, pTagged, pAll, causingPtr: SmallNumber := (others => '0');	
+	signal pStart, pStartNext, pDrain, pDrainNext, pTagged, pAll,
+	       pStartNew, pStartNewEffective, pStartNewNext, pStartNewEffectiveNext, causingPtr: SmallNumber := (others => '0');	
 	   signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
 	   signal recoveryCounter: SmallNumber := (others => '0');
 	   signal isFull, isAlmostFull: std_logic := '0'; 	
@@ -424,7 +425,86 @@ architecture Behavioral of StoreQueue is
         
         
         signal ch0, ch1, ch2, ch3: std_logic := '0';
+     
+     function getNumCancelled(robData: InstructionSlotArray) return SmallNumber is
+        variable res: SmallNumber := (others => '0');
+        variable k: integer := 0;
+        variable found: boolean := false;
+     begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            if robData(i).full = '1' and hasSyncEvent(robData(i).ins) = '1' then
+                found := true; -- Note that this causing op may be a store and cancel itself
+            end if;
+            
+            if found and robData(i).ins.classInfo.secCluster = '1' then
+                k := k + 1;
+            end if;
+            
+        end loop;
+        return i2slv(k, SMALL_NUMBER_SIZE);
+     end function;
+
+     function getNumCommittedEffective(robData: InstructionSlotArray) return SmallNumber is
+        variable res: SmallNumber := (others => '0');
+        variable k: integer := 0;
+        variable found: boolean := false;
+     begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            if robData(i).full = '1' and hasSyncEvent(robData(i).ins) = '1' then
+                exit;
+            end if;
+
+            if robData(i).full = '1' and robData(i).ins.classInfo.secCluster = '1' then
+                k := k + 1;
+            end if;
+         
+        end loop;
+        return i2slv(k, SMALL_NUMBER_SIZE);
+     end function;
+     
+     function getNumCommitted(robData: InstructionSlotArray) return SmallNumber is
+        variable res: SmallNumber := (others => '0');
+        variable k: integer := 0;
+        variable found: boolean := false;
+     begin
+        for i in 0 to PIPE_WIDTH-1 loop
+                -- A redirected branch cuts a group in SQ, so it must stop there
+                if robData(i).ins.controlInfo.newEvent = '1' and hasSyncEvent(robData(i).ins) = '0' then
+                    --    return (others => '1');
+                    exit;
+                end if;
+        
+            -- Not only full, because exceptions clear following 'full' bits
+            if --robData(i).full = '1' and 
+                robData(i).ins.classInfo.secCluster = '1' then
+                k := k + 1;
+            end if;
+            
+        end loop;
+        return i2slv(k, SMALL_NUMBER_SIZE);
+     end function;     
+      
+      signal nCancelled, nCommitted, nCommittedEffective: SmallNumber := (others => '0');
+      signal drainA, drainB, needCancel, nowCancelled, nowCancelledNext, allowDrain: std_logic := '0';
+      signal TMP_numSend: integer := 0;
 begin
+        
+
+        needCancel <= committing and bool2std(nCommitted /= nCommittedEffective);
+        drainA <= bool2std(pDrain = pStartNew);
+        drainB <= bool2std(pDrain = pStartNewEffective);
+        
+         TMP_numSend <=   getNumberToSend(dataOutSig, groupCtrInc, committing);
+
+        nCancelled <= getNumCancelled(robData);
+        nCommitted <= getNumCommitted(robData);
+        nCommittedEffective <= getNumCommittedEffective(robData);
+        
+        pStartNewNext <= addTruncZ(pStartNew, nCommitted, QUEUE_PTR_SIZE) when committing = '1' else pStartNew;
+        pStartNewEffectiveNext <= addTruncZ(pStartNewEffective, nCommittedEffective, QUEUE_PTR_SIZE) when committing = '1'
+                            else pStartNewNext when nowCancelled = '1' and drainA = '1'
+                            else pStartNewEffective;
+        
     causingPtr <= getCausingPtr(content, execCausing);
     
 	-- in shifting queue this would be shfited by nSend
@@ -473,10 +553,11 @@ begin
             
             TMP_drain <= bool2std(TMP_drainPtr /= pStart);
             
-                ch0 <= bool2std(isDraining = TMP_drain);
-                ch1 <= bool2std(TMP_drainValue = dataDrainSigPrev.ins.result) or not dataDrainSigPrev.full;
-                ch2 <= bool2std(TMP_selectValue = selectedDataOutputSig.ins.result) or not selectedDataOutputSig.full;
-                ch3 <= bool2std(TMP_selectPtr2 = TMP_selectPtr);
+            
+                ch0 <= bool2std(pStartNewNext = pStartNext);
+                ch1 <= bool2std(pStartNew = pStart);
+--                ch2 <= bool2std(TMP_selectValue = selectedDataOutputSig.ins.result) or not selectedDataOutputSig.full;
+--                ch3 <= bool2std(TMP_selectPtr2 = TMP_selectPtr);
             
     drainMaskNC <= drainMask and not cancelledMask;
  
@@ -495,17 +576,15 @@ begin
 	addressMatchMask <= getMatchedAddresses(content, compareAddressInput);	
 	matchedMask <= findOldestMatch(content, newerLQ, taggedMask,           pStart, compareAddressInput.ins) when IS_LOAD_QUEUE 
 	                                                 -- TODO: above - not necessary to find oldest, each younger load can be "poisoned" and cause an event on Commit
-	         else  --findNewestMatch(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
-	               olderSQ and fullOrCommittedMask;
+	         else  olderSQ and fullOrCommittedMask;
 	               
-	   --TMP_selectPtr2 <= i2slv(getFirstOnePosition(matchedMask), SMALL_NUMBER_SIZE) and PTR_MASK_SN;
-	    TMP_selectPtr2 <=   findNewestMatchIndex(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
+	    --TMP_selectPtr2 <=   findNewestMatchIndex(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
 	    TMP_selectPtr <=   findNewestMatchIndex2(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
 	
 	
-	selectedDataSlot <= --selectWithMask(content, matchedMask, compareAddressInput.full); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
-	                    selectMatched(content, matchedMask, compareAddressInput.full, TMP_selectPtr); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
-    pStartNext <= addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE);
+	selectedDataSlot <= selectMatched(content, matchedMask, compareAddressInput.full, TMP_selectPtr); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
+    pStartNext <= addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE) when IS_LOAD_QUEUE
+             else pStartNewNext;
     pDrainNext <= pDrain when isDraining = '0' else addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE);
             	
 	process (clk)
@@ -543,7 +622,20 @@ begin
             
             pDrain <= pDrainNext;        
             pStart <= pStartNext;
-            
+                pStartNew <= pStartNewNext;
+                pStartNewEffective <= pStartNewEffectiveNext;
+                
+                if drainA = '0' and drainB = '1' then
+                    nowCancelled <= '1';
+                end if;
+                
+                if nowCancelled = '1' and drainA = '1' then
+                    nowCancelled <= '0';
+                end if;
+                
+                allowDrain <= not (nowCancelled or (not drainA and drainB));
+                
+                
             if lateEventSignal = '1' then
                 pTagged <= pStartNext;
             elsif execEventSignal = '1' then
@@ -585,7 +677,8 @@ begin
                             else subTruncZ(pTagged, pDrainNext, QUEUE_PTR_SIZE); -- CAREFUL: nFullRestored can be outside PTR range but it's handled in the other branch
     end generate;
     
-    isDraining <= dataDrainSig(0).full;
+    isDraining <= --dataDrainSig(0).full;
+                    TMP_drain;
     dataOutSigFinal <= getSendingArray(dataOutSig, groupCtrInc, committing);
      
     isSending <= dataOutSigFinal(0).full;	
@@ -596,17 +689,14 @@ begin
 	dataOutV <= dataOutSigFinal;	
 	sendingSQOut <= isSending;
 
-	selectedDataOutput <= --selectedDataOutputSig;
-	                       (selectedDataOutputSig.full, setInstructionResult(selectedDataOutputSig.ins, TMP_selectValue));
+	selectedDataOutput <= (selectedDataOutputSig.full, setInstructionResult(selectedDataOutputSig.ins, TMP_selectValue));
 	
 	committedEmpty <= not isNonzero(committedMask or drainMaskNCPrev);
-	committedSending <= --isDraining;
-	                       isDrainingPrev;
-	--committedDataOut <= (0 => dataDrainSigNC(0), others => DEFAULT_INSTRUCTION_SLOT);
+	committedSending <= isDrainingPrev;
+	                       
 	committedDataOut(1 to PIPE_WIDTH-1) <= (others => DEFAULT_INSTRUCTION_SLOT);
-	committedDataOut(0) <= --(dataDrainSigNC(0).full, --setInstructionResult(dataDrainSigNC(0).ins, TMP_drainValue));
-	                       --                         --dataDrainSigNC(0).ins); -- TODO
-	                         (dataDrainSigPrev.full, setInstructionResult(dataDrainSigPrev.ins, TMP_drainValue));                      
+	committedDataOut(0) <= --(dataDrainSigPrev.full, setInstructionResult(dataDrainSigPrev.ins, TMP_drainValue));                      
+                           (isDrainingPrev and allowDrain, setInstructionResult(dataDrainSigPrev.ins, TMP_drainValue));
 	               	               
 	VIEW: if VIEW_ON generate
        use work.Viewing.all;

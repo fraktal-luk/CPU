@@ -120,10 +120,12 @@ architecture Behavioral of ReorderBuffer is
        if CLEAR_DEBUG_INFO then
            for j in 0 to ROB_SIZE-1 loop
                for i in 0 to PIPE_WIDTH-1 loop
-                   -- Only controlInfo survives here! Other useful data is stored in separate mem array because the rest is immutable
+                   -- controlInfo survives here, other useful data is stored in separate mem array because the rest is immutable
                    newInsState := res(j).ops(i).ins;
                    res(j).ops(i).ins := DEFAULT_INSTRUCTION_STATE;
                    res(j).ops(i).ins.controlInfo := newInsState.controlInfo;
+                        -- CAREFUL: info aobut stores needed for StoreQueue
+                        res(j).ops(i).ins.classInfo.secCluster := newInsState.classInfo.secCluster;
                end loop;
 
                    newInsState := res(j).special.ins;
@@ -142,6 +144,7 @@ architecture Behavioral of ReorderBuffer is
            for i in 0 to PIPE_WIDTH-1 loop
 	           res(i).ins := DEFAULT_INSTRUCTION_STATE;
 	           res(i).ins.controlInfo := insVec(i).ins.controlInfo;
+	               res(i).ins.classInfo.secCluster := insVec(i).ins.classInfo.secCluster;
 	       end loop;       
 	   end if;
 	
