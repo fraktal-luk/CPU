@@ -392,6 +392,44 @@ architecture Behavioral of StoreQueue is
 
         return res and PTR_MASK_SN;
     end function;
+
+        function findNewestMatchIndex3(content: InstructionStateArray;
+                                             olderSQ, cmpMask: std_logic_vector; pStart, pEnd: SmallNumber;
+                                             ins: InstructionState)
+        return SmallNumber is
+            constant LEN: integer := cmpMask'length;
+            variable res1, res2, older, before: std_logic_vector(0 to LEN-1) := (others => '0');
+            variable indices, rawIndices: SmallNumberArray(0 to LEN-1) := (others => (others => '0'));
+            variable matchBefore: std_logic := '0';       
+            variable tmpVec, tmpVec1, tmpVec2: std_logic_vector(0 to LEN-1) := (others => '0');
+            variable tmpVecExt: std_logic_vector(0 to 2*LEN-1) := (others => '0');
+            
+            variable res: SmallNumber := (others => '0');
+            variable nShift, count, nPos: natural := 0;
+        begin
+            -- Shift by pStart
+            nShift := slv2u(pStart);
+            count := slv2u(subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE));
+            
+            tmpVec := olderSQ and cmpMask;
+            tmpVecExt := tmpVec & tmpVec;
+            
+            for i in 0 to LEN-1 loop
+                tmpVec1(i) := tmpVecExt(i + nShift);
+            end loop;
+            
+            -- Find first index
+            for i in LEN-1 downto 0 loop
+                if tmpVec1(i) = '1' then
+                    res := i2slv(i, SMALL_NUMBER_SIZE);
+                    exit;
+                end if;
+            end loop;
+            -- Add pStart
+            res := add(res, pStart);
+    
+            return res and PTR_MASK_SN;
+        end function;
     
     function selectWithMask(content: InstructionStateArray; mask: std_logic_vector; compareValid: std_logic) return InstructionSlot is
         variable res: InstructionSlot := ('0', content(0));
@@ -420,7 +458,7 @@ architecture Behavioral of StoreQueue is
         --signal doUpdate: std_logic := '0';
         signal storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
         signal TMP_drain: std_logic := '0';
-        signal TMP_drainPtr, TMP_selectPtr, TMP_selectPtr2: SmallNumber := (others => '0');
+        signal TMP_drainPtr, TMP_drainPtrPrev, TMP_selectPtr, TMP_selectPtr2: SmallNumber := (others => '0');
         signal TMP_drainValue, TMP_selectValue: Mword := (others => '0');
         
         
@@ -578,8 +616,8 @@ begin
 	                                                 -- TODO: above - not necessary to find oldest, each younger load can be "poisoned" and cause an event on Commit
 	         else  olderSQ and fullOrCommittedMask;
 	               
-	    --TMP_selectPtr2 <=   findNewestMatchIndex(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
-	    TMP_selectPtr <=   findNewestMatchIndex2(content, olderSQ, fullOrCommittedMask,  pStart, compareAddressInput.ins);
+	    -- CAREFUL: starting from TMP_drainPtrPrev because its target+result is in output register, not yet written to cache
+	    TMP_selectPtr <=   findNewestMatchIndex2(content, olderSQ, fullOrCommittedMask,  TMP_drainPtrPrev, compareAddressInput.ins);
 	
 	
 	selectedDataSlot <= selectMatched(content, matchedMask, compareAddressInput.full, TMP_selectPtr); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
@@ -610,7 +648,9 @@ begin
                 if storeValueInput.full = '1' then
                     storeValues(slv2u(storePtr)) <= storeValueInput.ins.result;
                 end if;
-            
+                
+                TMP_drainPtrPrev <= TMP_drainPtr;
+                
                 if TMP_drain = '1' then
                     TMP_drainValue <= storeValues(slv2u(TMP_drainPtr));
                     TMP_drainPtr <= addIntTrunc(TMP_drainPtr, 1, QUEUE_PTR_SIZE);
@@ -686,8 +726,10 @@ begin
 	acceptingOut <= not isFull;
 	almostFull <= isAlmostFull;
 
-	dataOutV <= dataOutSigFinal;	
-	sendingSQOut <= isSending;
+    COMMIT_OUTPUTS: if VIEW_ON generate
+	   dataOutV <= dataOutSigFinal;	
+	   sendingSQOut <= isSending;
+    end generate;
 
 	selectedDataOutput <= (selectedDataOutputSig.full, setInstructionResult(selectedDataOutputSig.ins, TMP_selectValue));
 	
