@@ -458,9 +458,9 @@ architecture Behavioral of StoreQueue is
         --signal doUpdate: std_logic := '0';
         signal storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
         signal TMP_drain: std_logic := '0';
-        signal TMP_drainPtr, TMP_drainPtrPrev, TMP_selectPtr, TMP_selectPtr2: SmallNumber := (others => '0');
-        signal TMP_drainValue, TMP_selectValue: Mword := (others => '0');
-        
+        signal TMP_drainPtr, TMP_drainPtrNext, TMP_drainPtrPrev, TMP_selectPtr, TMP_selectPtr2: SmallNumber := (others => '0');
+        signal TMP_drainValue, TMP_drainTarget, TMP_selectValue: Mword := (others => '0');
+        signal TMP_drainData: InstructionState := DEFAULT_INSTRUCTION_STATE;
         
         signal ch0, ch1, ch2, ch3: std_logic := '0';
      
@@ -624,7 +624,12 @@ begin
     pStartNext <= addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE) when IS_LOAD_QUEUE
              else pStartNewNext;
     pDrainNext <= pDrain when isDraining = '0' else addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE);
-            	
+      pDrainNext <= TMP_drainPtrNext;
+      pDrain <= TMP_drainPtr;
+
+           TMP_drainPtrNext <= addIntTrunc(TMP_drainPtr, 1, QUEUE_PTR_SIZE) when TMP_drain = '1' else TMP_drainPtr;
+
+      
 	process (clk)
 	begin
 		if rising_edge(clk) then
@@ -650,17 +655,20 @@ begin
                 end if;
                 
                 TMP_drainPtrPrev <= TMP_drainPtr;
+                TMP_drainPtr <= TMP_drainPtrNext;
                 
                 if TMP_drain = '1' then
                     TMP_drainValue <= storeValues(slv2u(TMP_drainPtr));
-                    TMP_drainPtr <= addIntTrunc(TMP_drainPtr, 1, QUEUE_PTR_SIZE);
+                    --TMP_drainTarget <= content(slv2u(TMP_drainPtr)).target;
+                    TMP_drainData <= content(slv2u(TMP_drainPtr));
+                    --    TMP_drainPtr <= addIntTrunc(TMP_drainPtr, 1, QUEUE_PTR_SIZE);
                 end if;
                 
                 if true then    
                     TMP_selectValue <= storeValues(slv2u(TMP_selectPtr));
                 end if;
             
-            pDrain <= pDrainNext;        
+            --pDrain <= pDrainNext;        
             pStart <= pStartNext;
                 pStartNew <= pStartNewNext;
                 pStartNewEffective <= pStartNewEffectiveNext;
@@ -738,7 +746,11 @@ begin
 	                       
 	committedDataOut(1 to PIPE_WIDTH-1) <= (others => DEFAULT_INSTRUCTION_SLOT);
 	committedDataOut(0) <= --(dataDrainSigPrev.full, setInstructionResult(dataDrainSigPrev.ins, TMP_drainValue));                      
-                           (isDrainingPrev and allowDrain, setInstructionResult(dataDrainSigPrev.ins, TMP_drainValue));
+                           (isDrainingPrev and allowDrain, --setInstructionTarget(
+                                                           --         setInstructionResult(dataDrainSigPrev.ins, TMP_drainValue)
+                                                           --        , TMP_drainTarget)
+                                                           --         );
+	               	                                       setInstructionResult(TMP_drainData, TMP_drainValue));
 	               	               
 	VIEW: if VIEW_ON generate
        use work.Viewing.all;
