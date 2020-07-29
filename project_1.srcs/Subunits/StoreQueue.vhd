@@ -526,15 +526,13 @@ architecture Behavioral of StoreQueue is
       signal drainA, drainB, needCancel, nowCancelled, nowCancelledNext, allowDrain: std_logic := '0';
       signal TMP_numSend: integer := 0;
 begin
-        
-
-        needCancel <= committing and bool2std(nCommitted /= nCommittedEffective);
+        --needCancel <= committing and bool2std(nCommitted /= nCommittedEffective);
         drainA <= bool2std(pDrain = pStartNew);
         drainB <= bool2std(pDrain = pStartNewEffective);
         
-         TMP_numSend <=   getNumberToSend(dataOutSig, groupCtrInc, committing);
+       --  TMP_numSend <=   getNumberToSend(dataOutSig, groupCtrInc, committing);
 
-        nCancelled <= getNumCancelled(robData);
+       -- nCancelled <= getNumCancelled(robData);
         nCommitted <= getNumCommitted(robData);
         nCommittedEffective <= getNumCommittedEffective(robData);
         
@@ -548,14 +546,15 @@ begin
 	-- in shifting queue this would be shfited by nSend
 	frontMask <= getSendingMask(content, taggedLivingMask, groupCtrInc);
 	cancelMask <= getCancelMask(content, taggedLivingMask, groupCtrInc, robData);
-	scMask <= sendingMask and cancelMask;
 	
+
+	scMask <= sendingMask and cancelMask;	
 	cancelledMaskNext <= (cancelledMask and not drainMask) or scMask;
 	
 	sendingMask <= frontMask when committing = '1' else (others => '0');
 
 	killMask <= getKillMask(content, taggedMask, execCausing, execEventSignal, lateEventSignal);
-	livingMask <= fullMask when (lateEventSignal = '0' and execEventSignal = '0') else taggedLivingMask;
+	--livingMask <= fullMask when (lateEventSignal = '0' and execEventSignal = '0') else taggedLivingMask;
     taggedLivingMask <= taggedMask and not killMask;
 				
     inputMask <= getInputMask(taggedMask, extractFullMask(dataIn), prevSending, pTagged, PTR_MASK_SN);
@@ -592,15 +591,15 @@ begin
             TMP_drain <= bool2std(TMP_drainPtr /= pStart);
             
             
-                ch0 <= bool2std(pStartNewNext = pStartNext);
-                ch1 <= bool2std(pStartNew = pStart);
---                ch2 <= bool2std(TMP_selectValue = selectedDataOutputSig.ins.result) or not selectedDataOutputSig.full;
+                ch0 <= bool2std(pStart = TMP_drainPtrPrev);
+                ch1 <= not isNonzero(committedMask or drainMaskNCPrev);
+                ch2 <= bool2std(ch0 = ch1);
 --                ch3 <= bool2std(TMP_selectPtr2 = TMP_selectPtr);
             
     drainMaskNC <= drainMask and not cancelledMask;
  
-	dataDrainSig <= getWindow(content, drainMask, pDrain, PIPE_WIDTH);				                
-	dataDrainSigNC <= getWindow(content, drainMaskNC, pDrain, PIPE_WIDTH);	
+	--dataDrainSig <= getWindow(content, drainMask, pDrain, PIPE_WIDTH);				                
+	--dataDrainSigNC <= getWindow(content, drainMaskNC, pDrain, PIPE_WIDTH);	
     dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
 
 	newerLQ <=     newerRegLQ and addressMatchMask and whichAddressCompleted(content) when isStoreMemOp(compareAddressInput.ins) = '1'
@@ -639,7 +638,7 @@ begin
 	        committedMask <= committedMaskNext;
 			     
 			     drainMaskNCPrev <= drainMask;
-                 dataDrainSigPrev <= dataDrainSigNC(0);
+                 --dataDrainSigPrev <= dataDrainSigNC(0);
                  isDrainingPrev <= isDraining;
 
             cancelledMask <= cancelledMaskNext;
@@ -659,17 +658,14 @@ begin
                 
                 if TMP_drain = '1' then
                     TMP_drainValue <= storeValues(slv2u(TMP_drainPtr));
-                    --TMP_drainTarget <= content(slv2u(TMP_drainPtr)).target;
                     TMP_drainData <= content(slv2u(TMP_drainPtr));
-                    --    TMP_drainPtr <= addIntTrunc(TMP_drainPtr, 1, QUEUE_PTR_SIZE);
                 end if;
                 
                 if true then    
                     TMP_selectValue <= storeValues(slv2u(TMP_selectPtr));
                 end if;
             
-            --pDrain <= pDrainNext;        
-            pStart <= pStartNext;
+                pStart <= pStartNext;
                 pStartNew <= pStartNewNext;
                 pStartNewEffective <= pStartNewEffectiveNext;
                 
@@ -712,6 +708,9 @@ begin
 	nIn <= i2slv( countOnes(inputMask), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
 		
 	LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
+        dataOutSigFinal <= getSendingArray(dataOutSig, groupCtrInc, committing);	
+        isSending <= dataOutSigFinal(0).full;
+	
         nOut <= i2slv(countOnes(extractFullMask(dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending = '1'
                 else (others => '0');	
         nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and fullMask(0) = '1'
@@ -725,32 +724,25 @@ begin
                             else subTruncZ(pTagged, pDrainNext, QUEUE_PTR_SIZE); -- CAREFUL: nFullRestored can be outside PTR range but it's handled in the other branch
     end generate;
     
-    isDraining <= --dataDrainSig(0).full;
-                    TMP_drain;
-    dataOutSigFinal <= getSendingArray(dataOutSig, groupCtrInc, committing);
+    isDraining <= TMP_drain;
      
-    isSending <= dataOutSigFinal(0).full;	
 
 	acceptingOut <= not isFull;
 	almostFull <= isAlmostFull;
 
     COMMIT_OUTPUTS: if VIEW_ON generate
-	   dataOutV <= dataOutSigFinal;	
+	   --dataOutV <= dataOutSigFinal;	
 	   sendingSQOut <= isSending;
     end generate;
 
 	selectedDataOutput <= (selectedDataOutputSig.full, setInstructionResult(selectedDataOutputSig.ins, TMP_selectValue));
 	
-	committedEmpty <= not isNonzero(committedMask or drainMaskNCPrev);
+	committedEmpty <= --not isNonzero(committedMask or drainMaskNCPrev);
+	                   bool2std(pStart = TMP_drainPtrPrev);
 	committedSending <= isDrainingPrev;
 	                       
 	committedDataOut(1 to PIPE_WIDTH-1) <= (others => DEFAULT_INSTRUCTION_SLOT);
-	committedDataOut(0) <= --(dataDrainSigPrev.full, setInstructionResult(dataDrainSigPrev.ins, TMP_drainValue));                      
-                           (isDrainingPrev and allowDrain, --setInstructionTarget(
-                                                           --         setInstructionResult(dataDrainSigPrev.ins, TMP_drainValue)
-                                                           --        , TMP_drainTarget)
-                                                           --         );
-	               	                                       setInstructionResult(TMP_drainData, TMP_drainValue));
+	committedDataOut(0) <= (isDrainingPrev and allowDrain, setInstructionResult(TMP_drainData, TMP_drainValue));
 	               	               
 	VIEW: if VIEW_ON generate
        use work.Viewing.all;
