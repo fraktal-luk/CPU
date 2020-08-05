@@ -109,16 +109,26 @@ architecture Behavioral of StoreQueue is
     return InstructionStateArray is
         variable res: InstructionStateArray(0 to QUEUE_SIZE-1) := content;
         variable slot: InstructionSlot;
-        variable diff: SmallNumber := (others => '0');
+        variable pos, diff: SmallNumber := (others => '0');
 	    variable remv: std_logic_vector(0 to 2) := "000";
 	    variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
 	    constant IS_STORE_OP: boolean := std2bool(isStoreOp(storeAddressInput.ins));
 	    constant IS_LOAD_OP: boolean := std2bool(isLoadOp(storeAddressInput.ins));
+	    variable inputInd: natural := 0;
     begin
 
         for i in 0 to QUEUE_SIZE-1 loop
-        
+--            pos := i2slv(i, SMALL_NUMBER_SIZE);
+--               inputInd := i - slv2u(pTagged);
+--               if false then
+               
+--               end if;
+            
            diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;
+--               if slv2u(diff) < countOnes(extractFullMask(dataIn)) then
+--                   -- TODO
+                   
+--               end if;
            
            case diff(1 downto 0) is
                when "00" =>
@@ -131,7 +141,8 @@ architecture Behavioral of StoreQueue is
                     remv := "000";                                                                                       
            end case;
            
-           if im(i) = '1' then
+           --if im(i) = '1' then
+             if slv2u(diff) < countOnes(extractFullMask(dataIn)) and prevSending = '1' then
                 slot := getNewElem(remv, dataIn);
                         --dataIn(slv2u(diff(1 downto 0)));
                 res(i) := slot.ins;          
@@ -286,7 +297,7 @@ architecture Behavioral of StoreQueue is
     end function;
 
     function findNewestMatchIndex2(content: InstructionStateArray;
-                                         olderSQ, cmpMask: std_logic_vector; pStart: SmallNumber;
+                                         olderSQ, cmpMask: std_logic_vector; pStart, pEnd: SmallNumber;
                                          ins: InstructionState)
     return SmallNumber is
         constant LEN: integer := cmpMask'length;
@@ -297,12 +308,13 @@ architecture Behavioral of StoreQueue is
         variable tmpVecExt: std_logic_vector(0 to 2*LEN-1) := (others => '0');
         
         variable res: SmallNumber := (others => '0');
-        variable nShift, nPos: natural := 0;
+        variable nShift, count, nPos: natural := 0;
     begin
         -- Shift by pStart
         nShift := slv2u(pStart);
+        count := slv2u(subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE));
         
-        tmpVec := olderSQ and cmpMask;
+        tmpVec := olderSQ;-- and cmpMask;
         tmpVecExt := tmpVec & tmpVec;
         
         for i in 0 to LEN-1 loop
@@ -311,7 +323,7 @@ architecture Behavioral of StoreQueue is
         
         -- Find first index
         for i in LEN-1 downto 0 loop
-            if tmpVec1(i) = '1' then
+            if tmpVec1(i) = '1' and i < count then
                 res := i2slv(i, SMALL_NUMBER_SIZE);
                 exit;
             end if;
@@ -569,7 +581,7 @@ begin
 	   selectedDataSlot <= TMP_selectedSlot;
 	   
 	    -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
-       TMP_selectPtr <=   findNewestMatchIndex2(content, olderSQ, fullOrCommittedMask,  pDrainPrev, compareAddressInput.ins);
+       TMP_selectPtr <=   findNewestMatchIndex2(content, olderSQ, fullOrCommittedMask,  pDrainPrev, pTagged, compareAddressInput.ins);
        TMP_selectedSlot <=   findNewestMatchIndex3(content, olderSQ, fullOrCommittedMask,  pDrainPrev, pTagged, compareAddressInput);	   
 	end generate;
 	
