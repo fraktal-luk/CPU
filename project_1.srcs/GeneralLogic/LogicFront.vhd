@@ -43,8 +43,12 @@ function getInstructionClassInfo(ins: InstructionState) return InstructionClassI
 begin 
     -- Which clusters?
     ci.mainCluster := '1';
-    if ins.specificOperation.subpipe = Mem and (ins.specificOperation.memory = opStore or ins.specificOperation.memory = opStoreSys) then
-        ci.secCluster := '1';
+    if ins.specificOperation.subpipe = Mem then 
+        if (ins.specificOperation.memory = opStore or ins.specificOperation.memory = opStoreSys) then
+            ci.secCluster := '1';
+        else
+            ci.useLQ := '1';
+        end if;
     end if;
 
     if ins.specificOperation.subpipe = Alu

@@ -123,9 +123,14 @@ architecture Behavioral of UnitRegManager is
         for i in 0 to PIPE_WIDTH-1 loop
             if found then
                 res(i).full := '0';
-                    -- CAREFUL: needed for correct operation of StoreQueue
-                    res(i).ins.classInfo.secCluster := '0';
             end if;
+            
+            if res(i).full = '0' then
+                -- CAREFUL: needed for correct operation of StoreQueue + LQ
+                res(i).ins.classInfo.secCluster := '0';
+                res(i).ins.classInfo.useLQ := '0';            
+            end if;
+            
             if hasSyncEvent(res(i).ins) = '1' then
                 found := true;
             end if;

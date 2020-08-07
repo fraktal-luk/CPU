@@ -412,7 +412,7 @@ architecture Behavioral of StoreQueue is
 --        return i2slv(k, SMALL_NUMBER_SIZE);
 --     end function;
 
-     function getNumCommittedEffective(robData: InstructionSlotArray) return SmallNumber is
+     function getNumCommittedEffective(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber is
         variable res: SmallNumber := (others => '0');
         variable k: integer := 0;
         variable found: boolean := false;
@@ -421,33 +421,42 @@ architecture Behavioral of StoreQueue is
             if robData(i).full = '1' and hasSyncEvent(robData(i).ins) = '1' then
                 exit;
             end if;
-
-            if robData(i).full = '1' and robData(i).ins.classInfo.secCluster = '1' then
-                k := k + 1;
+            
+            if isLQ then
+                if robData(i).full = '1' and robData(i).ins.classInfo.useLQ = '1' then
+                    k := k + 1;
+                end if;            
+            else
+                if robData(i).full = '1' and robData(i).ins.classInfo.secCluster = '1' then
+                    k := k + 1;
+                end if;
             end if;
          
         end loop;
         return i2slv(k, SMALL_NUMBER_SIZE);
      end function;
      
-     function getNumCommitted(robData: InstructionSlotArray) return SmallNumber is
+     function getNumCommitted(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber is
         variable res: SmallNumber := (others => '0');
         variable k: integer := 0;
         variable found: boolean := false;
      begin
         for i in 0 to PIPE_WIDTH-1 loop
-                -- A redirected branch cuts a group in SQ, so it must stop there
-                if robData(i).ins.controlInfo.newEvent = '1' and hasSyncEvent(robData(i).ins) = '0' then
-                    --    return (others => '1');
-                    exit;
-                end if;
+            -- A redirected branch cuts a group in SQ, so it must stop there
+            if robData(i).ins.controlInfo.newEvent = '1' and hasSyncEvent(robData(i).ins) = '0' then
+                exit;
+            end if;
         
             -- Not only full, because exceptions clear following 'full' bits
-            if --robData(i).full = '1' and 
-                robData(i).ins.classInfo.secCluster = '1' then
-                k := k + 1;
+            if isLQ then
+                if robData(i).ins.classInfo.useLQ = '1' then
+                    k := k + 1;
+                end if;
+            else
+                if robData(i).ins.classInfo.secCluster = '1' then
+                    k := k + 1;
+                end if;
             end if;
-            
         end loop;
         return i2slv(k, SMALL_NUMBER_SIZE);
      end function;     
@@ -505,8 +514,8 @@ begin
        --CAREFUL: this is only for SQ
         drainA <= bool2std(pDrain = pStartNew);
         drainB <= bool2std(pDrain = pStartNewEffective);       
-        nCommitted <= getNumCommitted(robData);
-        nCommittedEffective <= getNumCommittedEffective(robData);
+        nCommitted <= getNumCommitted(robData, IS_LOAD_QUEUE);
+        nCommittedEffective <= getNumCommittedEffective(robData, IS_LOAD_QUEUE);
         
         pStartNewNext <= addTruncZ(pStartNew, nCommitted, QUEUE_PTR_SIZE) when committing = '1' else pStartNew;
         pStartNewEffectiveNext <= addTruncZ(pStartNewEffective, nCommittedEffective, QUEUE_PTR_SIZE) when committing = '1'
@@ -586,12 +595,13 @@ begin
 	end generate;
 	
 	       ch0 <= bool2std(TMP_selectedSlot = selectedDataSlot) or not selectedDataSlot.full;
-	       ch1 <= bool2std(TMP_selectedSlot.full = selectedDataSlot.full);
+	       ch1 <= bool2std(nCommitted = nOut) or not isSending;
 	       ch2 <= bool2std(memEmpty /= isNonzero(taggedMask));
 	       ch3 <= bool2std(TMP_pFlush = TMP_pFlush_C);
 	
-    pStartNext <= addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE) when IS_LOAD_QUEUE
-             else pStartNewNext;
+    pStartNext <= --addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE) when IS_LOAD_QUEUE
+             --else 
+                  pStartNewNext;
 
     pDrainNext <= addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE) when TMP_drain = '1' else pDrain;
 
@@ -704,7 +714,8 @@ begin
         dataOutSigFinal <= getSendingArray(dataOutSig, groupCtrInc, committing);
         isSending <= dataOutSigFinal(0).full;
 	
-        nOut <= i2slv(countOnes(extractFullMask(dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending = '1'
+        nOut <= --i2slv(countOnes(extractFullMask(dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending = '1'
+                nCommitted when isSending = '1'
                 else (others => '0');
         nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and --taggedMask(0) = '1'
                                                                                             memEmpty = '0'
