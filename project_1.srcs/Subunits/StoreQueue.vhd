@@ -99,9 +99,9 @@ architecture Behavioral of StoreQueue is
     
 
     function getNewContentSQ(content: InstructionStateArray; dataIn: InstructionSlotArray;
-                                taggedMask: std_logic_vector;
+                                --taggedMask: std_logic_vector;
 				                prevSending: std_logic;
-				                inputMask: std_logic_vector;
+				                --inputMask: std_logic_vector;
 				                pTagged: SmallNumber;
 				                storeValueInput, storeAddressInput: InstructionSlot;
 				                isLQ: boolean; matchingNewerLoads: std_logic_vector
@@ -111,7 +111,7 @@ architecture Behavioral of StoreQueue is
         variable slot: InstructionSlot;
         variable pos, diff: SmallNumber := (others => '0');
 	    variable remv: std_logic_vector(0 to 2) := "000";
-	    variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
+	    --variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
 	    constant IS_STORE_OP: boolean := std2bool(isStoreOp(storeAddressInput.ins));
 	    constant IS_LOAD_OP: boolean := std2bool(isLoadOp(storeAddressInput.ins));
 	    variable inputInd: natural := 0;
@@ -189,9 +189,9 @@ architecture Behavioral of StoreQueue is
     end function;
     
     function getStoreDataIndex(content: InstructionStateArray; dataIn: InstructionSlotArray;
-                                taggedMask: std_logic_vector;
+                                --taggedMask: std_logic_vector;
 				                prevSending: std_logic;
-				                inputMask: std_logic_vector;
+				                --inputMask: std_logic_vector;
 				                pTagged: SmallNumber;
 				                storeValueInput, storeAddressInput: InstructionSlot;
 				                isLQ: boolean; matchingNewerLoads: std_logic_vector
@@ -201,7 +201,7 @@ architecture Behavioral of StoreQueue is
         variable slot: InstructionSlot;
         variable diff: SmallNumber := (others => '0');
 	    variable remv: std_logic_vector(0 to 2) := "000";
-	    variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
+	    --variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
 	    constant IS_STORE_OP: boolean := std2bool(isStoreOp(storeAddressInput.ins));
 	    constant IS_LOAD_OP: boolean := std2bool(isLoadOp(storeAddressInput.ins));
     begin
@@ -372,7 +372,49 @@ architecture Behavioral of StoreQueue is
 
             return outRes;
         end function;
+
+
+        function findOldestMatchIndex(content: InstructionStateArray;
+                                             newerLQ: std_logic_vector; pStart, pEnd: SmallNumber;
+                                             cmpInput: InstructionSlot)
+        return InstructionSlot is
+            constant LEN: integer := content'length;
+            variable contentExt: InstructionStateArray(0 to 2*content'length-1) := content & content;
+            variable res1, res2, older, before: std_logic_vector(0 to LEN-1) := (others => '0');
+            variable indices, rawIndices: SmallNumberArray(0 to LEN-1) := (others => (others => '0'));
+            variable matchBefore: std_logic := '0';       
+            variable tmpVec, tmpVec1, tmpVec2: std_logic_vector(0 to LEN-1) := (others => '0');
+            variable tmpVecExt: std_logic_vector(0 to 2*LEN-1) := (others => '0');
+            
+            variable res: SmallNumber := (others => '0');
+            variable nShift, count, nPos: natural := 0;
+            variable outRes: InstructionSlot := ('0', content(LEN-1));
+        begin
+            -- Shift by pStart
+            nShift := slv2u(pStart);
+            count := slv2u(subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE));
+            
+            tmpVec := newerLQ;
+            tmpVecExt := tmpVec & tmpVec;
+            
+            for i in 0 to LEN-1 loop
+                tmpVec1(i) := tmpVecExt(i + nShift);
+            end loop;
+            
+            -- Find first index
+            for i in 0 to LEN-1 loop
+                if tmpVec1(i) = '1' and i < count then
+                    outRes.ins := contentExt(i + nShift);
+                    outRes.full := cmpInput.full;
+                    exit;
+                end if;
+            end loop;
+
+            return outRes;
+        end function;
     
+
+
     function selectMatched(content: InstructionStateArray; mask: std_logic_vector; compareValid: std_logic; index: SmallNumber) return InstructionSlot is
         variable res: InstructionSlot := ('0', content(0));
     begin 
@@ -526,40 +568,40 @@ begin
     causingPtr <= getCausingPtr(content, execCausing);
 
     -- These 2 are only for updating the 'active' masks
-        frontMask <= getSendingMask(content, taggedLivingMask, groupCtrInc);	
-        sendingMask <= frontMask when committing = '1' else (others => '0');
+    --    frontMask <= getSendingMask(content, taggedLivingMask, groupCtrInc);	
+    --    sendingMask <= frontMask when committing = '1' else (others => '0');
 
-	killMask <= getKillMask(content, taggedMask, execCausing, execEventSignal, lateEventSignal);
-    taggedLivingMask <= taggedMask and not killMask;
+	--killMask <= getKillMask(content, taggedMask, execCausing, execEventSignal, lateEventSignal);
+    --taggedLivingMask <= taggedMask and not killMask;
 				
-    inputMask <= getInputMask(taggedMask, extractFullMask(dataIn), prevSending, pTagged, PTR_MASK_SN);
+    --inputMask <= getInputMask(taggedMask, extractFullMask(dataIn), prevSending, pTagged, PTR_MASK_SN);
 
-	taggedMaskNext <= (taggedLivingMask and not sendingMask) or inputMask;
+	--taggedMaskNext <= (taggedLivingMask and not sendingMask) or inputMask;
 	
-	committedMaskNext <= (committedMask or sendingMask) and not drainMask; -- For SQ
+	--committedMaskNext <= (committedMask or sendingMask) and not drainMask; -- For SQ
 
 	--fullOrCommittedMask <= taggedMask or committedMask
 	--                                                    or drainMaskPrev; -- CAREFUL: this really doesn't care about cancelling because if   
 	                                                                        --          anyth is cancelled, no uncommintted instructions are in flight to use 'fullOr...'   
 	   
 	-- TODO: this won't work if the queue is allowed to become full of 'committed'. If it could, change to [set '1' on drainP when startP ~= drainP]
-	drainMask <= committedMask and not (committedMask(QUEUE_SIZE-1) & committedMask(0 to QUEUE_SIZE-2)); -- First '1' bit of committedMask
+	--drainMask <= committedMask and not (committedMask(QUEUE_SIZE-1) & committedMask(0 to QUEUE_SIZE-2)); -- First '1' bit of committedMask
 
 	
 	contentNext <=
 				getNewContentSQ(content, dataIn,
-				                taggedMask,
+				                --taggedMask,
 				                prevSending,
-				                inputMask,				             
+				                --inputMask,				             
 				                pTagged,
 				                storeValueInput,
 				                compareAddressInput,
 				                IS_LOAD_QUEUE, newerLQ
 				                                    );
             storePtr <= 				getStoreDataIndex(content, dataIn,
-                                                                    taggedMask,
+                                                                    --taggedMask,
                                                                     prevSending,
-                                                                    inputMask,                             
+                                                                    --inputMask,                             
                                                                     pTagged,
                                                                     storeValueInput,
                                                                     compareAddressInput,
@@ -582,7 +624,9 @@ begin
 	   matchedMask <= findOldestMatch(content, newerLQ, taggedMask,           pStart, compareAddressInput.ins); 
 	       -- TODO: above - not necessary to find oldest, each younger load can be "poisoned" and cause an event on Commit
 	       
-	   selectedDataSlot <= selectMatched(content, matchedMask, compareAddressInput.full, TMP_selectPtr); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)	       
+	   selectedDataSlot <= --selectMatched(content, matchedMask, compareAddressInput.full, TMP_selectPtr); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
+	                       TMP_selectedSlot;
+	     TMP_selectedSlot <= findOldestMatchIndex(content, newerLQ, pStart, pTagged, compareAddressInput);	       
 	end generate;
 	
 	WHEN_SQ: if not IS_LOAD_QUEUE generate
@@ -609,7 +653,7 @@ begin
 	process (clk)
 	begin
 		if rising_edge(clk) then
-            taggedMask <= taggedMaskNext;
+            --taggedMask <= taggedMaskNext;
 			content <= contentNext;
 	        committedMask <= committedMaskNext;
 			     
@@ -620,7 +664,7 @@ begin
             olderRegSQ <= olderNextSQ;
 			
 			selectedDataOutputSig <= selectedDataSlot;
-            dataOutSig <= dataOutSigNext;
+            --dataOutSig <= dataOutSigNext;
             
                 if storeValueInput.full = '1' then
                     storeValues(slv2u(storePtr)) <= storeValueInput.ins.result;
@@ -698,7 +742,7 @@ begin
                    memEmpty <= '1';
                 end if;
                 
-                if isSending = '1' and (prevSending = '0' or isNonzero(extractFullMask(dataIn)) = '0') and pStartNext = pTagged then
+                if committing = '1' and (prevSending = '0' or isNonzero(extractFullMask(dataIn)) = '0') and pStartNext = pTagged then
                    memEmpty  <= '1';
                 end if;	           
 	        end if;
@@ -710,12 +754,13 @@ begin
 	nIn <= i2slv( countOnes(extractFullMask(dataIn)), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
 		
 	LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
-        dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);	
-        dataOutSigFinal <= getSendingArray(dataOutSig, groupCtrInc, committing);
-        isSending <= dataOutSigFinal(0).full;
+        --dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);	
+        --dataOutSigFinal <= getSendingArray(dataOutSig, groupCtrInc, committing);
+        --isSending <= dataOutSigFinal(0).full;
 	
         nOut <= --i2slv(countOnes(extractFullMask(dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending = '1'
-                nCommitted when isSending = '1'
+                nCommitted when --isSending = '1'
+                                committing = '1'
                 else (others => '0');
         nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and --taggedMask(0) = '1'
                                                                                             memEmpty = '0'
@@ -741,7 +786,8 @@ begin
 	   sendingSQOut <= isSending;
     end generate;
 
-	selectedDataOutput <= (selectedDataOutputSig.full, setInstructionResult(selectedDataOutputSig.ins, TMP_selectValue));
+	selectedDataOutput <= (selectedDataOutputSig.full, setInstructionResult(selectedDataOutputSig.ins, TMP_selectValue)) when not IS_LOAD_QUEUE
+	               else    selectedDataOutputSig;
 	
 	committedEmpty <= --not isNonzero(committedMask or drainMaskNCPrev);
 	                   bool2std(pStart = pDrainPrev);
