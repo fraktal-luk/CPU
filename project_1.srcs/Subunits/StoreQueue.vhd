@@ -258,43 +258,6 @@ architecture Behavioral of StoreQueue is
         return res;
     end function;
 
-    -- To check what in the LoadQueue has an error
-    function findOldestMatch(content: InstructionStateArray;
-                                     newerLQ, cmpMask: std_logic_vector; pStart: SmallNumber;
-                                     ins: InstructionState)
-    return std_logic_vector is
-        constant LEN: integer := cmpMask'length;
-        variable res, newer, areAtOrAfter: std_logic_vector(0 to LEN-1) := (others => '0');
-        variable indices, rawIndices: SmallNumberArray(0 to LEN-1) := (others => (others => '0'));
-        variable matchAtOrAfter: std_logic := '0';
-        
-        variable tmpVec: std_logic_vector(0 to LEN-1) := (others => '0');
-    begin
-        -- From qs we must check which are newer than ins
-        newer := newerLQ;-- TMP_cmpTagsAfter(content, ins.tags.renameIndex) and whichAddressCompleted(content); -- Only those with known address 
-        areAtOrAfter := not setToOnes(newer, slv2u(pStart));
-        -- Use priority enc. to find first in the newer ones. But they may be divided:
-        --		V  1 1 1 0 0 0 0 1 1 1 and cmp  V
-        --		   0 1 0 0 0 0 0 1 0 1
-        -- and then there are 2 runs of bits and those at the enc must be ignored (r newer than first run)
-        
-        -- So, elems at the end are ignored when those conditions cooccur:
-        --		pStart > ins.groupTag and [match exists that match.groupTag < ins.groupTag]
-        tmpVec := cmpMask and newer and areAtOrAfter;
-        matchAtOrAfter := isNonzero(tmpVec);
-        
-        if matchAtOrAfter = '1' then
-            -- Ignore those before
-            tmpVec := cmpMask and newer and areAtOrAfter;
-            res := getFirstOne(tmpVec);
-        else
-            -- Don't ignore any matches
-            tmpVec := cmpMask and newer;
-            res := getFirstOne(tmpVec);
-        end if;
-        
-        return res;
-    end function;
 
     function findNewestMatchIndex2(content: InstructionStateArray;
                                          olderSQ: std_logic_vector; pStart, pEnd: SmallNumber;
@@ -435,24 +398,6 @@ architecture Behavioral of StoreQueue is
         signal TMP_drainData: InstructionState := DEFAULT_INSTRUCTION_STATE;
         
         signal ch0, ch1, ch2, ch3: std_logic := '0';
-     
---     function getNumCancelled(robData: InstructionSlotArray) return SmallNumber is
---        variable res: SmallNumber := (others => '0');
---        variable k: integer := 0;
---        variable found: boolean := false;
---     begin
---        for i in 0 to PIPE_WIDTH-1 loop
---            if robData(i).full = '1' and hasSyncEvent(robData(i).ins) = '1' then
---                found := true; -- Note that this causing op may be a store and cancel itself
---            end if;
-            
---            if found and robData(i).ins.classInfo.secCluster = '1' then
---                k := k + 1;
---            end if;
-            
---        end loop;
---        return i2slv(k, SMALL_NUMBER_SIZE);
---     end function;
 
      function getNumCommittedEffective(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber is
         variable res: SmallNumber := (others => '0');
@@ -566,42 +511,17 @@ begin
 
         
     causingPtr <= getCausingPtr(content, execCausing);
-
-    -- These 2 are only for updating the 'active' masks
-    --    frontMask <= getSendingMask(content, taggedLivingMask, groupCtrInc);	
-    --    sendingMask <= frontMask when committing = '1' else (others => '0');
-
-	--killMask <= getKillMask(content, taggedMask, execCausing, execEventSignal, lateEventSignal);
-    --taggedLivingMask <= taggedMask and not killMask;
-				
-    --inputMask <= getInputMask(taggedMask, extractFullMask(dataIn), prevSending, pTagged, PTR_MASK_SN);
-
-	--taggedMaskNext <= (taggedLivingMask and not sendingMask) or inputMask;
-	
-	--committedMaskNext <= (committedMask or sendingMask) and not drainMask; -- For SQ
-
-	--fullOrCommittedMask <= taggedMask or committedMask
-	--                                                    or drainMaskPrev; -- CAREFUL: this really doesn't care about cancelling because if   
-	                                                                        --          anyth is cancelled, no uncommintted instructions are in flight to use 'fullOr...'   
-	   
-	-- TODO: this won't work if the queue is allowed to become full of 'committed'. If it could, change to [set '1' on drainP when startP ~= drainP]
-	--drainMask <= committedMask and not (committedMask(QUEUE_SIZE-1) & committedMask(0 to QUEUE_SIZE-2)); -- First '1' bit of committedMask
-
 	
 	contentNext <=
 				getNewContentSQ(content, dataIn,
-				                --taggedMask,
 				                prevSending,
-				                --inputMask,				             
 				                pTagged,
 				                storeValueInput,
 				                compareAddressInput,
 				                IS_LOAD_QUEUE, newerLQ
 				                                    );
             storePtr <= 				getStoreDataIndex(content, dataIn,
-                                                                    --taggedMask,
                                                                     prevSending,
-                                                                    --inputMask,                             
                                                                     pTagged,
                                                                     storeValueInput,
                                                                     compareAddressInput,
@@ -621,21 +541,13 @@ begin
 	addressMatchMask <= getMatchedAddresses(content, compareAddressInput);       
 	
 	WHEN_LQ: if IS_LOAD_QUEUE generate
-	   matchedMask <= findOldestMatch(content, newerLQ, taggedMask,           pStart, compareAddressInput.ins); 
-	       -- TODO: above - not necessary to find oldest, each younger load can be "poisoned" and cause an event on Commit
-	       
-	   selectedDataSlot <= --selectMatched(content, matchedMask, compareAddressInput.full, TMP_selectPtr); -- Not requiring that it be a load (for SQ) (overlaping stores etc.)
-	                       TMP_selectedSlot;
-	     TMP_selectedSlot <= findOldestMatchIndex(content, newerLQ, pStart, pTagged, compareAddressInput);	       
+	   selectedDataSlot <= findOldestMatchIndex(content, newerLQ, pStart, pTagged, compareAddressInput);	       
 	end generate;
 	
-	WHEN_SQ: if not IS_LOAD_QUEUE generate
-	   matchedMask <= olderSQ;
-	   selectedDataSlot <= TMP_selectedSlot;
-	   
+	WHEN_SQ: if not IS_LOAD_QUEUE generate	   
 	    -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
        TMP_selectPtr <=   findNewestMatchIndex2(content, olderSQ,  pDrainPrev, pTagged, compareAddressInput.ins);
-       TMP_selectedSlot <=   findNewestMatchIndex3(content, olderSQ,  pDrainPrev, pTagged, compareAddressInput);	   
+       selectedDataSlot <=   findNewestMatchIndex3(content, olderSQ,  pDrainPrev, pTagged, compareAddressInput);	   
 	end generate;
 	
 	       ch0 <= bool2std(TMP_selectedSlot = selectedDataSlot) or not selectedDataSlot.full;
@@ -643,9 +555,7 @@ begin
 	       ch2 <= bool2std(memEmpty /= isNonzero(taggedMask));
 	       ch3 <= bool2std(TMP_pFlush = TMP_pFlush_C);
 	
-    pStartNext <= --addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE) when IS_LOAD_QUEUE
-             --else 
-                  pStartNewNext;
+    pStartNext <= pStartNewNext;
 
     pDrainNext <= addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE) when TMP_drain = '1' else pDrain;
 
@@ -653,18 +563,14 @@ begin
 	process (clk)
 	begin
 		if rising_edge(clk) then
-            --taggedMask <= taggedMaskNext;
 			content <= contentNext;
-	        committedMask <= committedMaskNext;
-			     
-			drainMaskPrev <= drainMask;
+
             isDrainingPrev <= isDraining;
         
             newerRegLQ <= newerNextLQ;
             olderRegSQ <= olderNextSQ;
 			
 			selectedDataOutputSig <= selectedDataSlot;
-            --dataOutSig <= dataOutSigNext;
             
                 if storeValueInput.full = '1' then
                     storeValues(slv2u(storePtr)) <= storeValueInput.ins.result;
@@ -724,8 +630,7 @@ begin
                   memEmpty <= '0';
                end if;
                 
-               if lateEventSignal = '1' and --committedEmpty = '1' then  -- It is an output
-                                            pStart = pDrainPrev then
+               if lateEventSignal = '1' and pStart = pDrainPrev then
                   memEmpty <= '1';
                end if;
                
@@ -754,24 +659,16 @@ begin
 	nIn <= i2slv( countOnes(extractFullMask(dataIn)), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
 		
 	LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
-        --dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);	
-        --dataOutSigFinal <= getSendingArray(dataOutSig, groupCtrInc, committing);
-        --isSending <= dataOutSigFinal(0).full;
-	
-        nOut <= --i2slv(countOnes(extractFullMask(dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending = '1'
-                nCommitted when --isSending = '1'
-                                committing = '1'
+        nOut <= nCommitted when committing = '1'
                 else (others => '0');
-        nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and --taggedMask(0) = '1'
-                                                                                            memEmpty = '0'
+        nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and memEmpty = '0'
                            else subTruncZ(pTagged, pStartNext, QUEUE_PTR_SIZE); -- CAREFUL: nFullRestored can be outside PTR range but it's handled in the other branch 
     end generate;
     
     STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
         nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isDrainingPrev = '1'
               else (others => '0');		  
-        nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pDrain = pTagged and --fullOrCommittedMask(0) = '1'
-                                                                                            memEmpty = '0'
+        nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pDrainPrev = pTagged and memEmpty = '0'
                             else subTruncZ(pTagged, pDrain, QUEUE_PTR_SIZE); -- CAREFUL: nFullRestored can be outside PTR range but it's handled in the other branch
     end generate;
     
@@ -789,8 +686,7 @@ begin
 	selectedDataOutput <= (selectedDataOutputSig.full, setInstructionResult(selectedDataOutputSig.ins, TMP_selectValue)) when not IS_LOAD_QUEUE
 	               else    selectedDataOutputSig;
 	
-	committedEmpty <= --not isNonzero(committedMask or drainMaskNCPrev);
-	                   bool2std(pStart = pDrainPrev);
+	committedEmpty <= bool2std(pStart = pDrainPrev);
 	committedSending <= isDrainingPrev;
 	                       
 	committedDataOut(1 to PIPE_WIDTH-1) <= (others => DEFAULT_INSTRUCTION_SLOT);
