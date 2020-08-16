@@ -65,26 +65,26 @@ architecture Behavioral of StoreQueue is
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
     constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;
 
-	signal isSending, isDraining, isDrainingPrev: std_logic := '0';							
-    signal memEmpty: std_logic := '1';
-
 	signal content, contentNext: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INSTRUCTION_STATE);
-	signal fullMask, taggedMask, killMask, killMask_N, killMask_N2, livingMask, frontMask, sendingMask, inputMask, drainMask, drainMaskNext, drainMaskPrev,
-			 committedMask, committedMaskNext, fullMaskNext, taggedMaskNext, sqCmpMask, lqCmpMask, addressMatchMask,
-			 cancelMask, cancelledMask, cancelledMaskNext,
-			 scMask, drainMaskNC, drainMaskNCPrev: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 	
-	signal taggedLivingMask, fullOrCommittedMask, matchedMask,
-	           newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+	signal addressMatchMask, newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
-	signal selectedDataSlot, TMP_selectedSlot, selectedDataOutputSig, dataDrainSigPrev: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-	signal dataOutSig, dataOutSigNext, dataOutSigFinal, dataDrainSig, dataDrainSigNC: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	
-	signal pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pTagged, pAll,  TMP_pFlush,  TMP_pFlush_C,
-	       pStartNew, pStartNewEffective, pStartNewNext, pStartNewEffectiveNext, causingPtr: SmallNumber := (others => '0');	
-	   signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
-	   signal recoveryCounter: SmallNumber := (others => '0');
-	   signal isFull, isAlmostFull: std_logic := '0'; 	
+	signal pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pTagged, pAll,  pFlush, storePtr, pSelect,
+	       pStartEffective, pStartEffectiveNext, causingPtr: SmallNumber := (others => '0');	
+	signal nFull, nFullNext, nFullRestored, nIn, nOut, nCommitted, nCommittedEffective: SmallNumber := (others => '0');
+	signal recoveryCounter: SmallNumber := (others => '0');
+
+    signal storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
+    signal drainValue, selectedValue: Mword := (others => '0');
+    signal drainData: InstructionState := DEFAULT_INSTRUCTION_STATE;
+              
+    signal isFull, isAlmostFull, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDraining, isDrainingPrev: std_logic := '0';
+    signal memEmpty: std_logic := '1'; -- CAREFUL! Starts with '1'
+
+    signal ch0, ch1, ch2, ch3: std_logic := '0';
+
 
     function getMatchedAddresses(content: InstructionStateArray; cmpIns: InstructionSlot) return std_logic_vector is
         variable res: std_logic_vector(0 to content'length-1) := (others => '0');
@@ -99,9 +99,7 @@ architecture Behavioral of StoreQueue is
     
 
     function getNewContentSQ(content: InstructionStateArray; dataIn: InstructionSlotArray;
-                                --taggedMask: std_logic_vector;
 				                prevSending: std_logic;
-				                --inputMask: std_logic_vector;
 				                pTagged: SmallNumber;
 				                storeValueInput, storeAddressInput: InstructionSlot;
 				                isLQ: boolean; matchingNewerLoads: std_logic_vector
@@ -109,27 +107,13 @@ architecture Behavioral of StoreQueue is
     return InstructionStateArray is
         variable res: InstructionStateArray(0 to QUEUE_SIZE-1) := content;
         variable slot: InstructionSlot;
-        variable pos, diff: SmallNumber := (others => '0');
+        variable diff: SmallNumber := (others => '0');
 	    variable remv: std_logic_vector(0 to 2) := "000";
-	    --variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
 	    constant IS_STORE_OP: boolean := std2bool(isStoreOp(storeAddressInput.ins));
 	    constant IS_LOAD_OP: boolean := std2bool(isLoadOp(storeAddressInput.ins));
-	    variable inputInd: natural := 0;
     begin
-
         for i in 0 to QUEUE_SIZE-1 loop
---            pos := i2slv(i, SMALL_NUMBER_SIZE);
---               inputInd := i - slv2u(pTagged);
---               if false then
-               
---               end if;
-            
-           diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;
---               if slv2u(diff) < countOnes(extractFullMask(dataIn)) then
---                   -- TODO
-                   
---               end if;
-           
+           diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;    
            case diff(1 downto 0) is
                when "00" =>
                     remv := "111";
@@ -141,8 +125,7 @@ architecture Behavioral of StoreQueue is
                     remv := "000";                                                                                       
            end case;
            
-           --if im(i) = '1' then
-             if slv2u(diff) < countOnes(extractFullMask(dataIn)) and prevSending = '1' then
+           if slv2u(diff) < countOnes(extractFullMask(dataIn)) and prevSending = '1' then
                 slot := getNewElem(remv, dataIn);
                         --dataIn(slv2u(diff(1 downto 0)));
                 res(i) := slot.ins;          
@@ -166,16 +149,14 @@ architecture Behavioral of StoreQueue is
 
         -- Update target after mem execution
         for i in 0 to QUEUE_SIZE-1 loop
-           if true --taggedMask(i) = '1' -- !! Prevent instruction with r.i. = 0 form updating untagged entries! 
-               and content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
+           if content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
                and storeValueInput.full = '1'
            then
                res(i).controlInfo.completed2 := '1'; -- data completed
                res(i).result := storeValueInput.ins.result;
            end if;
            
-           if true -- taggedMask(i) = '1' -- !! Prevent instruction with r.i. = 0 form updating untagged entries! 
-               and content(i).tags.renameIndex = storeAddressInput.ins.tags.renameIndex
+           if content(i).tags.renameIndex = storeAddressInput.ins.tags.renameIndex
                and storeAddressInput.full = '1'
                and ((IS_STORE_OP and not isLQ) or (IS_LOAD_OP and isLQ))
            then
@@ -188,30 +169,14 @@ architecture Behavioral of StoreQueue is
         return res;
     end function;
     
-    function getStoreDataIndex(content: InstructionStateArray; dataIn: InstructionSlotArray;
-                                --taggedMask: std_logic_vector;
-				                prevSending: std_logic;
-				                --inputMask: std_logic_vector;
-				                pTagged: SmallNumber;
-				                storeValueInput, storeAddressInput: InstructionSlot;
-				                isLQ: boolean; matchingNewerLoads: std_logic_vector
-				                )
+    function getStoreDataIndex(content: InstructionStateArray; storeValueInput: InstructionSlot)
     return SmallNumber is
-        --variable res: InstructionStateArray(0 to QUEUE_SIZE-1) := content;
-        variable slot: InstructionSlot;
-        variable diff: SmallNumber := (others => '0');
-	    variable remv: std_logic_vector(0 to 2) := "000";
-	    --variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
-	    constant IS_STORE_OP: boolean := std2bool(isStoreOp(storeAddressInput.ins));
-	    constant IS_LOAD_OP: boolean := std2bool(isLoadOp(storeAddressInput.ins));
     begin
-        -- Update target after mem execution
         for i in 0 to QUEUE_SIZE-1 loop
            if content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
            then
                return i2slv(i, SMALL_NUMBER_SIZE) and PTR_MASK_SN;
-           end if;
-                                
+           end if;                            
         end loop;
 
         return (others => '0');
@@ -260,25 +225,20 @@ architecture Behavioral of StoreQueue is
 
 
     function findNewestMatchIndex2(content: InstructionStateArray;
-                                         olderSQ: std_logic_vector; pStart, pEnd: SmallNumber;
-                                         ins: InstructionState)
+                                         olderSQ: std_logic_vector; pStart, pEnd: SmallNumber)
     return SmallNumber is
-        constant LEN: integer := content'length;
-        variable res1, res2, older, before: std_logic_vector(0 to LEN-1) := (others => '0');
-        variable indices, rawIndices: SmallNumberArray(0 to LEN-1) := (others => (others => '0'));
-        variable matchBefore: std_logic := '0';       
-        variable tmpVec, tmpVec1, tmpVec2: std_logic_vector(0 to LEN-1) := (others => '0');
+        constant LEN: integer := content'length;      
+        variable tmpVec1: std_logic_vector(0 to LEN-1) := (others => '0');
         variable tmpVecExt: std_logic_vector(0 to 2*LEN-1) := (others => '0');
         
         variable res: SmallNumber := (others => '0');
-        variable nShift, count, nPos: natural := 0;
+        variable nShift, count: natural := 0;
     begin
         -- Shift by pStart
         nShift := slv2u(pStart);
         count := slv2u(subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE));
         
-        tmpVec := olderSQ;-- and cmpMask;
-        tmpVecExt := tmpVec & tmpVec;
+        tmpVecExt := olderSQ & olderSQ;
         
         for i in 0 to LEN-1 loop
             tmpVec1(i) := tmpVecExt(i + nShift);
@@ -292,112 +252,78 @@ architecture Behavioral of StoreQueue is
             end if;
         end loop;
         -- Add pStart
-        res := add(res, pStart);
-
-        return res and PTR_MASK_SN;
-    end function;
-
-        function findNewestMatchIndex3(content: InstructionStateArray;
-                                             olderSQ: std_logic_vector; pStart, pEnd: SmallNumber;
-                                             cmpInput: InstructionSlot)
-        return InstructionSlot is
-            constant LEN: integer := content'length;
-            variable contentExt: InstructionStateArray(0 to 2*content'length-1) := content & content;
-            variable res1, res2, older, before: std_logic_vector(0 to LEN-1) := (others => '0');
-            variable indices, rawIndices: SmallNumberArray(0 to LEN-1) := (others => (others => '0'));
-            variable matchBefore: std_logic := '0';       
-            variable tmpVec, tmpVec1, tmpVec2: std_logic_vector(0 to LEN-1) := (others => '0');
-            variable tmpVecExt: std_logic_vector(0 to 2*LEN-1) := (others => '0');
-            
-            variable res: SmallNumber := (others => '0');
-            variable nShift, count, nPos: natural := 0;
-            variable outRes: InstructionSlot := ('0', content(LEN-1));
-        begin
-            -- Shift by pStart
-            nShift := slv2u(pStart);
-            count := slv2u(subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE));
-            
-            tmpVec := olderSQ;
-            tmpVecExt := tmpVec & tmpVec;
-            
-            for i in 0 to LEN-1 loop
-                tmpVec1(i) := tmpVecExt(i + nShift);
-            end loop;
-            
-            -- Find first index
-            for i in LEN-1 downto 0 loop
-                if tmpVec1(i) = '1' and i < count then
-                    outRes.ins := contentExt(i + nShift);
-                    outRes.full := cmpInput.full;
-                    exit;
-                end if;
-            end loop;
-
-            return outRes;
-        end function;
-
-
-        function findOldestMatchIndex(content: InstructionStateArray;
-                                             newerLQ: std_logic_vector; pStart, pEnd: SmallNumber;
-                                             cmpInput: InstructionSlot)
-        return InstructionSlot is
-            constant LEN: integer := content'length;
-            variable contentExt: InstructionStateArray(0 to 2*content'length-1) := content & content;
-            variable res1, res2, older, before: std_logic_vector(0 to LEN-1) := (others => '0');
-            variable indices, rawIndices: SmallNumberArray(0 to LEN-1) := (others => (others => '0'));
-            variable matchBefore: std_logic := '0';       
-            variable tmpVec, tmpVec1, tmpVec2: std_logic_vector(0 to LEN-1) := (others => '0');
-            variable tmpVecExt: std_logic_vector(0 to 2*LEN-1) := (others => '0');
-            
-            variable res: SmallNumber := (others => '0');
-            variable nShift, count, nPos: natural := 0;
-            variable outRes: InstructionSlot := ('0', content(LEN-1));
-        begin
-            -- Shift by pStart
-            nShift := slv2u(pStart);
-            count := slv2u(subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE));
-            
-            tmpVec := newerLQ;
-            tmpVecExt := tmpVec & tmpVec;
-            
-            for i in 0 to LEN-1 loop
-                tmpVec1(i) := tmpVecExt(i + nShift);
-            end loop;
-            
-            -- Find first index
-            for i in 0 to LEN-1 loop
-                if tmpVec1(i) = '1' and i < count then
-                    outRes.ins := contentExt(i + nShift);
-                    outRes.full := cmpInput.full;
-                    exit;
-                end if;
-            end loop;
-
-            return outRes;
-        end function;
-    
-
-
-    function selectMatched(content: InstructionStateArray; mask: std_logic_vector; compareValid: std_logic; index: SmallNumber) return InstructionSlot is
-        variable res: InstructionSlot := ('0', content(0));
-    begin 
-        res.full := compareValid and isNonzero(mask);
-        res.ins := content(slv2u(index));
-        
+        res := addTruncZ(res, pStart, QUEUE_PTR_SIZE);
         return res;
     end function;
-    
-        signal matchIndex, storeIndex: natural range 0 to QUEUE_SIZE-1 := 0;
-        signal storePtr: SmallNumber := (others => '0');
-        --signal doUpdate: std_logic := '0';
-        signal storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
-        signal TMP_drain: std_logic := '0';
-        signal --pDrain, pDrainNext, pDrainPrev,
-                 TMP_selectPtr, TMP_selectPtr2: SmallNumber := (others => '0');
-        signal TMP_drainValue, TMP_drainTarget, TMP_selectValue: Mword := (others => '0');
-        signal TMP_drainData: InstructionState := DEFAULT_INSTRUCTION_STATE;
+
+    function findNewestMatchIndex3(content: InstructionStateArray;
+                                         olderSQ: std_logic_vector; pStart, pEnd: SmallNumber;
+                                         allow: std_logic)
+    return InstructionSlot is
+        constant LEN: integer := content'length;
+        variable contentExt: InstructionStateArray(0 to 2*content'length-1) := content & content;    
+        variable tmpVec1: std_logic_vector(0 to LEN-1) := (others => '0');
+        variable tmpVecExt: std_logic_vector(0 to 2*LEN-1) := (others => '0');
         
-        signal ch0, ch1, ch2, ch3: std_logic := '0';
+        variable res: InstructionSlot := ('0', content(LEN-1));
+        variable nShift, count, nPos: natural := 0;
+    begin
+        -- Shift by pStart
+        nShift := slv2u(pStart);
+        count := slv2u(subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE));
+        
+        tmpVecExt := olderSQ & olderSQ;
+        
+        for i in 0 to LEN-1 loop
+            tmpVec1(i) := tmpVecExt(i + nShift);
+        end loop;
+        
+        -- Find first index
+        for i in LEN-1 downto 0 loop
+            if tmpVec1(i) = '1' and i < count then
+                res.ins := contentExt(i + nShift);
+                res.full := allow;
+                exit;
+            end if;
+        end loop;
+
+        return res;
+    end function;
+
+
+    function findOldestMatchIndex(content: InstructionStateArray;
+                                         newerLQ: std_logic_vector; pStart, pEnd: SmallNumber;
+                                         cmpInput: InstructionSlot)
+    return InstructionSlot is
+        constant LEN: integer := content'length;
+        variable contentExt: InstructionStateArray(0 to 2*content'length-1) := content & content;     
+        variable tmpVec1: std_logic_vector(0 to LEN-1) := (others => '0');
+        variable tmpVecExt: std_logic_vector(0 to 2*LEN-1) := (others => '0');
+        
+        variable res: InstructionSlot := ('0', content(LEN-1));
+        variable nShift, count, nPos: natural := 0;
+    begin
+        -- Shift by pStart
+        nShift := slv2u(pStart);
+        count := slv2u(subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE));
+        
+        tmpVecExt := newerLQ & newerLQ;
+        
+        for i in 0 to LEN-1 loop
+            tmpVec1(i) := tmpVecExt(i + nShift);
+        end loop;
+        
+        -- Find first index
+        for i in 0 to LEN-1 loop
+            if tmpVec1(i) = '1' and i < count then
+                res.ins := contentExt(i + nShift);
+                res.full := cmpInput.full;
+                exit;
+            end if;
+        end loop;
+
+        return res;
+    end function;
 
      function getNumCommittedEffective(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber is
         variable res: SmallNumber := (others => '0');
@@ -464,7 +390,7 @@ architecture Behavioral of StoreQueue is
           for i in 0 to LEN-1 loop
              tmpVec(i) := compareTagBefore(causing.tags.renameIndex, content(i).tags.renameIndex);
           end loop;
-             
+
           tmpVecExt := tmpVec & tmpVec;
           
           -- Shift kill mask
@@ -481,54 +407,38 @@ architecture Behavioral of StoreQueue is
             
          return res and PTR_MASK_SN; 
       end function;
-      
-      signal nCancelled, nCommitted, nCommittedEffective: SmallNumber := (others => '0');
-      signal drainA, drainB, needCancel, nowCancelled, nowCancelledNext, allowDrain: std_logic := '0';
-      signal TMP_numSend: integer := 0;
+
 begin
-
-               TMP_KILL: for i in 0 to QUEUE_SIZE-1 generate
-                   killMask_N(i) <=  compareTagBefore(execCausing.tags.renameIndex, content(i).tags.renameIndex);
-               end generate;
-        
-               killMask_N2 <= getKillMask(content, taggedMask, execCausing, '1', '0');
-        
-               TMP_pFlush <= getNewPtr(content, execCausing, pStart, pTagged);
-               TMP_pFlush_C <= addIntTrunc(pTagged, -countOnes(killMask_N2), QUEUE_PTR_SIZE);            
-
-
-
-       --CAREFUL: this is only for SQ
-        drainA <= bool2std(pDrain = pStartNew);
-        drainB <= bool2std(pDrain = pStartNewEffective);       
-        nCommitted <= getNumCommitted(robData, IS_LOAD_QUEUE);
-        nCommittedEffective <= getNumCommittedEffective(robData, IS_LOAD_QUEUE);
-        
-        pStartNewNext <= addTruncZ(pStartNew, nCommitted, QUEUE_PTR_SIZE) when committing = '1' else pStartNew;
-        pStartNewEffectiveNext <= addTruncZ(pStartNewEffective, nCommittedEffective, QUEUE_PTR_SIZE) when committing = '1'
-                            else pStartNewNext when nowCancelled = '1' and drainA = '1'
-                            else pStartNewEffective;
-
-        
     causingPtr <= getCausingPtr(content, execCausing);
-	
+
+
+   --CAREFUL: this is only for SQ
+    drainEqual <= bool2std(pDrain = pStart);
+    drainEffectiveEqual <= bool2std(pDrain = pStartEffective);       
+    nCommitted <= getNumCommitted(robData, IS_LOAD_QUEUE);
+    nCommittedEffective <= getNumCommittedEffective(robData, IS_LOAD_QUEUE);
+
+
+    pStartNext <= addTruncZ(pStart, nCommitted, QUEUE_PTR_SIZE) when committing = '1' else pStart; --pStartNewNext;        
+    
+    pStartEffectiveNext <= addTruncZ(pStartEffective, nCommittedEffective, QUEUE_PTR_SIZE) when committing = '1'
+                        else pStartNext when nowCancelled = '1' and drainEqual = '1'
+                        else pStartEffective;
+
+    pDrainNext <= addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE) when drainReq = '1' else pDrain;
+    	
 	contentNext <=
 				getNewContentSQ(content, dataIn,
 				                prevSending,
 				                pTagged,
 				                storeValueInput,
 				                compareAddressInput,
-				                IS_LOAD_QUEUE, newerLQ
-				                                    );
-            storePtr <= 				getStoreDataIndex(content, dataIn,
-                                                                    prevSending,
-                                                                    pTagged,
-                                                                    storeValueInput,
-                                                                    compareAddressInput,
-                                                                    IS_LOAD_QUEUE, newerLQ
-                                                                                        );
+				                IS_LOAD_QUEUE, newerLQ);
+
+    pFlush <= getNewPtr(content, execCausing, pStart, pTagged);
+    storePtr <= getStoreDataIndex(content, storeValueInput);
             
-    TMP_drain <= bool2std(pDrain /= pStart);
+    drainReq <= not drainEqual;--bool2std(pDrain /= pStart);
             
 	newerLQ <=     newerRegLQ and addressMatchMask and whichAddressCompleted(content) when isStoreMemOp(compareAddressInput.ins) = '1'
 	          else (others => '0'); -- Only those with known address
@@ -546,19 +456,14 @@ begin
 	
 	WHEN_SQ: if not IS_LOAD_QUEUE generate	   
 	    -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
-       TMP_selectPtr <=   findNewestMatchIndex2(content, olderSQ,  pDrainPrev, pTagged, compareAddressInput.ins);
-       selectedDataSlot <=   findNewestMatchIndex3(content, olderSQ,  pDrainPrev, pTagged, compareAddressInput);	   
+       pSelect <=   findNewestMatchIndex2(content, olderSQ,  pDrainPrev, pTagged);
+       selectedDataSlot <=   findNewestMatchIndex3(content, olderSQ,  pDrainPrev, pTagged, compareAddressInput.full);	   
 	end generate;
 	
-	       ch0 <= bool2std(TMP_selectedSlot = selectedDataSlot) or not selectedDataSlot.full;
-	       ch1 <= bool2std(nCommitted = nOut) or not isSending;
-	       ch2 <= bool2std(memEmpty /= isNonzero(taggedMask));
-	       ch3 <= bool2std(TMP_pFlush = TMP_pFlush_C);
-	
-    pStartNext <= pStartNewNext;
-
-    pDrainNext <= addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE) when TMP_drain = '1' else pDrain;
-
+	       --ch0 <= bool2std(TMP_selectedSlot = selectedDataSlot) or not selectedDataSlot.full;
+	       --ch1 <= bool2std(nCommitted = nOut) or not isSending;
+	       --ch2 <= bool2std(memEmpty /= isNonzero(taggedMask));
+	       --ch3 <= bool2std(pFlush = pFlush_C);
 
 	process (clk)
 	begin
@@ -572,42 +477,40 @@ begin
 			
 			selectedDataOutputSig <= selectedDataSlot;
             
-                if storeValueInput.full = '1' then
-                    storeValues(slv2u(storePtr)) <= storeValueInput.ins.result;
-                end if;
-                
-                pDrain <= pDrainNext;
-                pDrainPrev <= pDrain;
-                
-                if TMP_drain = '1' then
-                    TMP_drainValue <= storeValues(slv2u(pDrain));
-                    TMP_drainData <= content(slv2u(pDrain));
-                end if;
-                
-                if true then    
-                    TMP_selectValue <= storeValues(slv2u(TMP_selectPtr));
-                end if;
+            if storeValueInput.full = '1' then
+                storeValues(slv2u(storePtr)) <= storeValueInput.ins.result;
+            end if;
             
-                pStart <= pStartNext;
-                pStartNew <= pStartNewNext;
-                pStartNewEffective <= pStartNewEffectiveNext;
-                
-                if drainA = '0' and drainB = '1' then
-                    nowCancelled <= '1';
-                end if;
-                
-                if nowCancelled = '1' and drainA = '1' then
-                    nowCancelled <= '0';
-                end if;
-                
-                allowDrain <= not (nowCancelled or (not drainA and drainB));
+            pDrain <= pDrainNext;
+            pDrainPrev <= pDrain;
+            
+            if drainReq = '1' then
+                drainValue <= storeValues(slv2u(pDrain));
+                drainData <= content(slv2u(pDrain));
+            end if;
+            
+            if true then    
+                selectedValue <= storeValues(slv2u(pSelect));
+            end if;
+        
+            pStart <= pStartNext;
+            pStartEffective <= pStartEffectiveNext;
+            
+            if drainEqual = '0' and drainEffectiveEqual = '1' then
+                nowCancelled <= '1';
+            end if;
+            
+            if nowCancelled = '1' and drainEqual = '1' then
+                nowCancelled <= '0';
+            end if;
+            
+            allowDrain <= not (nowCancelled or (not drainEqual and drainEffectiveEqual));
                 
                 
             if lateEventSignal = '1' then
                 pTagged <= pStartNext;
             elsif execEventSignal = '1' then
-                --pTagged <= addIntTrunc(pTagged, -countOnes(killMask), QUEUE_PTR_SIZE);
-               pTagged <= TMP_pFlush;
+               pTagged <= pFlush;
             elsif prevSending = '1' then -- + N
                 pTagged <= addIntTrunc(pTagged, countOnes(extractFullMask(dataIn)), QUEUE_PTR_SIZE);
             end if;
@@ -618,7 +521,7 @@ begin
                 recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
 	        
-	           recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here
+	        recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here
 	        
 	        isFull <= cmpGtU(nFullNext, QUEUE_SIZE-4);
             isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
@@ -672,7 +575,7 @@ begin
                             else subTruncZ(pTagged, pDrain, QUEUE_PTR_SIZE); -- CAREFUL: nFullRestored can be outside PTR range but it's handled in the other branch
     end generate;
     
-    isDraining <= TMP_drain;
+    isDraining <= drainReq;
      
 
 	acceptingOut <= not isFull;
@@ -680,24 +583,25 @@ begin
 
     COMMIT_OUTPUTS: if VIEW_ON generate
 	   --dataOutV <= dataOutSigFinal;	
-	   sendingSQOut <= isSending;
+	   --sendingSQOut <= isSending;
     end generate;
 
-	selectedDataOutput <= (selectedDataOutputSig.full, setInstructionResult(selectedDataOutputSig.ins, TMP_selectValue)) when not IS_LOAD_QUEUE
+	selectedDataOutput <= (selectedDataOutputSig.full, setInstructionResult(selectedDataOutputSig.ins, selectedValue)) when not IS_LOAD_QUEUE
 	               else    selectedDataOutputSig;
 	
 	committedEmpty <= bool2std(pStart = pDrainPrev);
 	committedSending <= isDrainingPrev;
 	                       
 	committedDataOut(1 to PIPE_WIDTH-1) <= (others => DEFAULT_INSTRUCTION_SLOT);
-	committedDataOut(0) <= (isDrainingPrev and allowDrain, setInstructionResult(TMP_drainData, TMP_drainValue));
+	committedDataOut(0) <= (isDrainingPrev and allowDrain, setInstructionResult(drainData, drainValue));
 	               	               
 	VIEW: if VIEW_ON generate
        use work.Viewing.all;
       
        signal queueText: InsStringArray(0 to QUEUE_SIZE-1);
+       signal DUMMY_mask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '1');
     begin       
-       queueText <= getInsStringArray(makeSlotArray(content, fullOrCommittedMask), transfer);
+       queueText <= getInsStringArray(makeSlotArray(content, DUMMY_mask), transfer);
     end generate;
 	
 end Behavioral;
