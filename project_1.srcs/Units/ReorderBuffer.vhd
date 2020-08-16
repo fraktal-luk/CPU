@@ -336,8 +336,9 @@ begin
 	
 	       outputCompleted <= groupCompleted(outputDataReg);
 	
-    isSending <=    completedMask(slv2u(startPtr)) and nextAccepting and not isEmpty when not TMP_PARAM_ROB_OUTPUT
-                else  outputCompleted and nextAccepting and not outputEmpty;
+    isSending <=  --  completedMask(slv2u(startPtr)) and nextAccepting and not isEmpty when not TMP_PARAM_ROB_OUTPUT
+                --else  
+                    outputCompleted and nextAccepting and not outputEmpty;
 
         ch0 <= bool2std(isSending = (outputCompleted and nextAccepting and not outputEmpty));
 

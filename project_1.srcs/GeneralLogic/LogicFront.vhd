@@ -283,9 +283,10 @@ begin
     insVecSh := insVec;
     branchMask := getBranchMask(insVecSh);
     
-        --ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS);
-        nSh := slv2u(ins.ins.ip(ALIGN_BITS-1 downto 2));
-        for i in 0 to PIPE_WIDTH-1 loop
+        --ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) := ;
+    nSh := slv2u(ins.ins.ip(ALIGN_BITS-1 downto 2));
+    for i in 0 to PIPE_WIDTH-1 loop
+        if not TMP_PARAM_COMPRESS_RETURN then
             if i + nSh >= PIPE_WIDTH-1 then
                 insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS), 1);
                 insVecSh(i).ins.result(ALIGN_BITS-1 downto 0) := (others => '0');
@@ -293,8 +294,16 @@ begin
                 insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS);
                 insVecSh(i).ins.result(ALIGN_BITS-1 downto 2) := i2slv(i + nSh + 1, ALIGN_BITS-2);                           
             end if;
-            
-        end loop;
+        else    
+            if i + nSh >= PIPE_WIDTH-1 then
+                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := i2slv(1, MWORD_SIZE-ALIGN_BITS);
+                insVecSh(i).ins.result(ALIGN_BITS-1 downto 0) := (others => '0');
+            else
+                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := (others => '0');
+                insVecSh(i).ins.result(ALIGN_BITS-1 downto 2) := i2slv(i + nSh + 1, ALIGN_BITS-2);                           
+            end if;
+        end if;         
+    end loop;
     
     
 	for i in insVec'range loop
@@ -310,16 +319,16 @@ begin
 	   end if;
 	   
 	       if res(i).ins.controlInfo.frontBranch = '1' then
-	           res(i).ins.ip := res(i).ins.result;
+	           --res(i).ins.ip := res(i).ins.result;
 	       else
-	           res(i).ins.ip := res(i).ins.target;
+	           --res(i).ins.ip := res(i).ins.target;
 	       end if;
 	   
 	end loop;
 
     
         -- TMP!
-    --    res(0).ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) := ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS);
+    res(0).ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) := ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS);
     --    res(1).ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS), 1);
     
 	return res;
