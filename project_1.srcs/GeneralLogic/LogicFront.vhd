@@ -30,7 +30,7 @@ function getEarlyEvent(inputIns: Instructionstate; earlyBranchMultiDataInA: Inst
                        predictedAddress: Mword; fetchStall: std_logic)
 return InstructionState;
 	
-function prepareForBQ(insVec: InstructionSlotArray) return InstructionSlotArray;
+function prepareForBQ(ins: InstructionSlot; insVec: InstructionSlotArray) return InstructionSlotArray;
 
 end LogicFront;
 
@@ -43,15 +43,19 @@ function getInstructionClassInfo(ins: InstructionState) return InstructionClassI
 begin 
     -- Which clusters?
     ci.mainCluster := '1';
-    if ins.specificOperation.subpipe = Mem and (ins.specificOperation.memory = opStore or ins.specificOperation.memory = opStoreSys) then
-        ci.secCluster := '1';
+    if ins.specificOperation.subpipe = Mem then 
+        if (ins.specificOperation.memory = opStore or ins.specificOperation.memory = opStoreSys) then
+            ci.secCluster := '1';
+        else
+            ci.useLQ := '1';
+        end if;
     end if;
 
     if ins.specificOperation.subpipe = Alu
         and (ins.specificOperation.arith = opJ or ins.specificOperation.arith = opJz or ins.specificOperation.arith = opJnz) then
         ci.branchIns := '1';
     end if;
-
+    
     if ins.specificOperation.subpipe = none then  
         ci.mainCluster := '0';
         ci.secCluster := '0';
@@ -181,7 +185,7 @@ begin
         end if;
     
         branchIns(i) := regularJump or longJump or regJump;
-        res(i).ins.target := add(res(i).ins.ip, tempOffset);	-- !! Only for BQ		
+        res(i).ins.target := add(res(i).ins.ip, tempOffset);	-- !! Only for BQ
     end loop;
     
     -- Find if any branch predicted
@@ -212,6 +216,10 @@ begin
 
 	for i in 0 to FETCH_WIDTH-1 loop
 	   res(i).full := fullOut(i);
+
+            if res(i).full = '1' and res(i).ins.classInfo.branchIns = '1' then
+                res(0).ins.controlInfo.firstBr := '1'; -- TMP, indicating that group has a branch
+            end if;
 	   
        if CLEAR_DEBUG_INFO then
           res(0).ins.specificOperation.arith := opAnd;
@@ -220,6 +228,7 @@ begin
           res(0).ins.specificOperation.system := opNone;
 
           res(i) := clearRawInfo(res(i));
+          --res(i).bits := (others => '0');
           
           res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;        
        end if;	   
@@ -265,22 +274,63 @@ begin
     return res;
 end function;
 
-function prepareForBQ(insVec: InstructionSlotArray) return InstructionSlotArray is
-	variable res: InstructionSlotArray(insVec'range) := insVec;
+function prepareForBQ(ins: InstructionSlot; insVec: InstructionSlotArray) return InstructionSlotArray is
+	variable res, insVecSh: InstructionSlotArray(insVec'range) := insVec;
 	variable result, target: Mword;
-	constant BRANCH_MASK: std_logic_vector(insVec'range) := getBranchMask(insVec);
+	variable branchMask: std_logic_vector(insVec'range) := (others => '0');
+	variable nSh: natural := 0;
 begin
+    insVecSh := insVec;
+    branchMask := getBranchMask(insVecSh);
+    
+        --ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) := ;
+    nSh := slv2u(ins.ins.ip(ALIGN_BITS-1 downto 2));
+    for i in 0 to PIPE_WIDTH-1 loop
+        if not TMP_PARAM_COMPRESS_RETURN then
+            if i + nSh >= PIPE_WIDTH-1 then
+                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS), 1);
+                insVecSh(i).ins.result(ALIGN_BITS-1 downto 0) := (others => '0');
+            else
+                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS);
+                insVecSh(i).ins.result(ALIGN_BITS-1 downto 2) := i2slv(i + nSh + 1, ALIGN_BITS-2);                           
+            end if;
+        else    
+            if i + nSh >= PIPE_WIDTH-1 then
+                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := i2slv(1, MWORD_SIZE-ALIGN_BITS);
+                insVecSh(i).ins.result(ALIGN_BITS-1 downto 0) := (others => '0');
+            else
+                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := (others => '0');
+                insVecSh(i).ins.result(ALIGN_BITS-1 downto 2) := i2slv(i + nSh + 1, ALIGN_BITS-2);                           
+            end if;
+        end if;         
+    end loop;
+    
+    
 	for i in insVec'range loop
-	   res(i).full := BRANCH_MASK(i) and insVec(i).full; -- TODO: getBranchMask already check for 'full' - remove it here?   
-
+	   res(i).full := branchMask(i) and insVecSh(i).full; -- TODO: getBranchMask already check for 'full' - remove it here?
+       
        if CLEAR_DEBUG_INFO then -- Otherwise everything remains
            res(i).ins := DEFAULT_INS_STATE;
-           res(i).ins.controlInfo := insVec(i).ins.controlInfo;
-           res(i).ins.target := insVec(i).ins.target;
-           res(i).ins.result := insVec(i).ins.result;
+           --     res(i).ins.ip := insVecSh(i).ins.ip;
+           
+           res(i).ins.controlInfo := insVecSh(i).ins.controlInfo;
+           res(i).ins.target := insVecSh(i).ins.target;
+           res(i).ins.result := insVecSh(i).ins.result;
 	   end if;
+	   
+	       if res(i).ins.controlInfo.frontBranch = '1' then
+	           --res(i).ins.ip := res(i).ins.result;
+	       else
+	           --res(i).ins.ip := res(i).ins.target;
+	       end if;
+	   
 	end loop;
-	
+
+    
+        -- TMP!
+    res(0).ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) := ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS);
+    --    res(1).ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS), 1);
+    
 	return res;
 end function;
 

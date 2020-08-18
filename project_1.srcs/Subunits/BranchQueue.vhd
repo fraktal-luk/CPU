@@ -30,9 +30,9 @@ entity BranchQueue is
 		acceptingBr: out std_logic;
 		
 		prevSending: in std_logic;
-			prevSendingBr: in std_logic;
+		prevSendingBr: in std_logic;
 		dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-			dataInBr: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+		dataInBr: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 
 		storeValueInput: in InstructionSlot;
 		compareAddressInput: in InstructionSlot;
@@ -49,7 +49,11 @@ entity BranchQueue is
 		
 		nextAccepting: in std_logic;		
 		sendingSQOut: out std_logic;
-		dataOutV: out InstructionSlotArray(0 to PIPE_WIDTH-1)
+		dataOutV: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+		
+		committedEmpty: out std_logic;
+        committedSending: out std_logic;
+        committedDataOut: out InstructionSlot		
 	);
 end BranchQueue;
 
@@ -59,176 +63,16 @@ architecture Behavioral of BranchQueue is
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
     constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;
 
-	signal isSending: std_logic := '0';
+	signal selectedDataSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
 
-	signal content, contentNext: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INSTRUCTION_STATE);
-	signal fullMask, taggedMask, killMask, livingMask, frontMask, sendingMask, inputMask, inputMaskBr,
-			 fullMaskNext, taggedMaskNext, taggedLivingMask, matchMask, matchMaskUpdate: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
-
-	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
-	signal dataOutSig, dataOutSigNext, dataOutSigFinal: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-
-	signal pStart, pStartNext, pTagged, pAll, causingPtr: SmallNumber := (others => '0');
-    signal nFull, nFullNext, nFullRestored, nIn, nOut: SmallNumber := (others => '0');
+	signal pStart, pStartNext, pTagged, pEnd, pSelect, pCausing: SmallNumber := (others => '0');
     signal recoveryCounter: SmallNumber := (others => '0');
-    signal isFull, isAlmostFull: std_logic := '0';
-	
-
-    function getNewContentBr(content: InstructionStateArray; dataIn, dataInBr: InstructionSlotArray;
-                                taggedMask, fullMask: std_logic_vector;
-				                prevSending, prevSendingBr: std_logic;
-				                inputMask, inputMaskBr: std_logic_vector;
-				                pTagged, pAll: SmallNumber;
-				                matchMaskUpdate: std_logic_vector;
-				                storeValueInput: InstructionSlot
-				                )
-    return InstructionStateArray is
-        variable res: InstructionStateArray(0 to QUEUE_SIZE-1) := content;
-        variable slot: InstructionSlot;
-        variable diff: SmallNumber := (others => '0');
-	    variable remv: std_logic_vector(0 to 2) := "000";
-	    variable im: std_logic_vector(0 to QUEUE_SIZE-1) := inputMask;
-	    variable imBr: std_logic_vector(0 to QUEUE_SIZE-1) := inputMaskBr;	    
-    begin
-
-        -- TODO, CHECK: clear newEvent if unneeded? Other controlInfo except frontBranch, confirmedBranch, firstBr?
-        -- TODO: add 'completed' flag for debug?  
-
-        for i in 0 to QUEUE_SIZE-1 loop
-           diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;
-           
-           case diff(1 downto 0) is
-               when "00" =>
-                    remv := "111";
-               when "01" =>
-                    remv := "110";
-               when "10" =>
-                    remv := "100";
-               when others =>
-                    remv := "000";                                                                                       
-           end case;
-           
-           if im(i) = '1' then
-               slot := getNewElem(remv, dataIn); 
-                       --dataIn(slv2u(diff(1 downto 0)));         
-               res(i).tags := slot.ins.tags;               
-               res(i).controlInfo.firstBr := '0'; -- This is '1' only for the first branch in group!               
-           end if;
-        end loop;
-
-        -- Set firstBr bit for the first entry in new group
-        if prevSending = '1' then
-            res(slv2u(pTagged)).controlInfo.firstBr := '1';
-        end if;
-
-        for i in 0 to QUEUE_SIZE-1 loop
-           diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pAll) and PTR_MASK_SN;
-           
-           case diff(1 downto 0) is
-               when "00" =>
-                    remv := "111";
-               when "01" =>
-                    remv := "110";
-               when "10" =>
-                    remv := "100";
-               when others =>
-                    remv := "000";                                                                                       
-           end case;
-           
-           if imBr(i) = '1' then
-              slot := getNewElem(remv, dataInBr);
-                     --dataInBr(slv2u(diff(1 downto 0)));  
-              res(i) := slot.ins;                       
-           end if;
-        end loop;
-
-        -- Update target after branch execution
-        for i in 0 to QUEUE_SIZE-1 loop
-           if taggedMask(i) = '1' -- !! Prevent instruction with renmeIndex. = 0 from updating untagged entries! 
-               and matchMaskUpdate(i) = '1'
-               and storeValueInput.full = '1'
-           then
-               res(i).target := storeValueInput.ins.target;
-               res(i).controlInfo.confirmedBranch := storeValueInput.ins.controlInfo.confirmedBranch;
-               res(i).controlInfo.newEvent := storeValueInput.ins.controlInfo.newEvent;
-           end if;
-           
-           if CLEAR_DEBUG_INFO then
-              res(i) := clearRawInfo(res(i));
-              res(i) := clearDbCounters(res(i));
-              
-              res(i).specificOperation := DEFAULT_SPECIFIC_OP;
-
-              res(i).constantArgs := DEFAULT_CONSTANT_ARGS;
-              res(i).virtualArgSpec := DEFAULT_ARG_SPEC;
-              res(i).physicalArgSpec := DEFAULT_ARG_SPEC;
-             end if;                    
-        end loop;
-
-        return res;
-    end function;
-
+    signal isFull, isAlmostFull, isSending: std_logic := '0';
 begin
-    causingPtr <= getCausingPtr(content, execCausing);
-    
-	-- in shifting queue this would be shfited by nSend
-	frontMask <= getSendingMask(content, taggedLivingMask, groupCtrInc);
-	sendingMask <= frontMask when committing = '1' else (others => '0');
 
-	killMask <= getKillMask(content, taggedMask, execCausing, execEventSignal, lateEventSignal);
-	livingMask <= fullMask when (lateEventSignal = '0' and execEventSignal = '0') 
-	         else taggedLivingMask;	
-    taggedLivingMask <= taggedMask and not killMask;
-				
-    inputMask <= getInputMask(taggedMask, extractFullMask(dataIn), prevSending, pTagged, PTR_MASK_SN);				
-    inputMaskBr <= getInputMask(fullMask, extractFullMask(dataInBr), prevSendingBr, pAll, PTR_MASK_SN);
-				
-	fullMaskNext <= (livingMask and not sendingMask) or inputMaskBr;
-	taggedMaskNext <= (taggedLivingMask and not sendingMask) or inputMask;
-	
-	contentNext <=
-				getNewContentBr(content, dataIn, dataInBr,
-				                taggedMask, fullMask,
-				                prevSending, prevSendingBr,
-				                inputMask, inputMaskBr,				             
-				                pTagged, pAll,
-				                matchMaskUpdate,
-				                storeValueInput);
-				                
-	dataOutSigNext <= getWindow(content, taggedMask, pStartNext, PIPE_WIDTH);
-	selectedDataSlot <= selectBranchDataSlot(content, taggedMask, matchMask, compareAddressInput);
-	matchMask <= getMatchingTags(content, compareAddressInput.ins.tags.renameIndex);
-	
-    pStartNext <= addIntTrunc(pStart, getNumberToSend(dataOutSig, groupCtrInc, committing), QUEUE_PTR_SIZE);
-	
-	process (clk)
+	SYNCH: process (clk)
 	begin
-		if rising_edge(clk) then	
-            fullMask <= fullMaskNext;
-            taggedMask <= taggedMaskNext;
-			content <= contentNext;
-            pStart <= pStartNext;
-			
-			selectedDataOutputSig <= selectedDataSlot;
-            dataOutSig <= dataOutSigNext;
-            
-            matchMaskUpdate <= matchMask;
-            
-            if lateEventSignal = '1' then
-                pTagged <= pStartNext;
-            elsif execEventSignal = '1' then
-                pTagged <= addIntTrunc(causingPtr, 1, QUEUE_PTR_SIZE);
-            elsif prevSending = '1' then
-                pTagged <= addIntTrunc(pTagged, countOnes(inputMask), QUEUE_PTR_SIZE);                
-            end if;
-
-            if lateEventSignal = '1' then
-                pAll <= pStartNext;
-            elsif execEventSignal = '1' then
-                pAll <= addIntTrunc(causingPtr, 1, QUEUE_PTR_SIZE);       
-            elsif prevSendingBr = '1' then
-                pAll <= addIntTrunc(pAll, countOnes(inputMaskBr), QUEUE_PTR_SIZE);                
-            end if;
+		if rising_edge(clk) then
                
             if lateEventSignal = '1' or execEventSignal = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
@@ -236,41 +80,235 @@ begin
                 recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
             
-                recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here
-            
-            isFull <=       cmpGtU(nFullNext, QUEUE_SIZE-4);
-            isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
-            nFull <= nFullNext;                     
+            recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here                   
 		end if;
 	end process;
 
-    nFullNext <= nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
-                else subTruncZ(add(nFull, nIn), nOut, QUEUE_CAP_SIZE);
-
-    nIn <= i2slv( countOnes(extractFullMask(dataInBr)), SMALL_NUMBER_SIZE ) when prevSendingBr = '1' else (others => '0');
-
-    nOut <= i2slv(countOnes(extractFullMask(dataOutSigFinal)), SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');              
-    nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pAll and fullMask(0) = '1'
-                else subTruncZ(pAll, pStartNext, QUEUE_PTR_SIZE);  -- CAREFUL: nFullRestored can be outside PTR range but it's handled in the other branch
-    
-    dataOutSigFinal <= getSendingArray(dataOutSig, groupCtrInc, committing);
-
-    isSending <= dataOutSigFinal(0).full;
 	acceptingOut <= '1';
-	acceptingBr <= not isAlmostFull;     
  
-	dataOutV <= dataOutSigFinal;                   
 	sendingSQOut <= isSending;
 
 	selectedDataOutput <= selectedDataSlot;
 	almostFull <= '0'; -- TODO: is it deprecated?
+
+	ALL_BRANCHES: block
+	   signal allBranches: PipeStageArray(0 to QUEUE_SIZE-1) := (others => (others => DEFAULT_INS_SLOT));
+	   signal allGroupTargets: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INS_STATE);
+	   
+	   signal allBranchOutput: PipeStage := (others => DEFAULT_INS_SLOT);
+	   signal allGroupTargetOutput: InstructionState := DEFAULT_INS_STATE;	   
+	   signal comparedMatchingSlot, selectedSlot: InstructionSlot := DEFAULT_INS_SLOT;
+	   
+	   signal accepting, committingBr: std_logic := '0';	   
+	   signal memEmpty, taggedEmpty: std_logic := '1'; -- CAREFUL: starting with '1' 
+	   
+	   signal targetArray, ipArray: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
+	   signal targetOutput, ipOutputA: Mword := (others => '0');
+ 
+       signal trg0, trg1, trg2, trg3, res0, res1, res2, res3: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
+       signal intp0, intp1, intp2, intp3, floatp0, floatp1, floatp2, floatp3: SmallNumberArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
+       signal trgs, ress: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+       signal intps, floatps: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+       
+
+	       signal ch0, ch1, ch2, ch3: std_logic := '0';
+
+	   function getMatchingPtr(content: PipeStageArray; tag: InsTag; startPtr: SmallNumber) return SmallNumber is
+	       variable res: SmallNumber := (others => '0');
+	       variable mask, maskTmp: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0'); 
+	       variable maskExt: std_logic_vector(0 to 2*QUEUE_SIZE-1) := (others => '0'); 
+	   begin
+	       for i in 0 to QUEUE_SIZE-1 loop
+	           if getTagHigh(content(i)(0).ins.tags.renameIndex) = getTagHigh(tag) then
+	               mask(i) := '1';
+	           end if;
+	       end loop;
+	       maskExt := mask & mask;
+	       
+	       for i in 0 to QUEUE_SIZE-1 loop
+	           maskTmp(i) := maskExt(i + slv2u(startPtr));
+	       end loop;
+	       
+	       for i in 0 to QUEUE_SIZE-1 loop
+               if maskTmp(i) = '1' then
+                   res := addIntTrunc(startPtr, i, QUEUE_PTR_SIZE);
+                   exit;
+               end if;
+           end loop;	       
+
+	       return res;
+	   end function;
+
+	   
+	   function getMatchedSlot(allBranches: PipeStageArray; slotPtr: SmallNumber; cmpAdrSlot: InstructionSlot; ipBase: MWord; trgs, ress: MwordArray;
+	                           intps, floatps: SmallNumberArray
+	   ) return InstructionSlot is
+	       variable res: InstructionSlot := DEFAULT_INS_SLOT;
+	       variable lowPtr: natural := 0;
+	       variable resLow: Mword := (others => '0');
+	       variable tmpNumI, tmpNumF: SmallNumber := (others => '0');
+	   begin
+	       lowPtr := slv2u(getTagLow(cmpAdrSlot.ins.tags.renameIndex));
+	       res := allBranches(slv2u(slotPtr))(lowPtr);
+	       res.full := cmpAdrSlot.full;
+
+           res.ins.ip := trgs(lowPtr);
+               -- !!! this doesn't work for register branches
+               
+           if not TMP_PARAM_COMPRESS_RETURN then
+               res.ins.result := ress(lowPtr);
+           else  
+               resLow(ALIGN_BITS downto 0) :=  ress(lowPtr)(ALIGN_BITS downto 0);
+
+               if resLow(ALIGN_BITS) = '1' then
+                   res.ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ipBase(MWORD_SIZE-1 downto ALIGN_BITS), 1);
+               else
+                   res.ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := ipBase(MWORD_SIZE-1 downto ALIGN_BITS);                   
+               end if;              
+               res.ins.result(ALIGN_BITS-1 downto 0) := resLow(ALIGN_BITS-1 downto 0);
+           end if;
+                                
+           res.ins.target := trgs(lowPtr);
+           
+           if not TMP_PARAM_COMPRESS_PTRS then
+               res.ins.tags.intPointer := intps(lowPtr);
+               res.ins.tags.floatPointer := floatps(lowPtr);
+           else
+                tmpNumI(1 downto 0) := intps(lowPtr)(1 downto 0);
+                tmpNumF(1 downto 0) := floatps(lowPtr)(1 downto 0);
+                if lowPtr = 0 then
+                    res.ins.tags.intPointer := intps(0);
+                    res.ins.tags.floatPointer := floatps(0);                    
+                else
+                    res.ins.tags.intPointer := add(intps(0), tmpNumI);
+                    res.ins.tags.floatPointer := add(floatps(0), tmpNumF);             
+                end if;
+           end if;
+           
+	       return res;
+	   end function;
+	begin
+
+       selectedDataSlot <= comparedMatchingSlot; -- !!!!!
+       dataOutV <= allBranchOutput; -- !!!
+       isSending <= committingBr;
+
+       comparedMatchingSlot <= getMatchedSlot(allBranches, pSelect, compareAddressInput, ipOutputA, trgs, ress, intps, floatps);
+        
+            ipOutputA <= ipArray(slv2u(pSelect));
+            trgs <= (trg0(slv2u(pSelect)), trg1(slv2u(pSelect)), trg2(slv2u(pSelect)), trg3(slv2u(pSelect)));
+            ress <= (res0(slv2u(pSelect)), res1(slv2u(pSelect)), res2(slv2u(pSelect)), res3(slv2u(pSelect)));
+            intps <= (intp0(slv2u(pSelect)), intp1(slv2u(pSelect)), intp2(slv2u(pSelect)), intp3(slv2u(pSelect)));
+            floatps <= (floatp0(slv2u(pSelect)), floatp1(slv2u(pSelect)), floatp2(slv2u(pSelect)), floatp3(slv2u(pSelect)));
+            
+       pSelect <= getMatchingPtr(allBranches, compareAddressInput.ins.tags.renameIndex, pStart);
+
+       -- TODO: introduce bit in ROB which indicated whether the ROB entry uses a slot in this queue  
+       committingBr <= committing and robData(0).ins.controlInfo.firstBr and not taggedEmpty;
+   
+        --    TMP_committingBr <= TMP_usesBQ(robData) and committing;
+   
+	   accepting <= bool2std(pStart /= addIntTrunc(pEnd, 2, QUEUE_PTR_SIZE)) and bool2std(pStart /= addIntTrunc(pEnd, 1, QUEUE_PTR_SIZE)); -- Need 2 reserve slots because one group could be on the way
+	   
+       pStartNext <= addIntTrunc(pStart, 1, QUEUE_PTR_SIZE) when committingBr = '1' else pStart;
+
+	   SYNCH: process (clk)
+	   begin
+	       if rising_edge(clk) then
+	           selectedSlot <= comparedMatchingSlot;
+	           
+	           pCausing <= pSelect;
+	           
+	           if lateEventSignal = '1' then
+	               pEnd <= pStart;
+	               pTagged <= pStart;
+	               memEmpty <= '1';
+	               taggedEmpty <= '1';
+	           elsif execEventSignal = '1' then
+	               pEnd <= addIntTrunc(pCausing, 1, QUEUE_PTR_SIZE);
+	               pTagged <= addIntTrunc(pCausing, 1, QUEUE_PTR_SIZE);	                   
+	               memEmpty <= '0'; -- ???
+	               taggedEmpty <= '0';
+	           else	           
+                   if prevSendingBr = '1' and dataInBr(0).ins.controlInfo.firstBr = '1' then
+                       allBranches(slv2u(pEnd)) <= dataInBr;
+                            ipArray(slv2u(pEnd)) <= dataInBr(0).ins.ip;
+                            
+                            trg0(slv2u(pEnd)) <= dataInBr(0).ins.target;
+                            trg1(slv2u(pEnd)) <= dataInBr(1).ins.target;
+                            trg2(slv2u(pEnd)) <= dataInBr(2).ins.target;
+                            trg3(slv2u(pEnd)) <= dataInBr(3).ins.target;
+                            
+                            res0(slv2u(pEnd)) <= dataInBr(0).ins.result;
+                            res1(slv2u(pEnd)) <= dataInBr(1).ins.result;
+                            res2(slv2u(pEnd)) <= dataInBr(2).ins.result;
+                            res3(slv2u(pEnd)) <= dataInBr(3).ins.result;
+                            
+                       
+                       pEnd <= addIntTrunc(pEnd, 1, QUEUE_PTR_SIZE);
+                       memEmpty <= '0';
+                   end if;
+                   
+                   
+                   if prevSending = '1' and dataIn(0).ins.controlInfo.firstBr = '1' then
+                       allBranches(slv2u(pTagged))(0).ins.tags.renameIndex <= dataIn(0).ins.tags.renameIndex;
+                       for i in 0 to PIPE_WIDTH-1 loop
+                           allBranches(slv2u(pTagged))(i).ins.tags.intPointer <= dataIn(i).ins.tags.intPointer;
+                           allBranches(slv2u(pTagged))(i).ins.tags.floatPointer <= dataIn(i).ins.tags.floatPointer;
+                       end loop;
+
+                            intp0(slv2u(pTagged)) <= dataIn(0).ins.tags.intPointer;
+                            intp1(slv2u(pTagged)) <= dataIn(1).ins.tags.intPointer;
+                            intp2(slv2u(pTagged)) <= dataIn(2).ins.tags.intPointer;
+                            intp3(slv2u(pTagged)) <= dataIn(3).ins.tags.intPointer;
+                            
+                            floatp0(slv2u(pTagged)) <= dataIn(0).ins.tags.floatPointer;
+                            floatp1(slv2u(pTagged)) <= dataIn(1).ins.tags.floatPointer;
+                            floatp2(slv2u(pTagged)) <= dataIn(2).ins.tags.floatPointer;
+                            floatp3(slv2u(pTagged)) <= dataIn(3).ins.tags.floatPointer;
+                       
+                       allGroupTargets(slv2u(pTagged)).tags.renameIndex <= dataIn(0).ins.tags.renameIndex;
+                       pTagged <= addIntTrunc(pTagged, 1, QUEUE_PTR_SIZE);
+                       taggedEmpty <= '0';                       
+                   end if;                
+	           end if;
+	           
+	           if true then
+	              allBranchOutput <= allBranches(slv2u(pStartNext));
+	              allGroupTargetOutput <= allGroupTargets(slv2u(pStartNext));
+	              targetOutput <= targetArray(slv2u(pStartNext));	              
+	           end if;
+	           
+               if storeValueInput.full = '1' then
+                   allGroupTargets(slv2u(pCausing)).target <= storeValueInput.ins.target;
+                   targetArray(slv2u(pCausing)) <= storeValueInput.ins.target;
+                   allGroupTargets(slv2u(pCausing)).controlInfo <= storeValueInput.ins.controlInfo;
+               end if;
+
+               if committingBr = '1' and (prevSendingBr = '0' or dataInBr(0).ins.controlInfo.firstBr = '0')  and pStartNext = pEnd then -- that is memDraining
+                   memEmpty <= '1';
+               end if;
+               
+               if committingBr = '1' and (prevSending = '0' or dataIn(0).ins.controlInfo.firstBr = '0')  and pStartNext = pEnd then -- that is memDraining
+                   taggedEmpty <= '1';
+               end if;
+               	           
+	           pStart <= pStartNext;
+	       end if;
+	   end process;
+
+       committedDataOut <= (committingBr, setInstructionTarget(allGroupTargetOutput, targetOutput));	       
+       acceptingBr <= accepting;
+	end block;
+	
+	
 	
 	VIEW: if VIEW_ON generate
        use work.Viewing.all;
       
        signal queueText: InsStringArray(0 to QUEUE_SIZE-1);
     begin       
-       queueText <= getInsStringArray(makeSlotArray(content, fullMask), control);       
+       --queueText <= getInsStringArray(makeSlotArray(content, fullMask), control);       
     end generate;
 
 end Behavioral;

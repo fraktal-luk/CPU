@@ -90,7 +90,7 @@ architecture Behavioral of Core is
     signal committedOut: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal committedSending: std_logic := '0';
     
-    signal lastEffectiveOut: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+    signal lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     signal cycleCounter: Word := (others => '0');
     
@@ -155,6 +155,7 @@ begin
         robSpecial => specialOutROB,
         ---
         dataFromBQV => bqData,
+        bqTargetData => bqTargetData,
 
         sbSending => sbSending,
         dataFromSB => dataFromSB(0),
@@ -1550,7 +1551,9 @@ begin
 		
 		nextAccepting => commitAccepting,		
 		sendingSQOut => bqSending,
-		dataOutV => bqData
+		dataOutV => bqData,
+		
+		committedDataOut => bqTargetData
 	);
 
     STORE_QUEUE: entity work.StoreQueue(Behavioral)

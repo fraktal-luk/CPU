@@ -70,9 +70,9 @@ begin
         if full = '1' then
             res(i) := '1';
         elsif cmpGtU(endP, startP) = '1' then
-            res(i) := cmpLeU(iv, startP) and cmpLtU(iv, endP);
+            res(i) := cmpGeU(iv, startP) and cmpLtU(iv, endP);
         else
-            res(i) := cmpLtU(iv, startP) and cmpLtU(iv, endP);
+            res(i) := cmpGeU(iv, startP) or cmpLtU(iv, endP);
         end if;
     end loop;
     

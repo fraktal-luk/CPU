@@ -17,7 +17,7 @@ constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');
 
 constant FETCH_WIDTH: positive := PIPE_WIDTH; 
 
-constant IBUFFER_SIZE: positive := 2*FETCH_WIDTH;
+constant IBUFFER_SIZE: positive := 5*FETCH_WIDTH;
 constant ROB_SIZE: positive := 8; 
 
 constant USE_LINE_PREDICTOR: boolean := true;
@@ -38,6 +38,9 @@ constant FREE_LIST_SIZE: positive := --N_PHYSICAL_REGS;
 
 -- Optimize immediate field by keeping part of it in physical register field
 constant IMM_AS_REG: boolean := true;
+
+    constant TMP_PARAM_COMPRESS_RETURN: boolean := false;
+    constant TMP_PARAM_COMPRESS_PTRS: boolean := false;
 
 end CoreConfig;
 

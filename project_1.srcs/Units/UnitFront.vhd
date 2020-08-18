@@ -61,7 +61,7 @@ architecture Behavioral of UnitFront is
 	
 	signal fetchedLine0, fetchedLine1: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0')); 
 	signal frontBranchEvent, killAll, killAllOrFront: std_logic := '0';
-	signal sendingToEarlyBranch, sendingToBuffer, fetchStall: std_logic := '0'; 
+	signal sendingToEarlyBranch, sendingToBQ, sendingToBuffer, fetchStall: std_logic := '0'; 
 	
 	signal frontCausingSig, earlyBranchIn: InstructionState := DEFAULT_INSTRUCTION_STATE;
 	signal predictedAddress: Mword := (others => '0');
@@ -71,7 +71,7 @@ architecture Behavioral of UnitFront is
     --                              earlyBranchMultiDataOutA UNUSED!
 	signal earlyBranchMultiDataInA, earlyBranchMultiDataOutA, ibufDataOut: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	
-	signal dataToBranchTransfer, dataBranchTransferOut: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+	signal dataToIbuffer, dataToBranchTransfer, dataBranchTransferOut: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	signal fetchCounter, fetchCounterNext: Word := (others => '0');
 begin
 	killAll <= execEventSignal or lateEventSignal;
@@ -201,14 +201,16 @@ begin
 	end process;
 	
 	sendingToBuffer <= sendingOutFetch1 and not fetchStall;
-	
+	   
+	   dataToIbuffer <= adjustStage(earlyBranchMultiDataInA);
+	   
 	SUBUNIT_IBUFFER: entity work.InstructionBuffer(Implem)
 	port map(
 		clk => clk, reset => resetSig, en => enSig,
 		
 		prevSending => sendingToBuffer,
 		nextAccepting => renameAccepting,
-		stageDataIn => earlyBranchMultiDataInA,
+		stageDataIn => dataToIbuffer,
 		
 		acceptingOut => bufferAccepting,
 		sendingOut => sendingOutBuffer,
@@ -226,9 +228,13 @@ begin
    
 	sendingToBranchTransfer <= sendingOutFetch1 and not fetchStall;
 
-	dataToBranchTransfer <= prepareForBQ(earlyBranchMultiDataInA);
+	dataToBranchTransfer <= prepareForBQ(--earlyBranchMultiDataInA);
+	                                      stageDataOutFetch1(0), dataToIbuffer);
 
-    bpData <= dataBranchTransferOut;
+    bpData <= --dataBranchTransferOut;
+                dataToBranchTransfer;
+    bpSending <= --sendingToBQ;
+                 sendingToBranchTransfer;
 
     SUBUNIT_BRANCH_TRANSFER: entity work.GenericStage(Behavioral)
 	generic map(
@@ -242,7 +248,7 @@ begin
 		stageDataIn => dataToBranchTransfer,
 		
 		acceptingOut => open,
-		sendingOut => bpSending,
+		sendingOut => sendingToBQ,
 		stageDataOut => dataBranchTransferOut,
 		
 		execEventSignal => killAll,

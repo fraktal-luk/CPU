@@ -150,6 +150,7 @@ constant SELECTION_FN_MAP_FLOAT: ForwardingMap := (
     maskM2 => "000"
 );
 
+function adjustStage(content: InstructionSlotArray) return InstructionSlotArray;
 
 function compactMask(vec: std_logic_vector) return std_logic_vector; -- WARNING: only for 4 elements
 --function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector;  PRIVATE
@@ -279,6 +280,34 @@ end package;
 
 
 package body PipelineGeneral is
+
+
+function adjustStage(content: InstructionSlotArray)
+return InstructionSlotArray is
+    constant LEN: positive := content'length;
+    variable res: InstructionSlotArray(0 to LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    variable contentExt: InstructionSlotArray(0 to 2*LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    variable fullMask: std_logic_vector(0 to LEN-1) := (others => '0');
+    variable nShift, j: integer := 0;
+begin
+    contentExt(0 to LEN-1) := content;
+    contentExt(LEN to 2*LEN-1) := (others => ('0', content(LEN-1).ins)); -- leave it instead of rotating
+    fullMask := extractFullMask(content);
+    nShift := getFirstOnePosition(fullMask);
+    if isNonzero(fullMask) = '0' then
+        nShift := 0;
+    end if; 
+    
+    for i in 0 to LEN-1 loop
+        res(i) := contentExt(nShift + i);
+    end loop;
+        
+        -- TMP!
+        res(0).ins.controlInfo.firstBr := content(0).ins.controlInfo.firstBr;
+        
+    return res;
+end function;
+
 
 function clearRawInfo(ins: InstructionState) return InstructionState is
     variable res: InstructionState := ins;

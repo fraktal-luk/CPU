@@ -48,11 +48,11 @@ end ReorderBuffer;
 architecture Behavioral of ReorderBuffer is
     signal outputDataReg: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal outputSpecialReg: InstructionSlot := DEFAULT_INS_SLOT;
-	signal fullMask, completedMask, completedMaskNext: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
+	signal fullMask, completedMask, completedMaskNext, killMask: std_logic_vector(0 to ROB_SIZE-1) := (others => '0');
 
     signal content, contentNext: ReorderBufferArray := DEFAULT_ROB_ARRAY;
 
-	signal isSending, isEmpty: std_logic := '0';
+	signal isSending, isEmpty, outputCompleted, outputEmpty: std_logic := '0';
 	signal execEvent: std_logic := '0'; -- depends on input in slot referring to branch ops
 
     constant ROB_HAS_RESET: std_logic := '0';
@@ -120,10 +120,13 @@ architecture Behavioral of ReorderBuffer is
        if CLEAR_DEBUG_INFO then
            for j in 0 to ROB_SIZE-1 loop
                for i in 0 to PIPE_WIDTH-1 loop
-                   -- Only controlInfo survives here! Other useful data is stored in separate mem array because the rest is immutable
+                   -- controlInfo survives here, other useful data is stored in separate mem array because the rest is immutable
                    newInsState := res(j).ops(i).ins;
                    res(j).ops(i).ins := DEFAULT_INSTRUCTION_STATE;
                    res(j).ops(i).ins.controlInfo := newInsState.controlInfo;
+                        -- CAREFUL: info aobut stores needed for StoreQueue
+                        res(j).ops(i).ins.classInfo.secCluster := newInsState.classInfo.secCluster;
+                        res(j).ops(i).ins.classInfo.useLQ := newInsState.classInfo.useLQ;
                end loop;
 
                    newInsState := res(j).special.ins;
@@ -142,6 +145,8 @@ architecture Behavioral of ReorderBuffer is
            for i in 0 to PIPE_WIDTH-1 loop
 	           res(i).ins := DEFAULT_INSTRUCTION_STATE;
 	           res(i).ins.controlInfo := insVec(i).ins.controlInfo;
+	               res(i).ins.classInfo.secCluster := insVec(i).ins.classInfo.secCluster;
+	               res(i).ins.classInfo.useLQ := insVec(i).ins.classInfo.useLQ;
 	       end loop;       
 	   end if;
 	
@@ -184,11 +189,14 @@ architecture Behavioral of ReorderBuffer is
 	signal constantBuf, constantBuf2, constantBuf3, mem0, mem1: WordArray(0 to ROB_SIZE-1) := (others => (others => '0'));
 	signal inputConstant, inputConstant2, inputConstant3, constantFromBuf, constantFromBuf2, constantFromBuf3, iw0, iw1, ow0, ow1: Word := (others => '0');
 	
+	   signal ch0, ch1, ch2, ch3: std_logic := '0';
+	
     attribute ram_style: string;
     --attribute ram_style of constantBuf, constantBuf2, constantBuf3: signal is "block";	
     --attribute ram_style of mem0, mem1: signal is "block";	
 begin
-
+            killMask <=  getMaskBetween(ROB_SIZE, causingPtr, endPtr, '0'); 
+            
 	execEvent <= execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
 	causingPtr <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
 	
@@ -301,6 +309,8 @@ begin
             completedMask <= completedMaskNext;
             outputDataReg <= content(slv2u(startPtrNext)).ops;
             outputSpecialReg <= content(slv2u(startPtrNext)).special;
+            
+                outputEmpty <= bool2std(startPtrNext = endPtr) or lateEventSignal; 
 		end if;		
 	end process;
  
@@ -320,14 +330,21 @@ begin
 	   
 	FULL_MASK: for i in 0 to ROB_SIZE-1 generate
 	   fullMask(i) <= content(i).full;
-       completedMaskNext(i) <= groupCompleted(content(i).ops) and fullMask(i) and not isEmpty and not lateEventSignal;
+       completedMaskNext(i) <= groupCompleted(content(i).ops) and fullMask(i)
+                                    and not isEmpty and not lateEventSignal;
 	end generate;
 	
-    isSending <= completedMask(slv2u(startPtr)) and nextAccepting and not isEmpty;
+	       outputCompleted <= groupCompleted(outputDataReg);
+	
+    isSending <=  --  completedMask(slv2u(startPtr)) and nextAccepting and not isEmpty when not TMP_PARAM_ROB_OUTPUT
+                --else  
+                    outputCompleted and nextAccepting and not outputEmpty;
+
+        ch0 <= bool2std(isSending = (outputCompleted and nextAccepting and not outputEmpty));
 
 	acceptingOut <= not isFull;
 	
-    acmPtr <= addIntTrunc(endPtr, 1, ROB_PTR_SIZE);
+    --acmPtr <= addIntTrunc(endPtr, 1, ROB_PTR_SIZE);
     acceptingMore <= not isAlmostFull;
 	outputData <= ( replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2, constantFromBuf3));
 

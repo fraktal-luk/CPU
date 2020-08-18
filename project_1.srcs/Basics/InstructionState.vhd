@@ -124,6 +124,7 @@ type InstructionClassInfo is record
 	secCluster: std_logic;
 	fpRename: std_logic; -- true if instruction is routed to FP renamer (NOTE, CHECK: Int renamer is used for all ops, even those that don't go to any IQ)
 	branchIns: std_logic;
+	useLQ: std_logic;
 end record;
 
 
@@ -190,7 +191,8 @@ constant DEFAULT_CLASS_INFO: InstructionClassInfo := (
                                     mainCluster => '0',
                                     secCluster => '0',
                                     fpRename => '0',
-                                    branchIns => '0'									
+                                    branchIns => '0',
+                                    useLQ => '0'									
                                   );
 
 
@@ -298,6 +300,13 @@ constant DEFAULT_SCH_ENTRY_SLOT: SchedulerEntrySlot := (full => '0',
                                                         state => DEFAULT_SCHEDULER_STATE);
 
 type SchedulerEntrySlotArray is array(integer range <>) of SchedulerEntrySlot;
+
+
+    
+subtype PipeStage is InstructionSlotArray(0 to PIPE_WIDTH-1);
+type PipeStageArray is array(natural range <>) of PipeStage;
+
+constant DEFAULT_PIPE_STAGE: PipeStage := (others => DEFAULT_INS_SLOT); 
 
 
 end InstructionState;

@@ -111,6 +111,13 @@ architecture Behavioral of UnitRegManager is
             res(i).ins.tags.intPointer := addInt(newIntDestPointer, countOnes(takeVecInt(0 to i)));
                                                                          -- Don't increment pointer on ops which use no destination!
             res(i).ins.tags.floatPointer := addInt(newFloatDestPointer, countOnes(takeVecFloat(0 to i)));
+            
+            if TMP_PARAM_COMPRESS_PTRS then -- replace every except slot 0 with offset from slot 0
+                if i > 0 then
+                    res(i).ins.tags.intPointer := i2slv(countOnes(takeVecInt(0 to i)), SMALL_NUMBER_SIZE);
+                    res(i).ins.tags.floatPointer := i2slv(countOnes(takeVecFloat(0 to i)), SMALL_NUMBER_SIZE);
+                end if;
+            end if;
         end loop;
 
         -- Setting 'complete' for ops not using Exec resources
@@ -124,6 +131,13 @@ architecture Behavioral of UnitRegManager is
             if found then
                 res(i).full := '0';
             end if;
+            
+            if res(i).full = '0' then
+                -- CAREFUL: needed for correct operation of StoreQueue + LQ
+                res(i).ins.classInfo.secCluster := '0';
+                res(i).ins.classInfo.useLQ := '0';            
+            end if;
+            
             if hasSyncEvent(res(i).ins) = '1' then
                 found := true;
             end if;
@@ -154,7 +168,9 @@ architecture Behavioral of UnitRegManager is
                 res(i).ins.controlInfo.orderViolation := '0';
                 res(i).ins.controlInfo.tlbMiss := '0';
                 res(i).ins.controlInfo.sqMiss := '0';
-                res(i).ins.controlInfo.firstBr := '0';
+                if i /= 0 then -- TMP!
+                    res(i).ins.controlInfo.firstBr := '0';
+                end if;
             end loop;           
         end if;
 
