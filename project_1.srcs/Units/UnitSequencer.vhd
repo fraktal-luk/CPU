@@ -99,7 +99,7 @@ architecture Behavioral of UnitSequencer is
     signal eventOccurred, killPC, eventCommitted, intCommitted, intSuppressed, lateEventSending: std_logic := '0';    
     signal intWaiting, addDbEvent, intAllow, intAck, dbtrapOn, restartPC: std_logic := '0';
     signal stageDataCommitInA, stageDataCommitOutA: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);    
-    signal stageDataToPC, tmpPcOutA, stageDataLastEffectiveInA,  stageDataLastEffectiveInA_T,  stageDataLastEffectiveOutA, stageDataLateCausingIn:
+    signal stageDataToPC, tmpPcOutA, stageDataLastEffectiveInA, stageDataLastEffectiveOutA, stageDataLateCausingIn:
                         InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal special: InstructionSlot := DEFAULT_INS_SLOT;
@@ -298,17 +298,9 @@ begin
         --            already committed.
         --            When committing a taken branch -> fill with target from BQ output
         --            When committing normal op -> increment by length of the op
-        --            The 'target' field will be used to update return address for exc/int
-        stageDataLastEffectiveInA_T(0) <= getNewEffective(sendingToCommit, robDataLiving, dataFromBQV, bqTargetData,
-                                                        stageDataLastEffectiveOutA(0).ins, stageDataLateCausingOut(0).ins, lateEventSending);
-                                                        
-                   stageDataLastEffectiveInA(0) <= getNewEffective2(sendingToCommit, robDataLiving, dataFromBQV, bqTargetData,
-                                                        stageDataLastEffectiveOutA(0).ins, stageDataLateCausingOut(0).ins, lateEventSending);
-                    
-                    
-                        ch0 <= bool2std(stageDataLastEffectiveInA(0).ins = stageDataLastEffectiveInA_T(0).ins) or not stageDataLastEffectiveInA(0).full;
-                        ch1 <= bool2std(stageDataLastEffectiveInA(0).ins.result = stageDataLastEffectiveInA_T(0).ins.result) or not stageDataLastEffectiveInA(0).full;
-                                                                                             
+        --            The 'target' field will be used to update return address for exc/int                             
+       stageDataLastEffectiveInA(0) <= getNewEffective(sendingToCommit, robDataLiving, dataFromBQV, bqTargetData,
+                                                       stageDataLastEffectiveOutA(0).ins, stageDataLateCausingOut(0).ins, lateEventSending);                                                                                   
         sendingToLastEffective <= sendingToCommit or lateEventSending;
     
         LAST_EFFECTIVE_SLOT: entity work.GenericStage(Behavioral)
@@ -344,20 +336,21 @@ begin
                 
                 if committingEvent = '1' then
                     eventCommitted <= '1';
-                        commitLocked <= '1';
+                    commitLocked <= '1';
                 end if;
+
                 if (intSignal and not committingEvent) = '1' then
                     intCommitted <= '1';
                     intTypeCommitted <= intType;
-                        commitLocked <= '1';
+                    commitLocked <= '1';
                 elsif (intSignal and committingEvent) = '1' then
                     intSuppressed <= '1';
-                        commitLocked <= '1';
+                    commitLocked <= '1';
                 end if;
                 
-                    if lateEventSending = '1' then
-                        commitLocked <= '0';
-                    end if;
+                if lateEventSending = '1' then
+                    commitLocked <= '0';
+                end if;
             end if;
         end process;
         
@@ -406,8 +399,7 @@ begin
     commitGroupCtrOut <= commitGroupCtr;
     commitGroupCtrIncOut <= commitGroupCtrInc;
     
-    commitAccepting <= --not eventCommitted and not intCommitted and not lateEventSending; -- Blocked while procesing event
-                       not commitLocked; 
+    commitAccepting <= not commitLocked; -- Blocked while procesing event
                         
     doneSig <= eventCommitted and bool2std(special.ins.specificOperation.system = opSend);
     failSig <= eventCommitted and bool2std(special.ins.specificOperation.system = opError);

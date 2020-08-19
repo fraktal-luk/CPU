@@ -27,7 +27,7 @@ function newPCData( commitEvent: std_logic; commitCausing: InstructionState;
 						  pcNext: Mword)
 return InstructionState;
 
--- Unifies content of ROB slot with BQ, others queues etc. to restore full state needed at Commit
+-- Unifies content of ROB slot with BQ, other queues etc. to restore full state at Commit
 function recreateGroup(insVec: InstructionSlotArray; bqGroup: InstructionSlotArray; prevTarget: Mword; commitCtr32: Word)
 return InstructionSlotArray;
 
@@ -36,11 +36,6 @@ return InstructionSlotArray;
 function clearControlEvents(ins: InstructionState) return InstructionState;
 
 function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray; bqTargetData: InstructionSlot;
-								 lastEffectiveIns, lateTargetIns: InstructionState;
-								 evtPhase2: std_logic)
-return InstructionSlot;
-
-function getNewEffective2(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray; bqTargetData: InstructionSlot;
 								 lastEffectiveIns, lateTargetIns: InstructionState;
 								 evtPhase2: std_logic)
 return InstructionSlot;
@@ -212,115 +207,34 @@ function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV:
 return InstructionSlot is
 	variable res: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	variable insToLastEffective: InstructionState;	
-	variable branchTarget: Mword := lastEffectiveIns.target;
 	variable targetInc: Mword := (others => '0');
-	variable lastConfirmedBranchInd, lastEffectiveInd: std_logic_vector(LOG2_PIPE_WIDTH downto 0) := (others => '0');
-begin
-    lastConfirmedBranchInd := i2slv(-1, LOG2_PIPE_WIDTH+1);
-	insToLastEffective := getLastEffective(robDataLiving);
-	
-	if evtPhase2 = '1' then
-	   res := ('1', lateTargetIns);
-	   return res;
-	end if;
-	
-    res := (sendingToCommit, insToLastEffective);	
-
-    for i in robDataLiving'range loop
-        if robDataLiving(i).full = '1' then
-            lastEffectiveInd := i2slv(i, LOG2_PIPE_WIDTH+1);
-        end if;			
-    end loop;
-    
-    -- Find taken jumps in BQ group and select last as target
-    branchTarget := lastEffectiveIns.target;
-    -- Now last effective and taken target from BQ
-    for i in 0 to PIPE_WIDTH-1 loop        
-        if dataFromBQV(i).full = '1' and dataFromBQV(i).ins.controlInfo.confirmedBranch = '1' then
-            branchTarget := dataFromBQV(i).ins.target;
-            lastConfirmedBranchInd := '0' & dataFromBQV(i).ins.tags.renameIndex(LOG2_PIPE_WIDTH-1 downto 0);  
-        end if;
-    end loop;
-    
-    -- CAREFUL: works only for 32b instructions
-    targetInc(LOG2_PIPE_WIDTH + 2 downto 2) := sub(lastEffectiveInd, lastConfirmedBranchInd);
-    
-    res.ins.target := add(branchTarget, targetInc);
-    
-    if CLEAR_DEBUG_INFO then
-        res.ins.ip := (others => '0');
-        res.ins.bits := (others => '0');
-        res.ins.virtualArgSpec := DEFAULT_ARG_SPEC;
-        res.ins.physicalArgSpec := DEFAULT_ARG_SPEC;
-        
-        res.ins.classInfo := DEFAULT_CLASS_INFO;
-        res.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
-        
-        res.ins.specificOperation.arith := ArithOp'(opAnd);
-        res.ins.specificOperation.memory := MemOp'(opLoad);
-        res.ins.specificOperation.float := FpOp'(opMove);
-        
-        res.ins.tags := DEFAULT_INSTRUCTION_TAGS;
-    end if;    
-	return res;
-end function;
-
-function getNewEffective2(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray; bqTargetData: InstructionSlot;
-						 lastEffectiveIns, lateTargetIns: InstructionState; evtPhase2: std_logic)
-return InstructionSlot is
-	variable res: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-	variable insToLastEffective: InstructionState;	
-	variable branchTarget: Mword := lastEffectiveIns.target;
-	variable targetInc: Mword := (others => '0');
-	variable lastConfirmedBranchInd, lastEffectiveInd: std_logic_vector(LOG2_PIPE_WIDTH downto 0) := (others => '0');
 	variable anyConfirmed: boolean := false;
 begin
-    lastConfirmedBranchInd := i2slv(-1, LOG2_PIPE_WIDTH+1);
 	insToLastEffective := getLastEffective(robDataLiving);
-	
-	   for i in PIPE_WIDTH-1 downto 0 loop
-	       if robDataLiving(i).full = '1' then
-	           targetInc := i2slv(4*(i+1), MWORD_SIZE);  -- CAREFUL: only for 4b instructions
-	           exit;
-	       end if;
-	   end loop;
-	   
-	   for i in 0 to PIPE_WIDTH-1 loop 
-	       if dataFromBQV(i).full = '1' and dataFromBQV(i).ins.controlInfo.confirmedBranch = '1' then
-	           anyConfirmed := true;
-	       end if;
-	   end loop;
+
+    for i in PIPE_WIDTH-1 downto 0 loop
+        if robDataLiving(i).full = '1' then
+            targetInc := i2slv(4*(i+1), MWORD_SIZE);  -- CAREFUL: only for 4b instructions
+            exit;
+        end if;
+    end loop;
+   
+    for i in 0 to PIPE_WIDTH-1 loop 
+        if dataFromBQV(i).full = '1' and dataFromBQV(i).ins.controlInfo.confirmedBranch = '1' then
+            anyConfirmed := true;
+        end if;
+    end loop;
 	   
 	if evtPhase2 = '1' then
-	   res := ('1', lateTargetIns);
-	   return res;
+	   return ('1', lateTargetIns);
 	end if;
 	
-    res := (sendingToCommit, insToLastEffective);	
+    res := (sendingToCommit, insToLastEffective);
 
---    for i in robDataLiving'range loop
---        if robDataLiving(i).full = '1' then
---            lastEffectiveInd := i2slv(4*i, LOG2_PIPE_WIDTH+1); -- CAREFUL: only for 4b instructions
---        end if;			
---    end loop;
-    
-    -- Find taken jumps in BQ group and select last as target
-    branchTarget := lastEffectiveIns.target;
---    -- Now last effective and taken target from BQ
---    for i in 0 to PIPE_WIDTH-1 loop        
---        if dataFromBQV(i).full = '1' and dataFromBQV(i).ins.controlInfo.confirmedBranch = '1' then
---            --branchTarget := dataFromBQV(i).ins.target;
---            lastConfirmedBranchInd := '0' & dataFromBQV(i).ins.tags.renameIndex(LOG2_PIPE_WIDTH-1 downto 0);  
---        end if;
---    end loop;
-    
-    -- CAREFUL: works only for 32b instructions
-    --targetInc(LOG2_PIPE_WIDTH + 2 downto 2) := sub(lastEffectiveInd, lastConfirmedBranchInd);
-    
     if bqTargetData.full = '1' and anyConfirmed then -- TODO, CHECK: bqTargetData.full will always be '1' if anyConfirmed?
         res.ins.target := bqTargetData.ins.target;
     else
-        res.ins.target := add(branchTarget, targetInc);        
+        res.ins.target := add(lastEffectiveIns.target, targetInc);        
     end if;
     
     if CLEAR_DEBUG_INFO then
