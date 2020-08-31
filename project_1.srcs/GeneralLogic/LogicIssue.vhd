@@ -29,9 +29,7 @@ return SchedulerEntrySlot;
 
 function iqContentNext(queueContent: SchedulerEntrySlotArray; inputDataS: SchedulerEntrySlotArray;
 								 remainMask, fullMask, livingMask, selMask, issuedMask: std_logic_vector;
-								 sends, sent: std_logic;
-								 sentUnexpected,
-								 prevSending: std_logic)
+								 sends, sent, sentUnexpected, prevSending: std_logic)
 return SchedulerEntrySlotArray;
 
 
@@ -369,9 +367,7 @@ end function;
 
 function iqContentNext(queueContent: SchedulerEntrySlotArray; inputDataS: SchedulerEntrySlotArray;
 								 remainMask, fullMask, livingMask, selMask, issuedMask: std_logic_vector;
-								 sends, sent: std_logic;
-								 sentUnexpected,
-								 prevSending: std_logic)
+								 sends, sent, sentUnexpected, prevSending: std_logic)
 return SchedulerEntrySlotArray is
 	constant QUEUE_SIZE: natural := queueContent'length;
 	variable res: SchedulerEntrySlotArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT); 	
@@ -458,11 +454,6 @@ begin
            --  These ptrs are kept in BQ
            res(i).ins.tags.intPointer := (others => '0');
            res(i).ins.tags.floatPointer := (others => '0');
-               
-           --res(i).ins.classInfo.branchIns := '0';
-           --res(i).ins.controlInfo.frontBranch := '0';
-           --res(i).ins.controlInfo.confirmedBranch := '0';
-           --res(i).ins.controlInfo.specialAction := '0';
 
            res(i).ins.controlInfo := DEFAULT_CONTROL_INFO;
 

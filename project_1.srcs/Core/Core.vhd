@@ -529,7 +529,7 @@ begin
           
             branchData <= basicBranch(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins);                  
             
-            dataToBranch(0) <= (slotIssueI0.full and isBranchIns(slotIssueI0.ins), branchData);
+            dataToBranch(0) <= (slotIssueI0.full and not sentCancelledI0 and isBranchIns(slotIssueI0.ins), branchData);
             sendingBranchIns <= dataToBranch(0).full;
             
             bqCompare <= (sendingBranchIns, slotIssueI0.ins);
@@ -772,6 +772,7 @@ begin
             signal dataToStoreValueIQ, dataToStoreValueFloatIQ:
                         SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);             
             signal fmaIntSV, fmaFloatSV: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
+            signal sendingToRegReadI, sendingToRegReadF: std_logic := '0';
         begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
 
@@ -836,7 +837,9 @@ begin
                 fni => fniEmpty,
                 regValues => (others => (others => '0'))   
             );
-    
+            
+                sendingToRegReadI <= dataToRegReadStoreValue.full and not sentCancelledSVI;
+            
             REG_READ_STAGE_SV: entity work.IssueStage
             generic map(USE_IMM => false, REGS_ONLY => true)
             port map(
@@ -844,7 +847,7 @@ begin
                 reset => '0',
                 en => '0',
         
-                prevSending => dataToRegReadStoreValue.full,
+                prevSending => sendingToRegReadI,
                 nextAccepting => '1',
         
                 input => dataToRegReadStoreValue,
@@ -913,6 +916,8 @@ begin
                 fni => fniEmpty,
                 regValues => (others => (others => '0'))   
             );        
+
+                sendingToRegReadF <= dataToRegReadFloatStoreValue.full and not sentCancelledSVF;
     
             REG_READ_STAGE_FLOAT_SV: entity work.IssueStage
             generic map(USE_IMM => false, REGS_ONLY => true)
@@ -921,7 +926,7 @@ begin
                 reset => '0',
                 en => '0',
         
-                prevSending => dataToRegReadFloatStoreValue.full,
+                prevSending => sendingToRegReadF,
                 nextAccepting => '1',
         
                 input => dataToRegReadFloatStoreValue,
