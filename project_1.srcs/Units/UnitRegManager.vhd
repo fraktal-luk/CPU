@@ -14,6 +14,7 @@ use work.ArchDefs.all;
 use work.InstructionState.all;
 use work.CoreConfig.all;
 use work.PipelineGeneral.all;
+use work.LogicRenaming.all;
 
 
 entity UnitRegManager is
@@ -55,7 +56,7 @@ architecture Behavioral of UnitRegManager is
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG; -- This is rewinded on events
     signal renameCtr, renameCtrNext: Word := (others => '0');
 
-    signal newIntDests, newFloatDests, physStableInt, physStableFloat: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+    signal newIntDests, newFloatDests, assignedDests, assignedDestsInt, assignedDestsFloat, physStableInt, physStableFloat: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal newIntDestPointer, newFloatDestPointer: SmallNumber := (others => '0');
     signal newIntSources, newFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
     
@@ -200,7 +201,7 @@ architecture Behavioral of UnitRegManager is
     
     function renameGroupInt(insVec: InstructionSlotArray;
                                 newPhysSources: PhysNameArray;
-                                newIntDests: PhysNameArray;
+                                --newIntDests: PhysNameArray;
                                 depVec: DependencyVec
                                 ) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
@@ -237,7 +238,7 @@ architecture Behavioral of UnitRegManager is
  
     function renameGroupFloat(insVec: InstructionSlotArray;
                                 newFloatSources: PhysNameArray;
-                                newFloatDests: PhysNameArray;
+                                --newFloatDests: PhysNameArray;
                                 depVec: DependencyVec
                                 ) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
@@ -303,9 +304,26 @@ begin
                                     '0' --dbtrapOn
                                     );
 
-    stageDataRenameIn <=        renameGroupInt(     renamedBase, newIntSources,   newIntDests,   depVec);  -- TODO: dests already assigned in renameGroupBase - remove here? 
-    stageDataRenameInFloat <=   renameGroupFloat(   renamedBase, newFloatSources, newFloatDests, depVec); -- like above
+    stageDataRenameIn <=        renameGroupInt(     renamedBase, newIntSources,   --newIntDests,
+                                                                                       depVec);  -- TODO: dests already assigned in renameGroupBase - remove here? 
+    stageDataRenameInFloat <=   renameGroupFloat(   renamedBase, newFloatSources, --newFloatDests,
+                                                                                       depVec); -- like above
     -- TODO: ^ or assign dests above, not in renameGroupBase, to keep Int and FP path separate, and merge them ony when going to ROB - it could be good for layout
+
+            
+    assignedDests <= getPhysicalDests(renamedBase); 
+    
+    DEST_MOVE_NO: if not TMP_PARAM_DEST_MOVE generate
+        assignedDestsFloat <= newFloatDests;
+        assignedDestsInt <= newIntDests;    
+    end generate;
+    
+    DEST_MOVE_YES: if TMP_PARAM_DEST_MOVE generate
+        assignedDestsFloat <= assignedDests;
+        assignedDestsInt <= assignedDests;    
+    end generate;
+
+
                                                                                                                             
     SUBUNIT_RENAME_INT: entity work.GenericStage(Behavioral)--Renaming)
     generic map(
@@ -435,7 +453,7 @@ begin
         
         sendingToReserve => frontLastSending,
         stageDataToReserve => frontDataLastLiving,
-        newPhysDests => newIntDests,    -- MAPPING (from FREE LIST)
+        newPhysDests => assignedDestsInt,    -- MAPPING (from FREE LIST)
         
         sendingToCommit => sendingFromROB,
         stageDataToCommit => stageDataToCommit,
@@ -458,7 +476,7 @@ begin
         
         sendingToReserve => frontLastSending,
         stageDataToReserve => frontDataLastLiving,
-        newPhysDests => newFloatDests,    -- MAPPING (from FREE LIST)
+        newPhysDests => assignedDestsFloat,    -- MAPPING (from FREE LIST)
         
         sendingToCommit => sendingFromROB,
         stageDataToCommit => stageDataToCommit,
