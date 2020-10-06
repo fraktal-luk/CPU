@@ -259,7 +259,9 @@ begin
     commitCtrNext <= addInt(commitCtr, countOnes(extractFullMask(robDataLiving))) when sendingToCommit = '1' else commitCtr;
     
     COMMIT_STAGE: if VIEW_ON generate
-        
+       use std.textio.all;
+       use work.Viewing.all;
+       file outFile: text open write_mode is COMMITTED_FILE; 
     begin
         stageDataToCommit <= recreateGroup(robDataLiving, dataFromBQV, stageDataLastEffectiveOutA(0).ins.target, commitCtr);
 
@@ -286,6 +288,18 @@ begin
             lateEventSignal => '0',    
             execCausing => execCausing
         );
+        
+        PRINTOUT: process (clk)
+        begin
+            if rising_edge(clk) then
+                if DEBUG_LOG_COMMITTED then
+                    if sendingToCommit = '1' then
+                        printGroup(stageDataToCommit, outFile);
+                    end if;
+                end if;
+            end if;
+        end process;
+        
     end generate;
 
 

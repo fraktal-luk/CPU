@@ -165,7 +165,8 @@ begin
 	-- Take branch targets to correct places
 	for i in 0 to PIPE_WIDTH-1 loop
 		if bqGroup(i).full = '1' then
-			ind := slv2u(getTagLow(bqGroup(i).ins.tags.renameIndex));
+			ind := --slv2u(getTagLow(bqGroup(i).ins.tags.renameIndex));
+			       i;  
 			targets(ind) := bqGroup(i).ins.target;
 			confBr(ind) := '1';
 		end if;

@@ -695,7 +695,7 @@ function disasmWithAddress(a: natural; w: Word) return string is
 begin
     -- synthesis translate_off   
     res(1 to 8) := w2hex(aw);
-    res(1 + 8 to 1 + 9) := ": "; res(10) := cr;
+    res(1 + 8 to 1 + 9) := ": "; res(10) := ' ';--cr;
     res(11 to 18) := w2hex(w);
     res(19 to 21) := "   ";
     res(22 to 22 + 24-1) := disasmWord(w);
@@ -709,7 +709,7 @@ procedure disasmToFile(name: string; arr: WordArray) is
     file outFile: text open write_mode is name;
     variable outputLine: line;
     variable tmpStr: string(1 to 51);
-begin                            
+begin
     for i in 0 to arr'length-1 loop 
        tmpStr := disasmWithAddress(i, arr(i));
        write(outputLine, tmpStr); 
