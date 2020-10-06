@@ -30,7 +30,7 @@ use work.CoreConfig.all;
 use work.Helpers.all;
 
 use work.Assembler.all;
-
+use work.Emulate.all;
 
 ENTITY CoreTB IS
 END CoreTB;

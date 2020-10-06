@@ -82,14 +82,14 @@ constant OPCONT_TABLE_EXT0: OpcontArray := (
       8 => divs,     -- 001000
       9 => divu,     -- 001001
     
-    others => none 
+    others => undef 
 );
 
 constant OPCONT_TABLE_EXT1: OpcontArray := (
       0 => jzR,   -- 000000
       1 => jnzR,    -- 000001
     
-    others => none 
+    others => undef 
 );
 
 constant OPCONT_TABLE_EXT2: OpcontArray := (
@@ -105,14 +105,14 @@ constant OPCONT_TABLE_EXT2: OpcontArray := (
       8 => mfc,     -- 001000
       9 => mtc,     -- 001001
 
-    others => none 
+    others => undef 
 );
 
 constant OPCONT_TABLE_FP: OpcontArray := (
        0 => fmov,    -- 000000
        1 => forr,    -- 000001
 
-    others => none 
+    others => undef 
 );
 
 
