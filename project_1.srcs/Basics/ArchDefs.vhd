@@ -142,7 +142,7 @@ type ProcOpcont is ( -- ALU functions
 							divu,
 							
 							-- ext1:
-							-- mem
+							--mem
 							store,
 							load,
 								
