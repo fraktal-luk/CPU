@@ -114,6 +114,9 @@ ARCHITECTURE Behavior OF CoreTB IS
 	
     signal testProgram: WordArray(0 to 1023);
     signal testToDo, testDone, testFail: std_logic := '0';
+    
+    signal currentTest, currentSuite: string(1 to 20);
+    
 BEGIN
 
    -- Instantiate the Unit Under Test (UUT)
@@ -197,6 +200,11 @@ BEGIN
               report "Now to run: " & testName.all;
               progB := readSourceFile(testName.all & ".txt");
               machineCode <= processProgram(progB);
+
+                    currentSuite <= (others => ' ');
+                    currentTest <= (others => ' ');
+                    currentSuite(1 to suiteName.all'length) <= suiteName.all;
+                    currentTest(1 to testName.all'length) <= testName.all;
                
               wait until rising_edge(clk);
               

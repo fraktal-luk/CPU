@@ -63,7 +63,7 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
     add_i, add_r,
            sub_r,
     
-    shl_i, shl_r, -- direction defined by sift value, not opcode 
+    shl_i, shl_r, -- direction defined by shift value, not opcode 
     sha_i, sha_r, --   
     
     mul, mulh_s, mulh_u,
