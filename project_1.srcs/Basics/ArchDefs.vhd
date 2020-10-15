@@ -239,7 +239,7 @@ begin
 		when ext0 =>
 			return andR;
 		when ext1 =>
-			return store;
+			return jzR;
 		when ext2 =>
 			return retE;
 		when fop =>

@@ -266,7 +266,10 @@ type InternalOperation is record
     
 end record;
 
+function defaultInternalOp return InternalOperation;
 
+constant DEFAULT_INTERNAL_OPERATION: InternalOperation := defaultInternalOp;
+constant DEFAULT_INTERNAL_OP: InternalOperation := DEFAULT_INTERNAL_OPERATION;
 
 
     -- TMP
@@ -280,6 +283,12 @@ end package;
 
 
 package body Emulate is
+
+function defaultInternalOp return InternalOperation is
+    variable res: InternalOperation;
+begin
+    return res;
+end function;
 
 
 function bin2opcode(v: std_logic_vector(5 downto 0)) return ProcOpcode is
@@ -424,6 +433,8 @@ begin
     end if;
     if fmt.arg2inA = '1' then
         res.intSources(2) := qa;
+            res.intSources(0) := (others => '0');
+            --res.floatSources(0) := (others => '0');
     end if;
     
     res.floatSources := res.intSources;
@@ -524,11 +535,11 @@ procedure memWriteWord(signal memory: inout ByteArray; address: in Mword; data: 
     variable bytes: ByteArray(0 to 3);    
 begin
     for i in 3 downto 0 loop
-        bytes(i) := data(8*i + 7 downto 8*i);
+        bytes(3-i) := data(8*i + 7 downto 8*i); -- Big endian!
     end loop;
 
-    for i in 0 downto 3 loop
-        memory(index + i) <= bytes(i);
+    for i in 0 to 3 loop
+        memory(index + i) <= bytes(i);        
     end loop;
 end procedure;
 
@@ -538,10 +549,10 @@ procedure memWriteDword(signal memory: inout ByteArray; address: in Mword; data:
     variable bytes: ByteArray(0 to 7);    
 begin
     for i in 7 downto 0 loop
-        bytes(i) := data(8*i + 7 downto 8*i);
+        bytes(7-i) := data(8*i + 7 downto 8*i); -- Big endian!
     end loop;
 
-    for i in 0 downto 7 loop
+    for i in 0 to 7 loop
         memory(index + i) <= bytes(i);
     end loop;
 end procedure;
@@ -637,7 +648,7 @@ begin
         when sub => intResult := sub(ia0, ia1);
         
         
-        when jl => intResult := incrementedIP;
+        when j | jl | jz | jnz => intResult := incrementedIP;
 
         
         -- FP
@@ -667,6 +678,7 @@ end procedure;
 -- TODO: add exceptions etc
 procedure calculateNextIP(intArgs: in MwordArray; op: in InternalOperation; signal nextIP: out Mword) is
     variable takenJump: boolean := false;
+    variable target: Mword;
 begin
     if op.isJump = '1' then
         case op.operation is
@@ -679,12 +691,18 @@ begin
             when others =>
         end case;
     end if;
-
+    
+    
+    if op.hasImm = '1' then
+        target := add(op.ip, intArgs(1));
+    else
+        target := intArgs(1);
+    end if;
         
     if false then -- events
     
     elsif takenJump then 
-        nextIP <= add(op.ip, intArgs(1));
+        nextIP <= target;
     else
         nextIP <= addInt(op.ip, 4);
     end if;
@@ -694,8 +712,62 @@ end procedure;
 
 
 
--- TEMP Maybe change to use abstract operation type, add side effects
+--    alias currentState is sysRegArray(1);
+--    alias linkRegExc is sysRegArray(2);
+--    alias linkRegInt is sysRegArray(3);
+--    alias savedStateExc is sysRegArray(4);
+--    alias savedStateInt is sysRegArray(5);
+
+procedure performSystemOp(op: in InternalOperation; thisIP: in Mword; incIP: in Mword; excSignal, intSignal: in std_logic; signal sysRegs: inout MwordArray; signal nextIP: out Mword) is
+    variable exc: boolean := std2bool(excSignal);
+    variable int: boolean := std2bool(intSignal);
+begin
+    case op.operation is
+        when retE =>
+            nextIP <= sysRegs(2);
+            sysRegs(1) <= sysRegs(4); -- Restoring to Saved State
+        when retI =>
+            nextIP <= sysRegs(3);
+            sysRegs(1) <= sysRegs(5); -- Restoring to Saved State        
+        when halt =>
+            -- TODO
+            
+        when sync =>
+            nextIP <= incIP;
+           
+        when replay =>
+            nextIP <= thisIP;
+           
+        when error =>
+            nextIP <= EXC_BASE;
+            
+        when call =>
+            nextIP <= CALL_BASE;
+            exc := true;
+            
+        when send =>
+            nextIP <= incIP;
+
+        when undef =>        
+            nextIP <= EXC_BASE; -- ???
+            exc := true;
+            
+        when others =>
+    end case;
+    
+    if exc then
+        sysRegs(2) <= thisIP;
+        sysRegs(4) <= sysRegs(1);
+    elsif int then
+        sysRegs(3) <= thisIP;
+        sysRegs(5) <= sysRegs(1);
+    end if;
+end procedure;
+
+
+
 procedure performOp(signal state: inout CoreState; signal memory: inout ByteArray; op: in InternalOperation; signal outSigs: out std_logic_vector(0 to 2)) is
+    constant thisIP: Mword := op.ip;
     constant incrementedIP: Mword := addInt(op.ip, 4);
     variable intArgs: MwordArray(0 to 2);
     variable fpArgs:  MwordArray(0 to 2);
@@ -712,8 +784,14 @@ begin
     -- Mem reading
     if op.isMemLoad = '1' then
         memValue := memReadMword(memory, address);
+        if op.hasFloatDest = '1' then
+            fpRes := memValue;
+        elsif op.hasIntDest = '1' then
+            intRes := memValue;
+        end if;
     elsif op.isSysLoad = '1' then
         memValue := state.sysRegs(slv2u(address)); -- TODO: handle out of range?
+        intRes := memValue;
     end if;
     
     -- Postprocessing
@@ -729,16 +807,34 @@ begin
     
     -- Mem store
     if op.isMemStore = '1' then
-        memWriteMword(memory, address, intArgs(2));
+             --   report "Writing " & integer'image(slv2u(address)) & "  " & integer'image(slv2u(intArgs(2))); 
+            
+        if op.operation = stf then
+            memWriteMword(memory, address, fpArgs(2));
+        else
+            memWriteMword(memory, address, intArgs(2));
+        end if;
     elsif op.isSysStore = '1' then
-        state.sysRegs(slv2u(address)) <= intArgs(1);
+        state.sysRegs(slv2u(address)) <= intArgs(2);
     end if;
     
     -- Update IP and sys regs
     
     calculateNextIP(intArgs, op, state.nextIP);
     
+    performSystemOp(op, thisIP, incrementedIP,
+                        '0', '0',  -- TODO: Exec exception, interrupt 
+                        state.sysRegs, state.nextIP);
+
     outSigs <= (others => '0');
+
+        -- TMP
+        if op.operation = error then
+            outSigs <= "100";
+        elsif op.operation = send then
+            outSigs <= "001";
+        end if;
+    
 end procedure;
 
 
