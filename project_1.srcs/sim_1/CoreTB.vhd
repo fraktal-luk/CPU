@@ -76,6 +76,10 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal clk : std_logic := '0';
     signal reset : std_logic := '0';
     signal en : std_logic := '0';
+    
+    
+    -- CPU ports
+    -- Inputs
     signal ivalid : std_logic := '0';
     signal iin : WordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal intallow, intack: std_logic := '0';
@@ -99,18 +103,16 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal iadrvalid : std_logic;
     signal iadr : std_logic_vector(31 downto 0);
     signal oaux : std_logic_vector(31 downto 0);
+	-- end CP ports
 	
-	signal memReadDone, memReadDonePrev, memWriteDone: std_logic := '0';
-	signal memReadValue, memReadValuePrev, memWriteAddress, memWriteValue: Mword := (others => '0');
+	
 
-	signal dataMem: WordArray(0 to 255) := (
-					others => (others => '0'));
-    
     signal resetDataMem: std_logic := '0';
     
     -- Clock period definitions
     constant clk_period : time := 10 ns;
-	--signal memEn: std_logic := '0';
+
+    constant TIME_STEP: time := 1 ns; -- for 1 instruction in emulation
 
  
 	signal prog: ProgramBuffer;
@@ -121,13 +123,20 @@ ARCHITECTURE Behavior OF CoreTB IS
     
     signal currentTest, currentSuite: string(1 to 20);
 
-    constant TIME_STEP: time := 1 ns;
     
     signal programMemory: WordArray(0 to 1023);
     signal dataMemory: ByteArray(0 to 4095);
     
-    signal instructionWord: Mword;
-    signal disasm: string(1 to 51);
+    --signal instructionWord: Mword;
+    --signal disasm: string(1 to 51);
+
+    type Instruction is record
+        address: Mword;
+        bits: Word;
+        disasm: string(1 to 51);
+    end record;
+    
+    signal currentInstruction: Instruction;
     
     
     signal cpuState: CoreState := INIT_CORE_STATE;
@@ -137,7 +146,7 @@ ARCHITECTURE Behavior OF CoreTB IS
         signal opFlags: std_logic_vector(0 to 2);
         
     signal okFlag, errorFlag: std_logic := '0';
-    
+
 BEGIN
 
     okFlag <= bool2std(opFlags = "001");
@@ -233,9 +242,11 @@ BEGIN
                     currentSuite(1 to suiteName.all'length) <= suiteName.all;
                     currentTest(1 to testName.all'length) <= testName.all;
 
-                        instructionWord <= (others => 'U');
+                        --instructionWord <= (others => 'U');
                         internalOp <= DEFAULT_INTERNAL_OP;
-                        disasm <= (others => ' ');
+                        --disasm <= (others => ' ');
+                        currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '));
+                        
 						opFlags <= (others => '0');
 						cpuState <= INIT_CORE_STATE;
 						dataMemory <= (others => (others => '0'));
@@ -260,10 +271,14 @@ BEGIN
 
                 if CORE_SIMULATION then
                       testToDo <= '1';
-                      int0b <= '1';
+                      int0b <= '1';                      
                       wait until rising_edge(clk);
                       testToDo <= '0';
                       int0b <= '0';
+                end if;
+                
+                if EMULATION then
+                    wait for TIME_STEP;
                 end if;
             
               disasmToFile(testName.all & "_disasm.txt", testProgram);
@@ -275,10 +290,12 @@ BEGIN
                     -- Now doing the actual test 
                     while opFlags /= "100" and opFlags /= "001" loop -- ERROR or SEND (completed)
                         insWordVar := programMemory(slv2u(cpuState.nextIP)/4);
-                        instructionWord <= insWordVar;
+                        --instructionWord <= insWordVar;
                         intOpVar := decode(cpuState.nextIP, insWordVar);
                         internalOp <= intOpVar;
-                        disasm <= disasmWithAddress(slv2u(cpuState.nextIP), programMemory(slv2u(cpuState.nextIP)/4));
+                        --disasm <= disasmWithAddress(slv2u(cpuState.nextIP), programMemory(slv2u(cpuState.nextIP)/4));
+                        
+                            currentInstruction <= (cpuState.nextIP, insWordVar,  disasmWithAddress(slv2u(cpuState.nextIP), programMemory(slv2u(cpuState.nextIP)/4)));
                         
                         performOp(cpuState, dataMemory, intOpVar, opFlags);
                                           
@@ -305,12 +322,26 @@ BEGIN
                 
               wait until rising_edge(clk);
           end loop;
+          
           report "All tests in suite done!";
+          
+          wait until rising_edge(clk);
+                    
       
       end loop;
           
       report "All suites done!";
+      currentSuite <= (others => ' ');
+      currentTest <= (others => ' ');
 
+        internalOp <= DEFAULT_INTERNAL_OP;
+        --disasm <= (others => ' ');
+        currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '));
+        
+        opFlags <= (others => '0');
+        cpuState <= INIT_CORE_STATE;
+        dataMemory <= (others => (others => '0'));
+      
       wait until rising_edge(clk);
       
       report "Run exception tests";
@@ -461,33 +492,39 @@ BEGIN
 	end process;	
 
 
-	DATA_MEM: process (clk)
-	begin
-		if rising_edge(clk) then
-		    if resetDataMem = '1' then
-		        dataMem <= (others => (others => '0'));
-			elsif en = '1' then			
-				-- TODO: define effective address exact size
-			
-				-- Reading
-				memReadDone <= dread;
-				memReadDonePrev <= memReadDone;
-				memReadValue <= dataMem(slv2u(dadr(MWORD_SIZE-1 downto 2))) ;-- CAREFUL: pseudo-byte addressing 
-				memReadValuePrev <= memReadValue;	
-				
-				-- Writing
-				memWriteDone <= dwrite;
-				memWriteValue <= dout;
-				memWriteAddress <= doutadr;
-				if dwrite = '1' then
-					dataMem(slv2u(doutadr(MWORD_SIZE-1 downto 2))) <= dout; -- CAREFUL: pseudo-byte addressing		
-				end if;
-				
-			end if;
-		end if;	
-	end process;
-
-	din <= memReadValue;
-	dvalid <= memReadDone;
-	
+    DATA_MEM: block
+        signal memReadDone, memReadDonePrev, memWriteDone: std_logic := '0';
+        signal memReadValue, memReadValuePrev, memWriteAddress, memWriteValue: Mword := (others => '0');
+        signal dataMem: WordArray(0 to 255) := (others => (others => '0'));
+    begin
+        SYNCH: process (clk)
+        
+        begin
+            if rising_edge(clk) then
+                if resetDataMem = '1' then
+                    dataMem <= (others => (others => '0'));
+                elsif en = '1' then			
+                    -- TODO: define effective address exact size
+                
+                    -- Reading
+                    memReadDone <= dread;
+                    memReadDonePrev <= memReadDone;
+                    memReadValue <= dataMem(slv2u(dadr(MWORD_SIZE-1 downto 2))) ;-- CAREFUL: pseudo-byte addressing 
+                    memReadValuePrev <= memReadValue;	
+                    
+                    -- Writing
+                    memWriteDone <= dwrite;
+                    memWriteValue <= dout;
+                    memWriteAddress <= doutadr;
+                    if dwrite = '1' then
+                        dataMem(slv2u(doutadr(MWORD_SIZE-1 downto 2))) <= dout; -- CAREFUL: pseudo-byte addressing		
+                    end if;
+                    
+                end if;
+            end if;	
+        end process;
+    
+        din <= memReadValue;
+        dvalid <= memReadDone;
+	end block;
 END;

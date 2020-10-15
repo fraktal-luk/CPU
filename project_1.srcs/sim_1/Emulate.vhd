@@ -51,10 +51,13 @@ constant FMT_IMM16:      FormatSpec := ('1', '1', '0', '0', '0', '0', '0', "000"
 constant FMT_INT_REG:    FormatSpec := ('0', '0', '0', '0', '0', '0', '0', "000");
 constant FMT_INT_LOAD:   FormatSpec := ('1', '1', '0', '0', '0', '0', '0', "000"); -- Equal to FMT_IMM16?
 constant FMT_IMM10:      FormatSpec := ('1', '0', '0', '0', '0', '0', '0', "000");
-constant FMT_INT_STORE:  FormatSpec := ('1', '1', '0', '0', '1', '1', '0', "000");
+constant FMT_INT_STORE:  FormatSpec := ('1', '1', '0', '0', '0', '1', '0', "000");
 constant FMT_FP_REG:     FormatSpec := ('0', '0', '0', '0', '0', '0', '1', "111");
 constant FMT_FP_LOAD:    FormatSpec := ('1', '1', '0', '0', '0', '0', '1', "000");
-constant FMT_FP_STORE:   FormatSpec := ('1', '1', '0', '0', '1', '1', '0', "001");
+constant FMT_FP_STORE:   FormatSpec := ('1', '1', '0', '0', '0', '1', '0', "001");
+constant FMT_SYS_LOAD:   FormatSpec := ('1', '0', '0', '0', '0', '0', '1', "000");
+constant FMT_SYS_STORE:  FormatSpec := ('1', '0', '0', '0', '0', '1', '0', "000");
+
 constant FMT_JUMP:       FormatSpec := ('1', '0', '0', '1', '0', '0', '0', "000");
 constant FMT_JUMP_LINK:  FormatSpec := ('1', '0', '1', '0', '0', '0', '0', "000");
 constant FMT_JUMP_COND:  FormatSpec := ('1', '0', '1', '0', '1', '0', '0', "000");
@@ -232,8 +235,12 @@ constant OP_TABLE: OpTable(ProcMnemonic'left to ProcMnemonic'right) := (
     stf_i => (stf,       none,  FMT_FP_STORE,    DESC_FP_STORE, stf),
     -- ....
     
-    lds  =>  (ext2,     mfc,   FMT_IMM10,    DESC_SYS_LOAD, mfc),   -- ??
-    sts  =>  (ext2,     mtc,   FMT_IMM10,    DESC_SYS_STORE, mtc),  -- ??
+    lds  =>  (ext2,     mfc,   FMT_SYS_LOAD,    DESC_SYS_LOAD, mfc),   -- ??
+    sts  =>  (ext2,     mtc,   FMT_SYS_STORE,    DESC_SYS_STORE, mtc),  -- ??
+    
+    mov_f => (fop,      fmov,  FMT_FP_REG,      DESC_FP,  fpMove),
+    or_f =>  (fop,      forr,  FMT_FP_REG,      DESC_FP,  fpOr),
+    
     
     -- NOTE: sys decoding must be implemented differently because there are no distinct mnemonics
     
