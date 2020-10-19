@@ -34,6 +34,9 @@ package Assembler is
 type GroupBuffer is array(0 to 4) of string(1 to 10);
 type ProgramBuffer is array(0 to 999) of GroupBuffer;
 
+                        function parseInstructionString(str: string) return GroupBuffer; -- TEMP!
+
+
 function readSourceFile(name: string) return ProgramBuffer;
 
 function processProgram(p: ProgramBuffer) return WordArray;
@@ -116,6 +119,9 @@ constant OPCONT_TABLE_FP: OpcontArray := (
 );
 
 
+function asm(str: string) return Word;
+
+
 function disasmWithAddress(a: natural; w: Word) return string;
 function disasmWord(w: Word) return string;
 
@@ -135,6 +141,50 @@ begin
         or (c = '_')
         or (c = '$'); -- To serve as label marker
 end function;
+
+
+function parseInstructionString(str: string) return GroupBuffer is
+    variable words: GroupBuffer := (others => (others => ' '));
+    
+    variable ind, grp, blockStart: integer := 0;    
+begin
+    -- To keep it simple: 
+    --  - line will be either a label or instruction
+    --  - label starts with '$'
+    --  - if not label, cut line into alphanumeric groups, don't care about commas etc.
+
+    ind := 1;
+    grp := 0;
+    words := (others => (others => cr));      
+    while str(ind) /= cr and grp < words'length loop -- keep last char as end sign
+        while str(ind) = ' ' or str(ind) = ','  or str(ind) = ht loop 
+            -- skipping wspace
+            ind := ind + 1;
+        end loop;
+        
+        blockStart := ind - 1;
+        while isAlphanum(str(ind)) or str(ind) = '-' loop -- and not tab nor cr!
+            -- Copy to current group
+            words(grp)(ind - blockStart) := str(ind); -- May overflow the word, but nvm                 
+            ind := ind + 1;
+        end loop;
+        -- Inc group index
+        grp := grp + 1;
+    end loop;
+    
+    
+--    for i in 0 to words'length-1 loop
+--       for j in 1 to words(0)'length loop
+--           if words(i)(j) = cr then
+--               words(i)(j) := ' ';
+--           end if;
+--       end loop; 
+--    end loop;
+    
+    return words;
+end function;
+
+
 
 function readSourceFile(name: string) return ProgramBuffer is
     file src: text open read_mode is name;
@@ -174,7 +224,7 @@ begin
         
         -- To keep it simple: 
         --  - line will be either a label or instruction
-        --  - label starts with '@'
+        --  - label starts with '$'
         --  - if not label, cut line into alphanumeric groups, don't care about commas etc.
 
         ind := 1;
@@ -197,13 +247,15 @@ begin
         end loop;
         
         -- Convert words to line structure
-        program(lineNum) := words;
-        
+        program(lineNum) := --words;
+                            parseInstructionString(str);        
+
         lineNum := lineNum + 1;
     end loop;
     
     return program;
 end function;
+
 
 
 function matches(a, b: string) return boolean is
@@ -237,6 +289,49 @@ begin
 end function;
 
 
+
+function TMP_str2int(s: string) return integer is
+    constant LEN: natural := s'length;
+    variable str0: string(1 to LEN) := s;
+begin
+    for i in str0'range loop
+        if str0(i) = cr then
+            str0(i) := ' ';
+        end if;
+    end loop;
+    return integer'value(str0);
+end function;
+
+
+--function parseInteger(str: string) return integer is
+--    variable res, first, last: integer := -1;
+--    variable prefix, number: boolean := true;
+--begin
+--    -- Find start and end of digits
+--    for i in str'range loop
+--        if str(i) >= '0' and str(i) <= '9' then
+--            if prefix then
+--                -- end of prefix
+--                prefix := false;
+--                first := i;
+--            else
+--                --prefix := false;
+--            end if;
+--        elsif prefix then
+--            null;
+--        else -- Not a digit and not in prefix
+--            last := i-1;
+--            exit;
+--        end if;
+        
+--    end loop;
+    
+--    res := integer'value(str(first to last));
+    
+--    return res;
+--end function;
+
+
 function processInstruction(ar: GroupBuffer; num: integer; labels: LabelArray) return word is
     variable mnem: ProcMnemonic;
     variable res: word := (others => '0');
@@ -259,17 +354,22 @@ begin
             
         elsif ar(i)(1) = 'r' and ar(i)(2) >= '0' and ar(i)(2) <= '9' then
             -- register
-            x := integer'value(ar(i)(2 to ar(i)'length)); -- ignore 'r'
+            x := --integer'value(ar(i)(2 to ar(i)'length)); -- ignore 'r'
+                    TMP_str2int(ar(i)(2 to ar(i)'length));
         elsif ar(i)(1) = 'f' and ar(i)(2) >= '0' and ar(i)(2) <= '9' then
             -- register (FP)
-            x := integer'value(ar(i)(2 to ar(i)'length)); -- ignore 'f'			
+            x := --integer'value(ar(i)(2 to ar(i)'length)); -- ignore 'f'
+                   TMP_str2int(ar(i)(2 to ar(i)'length ));			
         elsif ar(i)(1) = '-' then
-            x := -integer'value(ar(i)(2 to ar(i)'length)); 
+            x := ---integer'value(ar(i)(2 to ar(i)'length));
+                    -TMP_str2int(ar(i)(2 to ar(i)'length));
+                    
         elsif not isAlphanum(ar(i)(1)) then
             x := -1;
         elsif ar(i)(1) >= '0' and ar(i)(1) <= '9' then
             -- Hope it's a number 
-            x := integer'value(ar(i));
+            x := --integer'value(ar(i));
+                    TMP_str2int(ar(i));
         else
             x := -1;
         end if;
@@ -378,6 +478,27 @@ begin
     
     return res;
 end function;
+
+
+function processSingleInstruction(gb: GroupBuffer) return Word is
+    variable res: Word;
+    constant EMPTY_LABEL_ARRAY: LabelArray(0 to 0) := (others => (others => ' '));
+begin
+    res := processInstruction(gb, 0, EMPTY_LABEL_ARRAY);
+    return res;
+end function;
+
+function asm(str: string) return Word is
+    constant LEN: natural := str'length;
+    variable str0: string(1 to LEN+1) := (others => cr);    
+    variable gb: GroupBuffer;
+begin
+    str0(1 to LEN) := str;
+    gb := parseInstructionString(str0);
+    return processSingleInstruction(gb);
+end function;
+
+
 
 function processProgram(p: ProgramBuffer) return WordArray is
     variable insIndex: integer := 0; -- Actual number of instruction
@@ -717,6 +838,7 @@ begin
     end loop;
 
 end procedure;
+
 
 
 end Assembler;

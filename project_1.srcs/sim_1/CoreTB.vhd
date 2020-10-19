@@ -146,8 +146,31 @@ ARCHITECTURE Behavior OF CoreTB IS
         signal opFlags: std_logic_vector(0 to 2);
         
     signal okFlag, errorFlag: std_logic := '0';
-
+        signal TEST_word, TP, TQ: Word;
+        signal TEST_gb: GroupBuffer;
+        
+        
+        signal TMP_str0: string(1 to 10) := ('1', '1', cr, cr, cr, cr, cr, cr, cr, cr); 
+        signal TMP_str1: string(1 to 10) := ('1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '); 
+        
+        signal num0, num1: integer;
+        
 BEGIN
+
+            assert ins655H(addI, r20, r0, 55) = asm("add_i r20, r0, 55") severity failure;
+            assert ins6L(j, -512) = asm("ja -512") severity failure;
+            --    TP <= ins6L(j, -512);
+             --   TQ <= asm("ja -512");
+            assert ins655655(ext2, 0, 0, retE, 0, 0) = asm("sys rete") severity failure;
+      
+
+            num0 <= integer'value(TMP_str0(2 to 10));
+            num1 <= integer'value(TMP_str1);
+
+                            --TEST_word <=  asm("add_i r0, r0, 0");
+                            TEST_word <=  asm("ldf_i f7, r0, 20");
+                            TEST_gb <= parseInstructionString("ldf_i f7, r0, 20" & cr);
+                            
 
     okFlag <= bool2std(opFlags = "001");
     errorFlag <= bool2std(opFlags = "100");
@@ -386,7 +409,7 @@ BEGIN
         
       testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
       testProgram(512/4) <= ins6L(j, -512);-- TEMP!        
-      
+
       testProgram(384/4) <= ins655H(addI, r20, r0, 55);
       testProgram(384/4 + 1) <= ins655655(ext2, 0, 0, retE, 0, 0);
       
