@@ -16,6 +16,9 @@ use work.PipelineGeneral.all;
 use work.Arith.all;
 
 entity Core is
+    generic(
+        DEBUG_FILE_PREFIX: string := "CoreDB_"
+    );
     Port ( clk : in  STD_LOGIC;
            reset : in  STD_LOGIC;
            en : in  STD_LOGIC;
@@ -116,6 +119,7 @@ begin
     intType <= (int0, int1);
 
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
+	generic map(DEBUG_FILE_PREFIX => DEBUG_FILE_PREFIX)
     port map (
         clk => clk, reset => reset, en => '0',
         

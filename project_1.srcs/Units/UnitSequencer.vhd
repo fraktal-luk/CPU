@@ -18,6 +18,9 @@ use work.LogicRenaming.all;
 
 
 entity UnitSequencer is
+    generic(
+        DEBUG_FILE_PREFIX: string
+    );
 	port(
     clk: in std_logic;
     reset: in std_logic;

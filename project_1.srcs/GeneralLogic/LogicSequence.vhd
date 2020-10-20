@@ -221,7 +221,8 @@ begin
     end loop;
    
     for i in 0 to PIPE_WIDTH-1 loop 
-        if dataFromBQV(i).full = '1' and dataFromBQV(i).ins.controlInfo.confirmedBranch = '1' then
+        if robDataLiving(i).full = '1' and --dataFromBQV(i).full = '1' and dataFromBQV(i).ins.controlInfo.confirmedBranch = '1' then
+                                           robDataLiving(i).ins.controlInfo.confirmedBranch = '1' then 
             anyConfirmed := true;
         end if;
     end loop;
