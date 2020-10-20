@@ -37,7 +37,7 @@ END CoreTB;
  
 ARCHITECTURE Behavior OF CoreTB IS
     
-    constant EMULATION: boolean := false;
+    constant EMULATION: boolean := true;
     constant CORE_SIMULATION: boolean := true;
     
     -- Component Declaration for the Unit Under Test (UUT)
@@ -155,6 +155,8 @@ ARCHITECTURE Behavior OF CoreTB IS
         
         signal num0, num1: integer;
         
+        file traceFile: text open write_mode is "emulation_trace.txt";
+        
 BEGIN
 
             assert ins655H(addI, r20, r0, 55) = asm("add_i r20, r0, 55") severity failure;
@@ -225,12 +227,14 @@ BEGIN
    -- Stimulus process
    stim_proc: process
        variable progB: ProgramBuffer;
-       variable testName, suiteName: line;
+       variable testName, suiteName, disasmText: line;
        file suiteFile: text open read_mode is "suite_names.txt";
        file testFile: text;
 	   
         variable insWordVar: Word;
-        variable intOpVar: InternalOperation;	   
+        variable intOpVar: InternalOperation;
+        variable opResultVar: OperationResult;
+           
    begin
 	
 	  wait for 110 ns;
@@ -318,10 +322,12 @@ BEGIN
                         internalOp <= intOpVar;
                         --disasm <= disasmWithAddress(slv2u(cpuState.nextIP), programMemory(slv2u(cpuState.nextIP)/4));
                         
-                            currentInstruction <= (cpuState.nextIP, insWordVar,  disasmWithAddress(slv2u(cpuState.nextIP), programMemory(slv2u(cpuState.nextIP)/4)));
+                            currentInstruction <= (cpuState.nextIP, insWordVar,  disasmWithAddress(slv2u(cpuState.nextIP), programMemory(slv2u(cpuState.nextIP)/4)));   
+                        performOp(cpuState, dataMemory, intOpVar, opFlags, opResultVar);
                         
-                        performOp(cpuState, dataMemory, intOpVar, opFlags);
-                                          
+                               write(disasmText, disasmWithAddress(slv2u(cpuState.nextIP), insWordVar));
+                               writeline(traceFile, disasmText);
+                        
                         wait for TIME_STEP;
                     end loop;
                 end if;

@@ -822,7 +822,7 @@ begin
     res(22 to 22 + 24-1) := disasmWord(w);
     -- synthesis translate_on
     
-    return res;   
+    return res;
 end function;
 
 

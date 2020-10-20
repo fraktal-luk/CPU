@@ -67,6 +67,7 @@ function getInsStringArray(sa: SchedulerEntrySlotArray; fmt: InsPrintFormat) ret
 
 --procedure printGroup(ia: InstructionSlotArray; filename: string);
 
+procedure printOp(ins: InstructionState; file f: text);
 procedure printGroup(ia: InstructionSlotArray; file f: text);
   
 end package;
@@ -609,27 +610,34 @@ end function;
     
 --end procedure;
 
+procedure printOp(ins: InstructionState; file f: text) is
+    variable outputLine: line;
+begin
+    write(outputLine, disasmWithAddress(slv2u(ins.ip), ins.bits));
+    if ins.controlInfo.hasInterrupt = '1' then
+        write(outputLine, string'("  # Interrupt "));
+    end if;
+    if ins.controlInfo.hasException = '1' then
+        write(outputLine, string'("  # Exception "));
+    end if;                 
+
+    if ins.controlInfo.specialAction = '1' then
+        write(outputLine, string'("  # SpecialAction "));
+    end if;
+    
+    if ins.controlInfo.refetch = '1' then
+        write(outputLine, string'("(refetch)"));
+    end if;                
+    writeline(f, outputLine);
+    
+end procedure;
+
 procedure printGroup(ia: InstructionSlotArray; file f: text) is
     variable outputLine: line;
 begin
     for i in ia'range loop
         if ia(i).full = '1' then
-            write(outputLine, disasmWithAddress(slv2u(ia(i).ins.ip), ia(i).ins.bits));
-                if ia(i).ins.controlInfo.hasInterrupt = '1' then
-                    write(outputLine, string'("  # Interrupt "));
-                end if;
-                if ia(i).ins.controlInfo.hasException = '1' then
-                    write(outputLine, string'("  # Exception "));
-                end if;                 
-            
-                if ia(i).ins.controlInfo.specialAction = '1' then
-                    write(outputLine, string'("  # SpecialAction "));
-                end if;
-                
-                if ia(i).ins.controlInfo.refetch = '1' then
-                    write(outputLine, string'("(refetch)"));
-                end if;                
-            writeline(f, outputLine);
+            printOp(ia(i).ins, f);
         end if;
     end loop;
     

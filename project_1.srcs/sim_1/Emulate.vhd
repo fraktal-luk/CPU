@@ -281,8 +281,9 @@ constant DEFAULT_INTERNAL_OP: InternalOperation := DEFAULT_INTERNAL_OPERATION;
 
     -- TMP
     function decode(adr: Mword; w: Word) return InternalOperation;
-    procedure performOp(signal state: inout CoreState; signal memory: inout ByteArray; op: in InternalOperation; signal outSigs: out std_logic_vector(0 to 2));
-
+    procedure performOp(signal state: inout CoreState; signal memory: inout ByteArray; op: in InternalOperation;
+                        signal outSigs: out std_logic_vector(0 to 2);
+                        result: out OperationResult);
 
 
 end package;
@@ -773,7 +774,9 @@ end procedure;
 
 
 
-procedure performOp(signal state: inout CoreState; signal memory: inout ByteArray; op: in InternalOperation; signal outSigs: out std_logic_vector(0 to 2)) is
+procedure performOp(signal state: inout CoreState; signal memory: inout ByteArray; op: in InternalOperation;
+                    signal outSigs: out std_logic_vector(0 to 2);
+                    result: out OperationResult) is
     constant thisIP: Mword := op.ip;
     constant incrementedIP: Mword := addInt(op.ip, 4);
     variable intArgs: MwordArray(0 to 2);

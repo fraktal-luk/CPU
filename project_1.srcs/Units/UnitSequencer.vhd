@@ -264,7 +264,7 @@ begin
     COMMIT_STAGE: if VIEW_ON generate
        use std.textio.all;
        use work.Viewing.all;
-       file outFile: text open write_mode is COMMITTED_FILE; 
+       file outFile: text open write_mode is DEBUG_FILE_PREFIX & "committed.txt"; 
     begin
         stageDataToCommit <= recreateGroup(robDataLiving, dataFromBQV, stageDataLastEffectiveOutA(0).ins.target, commitCtr);
 

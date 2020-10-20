@@ -13,7 +13,7 @@ constant CLEAR_DEBUG_INFO: boolean := false;
 constant VIEW_ON: boolean := true;
 
    constant DEBUG_LOG_COMMITTED: boolean := true;
-   constant COMMITTED_FILE: string := "committed_out.txt";
+   --constant COMMITTED_FILE: string := "committed_out.txt";
 
 
 --constant SYNTH_CHECK: boolean := checkSynthesis;
