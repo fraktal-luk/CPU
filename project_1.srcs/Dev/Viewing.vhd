@@ -615,19 +615,19 @@ procedure printOp(ins: InstructionState; file f: text) is
 begin
     write(outputLine, disasmWithAddress(slv2u(ins.ip), ins.bits));
     if ins.controlInfo.hasInterrupt = '1' then
-        write(outputLine, string'("  # Interrupt "));
-    end if;
-    if ins.controlInfo.hasException = '1' then
-        write(outputLine, string'("  # Exception "));
-    end if;                 
-
-    if ins.controlInfo.specialAction = '1' then
-        write(outputLine, string'("  # SpecialAction "));
+        write(outputLine, string'(" # Interrupt "));
     end if;
     
+    if ins.controlInfo.hasException = '1' then
+        write(outputLine, string'(" # Exception "));
+    end if;                 
+
     if ins.controlInfo.refetch = '1' then
-        write(outputLine, string'("(refetch)"));
-    end if;                
+        write(outputLine, string'(" #R (refetch)"));
+    elsif ins.controlInfo.specialAction = '1' then
+        write(outputLine, string'(" # SpecialAction "));
+    end if;
+
     writeline(f, outputLine);
     
 end procedure;

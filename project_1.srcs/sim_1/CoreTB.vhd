@@ -38,6 +38,7 @@ END CoreTB;
 ARCHITECTURE Behavior OF CoreTB IS
     
     constant EMULATION: boolean := true;
+    constant LOG_EMULATION_TRACE: boolean := true;
     constant CORE_SIMULATION: boolean := true;
     
     -- Component Declaration for the Unit Under Test (UUT)
@@ -127,6 +128,9 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal programMemory: WordArray(0 to 1023);
     signal dataMemory: ByteArray(0 to 4095);
     
+    alias cpuEndFlag is oaux(0);
+    alias cpuErrorFlag is oaux(1);
+    
     --signal instructionWord: Mword;
     --signal disasm: string(1 to 51);
 
@@ -156,6 +160,95 @@ ARCHITECTURE Behavior OF CoreTB IS
         signal num0, num1: integer;
         
         file traceFile: text open write_mode is "emulation_trace.txt";
+    
+    
+    
+    function compareTraceLines(sa, sb: string) return boolean is
+    begin
+        if sa(1 to 8) /= sb(1 to 8) then 
+            return false;
+        elsif sa(11 to 18) /= sb(11 to 18) then    
+            return false;
+        end if;
+        return true;
+    end function;
+    
+    function skipLine(s: string) return boolean is
+    begin
+        --        return false;
+    
+        for i in s'range loop
+            if s(i) = '#' and i < s'length then
+                return s(i+1) = 'R';
+            end if;
+        end loop;
+        return false;
+    end function;
+    
+
+    procedure compareTraceFiles(a, b: in string; match: out boolean) is
+        file fa: text open read_mode is a;
+        file fb: text open read_mode is b;
+        variable la, lb: line;
+        variable ia, ib: natural := 0;
+    begin
+        match := true;
+           --     report "Comparng" severity note;
+    
+        loop
+           --         report "iter " & natural'image(ia);
+        
+                    --if ia > 20 or ib > 20 then return; end if;
+            la := null;
+            lb := null;
+            ia := ia + 1;
+            ib := ib + 1;
+            readline(fa, la);
+            readline(fb, lb);
+            
+            while la /= null and skipLine(la.all) loop la := null; readline(fa, la); ia := ia + 1; end loop;
+            while lb /= null and skipLine(lb.all) loop lb := null; readline(fb, lb); ib := ib + 1; end loop;
+            
+--                    report "What now?";
+            
+--                        if la = null then
+--                            report "la ended " & natural'image(ia);
+--                        else
+--                            report la.all;     
+--                        end if;
+--                        if lb = null then
+--                            report "lb ended " & natural'image(ib)
+--                            ;
+--                        else
+--                            report lb.all;     
+--                        end if;
+            
+            if la = null and lb = null then
+                --return true;
+                --            report "Both files end";
+                return;
+            end if;
+            
+            if (la = null) /= (lb = null) then
+--                    report "EOF!";
+                    --        report "One file ends";
+                match := false;
+                return;
+            end if; 
+            
+            if not compareTraceLines(la.all, lb.all) then
+                --    report "Different lines!";
+                match := false;
+                return;
+            end if;
+            
+            --    report "go on";
+        end loop;
+        
+        --    report natural'image(ia) & " <-> " &natural'image(ib);
+        
+        --return true;
+    end procedure;
         
 BEGIN
 
@@ -221,8 +314,8 @@ BEGIN
 	
 	int0 <= int0a or int0b;
 	
-    testDone <= oaux(0);
-    testFail <= oaux(1);
+    --testDone <= oaux(0);
+    --testFail <= oaux(1);
 	
    -- Stimulus process
    stim_proc: process
@@ -234,7 +327,8 @@ BEGIN
         variable insWordVar: Word;
         variable intOpVar: InternalOperation;
         variable opResultVar: OperationResult;
-           
+         
+      variable match: boolean := true;     
    begin
 	
 	  wait for 110 ns;
@@ -325,8 +419,11 @@ BEGIN
                             currentInstruction <= (cpuState.nextIP, insWordVar,  disasmWithAddress(slv2u(cpuState.nextIP), programMemory(slv2u(cpuState.nextIP)/4)));   
                         performOp(cpuState, dataMemory, intOpVar, opFlags, opResultVar);
                         
+                        if LOG_EMULATION_TRACE then
+                               -- log trace
                                write(disasmText, disasmWithAddress(slv2u(cpuState.nextIP), insWordVar));
                                writeline(traceFile, disasmText);
+                        end if;
                         
                         wait for TIME_STEP;
                     end loop;
@@ -336,20 +433,23 @@ BEGIN
                       loop
                           wait until rising_edge(clk);
         
-                          if testDone = '1' then
+                          if cpuEndFlag = '1' then
                               report "Test done";
+                              testDone <= '1';
                               exit;
                           end if;
                           
-                          if testFail = '1' then
+                          if cpuErrorFlag = '1' then
                               report "TEST FAIL: " & testName.all;
-                              
+                              testFail <= '1';
                               wait;                     
                           end if;                  
                       end loop;
                 end if;
                 
               wait until rising_edge(clk);
+                        testDone <= '0';
+                        testFail <= '0';              
           end loop;
           
           report "All tests in suite done!";
@@ -357,6 +457,12 @@ BEGIN
           wait until rising_edge(clk);
                     
       
+              compareTraceFiles("emulation_trace.txt", "CoreDB_committed.txt", match);
+                    report "Traces match: " & boolean'image(match);
+                assert match report "Traces are divergent!" severity error;
+                
+      
+           --         wait;
       end loop;
           
       report "All suites done!";
@@ -393,19 +499,23 @@ BEGIN
 
       loop
           wait until rising_edge(clk);
-              if testDone = '1' then
+              if cpuEndFlag = '1' then
                   report "Success signal when error expected!";
+                  testFail <= '1';
                   wait;
               end if;
               
-              if testFail = '1' then
+              if cpuErrorFlag = '1' then
                   report "Error signal confirmed correctly";
+                  testDone <= '1';
                   exit;                     
               end if;                  
       end loop;     
 
       wait until rising_edge(clk);
-
+            testDone <= '0';
+            testFail <= '0';
+            
       report "Now test exception return";
 
 	  progB := readSourceFile("events.txt" );
@@ -433,13 +543,15 @@ BEGIN
  
      loop
         wait until rising_edge(clk);
-          if testDone = '1' then
+          if cpuEndFlag = '1' then
               report "Test done";
+              testDone <= '1';
               exit;
           end if;
           
-          if testFail = '1' then
-              report "TEST FAIL: " & "events";             
+          if cpuErrorFlag = '1' then
+              report "TEST FAIL: " & "events";
+              testFail <= '1';            
               wait;                     
           end if;                  
       end loop;      
@@ -449,7 +561,8 @@ BEGIN
 	  progB := readSourceFile( "events2.txt");
       machineCode <= processProgram(progB);
       wait until rising_edge(clk);
-
+                        testDone <= '0';
+                        testFail <= '0';
           
       testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
       testProgram(512/4) <= ins6L(j, -512);-- TEMP!        
@@ -482,17 +595,25 @@ BEGIN
       loop
           wait until rising_edge(clk);
           
-          if testDone = '1' then
+          if cpuEndFlag = '1' then
               report "Test done";
-              report "All test runs have been completed successfully";
+              testDone <= '1';
+              
               exit;
           end if;
           
-          if testFail = '1' then
-              report "TEST FAIL: " & "events2";            
+          if cpuErrorFlag = '1' then
+              report "TEST FAIL: " & "events2";
+              testFail <= '1';            
               wait;                     
           end if;                  
       end loop;      
+
+              report "All test runs have been completed successfully";
+
+        wait until rising_edge(clk);
+            testDone <= '0';
+            testFail <= '0';
 
       wait;
    end process;
