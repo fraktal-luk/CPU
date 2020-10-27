@@ -125,7 +125,9 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal currentTest, currentSuite: string(1 to 20);
 
     
-    signal programMemory: WordArray(0 to 1023);
+    --signal programMemory: WordArray(0 to 1023);
+        alias programMemory is testProgram;
+    
     signal dataMemory: ByteArray(0 to 4095);
     
     alias cpuEndFlag is oaux(0);
@@ -250,19 +252,134 @@ ARCHITECTURE Behavior OF CoreTB IS
         --return true;
     end procedure;
         
+        
+        procedure cycle(signal clk: in std_logic) is
+        begin
+            wait until rising_edge(clk);
+        end procedure;
+
+        procedure cycle is
+        begin
+            wait until rising_edge(clk);
+        end procedure;
+
+        
+    procedure checkTestResult(variable testName: in line; signal testDone, testFail: out std_logic) is
+    begin
+        loop
+          cycle(clk);
+    
+          if cpuEndFlag = '1' then
+              report "Test done";
+              testDone <= '1';
+              exit;
+          end if;
+          
+          if cpuErrorFlag = '1' then
+              report "TEST FAIL: " & testName.all;
+              testFail <= '1';
+              wait;                     
+          end if;                  
+        end loop;
+            
+        cycle(clk);
+        testDone <= '0';
+        testFail <= '0';  
+    end procedure;
+
+    procedure checkTestResult(testName: in string; signal testDone, testFail: out std_logic) is
+    begin
+        loop
+          cycle(clk);
+    
+          if cpuEndFlag = '1' then
+              report "Test done";
+              testDone <= '1';
+              exit;
+          end if;
+          
+          if cpuErrorFlag = '1' then
+              report "TEST FAIL: " & testName;
+              testFail <= '1';
+              wait;                     
+          end if;                  
+        end loop;
+            
+        cycle(clk);
+        testDone <= '0';
+        testFail <= '0';  
+    end procedure;
+
+    procedure checkErrorTestResult(testName: in string; signal testDone, testFail: out std_logic) is
+    begin
+        loop
+          cycle(clk);
+            
+          -- CAREFUL: This is reversed because we expect error signal
+          if cpuErrorFlag = '1' then
+              report "Test done";
+              testDone <= '1';
+              exit;
+          end if;
+          
+          if cpuEndFlag = '1' then
+              report "TEST FAIL: " & testName;
+              testFail <= '1';
+              wait;                     
+          end if;                  
+        end loop;
+            
+        cycle(clk);
+        testDone <= '0';
+        testFail <= '0';  
+    end procedure;
+
+
+    procedure startTest(signal testToDo, int0b: out std_logic) is
+    begin
+      cycle(clk);
+      testToDo <= '1';
+      int0b <= '1';
+      cycle(clk);                     
+      testToDo <= '0';
+      int0b <= '0';
+    end procedure;
+    
+    procedure setForOneCycle(signal s: out std_logic; signal clk: std_logic) is
+    begin
+        s <= '1';
+        cycle(clk);
+        s <= '0';
+        cycle(clk);
+    end procedure;
+    
+    procedure putInstructionSequence(signal programMem: inout WordArray; address: in Mword; insSeq: WordArray) is
+        constant startAdr: natural := slv2u(address);
+        constant LEN: natural := insSeq'length;
+    begin
+        assert isNonzero(address(1 downto 0)) = '0' report "Unaligned instruction address!" severity error;
+    
+        programMem(startAdr to startAdr + LEN - 1) <= insSeq;
+        
+    end procedure;
+    
+    procedure loadProgramFromFile(variable filename: in line; signal testProgram: out WordArray) is        
+	    constant prog: ProgramBuffer := readSourceFile(filename.all & ".txt");
+        constant machineCode: WordArray(0 to prog'length-1) := processProgram(prog);
+    begin
+        testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+    end procedure;
+     
 BEGIN
 
             assert ins655H(addI, r20, r0, 55) = asm("add_i r20, r0, 55") severity failure;
             assert ins6L(j, -512) = asm("ja -512") severity failure;
-            --    TP <= ins6L(j, -512);
-             --   TQ <= asm("ja -512");
             assert ins655655(ext2, 0, 0, retE, 0, 0) = asm("sys rete") severity failure;
       
 
-            num0 <= integer'value(TMP_str0(2 to 10));
-            num1 <= integer'value(TMP_str1);
+            --num0 <= integer'value(TMP_str0(2 to 10));
+            --num1 <= integer'value(TMP_str1);
 
-                            --TEST_word <=  asm("add_i r0, r0, 0");
                             TEST_word <=  asm("ldf_i f7, r0, 20");
                             TEST_gb <= parseInstructionString("ldf_i f7, r0, 20" & cr);
                             
@@ -301,7 +418,7 @@ BEGIN
    );
 
    -- Clock process definitions
-   clk_process :process
+   clk_process: process
    begin
 		clk <= '1';
 		wait for clk_period/2;
@@ -328,7 +445,8 @@ BEGIN
         variable intOpVar: InternalOperation;
         variable opResultVar: OperationResult;
          
-      variable match: boolean := true;     
+      variable match: boolean := true;
+ 
    begin
 	
 	  wait for 110 ns;
@@ -358,6 +476,8 @@ BEGIN
               progB := readSourceFile(testName.all & ".txt");
               machineCode <= processProgram(progB);
 
+                 loadProgramFromFile(testName, programMemory);
+
                     currentSuite <= (others => ' ');
                     currentTest <= (others => ' ');
                     currentSuite(1 to suiteName.all'length) <= suiteName.all;
@@ -371,52 +491,32 @@ BEGIN
 						opFlags <= (others => '0');
 						cpuState <= INIT_CORE_STATE;
 						dataMemory <= (others => (others => '0'));
-               
-                resetDataMem <= '1';
-               
-              wait until rising_edge(clk);
-                
-                resetDataMem <= '0';
-                
-              --  dataMem <= (others => (others => '0'));
+
+              setForOneCycle(resetDataMem, clk); 
               
-              testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+              --testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+              
               testProgram(512/4) <= ins6L(j, -512);-- TEMP! 
               testProgram(384/4) <= ins655655(ext2, 0, 0, send, 0, 0);
               testProgram(384/4 + 1) <= ins6L(j, 0); -- idle loop          
 
-                programMemory(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
-                programMemory(512/4) <= ins6L(j, -512);-- TEMP! 
-                programMemory(384/4) <= ins655655(ext2, 0, 0, send, 0, 0);
-                programMemory(384/4 + 1) <= ins6L(j, 0); -- idle loop   
-
                 if CORE_SIMULATION then
-                      testToDo <= '1';
-                      int0b <= '1';                      
-                      wait until rising_edge(clk);
-                      testToDo <= '0';
-                      int0b <= '0';
+                    startTest(testToDo, int0b);
                 end if;
-                
-                if EMULATION then
-                    wait for TIME_STEP;
-                end if;
-            
+
               disasmToFile(testName.all & "_disasm.txt", testProgram);
                     
               report "Waiting for completion...";
-
+              cycle;
                 
                 if EMULATION then    
                     -- Now doing the actual test 
                     while opFlags /= "100" and opFlags /= "001" loop -- ERROR or SEND (completed)
                         insWordVar := programMemory(slv2u(cpuState.nextIP)/4);
-                        --instructionWord <= insWordVar;
                         intOpVar := decode(cpuState.nextIP, insWordVar);
                         internalOp <= intOpVar;
-                        --disasm <= disasmWithAddress(slv2u(cpuState.nextIP), programMemory(slv2u(cpuState.nextIP)/4));
                         
-                            currentInstruction <= (cpuState.nextIP, insWordVar,  disasmWithAddress(slv2u(cpuState.nextIP), programMemory(slv2u(cpuState.nextIP)/4)));   
+                        currentInstruction <= (cpuState.nextIP, insWordVar,  disasmWithAddress(slv2u(cpuState.nextIP), programMemory(slv2u(cpuState.nextIP)/4)));   
                         performOp(cpuState, dataMemory, intOpVar, opFlags, opResultVar);
                         
                         if LOG_EMULATION_TRACE then
@@ -430,31 +530,14 @@ BEGIN
                 end if;
 
                 if CORE_SIMULATION then
-                      loop
-                          wait until rising_edge(clk);
-        
-                          if cpuEndFlag = '1' then
-                              report "Test done";
-                              testDone <= '1';
-                              exit;
-                          end if;
-                          
-                          if cpuErrorFlag = '1' then
-                              report "TEST FAIL: " & testName.all;
-                              testFail <= '1';
-                              wait;                     
-                          end if;                  
-                      end loop;
+                    checkTestResult(testName, testDone, testFail);
                 end if;
-                
-              wait until rising_edge(clk);
-                        testDone <= '0';
-                        testFail <= '0';              
+           
           end loop;
           
           report "All tests in suite done!";
           
-          wait until rising_edge(clk);
+          cycle;
                     
       
               compareTraceFiles("emulation_trace.txt", "CoreDB_committed.txt", match);
@@ -477,143 +560,85 @@ BEGIN
         cpuState <= INIT_CORE_STATE;
         dataMemory <= (others => (others => '0'));
       
-      wait until rising_edge(clk);
+      --wait until rising_edge(clk);
+      cycle;
       
       report "Run exception tests";
       testProgram(0) <= ins655655(ext2, 0, 0, error, 0, 0);
       testProgram(1) <= ins6L(j, 0);
       
-      wait until rising_edge(clk);
-
-      testToDo <= '1';
-      int0b <= '1';
-      wait until rising_edge(clk);
-      testToDo <= '0';
-      int0b <= '0';
+      --wait until rising_edge(clk);
+      cycle;
+        
+      startTest(testToDo, int0b);
       
       disasmToFile("error_disasm.txt", testProgram);
       
       report "Waiting for completion...";
  
-      wait until rising_edge(clk);
+      -- wait until rising_edge(clk);
+      cycle; 
+        
+      checkErrorTestResult("check_error", testDone, testFail);  
 
-      loop
-          wait until rising_edge(clk);
-              if cpuEndFlag = '1' then
-                  report "Success signal when error expected!";
-                  testFail <= '1';
-                  wait;
-              end if;
-              
-              if cpuErrorFlag = '1' then
-                  report "Error signal confirmed correctly";
-                  testDone <= '1';
-                  exit;                     
-              end if;                  
-      end loop;     
-
-      wait until rising_edge(clk);
-            testDone <= '0';
-            testFail <= '0';
+      --wait until rising_edge(clk);
+      cycle;
+      --      testDone <= '0';
+      --      testFail <= '0';
             
       report "Now test exception return";
 
 	  progB := readSourceFile("events.txt" );
       machineCode <= processProgram(progB);
-      wait until rising_edge(clk);
+      --wait until rising_edge(clk);
+      cycle;
 
-        
-      testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
-      testProgram(512/4) <= ins6L(j, -512);-- TEMP!        
-
-      testProgram(384/4) <= ins655H(addI, r20, r0, 55);
-      testProgram(384/4 + 1) <= ins655655(ext2, 0, 0, retE, 0, 0);
+            
+          testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+          testProgram(512/4) <= ins6L(j, -512);-- TEMP!        
+    
+          testProgram(384/4) <= ins655H(addI, r20, r0, 55);
+          testProgram(384/4 + 1) <= ins655655(ext2, 0, 0, retE, 0, 0);
       
-      --wait until rising_edge(clk);         
-      testToDo <= '1';
-      int0b <= '1';
-      wait until rising_edge(clk);
-      testToDo <= '0';
-      int0b <= '0';
+      startTest(testToDo, int0b);
+      
       
       disasmToFile("events_disasm.txt", testProgram);      
       report "Waiting for completion...";
 
-     wait until rising_edge(clk);
- 
-     loop
-        wait until rising_edge(clk);
-          if cpuEndFlag = '1' then
-              report "Test done";
-              testDone <= '1';
-              exit;
-          end if;
-          
-          if cpuErrorFlag = '1' then
-              report "TEST FAIL: " & "events";
-              testFail <= '1';            
-              wait;                     
-          end if;                  
-      end loop;      
+      checkTestResult("events", testDone, testFail);
+   
 
       report "Now test interrupts";
 
 	  progB := readSourceFile( "events2.txt");
       machineCode <= processProgram(progB);
-      wait until rising_edge(clk);
-                        testDone <= '0';
-                        testFail <= '0';
+      
+      cycle;
           
-      testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
-      testProgram(512/4) <= ins6L(j, -512);-- TEMP!        
+          testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+          testProgram(512/4) <= ins6L(j, -512);-- TEMP!        
+          
+          testProgram(384/4) <= ins655H(addI, r20, r0, 55);
+          testProgram(384/4 + 1) <= ins655655(ext2, 0, 0, retE, 0, 0);
+          
+          testProgram(640/4) <= ins655H(addI, r0, r0, 0); -- NOP
+          testProgram(640/4 + 1) <= ins655655(ext2, 0, 0, retI, 0, 0);
       
-      testProgram(384/4) <= ins655H(addI, r20, r0, 55);
-      testProgram(384/4 + 1) <= ins655655(ext2, 0, 0, retE, 0, 0);
-      
-      testProgram(640/4) <= ins655H(addI, r0, r0, 0); -- NOP
-      testProgram(640/4 + 1) <= ins655655(ext2, 0, 0, retI, 0, 0);          
-      
-      --wait until rising_edge(clk);         
-      testToDo <= '1';
-      int0b <= '1';
-      wait until rising_edge(clk);
-      testToDo <= '0';
-      int0b <= '0';
+      startTest(testToDo, int0b);
       
       disasmToFile("events2_disasm.txt", testProgram);      
       report "Waiting for completion...";
 
-
-      wait until rising_edge(clk);
+      cycle;
         -- After x cycles send interrupt
       wait for 22 * 10 ns;
-      wait until rising_edge(clk);        
-      int1 <= '1';
-      wait until rising_edge(clk);
-      int1 <= '0';      
- 
-      loop
-          wait until rising_edge(clk);
-          
-          if cpuEndFlag = '1' then
-              report "Test done";
-              testDone <= '1';
-              
-              exit;
-          end if;
-          
-          if cpuErrorFlag = '1' then
-              report "TEST FAIL: " & "events2";
-              testFail <= '1';            
-              wait;                     
-          end if;                  
-      end loop;      
+      
+        setForOneCycle(int1, clk);
 
-              report "All test runs have been completed successfully";
-
-        wait until rising_edge(clk);
-            testDone <= '0';
-            testFail <= '0';
+        checkTestResult("events2", testDone, testFail);    
+        report "All test runs have been completed successfully";
+        cycle;
 
       wait;
    end process;
