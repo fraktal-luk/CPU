@@ -116,54 +116,37 @@ ARCHITECTURE Behavior OF CoreTB IS
     constant TIME_STEP: time := 1 ns; -- for 1 instruction in emulation
 
  
-	signal prog: ProgramBuffer;
-	signal machineCode: WordArray(0 to prog'length-1);
+	--signal prog: ProgramBuffer;
+	--signal machineCode: WordArray(0 to prog'length-1);
 	
     signal testProgram: WordArray(0 to 1023);
     signal testToDo, testDone, testFail: std_logic := '0';
     
     signal currentTest, currentSuite: string(1 to 20);
-
     
-    --signal programMemory: WordArray(0 to 1023);
-        alias programMemory is testProgram;
+    alias programMemory is testProgram;
     
     signal dataMemory: ByteArray(0 to 4095);
     
     alias cpuEndFlag is oaux(0);
     alias cpuErrorFlag is oaux(1);
-    
-    --signal instructionWord: Mword;
-    --signal disasm: string(1 to 51);
+
 
     type Instruction is record
         address: Mword;
         bits: Word;
         disasm: string(1 to 51);
+        internalOp: InternalOperation;
     end record;
     
     signal currentInstruction: Instruction;
     
-    
     signal cpuState: CoreState := INIT_CORE_STATE;
-    
-    
-        signal internalOp: InternalOperation;
-        signal opFlags: std_logic_vector(0 to 2);
         
+    signal opFlags: std_logic_vector(0 to 2);
     signal okFlag, errorFlag: std_logic := '0';
-        signal TEST_word, TP, TQ: Word;
-        signal TEST_gb: GroupBuffer;
         
-        
-        signal TMP_str0: string(1 to 10) := ('1', '1', cr, cr, cr, cr, cr, cr, cr, cr); 
-        signal TMP_str1: string(1 to 10) := ('1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '); 
-        
-        signal num0, num1: integer;
-        
-        file traceFile: text open write_mode is "emulation_trace.txt";
-    
-    
+    file traceFile: text open write_mode is "emulation_trace.txt";
     
     function compareTraceLines(sa, sb: string) return boolean is
     begin
@@ -177,8 +160,6 @@ ARCHITECTURE Behavior OF CoreTB IS
     
     function skipLine(s: string) return boolean is
     begin
-        --        return false;
-    
         for i in s'range loop
             if s(i) = '#' and i < s'length then
                 return s(i+1) = 'R';
@@ -195,12 +176,7 @@ ARCHITECTURE Behavior OF CoreTB IS
         variable ia, ib: natural := 0;
     begin
         match := true;
-           --     report "Comparng" severity note;
-    
         loop
-           --         report "iter " & natural'image(ia);
-        
-                    --if ia > 20 or ib > 20 then return; end if;
             la := null;
             lb := null;
             ia := ia + 1;
@@ -210,46 +186,21 @@ ARCHITECTURE Behavior OF CoreTB IS
             
             while la /= null and skipLine(la.all) loop la := null; readline(fa, la); ia := ia + 1; end loop;
             while lb /= null and skipLine(lb.all) loop lb := null; readline(fb, lb); ib := ib + 1; end loop;
-            
---                    report "What now?";
-            
---                        if la = null then
---                            report "la ended " & natural'image(ia);
---                        else
---                            report la.all;     
---                        end if;
---                        if lb = null then
---                            report "lb ended " & natural'image(ib)
---                            ;
---                        else
---                            report lb.all;     
---                        end if;
-            
+
             if la = null and lb = null then
-                --return true;
-                --            report "Both files end";
                 return;
             end if;
             
             if (la = null) /= (lb = null) then
---                    report "EOF!";
-                    --        report "One file ends";
                 match := false;
                 return;
             end if; 
             
             if not compareTraceLines(la.all, lb.all) then
-                --    report "Different lines!";
                 match := false;
                 return;
-            end if;
-            
-            --    report "go on";
+            end if;            
         end loop;
-        
-        --    report natural'image(ia) & " <-> " &natural'image(ib);
-        
-        --return true;
     end procedure;
         
         
@@ -354,7 +305,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     end procedure;
     
     procedure putInstructionSequence(signal programMem: inout WordArray; address: in Mword; insSeq: WordArray) is
-        constant startAdr: natural := slv2u(address);
+        constant startAdr: natural := slv2u(address)/4;
         constant LEN: natural := insSeq'length;
     begin
         assert isNonzero(address(1 downto 0)) = '0' report "Unaligned instruction address!" severity error;
@@ -363,26 +314,33 @@ ARCHITECTURE Behavior OF CoreTB IS
         
     end procedure;
     
-    procedure loadProgramFromFile(variable filename: in line; signal testProgram: out WordArray) is        
-	    constant prog: ProgramBuffer := readSourceFile(filename.all & ".txt");
+    procedure loadProgramFromFile(filename: in string; signal testProgram: out WordArray) is        
+	    constant prog: ProgramBuffer := readSourceFile(filename);
         constant machineCode: WordArray(0 to prog'length-1) := processProgram(prog);
     begin
+        testProgram <= (others => (others => 'U'));
         testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
     end procedure;
-     
+
+
+    procedure fillStringFromLine(signal s: out string; variable ln: in line) is
+    begin
+        s <= (others => ' ');
+        s(1 to ln.all'length) <= ln.all;        
+    end procedure; 
+
+    
+    function getInstruction(signal cpuState: in CoreState; signal programMemory: in WordArray) return Instruction is
+        variable res: Instruction;
+        variable insWordVar: Word;
+        variable intOpVar: InternalOperation;
+    begin
+        insWordVar := programMemory(slv2u(cpuState.nextIP)/4);
+        intOpVar := decode(cpuState.nextIP, insWordVar);
+        res := (cpuState.nextIP, insWordVar,  disasmWithAddress(slv2u(cpuState.nextIP), insWordVar), intOpVar); 
+        return res;
+    end function;
 BEGIN
-
-            assert ins655H(addI, r20, r0, 55) = asm("add_i r20, r0, 55") severity failure;
-            assert ins6L(j, -512) = asm("ja -512") severity failure;
-            assert ins655655(ext2, 0, 0, retE, 0, 0) = asm("sys rete") severity failure;
-      
-
-            --num0 <= integer'value(TMP_str0(2 to 10));
-            --num1 <= integer'value(TMP_str1);
-
-                            TEST_word <=  asm("ldf_i f7, r0, 20");
-                            TEST_gb <= parseInstructionString("ldf_i f7, r0, 20" & cr);
-                            
 
     okFlag <= bool2std(opFlags = "001");
     errorFlag <= bool2std(opFlags = "100");
@@ -430,23 +388,18 @@ BEGIN
 	en <= '1' after 105 ns;
 	
 	int0 <= int0a or int0b;
-	
-    --testDone <= oaux(0);
-    --testFail <= oaux(1);
+
 	
    -- Stimulus process
    stim_proc: process
-       variable progB: ProgramBuffer;
        variable testName, suiteName, disasmText: line;
        file suiteFile: text open read_mode is "suite_names.txt";
        file testFile: text;
-	   
-        variable insWordVar: Word;
-        variable intOpVar: InternalOperation;
-        variable opResultVar: OperationResult;
+
+       variable opResultVar: OperationResult;
          
-      variable match: boolean := true;
- 
+       variable match: boolean := true;
+       variable currentInstructionVar: Instruction;
    begin
 	
 	  wait for 110 ns;
@@ -473,36 +426,27 @@ BEGIN
               end if;
     
               report "Now to run: " & testName.all;
-              progB := readSourceFile(testName.all & ".txt");
-              machineCode <= processProgram(progB);
+              loadProgramFromFile(testName.all & ".txt", programMemory);
 
-                 loadProgramFromFile(testName, programMemory);
+              fillStringFromLine(currentSuite, suiteName);
+              fillStringFromLine(currentTest, testName);
 
-                    currentSuite <= (others => ' ');
-                    currentTest <= (others => ' ');
-                    currentSuite(1 to suiteName.all'length) <= suiteName.all;
-                    currentTest(1 to testName.all'length) <= testName.all;
-
-                        --instructionWord <= (others => 'U');
-                        internalOp <= DEFAULT_INTERNAL_OP;
-                        --disasm <= (others => ' ');
-                        currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '));
-                        
-						opFlags <= (others => '0');
-						cpuState <= INIT_CORE_STATE;
-						dataMemory <= (others => (others => '0'));
+              currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
+            
+              opFlags <= (others => '0');
+              cpuState <= INIT_CORE_STATE;
+              dataMemory <= (others => (others => '0'));
 
               setForOneCycle(resetDataMem, clk); 
               
-              --testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
-              
-              testProgram(512/4) <= ins6L(j, -512);-- TEMP! 
-              testProgram(384/4) <= ins655655(ext2, 0, 0, send, 0, 0);
-              testProgram(384/4 + 1) <= ins6L(j, 0); -- idle loop          
 
-                if CORE_SIMULATION then
-                    startTest(testToDo, int0b);
-                end if;
+              testProgram(512/4) <= asm("ja -512");
+              testProgram(384/4) <= asm("sys send");
+              testProgram(384/4 + 1) <= asm("ja 0");        
+
+              if CORE_SIMULATION then
+                  startTest(testToDo, int0b);
+              end if;
 
               disasmToFile(testName.all & "_disasm.txt", testProgram);
                     
@@ -512,23 +456,19 @@ BEGIN
                 if EMULATION then    
                     -- Now doing the actual test 
                     while opFlags /= "100" and opFlags /= "001" loop -- ERROR or SEND (completed)
-                        insWordVar := programMemory(slv2u(cpuState.nextIP)/4);
-                        intOpVar := decode(cpuState.nextIP, insWordVar);
-                        internalOp <= intOpVar;
-                        
-                        currentInstruction <= (cpuState.nextIP, insWordVar,  disasmWithAddress(slv2u(cpuState.nextIP), programMemory(slv2u(cpuState.nextIP)/4)));   
-                        performOp(cpuState, dataMemory, intOpVar, opFlags, opResultVar);
+                        currentInstructionVar := getInstruction(cpuState, programMemory);
+                        currentInstruction <= currentInstructionVar;
+                        performOp(cpuState, dataMemory, currentInstructionVar.internalOp, opFlags, opResultVar);
                         
                         if LOG_EMULATION_TRACE then
-                               -- log trace
-                               write(disasmText, disasmWithAddress(slv2u(cpuState.nextIP), insWordVar));
-                               writeline(traceFile, disasmText);
+                            write(disasmText, disasmWithAddress(slv2u(cpuState.nextIP), currentInstructionVar.bits));
+                            writeline(traceFile, disasmText);
                         end if;
                         
                         wait for TIME_STEP;
                     end loop;
                 end if;
-
+    
                 if CORE_SIMULATION then
                     checkTestResult(testName, testDone, testFail);
                 end if;
@@ -538,36 +478,29 @@ BEGIN
           report "All tests in suite done!";
           
           cycle;
-                    
-      
-              compareTraceFiles("emulation_trace.txt", "CoreDB_committed.txt", match);
-                    report "Traces match: " & boolean'image(match);
-                assert match report "Traces are divergent!" severity error;
-                
-      
-           --         wait;
+
       end loop;
-          
+
+          compareTraceFiles("emulation_trace.txt", "CoreDB_committed.txt", match);
+          report "Traces match: " & boolean'image(match);
+          assert match report "Traces are divergent!" severity error;
+
       report "All suites done!";
       currentSuite <= (others => ' ');
       currentTest <= (others => ' ');
 
-        internalOp <= DEFAULT_INTERNAL_OP;
-        --disasm <= (others => ' ');
-        currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '));
+      currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
         
-        opFlags <= (others => '0');
-        cpuState <= INIT_CORE_STATE;
-        dataMemory <= (others => (others => '0'));
+      opFlags <= (others => '0');
+      cpuState <= INIT_CORE_STATE;
+      dataMemory <= (others => (others => '0'));
       
-      --wait until rising_edge(clk);
       cycle;
       
       report "Run exception tests";
-      testProgram(0) <= ins655655(ext2, 0, 0, error, 0, 0);
-      testProgram(1) <= ins6L(j, 0);
+      testProgram(0) <= asm("sys error");
+      testProgram(1) <= asm("ja 0");
       
-      --wait until rising_edge(clk);
       cycle;
         
       startTest(testToDo, int0b);
@@ -576,54 +509,42 @@ BEGIN
       
       report "Waiting for completion...";
  
-      -- wait until rising_edge(clk);
       cycle; 
         
       checkErrorTestResult("check_error", testDone, testFail);  
 
-      --wait until rising_edge(clk);
       cycle;
-      --      testDone <= '0';
-      --      testFail <= '0';
             
       report "Now test exception return";
-
-	  progB := readSourceFile("events.txt" );
-      machineCode <= processProgram(progB);
-      --wait until rising_edge(clk);
+      
+      loadProgramFromFile("events.txt", programMemory);
       cycle;
 
             
-          testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
-          testProgram(512/4) <= ins6L(j, -512);-- TEMP!        
-    
-          testProgram(384/4) <= ins655H(addI, r20, r0, 55);
-          testProgram(384/4 + 1) <= ins655655(ext2, 0, 0, retE, 0, 0);
+      testProgram(512/4) <=     asm("ja -512");       
+
+      testProgram(384/4) <=     asm("add_i r20, r0, 55");  
+      testProgram(384/4 + 1) <= asm("sys rete");
       
-      startTest(testToDo, int0b);
+      startTest(testToDo, int0b);      
       
-      
-      disasmToFile("events_disasm.txt", testProgram);      
+      disasmToFile("events_disasm.txt", testProgram);
       report "Waiting for completion...";
 
-      checkTestResult("events", testDone, testFail);
-   
+      checkTestResult("events", testDone, testFail);   
 
       report "Now test interrupts";
 
-	  progB := readSourceFile( "events2.txt");
-      machineCode <= processProgram(progB);
-      
+      loadProgramFromFile("events2.txt", programMemory);      
       cycle;
-          
-          testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
-          testProgram(512/4) <= ins6L(j, -512);-- TEMP!        
-          
-          testProgram(384/4) <= ins655H(addI, r20, r0, 55);
-          testProgram(384/4 + 1) <= ins655655(ext2, 0, 0, retE, 0, 0);
-          
-          testProgram(640/4) <= ins655H(addI, r0, r0, 0); -- NOP
-          testProgram(640/4 + 1) <= ins655655(ext2, 0, 0, retI, 0, 0);
+
+      testProgram(512/4) <=     asm("ja -512");     
+      
+      testProgram(384/4) <=     asm("add_i r20, r0, 55");
+      testProgram(384/4 + 1) <= asm("sys rete");
+      
+      testProgram(640/4) <=     asm("add_i r0, r0, 0"); -- NOP
+      testProgram(640/4 + 1) <= asm("sys reti");
       
       startTest(testToDo, int0b);
       
@@ -633,12 +554,13 @@ BEGIN
       cycle;
         -- After x cycles send interrupt
       wait for 22 * 10 ns;
-      
-        setForOneCycle(int1, clk);
+      cycle;
 
-        checkTestResult("events2", testDone, testFail);    
-        report "All test runs have been completed successfully";
-        cycle;
+      setForOneCycle(int1, clk);
+
+      checkTestResult("events2", testDone, testFail);    
+      report "All test runs have been completed successfully";
+      cycle;
 
       wait;
    end process;
@@ -657,12 +579,8 @@ BEGIN
             for i in 0 to PIPE_WIDTH-1 loop
                 iin(i) <= testProgram(slv2u(baseIP(10 downto 2)) + i); -- CAREFUL! 2 low bits unused (32b memory) 									
             end loop;
-					
-            if iadrvalid = '1' and countOnes(iadr(iadr'high downto 12)) = 0 then
-                ivalid <= '1';					
-            else
-                ivalid <= '0';	
-            end if;			
+            
+            ivalid <= iadrvalid and not isNonzero(iadr(iadr'high downto 12));
 		end if;	
 	end process;	
 
