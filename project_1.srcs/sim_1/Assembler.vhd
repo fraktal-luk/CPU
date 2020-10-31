@@ -34,16 +34,19 @@ package Assembler is
 type GroupBuffer is array(0 to 4) of string(1 to 10);
 type ProgramBuffer is array(0 to 999) of GroupBuffer;
 
-                        function parseInstructionString(str: string) return GroupBuffer; -- TEMP!
+constant MAX_LABEL_SIZE: natural := 20;
+
+type LabelArray is array(integer range <>) of string(1 to MAX_LABEL_SIZE);
+
+
+
+    function parseInstructionString(str: string) return GroupBuffer; -- TEMP!
 
 
 function readSourceFile(name: string) return ProgramBuffer;
 
 function processProgram(p: ProgramBuffer) return WordArray;
-
-constant MAX_LABEL_SIZE: natural := 20;
-
-type LabelArray is array(integer range <>) of string(1 to MAX_LABEL_SIZE);
+procedure processProgramWithExports(p: in ProgramBuffer; machineCode: out WordArray; outLabels, outExports: out LabelArray; outStartOffsets, outEndOffsets: out IntArray);
 
 
 type OpcodeArray is array(0 to 63) of ProcOpcode;
@@ -139,7 +142,8 @@ begin
         or (c >= 'A' and c <= 'Z')
         or (c >= 'a' and c <= 'z')
         or (c = '_')
-        or (c = '$'); -- To serve as label marker
+        or (c = '$') -- To serve as label marker
+        or (c = '@'); -- To serve as keyword marker
 end function;
 
 
@@ -530,6 +534,71 @@ begin
     
     return commands;
 end function;
+
+
+procedure processProgramWithExports(p: in ProgramBuffer; machineCode: out WordArray; outLabels, outExports: out LabelArray; outStartOffsets, outEndOffsets: out IntArray) is
+    variable insIndex, procIndex: integer := 0; -- Actual number of instruction
+    variable labels, exports: LabelArray(0 to p'length-1) := (others => (others => cr));
+    variable startOffsets, endOffsets: IntArray(0 to p'length-1) := (others => -1);
+    variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
+    variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext2, 0, 0, error, 0, 0));
+    variable tmpStr: string(1 to 10) :=(others => ' ');
+begin
+    --        return;
+
+    for i in 0 to p'length-1 loop
+        if p(i)(0)(1) = '@' then -- Keyword
+            tmpStr(1 to  p(i)(0)'length-1) := p(i)(0)(2 to p(i)(0)'length);
+            -- TODO
+            -- when proc
+            if matches(tmpStr, "proc") then
+                -- add name to labels
+                -- add name to export
+                -- add insIndex to offsets
+                labels(insIndex)(1 to 10) := p(i)(1);
+                exports(insIndex)(1 to 10) := p(i)(1);
+                startOffsets(procIndex) := insIndex; 
+                --procIndex := procIndex + 1;
+            -- when end
+            elsif matches(tmpStr, "end") then
+                -- ignore
+                -- set proc end (if such action needed and defined)
+                endOffsets(procIndex) := insIndex;
+                procIndex := procIndex + 1;
+            end if;
+        elsif p(i)(0)(1) = '$' then -- label
+           labels(insIndex)(1 to 10) := p(i)(0);            
+        elsif p(i)(0)(1) = cr then -- the line is empty
+           null;
+        else -- instruction
+           pSqueezed(insIndex) := p(i);
+           insIndex := insIndex + 1;  
+        end if;
+        
+         --       report "Iter done " & integer'image(i);
+    end loop;
+    
+    for i in 0 to p'length-1 loop
+        if pSqueezed(i)(0)(1) = '$' then -- label
+           null;
+        elsif pSqueezed(i)(0)(1) = cr then -- the line is empty
+           null;
+        else -- instruction        
+           commands(i) := processInstruction(pSqueezed(i), i, labels);
+        end if;
+        
+--                                report "Iter x done " & integer'image(i);
+
+    end loop;    
+    
+    machineCode := commands;
+    
+        outLabels := labels;
+        outExports := exports;
+        outStartOffsets := startOffsets;
+        outEndOffsets := endOffsets;
+end procedure;
+
 
 
 function reg2str(n: natural; fp: boolean) return string is

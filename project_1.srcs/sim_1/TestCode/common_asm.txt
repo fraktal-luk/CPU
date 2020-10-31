@@ -1,0 +1,13 @@
+$label0
+	and_i r0, r0, r0 ;
+	ldi_i r7, r8, 28
+@proc f1
+	reti
+@end
+
+	and_i r1, r1, r1
+	
+@proc f2
+	or_i r2, r2, r2 ; 
+	reti
+ 

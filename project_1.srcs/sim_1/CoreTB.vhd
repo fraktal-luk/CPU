@@ -340,7 +340,24 @@ ARCHITECTURE Behavior OF CoreTB IS
         res := (cpuState.nextIP, insWordVar,  disasmWithAddress(slv2u(cpuState.nextIP), insWordVar), intOpVar); 
         return res;
     end function;
+    
+    
+    procedure loadCommonAsm(signal machineCode: out WordArray) is
+        variable prog: ProgramBuffer := readSourceFile("common_asm.txt");
+        --variable machineCode: WordArray(0 to 999);
+    begin
+        machineCode <= processProgram(prog);
+        
+    end procedure;
+    
+    signal commonCode: WordArray(0 to 999);
+    
+    
+    
+    signal outLabels, outExports: LabelArray(0 to 999);
+    signal outStartOffsets, outEndOffsets: IntArray(0 to 999);    
 BEGIN
+    --loadCommonAsm(commonCode);
 
     okFlag <= bool2std(opFlags = "001");
     errorFlag <= bool2std(opFlags = "100");
@@ -400,8 +417,19 @@ BEGIN
          
        variable match: boolean := true;
        variable currentInstructionVar: Instruction;
+        variable machineCodeVar: WordArray(0 to 999);
+        
+        variable outLabelsVar, outExportsVar: LabelArray(0 to 999);
+        variable outStartOffsetsVar, outEndOffsetsVar: IntArray(0 to 999);
    begin
-	
+	           processProgramWithExports(readSourceFile("common_asm.txt"), machineCodeVar, outLabelsVar, outExportsVar, outStartOffsetsVar, outEndOffsetsVar);
+	           
+	           commonCode <= machineCodeVar;
+	           outLabels <= outLabelsVar;
+	           outExports <= outExportsVar;
+	           outStartOffsets <= outStartOffsetsVar;
+	           outEndOffsets <= outEndOffsetsVar;
+	           
 	  wait for 110 ns;
       
       loop
