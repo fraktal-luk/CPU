@@ -316,19 +316,21 @@ ARCHITECTURE Behavior OF CoreTB IS
     
     procedure loadProgramFromFile(filename: in string; signal testProgram: out WordArray) is        
 	    constant prog: ProgramBuffer := readSourceFile(filename);
-        constant machineCode: WordArray(0 to prog'length-1) := processProgram(prog);
+        variable machineCode: WordArray(0 to prog'length-1);
     begin
+        machineCode := processProgram(prog); -- TODO: include common imports
+    
         testProgram <= (others => (others => 'U'));
         testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
     end procedure;
 
 
+    -- Differs from simple ln.all in that it's written to a string of predefined length
     procedure fillStringFromLine(signal s: out string; variable ln: in line) is
     begin
         s <= (others => ' ');
         s(1 to ln.all'length) <= ln.all;        
-    end procedure; 
-
+    end procedure;
     
     function getInstruction(signal cpuState: in CoreState; signal programMemory: in WordArray) return Instruction is
         variable res: Instruction;
@@ -350,12 +352,15 @@ ARCHITECTURE Behavior OF CoreTB IS
         
     end procedure;
     
-    signal commonCode: WordArray(0 to 999);
+    signal commonCode, commonCode2: WordArray(0 to 999);
     
     
     
     signal outLabels, outExports: LabelArray(0 to 999);
-    signal outStartOffsets, outEndOffsets: IntArray(0 to 999);    
+    signal outStartOffsets, outEndOffsets: IntArray(0 to 999);
+
+       signal linkOffsets: IntArray(0 to 100);
+    
 BEGIN
     --loadCommonAsm(commonCode);
 
@@ -417,21 +422,41 @@ BEGIN
          
        variable match: boolean := true;
        variable currentInstructionVar: Instruction;
-        variable machineCodeVar: WordArray(0 to 999);
+        variable machineCodeVar, machineCodeVar2, machineCodeVar3: WordArray(0 to 999);
         
         variable outLabelsVar, outExportsVar: LabelArray(0 to 999);
         variable outStartOffsetsVar, outEndOffsetsVar: IntArray(0 to 999);
+        
+        variable exp, imp: XrefArray(0 to 100);
+        variable exp2, imp2: XrefArray(0 to 100);
+        variable linkOffsetsVar: IntArray(0 to 100);
    begin
-	           processProgramWithExports(readSourceFile("common_asm.txt"), machineCodeVar, outLabelsVar, outExportsVar, outStartOffsetsVar, outEndOffsetsVar);
+	           --processProgramWithExports(readSourceFile("common_asm.txt"), machineCodeVar, outLabelsVar, outExportsVar, outStartOffsetsVar, outEndOffsetsVar);
+	      --     processProgramNew(readSourceFile("common_asm.txt"), machineCodeVar, outLabelsVar, outExportsVar, outStartOffsetsVar, outEndOffsetsVar);
+    	           processProgramNew2(readSourceFile("common_asm.txt"), machineCodeVar2, imp, exp);
+    	           processProgramNew2(readSourceFile("common_asm_2.txt"), machineCodeVar3, imp2, exp2);
+	               
+	               linkOffsetsVar := matchXrefs(imp2, exp);
+	               linkOffsets <= linkOffsetsVar;
 	           
-	           commonCode <= machineCodeVar;
+	               printXrefArray(imp);
+	               printXrefArray(exp);
+
+	               printXrefArray(imp2);
+	               printXrefArray(exp2);
+	           
+	           commonCode <= --machineCodeVar;
+	                           machineCodeVar2;
+	           commonCode2 <= --machineCodeVar;
+	                           machineCodeVar3;
+	                           
 	           outLabels <= outLabelsVar;
 	           outExports <= outExportsVar;
 	           outStartOffsets <= outStartOffsetsVar;
 	           outEndOffsets <= outEndOffsetsVar;
 	           
 	  wait for 110 ns;
-      
+                    commonCode2 <= fillXrefs(commonCode2, imp2, linkOffsets, 0, 0);
       loop
           suiteName := null;
           readline(suiteFile, suiteName);

@@ -40,13 +40,30 @@ type LabelArray is array(integer range <>) of string(1 to MAX_LABEL_SIZE);
 constant EMPTY_LABEL_ARRAY: LabelArray(0 to 0) := (others => (others => ' '));
 
 
+
+-- Structure for import or export of label: name and where the source or required replacement is
+type Xref is record
+    name: line;
+    address: integer;
+end record;
+
+--constant DEFAULT_XREF: Xref := (null, -1); -- Illegal bc constant can't have pointers
+
+type XrefArray is array(integer range <>) of Xref;
+
+procedure printXrefArray(xa: XrefArray);
+
+
     function parseInstructionString(str: string) return GroupBuffer; -- TEMP!
 
 
 function readSourceFile(name: string) return ProgramBuffer;
 
 function processProgram(p: ProgramBuffer) return WordArray;
-procedure processProgramWithExports(p: in ProgramBuffer; machineCode: out WordArray; outLabels, outExports: out LabelArray; outStartOffsets, outEndOffsets: out IntArray);
+--procedure processProgramWithExports(p: in ProgramBuffer; machineCode: out WordArray; outLabels, outExports: out LabelArray; outStartOffsets, outEndOffsets: out IntArray);
+
+--procedure processProgramNew(p: in ProgramBuffer; machineCode: out WordArray; outLabels, outExports: out LabelArray; outStartOffsets, outEndOffsets: out IntArray);
+procedure processProgramNew2(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray);
 
 
 type OpcodeArray is array(0 to 63) of ProcOpcode;
@@ -130,12 +147,43 @@ function disasmWord(w: Word) return string;
 
 procedure disasmToFile(name: string; arr: WordArray);
 
+function matchXrefs(imp, exp: XrefArray) return IntArray;
+
+function fillXrefs(code: WordArray; imports: XrefArray; offsets: IntArray; imgStart, libStart: integer) return WordArray;
+
+
+    procedure stringFromLine(s: out string; variable ln: in line);
+
 end Assembler;
 
 
 
 package body Assembler is
 
+    -- Differs from simple ln.all in that it's written to a string of predefined length
+    procedure stringFromLine(s: out string; variable ln: in line) is
+    begin
+        s := (others => ' ');
+        s(1 to ln.all'length) := ln.all;        
+    end procedure; 
+
+
+procedure printXrefArray(xa: XrefArray) is
+
+begin
+    report "Printing refs:";
+    for i in xa'range loop
+        if xa(i).name = null then
+            return;
+        end if;
+        --report xa(i).name.all & ": " & natural'image(xa(i).address);
+        report xa(i).name.all; report natural'image(xa(i).address);
+    end loop;
+end procedure;
+
+
+
+-- TODO: change name to something true (isExtendedAlphanum?)
 function isAlphanum(c: character) return boolean is
 begin
     return (c >= '0' and c <= '9')
@@ -176,15 +224,6 @@ begin
         grp := grp + 1;
     end loop;
     
-    
---    for i in 0 to words'length-1 loop
---       for j in 1 to words(0)'length loop
---           if words(i)(j) = cr then
---               words(i)(j) := ' ';
---           end if;
---       end loop; 
---    end loop;
-    
     return words;
 end function;
 
@@ -221,39 +260,9 @@ begin
             end if;
             
             str(i) := ch;
-        end loop;  
-        
-        -- We need to save the label (if any) of this line for branch reference, and produce hex value for instruction.
-        -- The latter is not possible until we have all the labels, so it must be done in steps.
-        
-        -- To keep it simple: 
-        --  - line will be either a label or instruction
-        --  - label starts with '$'
-        --  - if not label, cut line into alphanumeric groups, don't care about commas etc.
-
-        ind := 1;
-        grp := 0;
-        words := (others => (others => cr));      
-        while str(ind) /= cr and grp < words'length loop -- keep last char as end sign
-            while str(ind) = ' ' or str(ind) = ','  or str(ind) = ht loop 
-                -- skipping wspace
-                ind := ind + 1;
-            end loop;
-            
-            blockStart := ind - 1;
-            while isAlphanum(str(ind)) or str(ind) = '-' loop -- and not tab nor cr!
-                -- Copy to current group
-                words(grp)(ind - blockStart) := str(ind); -- May overflow the word, but nvm                 
-                ind := ind + 1;
-            end loop;
-            -- Inc group index
-            grp := grp + 1;
         end loop;
-        
-        -- Convert words to line structure
-        program(lineNum) := --words;
-                            parseInstructionString(str);        
-
+   
+        program(lineNum) := parseInstructionString(str);
         lineNum := lineNum + 1;
     end loop;
     
@@ -336,52 +345,39 @@ end function;
 --end function;
 
 
-function processInstruction(ar: GroupBuffer; num: integer; labels, imports: LabelArray; fillLabels: boolean) return word is
-    variable mnem: ProcMnemonic;
-    variable res: word := (others => '0');
-    variable vals: IntArray(0 to ar'length-1) := (others => -1);
-    variable x: integer := 0;
-    variable undefOffset: boolean := false;
+function parseArg(s: string) return integer is
+    variable x: integer := -1;
 begin
-    -- First elem must be opcode. Find it in opcode list
-    mnem := undef;
-    for m in ProcMnemonic loop
-        if matches(ar(0), ProcMnemonic'image(m)) then
-            mnem := m;
-        end if;
-    end loop;
-    
-    -- Convert other arg to numbers
-    for i in 1 to ar'length-1 loop
-        undefOffset := false;
-        if ar(i)(1) = '$' then
-            -- Label!
-            x := 4*(findLabel(ar(i), labels) - num); -- branch offset
-            if not fillLabels then
-                undefOffset := true;
-            end if;
-        elsif ar(i)(1) = 'r' and ar(i)(2) >= '0' and ar(i)(2) <= '9' then
-            -- register
-            x := TMP_str2int(ar(i)(2 to ar(i)'length));
-        elsif ar(i)(1) = 'f' and ar(i)(2) >= '0' and ar(i)(2) <= '9' then
-            -- register (FP)
-            x := TMP_str2int(ar(i)(2 to ar(i)'length ));			
-        elsif ar(i)(1) = '-' then
-            x := -TMP_str2int(ar(i)(2 to ar(i)'length));                  
-        elsif not isAlphanum(ar(i)(1)) then
-            x := -1;
-        elsif ar(i)(1) >= '0' and ar(i)(1) <= '9' then
-            -- Hope it's a number 
-            x := TMP_str2int(ar(i));
-        else
-            x := -1;
-        end if;
-        
-        vals(i) := x;
-    end loop;
-    
+    if s(1) = '$' or s(1) = '@' then
+        -- Label!
+--        x := 4*(findLabel(ar(i), labels) - num); -- branch offset
+--        if not fillLabels then
+--            undefOffset := true;
+--        end if;
+    elsif s(1) = 'r' and s(2) >= '0' and s(2) <= '9' then
+        -- register
+        x := TMP_str2int(s(2 to s'length));
+    elsif s(1) = 'f' and s(2) >= '0' and s(2) <= '9' then
+        -- register (FP)
+        x := TMP_str2int(s(2 to s'length ));            
+    elsif s(1) = '-' then
+        x := -TMP_str2int(s(2 to s'length));                  
+    elsif not isAlphanum(s(1)) then
+        x := -1;
+    elsif s(1) >= '0' and s(1) <= '9' then
+        -- Hope it's a number 
+        x := TMP_str2int(s);
+    else
+        x := -1;
+    end if;    
+    return x;
+end function;
 
-    case mnem is
+
+function makeMachineWord(mnemonic: ProcMnemonic; vals: IntArray; strArg: string; undefOffset: boolean) return Word is
+    variable res: Word := (others => '0');
+begin
+    case mnemonic is
         when and_i =>
             res := ins655H(andI, vals(1), vals(2), vals(3));
         when or_i =>
@@ -390,9 +386,7 @@ begin
                 --res := ins655H(xorI, vals(1), vals(2), vals(3));
         when add_i =>
             res := ins655H(addI, vals(1), vals(2), vals(3));
-        --when sub_i =>
-        --        res := ins655H(subI, vals(1), vals(2), vals(3));
-
+    
         when and_r =>
             res := ins655655(ext0, vals(1), vals(2), andR, vals(3), 0);
         when or_r =>
@@ -424,11 +418,11 @@ begin
         
         when lds =>
             res := ins6556X(ext2, vals(1), vals(2), mfc, vals(3));
-
+    
         when sts =>
             res := ins6556X(ext2, vals(1), vals(2), mtc, vals(3));
-
-
+    
+    
         when jz_i =>
             res := ins65J(jz, vals(1), vals(2));
                 if undefOffset then
@@ -457,38 +451,106 @@ begin
                 end if;            
             
         when sys =>
-            if matches(ar(1), "halt") then
+            if matches(strArg, "halt") then
                res := ins655655(ext2, 0, 0, halt, 0, 0);
-            elsif matches(ar(1), "reti") then
+            elsif matches(strArg, "reti") then
                res := ins655655(ext2, 0, 0, retI, 0, 0);
-            elsif matches(ar(1), "rete") then
+            elsif matches(strArg, "rete") then
                res := ins655655(ext2, 0, 0, retE, 0, 0);
-            elsif matches(ar(1), "sync") then
+            elsif matches(strArg, "sync") then
                res := ins655655(ext2, 0, 0, sync, 0, 0);            
-            elsif matches(ar(1), "replay") then
+            elsif matches(strArg, "replay") then
                res := ins655655(ext2, 0, 0, replay, 0, 0);            
-            elsif matches(ar(1), "error") then
+            elsif matches(strArg, "error") then
                res := ins655655(ext2, 0, 0, error, 0, 0);
-            elsif matches(ar(1), "call") then
+            elsif matches(strArg, "call") then
                   res := ins655655(ext2, 0, 0, call, 0, 0);
-            elsif matches(ar(1), "send") then
+            elsif matches(strArg, "send") then
                   res := ins655655(ext2, 0, 0, send, 0, 0);                                            
             else
                res := ins6L(undef, 0);            
             end if;
         
-		when mov_f =>
-			res := ins6556X(fop, vals(1), vals(2), fmov, 0);
-			
-		when or_f =>
-			res := ins655655(fop, vals(1), vals(2), fmov, vals(3), 0);
-		
+        when mov_f =>
+            res := ins6556X(fop, vals(1), vals(2), fmov, 0);
+            
+        when or_f =>
+            res := ins655655(fop, vals(1), vals(2), fmov, vals(3), 0);
+        
         when others => 
             res := ins6L(undef, 0);
     end case;
     
     return res;
 end function;
+
+
+
+function processInstruction(ar: GroupBuffer; num: integer; labels, imports: LabelArray; fillLabels: boolean) return word is
+    variable mnem: ProcMnemonic;
+    variable res: word := (others => '0');
+    variable vals: IntArray(0 to ar'length-1) := (others => -1);
+    variable x: integer := 0;
+    variable undefOffset: boolean := false;
+begin
+    -- First elem must be opcode. Find it in opcode list
+    mnem := undef;
+    for m in ProcMnemonic loop
+        if matches(ar(0), ProcMnemonic'image(m)) then
+            mnem := m;
+        end if;
+    end loop;
+    
+    -- Convert other arg to numbers
+    for i in 1 to ar'length-1 loop
+        undefOffset := false;
+        if ar(i)(1) = '$' then
+            -- Label!
+            x := 4*(findLabel(ar(i), labels) - num); -- branch offset
+            if not fillLabels then
+                undefOffset := true;
+            end if;
+         else
+            x := parseArg(ar(i));            
+         end if;
+        
+        vals(i) := x;
+    end loop;
+    
+    res := makeMachineWord(mnem, vals, ar(1), undefOffset);
+    return res;
+end function;
+
+
+procedure processInstructionNew(ar: GroupBuffer; num: integer; labels, imports: LabelArray; fillLabels: boolean; command: out Word; hasImport: out boolean; import: out string) is
+    variable mnem: ProcMnemonic;
+    variable undefOffset: boolean := false; 
+    variable vals: IntArray(0 to ar'length-1) := (others => -1);
+begin
+    hasImport := false;
+    import := (others => cr);
+    -- First elem must be opcode. Find it in opcode list
+    mnem := undef;
+    for m in ProcMnemonic loop
+        if matches(ar(0), ProcMnemonic'image(m)) then
+            mnem := m;
+        end if;
+    end loop;
+    
+    -- Convert other arg to numbers
+    for i in 1 to ar'length-1 loop
+        if ar(i)(1) = '$' then -- Label!
+           undefOffset := true;
+           vals(i) := -1;     
+           import(ar(i)'range) := ar(i);
+           hasImport := true;          
+        else
+           vals(i) := parseArg(ar(i));            
+        end if;
+    end loop;
+    
+    command := makeMachineWord(mnem, vals, ar(1), undefOffset);
+end procedure;
 
 
 function processSingleInstruction(gb: GroupBuffer) return Word is
@@ -542,13 +604,129 @@ begin
 end function;
 
 
-procedure processProgramWithExports(p: in ProgramBuffer; machineCode: out WordArray; outLabels, outExports: out LabelArray; outStartOffsets, outEndOffsets: out IntArray) is
+-- TODO: make it dependent on addresses, not instruction and labels indices
+function fillOffset(w: Word; k: natural; import: string; labels, imports: LabelArray) return Word is
+    variable res: Word := w;
+    variable numL, numI, offset: integer := -1;
+    variable offsetWord: Word := (others => 'U'); 
+begin
+    numL := (findLabel(import, labels)); -- branch offset
+    if numL /= -1 then
+        offset := 4*(numL - k);
+    else 
+        numI := findLabel(import, imports);
+        if numI /= -1 then
+            offset := 4*(numI - k);
+        else
+            report "Using unknown label" severity error;
+            return res; 
+        end if;
+    end if;
+    
+    offsetWord := i2slv(offset, 32);
+    for i in res'range loop
+        if res(i) = 'U' then
+            res(i) := offsetWord(i);
+        end if;
+    end loop;
+    return res;
+end function;
+
+
+function fillOffsetConst(w: Word; offset: integer) return Word is
+    variable res: Word := w;
+    variable offsetWord: Word := (others => 'U'); 
+begin
+    
+    offsetWord := i2slv(offset, 32);
+    for i in res'range loop
+        if res(i) = 'U' then
+            res(i) := offsetWord(i);
+        end if;
+    end loop;
+    return res;
+end function;
+
+
+--procedure processProgramNew(p: in ProgramBuffer; machineCode: out WordArray; outLabels, outExports: out LabelArray; outStartOffsets, outEndOffsets: out IntArray) is
+--    variable insIndex, procIndex: integer := 0; -- Actual number of instruction
+--    variable labels, exports: LabelArray(0 to p'length-1) := (others => (others => cr));
+--    variable startOffsets, endOffsets: IntArray(0 to p'length-1) := (others => -1);
+--    variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
+--    variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext2, 0, 0, error, 0, 0));
+--    variable tmpStr: string(1 to 10) :=(others => ' ');
+--    variable tmpImport: string(1 to 20) := (others => ' ');
+--    variable tmpHasImport: boolean := false;
+--begin
+--    --        return;
+
+--    for i in 0 to p'length-1 loop
+--        if p(i)(0)(1) = '@' then -- Keyword
+--            tmpStr(1 to  p(i)(0)'length-1) := p(i)(0)(2 to p(i)(0)'length);
+--            -- TODO
+--            -- when proc
+--            if matches(tmpStr, "proc") then
+--                -- add name to labels
+--                -- add name to export
+--                -- add insIndex to offsets
+--                labels(insIndex)(1 to 10) := p(i)(1);
+--                exports(insIndex)(1 to 10) := p(i)(1);
+--                startOffsets(procIndex) := insIndex; 
+--                --procIndex := procIndex + 1;
+--            -- when end
+--            elsif matches(tmpStr, "end") then
+--                -- ignore
+--                -- set proc end (if such action needed and defined)
+--                endOffsets(procIndex) := insIndex;
+--                procIndex := procIndex + 1;
+--            end if;
+--        elsif p(i)(0)(1) = '$' then -- label
+--           labels(insIndex)(1 to 10) := p(i)(0);            
+--        elsif p(i)(0)(1) = cr then -- the line is empty
+--           null;
+--        else -- instruction
+--           pSqueezed(insIndex) := p(i);
+--           insIndex := insIndex + 1;  
+--        end if;
+        
+--    end loop;
+    
+--    for i in 0 to p'length-1 loop
+--        processInstructionNew(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, false, commands(i), tmpHasImport, tmpImport);
+--    end loop; 
+
+--        machineCode := commands;
+    
+--        outLabels := labels;
+--        outExports := exports;
+--        outStartOffsets := startOffsets;
+--        outEndOffsets := endOffsets;
+--end procedure;
+
+
+
+function tmpStrip(s: string) return string is
+begin
+    for i in s'range loop
+        if s(i) = ' ' or s(i) = ht or s(i) = cr then
+            return s(1 to i-1);
+        end if;
+    end loop;
+    return s;
+end function;
+
+
+procedure processProgramNew2(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray) is
     variable insIndex, procIndex: integer := 0; -- Actual number of instruction
     variable labels, exports: LabelArray(0 to p'length-1) := (others => (others => cr));
     variable startOffsets, endOffsets: IntArray(0 to p'length-1) := (others => -1);
     variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
     variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext2, 0, 0, error, 0, 0));
     variable tmpStr: string(1 to 10) :=(others => ' ');
+    variable tmpImport: string(1 to 20) := (others => cr);
+    variable tmpHasImport: boolean := false;
+    
+    variable ne, ni: natural := 0;
 begin
     --        return;
 
@@ -562,10 +740,14 @@ begin
                 -- add name to export
                 -- add insIndex to offsets
                 labels(insIndex)(1 to 10) := p(i)(1);
-                exports(insIndex)(1 to 10) := p(i)(1);
+                exports(insIndex)(2 to 11) := p(i)(1);
+                exports(insIndex)(1) := '$';
                 startOffsets(procIndex) := insIndex; 
                 --procIndex := procIndex + 1;
             -- when end
+                
+                outExports(ne) := (new string'('$' & tmpStrip(p(i)(1))), 4*insIndex);
+                ne := ne + 1;
             elsif matches(tmpStr, "end") then
                 -- ignore
                 -- set proc end (if such action needed and defined)
@@ -581,28 +763,24 @@ begin
            insIndex := insIndex + 1;  
         end if;
         
-         --       report "Iter done " & integer'image(i);
     end loop;
     
     for i in 0 to p'length-1 loop
-        if pSqueezed(i)(0)(1) = '$' then -- label
-           null;
-        elsif pSqueezed(i)(0)(1) = cr then -- the line is empty
-           null;
-        else -- instruction        
-           commands(i) := processInstruction(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true);
-        end if;
+        processInstructionNew(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true, commands(i), tmpHasImport, tmpImport);
         
---                                report "Iter x done " & integer'image(i);
+        if tmpHasImport then
+            commands(i) := fillOffset(commands(i), i, tmpImport, labels, EMPTY_LABEL_ARRAY);
+            imports(ni) := (new string'(tmpStrip(tmpImport)), 4*i);
+            ni := ni + 1;
+        end if;
+    end loop; 
 
-    end loop;    
+        machineCode := commands;
     
-    machineCode := commands;
-    
-        outLabels := labels;
-        outExports := exports;
-        outStartOffsets := startOffsets;
-        outEndOffsets := endOffsets;
+        --outLabels := labels;
+   --     outExports := exports;
+        --outStartOffsets := startOffsets;
+        --outEndOffsets := endOffsets;
 end procedure;
 
 
@@ -926,6 +1104,53 @@ begin
 
 end procedure;
 
+
+
+function matchXrefs(imp, exp: XrefArray) return IntArray is
+    variable res: IntArray(imp'range) := (others => -1);
+    variable str0, str1: string(1 to 20);
+    variable l0, l1: line; 
+begin
+    for i in imp'range loop
+        if imp(i).name = null then exit; end if;
+    
+        for j in exp'range loop
+            if exp(j).name = null then exit; end if;
+            
+            l0 := imp(i).name;
+            l1 := exp(j).name;
+            stringFromLine(str0, l0);
+            stringFromLine(str1, l1);
+
+
+            if matches(str0, str1) then
+--                    report "atching: " & integer'image(i) & " to " & integer'image(j); 
+--                        report str0;
+--                        report str1;
+                res(i) := --j;
+                          exp(j).address;
+                exit;
+            end if;
+        end loop;
+    end loop;
+    return res;
+end function;
+
+function fillXrefs(code: WordArray; imports: XrefArray; offsets: IntArray; imgStart, libStart: integer) return WordArray is
+    variable res: WordArray(code'range) := code;
+    variable currentPos: integer := -1;
+begin
+    for i in imports'range loop
+        if imports(i).name = null then
+            return res;
+        end if;
+    
+        currentPos := imports(i).address/4;
+        res(currentPos) := fillOffsetConst(res(currentPos), imports(i).address - offsets(i) + libStart - imgStart);
+    end loop;
+    
+    return res;
+end function;
 
 
 
