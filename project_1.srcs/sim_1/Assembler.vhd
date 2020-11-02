@@ -37,7 +37,7 @@ type ProgramBuffer is array(0 to 999) of GroupBuffer;
 constant MAX_LABEL_SIZE: natural := 20;
 
 type LabelArray is array(integer range <>) of string(1 to MAX_LABEL_SIZE);
-
+constant EMPTY_LABEL_ARRAY: LabelArray(0 to 0) := (others => (others => ' '));
 
 
     function parseInstructionString(str: string) return GroupBuffer; -- TEMP!
@@ -336,11 +336,12 @@ end function;
 --end function;
 
 
-function processInstruction(ar: GroupBuffer; num: integer; labels: LabelArray) return word is
+function processInstruction(ar: GroupBuffer; num: integer; labels, imports: LabelArray; fillLabels: boolean) return word is
     variable mnem: ProcMnemonic;
     variable res: word := (others => '0');
     variable vals: IntArray(0 to ar'length-1) := (others => -1);
     variable x: integer := 0;
+    variable undefOffset: boolean := false;
 begin
     -- First elem must be opcode. Find it in opcode list
     mnem := undef;
@@ -352,28 +353,26 @@ begin
     
     -- Convert other arg to numbers
     for i in 1 to ar'length-1 loop
+        undefOffset := false;
         if ar(i)(1) = '$' then
             -- Label!
             x := 4*(findLabel(ar(i), labels) - num); -- branch offset
-            
+            if not fillLabels then
+                undefOffset := true;
+            end if;
         elsif ar(i)(1) = 'r' and ar(i)(2) >= '0' and ar(i)(2) <= '9' then
             -- register
-            x := --integer'value(ar(i)(2 to ar(i)'length)); -- ignore 'r'
-                    TMP_str2int(ar(i)(2 to ar(i)'length));
+            x := TMP_str2int(ar(i)(2 to ar(i)'length));
         elsif ar(i)(1) = 'f' and ar(i)(2) >= '0' and ar(i)(2) <= '9' then
             -- register (FP)
-            x := --integer'value(ar(i)(2 to ar(i)'length)); -- ignore 'f'
-                   TMP_str2int(ar(i)(2 to ar(i)'length ));			
+            x := TMP_str2int(ar(i)(2 to ar(i)'length ));			
         elsif ar(i)(1) = '-' then
-            x := ---integer'value(ar(i)(2 to ar(i)'length));
-                    -TMP_str2int(ar(i)(2 to ar(i)'length));
-                    
+            x := -TMP_str2int(ar(i)(2 to ar(i)'length));                  
         elsif not isAlphanum(ar(i)(1)) then
             x := -1;
         elsif ar(i)(1) >= '0' and ar(i)(1) <= '9' then
             -- Hope it's a number 
-            x := --integer'value(ar(i));
-                    TMP_str2int(ar(i));
+            x := TMP_str2int(ar(i));
         else
             x := -1;
         end if;
@@ -432,22 +431,30 @@ begin
 
         when jz_i =>
             res := ins65J(jz, vals(1), vals(2));
-            
+                if undefOffset then
+                    res := ins65J(jz, vals(1));
+                end if;
         when jz_r =>
             res := ins655655(ext1, vals(1), vals(2), jzR, vals(3), 0);
             
         when jnz_i =>
             res := ins65J(jnz, vals(1), vals(2));
-            
+                if undefOffset then
+                    res := ins65J(jnz, vals(1));
+                end if;            
         when jnz_r =>
             res := ins655655(ext1, vals(1), vals(2), jnzR, vals(3), 0);
             
         when ja =>
             res := ins6L(j, vals(1));
-            
+                if undefOffset then
+                    res := ins6L(j);
+                end if;            
         when jl =>
             res := ins65J(jl, vals(1), vals(2));
-            
+                if undefOffset then
+                    res := ins65J(jl, vals(1));
+                end if;            
             
         when sys =>
             if matches(ar(1), "halt") then
@@ -486,9 +493,8 @@ end function;
 
 function processSingleInstruction(gb: GroupBuffer) return Word is
     variable res: Word;
-    constant EMPTY_LABEL_ARRAY: LabelArray(0 to 0) := (others => (others => ' '));
 begin
-    res := processInstruction(gb, 0, EMPTY_LABEL_ARRAY);
+    res := processInstruction(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true);
     return res;
 end function;
 
@@ -528,7 +534,7 @@ begin
         elsif pSqueezed(i)(0)(1) = cr then -- the line is empty
            null;
         else -- instruction        
-           commands(i) := processInstruction(pSqueezed(i), i, labels);
+           commands(i) := processInstruction(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true);
         end if;
     end loop;    
     
@@ -584,7 +590,7 @@ begin
         elsif pSqueezed(i)(0)(1) = cr then -- the line is empty
            null;
         else -- instruction        
-           commands(i) := processInstruction(pSqueezed(i), i, labels);
+           commands(i) := processInstruction(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true);
         end if;
         
 --                                report "Iter x done " & integer'image(i);
@@ -907,6 +913,19 @@ begin
     end loop;
 
 end procedure;
+
+
+
+procedure assemblePrograms is
+begin
+    -- run first pass: assemble with possible missing labels
+        -- local labels must be there, otherwise fail
+        -- external labels are left to complete and marked
+        -- export symbols from each file to common export list
+    -- run second pass: fill missing addresses using export list
+
+end procedure;
+
 
 
 

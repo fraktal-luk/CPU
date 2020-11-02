@@ -216,6 +216,14 @@ function ins655H(opcode: ProcOpcode; ra, rb, offset: integer) return Word;
 function ins6556X(opcode: ProcOpcode; ra, rb: integer; opcont: ProcOpcont; offset: integer) return Word;
 function ins655655(opcode: ProcOpcode; ra, rb: integer; opcont: ProcOpcont; rc, rd: integer) return Word;
 
+
+-- Encoding (with undefined offset)
+function ins6L(opcode: ProcOpcode) return Word;
+function ins65J(opcode: ProcOpcode; ra: integer) return Word;
+function ins655H(opcode: ProcOpcode; ra, rb: integer) return Word;
+function ins6556X(opcode: ProcOpcode; ra, rb: integer; opcont: ProcOpcont) return Word;
+
+
 end ArchDefs;
 
 
@@ -354,7 +362,7 @@ begin
     res(15 downto 10) := opcont2slv(opcode, opcont);  
     res(9 downto 0) := i2slv(offset, 10);
 	return res;
-end function;	
+end function;
 
 function ins655655(opcode: ProcOpcode; ra, rb: integer; opcont: ProcOpcont; rc, rd: integer) return Word is
     variable res: Word := (others => '0');
@@ -368,5 +376,45 @@ begin
     return res;
 end function;	
 
+
+
+-- Variants with undefined offset - only for formats with offset
+function ins6L(opcode: ProcOpcode) return Word is
+    variable res: Word := (others => '0');
+begin
+    res(31 downto 26) := opcode2slv(opcode);
+    res(25 downto 0) := (others => 'U');
+	return res;
+end function;
+
+function ins65J(opcode: ProcOpcode; ra: integer) return Word is
+    variable res: Word := (others => '0');
+begin
+    res(31 downto 26) := opcode2slv(opcode);
+    res(25 downto 21) := i2slv(ra, 5);
+    res(20 downto 0) := (others => 'U');
+	return res;
+end function;
+
+function ins655H(opcode: ProcOpcode; ra, rb: integer) return Word is
+    variable res: Word := (others => '0');
+begin
+    res(31 downto 26) := opcode2slv(opcode);
+    res(25 downto 21) := i2slv(ra, 5);
+    res(20 downto 16) := i2slv(rb, 5);    
+    res(15 downto 0) := (others => 'U');
+	return res;
+end function;
+
+function ins6556X(opcode: ProcOpcode; ra, rb: integer; opcont: ProcOpcont) return Word is
+    variable res: Word := (others => '0');
+begin
+    res(31 downto 26) := opcode2slv(opcode);
+    res(25 downto 21) := i2slv(ra, 5);
+    res(20 downto 16) := i2slv(rb, 5);
+    res(15 downto 10) := opcont2slv(opcode, opcont);  
+    res(9 downto 0) := (others => 'U');
+	return res;
+end function;
 
 end ArchDefs;

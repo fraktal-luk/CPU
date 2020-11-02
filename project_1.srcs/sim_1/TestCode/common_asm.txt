@@ -10,4 +10,3 @@ $label0
 @proc f2
 	or_i r2, r2, r2 ; 
 	reti
- 
