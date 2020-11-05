@@ -329,7 +329,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     procedure fillStringFromLine(signal s: out string; variable ln: in line) is
     begin
         s <= (others => ' ');
-        s(1 to ln.all'length) <= ln.all;        
+        s(1 to ln.all'length) <= ln.all;
     end procedure;
     
     function getInstruction(signal cpuState: in CoreState; signal programMemory: in WordArray) return Instruction is
@@ -539,6 +539,12 @@ BEGIN
           assert match report "Traces are divergent!" severity error;
 
       report "All suites done!";
+        
+      cycle;
+      
+      -- Test error signal
+      report "Run exception tests";      
+      
       currentSuite <= (others => ' ');
       currentTest <= (others => ' ');
 
@@ -547,14 +553,15 @@ BEGIN
       opFlags <= (others => '0');
       cpuState <= INIT_CORE_STATE;
       dataMemory <= (others => (others => '0'));
+
+      setForOneCycle(resetDataMem, clk); 
       
-      cycle;
+      --cycle;
       
-      report "Run exception tests";
       testProgram(0) <= asm("sys error");
       testProgram(1) <= asm("ja 0");
       
-      cycle;
+      --cycle;
         
       startTest(testToDo, int0b);
       
@@ -565,6 +572,8 @@ BEGIN
       cycle; 
         
       checkErrorTestResult("check_error", testDone, testFail);  
+
+      -- end test
 
       cycle;
             
