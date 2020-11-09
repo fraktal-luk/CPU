@@ -119,7 +119,7 @@ ARCHITECTURE Behavior OF CoreTB IS
 	--signal prog: ProgramBuffer;
 	--signal machineCode: WordArray(0 to prog'length-1);
 	
-    signal testProgram: WordArray(0 to 1023);
+    signal testProgram: WordArray(0 to 2047);
     signal testToDo, testDone, testFail: std_logic := '0';
     
     signal currentTest, currentSuite: string(1 to 20);
@@ -324,6 +324,36 @@ ARCHITECTURE Behavior OF CoreTB IS
         testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
     end procedure;
 
+    procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
+	    constant prog: ProgramBuffer := readSourceFile(filename);
+        variable machineCode: WordArray(0 to prog'length-1);
+        variable imp, exp: XrefArray(0 to 100);
+    begin
+        --machineCode := processProgram(prog); -- TODO: include common imports
+        processProgramNew2(prog, machineCode, imp, exp);
+        
+--            if imp(0).name = null then
+--                report "rrrr: null import";
+--            else 
+--                report "rrrrr: " & imp(0).name.all; 
+--            end if;
+        
+        --    report "rrrrr " & imp(0).name.all;
+        --    report "bbbbbb " & libExports(0).name.all;
+        
+        machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
+    
+        testProgram <= (others => (others => 'U'));
+        testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+    end procedure;
+
+
+    procedure setProgram(signal testProgram: inout WordArray; program: WordArray; offset: Mword) is
+        constant offsetInt: natural := slv2u(offset)/4; 
+    begin
+        testProgram(offsetInt to offsetInt + program'length-1) <= program;
+    end procedure;
+
 
     -- Differs from simple ln.all in that it's written to a string of predefined length
     procedure fillStringFromLine(signal s: out string; variable ln: in line) is
@@ -448,8 +478,7 @@ BEGIN
 	           commonCode <= --machineCodeVar;
 	                           machineCodeVar2;
 	           commonCode2 <= --machineCodeVar;
-	                           machineCodeVar3;
-	                           
+	                           machineCodeVar3;	                           
 	           outLabels <= outLabelsVar;
 	           outExports <= outExportsVar;
 	           outStartOffsets <= outStartOffsetsVar;
@@ -479,7 +508,8 @@ BEGIN
               end if;
     
               report "Now to run: " & testName.all;
-              loadProgramFromFile(testName.all & ".txt", programMemory);
+              --loadProgramFromFile(testName.all & ".txt", programMemory);
+              loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);
 
               fillStringFromLine(currentSuite, suiteName);
               fillStringFromLine(currentTest, testName);
@@ -496,6 +526,9 @@ BEGIN
               testProgram(512/4) <= asm("ja -512");
               testProgram(384/4) <= asm("sys send");
               testProgram(384/4 + 1) <= asm("ja 0");        
+
+              setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
+
 
               if CORE_SIMULATION then
                   startTest(testToDo, int0b);
@@ -560,6 +593,8 @@ BEGIN
       
       testProgram(0) <= asm("sys error");
       testProgram(1) <= asm("ja 0");
+	  
+	  setProgram(testProgram, commonCode, i2slv(1024, 32));	           
       
       --cycle;
         
@@ -580,6 +615,7 @@ BEGIN
       report "Now test exception return";
       
       loadProgramFromFile("events.txt", programMemory);
+	  setProgram(testProgram, commonCode, i2slv(1024, 32));      
       cycle;
 
             
@@ -597,7 +633,8 @@ BEGIN
 
       report "Now test interrupts";
 
-      loadProgramFromFile("events2.txt", programMemory);      
+      loadProgramFromFile("events2.txt", programMemory);
+	  setProgram(testProgram, commonCode, i2slv(1024, 32));          
       cycle;
 
       testProgram(512/4) <=     asm("ja -512");     
@@ -639,7 +676,7 @@ BEGIN
             --				stalled content in fetch buffer!
             baseIP := iadr and i2slv(-PIPE_WIDTH*4, MWORD_SIZE); -- Clearing low bits
             for i in 0 to PIPE_WIDTH-1 loop
-                iin(i) <= testProgram(slv2u(baseIP(10 downto 2)) + i); -- CAREFUL! 2 low bits unused (32b memory) 									
+                iin(i) <= testProgram(slv2u(baseIP(12 downto 2)) + i); -- CAREFUL! 2 low bits unused (32b memory) 									
             end loop;
             
             ivalid <= iadrvalid and not isNonzero(iadr(iadr'high downto 12));

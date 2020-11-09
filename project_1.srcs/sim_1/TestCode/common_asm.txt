@@ -3,12 +3,12 @@ $label0
 	and_i r0, r0, r0 ;
 	ldi_i r7, r8, 28
 	
-	ja	  $que
+	ja  $label0
 @proc f1
-	reti
+	jz_r r0, r0, r31
 @end
 
-	and_i r1, r1, r1
+	and_i r1, r1, 1
 	ja $label0
 	jnz_i r5, $piou
 $piou

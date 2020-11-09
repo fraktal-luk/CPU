@@ -536,14 +536,14 @@ begin
             mnem := m;
         end if;
     end loop;
-    
+            
     -- Convert other arg to numbers
     for i in 1 to ar'length-1 loop
         if ar(i)(1) = '$' then -- Label!
            undefOffset := true;
-           vals(i) := -1;     
+           vals(i) := -1;
            import(ar(i)'range) := ar(i);
-           hasImport := true;          
+           hasImport := true;
         else
            vals(i) := parseArg(ar(i));            
         end if;
@@ -767,6 +767,9 @@ begin
     
     for i in 0 to p'length-1 loop
         processInstructionNew(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true, commands(i), tmpHasImport, tmpImport);
+        
+        --    report "iter: " & integer'image(i);
+        --    report boolean'image(tmpHasImport);
         
         if tmpHasImport then
             commands(i) := fillOffset(commands(i), i, tmpImport, labels, EMPTY_LABEL_ARRAY);
@@ -1140,13 +1143,17 @@ function fillXrefs(code: WordArray; imports: XrefArray; offsets: IntArray; imgSt
     variable res: WordArray(code'range) := code;
     variable currentPos: integer := -1;
 begin
+          --      report "Fil xrefs";
+
     for i in imports'range loop
         if imports(i).name = null then
             return res;
         end if;
     
         currentPos := imports(i).address/4;
-        res(currentPos) := fillOffsetConst(res(currentPos), imports(i).address - offsets(i) + libStart - imgStart);
+        res(currentPos) := fillOffsetConst(res(currentPos), offsets(i) - imports(i).address + libStart - imgStart);
+            report ">>>>> "; report integer'image( imports(i).address); report integer'image( offsets(i)); 
+            report integer'image( libStart - imgStart); 
     end loop;
     
     return res;
