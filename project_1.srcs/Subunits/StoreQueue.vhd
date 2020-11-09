@@ -527,13 +527,18 @@ begin
             isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
 
 	        nFull <= nFullNext;
-
+            
+            -- TODO: include execEventSignal in both cases!
             if not IS_LOAD_QUEUE then -- SQ
                if prevSending = '1' and isNonzero(extractFullMask(dataIn)) = '1' then 
                   memEmpty <= '0';
                end if;
                 
                if lateEventSignal = '1' and pStart = pDrainPrev then
+                  memEmpty <= '1';
+               end if;
+               
+               if execEventSignal = '1' and pFlush = pStartNext then -- if execEventSignal, content can't grow
                   memEmpty <= '1';
                end if;
                
@@ -547,6 +552,10 @@ begin
                 end if;
                  
                 if lateEventSignal = '1' then
+                   memEmpty <= '1';
+                end if;
+
+                if execEventSignal = '1' and pFlush = pStartNext then -- if execEventSignal, content can't grow
                    memEmpty <= '1';
                 end if;
                 
