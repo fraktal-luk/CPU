@@ -122,7 +122,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal testProgram: WordArray(0 to 2047);
     signal testToDo, testDone, testFail: std_logic := '0';
     
-    signal currentTest, currentSuite: string(1 to 20);
+    signal currentTest, currentSuite: string(1 to 30);
     
     alias programMemory is testProgram;
     
@@ -566,11 +566,13 @@ BEGIN
           cycle;
 
       end loop;
-
+        
+      if false then -- TODO: scenario where emulation happens along with Core sim?
           compareTraceFiles("emulation_trace.txt", "CoreDB_committed.txt", match);
           report "Traces match: " & boolean'image(match);
           assert match report "Traces are divergent!" severity error;
-
+      end if;
+      
       report "All suites done!";
         
       cycle;
@@ -594,7 +596,7 @@ BEGIN
       testProgram(0) <= asm("sys error");
       testProgram(1) <= asm("ja 0");
 	  
-	  setProgram(testProgram, commonCode, i2slv(1024, 32));	           
+	  setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
       
       --cycle;
         
@@ -614,8 +616,13 @@ BEGIN
             
       report "Now test exception return";
       
-      loadProgramFromFile("events.txt", programMemory);
-	  setProgram(testProgram, commonCode, i2slv(1024, 32));      
+      
+            printXrefArray(exp);
+      --loadProgramFromFile("events.txt", programMemory);
+              loadProgramFromFileWithImports("events.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);
+      
+      
+	  setProgram(testProgram, commonCode, i2slv(4*1024, 32));      
       cycle;
 
             
@@ -633,8 +640,9 @@ BEGIN
 
       report "Now test interrupts";
 
-      loadProgramFromFile("events2.txt", programMemory);
-	  setProgram(testProgram, commonCode, i2slv(1024, 32));          
+      --loadProgramFromFile("events2.txt", programMemory);
+              loadProgramFromFileWithImports("events2.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);      
+	  setProgram(testProgram, commonCode, i2slv(4*1024, 32));          
       cycle;
 
       testProgram(512/4) <=     asm("ja -512");     

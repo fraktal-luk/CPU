@@ -16,7 +16,7 @@ $start
 $error
 	sys error
 $check
-	sys send
+	jl r31, $sendSignal ; sys send
 	ja 0				; infinite loop
 	
 

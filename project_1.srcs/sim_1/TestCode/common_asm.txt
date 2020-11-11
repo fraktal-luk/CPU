@@ -279,3 +279,8 @@ $ms32done
 	; return address in r31
 	
 @end
+
+@proc sendSignal
+	sys send
+	jz_r r0, r0, r31	
+@end

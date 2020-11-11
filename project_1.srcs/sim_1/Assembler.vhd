@@ -31,10 +31,11 @@ use work.CpuText.all;
 
 package Assembler is
 
-type GroupBuffer is array(0 to 4) of string(1 to 10);
+constant MAX_LABEL_SIZE: natural := 30;
+
+type GroupBuffer is array(0 to 4) of string(1 to MAX_LABEL_SIZE);
 type ProgramBuffer is array(0 to 999) of GroupBuffer;
 
-constant MAX_LABEL_SIZE: natural := 20;
 
 type LabelArray is array(integer range <>) of string(1 to MAX_LABEL_SIZE);
 constant EMPTY_LABEL_ARRAY: LabelArray(0 to 0) := (others => (others => ' '));
@@ -163,7 +164,7 @@ package body Assembler is
     -- Differs from simple ln.all in that it's written to a string of predefined length
     procedure stringFromLine(s: out string; variable ln: in line) is
     begin
-        s := (others => ' ');
+        s := (others => cr);
         s(1 to ln.all'length) := ln.all;        
     end procedure; 
 
@@ -722,8 +723,8 @@ procedure processProgramNew2(p: in ProgramBuffer; machineCode: out WordArray; im
     variable startOffsets, endOffsets: IntArray(0 to p'length-1) := (others => -1);
     variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
     variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext2, 0, 0, error, 0, 0));
-    variable tmpStr: string(1 to 10) :=(others => ' ');
-    variable tmpImport: string(1 to 20) := (others => cr);
+    variable tmpStr: string(1 to MAX_LABEL_SIZE) :=(others => ' ');
+    variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
     variable tmpHasImport: boolean := false;
     
     variable ne, ni: natural := 0;
@@ -1088,7 +1089,7 @@ procedure disasmToFile(name: string; arr: WordArray) is
     variable tmpStr: string(1 to 51);
 begin
     for i in 0 to arr'length-1 loop 
-       tmpStr := disasmWithAddress(i, arr(i));
+       tmpStr := disasmWithAddress(4*i, arr(i));
        write(outputLine, tmpStr); 
        writeline(outFile, outputLine);
     end loop;
@@ -1111,7 +1112,7 @@ end procedure;
 
 function matchXrefs(imp, exp: XrefArray) return IntArray is
     variable res: IntArray(imp'range) := (others => -1);
-    variable str0, str1: string(1 to 20);
+    variable str0, str1: string(1 to MAX_LABEL_SIZE);
     variable l0, l1: line; 
 begin
     for i in imp'range loop
@@ -1122,14 +1123,20 @@ begin
             
             l0 := imp(i).name;
             l1 := exp(j).name;
-            stringFromLine(str0, l0);
-            stringFromLine(str1, l1);
+--            stringFromLine(str0, l0);
+--            stringFromLine(str1, l1);
 
 
-            if matches(str0, str1) then
---                    report "atching: " & integer'image(i) & " to " & integer'image(j); 
---                        report str0;
---                        report str1;
+                    
+
+--                    report "matching: " & integer'image(i) & " to " & integer'image(j); 
+--                        report l0.all;
+--                        report "";
+--                        report l1.all;
+--                        report "";
+
+            if matches(l0.all, l1.all) then
+
                 res(i) := --j;
                           exp(j).address;
                 exit;
@@ -1152,8 +1159,8 @@ begin
     
         currentPos := imports(i).address/4;
         res(currentPos) := fillOffsetConst(res(currentPos), offsets(i) - imports(i).address + libStart - imgStart);
-            report ">>>>> "; report integer'image( imports(i).address); report integer'image( offsets(i)); 
-            report integer'image( libStart - imgStart); 
+        --    report ">>>>> " & imports(i).name.all; report integer'image( imports(i).address); report integer'image( offsets(i)); 
+        --    report integer'image( libStart - imgStart); 
     end loop;
     
     return res;
