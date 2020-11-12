@@ -74,7 +74,7 @@ begin
         if intType = "01" then
             res.ip := X"00000280";
         else
-            res.ip := INT_BASE; -- TEMP!
+            res.ip := RESET_BASE; -- TEMP!
         end if;
         res.result := currentState or X"00000001";
         res.result := res.result and X"fdffffff"; -- Clear dbtrap

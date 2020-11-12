@@ -390,7 +390,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal outStartOffsets, outEndOffsets: IntArray(0 to 999);
 
        signal linkOffsets: IntArray(0 to 100);
-    
+
 BEGIN
     --loadCommonAsm(commonCode);
 
@@ -523,9 +523,9 @@ BEGIN
               setForOneCycle(resetDataMem, clk); 
               
 
-              testProgram(512/4) <= asm("ja -512");
-              testProgram(384/4) <= asm("sys send");
-              testProgram(384/4 + 1) <= asm("ja 0");        
+              testProgram(slv2u(RESET_BASE)/4) <= asm("ja -512");
+              testProgram(slv2u(CALL_BASE)/4) <= asm("sys send");
+              testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("ja 0");        
 
               setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
 
@@ -626,10 +626,10 @@ BEGIN
       cycle;
 
             
-      testProgram(512/4) <=     asm("ja -512");       
+      testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");       
 
-      testProgram(384/4) <=     asm("add_i r20, r0, 55");  
-      testProgram(384/4 + 1) <= asm("sys rete");
+      testProgram(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");  
+      testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
       
       startTest(testToDo, int0b);      
       
@@ -645,13 +645,18 @@ BEGIN
 	  setProgram(testProgram, commonCode, i2slv(4*1024, 32));          
       cycle;
 
-      testProgram(512/4) <=     asm("ja -512");     
+      --testProgram(512/4) <=     asm("ja -512");     
+        testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");     
       
-      testProgram(384/4) <=     asm("add_i r20, r0, 55");
-      testProgram(384/4 + 1) <= asm("sys rete");
+      --testProgram(384/4) <=     asm("add_i r20, r0, 55");
+      --testProgram(384/4 + 1) <= asm("sys rete");
+        testProgram(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");
+        testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
       
-      testProgram(640/4) <=     asm("add_i r0, r0, 0"); -- NOP
-      testProgram(640/4 + 1) <= asm("sys reti");
+      --testProgram(640/4) <=     asm("add_i r0, r0, 0"); -- NOP
+      --testProgram(640/4 + 1) <= asm("sys reti");
+        testProgram(slv2u(INT_BASE)/4) <=     asm("add_i r0, r0, 0"); -- NOP
+        testProgram(slv2u(INT_BASE)/4 + 1) <= asm("sys reti");
       
       startTest(testToDo, int0b);
       
