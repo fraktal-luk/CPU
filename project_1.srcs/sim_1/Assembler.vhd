@@ -152,7 +152,7 @@ function matchXrefs(imp, exp: XrefArray) return IntArray;
 
 function fillXrefs(code: WordArray; imports: XrefArray; offsets: IntArray; imgStart, libStart: integer) return WordArray;
 
-
+    procedure stringAssign(signal s: out string; sIn: string);
     procedure stringFromLine(s: out string; variable ln: in line);
 
 end Assembler;
@@ -160,6 +160,19 @@ end Assembler;
 
 
 package body Assembler is
+
+    procedure stringAssign(signal s: out string; sIn: string) is
+        constant nOut: natural := s'length;
+        variable nIn: natural := sIn'length;
+    begin
+        if nIn > nOut then
+            nIn := nOut;
+        end if;
+        
+        s <= (others => ' ');
+        s(1 to nIn) <= sIn(1 to nIn);
+    end procedure;
+
 
     -- Differs from simple ln.all in that it's written to a string of predefined length
     procedure stringFromLine(s: out string; variable ln: in line) is

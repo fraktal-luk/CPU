@@ -36,6 +36,10 @@ ENTITY CoreTB IS
 END CoreTB;
  
 ARCHITECTURE Behavior OF CoreTB IS
+
+    signal currentTest, currentSuite: string(1 to 30);    
+    signal testToDo, testDone, testFail: std_logic := '0';
+    
     
     constant EMULATION: boolean := true;
     constant LOG_EMULATION_TRACE: boolean := true;
@@ -105,8 +109,6 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal iadr : std_logic_vector(31 downto 0);
     signal oaux : std_logic_vector(31 downto 0);
 	-- end CP ports
-	
-	
 
     signal resetDataMem: std_logic := '0';
     
@@ -114,15 +116,9 @@ ARCHITECTURE Behavior OF CoreTB IS
     constant clk_period : time := 10 ns;
 
     constant TIME_STEP: time := 1 ns; -- for 1 instruction in emulation
-
- 
-	--signal prog: ProgramBuffer;
-	--signal machineCode: WordArray(0 to prog'length-1);
 	
     signal testProgram: WordArray(0 to 2047);
-    signal testToDo, testDone, testFail: std_logic := '0';
-    
-    signal currentTest, currentSuite: string(1 to 30);
+
     
     alias programMemory is testProgram;
     
@@ -285,6 +281,14 @@ ARCHITECTURE Behavior OF CoreTB IS
         testFail <= '0';  
     end procedure;
 
+    procedure announceTest(signal nameOut, suiteOut: out string; name, suite: string) is
+    begin
+        stringAssign(nameOut, name);
+        stringAssign(suiteOut, suite);
+        
+        report "Test to run: " & name;
+    end procedure;
+    
 
     procedure startTest(signal testToDo, int0b: out std_logic) is
     begin
@@ -329,18 +333,7 @@ ARCHITECTURE Behavior OF CoreTB IS
         variable machineCode: WordArray(0 to prog'length-1);
         variable imp, exp: XrefArray(0 to 100);
     begin
-        --machineCode := processProgram(prog); -- TODO: include common imports
         processProgramNew2(prog, machineCode, imp, exp);
-        
---            if imp(0).name = null then
---                report "rrrr: null import";
---            else 
---                report "rrrrr: " & imp(0).name.all; 
---            end if;
-        
-        --    report "rrrrr " & imp(0).name.all;
-        --    report "bbbbbb " & libExports(0).name.all;
-        
         machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
     
         testProgram <= (others => (others => 'U'));
@@ -376,26 +369,19 @@ ARCHITECTURE Behavior OF CoreTB IS
     
     procedure loadCommonAsm(signal machineCode: out WordArray) is
         variable prog: ProgramBuffer := readSourceFile("common_asm.txt");
-        --variable machineCode: WordArray(0 to 999);
     begin
-        machineCode <= processProgram(prog);
-        
+        machineCode <= processProgram(prog);     
     end procedure;
     
     signal commonCode, commonCode2: WordArray(0 to 999);
-    
-    
-    
+      
     signal outLabels, outExports: LabelArray(0 to 999);
     signal outStartOffsets, outEndOffsets: IntArray(0 to 999);
 
-       signal linkOffsets: IntArray(0 to 100);
-
+    signal linkOffsets: IntArray(0 to 100);
 BEGIN
-    --loadCommonAsm(commonCode);
-
-    okFlag <= bool2std(opFlags = "001");
-    errorFlag <= bool2std(opFlags = "100");
+   okFlag <= bool2std(opFlags = "001");
+   errorFlag <= bool2std(opFlags = "100");
 
    -- Instantiate the Unit Under Test (UUT)
    uut: Core PORT MAP (
@@ -461,31 +447,11 @@ BEGIN
         variable exp2, imp2: XrefArray(0 to 100);
         variable linkOffsetsVar: IntArray(0 to 100);
    begin
-	           --processProgramWithExports(readSourceFile("common_asm.txt"), machineCodeVar, outLabelsVar, outExportsVar, outStartOffsetsVar, outEndOffsetsVar);
-	      --     processProgramNew(readSourceFile("common_asm.txt"), machineCodeVar, outLabelsVar, outExportsVar, outStartOffsetsVar, outEndOffsetsVar);
-    	           processProgramNew2(readSourceFile("common_asm.txt"), machineCodeVar2, imp, exp);
-    	           processProgramNew2(readSourceFile("common_asm_2.txt"), machineCodeVar3, imp2, exp2);
-	               
-	               linkOffsetsVar := matchXrefs(imp2, exp);
-	               linkOffsets <= linkOffsetsVar;
-	           
-	               printXrefArray(imp);
-	               printXrefArray(exp);
-
-	               printXrefArray(imp2);
-	               printXrefArray(exp2);
-	           
-	           commonCode <= --machineCodeVar;
-	                           machineCodeVar2;
-	           commonCode2 <= --machineCodeVar;
-	                           machineCodeVar3;	                           
-	           outLabels <= outLabelsVar;
-	           outExports <= outExportsVar;
-	           outStartOffsets <= outStartOffsetsVar;
-	           outEndOffsets <= outEndOffsetsVar;
+      processProgramNew2(readSourceFile("common_asm.txt"), machineCodeVar2, imp, exp);
+      commonCode <= machineCodeVar2;
 	           
 	  wait for 110 ns;
-                    commonCode2 <= fillXrefs(commonCode2, imp2, linkOffsets, 0, 0);
+
       loop
           suiteName := null;
           readline(suiteFile, suiteName);
@@ -506,13 +472,10 @@ BEGIN
               elsif testName(1) = ';' then
                   next;
               end if;
-    
-              report "Now to run: " & testName.all;
-              --loadProgramFromFile(testName.all & ".txt", programMemory);
-              loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);
 
-              fillStringFromLine(currentSuite, suiteName);
-              fillStringFromLine(currentTest, testName);
+
+              announceTest(currentTest, currentSuite, testName.all, suiteName.all);    
+              loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);
 
               currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
             
@@ -520,7 +483,7 @@ BEGIN
               cpuState <= INIT_CORE_STATE;
               dataMemory <= (others => (others => '0'));
 
-              setForOneCycle(resetDataMem, clk); 
+              setForOneCycle(resetDataMem, clk);
               
 
               testProgram(slv2u(RESET_BASE)/4) <= asm("ja -512");
@@ -577,29 +540,25 @@ BEGIN
         
       cycle;
       
-      -- Test error signal
-      report "Run exception tests";      
-      
-      currentSuite <= (others => ' ');
-      currentTest <= (others => ' ');
+      -----------------------------------------------
+      -----------------------------------------------
 
-      currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
-        
-      opFlags <= (others => '0');
-      cpuState <= INIT_CORE_STATE;
-      dataMemory <= (others => (others => '0'));
+      -- Test error signal  
+      announceTest(currentTest, currentSuite, "err signal", "");      
 
-      setForOneCycle(resetDataMem, clk); 
-      
-      --cycle;
-      
+          currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
+            
+          opFlags <= (others => '0');
+          cpuState <= INIT_CORE_STATE;
+          dataMemory <= (others => (others => '0'));
+    
+          setForOneCycle(resetDataMem, clk); 
+          
       testProgram(0) <= asm("sys error");
       testProgram(1) <= asm("ja 0");
 	  
 	  setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
-      
-      --cycle;
-        
+              
       startTest(testToDo, int0b);
       
       disasmToFile("error_disasm.txt", testProgram);
@@ -610,17 +569,23 @@ BEGIN
         
       checkErrorTestResult("check_error", testDone, testFail);  
 
-      -- end test
-
       cycle;
+      
+      -------------
+      -------------
+      announceTest(currentTest, currentSuite, "exc return", "");      
+      
+
+          currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
             
-      report "Now test exception return";
+          opFlags <= (others => '0');
+          cpuState <= INIT_CORE_STATE;
+          dataMemory <= (others => (others => '0'));
+    
+          setForOneCycle(resetDataMem, clk); 
+
       
-      
-            printXrefArray(exp);
-      --loadProgramFromFile("events.txt", programMemory);
-              loadProgramFromFileWithImports("events.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);
-      
+      loadProgramFromFileWithImports("events.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);
       
 	  setProgram(testProgram, commonCode, i2slv(4*1024, 32));      
       cycle;
@@ -637,26 +602,30 @@ BEGIN
       report "Waiting for completion...";
 
       checkTestResult("events", testDone, testFail);   
+      
+      -------
+      -------
+      announceTest(currentTest, currentSuite, "interrupt", "");      
 
-      report "Now test interrupts";
+          currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
+            
+          opFlags <= (others => '0');
+          cpuState <= INIT_CORE_STATE;
+          dataMemory <= (others => (others => '0'));
+    
+          setForOneCycle(resetDataMem, clk);
 
-      --loadProgramFromFile("events2.txt", programMemory);
-              loadProgramFromFileWithImports("events2.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);      
+      loadProgramFromFileWithImports("events2.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);      
 	  setProgram(testProgram, commonCode, i2slv(4*1024, 32));          
       cycle;
 
-      --testProgram(512/4) <=     asm("ja -512");     
-        testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");     
+      testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");     
       
-      --testProgram(384/4) <=     asm("add_i r20, r0, 55");
-      --testProgram(384/4 + 1) <= asm("sys rete");
-        testProgram(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");
-        testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
+      testProgram(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");
+      testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
       
-      --testProgram(640/4) <=     asm("add_i r0, r0, 0"); -- NOP
-      --testProgram(640/4 + 1) <= asm("sys reti");
-        testProgram(slv2u(INT_BASE)/4) <=     asm("add_i r0, r0, 0"); -- NOP
-        testProgram(slv2u(INT_BASE)/4 + 1) <= asm("sys reti");
+      testProgram(slv2u(INT_BASE)/4) <=     asm("add_i r0, r0, 0"); -- NOP
+      testProgram(slv2u(INT_BASE)/4 + 1) <= asm("sys reti");
       
       startTest(testToDo, int0b);
       
