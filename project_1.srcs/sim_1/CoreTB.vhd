@@ -41,6 +41,11 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal testToDo, testDone, testFail: std_logic := '0';
     
     
+        signal simDone, emulDone: std_logic := '1';
+        
+        signal emulReady, emulPrepare, emulRunning: std_logic := '0';
+    
+    
     constant EMULATION: boolean := true;
     constant LOG_EMULATION_TRACE: boolean := true;
     constant CORE_SIMULATION: boolean := true;
@@ -521,7 +526,11 @@ BEGIN
                 if CORE_SIMULATION then
                     checkTestResult(testName, testDone, testFail);
                 end if;
-           
+                
+                -- Wait for emulation to end 
+                while emulReady /= '1' loop           
+                    cycle;
+                end loop;
           end loop;
           
           report "All tests in suite done!";
@@ -569,6 +578,11 @@ BEGIN
         
       checkErrorTestResult("check_error", testDone, testFail);  
 
+                -- Wait for emulation to end 
+                while emulReady /= '1' loop           
+                    cycle;
+                end loop;
+
       cycle;
       
       -------------
@@ -602,6 +616,11 @@ BEGIN
       report "Waiting for completion...";
 
       checkTestResult("events", testDone, testFail);   
+
+                -- Wait for emulation to end 
+                while emulReady /= '1' loop           
+                    cycle;
+                end loop;
       
       -------
       -------
@@ -639,13 +658,61 @@ BEGIN
 
       setForOneCycle(int1, clk);
 
-      checkTestResult("events2", testDone, testFail);    
+      checkTestResult("events2", testDone, testFail);  
+      
+                -- Wait for emulation to end 
+                  while emulReady /= '1' loop           
+                      cycle;
+                  end loop;      
+      
+        
       report "All test runs have been completed successfully";
       cycle;
 
       wait;
    end process;
 
+    
+  TMP_EMULATION: block
+  
+  begin
+        TMP_EMUL: process (clk)
+            type EmulState is (ready, prepare, running);
+            variable state: EmulState := ready;
+            variable cnt: natural := 0;
+        begin
+            if rising_edge(clk) then
+                case state is
+                    when ready =>
+                        if resetDataMem = '1' then
+                            emulDone <= '0';
+                            state := prepare;
+                        end if;
+                    
+                    when prepare =>
+                        if testToDo = '1' then
+                            state := running;
+                            cnt := 0;
+                        end if;
+                        
+                    when running =>
+                        if cnt = 100 then
+                            state := ready;
+                        else
+                            cnt := cnt + 1;
+                        end if;    
+                    
+                    when others =>
+                end case;            
+                
+                emulReady <= bool2std(state = ready);
+                emulPrepare <= bool2std(state = prepare);
+                emulRunning <= bool2std(state = running);
+                
+            end if;
+        end process;
+    end block;
+    
 
 	PROGRAM_MEM: process (clk)
 		variable baseIP: Mword := (others => '0');
