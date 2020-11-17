@@ -482,11 +482,11 @@ BEGIN
               announceTest(currentTest, currentSuite, testName.all, suiteName.all);    
               loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);
 
-              currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
+--              currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
             
-              opFlags <= (others => '0');
-              cpuState <= INIT_CORE_STATE;
-              dataMemory <= (others => (others => '0'));
+--              opFlags <= (others => '0');
+--              cpuState <= INIT_CORE_STATE;
+--              dataMemory <= (others => (others => '0'));
 
               setForOneCycle(resetDataMem, clk);
               
@@ -508,19 +508,19 @@ BEGIN
               cycle;
                 
                 if EMULATION then    
-                    -- Now doing the actual test 
-                    while opFlags /= "100" and opFlags /= "001" loop -- ERROR or SEND (completed)
-                        currentInstructionVar := getInstruction(cpuState, programMemory);
-                        currentInstruction <= currentInstructionVar;
-                        performOp(cpuState, dataMemory, currentInstructionVar.internalOp, opFlags, opResultVar);
+--                    -- Now doing the actual test 
+--                    while opFlags /= "100" and opFlags /= "001" loop -- ERROR or SEND (completed)
+--                        currentInstructionVar := getInstruction(cpuState, programMemory);
+--                        currentInstruction <= currentInstructionVar;
+--                        performOp(cpuState, dataMemory, currentInstructionVar.internalOp, opFlags, opResultVar);
                         
-                        if LOG_EMULATION_TRACE then
-                            write(disasmText, disasmWithAddress(slv2u(cpuState.nextIP), currentInstructionVar.bits));
-                            writeline(traceFile, disasmText);
-                        end if;
+--                        if LOG_EMULATION_TRACE then
+--                            write(disasmText, disasmWithAddress(slv2u(cpuState.nextIP), currentInstructionVar.bits));
+--                            writeline(traceFile, disasmText);
+--                        end if;
                         
-                        wait for TIME_STEP;
-                    end loop;
+--                        wait for TIME_STEP;
+--                    end loop;
                 end if;
     
                 if CORE_SIMULATION then
@@ -539,7 +539,7 @@ BEGIN
 
       end loop;
         
-      if false then -- TODO: scenario where emulation happens along with Core sim?
+      if true then -- TODO: scenario where emulation happens along with Core sim?
           compareTraceFiles("emulation_trace.txt", "CoreDB_committed.txt", match);
           report "Traces match: " & boolean'image(match);
           assert match report "Traces are divergent!" severity error;
@@ -555,11 +555,11 @@ BEGIN
       -- Test error signal  
       announceTest(currentTest, currentSuite, "err signal", "");      
 
-          currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
+--          currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
             
-          opFlags <= (others => '0');
-          cpuState <= INIT_CORE_STATE;
-          dataMemory <= (others => (others => '0'));
+--          opFlags <= (others => '0');
+--          cpuState <= INIT_CORE_STATE;
+--          dataMemory <= (others => (others => '0'));
     
           setForOneCycle(resetDataMem, clk); 
           
@@ -578,10 +578,10 @@ BEGIN
         
       checkErrorTestResult("check_error", testDone, testFail);  
 
-                -- Wait for emulation to end 
-                while emulReady /= '1' loop           
-                    cycle;
-                end loop;
+--                -- Wait for emulation to end 
+--                while emulReady /= '1' loop           
+--                    cycle;
+--                end loop;
 
       cycle;
       
@@ -590,11 +590,11 @@ BEGIN
       announceTest(currentTest, currentSuite, "exc return", "");      
       
 
-          currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
+--          currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
             
-          opFlags <= (others => '0');
-          cpuState <= INIT_CORE_STATE;
-          dataMemory <= (others => (others => '0'));
+--          opFlags <= (others => '0');
+--          cpuState <= INIT_CORE_STATE;
+--          dataMemory <= (others => (others => '0'));
     
           setForOneCycle(resetDataMem, clk); 
 
@@ -618,19 +618,19 @@ BEGIN
       checkTestResult("events", testDone, testFail);   
 
                 -- Wait for emulation to end 
-                while emulReady /= '1' loop           
-                    cycle;
-                end loop;
+--                while emulReady /= '1' loop           
+--                    cycle;
+--                end loop;
       
       -------
       -------
       announceTest(currentTest, currentSuite, "interrupt", "");      
 
-          currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
+--          currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
             
-          opFlags <= (others => '0');
-          cpuState <= INIT_CORE_STATE;
-          dataMemory <= (others => (others => '0'));
+--          opFlags <= (others => '0');
+--          cpuState <= INIT_CORE_STATE;
+--          dataMemory <= (others => (others => '0'));
     
           setForOneCycle(resetDataMem, clk);
 
@@ -661,9 +661,9 @@ BEGIN
       checkTestResult("events2", testDone, testFail);  
       
                 -- Wait for emulation to end 
-                  while emulReady /= '1' loop           
-                      cycle;
-                  end loop;      
+--                  while emulReady /= '1' loop           
+--                      cycle;
+--                  end loop;      
       
         
       report "All test runs have been completed successfully";
@@ -680,6 +680,9 @@ BEGIN
             type EmulState is (ready, prepare, running);
             variable state: EmulState := ready;
             variable cnt: natural := 0;
+            variable currentInstructionVar: Instruction;
+            variable opResultVar: OperationResult;
+            variable  disasmText: line;
         begin
             if rising_edge(clk) then
                 case state is
@@ -687,6 +690,13 @@ BEGIN
                         if resetDataMem = '1' then
                             emulDone <= '0';
                             state := prepare;
+                            
+                            
+                            currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
+                              
+                            opFlags <= (others => '0');
+                            cpuState <= INIT_CORE_STATE;
+                            dataMemory <= (others => (others => '0'));                            
                         end if;
                     
                     when prepare =>
@@ -697,11 +707,29 @@ BEGIN
                         
                     when running =>
                         if cnt = 100 then
-                            state := ready;
+                            --state := ready;
                         else
                             cnt := cnt + 1;
-                        end if;    
-                    
+                        end if; 
+                           
+                             if true then    
+                                -- Now doing the actual test 
+                                if opFlags /= "100" and opFlags /= "001" then -- ERROR or SEND (completed)
+                                    currentInstructionVar := getInstruction(cpuState, programMemory);
+                                    currentInstruction <= currentInstructionVar;
+                                    performOp(cpuState, dataMemory, currentInstructionVar.internalOp, opFlags, opResultVar);
+                                    
+                                    if LOG_EMULATION_TRACE then
+                                        write(disasmText, disasmWithAddress(slv2u(cpuState.nextIP), currentInstructionVar.bits));
+                                        writeline(traceFile, disasmText);
+                                    end if;
+                                    
+                                    --wait for TIME_STEP;
+                                else
+                                    state := ready;
+                                end if;
+                            end if;
+                                          
                     when others =>
                 end case;            
                 
