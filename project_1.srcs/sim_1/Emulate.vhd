@@ -684,7 +684,7 @@ end procedure;
 
 
 -- TODO: add exceptions etc
-procedure calculateNextIP(intArgs: in MwordArray; op: in InternalOperation; signal nextIP: out Mword) is
+procedure calculateNextIP(intArgs: in MwordArray; op: in InternalOperation; nextIP: out Mword) is
     variable takenJump: boolean := false;
     variable target: Mword;
 begin
@@ -710,9 +710,9 @@ begin
     if false then -- events
     
     elsif takenJump then 
-        nextIP <= target;
+        nextIP := target;
     else
-        nextIP <= addInt(op.ip, 4);
+        nextIP := addInt(op.ip, 4);
     end if;
     
 end procedure;
@@ -726,50 +726,69 @@ end procedure;
 --    alias savedStateExc is sysRegArray(4);
 --    alias savedStateInt is sysRegArray(5);
 
-procedure performSystemOp(op: in InternalOperation; thisIP: in Mword; incIP: in Mword; excSignal, intSignal: in std_logic; signal sysRegs: inout MwordArray; signal nextIP: out Mword) is
+procedure performSystemOp(op: in InternalOperation; thisIP: in Mword; incIP: in Mword; excSignal, intSignal: in std_logic; signal sysRegs: inout MwordArray; 
+                          normalNextIP: in Mword; signal nextIP: out Mword) is
     variable exc: boolean := std2bool(excSignal);
     variable int: boolean := std2bool(intSignal);
+    variable newIP: Mword := normalNextIP;
+    variable isEvent: boolean := false;
 begin
     case op.operation is
         when retE =>
-            nextIP <= sysRegs(2);
+            newIP := sysRegs(2);
             sysRegs(1) <= sysRegs(4); -- Restoring to Saved State
+
         when retI =>
-            nextIP <= sysRegs(3);
-            sysRegs(1) <= sysRegs(5); -- Restoring to Saved State        
+            newIP := sysRegs(3);
+            sysRegs(1) <= sysRegs(5); -- Restoring to Saved State
+       
         when halt =>
             -- TODO
             
         when sync =>
-            nextIP <= incIP;
+            newIP := incIP;
            
         when replay =>
-            nextIP <= thisIP;
+            newIP := thisIP;
            
         when error =>
-            nextIP <= EXC_BASE;
-            
+            newIP := EXC_BASE;
+            sysRegs(2) <= --thisIP;
+                            normalNextIP;
+            sysRegs(4) <= sysRegs(1);
+           
         when call =>
-            nextIP <= CALL_BASE;
-            exc := true;
-            
+            newIP := CALL_BASE;
+            --exc := true;
+            sysRegs(2) <= --thisIP;
+                            normalNextIP;
+            sysRegs(4) <= sysRegs(1);
+                       
         when send =>
-            nextIP <= incIP;
+            newIP := incIP;
 
-        when undef =>        
-            nextIP <= EXC_BASE; -- ???
+        when undef =>
+            newIP := EXC_BASE; -- ???
             exc := true;
             
         when others =>
+            newIP := normalNextIP;
     end case;
     
     if exc then
-        sysRegs(2) <= thisIP;
+        sysRegs(2) <= --thisIP;
+                        normalNextIP;
         sysRegs(4) <= sysRegs(1);
+        
+         newIP := EXC_BASE;
     elsif int then
-        sysRegs(3) <= thisIP;
+        sysRegs(3) <= --thisIP;
+                        normalNextIP;
         sysRegs(5) <= sysRegs(1);
+        newIP := INT_BASE;
     end if;
+    
+    nextIP <= newIP;
 end procedure;
 
 
@@ -779,6 +798,7 @@ procedure performOp(signal state: inout CoreState; signal memory: inout ByteArra
                     result: out OperationResult) is
     constant thisIP: Mword := op.ip;
     constant incrementedIP: Mword := addInt(op.ip, 4);
+    variable normalNextIP: Mword; -- := addInt(op.ip, 4);
     variable intArgs: MwordArray(0 to 2);
     variable fpArgs:  MwordArray(0 to 2);
     variable intRes, fpRes, address, memValue: Mword;
@@ -830,11 +850,11 @@ begin
     
     -- Update IP and sys regs
     
-    calculateNextIP(intArgs, op, state.nextIP);
+    calculateNextIP(intArgs, op, normalNextIP);
     
     performSystemOp(op, thisIP, incrementedIP,
                         '0', '0',  -- TODO: Exec exception, interrupt 
-                        state.sysRegs, state.nextIP);
+                        state.sysRegs, normalNextIP, state.nextIP);
 
     outSigs <= (others => '0');
 
