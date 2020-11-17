@@ -46,7 +46,7 @@ ARCHITECTURE Behavior OF CoreTB IS
         signal emulReady, emulPrepare, emulRunning: std_logic := '0';
     
     
-    constant EMULATION: boolean := true;
+    constant EMULATION: boolean := false;
     constant LOG_EMULATION_TRACE: boolean := true;
     constant CORE_SIMULATION: boolean := true;
     
@@ -482,55 +482,35 @@ BEGIN
               announceTest(currentTest, currentSuite, testName.all, suiteName.all);    
               loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);
 
---              currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
-            
---              opFlags <= (others => '0');
---              cpuState <= INIT_CORE_STATE;
---              dataMemory <= (others => (others => '0'));
+
+                  -- Reset handler
+                  testProgram(slv2u(RESET_BASE)/4) <= asm("ja -512");
+                  
+                  -- Call handler
+                  testProgram(slv2u(CALL_BASE)/4) <= asm("sys send");
+                  testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("ja 0");        
+
+                  -- Common lib
+                  setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
 
               setForOneCycle(resetDataMem, clk);
-              
 
-              testProgram(slv2u(RESET_BASE)/4) <= asm("ja -512");
-              testProgram(slv2u(CALL_BASE)/4) <= asm("sys send");
-              testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("ja 0");        
-
-              setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
+              disasmToFile(testName.all & "_disasm.txt", testProgram);
 
 
               if CORE_SIMULATION then
                   startTest(testToDo, int0b);
-              end if;
-
-              disasmToFile(testName.all & "_disasm.txt", testProgram);
                     
-              report "Waiting for completion...";
-              cycle;
-                
-                if EMULATION then    
---                    -- Now doing the actual test 
---                    while opFlags /= "100" and opFlags /= "001" loop -- ERROR or SEND (completed)
---                        currentInstructionVar := getInstruction(cpuState, programMemory);
---                        currentInstruction <= currentInstructionVar;
---                        performOp(cpuState, dataMemory, currentInstructionVar.internalOp, opFlags, opResultVar);
-                        
---                        if LOG_EMULATION_TRACE then
---                            write(disasmText, disasmWithAddress(slv2u(cpuState.nextIP), currentInstructionVar.bits));
---                            writeline(traceFile, disasmText);
---                        end if;
-                        
---                        wait for TIME_STEP;
---                    end loop;
-                end if;
+                  report "Waiting for completion...";
+                  cycle;
     
-                if CORE_SIMULATION then
-                    checkTestResult(testName, testDone, testFail);
-                end if;
-                
-                -- Wait for emulation to end 
-                while emulReady /= '1' loop           
-                    cycle;
-                end loop;
+                  checkTestResult(testName, testDone, testFail);
+              end if;
+            
+              -- Wait for emulation to end 
+              while emulReady /= '1' loop           
+                  cycle;
+              end loop;
           end loop;
           
           report "All tests in suite done!";
@@ -539,7 +519,7 @@ BEGIN
 
       end loop;
         
-      if true then -- TODO: scenario where emulation happens along with Core sim?
+      if EMULATION and LOG_EMULATION_TRACE and CORE_SIMULATION then -- TODO: scenario where emulation happens along with Core sim?
           compareTraceFiles("emulation_trace.txt", "CoreDB_committed.txt", match);
           report "Traces match: " & boolean'image(match);
           assert match report "Traces are divergent!" severity error;
@@ -555,115 +535,108 @@ BEGIN
       -- Test error signal  
       announceTest(currentTest, currentSuite, "err signal", "");      
 
---          currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
-            
---          opFlags <= (others => '0');
---          cpuState <= INIT_CORE_STATE;
---          dataMemory <= (others => (others => '0'));
-    
-          setForOneCycle(resetDataMem, clk); 
           
-      testProgram(0) <= asm("sys error");
-      testProgram(1) <= asm("ja 0");
+          testProgram(0) <= asm("sys error");
+          testProgram(1) <= asm("ja 0");
 	  
-	  setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
-              
-      startTest(testToDo, int0b);
+	      -- Common lib, unneeded here
+	      setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
+
+      setForOneCycle(resetDataMem, clk);              
+      
+      --cycle;
       
       disasmToFile("error_disasm.txt", testProgram);
       
-      report "Waiting for completion...";
- 
-      cycle; 
-        
-      checkErrorTestResult("check_error", testDone, testFail);  
 
---                -- Wait for emulation to end 
---                while emulReady /= '1' loop           
---                    cycle;
---                end loop;
+      if CORE_SIMULATION then
+          startTest(testToDo, int0b);  
+          report "Waiting for completion...";
+          checkErrorTestResult("check_error", testDone, testFail);  
+      end if;
+                -- Wait for emulation to end 
+                while emulReady /= '1' loop           
+                    cycle;
+                end loop;
 
       cycle;
       
       -------------
       -------------
-      announceTest(currentTest, currentSuite, "exc return", "");      
-      
-
---          currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
-            
---          opFlags <= (others => '0');
---          cpuState <= INIT_CORE_STATE;
---          dataMemory <= (others => (others => '0'));
-    
-          setForOneCycle(resetDataMem, clk); 
-
+      announceTest(currentTest, currentSuite, "exc return", "");
       
       loadProgramFromFileWithImports("events.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);
       
-	  setProgram(testProgram, commonCode, i2slv(4*1024, 32));      
-      cycle;
+          -- Reset handler      
+          testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");       
+          
+          -- Call handler - special
+          testProgram(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");  
+          testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
+          
+          -- Common lib
+          setProgram(testProgram, commonCode, i2slv(4*1024, 32));      
 
-            
-      testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");       
 
-      testProgram(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");  
-      testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
-      
-      startTest(testToDo, int0b);      
-      
+      setForOneCycle(resetDataMem, clk); 
+
       disasmToFile("events_disasm.txt", testProgram);
-      report "Waiting for completion...";
-
-      checkTestResult("events", testDone, testFail);   
-
+      
+      if CORE_SIMULATION then
+          startTest(testToDo, int0b);      
+          
+          report "Waiting for completion...";
+    
+          checkTestResult("events", testDone, testFail);   
+       end if;
                 -- Wait for emulation to end 
---                while emulReady /= '1' loop           
---                    cycle;
---                end loop;
+                while emulReady /= '1' loop           
+                    cycle;
+                end loop;
       
       -------
       -------
       announceTest(currentTest, currentSuite, "interrupt", "");      
 
---          currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
-            
---          opFlags <= (others => '0');
---          cpuState <= INIT_CORE_STATE;
---          dataMemory <= (others => (others => '0'));
-    
-          setForOneCycle(resetDataMem, clk);
-
       loadProgramFromFileWithImports("events2.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);      
-	  setProgram(testProgram, commonCode, i2slv(4*1024, 32));          
-      cycle;
+          
+          -- Reset handler
+          testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");
+          
+          -- Call handler - special
+          testProgram(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");
+          testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
+          
+          -- Int handler - special
+          testProgram(slv2u(INT_BASE)/4) <=     asm("add_i r0, r0, 0"); -- NOP
+          testProgram(slv2u(INT_BASE)/4 + 1) <= asm("sys reti");
+          
+          -- Common lib
+          setProgram(testProgram, commonCode, i2slv(4*1024, 32));          
 
-      testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");     
       
-      testProgram(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");
-      testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
+      setForOneCycle(resetDataMem, clk);
       
-      testProgram(slv2u(INT_BASE)/4) <=     asm("add_i r0, r0, 0"); -- NOP
-      testProgram(slv2u(INT_BASE)/4 + 1) <= asm("sys reti");
+      disasmToFile("events2_disasm.txt", testProgram);
       
-      startTest(testToDo, int0b);
-      
-      disasmToFile("events2_disasm.txt", testProgram);      
-      report "Waiting for completion...";
-
-      cycle;
-        -- After x cycles send interrupt
-      wait for 22 * 10 ns;
-      cycle;
-
-      setForOneCycle(int1, clk);
-
-      checkTestResult("events2", testDone, testFail);  
-      
+      if CORE_SIMULATION then
+          startTest(testToDo, int0b);
+               
+          report "Waiting for completion...";
+    
+          cycle;
+            -- After x cycles send interrupt
+          wait for 22 * 10 ns;
+          cycle;
+    
+          setForOneCycle(int1, clk);
+    
+          checkTestResult("events2", testDone, testFail);  
+      end if;
                 -- Wait for emulation to end 
---                  while emulReady /= '1' loop           
---                      cycle;
---                  end loop;      
+                  while emulReady /= '1' loop           
+                      cycle;
+                  end loop;      
       
         
       report "All test runs have been completed successfully";
@@ -712,7 +685,7 @@ BEGIN
                             cnt := cnt + 1;
                         end if; 
                            
-                             if true then    
+                             if EMULATION then    
                                 -- Now doing the actual test 
                                 if opFlags /= "100" and opFlags /= "001" then -- ERROR or SEND (completed)
                                     currentInstructionVar := getInstruction(cpuState, programMemory);
@@ -728,6 +701,8 @@ BEGIN
                                 else
                                     state := ready;
                                 end if;
+                            else
+                                    state := ready;
                             end if;
                                           
                     when others =>
