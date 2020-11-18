@@ -10,7 +10,7 @@ use work.ArchDefs.all;
 
 use work.CoreConfig.all;
 
-use work.Assembler.all;
+--use work.Assembler.all;
 
 use work.CpuText.all;
 
@@ -63,6 +63,12 @@ function getInsStringArray(sa: SchedulerEntrySlotArray) return InsStringArray;
 
 function getInsStringArray(ia: InstructionSlotArray; fmt: InsPrintFormat) return InsStringArray;
 function getInsStringArray(sa: SchedulerEntrySlotArray; fmt: InsPrintFormat) return InsStringArray;
+
+
+--procedure printGroup(ia: InstructionSlotArray; filename: string);
+
+procedure printOp(ins: InstructionState; file f: text);
+procedure printGroup(ia: InstructionSlotArray; file f: text);
   
 end package;
 
@@ -249,7 +255,9 @@ end function;
 
 function sprintHex(ins: InstructionState) return string is
 begin
-   return disasmWithAddress(slv2u(ins.ip), ins.bits);
+   -- synthesis translate_off
+   return work.Assembler.disasmWithAddress(slv2u(ins.ip), ins.bits);
+   -- synthesis translate_on
 end function;
 
 
@@ -589,6 +597,56 @@ begin
     
     return res;
 end function;
+
+
+--procedure printGroup(ia: InstructionSlotArray; filename: string) is
+--    file outFile: text open append_mode is filename;
+--    variable outputLine: line;
+--begin
+--    for i in ia'range loop
+--        if ia(i).full = '1' then
+--            write(outputLine, disasmWithAddress(slv2u(ia(i).ins.ip), ia(i).ins.bits)); 
+--            writeline(outFile, outputLine);
+--        end if;
+--    end loop;
+    
+--end procedure;
+
+procedure printOp(ins: InstructionState; file f: text) is
+    variable outputLine: line;
+begin
+    -- synthesis translate_off
+    write(outputLine, work.Assembler.disasmWithAddress(slv2u(ins.ip), ins.bits));
+    -- synthesis translate_on
+    if ins.controlInfo.hasInterrupt = '1' then
+        write(outputLine, string'(" # Interrupt "));
+    end if;
+    
+    if ins.controlInfo.hasException = '1' then
+        write(outputLine, string'(" # Exception "));
+    end if;                 
+
+    if ins.controlInfo.refetch = '1' then
+        write(outputLine, string'(" #R (refetch)"));
+    elsif ins.controlInfo.specialAction = '1' then
+        write(outputLine, string'(" # SpecialAction "));
+    end if;
+
+    writeline(f, outputLine);
+    
+end procedure;
+
+procedure printGroup(ia: InstructionSlotArray; file f: text) is
+    variable outputLine: line;
+begin
+    for i in ia'range loop
+        if ia(i).full = '1' then
+            printOp(ia(i).ins, f);
+        end if;
+    end loop;
+    
+end procedure;
+
 
 end package body;
 

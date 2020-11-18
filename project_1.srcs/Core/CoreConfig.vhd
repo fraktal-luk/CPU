@@ -7,8 +7,16 @@ use work.ArchDefs.all;
 
 package CoreConfig is
 
+--function checkSynthesis return boolean;
+
 constant CLEAR_DEBUG_INFO: boolean := true;
 constant VIEW_ON: boolean := false;
+
+   constant DEBUG_LOG_COMMITTED: boolean := true;
+   --constant COMMITTED_FILE: string := "committed_out.txt";
+
+
+--constant SYNTH_CHECK: boolean := checkSynthesis;
 
 constant LOG2_PIPE_WIDTH: natural := 0 + 2;
 constant PIPE_WIDTH: positive := 2**LOG2_PIPE_WIDTH;
@@ -41,12 +49,24 @@ constant IMM_AS_REG: boolean := true;
 
     constant TMP_PARAM_COMPRESS_RETURN: boolean := false;
     constant TMP_PARAM_COMPRESS_PTRS: boolean := false;
-
+    constant TMP_PARAM_SIMPLIFY_ISSUE: boolean := true;
+    
+    constant TMP_PARAM_DEST_MOVE: boolean := true;
+    
 end CoreConfig;
 
 
 
 package body CoreConfig is
 
+--function checkSynthesis return boolean is
+--begin
+--    -- synthesis translate_off
+--    return true;
+--    -- synthesis translate_on
+
+--    assert checkSynthesis report "Synthesis started with incorrect settings" severity failure;
+--    return false;
+--end function;
 
 end CoreConfig;

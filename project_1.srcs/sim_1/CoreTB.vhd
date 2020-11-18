@@ -30,13 +30,26 @@ use work.CoreConfig.all;
 use work.Helpers.all;
 
 use work.Assembler.all;
-
+use work.Emulate.all;
 
 ENTITY CoreTB IS
 END CoreTB;
  
 ARCHITECTURE Behavior OF CoreTB IS
 
+    signal currentTest, currentSuite: string(1 to 30);    
+    signal testToDo, testDone, testFail: std_logic := '0';
+    
+    
+        signal simDone, emulDone: std_logic := '1';
+        
+        signal emulReady, emulPrepare, emulRunning: std_logic := '0';
+    
+    
+    constant EMULATION: boolean := false;
+    constant LOG_EMULATION_TRACE: boolean := true;
+    constant CORE_SIMULATION: boolean := true;
+    
     -- Component Declaration for the Unit Under Test (UUT)
 
     COMPONENT Core -- FrontPipe0
@@ -73,6 +86,10 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal clk : std_logic := '0';
     signal reset : std_logic := '0';
     signal en : std_logic := '0';
+    
+    
+    -- CPU ports
+    -- Inputs
     signal ivalid : std_logic := '0';
     signal iin : WordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal intallow, intack: std_logic := '0';
@@ -96,25 +113,280 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal iadrvalid : std_logic;
     signal iadr : std_logic_vector(31 downto 0);
     signal oaux : std_logic_vector(31 downto 0);
-	
-	signal memReadDone, memReadDonePrev, memWriteDone: std_logic := '0';
-	signal memReadValue, memReadValuePrev, memWriteAddress, memWriteValue: Mword := (others => '0');
+	-- end CP ports
 
-	signal dataMem: WordArray(0 to 255) := (
-					72 => X"00000064",
-					250 => X"00000055",
-					others => (others => '0'));
-
+    signal resetDataMem: std_logic := '0';
+    
     -- Clock period definitions
     constant clk_period : time := 10 ns;
-	--signal memEn: std_logic := '0';
- 
-	signal prog: ProgramBuffer;
-	signal machineCode: WordArray(0 to prog'length-1);
+
+    constant TIME_STEP: time := 1 ns; -- for 1 instruction in emulation
 	
-    signal testProgram: WordArray(0 to 1023);
-    signal testToDo, testDone, testFail: std_logic := '0';
+    signal testProgram: WordArray(0 to 2047);
+
+    
+    alias programMemory is testProgram;
+    
+    signal dataMemory: ByteArray(0 to 4095);
+    
+    alias cpuEndFlag is oaux(0);
+    alias cpuErrorFlag is oaux(1);
+
+
+    type Instruction is record
+        address: Mword;
+        bits: Word;
+        disasm: string(1 to 51);
+        internalOp: InternalOperation;
+    end record;
+    
+    signal currentInstruction: Instruction;
+    
+    signal cpuState: CoreState := INIT_CORE_STATE;
+        
+    signal opFlags: std_logic_vector(0 to 2);
+    signal okFlag, errorFlag: std_logic := '0';
+        
+    file traceFile: text open write_mode is "emulation_trace.txt";
+    
+    function compareTraceLines(sa, sb: string) return boolean is
+    begin
+        if sa(1 to 8) /= sb(1 to 8) then 
+            return false;
+        elsif sa(11 to 18) /= sb(11 to 18) then    
+            return false;
+        end if;
+        return true;
+    end function;
+    
+    function skipLine(s: string) return boolean is
+    begin
+        for i in s'range loop
+            if s(i) = '#' and i < s'length then
+                return s(i+1) = 'R';
+            end if;
+        end loop;
+        return false;
+    end function;
+    
+
+    procedure compareTraceFiles(a, b: in string; match: out boolean) is
+        file fa: text open read_mode is a;
+        file fb: text open read_mode is b;
+        variable la, lb: line;
+        variable ia, ib: natural := 0;
+    begin
+        match := true;
+        loop
+            la := null;
+            lb := null;
+            ia := ia + 1;
+            ib := ib + 1;
+            readline(fa, la);
+            readline(fb, lb);
+            
+            while la /= null and skipLine(la.all) loop la := null; readline(fa, la); ia := ia + 1; end loop;
+            while lb /= null and skipLine(lb.all) loop lb := null; readline(fb, lb); ib := ib + 1; end loop;
+
+            if la = null and lb = null then
+                return;
+            end if;
+            
+            if (la = null) /= (lb = null) then
+                match := false;
+                return;
+            end if; 
+            
+            if not compareTraceLines(la.all, lb.all) then
+                match := false;
+                return;
+            end if;            
+        end loop;
+    end procedure;
+        
+        
+        procedure cycle(signal clk: in std_logic) is
+        begin
+            wait until rising_edge(clk);
+        end procedure;
+
+        procedure cycle is
+        begin
+            wait until rising_edge(clk);
+        end procedure;
+
+        
+    procedure checkTestResult(variable testName: in line; signal testDone, testFail: out std_logic) is
+    begin
+        loop
+          cycle(clk);
+    
+          if cpuEndFlag = '1' then
+              report "Test done";
+              testDone <= '1';
+              exit;
+          end if;
+          
+          if cpuErrorFlag = '1' then
+              report "TEST FAIL: " & testName.all;
+              testFail <= '1';
+              wait;                     
+          end if;                  
+        end loop;
+            
+        cycle(clk);
+        testDone <= '0';
+        testFail <= '0';  
+    end procedure;
+
+    procedure checkTestResult(testName: in string; signal testDone, testFail: out std_logic) is
+    begin
+        loop
+          cycle(clk);
+    
+          if cpuEndFlag = '1' then
+              report "Test done";
+              testDone <= '1';
+              exit;
+          end if;
+          
+          if cpuErrorFlag = '1' then
+              report "TEST FAIL: " & testName;
+              testFail <= '1';
+              wait;                     
+          end if;                  
+        end loop;
+            
+        cycle(clk);
+        testDone <= '0';
+        testFail <= '0';  
+    end procedure;
+
+    procedure checkErrorTestResult(testName: in string; signal testDone, testFail: out std_logic) is
+    begin
+        loop
+          cycle(clk);
+            
+          -- CAREFUL: This is reversed because we expect error signal
+          if cpuErrorFlag = '1' then
+              report "Test done";
+              testDone <= '1';
+              exit;
+          end if;
+          
+          if cpuEndFlag = '1' then
+              report "TEST FAIL: " & testName;
+              testFail <= '1';
+              wait;                     
+          end if;                  
+        end loop;
+            
+        cycle(clk);
+        testDone <= '0';
+        testFail <= '0';  
+    end procedure;
+
+    procedure announceTest(signal nameOut, suiteOut: out string; name, suite: string) is
+    begin
+        stringAssign(nameOut, name);
+        stringAssign(suiteOut, suite);
+        
+        report "Test to run: " & name;
+    end procedure;
+    
+
+    procedure startTest(signal testToDo, int0b: out std_logic) is
+    begin
+      cycle(clk);
+      testToDo <= '1';
+      int0b <= '1';
+      cycle(clk);                     
+      testToDo <= '0';
+      int0b <= '0';
+    end procedure;
+    
+    procedure setForOneCycle(signal s: out std_logic; signal clk: std_logic) is
+    begin
+        s <= '1';
+        cycle(clk);
+        s <= '0';
+        cycle(clk);
+    end procedure;
+    
+    procedure putInstructionSequence(signal programMem: inout WordArray; address: in Mword; insSeq: WordArray) is
+        constant startAdr: natural := slv2u(address)/4;
+        constant LEN: natural := insSeq'length;
+    begin
+        assert isNonzero(address(1 downto 0)) = '0' report "Unaligned instruction address!" severity error;
+    
+        programMem(startAdr to startAdr + LEN - 1) <= insSeq;
+        
+    end procedure;
+    
+    procedure loadProgramFromFile(filename: in string; signal testProgram: out WordArray) is        
+	    constant prog: ProgramBuffer := readSourceFile(filename);
+        variable machineCode: WordArray(0 to prog'length-1);
+    begin
+        machineCode := processProgram(prog); -- TODO: include common imports
+    
+        testProgram <= (others => (others => 'U'));
+        testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+    end procedure;
+
+    procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
+	    constant prog: ProgramBuffer := readSourceFile(filename);
+        variable machineCode: WordArray(0 to prog'length-1);
+        variable imp, exp: XrefArray(0 to 100);
+    begin
+        processProgramNew2(prog, machineCode, imp, exp);
+        machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
+    
+        testProgram <= (others => (others => 'U'));
+        testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+    end procedure;
+
+
+    procedure setProgram(signal testProgram: inout WordArray; program: WordArray; offset: Mword) is
+        constant offsetInt: natural := slv2u(offset)/4; 
+    begin
+        testProgram(offsetInt to offsetInt + program'length-1) <= program;
+    end procedure;
+
+
+    -- Differs from simple ln.all in that it's written to a string of predefined length
+    procedure fillStringFromLine(signal s: out string; variable ln: in line) is
+    begin
+        s <= (others => ' ');
+        s(1 to ln.all'length) <= ln.all;
+    end procedure;
+    
+    function getInstruction(signal cpuState: in CoreState; signal programMemory: in WordArray) return Instruction is
+        variable res: Instruction;
+        variable insWordVar: Word;
+        variable intOpVar: InternalOperation;
+    begin
+        insWordVar := programMemory(slv2u(cpuState.nextIP)/4);
+        intOpVar := decode(cpuState.nextIP, insWordVar);
+        res := (cpuState.nextIP, insWordVar,  disasmWithAddress(slv2u(cpuState.nextIP), insWordVar), intOpVar); 
+        return res;
+    end function;
+    
+    
+    procedure loadCommonAsm(signal machineCode: out WordArray) is
+        variable prog: ProgramBuffer := readSourceFile("common_asm.txt");
+    begin
+        machineCode <= processProgram(prog);     
+    end procedure;
+    
+    signal commonCode, commonCode2: WordArray(0 to 999);
+      
+    signal outLabels, outExports: LabelArray(0 to 999);
+    signal outStartOffsets, outEndOffsets: IntArray(0 to 999);
+
+    signal linkOffsets: IntArray(0 to 100);
 BEGIN
+   okFlag <= bool2std(opFlags = "001");
+   errorFlag <= bool2std(opFlags = "100");
 
    -- Instantiate the Unit Under Test (UUT)
    uut: Core PORT MAP (
@@ -147,7 +419,7 @@ BEGIN
    );
 
    -- Clock process definitions
-   clk_process :process
+   clk_process: process
    begin
 		clk <= '1';
 		wait for clk_period/2;
@@ -159,20 +431,32 @@ BEGIN
 	en <= '1' after 105 ns;
 	
 	int0 <= int0a or int0b;
-	
-    testDone <= oaux(0);
-    testFail <= oaux(1);
+
 	
    -- Stimulus process
    stim_proc: process
-       variable progB: ProgramBuffer;
-       variable testName, suiteName: line;
+       variable testName, suiteName, disasmText: line;
        file suiteFile: text open read_mode is "suite_names.txt";
        file testFile: text;
+
+       variable opResultVar: OperationResult;
+         
+       variable match: boolean := true;
+       variable currentInstructionVar: Instruction;
+        variable machineCodeVar, machineCodeVar2, machineCodeVar3: WordArray(0 to 999);
+        
+        variable outLabelsVar, outExportsVar: LabelArray(0 to 999);
+        variable outStartOffsetsVar, outEndOffsetsVar: IntArray(0 to 999);
+        
+        variable exp, imp: XrefArray(0 to 100);
+        variable exp2, imp2: XrefArray(0 to 100);
+        variable linkOffsetsVar: IntArray(0 to 100);
    begin
-	
+      processProgramNew2(readSourceFile("common_asm.txt"), machineCodeVar2, imp, exp);
+      commonCode <= machineCodeVar2;
+	           
 	  wait for 110 ns;
-      
+
       loop
           suiteName := null;
           readline(suiteFile, suiteName);
@@ -193,178 +477,245 @@ BEGIN
               elsif testName(1) = ';' then
                   next;
               end if;
-    
-              report "Now to run: " & testName.all;
-              progB := readSourceFile(testName.all & ".txt");
-              machineCode <= processProgram(progB);
-               
-              wait until rising_edge(clk);
-              
-              testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
-              testProgram(512/4) <= ins6L(j, -512);-- TEMP! 
-              testProgram(384/4) <= ins655655(ext2, 0, 0, send, 0, 0);
-              testProgram(384/4 + 1) <= ins6L(j, 0); -- idle loop          
 
-        
-              testToDo <= '1';
-              int0b <= '1';
-              wait until rising_edge(clk);
-              testToDo <= '0';
-              int0b <= '0';
-    
-              disasmToFile(testName.all & "_disasm.txt", testProgram);
-                    
-              report "Waiting for completion...";
-    
-              loop
-                  wait until rising_edge(clk);
 
-                  if testDone = '1' then
-                      report "Test done";
-                      exit;
-                  end if;
+              announceTest(currentTest, currentSuite, testName.all, suiteName.all);    
+              loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);
+
+
+                  -- Reset handler
+                  testProgram(slv2u(RESET_BASE)/4) <= asm("ja -512");
                   
-                  if testFail = '1' then
-                      report "TEST FAIL: " & testName.all;
-                      
-                      wait;                     
-                  end if;                  
+                  -- Call handler
+                  testProgram(slv2u(CALL_BASE)/4) <= asm("sys send");
+                  testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("ja 0");        
+
+                  -- Common lib
+                  setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
+
+              setForOneCycle(resetDataMem, clk);
+
+              disasmToFile(testName.all & "_disasm.txt", testProgram);
+
+
+              if CORE_SIMULATION then
+                  startTest(testToDo, int0b);
+                    
+                  report "Waiting for completion...";
+                  cycle;
+    
+                  checkTestResult(testName, testDone, testFail);
+              end if;
+            
+              -- Wait for emulation to end 
+              while emulReady /= '1' loop           
+                  cycle;
               end loop;
-                
-              wait until rising_edge(clk);
           end loop;
-          report "All tests in suite done!";
-      
-      end loop;
           
+          report "All tests in suite done!";
+          
+          cycle;
+
+      end loop;
+        
+      if EMULATION and LOG_EMULATION_TRACE and CORE_SIMULATION then -- TODO: scenario where emulation happens along with Core sim?
+          compareTraceFiles("emulation_trace.txt", "CoreDB_committed.txt", match);
+          report "Traces match: " & boolean'image(match);
+          assert match report "Traces are divergent!" severity error;
+      end if;
+      
       report "All suites done!";
-
-      wait until rising_edge(clk);
+        
+      cycle;
       
-      report "Run exception tests";
-      testProgram(0) <= ins655655(ext2, 0, 0, error, 0, 0);
-      testProgram(1) <= ins6L(j, 0);
-      
-      wait until rising_edge(clk);
+      -----------------------------------------------
+      -----------------------------------------------
 
-      testToDo <= '1';
-      int0b <= '1';
-      wait until rising_edge(clk);
-      testToDo <= '0';
-      int0b <= '0';
+      -- Test error signal  
+      announceTest(currentTest, currentSuite, "err signal", "");      
+
+          
+          testProgram(0) <= asm("sys error");
+          testProgram(1) <= asm("ja 0");
+	  
+	      -- Common lib, unneeded here
+	      setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
+
+      setForOneCycle(resetDataMem, clk);              
+      
+      --cycle;
       
       disasmToFile("error_disasm.txt", testProgram);
       
-      report "Waiting for completion...";
- 
-      wait until rising_edge(clk);
 
-      loop
-          wait until rising_edge(clk);
-              if testDone = '1' then
-                  report "Success signal when error expected!";
-                  wait;
-              end if;
-              
-              if testFail = '1' then
-                  report "Error signal confirmed correctly";
-                  exit;                     
-              end if;                  
-      end loop;     
+      if CORE_SIMULATION then
+          startTest(testToDo, int0b);  
+          report "Waiting for completion...";
+          checkErrorTestResult("check_error", testDone, testFail);  
+      end if;
+                -- Wait for emulation to end 
+                while emulReady /= '1' loop           
+                    cycle;
+                end loop;
 
-      wait until rising_edge(clk);
+      cycle;
+      
+      -------------
+      -------------
+      announceTest(currentTest, currentSuite, "exc return", "");
+      
+      loadProgramFromFileWithImports("events.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);
+      
+          -- Reset handler      
+          testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");       
+          
+          -- Call handler - special
+          testProgram(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");  
+          testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
+          
+          -- Common lib
+          setProgram(testProgram, commonCode, i2slv(4*1024, 32));      
 
-      report "Now test exception return";
 
-	  progB := readSourceFile("events.txt" );
-      machineCode <= processProgram(progB);
-      wait until rising_edge(clk);
+      setForOneCycle(resetDataMem, clk); 
 
+      disasmToFile("events_disasm.txt", testProgram);
+      
+      if CORE_SIMULATION then
+          startTest(testToDo, int0b);      
+          
+          report "Waiting for completion...";
+    
+          checkTestResult("events", testDone, testFail);   
+       end if;
+                -- Wait for emulation to end 
+                while emulReady /= '1' loop           
+                    cycle;
+                end loop;
+      
+      -------
+      -------
+      announceTest(currentTest, currentSuite, "interrupt", "");      
+
+      loadProgramFromFileWithImports("events2.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);      
+          
+          -- Reset handler
+          testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");
+          
+          -- Call handler - special
+          testProgram(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");
+          testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
+          
+          -- Int handler - special
+          testProgram(slv2u(INT_BASE)/4) <=     asm("add_i r0, r0, 0"); -- NOP
+          testProgram(slv2u(INT_BASE)/4 + 1) <= asm("sys reti");
+          
+          -- Common lib
+          setProgram(testProgram, commonCode, i2slv(4*1024, 32));          
+
+      
+      setForOneCycle(resetDataMem, clk);
+      
+      disasmToFile("events2_disasm.txt", testProgram);
+      
+      if CORE_SIMULATION then
+          startTest(testToDo, int0b);
+               
+          report "Waiting for completion...";
+    
+          cycle;
+            -- After x cycles send interrupt
+          wait for 22 * 10 ns;
+          cycle;
+    
+          setForOneCycle(int1, clk);
+    
+          checkTestResult("events2", testDone, testFail);  
+      end if;
+                -- Wait for emulation to end 
+                  while emulReady /= '1' loop           
+                      cycle;
+                  end loop;      
+      
         
-      testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
-      testProgram(512/4) <= ins6L(j, -512);-- TEMP!        
-      
-      testProgram(384/4) <= ins655H(addI, r20, r0, 55);
-      testProgram(384/4 + 1) <= ins655655(ext2, 0, 0, retE, 0, 0);
-      
-      --wait until rising_edge(clk);         
-      testToDo <= '1';
-      int0b <= '1';
-      wait until rising_edge(clk);
-      testToDo <= '0';
-      int0b <= '0';
-      
-      disasmToFile("events_disasm.txt", testProgram);      
-      report "Waiting for completion...";
-
-     wait until rising_edge(clk);
- 
-     loop
-        wait until rising_edge(clk);
-          if testDone = '1' then
-              report "Test done";
-              exit;
-          end if;
-          
-          if testFail = '1' then
-              report "TEST FAIL: " & "events";             
-              wait;                     
-          end if;                  
-      end loop;      
-
-      report "Now test interrupts";
-
-	  progB := readSourceFile( "events2.txt");
-      machineCode <= processProgram(progB);
-      wait until rising_edge(clk);
-
-          
-      testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
-      testProgram(512/4) <= ins6L(j, -512);-- TEMP!        
-      
-      testProgram(384/4) <= ins655H(addI, r20, r0, 55);
-      testProgram(384/4 + 1) <= ins655655(ext2, 0, 0, retE, 0, 0);
-      
-      testProgram(640/4) <= ins655H(addI, r0, r0, 0); -- NOP
-      testProgram(640/4 + 1) <= ins655655(ext2, 0, 0, retI, 0, 0);          
-      
-      --wait until rising_edge(clk);         
-      testToDo <= '1';
-      int0b <= '1';
-      wait until rising_edge(clk);
-      testToDo <= '0';
-      int0b <= '0';
-      
-      disasmToFile("events2_disasm.txt", testProgram);      
-      report "Waiting for completion...";
-
-
-      wait until rising_edge(clk);
-        -- After x cycles send interrupt
-      wait for 22 * 10 ns;
-      wait until rising_edge(clk);        
-      int1 <= '1';
-      wait until rising_edge(clk);
-      int1 <= '0';      
- 
-      loop
-          wait until rising_edge(clk);
-          
-          if testDone = '1' then
-              report "Test done";
-              report "All test runs have been completed successfully";
-              exit;
-          end if;
-          
-          if testFail = '1' then
-              report "TEST FAIL: " & "events2";            
-              wait;                     
-          end if;                  
-      end loop;      
+      report "All test runs have been completed successfully";
+      cycle;
 
       wait;
    end process;
 
+    
+  TMP_EMULATION: block
+  
+  begin
+        TMP_EMUL: process (clk)
+            type EmulState is (ready, prepare, running);
+            variable state: EmulState := ready;
+            variable cnt: natural := 0;
+            variable currentInstructionVar: Instruction;
+            variable opResultVar: OperationResult;
+            variable  disasmText: line;
+        begin
+            if rising_edge(clk) then
+                case state is
+                    when ready =>
+                        if resetDataMem = '1' then
+                            emulDone <= '0';
+                            state := prepare;
+                            
+                            
+                            currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
+                              
+                            opFlags <= (others => '0');
+                            cpuState <= INIT_CORE_STATE;
+                            dataMemory <= (others => (others => '0'));                            
+                        end if;
+                    
+                    when prepare =>
+                        if testToDo = '1' then
+                            state := running;
+                            cnt := 0;
+                        end if;
+                        
+                    when running =>
+                        if cnt = 100 then
+                            --state := ready;
+                        else
+                            cnt := cnt + 1;
+                        end if; 
+                           
+                             if EMULATION then    
+                                -- Now doing the actual test 
+                                if opFlags /= "100" and opFlags /= "001" then -- ERROR or SEND (completed)
+                                    currentInstructionVar := getInstruction(cpuState, programMemory);
+                                    currentInstruction <= currentInstructionVar;
+                                    performOp(cpuState, dataMemory, currentInstructionVar.internalOp, opFlags, opResultVar);
+                                    
+                                    if LOG_EMULATION_TRACE then
+                                        write(disasmText, disasmWithAddress(slv2u(cpuState.nextIP), currentInstructionVar.bits));
+                                        writeline(traceFile, disasmText);
+                                    end if;
+                                    
+                                    --wait for TIME_STEP;
+                                else
+                                    state := ready;
+                                end if;
+                            else
+                                    state := ready;
+                            end if;
+                                          
+                    when others =>
+                end case;            
+                
+                emulReady <= bool2std(state = ready);
+                emulPrepare <= bool2std(state = prepare);
+                emulRunning <= bool2std(state = running);
+                
+            end if;
+        end process;
+    end block;
+    
 
 	PROGRAM_MEM: process (clk)
 		variable baseIP: Mword := (others => '0');
@@ -377,43 +728,47 @@ BEGIN
             --				stalled content in fetch buffer!
             baseIP := iadr and i2slv(-PIPE_WIDTH*4, MWORD_SIZE); -- Clearing low bits
             for i in 0 to PIPE_WIDTH-1 loop
-                iin(i) <= testProgram(slv2u(baseIP(10 downto 2)) + i); -- CAREFUL! 2 low bits unused (32b memory) 									
+                iin(i) <= testProgram(slv2u(baseIP(12 downto 2)) + i); -- CAREFUL! 2 low bits unused (32b memory) 									
             end loop;
-					
-            if iadrvalid = '1' and countOnes(iadr(iadr'high downto 12)) = 0 then
-                ivalid <= '1';					
-            else
-                ivalid <= '0';	
-            end if;			
+            
+            ivalid <= iadrvalid and not isNonzero(iadr(iadr'high downto 12));
 		end if;	
 	end process;	
 
 
-	DATA_MEM: process (clk)
-	begin
-		if rising_edge(clk) then
-			if en = '1' then			
-				-- TODO: define effective address exact size
-			
-				-- Reading
-				memReadDone <= dread;
-				memReadDonePrev <= memReadDone;
-				memReadValue <= dataMem(slv2u(dadr(MWORD_SIZE-1 downto 2))) ;-- CAREFUL: pseudo-byte addressing 
-				memReadValuePrev <= memReadValue;	
-				
-				-- Writing
-				memWriteDone <= dwrite;
-				memWriteValue <= dout;
-				memWriteAddress <= doutadr;
-				if dwrite = '1' then
-					dataMem(slv2u(doutadr(MWORD_SIZE-1 downto 2))) <= dout; -- CAREFUL: pseudo-byte addressing		
-				end if;
-				
-			end if;
-		end if;	
-	end process;
-
-	din <= memReadValue;
-	dvalid <= memReadDone;
-	
+    DATA_MEM: block
+        signal memReadDone, memReadDonePrev, memWriteDone: std_logic := '0';
+        signal memReadValue, memReadValuePrev, memWriteAddress, memWriteValue: Mword := (others => '0');
+        signal dataMem: WordArray(0 to 255) := (others => (others => '0'));
+    begin
+        SYNCH: process (clk)
+        
+        begin
+            if rising_edge(clk) then
+                if resetDataMem = '1' then
+                    dataMem <= (others => (others => '0'));
+                elsif en = '1' then			
+                    -- TODO: define effective address exact size
+                
+                    -- Reading
+                    memReadDone <= dread;
+                    memReadDonePrev <= memReadDone;
+                    memReadValue <= dataMem(slv2u(dadr(MWORD_SIZE-1 downto 2))) ;-- CAREFUL: pseudo-byte addressing 
+                    memReadValuePrev <= memReadValue;	
+                    
+                    -- Writing
+                    memWriteDone <= dwrite;
+                    memWriteValue <= dout;
+                    memWriteAddress <= doutadr;
+                    if dwrite = '1' then
+                        dataMem(slv2u(doutadr(MWORD_SIZE-1 downto 2))) <= dout; -- CAREFUL: pseudo-byte addressing		
+                    end if;
+                    
+                end if;
+            end if;	
+        end process;
+    
+        din <= memReadValue;
+        dvalid <= memReadDone;
+	end block;
 END;
