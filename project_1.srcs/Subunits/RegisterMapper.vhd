@@ -132,7 +132,7 @@ architecture Behavioral of RegisterMapper is
         else
             t1 := p2;
         end if;
-        
+
         if (rew or s3 or s2) = '1' then
             res := t1;
         else
@@ -206,4 +206,97 @@ begin
 	   end if;
 	end process;
 
+
+    OBSERVE: if VIEW_ON generate
+        constant N_BANKS_NEWEST: natural := 8;
+        constant N_BANKS_STABLE: natural := 4;
+        constant BANK_SIZE_NEWEST: natural := 32/N_BANKS_NEWEST;
+        constant BANK_SIZE_STABLE: natural := 32/N_BANKS_STABLE;
+        
+        signal written: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        signal banksWritten: std_logic_vector(0 to N_BANKS_NEWEST-1) := (others => '0');
+        signal banksWrittenMultiple: std_logic_vector(0 to N_BANKS_NEWEST-1) := (others => '0');        
+        signal banksHist, banksHistC: IntArray(0 to N_BANKS_NEWEST-1) := (others => 0);
+        signal nDestsWritten, nBanksWritten, nBanksWrittenMultiple: natural := 0;
+        
+        type AccessMatrix is array(0 to PIPE_WIDTH-1, 0 to N_BANKS_NEWEST-1) of natural;
+        signal am, cam: AccessMatrix := (others => (others => 0));
+    begin
+        nDestsWritten <= countOnes(written);
+        nBanksWritten <= countOnes(banksWritten);
+        nBanksWrittenMultiple <= countOnes(banksWrittenMultiple);
+        
+        process (clk)
+            variable iHi, iLo: natural := 0;
+            variable tmpHist, tmpHistC: IntArray(0 to N_BANKS_NEWEST-1) := (others => 0);
+            variable tmpAm, tmpCam: AccessMatrix := (others => (others => 0));
+        begin
+            if rising_edge(clk) then
+                tmpHist := (others => 0);
+                tmpAm := (others => (others => 0));
+                
+                banksWritten <= (others => '0');
+                banksWrittenMultiple <= (others => '0');
+                banksHist <= (others => 0);
+                written <= (others => '0');
+                am <= (others => (others => 0));
+                --cam <= (others => (others => 0));
+                        
+                if sendingToReserve = '1' then
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        iHi := slv2u(selectReserve(i))/BANK_SIZE_NEWEST;
+                        iLo := slv2u(selectReserve(i)) mod BANK_SIZE_NEWEST;
+                        if reserve(i) = '1' then
+                            tmpAm(i, iHi) := tmpAm(i, iHi) + 1;
+                        
+                            tmpHist(iHi) := tmpHist(iHi) + 1;
+                            --banksWritten(iHi) <= '1';
+                        end if;
+                    end loop;
+                    am <= tmpAm;
+                    banksHist <= tmpHist;
+                    
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        banksWritten(i) <= bool2std(tmpHist(i) > 0);
+                        banksWrittenMultiple(i) <= bool2std(tmpHist(i) > 1);
+                    end loop;
+                    
+                    written <= reserve;
+                end if;
+                
+                -- TODO: clear on redirection
+                if sendingToReserve = '1' then
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        for j in 0 to N_BANKS_NEWEST-1 loop
+                            if tmpCam(i, j) > 0 then                   
+                            --    tmpCam(i, j) := tmpCam(i, j) - 1;
+                            end if;
+                            
+                            --tmpCam(i, j) := tmpCam(i, j) + tmpAm(i, j);
+                        end loop;
+                    end loop;
+                end if;
+                
+                tmpHistC := banksHistC;
+                for i in 0 to PIPE_WIDTH-1 loop
+                    for j in 0 to N_BANKS_NEWEST-1 loop
+                        --tmpHistC(j) := tmpHistC(j) + tmpCam(i, j);
+                    end loop;
+                end loop;
+
+                for j in 0 to N_BANKS_NEWEST-1 loop
+                    if tmpHistC(j) > 0 then
+                        tmpHistC(j) := tmpHistC(j) - 1;
+                    end if;
+                    
+                    tmpHistC(j) := tmpHistC(j) + tmpHist(j);
+                end loop;
+                
+                cam <= tmpCam;
+                banksHistC <= tmpHistC;
+                
+            end if;
+        end process;
+    end generate;
+    
 end Behavioral;
