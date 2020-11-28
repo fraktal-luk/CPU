@@ -65,8 +65,10 @@ architecture Behavioral of BranchQueue is
 
 	signal selectedDataSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
 
-	signal pStart, pStartNext, pTagged, pEnd, pSelect, pCausing: SmallNumber := (others => '0');
+	signal pStart, pStartNext, pTagged, pTaggedNext, pEnd, pSelect, pCausing: SmallNumber := (others => '0');
     signal isFull, isAlmostFull, isSending: std_logic := '0';
+    
+        signal TMP_fullMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
     
     signal recoveryCounter: SmallNumber := (others => '0');
 begin
@@ -123,28 +125,31 @@ begin
            return res;
        end function;
         
-	   function getMatchingPtr(content: PipeStageArray; tag: InsTag; startPtr: SmallNumber) return SmallNumber is
+	   function getMatchingPtr(content: PipeStageArray; tag: InsTag; startPtr: SmallNumber; taggedMask: std_logic_vector) return SmallNumber is
 	       variable res: SmallNumber := (others => '0');
 	       variable mask, maskTmp: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0'); 
 	       variable maskExt: std_logic_vector(0 to 2*QUEUE_SIZE-1) := (others => '0'); 
 	   begin
 	       for i in 0 to QUEUE_SIZE-1 loop
-	           if getTagHigh(content(i)(0).ins.tags.renameIndex) = getTagHigh(tag) then
+	           if      getTagHigh(content(i)(0).ins.tags.renameIndex) = getTagHigh(tag) 
+	              and  taggedMask(i) = '1' then
 	               mask(i) := '1';
 	           end if;
 	       end loop;
 	       maskExt := mask & mask;
 	       
 	       for i in 0 to QUEUE_SIZE-1 loop
-	           maskTmp(i) := maskExt(i + slv2u(startPtr));
+	           maskTmp(i) := --maskExt(i + slv2u(startPtr));
+	                         maskExt(i);          
 	       end loop;
 	       
 	       for i in 0 to QUEUE_SIZE-1 loop
                if maskTmp(i) = '1' then
-                   res := addIntTrunc(startPtr, i, QUEUE_PTR_SIZE);
+                   res := --addIntTrunc(startPtr, i, QUEUE_PTR_SIZE);
+                            i2slv(i, SMALL_NUMBER_SIZE);
                    exit;
                end if;
-           end loop;	       
+           end loop;
 
 	       return res;
 	   end function;
@@ -200,8 +205,45 @@ begin
            
 	       return res;
 	   end function;
-
+        
+       function calcTaggedMask(pStartNext, pTaggedNext: SmallNumber) return std_logic_vector is
+           variable res: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+           constant start: natural := slv2u(pStartNext);
+           constant tagged: natural := slv2u(pTaggedNext);
+       begin
+           -- if pStart < pEnd:   i => pStart AND  i < pEnd 
+           -- if pStart > pEnd:   i >= pStart OR i < pEnd
+           -- if pStart = pEnd:   memFull    // when BQ empty this should never matter because no branches can be in Exec part -> compareAddressInput.full = '0'  
+           
+           -- Lets merge conditions 2 and 3: if pStart >= pEnd: i >= pStart OR i < pEnd; if pStart = pEnd then check condition is always true
+           
+           for i in 0 to QUEUE_SIZE-1 loop
+               if start < tagged then
+                   res(i) := bool2std(i >= start and i < tagged);
+               else
+                   res(i) := bool2std(i >= start or i < tagged);               
+               end if;
+           end loop;
+           
+           return res;
+       end function;
+        
+        
+            signal TMP_tags: InsTagArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
+            signal matchingTags, TMP_taggedMask, TMP_taggedMaskNext: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+            signal TMP_nmt: natural := 0;
 	begin
+	           QQQ: for i in 0 to QUEUE_SIZE-1 generate
+	               TMP_tags(i) <= allBranches(i)(0).ins.tags.renameIndex;
+	               matchingTags(i) <= bool2std(getTagHigh(allBranches(i)(0).ins.tags.renameIndex) = getTagHigh(compareAddressInput.ins.tags.renameIndex)) --;
+	                           and    TMP_taggedMask(i);
+	           end generate;
+	           TMP_nmt <= countOnes(matchingTags);
+	       
+	       -- CAREFUL: it may look like full when queue is empty. It's never used in such situarion because it's used only for finding matching entry for branch op.
+	       --          When queue is empty, no branch ops are allowed to be in Exec. 
+	       TMP_taggedMaskNext <= calcTaggedMask(pStartNext, pTaggedNext);
+	
        dataOutV <= allBranchOutput; -- !!!
        isSending <= committingBr;
 
@@ -213,7 +255,7 @@ begin
        intps <= (intp0(slv2u(pSelect)), intp1(slv2u(pSelect)), intp2(slv2u(pSelect)), intp3(slv2u(pSelect)));
        floatps <= (floatp0(slv2u(pSelect)), floatp1(slv2u(pSelect)), floatp2(slv2u(pSelect)), floatp3(slv2u(pSelect)));
             
-       pSelect <= getMatchingPtr(allBranches, compareAddressInput.ins.tags.renameIndex, pStart);
+       pSelect <= getMatchingPtr(allBranches, compareAddressInput.ins.tags.renameIndex, pStart, TMP_taggedMask);
 
        -- TODO: introduce bit in ROB which indicated whether the ROB entry uses a slot in this queue  
        committingBr <= committing and robData(0).ins.controlInfo.firstBr and not taggedEmpty;
@@ -221,7 +263,12 @@ begin
 	   accepting <= bool2std(pStart /= addIntTrunc(pEnd, 2, QUEUE_PTR_SIZE)) and bool2std(pStart /= addIntTrunc(pEnd, 1, QUEUE_PTR_SIZE)); -- Need 2 reserve slots because one group could be on the way
 	   
        pStartNext <= addIntTrunc(pStart, 1, QUEUE_PTR_SIZE) when committingBr = '1' else pStart;
-
+        
+                pTaggedNext <= pStart when lateEventSignal = '1'
+                    else       addIntTrunc(pCausing, 1, QUEUE_PTR_SIZE) when execEventSignal = '1'
+                    else       addIntTrunc(pTagged, 1, QUEUE_PTR_SIZE) when prevSending = '1' and dataIn(0).ins.controlInfo.firstBr = '1'
+                    else       pTagged;   
+        
 	   SYNCH: process (clk)
 	   begin
 	       if rising_edge(clk) then	           
@@ -229,12 +276,12 @@ begin
 	           
 	           if lateEventSignal = '1' then
 	               pEnd <= pStart;
-	               pTagged <= pStart;
+	               --pTagged <= pStart;
 	               memEmpty <= '1';
 	               taggedEmpty <= '1';
 	           elsif execEventSignal = '1' then
 	               pEnd <= addIntTrunc(pCausing, 1, QUEUE_PTR_SIZE);
-	               pTagged <= addIntTrunc(pCausing, 1, QUEUE_PTR_SIZE);	                   
+	               --pTagged <= addIntTrunc(pCausing, 1, QUEUE_PTR_SIZE);	                   
 	               memEmpty <= '0'; -- ???
 	               taggedEmpty <= '0';
 	           else	           
@@ -276,7 +323,7 @@ begin
                             floatp3(slv2u(pTagged)) <= dataIn(3).ins.tags.floatPointer;
                        
                        allGroupTargets(slv2u(pTagged)).tags.renameIndex <= dataIn(0).ins.tags.renameIndex;
-                       pTagged <= addIntTrunc(pTagged, 1, QUEUE_PTR_SIZE);
+                       --pTagged <= addIntTrunc(pTagged, 1, QUEUE_PTR_SIZE);
                        taggedEmpty <= '0';                       
                    end if;                
 	           end if;
@@ -303,6 +350,8 @@ begin
                end if;
                	           
 	           pStart <= pStartNext;
+	               pTagged <= pTaggedNext;
+	               TMP_taggedMask <= TMP_taggedMaskNext;
 	       end if;
 	   end process;
 
