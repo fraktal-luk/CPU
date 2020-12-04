@@ -231,10 +231,10 @@ begin
 	dataToBranchTransfer <= prepareForBQ(--earlyBranchMultiDataInA);
 	                                      stageDataOutFetch1(0), dataToIbuffer);
 
-    bpData <= --dataBranchTransferOut;
-                dataToBranchTransfer;
-    bpSending <= --sendingToBQ;
-                 sendingToBranchTransfer;
+    bpData <= dataBranchTransferOut;
+              --  dataToBranchTransfer;
+    bpSending <= sendingToBQ;
+                -- sendingToBranchTransfer;
 
     SUBUNIT_BRANCH_TRANSFER: entity work.GenericStage(Behavioral)
 	generic map(
