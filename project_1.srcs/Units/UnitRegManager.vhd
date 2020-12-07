@@ -51,7 +51,7 @@ end UnitRegManager;
 architecture Behavioral of UnitRegManager is
     signal stageDataRenameIn, stageDataRenameInFloat, renamedDataLivingPre, renamedDataLivingFloatPre,
                stageDataToCommit, stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal eventSig, sendingCommitInt, sendingCommitFloat, renameLockState, renameLockEnd, renameLockRelease: std_logic := '0';
+    signal eventSig, robSendingDelayed, sendingCommitInt, sendingCommitFloat, renameLockState, renameLockEnd, renameLockEndDelayed, renameLockRelease: std_logic := '0';
  
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG; -- This is rewinded on events
     signal renameCtr, renameCtrNext: Word := (others => '0');
@@ -60,7 +60,7 @@ architecture Behavioral of UnitRegManager is
     signal newIntDestPointer, newFloatDestPointer: SmallNumber := (others => '0');
     signal newIntSources, newFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
     
-    signal renamedBase: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal renamedBase, stageDataToCommitDelayed: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     
     
     type DependencySpec is array(0 to 2) of std_logic_vector(0 to PIPE_WIDTH-1); 
@@ -412,7 +412,13 @@ begin
                 renameLockState <= '1';    
             elsif renameLockRelease = '1' then
                 renameLockState <= '0';
-            end if;                    
+            end if;
+            
+            
+            stageDataToCommitDelayed <= stageDataToCommit;
+            robSendingDelayed <= sendingFromROB;
+            
+            renameLockEndDelayed <= renameLockEnd;                 
         end if;    
     end process;
     
@@ -448,15 +454,18 @@ begin
     port map(
         clk => clk, en => '0', reset => '0',
         
-        rewind => renameLockEnd,    -- FROM SEQ
+        rewind => --renameLockEnd,    -- FROM SEQ
+                    renameLockEndDelayed,
         causingInstruction => DEFAULT_INSTRUCTION_STATE,
         
         sendingToReserve => frontLastSending,
         stageDataToReserve => frontDataLastLiving,
         newPhysDests => assignedDestsInt,    -- MAPPING (from FREE LIST)
         
-        sendingToCommit => sendingFromROB,
-        stageDataToCommit => stageDataToCommit,
+        sendingToCommit => --sendingFromROB,
+                             robSendingDelayed,   
+        stageDataToCommit => --stageDataToCommit,
+                                stageDataToCommitDelayed,
         physCommitDests_TMP => (others => (others => '0')), -- CAREFUL: useless input?
         
         prevNewPhysDests => open,
@@ -471,15 +480,18 @@ begin
     port map(
         clk => clk, en => '0', reset => '0',
         
-        rewind => renameLockEnd,    -- FROM SEQ
+        rewind => --renameLockEnd,    -- FROM SEQ
+                    renameLockEndDelayed,
         causingInstruction => DEFAULT_INSTRUCTION_STATE,
         
         sendingToReserve => frontLastSending,
         stageDataToReserve => frontDataLastLiving,
         newPhysDests => assignedDestsFloat,    -- MAPPING (from FREE LIST)
         
-        sendingToCommit => sendingFromROB,
-        stageDataToCommit => stageDataToCommit,
+        sendingToCommit => --sendingFromROB,
+                            robSendingDelayed,
+        stageDataToCommit => --stageDataToCommit,
+                                stageDataToCommitDelayed,
         physCommitDests_TMP => (others => (others => '0')), -- CAREFUL: useless input?
         
         prevNewPhysDests => open,
