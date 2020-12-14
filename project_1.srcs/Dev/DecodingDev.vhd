@@ -147,7 +147,7 @@ constant LTABLE_immSel_ext2: LogicTable := (8 to 9 => '1', others => '0');
 constant LTABLE_branchIns_none: LogicTable := (4 to 7 => '1', others => '0'); 
 constant LTABLE_branchIns_ext1: LogicTable := (0 to 1 => '1', others => '0'); 
 
-constant LTABLE_mainCluster_none: LogicTable := (14 => '0', others => '1'); -- ext2 is the exception 
+constant LTABLE_mainCluster_none: LogicTable := (0 to 13 => '1', 15 => '1', others => '0'); -- ext2 is the exception 
 --constant LTABLE_mainCluster_ext0: LogicTable := (others => '1'); 
 constant LTABLE_mainCluster_ext2: LogicTable := (8 to 9 => '1', others => '0');
 
@@ -326,7 +326,7 @@ begin
             or (bool2std(opcode = opcode2slv(ext0)) and logicFunction(LTABLE_immSel_ext0, opcont))
             or (bool2std(opcode = opcode2slv(ext2)) and logicFunction(LTABLE_immSel_ext2, opcont));
     
-    return '0';
+    return res;
 end function; 
 
 
@@ -343,7 +343,7 @@ function decodeBranchIns(w: Word) return std_logic is
 begin
     res :=                                              logicFunction(LTABLE_branchIns_none, opcode) 
             or (bool2std(opcode = opcode2slv(ext1)) and logicFunction(LTABLE_branchIns_ext1, opcont));
-    return '0';
+    return res;
 end function;
 
 
@@ -354,7 +354,7 @@ function decodeMainCluster(w: Word) return std_logic is
 begin
     res :=                                              logicFunction(LTABLE_mainCluster_none, opcode) 
             or (bool2std(opcode = opcode2slv(ext2)) and logicFunction(LTABLE_mainCluster_ext2, opcont));
-    return '0';
+    return res;
 end function;
 
 function decodeSecCluster(w: Word) return std_logic is
@@ -364,7 +364,7 @@ function decodeSecCluster(w: Word) return std_logic is
 begin
     res :=                                              logicFunction(LTABLE_secCluster_none, opcode) 
             or (bool2std(opcode = opcode2slv(ext2)) and logicFunction(LTABLE_secCluster_ext2, opcont));
-    return '0';
+    return res;
 end function;
 
 
@@ -374,9 +374,9 @@ function decodeFpRename(w: Word) return std_logic is
     constant opcont: slv6 := w(15 downto 10);
     variable res: std_logic := '0';
 begin
-    res := bool2std(opcode = opcode2slv(ldf)) or bool2std(opcode = opcode2slv(fop));
+    res := bool2std(opcode = opcode2slv(ldf)) or bool2std(opcode = opcode2slv(stf)) or bool2std(opcode = opcode2slv(fop));
     
-    return '0';
+    return res;
 end function;
 
 

@@ -105,6 +105,18 @@ begin
         end if;        
     end if;
 
+        if true then
+            res.constantArgs.immSel := decodeImmSel(inputState.bits);
+            res.classInfo.branchIns := decodeBranchIns(inputState.bits);
+            
+            res.classInfo.mainCluster := decodeMainCluster(inputState.bits);
+            res.classInfo.secCluster := decodeSecCluster(inputState.bits);
+            
+                res.controlInfo.specialAction := not (res.classInfo.mainCluster or res.classInfo.secCluster);
+            
+            res.classInfo.fpRename := decodeFpRename(inputState.bits);
+        end if;
+
 	return res;
 end function;
 

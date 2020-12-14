@@ -51,7 +51,7 @@ end UnitRegManager;
 architecture Behavioral of UnitRegManager is
     signal stageDataRenameIn, stageDataRenameInFloat, renamedDataLivingPre, renamedDataLivingFloatPre,
                stageDataToCommit, stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal eventSig, robSendingDelayed, sendingCommitInt, sendingCommitFloat, renameLockState, renameLockEnd, renameLockEndDelayed, renameLockRelease: std_logic := '0';
+    signal eventSig, robSendingDelayed, sendingCommitInt, sendingCommitFloat, renameLockState, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed: std_logic := '0';
  
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG; -- This is rewinded on events
     signal renameCtr, renameCtrNext: Word := (others => '0');
@@ -395,7 +395,7 @@ begin
         --                         But remember that rewinding GPR map needs a cycle, and before it happens,
         --                         renaming can't be done! So this delay may be caused by this problem.
     
-    renameLockEnd <= renameLockState and renameLockRelease;
+    renameLockEndDelayed <= renameLockState and renameLockReleaseDelayed;
         
     COMMON_SYNCHRONOUS: process(clk)     
     begin
@@ -410,7 +410,7 @@ begin
             -- Lock when exec part causes event
             if execEventSignal = '1' or lateEventSignal = '1' then -- CAREFUL
                 renameLockState <= '1';    
-            elsif renameLockRelease = '1' then
+            elsif renameLockReleaseDelayed = '1' then
                 renameLockState <= '0';
             end if;
             
@@ -418,7 +418,7 @@ begin
             stageDataToCommitDelayed <= stageDataToCommit;
             robSendingDelayed <= sendingFromROB;
             
-            renameLockEndDelayed <= renameLockEnd;                 
+            renameLockReleaseDelayed <= renameLockRelease;                 
         end if;    
     end process;
     
@@ -515,7 +515,7 @@ begin
         
         sendingToReserve => frontLastSending, 
         takeAllow => frontLastSending,	-- FROM SEQ
-        auxTakeAllow => renameLockEnd,
+        auxTakeAllow => renameLockEndDelayed,
         stageDataToReserve => frontDataLastLiving,
         
         newPhysDests => newIntDests,			-- TO SEQ
@@ -541,7 +541,7 @@ begin
         
         sendingToReserve => frontLastSending, 
         takeAllow => frontLastSending,	-- FROM SEQ
-        auxTakeAllow => renameLockEnd,
+        auxTakeAllow => renameLockEndDelayed,
         stageDataToReserve => frontDataLastLiving,
         
         newPhysDests => newFloatDests,			-- TO SEQ
