@@ -282,6 +282,7 @@ end package;
 package body PipelineGeneral is
 
 
+-- TODO: move to LogicFront? 
 function adjustStage(content: InstructionSlotArray)
 return InstructionSlotArray is
     constant LEN: positive := content'length;

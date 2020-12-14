@@ -129,7 +129,7 @@ begin
 
         
 
-        -- TODO: this can also hold 'full' flag of the slot!
+        -- TODO: this can also hold 'full' flag of the slot! And 'useLQ'
         function packInfo(ins: InstructionState) return Byte is
             variable res: Byte := (others => '0');
             variable b: Byte := (others => '0');

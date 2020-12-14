@@ -32,6 +32,21 @@ return InstructionState;
 	
 function prepareForBQ(ins: InstructionSlot; insVec: InstructionSlotArray) return InstructionSlotArray;
 
+
+    type TMP_decStruct is record
+        immSel: std_logic;
+        
+        branchIns: std_logic;
+        mainCluster: std_logic;
+        secCluster: std_logic;
+        fpRename: std_logic;
+    end record;
+    
+    type TMP_decStructArray is array(0 to PIPE_WIDTH-1) of TMP_decStruct;
+    
+    function TMP_getDecStructArray(insVec: InstructionSlotArray) return TMP_decStructArray;
+    function TMP_getRefStructArray(insVec: InstructionSlotArray) return TMP_decStructArray;
+  
 end LogicFront;
 
 
@@ -333,5 +348,38 @@ begin
     
 	return res;
 end function;
+
+
+    function TMP_getDecStructArray(insVec: InstructionSlotArray) return TMP_decStructArray is
+        variable res: TMP_decStructArray;
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            
+            res(i).immSel := decodeImmSel(insVec(i).ins.bits);
+            
+            res(i).branchIns := decodeBranchIns(insVec(i).ins.bits);            
+            res(i).mainCluster := decodeMainCluster(insVec(i).ins.bits);
+            res(i).secCluster := decodeSecCluster(insVec(i).ins.bits);
+            
+            res(i).fpRename := decodeFpRename(insVec(i).ins.bits);
+        end loop;
+        return res;
+    end function;
+
+    function TMP_getRefStructArray(insVec: InstructionSlotArray) return TMP_decStructArray is
+        variable res: TMP_decStructArray;
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            
+            res(i).immSel := insVec(i).ins.constantArgs.immSel;
+            
+            res(i).branchIns := insVec(i).ins.classInfo.branchIns;            
+            res(i).mainCluster := insVec(i).ins.classInfo.mainCluster;
+            res(i).secCluster := insVec(i).ins.classInfo.secCluster;
+            
+            res(i).fpRename := insVec(i).ins.classInfo.fpRename;
+        end loop;
+        return res;
+    end function;
 
 end LogicFront;

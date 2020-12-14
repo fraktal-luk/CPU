@@ -134,6 +134,37 @@ constant DECODE_TABLE: InsDefArray(0 to 40) := (
 
 function decodeFromWord(w: word) return InstructionState;
 
+
+
+
+
+subtype LogicTable is std_logic_vector(0 to 63);
+
+constant LTABLE_immSel_none: LogicTable := (0 to 11 => '1', others => '0'); 
+constant LTABLE_immSel_ext0: LogicTable := (2 to 3 => '1', others => '0'); 
+constant LTABLE_immSel_ext2: LogicTable := (8 to 9 => '1', others => '0'); 
+
+constant LTABLE_branchIns_none: LogicTable := (4 to 7 => '1', others => '0'); 
+constant LTABLE_branchIns_ext1: LogicTable := (0 to 1 => '1', others => '0'); 
+
+constant LTABLE_mainCluster_none: LogicTable := (14 => '0', others => '1'); -- ext2 is the exception 
+--constant LTABLE_mainCluster_ext0: LogicTable := (others => '1'); 
+constant LTABLE_mainCluster_ext2: LogicTable := (8 to 9 => '1', others => '0');
+
+constant LTABLE_secCluster_none: LogicTable := (9 => '1', 11 => '1', others => '0'); 
+--constant LTABLE_secCluster_ext0: LogicTable := (others => '0'); 
+constant LTABLE_secCluster_ext2: LogicTable := (9 => '1', others => '0'); 
+
+function logicFunction(table: LogicTable; v: slv6) return std_logic;
+
+
+function decodeImmSel(w: Word) return std_logic;
+function decodeBranchIns(w: Word) return std_logic;
+function decodeMainCluster(w: Word) return std_logic;
+function decodeSecCluster(w: Word) return std_logic;
+function decodeFpRename(w: Word) return std_logic;
+
+
 end package;
 
 
@@ -249,7 +280,7 @@ begin
     end if;
     
     -- process immediate
-    res.constantArgs.immSel := fmt.src1i; 
+    res.constantArgs.immSel := fmt.src1i;
     res.constantArgs.imm := w;
     if fmt.imm16 = '1' then -- Put imm in proper form 
         res.constantArgs.imm(31 downto 16) := (others => w(15));
@@ -258,6 +289,94 @@ begin
     end if;
     
     return res;
+end function;
+
+
+
+
+function logicFunction(table: LogicTable; v: slv6) return std_logic is
+begin
+    return table(slv2u(v));
+end function;
+
+
+-- Decoding control bits
+--  immSel
+--  ins.classInfo.mainCluster 
+--  ins.classInfo.secCluster 
+--  ins.classInfo.fpRename
+--  ins.classInfo.branchIns;
+-- Secondary, depending on BP (to be defined in LogicFront because impl. specific):
+--  frontBranch
+--  confirmedBranch
+function decodeImmSel(w: Word) return std_logic is
+    constant opcode: slv6 := w(31 downto 26);
+    constant opcont: slv6 := w(15 downto 10);
+    variable res: std_logic := '0';
+begin
+    
+    -- if opcode in [opcodes with imm]
+    -- or opcode is opcA and opcont in [imm(opcA)] 
+    -- ...
+    -- or opcode is opcZ and opcont in [imm(opcZ)]
+    --  -> '1'
+    -- else -> '0';
+    
+    res :=                                              logicFunction(LTABLE_immSel_none, opcode) 
+            or (bool2std(opcode = opcode2slv(ext0)) and logicFunction(LTABLE_immSel_ext0, opcont))
+            or (bool2std(opcode = opcode2slv(ext2)) and logicFunction(LTABLE_immSel_ext2, opcont));
+    
+    return '0';
+end function; 
+
+
+
+
+-- ......
+
+
+
+function decodeBranchIns(w: Word) return std_logic is
+    constant opcode: slv6 := w(31 downto 26);
+    constant opcont: slv6 := w(15 downto 10);
+    variable res: std_logic := '0';
+begin
+    res :=                                              logicFunction(LTABLE_branchIns_none, opcode) 
+            or (bool2std(opcode = opcode2slv(ext1)) and logicFunction(LTABLE_branchIns_ext1, opcont));
+    return '0';
+end function;
+
+
+function decodeMainCluster(w: Word) return std_logic is
+    constant opcode: slv6 := w(31 downto 26);
+    constant opcont: slv6 := w(15 downto 10);
+    variable res: std_logic := '0';
+begin
+    res :=                                              logicFunction(LTABLE_mainCluster_none, opcode) 
+            or (bool2std(opcode = opcode2slv(ext2)) and logicFunction(LTABLE_mainCluster_ext2, opcont));
+    return '0';
+end function;
+
+function decodeSecCluster(w: Word) return std_logic is
+    constant opcode: slv6 := w(31 downto 26);
+    constant opcont: slv6 := w(15 downto 10);
+    variable res: std_logic := '0';
+begin
+    res :=                                              logicFunction(LTABLE_secCluster_none, opcode) 
+            or (bool2std(opcode = opcode2slv(ext2)) and logicFunction(LTABLE_secCluster_ext2, opcont));
+    return '0';
+end function;
+
+
+
+function decodeFpRename(w: Word) return std_logic is
+    constant opcode: slv6 := w(31 downto 26);
+    constant opcont: slv6 := w(15 downto 10);
+    variable res: std_logic := '0';
+begin
+    res := bool2std(opcode = opcode2slv(ldf)) or bool2std(opcode = opcode2slv(fop));
+    
+    return '0';
 end function;
 
 
