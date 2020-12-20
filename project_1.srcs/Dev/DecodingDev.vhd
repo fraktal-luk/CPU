@@ -164,6 +164,8 @@ function decodeMainCluster(w: Word) return std_logic;
 function decodeSecCluster(w: Word) return std_logic;
 function decodeFpRename(w: Word) return std_logic;
 
+function decodeSrc2a(w: Word) return std_logic;
+function decodeSrc0a(w: Word) return std_logic;
 
 end package;
 
@@ -222,6 +224,10 @@ begin
     res.specificOperation := specificOperation;
     
     res.classInfo.fpRename := fmt.fpDestSel or isNonzero(fmt.fpSrcSel);
+    
+            fmt.src0a := decodeSrc0a(w);
+            fmt.src2a := decodeSrc2a(w);
+            fmt.src1i := decodeImmSel(w);
     
     -- assign register definitions
     res.virtualArgSpec.dest := parts.qa;
@@ -375,6 +381,29 @@ function decodeFpRename(w: Word) return std_logic is
     variable res: std_logic := '0';
 begin
     res := bool2std(opcode = opcode2slv(ldf)) or bool2std(opcode = opcode2slv(stf)) or bool2std(opcode = opcode2slv(fop));
+    
+    return res;
+end function;
+
+function decodeSrc2a(w: Word) return std_logic is
+    constant opcode: slv6 := w(31 downto 26);
+    constant opcont: slv6 := w(15 downto 10);
+    variable res: std_logic := '0';
+begin
+    res := bool2std(opcode = opcode2slv(st))
+        or bool2std(opcode = opcode2slv(stf))
+        or bool2std((opcode = opcode2slv(ext2)) and (opcont = opcont2slv(ext2, mtc)));
+    
+    return res;
+end function;
+
+function decodeSrc0a(w: Word) return std_logic is
+    constant opcode: slv6 := w(31 downto 26);
+    constant opcont: slv6 := w(15 downto 10);
+    variable res: std_logic := '0';
+begin
+    res := bool2std(opcode = opcode2slv(jz))
+        or bool2std(opcode = opcode2slv(jnz));
     
     return res;
 end function;
