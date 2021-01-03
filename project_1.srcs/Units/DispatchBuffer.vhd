@@ -79,7 +79,7 @@ architecture Behavioral of DispatchBuffer is
       
 begin
     
-    isSending <= nextAccepting and fullMask(0) and not (execEventSignal or lateEventSignal);
+    isSending <= nextAccepting and fullMask(0);-- and not (execEventSignal or lateEventSignal);
     
     SYNCH: process (clk)
         variable fullMaskNew0: std_logic := '0';

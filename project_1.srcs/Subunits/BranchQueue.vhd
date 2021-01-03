@@ -232,6 +232,8 @@ begin
             signal TMP_tags: InsTagArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
             signal matchingTags, TMP_taggedMask, TMP_taggedMaskNext: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
             signal TMP_nmt: natural := 0;
+            
+            signal allBranchesInputTmp: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
 	begin
 	           QQQ: for i in 0 to QUEUE_SIZE-1 generate
 	               TMP_tags(i) <= allBranches(i)(0).ins.tags.renameIndex;
@@ -269,6 +271,9 @@ begin
                     else       addIntTrunc(pTagged, 1, QUEUE_PTR_SIZE) when prevSending = '1' and dataIn(0).ins.controlInfo.firstBr = '1'
                     else       pTagged;   
         
+            allBranchesInputTmp <= prepareInput(dataInBr);
+
+        
 	   SYNCH: process (clk)
 	   begin
 	       if rising_edge(clk) then	           
@@ -286,7 +291,14 @@ begin
 	               taggedEmpty <= '0';
 	           else	           
                    if prevSendingBr = '1' and dataInBr(0).ins.controlInfo.firstBr = '1' then
-                       allBranches(slv2u(pEnd)) <= prepareInput(dataInBr);
+                       --allBranches(slv2u(pEnd)) <= prepareInput(dataInBr);
+                         for i in 0 to PIPE_WIDTH-1 loop
+                            allBranches(slv2u(pEnd))(i).full <= allBranchesInputTmp(i).full;                         
+                            allBranches(slv2u(pEnd))(i).ins.controlInfo <= allBranchesInputTmp(i).ins.controlInfo;
+                         end loop;
+                       
+                                    -- TODO: here don't write fields which aren't provided by this input (renameIndex etc.)
+                       
                             ipArray(slv2u(pEnd)) <= dataInBr(0).ins.ip;
                             
                             trg0(slv2u(pEnd)) <= dataInBr(0).ins.target;
