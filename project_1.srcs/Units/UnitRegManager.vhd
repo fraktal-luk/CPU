@@ -29,6 +29,10 @@ port(
     renamedDataLivingFloat: out InstructionSlotArray(0 to PIPE_WIDTH-1);    
     renamedSending: out std_logic;
     
+        renamingBr: out std_logic;
+    
+        bqPointer: in SmallNumber;
+    
     newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     
@@ -51,7 +55,8 @@ end UnitRegManager;
 architecture Behavioral of UnitRegManager is
     signal stageDataRenameIn, stageDataRenameInFloat, renamedDataLivingPre, renamedDataLivingFloatPre,
                stageDataToCommit, stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal eventSig, robSendingDelayed, sendingCommitInt, sendingCommitFloat, renameLockState, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed: std_logic := '0';
+    signal eventSig, robSendingDelayed, sendingCommitInt,
+               renamedSendingSig, sendingCommitFloat, renameLockState, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed: std_logic := '0';
  
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG; -- This is rewinded on events
     signal renameCtr, renameCtrNext: Word := (others => '0');
@@ -79,6 +84,7 @@ architecture Behavioral of UnitRegManager is
                                 renameGroupCtrNext: InsTag;
                                 newIntDestPointer: SmallNumber;
                                 newFloatDestPointer: SmallNumber;
+                                    bqPointer: SmallNumber;
                                 renameCtr: Word;                               
                                 dbtrap: std_logic
                                 ) return InstructionSlotArray is
@@ -112,6 +118,8 @@ architecture Behavioral of UnitRegManager is
             res(i).ins.tags.intPointer := addInt(newIntDestPointer, countOnes(takeVecInt(0 to i)));
                                                                          -- Don't increment pointer on ops which use no destination!
             res(i).ins.tags.floatPointer := addInt(newFloatDestPointer, countOnes(takeVecFloat(0 to i)));
+            
+                res(i).ins.tags.bqPointer := bqPointer;
             
             if TMP_PARAM_COMPRESS_PTRS then -- replace every except slot 0 with offset from slot 0
                 if i > 0 then
@@ -300,6 +308,7 @@ begin
                                     renameGroupCtrNext,
                                     newIntDestPointer,
                                     newFloatDestPointer,
+                                        bqPointer,
                                     renameCtr,
                                     '0' --dbtrapOn
                                     );
@@ -341,15 +350,14 @@ begin
         
         -- Interface with IQ
         nextAccepting => '1',
-        sendingOut => renamedSending,
+        sendingOut => renamedSendingSig,
         stageDataOut => renamedDataLivingPre,
         
         -- Event interface
         execEventSignal => '0',
         lateEventSignal => eventSig, -- because Exec is always older than Rename     
         execCausing => DEFAULT_INSTRUCTION_STATE
-    );
-    
+    );    
     
     SUBUNIT_RENAME_FLOAT: entity work.GenericStage(Behavioral)--Renaming)
     generic map(
@@ -558,4 +566,8 @@ begin
     newPhysDestsOut <= newIntDests;
     newFloatDestsOut <= newFloatDests; 
     renameAccepting <= not renameLockState;
+ 
+    renamedSending <= renamedSendingSig;   
+    
+         renamingBr <= frontLastSending and frontDataLastLiving(0).ins.controlInfo.firstBr;
 end Behavioral;

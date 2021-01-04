@@ -149,6 +149,7 @@ type InstructionTags is record
     renameIndex: InsTag;	-- group + group position
     intPointer: SmallNumber;
     floatPointer: SmallNumber;
+        bqPointer: SmallNumber;
     commitCtr: Word;
 end record;
 
@@ -214,6 +215,7 @@ constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
 			renameIndex => (others => '0'),
 			intPointer => (others => '0'),
 			floatPointer => (others => '0'),
+			    bqPointer => (others => '0'),
 			commitCtr => (others => '0')
 );
 

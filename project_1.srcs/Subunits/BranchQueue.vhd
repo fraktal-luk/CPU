@@ -31,8 +31,13 @@ entity BranchQueue is
 		
 		prevSending: in std_logic;
 		prevSendingBr: in std_logic;
+		
+		prevSendingRe: in std_logic;
+		
 		dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		dataInBr: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+
+            bqPtrOut: out SmallNumber;
 
 		storeValueInput: in InstructionSlot;
 		compareAddressInput: in InstructionSlot;
@@ -65,7 +70,7 @@ architecture Behavioral of BranchQueue is
 
 	signal selectedDataSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
 
-	signal pStart, pStartNext, pTagged, pTaggedNext, pEnd, pSelect, pCausing: SmallNumber := (others => '0');
+	signal pStart, pStartNext, pTagged, pRenamed, pRenamedNext, pTaggedNext, pEnd, pSelect, pCausing: SmallNumber := (others => '0');
     signal isFull, isAlmostFull, isSending: std_logic := '0';
     
         signal TMP_fullMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
@@ -269,8 +274,16 @@ begin
                 pTaggedNext <= pStart when lateEventSignal = '1'
                     else       addIntTrunc(pCausing, 1, QUEUE_PTR_SIZE) when execEventSignal = '1'
                     else       addIntTrunc(pTagged, 1, QUEUE_PTR_SIZE) when prevSending = '1' and dataIn(0).ins.controlInfo.firstBr = '1'
-                    else       pTagged;   
-        
+                    else       pTagged; 
+                
+                pRenamedNext <= pStart when lateEventSignal = '1'
+                        else       addIntTrunc(pCausing, 1, QUEUE_PTR_SIZE) when execEventSignal = '1'
+                        else       addIntTrunc(pRenamed, 1, QUEUE_PTR_SIZE) when prevSendingRe = '1'
+                        else       pRenamed; 
+                    
+                                    
+                
+                
             allBranchesInputTmp <= prepareInput(dataInBr);
 
         
@@ -364,12 +377,19 @@ begin
 	           pStart <= pStartNext;
 	               pTagged <= pTaggedNext;
 	               TMP_taggedMask <= TMP_taggedMaskNext;
+	               
+	               pRenamed <= pRenamedNext;
 	       end if;
 	   end process;
 
        committedDataOut <= (committingBr, setInstructionTarget(allGroupTargetOutput, targetOutput));	       
        acceptingBr <= accepting;
+       
+            ch0 <= not compareAddressInput.full or bool2std(compareAddressInput.ins.tags.bqPointer = pSelect);
+       
 	end block;
+	
+	       bqPtrOut <= pRenamed;
 	
 
 	VIEW: if VIEW_ON generate

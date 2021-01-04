@@ -20,7 +20,6 @@
     <Option Name="TargetLanguage" Val="VHDL"/>
     <Option Name="SimulatorLanguage" Val="VHDL"/>
     <Option Name="BoardPart" Val=""/>
-    <Option Name="SourceMgmtMode" Val="DisplayOnly"/>
     <Option Name="ActiveSimSet" Val="sim_1"/>
     <Option Name="DefaultLib" Val="xil_defaultlib"/>
     <Option Name="ProjectType" Val="Default"/>
@@ -34,7 +33,7 @@
     <Option Name="EnableBDX" Val="FALSE"/>
     <Option Name="DSAVendor" Val="xilinx"/>
     <Option Name="DSANumComputeUnits" Val="60"/>
-    <Option Name="WTXSimLaunchSim" Val="5238"/>
+    <Option Name="WTXSimLaunchSim" Val="5258"/>
     <Option Name="WTModelSimLaunchSim" Val="0"/>
     <Option Name="WTQuestaLaunchSim" Val="0"/>
     <Option Name="WTIesLaunchSim" Val="0"/>
@@ -86,12 +85,6 @@
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PSRCDIR/Basics/CpuText.vhd">
-        <FileInfo>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="simulation"/>
-        </FileInfo>
-      </File>
       <File Path="$PSRCDIR/Core/CoreConfig.vhd">
         <FileInfo>
           <Attr Name="UsedIn" Val="synthesis"/>
@@ -111,6 +104,12 @@
         </FileInfo>
       </File>
       <File Path="$PSRCDIR/GeneralLogic/LogicQueues.vhd">
+        <FileInfo>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/Basics/CpuText.vhd">
         <FileInfo>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -262,6 +261,7 @@
       </File>
       <File Path="$PSRCDIR/Subunits/MissQueue.vhd">
         <FileInfo>
+          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
@@ -286,13 +286,19 @@
     </FileSet>
     <FileSet Name="sim_1" Type="SimulationSrcs" RelSrcDir="$PSRCDIR/sim_1">
       <Filter Type="Srcs"/>
-      <File Path="$PSRCDIR/sim_1/CoreTB.vhd">
+      <File Path="$PSRCDIR/sim_1/Assembler.vhd">
         <FileInfo>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
       <File Path="$PSRCDIR/sim_1/Emulate.vhd">
+        <FileInfo>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PSRCDIR/sim_1/CoreTB.vhd">
         <FileInfo>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -321,12 +327,6 @@
       <File Path="$PSRCDIR/sim_1/TestCode/common_asm.txt"/>
       <File Path="$PSRCDIR/sim_1/TestCode/common_asm_2.txt"/>
       <File Path="$PSRCDIR/sim_1/TestCode/use_lib0.txt"/>
-      <File Path="$PSRCDIR/sim_1/Assembler.vhd">
-        <FileInfo>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="simulation"/>
-        </FileInfo>
-      </File>
       <Config>
         <Option Name="DesignMode" Val="RTL"/>
         <Option Name="TopModule" Val="CoreTB"/>
@@ -361,10 +361,10 @@
         <StratHandle Name="Flow_PerfOptimized_high" Flow="Vivado Synthesis 2018"/>
         <Step Id="synth_design">
           <Option Id="ShregMinSize">5</Option>
-          <Option Id="ReTiming">1</Option>
-          <Option Id="FsmExtraction">1</Option>
           <Option Id="RepFanoutThreshold">400</Option>
+          <Option Id="FsmExtraction">1</Option>
           <Option Id="KeepEquivalentRegisters">1</Option>
+          <Option Id="ReTiming">1</Option>
         </Step>
       </Strategy>
       <ReportStrategy Name="Vivado Synthesis Default Reports" Flow="Vivado Synthesis 2018"/>
@@ -390,10 +390,10 @@
           <Option Id="ResourceSharing">2</Option>
           <Option Id="RepFanoutThreshold">400</Option>
           <Option Id="NoCombineLuts">1</Option>
-          <Option Id="FsmExtraction">1</Option>
-          <Option Id="ReTiming">1</Option>
           <Option Id="ShregMinSize">5</Option>
+          <Option Id="ReTiming">1</Option>
           <Option Id="KeepEquivalentRegisters">1</Option>
+          <Option Id="FsmExtraction">1</Option>
         </Step>
       </Strategy>
       <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>

@@ -71,10 +71,13 @@ architecture Behavioral of Core is
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
+        signal bqPointer: SmallNumber := (others => '0');
+    
     signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
 
     signal execEventSignal, lateEventSignal, lateEventSetPC, sendingBranchIns: std_logic := '0';
     signal robSending, robAccepting, renamedSending, commitAccepting, oooAccepting, lsbrAccepting, renamedSendingBuff,
+                renameSendingBr,
                 queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0, dispatchAccepting,
                 robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0: std_logic := '0';
     signal commitGroupCtr, commitGroupCtrInc: InsTag := (others => '0');
@@ -220,6 +223,10 @@ begin
         renamedDataLiving => renamedDataLivingRe,
         renamedDataLivingFloat => renamedDataLivingFloatPre,        
         renamedSending => renamedSending,
+
+            renamingBr => renameSendingBr,
+
+            bqPointer => bqPointer,
 
         robDataLiving => dataOutROB,
         sendingFromROB => robSending,
@@ -1540,6 +1547,11 @@ begin
 		
 		prevSending => renamedSendingBuff,
 	    prevSendingBr => bpSending,
+	    
+	    prevSendingRe => renameSendingBr,
+	    
+	       bqPtrOut => bqPointer,
+	    
 		dataIn => renamedDataToBQ,
 		dataInBr => bpData,
 
