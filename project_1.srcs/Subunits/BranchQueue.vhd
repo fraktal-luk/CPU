@@ -262,7 +262,9 @@ begin
        intps <= (intp0(slv2u(pSelect)), intp1(slv2u(pSelect)), intp2(slv2u(pSelect)), intp3(slv2u(pSelect)));
        floatps <= (floatp0(slv2u(pSelect)), floatp1(slv2u(pSelect)), floatp2(slv2u(pSelect)), floatp3(slv2u(pSelect)));
             
-       pSelect <= getMatchingPtr(allBranches, compareAddressInput.ins.tags.renameIndex, pStart, TMP_taggedMask);
+       pSelect <= --getMatchingPtr(allBranches, compareAddressInput.ins.tags.renameIndex, pStart, TMP_taggedMask);
+                  compareAddressInput.ins.tags.bqPointer;
+
 
        -- TODO: introduce bit in ROB which indicated whether the ROB entry uses a slot in this queue  
        committingBr <= committing and robData(0).ins.controlInfo.firstBr and not taggedEmpty;
