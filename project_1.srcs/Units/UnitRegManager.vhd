@@ -138,6 +138,9 @@ architecture Behavioral of UnitRegManager is
         -- If found special instruction or exception, kill next ones
         for i in 0 to PIPE_WIDTH-1 loop
             if found then
+                    if res(i).full = '1' then
+                        res(i).ins.controlInfo.ignored := '1';
+                    end if;
                 res(i).full := '0';
             end if;
             

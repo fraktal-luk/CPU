@@ -53,7 +53,11 @@ architecture Behavioral of RegisterMapper is
 	
 	signal newestMap, stableMap, newestMapNext, stableMapNext: PhysNameArray(0 to 31) := initMap;
     
-    signal reserve, commit, psels: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+    signal reserve, reserve_T, commit, psels, fullMaskReserve, fullMaskCommit,
+             excMaskReserve, excMaskCommit, causingMaskReserve, causingMaskCommit, killedMaskReserve, killedMaskCommit,
+             ignoredMaskReserve, ignoredMaskCommit,
+             igVselReserve, igVselCommit, kiVselReserve, kiVselCommit,
+            vselReserve, vselCommit, pselReserve, pselCommit: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     signal selectReserve, selectCommit, selectStable: RegNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal selectNewest: RegNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
@@ -64,6 +68,8 @@ architecture Behavioral of RegisterMapper is
     signal selMask0, selMask1, selMask2, selMask3: std_logic_vector(0 to 31) := (others => '0');
     signal selMaskS0, selMaskS1, selMaskS2, selMaskS3: std_logic_vector(0 to 31) := (others => '0');
    
+   
+        signal tagReserve, tagCommit: InsTag := (others => '0');
 
 	function initMap return PhysNameArray is
 		variable res: PhysNameArray(0 to 31) := (others => (others=> '0'));
@@ -170,6 +176,34 @@ begin
     psels <= getPhysicalFloatDestSels(stageDataToCommit) when IS_FP else getPhysicalIntDestSels(stageDataToCommit);
 
 	reserve <= whichTakeReg(stageDataToReserve, IS_FP);
+	   reserve_T <= whichTakeReg_T(stageDataToReserve, IS_FP);
+
+        vselReserve <= getVirtualIntDestSels(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
+	    pselReserve <= getPhysicalIntDestSels(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
+	    fullMaskReserve <= extractFullMask(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
+	       tagReserve <= stageDataToReserve(0).ins.tags.renameIndex;
+
+            excMaskReserve <= getExceptionMask(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
+            causingMaskReserve <= getCausingMask(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
+            killedMaskReserve <= getKilledMask(stageDataToReserve)  when sendingToReserve = '1' else (others => '0');
+            ignoredMaskReserve <= getIgnoredMask(stageDataToReserve)  when sendingToReserve = '1' else (others => '0');
+
+	           igVselReserve <= ignoredMaskReserve and vselReserve;
+	
+	
+        vselCommit <= getVirtualIntDestSels(stageDataToCommit)  when sendingToCommit = '1' else (others => '0');
+        pselCommit <= getPhysicalIntDestSels(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
+        fullMaskCommit <= extractFullMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
+	       tagCommit <= stageDataToCommit(0).ins.tags.renameIndex;
+    
+            excMaskCommit <= getExceptionMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
+            causingMaskCommit <= getCausingMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
+            killedMaskCommit <= getKilledMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
+            ignoredMaskCommit <= getIgnoredMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
+	
+	           igVselCommit <= ignoredMaskCommit and vselCommit;
+	           kiVselCommit <= killedMaskCommit and vselCommit;
+	
 	commit <= psels;
 	
 	selectReserve <= getVirtualDests(stageDataToReserve);

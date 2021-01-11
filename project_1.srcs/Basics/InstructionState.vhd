@@ -116,6 +116,9 @@ type InstructionControlInfo is record
     dataMiss: std_logic;
     sqMiss:    std_logic;
     firstBr: std_logic;
+        killed: std_logic;
+        causing: std_logic;
+        ignored: std_logic;
 end record;
 
 type InstructionClassInfo is record
@@ -184,7 +187,10 @@ constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
                                     tlbMiss => '0',
                                     dataMiss => '0',
                                     sqMiss => '0',
-                                    firstBr => '0'
+                                    firstBr => '0',
+                                        killed => '0',
+                                        causing => '0',
+                                        ignored => '0'
                                  );
 
 constant DEFAULT_CLASS_INFO: InstructionClassInfo := ( 

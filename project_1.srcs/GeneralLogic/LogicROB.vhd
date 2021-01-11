@@ -92,11 +92,13 @@ begin
     for k in 0 to PIPE_WIDTH-1 loop
        if eventFound then
             res(k).full := '0';
+                res(k).ins.controlInfo.killed := '1';
        end if;
     
         if slv2u(il) = k then
             if execResult.ins.controlInfo.newEvent = '1' then -- CAREFUL: branches corrected to not taken need this!
-                eventFound := true;                    
+                eventFound := true;
+                   res(k).ins.controlInfo.causing := '1';                   
             end if;
                     
             if execResult.ins.controlInfo.confirmedBranch = '1' then

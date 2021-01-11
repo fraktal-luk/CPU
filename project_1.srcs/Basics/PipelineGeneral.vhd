@@ -188,7 +188,13 @@ function getKillMask(content: InstructionStateArray; fullMask: std_logic_vector;
 							causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector;
 
+-- TODO: deprecate?
 function getExceptionMask(insVec: InstructionSlotArray) return std_logic_vector;
+
+function getCausingMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getKilledMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getIgnoredMask(insVec: InstructionSlotArray) return std_logic_vector;
+
 
 
 function stageArrayNext(livingContent, newContent: InstructionSlotArray; full, sending, receiving, kill: std_logic)
@@ -301,8 +307,13 @@ begin
     
     for i in 0 to LEN-1 loop
         res(i) := contentExt(nShift + i);
-    end loop;
         
+            if res(i).full = '0' then
+                res(i).ins.virtualArgSpec.intDestSel := '0';
+                res(i).ins.virtualArgSpec.floatDestSel := '0';
+            end if;          
+    end loop;
+      
         -- TMP!
         res(0).ins.controlInfo.firstBr := content(0).ins.controlInfo.firstBr;
         
@@ -729,6 +740,36 @@ begin
 		       or insVec(i).ins.controlInfo.specialAction; -- CAREFUL: what if special actions are allowed to write registers?
 	end loop;			
 	return res;
+end function;
+
+
+
+function getCausingMask(insVec: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(insVec'range) := (others=>'0');
+begin
+    for i in insVec'range loop
+        res(i) := insVec(i).ins.controlInfo.causing; -- CAREFUL: what if special actions are allowed to write registers?
+    end loop;            
+    return res;
+end function;
+
+
+function getKilledMask(insVec: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(insVec'range) := (others=>'0');
+begin
+    for i in insVec'range loop
+        res(i) := insVec(i).ins.controlInfo.killed;
+    end loop;            
+    return res;
+end function;
+
+function getIgnoredMask(insVec: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(insVec'range) := (others=>'0');
+begin
+    for i in insVec'range loop
+        res(i) := insVec(i).ins.controlInfo.ignored;
+    end loop;            
+    return res;
 end function;
 
 
