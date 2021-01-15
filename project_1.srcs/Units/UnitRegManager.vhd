@@ -472,6 +472,7 @@ begin
         sendingToReserve => frontLastSending,
         stageDataToReserve => frontDataLastLiving,
         newPhysDests => assignedDestsInt,    -- MAPPING (from FREE LIST)
+            newPhysDestsOrig => newIntDests,    -- MAPPING (from FREE LIST)
         
         sendingToCommit => --sendingFromROB,
                              robSendingDelayed,   
@@ -498,6 +499,7 @@ begin
         sendingToReserve => frontLastSending,
         stageDataToReserve => frontDataLastLiving,
         newPhysDests => assignedDestsFloat,    -- MAPPING (from FREE LIST)
+            newPhysDestsOrig => newFloatDests,    -- MAPPING (from FREE LIST)
         
         sendingToCommit => --sendingFromROB,
                             robSendingDelayed,

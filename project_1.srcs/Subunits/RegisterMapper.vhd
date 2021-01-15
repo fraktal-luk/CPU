@@ -31,6 +31,7 @@ entity RegisterMapper is
 		sendingToReserve: in std_logic;
 		stageDataToReserve: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		newPhysDests: in PhysNameArray(0 to PIPE_WIDTH-1); -- to write to newest map
+		newPhysDestsOrig: in PhysNameArray(0 to PIPE_WIDTH-1); -- to write to newest map
 
 		sendingToCommit: in std_logic;
 		stageDataToCommit: in InstructionSlotArray(0 to PIPE_WIDTH-1);
@@ -51,7 +52,7 @@ architecture Behavioral of RegisterMapper is
 
 	function initMap return PhysNameArray;
 	
-	signal newestMap, stableMap, newestMapNext, stableMapNext: PhysNameArray(0 to 31) := initMap;
+	signal newestMap, newestMap_T, stableMap, newestMapNext, newestMapNext_T, stableMapNext, stableMapNext_T: PhysNameArray(0 to 31) := initMap;
     
     signal reserve, reserve_T, commit, psels, fullMaskReserve, fullMaskCommit,
              excMaskReserve, excMaskCommit, causingMaskReserve, causingMaskCommit, killedMaskReserve, killedMaskCommit,
@@ -157,14 +158,68 @@ architecture Behavioral of RegisterMapper is
         end loop;
         return res;
     end function;
+
+
+        function getSelection_New(p0, p1, p2, p3, st, prev: PhysName; reserve: std_logic_vector; s0, s1, s2, s3, rew: std_logic) return PhysName is
+            variable res: PhysName := prev;
+            variable t0, t1, t2: PhysName := (others => '0');
+            constant resVec: PhysNameArray(0 to 3) := (p0, p1, p2, p3);
+            constant r0: std_logic := reserve(0);
+            constant r1: std_logic := reserve(1);
+            constant r2: std_logic := reserve(2);
+            constant r3: std_logic := reserve(3);
+            variable sel: std_logic_vector(1 downto 0) := (others => '0'); 
+        begin   
+                if (s3 and r2 and r1 and r0) = '1' then
+                    sel := "11";
+                elsif ((s3 and ((r1 and r0) or (r2 and r0) or (r2 and r1))) or (s2 and r1 and r0)) = '1' then
+                    sel := "10";
+                elsif ((s3 and (r2 or r1 or r0)) or (s2 and (r1 or r0)) or (s1 and r0)) = '1' then
+                    sel := "01";
+                else
+                    sel := "00";
+                end if;
+                ----------
+                if --(s0 or s1 or s2 or s3)  = '0' then
+                    rew = '1' then
+                    res := st;
+                else
+                    res := resVec(slv2u(sel));                    
+                end if;
+            return res;
+        end function;
+
+
+        function getNextMap_New(content, stable: PhysNameArray; inputArr: PhysNameArray; reserve: std_logic_vector; sm0, sm1, sm2, sm3: std_logic_vector(0 to 31); sending, rew: std_logic)
+        return PhysNameArray is
+            variable res: PhysNameArray(0 to 31) := content;--(others => (others => '0'));
+            variable enMask: std_logic_vector(0 to 31) := (others => '0');
+        begin
+            for i in 0 to 31 loop
+                enMask(i) :=  (sending and (sm0(i) or sm1(i) or sm2(i) or sm3(i))) 
+                            or rew;
+                
+                if enMask(i) = '1' then
+                    res(i) := getSelection_New(inputArr(0), inputArr(1), inputArr(2), inputArr(3), stable(i), content(i), reserve,
+                                           sm0(i), sm1(i), sm2(i), sm3(i), rew);
+                end if;                                   
+            end loop;
+            return res;
+        end function;
     
+    signal ch0, ch1: std_logic := '0';
 begin	
     selMask0 <= getSelMask(selectReserve(0), reserve(0), reserve(0), IS_FP);
     selMask1 <= getSelMask(selectReserve(1), reserve(1), reserve(1), IS_FP);
     selMask2 <= getSelMask(selectReserve(2), reserve(2), reserve(2), IS_FP);
     selMask3 <= getSelMask(selectReserve(3), reserve(3), reserve(3), IS_FP);
 
-    newestMapNext <= getNextMap(newestMap, stableMap, writeReserve, selMask0, selMask1, selMask2, selMask3, rewind);
+    newestMapNext <= --getNextMap(newestMap, stableMap, writeReserve, selMask0, selMask1, selMask2, selMask3, rewind);
+                      getNextMap_New(newestMap, stableMap, newPhysDestsOrig, reserve, selMask0, selMask1, selMask2, selMask3, sendingToReserve, rewind);
+        newestMapNext_T <= getNextMap_New(newestMap_T, stableMap, newPhysDestsOrig, reserve, selMask0, selMask1, selMask2, selMask3, sendingToReserve, rewind);
+    
+        ch0 <= bool2std(newestMapNext_T = newestMapNext);
+        ch1 <= bool2std(newestMap_T = newestMap);
     
     selMaskS0 <= getSelMask(selectCommit(0), commit(0), commit(0), IS_FP);
     selMaskS1 <= getSelMask(selectCommit(1), commit(1), commit(1), IS_FP);
@@ -232,6 +287,8 @@ begin
           if sendingToReserve = '1' or rewind = '1' then
               newestMap <= newestMapNext;
           end if;
+          
+                newestMap_T <= newestMapNext_T;
           
           if sendingToCommit = '1' then
               stableMap <= stableMapNext;
