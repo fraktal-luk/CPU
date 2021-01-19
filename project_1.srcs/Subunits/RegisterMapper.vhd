@@ -52,7 +52,7 @@ architecture Behavioral of RegisterMapper is
 
 	function initMap return PhysNameArray;
 	
-	signal newestMap, newestMap_T, stableMap, newestMapNext, newestMapNext_T, stableMapNext, stableMapNext_T: PhysNameArray(0 to 31) := initMap;
+	signal newestMap, newestMap_T, stableMap, stableMap_T, newestMapNext, newestMapNext_T, stableMapNext, stableMapNext_T: PhysNameArray(0 to 31) := initMap;
     
     signal reserve, reserve_T, commit, psels, fullMaskReserve, fullMaskCommit,
              excMaskReserve, excMaskCommit, causingMaskReserve, causingMaskCommit, killedMaskReserve, killedMaskCommit,
@@ -218,15 +218,17 @@ begin
                       getNextMap_New(newestMap, stableMap, newPhysDestsOrig, reserve, selMask0, selMask1, selMask2, selMask3, sendingToReserve, rewind);
         newestMapNext_T <= getNextMap_New(newestMap_T, stableMap, newPhysDestsOrig, reserve, selMask0, selMask1, selMask2, selMask3, sendingToReserve, rewind);
     
-        ch0 <= bool2std(newestMapNext_T = newestMapNext);
-        ch1 <= bool2std(newestMap_T = newestMap);
+        ch0 <= bool2std(stableMapNext_T = stableMapNext);
+        ch1 <= bool2std(stableMap_T = stableMap);
     
     selMaskS0 <= getSelMask(selectCommit(0), commit(0), commit(0), IS_FP);
     selMaskS1 <= getSelMask(selectCommit(1), commit(1), commit(1), IS_FP);
     selMaskS2 <= getSelMask(selectCommit(2), commit(2), commit(2), IS_FP);
     selMaskS3 <= getSelMask(selectCommit(3), commit(3), commit(3), IS_FP);
 
-    stableMapNext <= getNextMap(stableMap, stableMap, writeCommit, selMaskS0, selMaskS1, selMaskS2, selMaskS3, '0');
+    stableMapNext_T <= getNextMap(stableMap_T, stableMap, writeCommit, selMaskS0, selMaskS1, selMaskS2, selMaskS3, '0');
+          
+          stableMapNext <= getNextMap_New(stableMap, stableMap, writeCommit, "1111", selMaskS0, selMaskS1, selMaskS2, selMaskS3, sendingToCommit, '0');
 
     psels <= getPhysicalFloatDestSels(stageDataToCommit) when IS_FP else getPhysicalIntDestSels(stageDataToCommit);
 
@@ -289,6 +291,7 @@ begin
           end if;
           
                 newestMap_T <= newestMapNext_T;
+                stableMap_T <= stableMapNext_T;
           
           if sendingToCommit = '1' then
               stableMap <= stableMapNext;
