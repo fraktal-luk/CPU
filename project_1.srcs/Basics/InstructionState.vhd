@@ -153,6 +153,8 @@ type InstructionTags is record
     intPointer: SmallNumber;
     floatPointer: SmallNumber;
         bqPointer: SmallNumber;
+        sqPointer: SmallNumber;
+        lqPointer: SmallNumber;
     commitCtr: Word;
 end record;
 
@@ -222,6 +224,8 @@ constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
 			intPointer => (others => '0'),
 			floatPointer => (others => '0'),
 			    bqPointer => (others => '0'),
+			    sqPointer => (others => '0'),
+			    lqPointer => (others => '0'),
 			commitCtr => (others => '0')
 );
 

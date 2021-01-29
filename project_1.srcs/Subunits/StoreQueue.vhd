@@ -29,11 +29,14 @@ entity StoreQueue is
 			almostFull: out std_logic;
 		
 		--acceptingBr: out std_logic;
-		
+		  prevSendingRe: in std_logic;
 		prevSending: in std_logic;
 		--	prevSendingBr: in std_logic;
+		  dataInRe: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		--	dataInBr: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+
+            renamedPtr: out SmallNumber;
 
 		storeValueInput: in InstructionSlot;
 		compareAddressInput: in InstructionSlot;
@@ -71,9 +74,9 @@ architecture Behavioral of StoreQueue is
 
 	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	
-	signal pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pTagged, pAll,  pFlush, storePtr, pSelect,
+	signal pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pTagged, pAll,  pFlush, storePtr, pSelect, pRenamed, pRenamedNext,
 	       pStartEffective, pStartEffectiveNext, causingPtr: SmallNumber := (others => '0');	
-	signal nFull, nFullNext, nFullRestored, nIn, nOut, nCommitted, nCommittedEffective: SmallNumber := (others => '0');
+	signal nFull, nFullNext, nFullRestored, nIn, nOut, nCommitted, nCommittedEffective, nInRe: SmallNumber := (others => '0');
 	signal recoveryCounter: SmallNumber := (others => '0');
 
     signal storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
@@ -407,7 +410,16 @@ architecture Behavioral of StoreQueue is
             
          return res and PTR_MASK_SN; 
       end function;
-
+    
+    
+--    function TMP_getLoadMask(insVec: InstructionSlotArray) return std_logic_vector is
+--        variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+--    begin
+--        for i in 0 to PIPE_WIDTH-1 loop
+--            res(i) := insVec(i).full 
+--        end loop;
+--        return res;
+--    end function;
 begin
     causingPtr <= getCausingPtr(content, execCausing);
 
@@ -435,6 +447,12 @@ begin
 				                compareAddressInput,
 				                IS_LOAD_QUEUE, newerLQ);
 
+                pRenamedNext <= pStart when lateEventSignal = '1'
+                        else       pFlush when execEventSignal = '1'
+                        else       addIntTrunc(pRenamed, slv2u(nInRe), QUEUE_PTR_SIZE) when prevSendingRe = '1'
+                        else       pRenamed;
+
+
     pFlush <= getNewPtr(content, execCausing, pStart, pTagged);
     storePtr <= getStoreDataIndex(content, storeValueInput);
             
@@ -451,10 +469,12 @@ begin
 	addressMatchMask <= getMatchedAddresses(content, compareAddressInput);       
 	
 	WHEN_LQ: if IS_LOAD_QUEUE generate
+	       nInRe <= i2slv(countOnes(getLoadMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE);
 	   selectedDataSlot <= findOldestMatchIndex(content, newerLQ, pStart, pTagged, compareAddressInput);	       
 	end generate;
 	
-	WHEN_SQ: if not IS_LOAD_QUEUE generate	   
+	WHEN_SQ: if not IS_LOAD_QUEUE generate
+	       nInRe <= i2slv(countOnes(getStoreMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE);	   
 	    -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
        pSelect <=   findNewestMatchIndex2(content, olderSQ,  pDrainPrev, pTagged);
        selectedDataSlot <=   findNewestMatchIndex3(content, olderSQ,  pDrainPrev, pTagged, compareAddressInput.full);	   
@@ -514,7 +534,9 @@ begin
             elsif prevSending = '1' then -- + N
                 pTagged <= addIntTrunc(pTagged, countOnes(extractFullMask(dataIn)), QUEUE_PTR_SIZE);
             end if;
-
+            
+                pRenamed <= pRenamedNext;
+            
             if lateEventSignal = '1' or execEventSignal = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
             elsif isNonzero(recoveryCounter) = '1' then
@@ -589,6 +611,8 @@ begin
 
 	acceptingOut <= not isFull;
 	almostFull <= isAlmostFull;
+
+        renamedPtr <= pRenamed;
 
     COMMIT_OUTPUTS: if VIEW_ON generate
 	   --dataOutV <= dataOutSigFinal;	

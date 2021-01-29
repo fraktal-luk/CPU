@@ -32,6 +32,8 @@ port(
         renamingBr: out std_logic;
     
         bqPointer: in SmallNumber;
+        sqPointer: in SmallNumber;
+        lqPointer: in SmallNumber;
     
     newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
@@ -85,16 +87,20 @@ architecture Behavioral of UnitRegManager is
                                 newIntDestPointer: SmallNumber;
                                 newFloatDestPointer: SmallNumber;
                                     bqPointer: SmallNumber;
+                                    sqPointer: SmallNumber;
+                                    lqPointer: SmallNumber;
                                 renameCtr: Word;                               
                                 dbtrap: std_logic
                                 ) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-        variable reserveSelSig, takeVecInt, takeVecFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
+        variable reserveSelSig, takeVecInt, takeVecFloat, stores, loads: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
         variable nToTake: integer := 0;
         variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
         variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
        	variable found: boolean := false;
-    begin      
+    begin
+        stores := getStoreMask(insVec);
+        loads := getLoadMask(insVec);
         -- Assign dest registers
         for i in 0 to PIPE_WIDTH-1 loop
             if res(i).ins.virtualArgSpec.floatDestSel = '1' then
@@ -120,6 +126,9 @@ architecture Behavioral of UnitRegManager is
             res(i).ins.tags.floatPointer := addInt(newFloatDestPointer, countOnes(takeVecFloat(0 to i)));
             
                 res(i).ins.tags.bqPointer := bqPointer;
+            
+                res(i).ins.tags.sqPointer := addInt(sqPointer, countOnes(stores(0 to i-1)));
+                res(i).ins.tags.lqPointer := addInt(lqPointer, countOnes(loads(0 to i-1)));
             
             if TMP_PARAM_COMPRESS_PTRS then -- replace every except slot 0 with offset from slot 0
                 if i > 0 then
@@ -312,6 +321,8 @@ begin
                                     newIntDestPointer,
                                     newFloatDestPointer,
                                         bqPointer,
+                                        sqPointer,
+                                        lqPointer,
                                     renameCtr,
                                     '0' --dbtrapOn
                                     );

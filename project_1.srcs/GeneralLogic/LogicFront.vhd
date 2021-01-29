@@ -249,10 +249,10 @@ begin
             end if;
 	   
        if CLEAR_DEBUG_INFO then
-          res(0).ins.specificOperation.arith := opAnd;
-          res(0).ins.specificOperation.memory := opLoad;
-          res(0).ins.specificOperation.float := opMove;
-          res(0).ins.specificOperation.system := opNone;
+          res(i).ins.specificOperation.arith := opAnd;
+          res(i).ins.specificOperation.memory := opLoad;
+          res(i).ins.specificOperation.float := opMove;
+          res(i).ins.specificOperation.system := opNone;
 
           res(i) := clearRawInfo(res(i));
           --res(i).bits := (others => '0');

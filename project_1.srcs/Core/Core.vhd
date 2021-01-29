@@ -71,7 +71,7 @@ architecture Behavioral of Core is
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
-        signal bqPointer: SmallNumber := (others => '0');
+        signal bqPointer, lqPointer, sqPointer: SmallNumber := (others => '0');
     
     signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
 
@@ -227,6 +227,8 @@ begin
             renamingBr => renameSendingBr,
 
             bqPointer => bqPointer,
+            sqPointer => sqPointer,
+            lqPointer => lqPointer,
 
         robDataLiving => dataOutROB,
         sendingFromROB => robSending,
@@ -1589,9 +1591,14 @@ begin
 		acceptingOut => acceptingSQ,
 		almostFull => almostFullSQ,
 				
+	       prevSendingRe => frontLastSending,
 		prevSending => renamedSendingBuff,
+		
+		   dataInRe => frontDataLastLiving,
 		dataIn => renamedDataToSQ, -- !!!!!
-
+            
+            renamedPtr => sqPointer,
+            
         -- interface with Exec
 		storeValueInput => sqValueInput, 
 		compareAddressInput => sqAddressInput,
@@ -1630,9 +1637,14 @@ begin
 
 		acceptingOut => acceptingLQ,
 		almostFull => almostFullLQ,
-				
+
+	       prevSendingRe => frontLastSending,				
 		prevSending => renamedSendingBuff,
+		
+		   dataInRe => frontDataLastLiving,		
 		dataIn => renamedDataToLQ, -- !!!!!
+
+            renamedPtr => lqPointer,
 
         -- interface with Exec
 		storeValueInput => DEFAULT_INSTRUCTION_SLOT, 
