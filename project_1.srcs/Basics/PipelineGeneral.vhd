@@ -1191,6 +1191,10 @@ begin
         res.tags.renameIndex := ins.tags.renameIndex;
         res.tags.intPointer := ins.tags.intPointer;
         res.tags.floatPointer := ins.tags.floatPointer;
+            res.tags.bqPointer := ins.tags.bqPointer;
+            res.tags.sqPointer := ins.tags.sqPointer;
+            res.tags.lqPointer := ins.tags.lqPointer;
+            
         
         res.target := ins.target;
     end if;

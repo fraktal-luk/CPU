@@ -47,6 +47,19 @@ constant FREE_LIST_SIZE: positive := --N_PHYSICAL_REGS;
 -- Optimize immediate field by keeping part of it in physical register field
 constant IMM_AS_REG: boolean := true;
 
+
+    constant BQ_SIZE: natural := 8;
+    constant SQ_SIZE: natural := 8;
+    constant LQ_SIZE: natural := 8;
+	
+	constant BQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
+	constant SQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
+	constant LQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
+
+    constant BQ_PTR_SIZE: natural := countOnes(BQ_PTR_MASK);
+    constant SQ_PTR_SIZE: natural := countOnes(SQ_PTR_MASK);
+    constant LQ_PTR_SIZE: natural := countOnes(LQ_PTR_MASK);
+
     constant TMP_PARAM_COMPRESS_RETURN: boolean := false;
     constant TMP_PARAM_COMPRESS_PTRS: boolean := false;
     constant TMP_PARAM_SIMPLIFY_ISSUE: boolean := true;

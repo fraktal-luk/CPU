@@ -41,6 +41,7 @@ entity StoreQueue is
 		storeValueInput: in InstructionSlot;
 		compareAddressInput: in InstructionSlot;
         compareTagInput:    in InsTag;
+            compareIndexInput: in SmallNumber;
 
 		selectedDataOutput: out InstructionSlot;
 
@@ -70,7 +71,7 @@ architecture Behavioral of StoreQueue is
 
 	signal content, contentNext: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INSTRUCTION_STATE);
 	
-	signal addressMatchMask, newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+	signal addressMatchMask, newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ, tmpTagCmpMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
 	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	
@@ -206,6 +207,53 @@ architecture Behavioral of StoreQueue is
 		end loop;
 		return res;
 	end function;
+
+
+        function TMP_cmpIndexBefore(pStart, pEnd, index: SmallNumber)
+        return std_logic_vector is
+            variable res: std_logic_vector(0 to content'length-1) := (others => '0');
+            variable iv: SmallNumber := (others => '0'); 
+        begin
+            -- A) if index > start then i >= start && i < index
+            -- B) if index < start then i >= start || i < index
+            -- C) if index = start then none -> can be coalesced into A):
+            -- A') if index >= start then i >= start && i < index    =>    i >= start && i < start   =>   i empty
+        
+            for i in 0 to res'length-1 loop
+                iv := i2slv(i, SMALL_NUMBER_SIZE);
+                if cmpGeU(index, pStart) = '1' then
+                    res(i) := cmpGeU(iv, pStart) and cmpLtU(iv, index);
+                else
+                    res(i) := cmpGeU(iv, pStart) or cmpLtU(iv, index);
+                end if;
+                --res(i) := compareTagBefore(content(i).tags.renameIndex, tag); -- If grTag < tag then diff(high) = '1'
+            end loop;
+            return res;
+        end function;
+
+        function TMP_cmpIndexAfter(pStart, pEnd, index: SmallNumber)
+        return std_logic_vector is
+            variable res: std_logic_vector(0 to content'length-1) := (others => '0');
+            variable iv: SmallNumber := (others => '0'); 
+        begin
+            -- A) if index > end then i <= end || i > index
+            -- B) if index < end then i <= end && i > index
+            -- C) if index = end then none -> can be coalesced into B):
+            -- B') if index <= end then i <= end && i > index    =>    i <= end && i > end   =>   i empty
+        
+            for i in 0 to res'length-1 loop
+                iv := i2slv(i, SMALL_NUMBER_SIZE);
+                if cmpLeU(index, pEnd) = '1' then -- case B')
+                    res(i) := cmpLeU(iv, pEnd) and cmpGtU(iv, index);
+                else    -- case A)
+                    res(i) := cmpLeU(iv, pEnd) or cmpGtU(iv, index);
+                end if;
+                --res(i) := compareTagBefore(content(i).tags.renameIndex, tag); -- If grTag < tag then diff(high) = '1'
+            end loop;
+            return res;
+        end function;
+
+
     
     function whichDataCompleted(content: InstructionStateArray) return std_logic_vector is
         variable res: std_logic_vector(0 to content'length-1) := (others => '0');
@@ -458,6 +506,7 @@ begin
             
     drainReq <= not drainEqual;--bool2std(pDrain /= pStart);
             
+            
 	newerLQ <=     newerRegLQ and addressMatchMask and whichAddressCompleted(content) when isStoreMemOp(compareAddressInput.ins) = '1'
 	          else (others => '0'); -- Only those with known address
 	olderSQ <=     olderRegSQ and addressMatchMask and whichAddressCompleted(content) when isLoadMemOp(compareAddressInput.ins) = '1'
@@ -469,11 +518,15 @@ begin
 	addressMatchMask <= getMatchedAddresses(content, compareAddressInput);       
 	
 	WHEN_LQ: if IS_LOAD_QUEUE generate
+	       tmpTagCmpMask <= TMP_cmpIndexAfter(pStart, pTagged, compareIndexInput);
+	
 	       nInRe <= i2slv(countOnes(getLoadMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE);
 	   selectedDataSlot <= findOldestMatchIndex(content, newerLQ, pStart, pTagged, compareAddressInput);	       
 	end generate;
 	
 	WHEN_SQ: if not IS_LOAD_QUEUE generate
+	       tmpTagCmpMask <= TMP_cmpIndexBefore(pStart, pTagged, compareIndexInput);
+	
 	       nInRe <= i2slv(countOnes(getStoreMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE);	   
 	    -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
        pSelect <=   findNewestMatchIndex2(content, olderSQ,  pDrainPrev, pTagged);

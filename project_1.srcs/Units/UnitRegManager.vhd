@@ -99,8 +99,8 @@ architecture Behavioral of UnitRegManager is
         variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
        	variable found: boolean := false;
     begin
-        stores := getStoreMask(insVec);
-        loads := getLoadMask(insVec);
+        stores := getStoreMask(TMP_recodeMem(insVec));
+        loads := getLoadMask(TMP_recodeMem(insVec));
         -- Assign dest registers
         for i in 0 to PIPE_WIDTH-1 loop
             if res(i).ins.virtualArgSpec.floatDestSel = '1' then
@@ -127,8 +127,8 @@ architecture Behavioral of UnitRegManager is
             
                 res(i).ins.tags.bqPointer := bqPointer;
             
-                res(i).ins.tags.sqPointer := addInt(sqPointer, countOnes(stores(0 to i-1)));
-                res(i).ins.tags.lqPointer := addInt(lqPointer, countOnes(loads(0 to i-1)));
+                res(i).ins.tags.sqPointer := addIntTrunc(sqPointer, countOnes(stores(0 to i-1)), SQ_PTR_SIZE);
+                res(i).ins.tags.lqPointer := addIntTrunc(lqPointer, countOnes(loads(0 to i-1)), LQ_PTR_SIZE);
             
             if TMP_PARAM_COMPRESS_PTRS then -- replace every except slot 0 with offset from slot 0
                 if i > 0 then

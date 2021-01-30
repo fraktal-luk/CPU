@@ -71,7 +71,7 @@ architecture Behavioral of Core is
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
-        signal bqPointer, lqPointer, sqPointer: SmallNumber := (others => '0');
+        signal bqPointer, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
     
     signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
 
@@ -635,6 +635,8 @@ begin
            );
                
            preAguTag <= slotIssueM0.ins.tags.renameIndex;
+               preIndexSQ <= slotIssueM0.ins.tags.sqPointer;
+               preIndexLQ <= slotIssueM0.ins.tags.lqPointer;
                                  
            sendingFromDLQ <= '0';          -- TEMP!
            dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
@@ -1535,7 +1537,7 @@ begin
 
     BRANCH_QUEUE: entity work.BranchQueue
 	generic map(
-		QUEUE_SIZE => 8
+		QUEUE_SIZE => BQ_SIZE
 	)
 	port map(
 		clk => clk,
@@ -1581,7 +1583,7 @@ begin
 
     STORE_QUEUE: entity work.StoreQueue(Behavioral)
 	generic map(
-		QUEUE_SIZE => 8
+		QUEUE_SIZE => SQ_SIZE
 	)
 	port map(
 		clk => clk,
@@ -1603,6 +1605,7 @@ begin
 		storeValueInput => sqValueInput, 
 		compareAddressInput => sqAddressInput,
         compareTagInput => preAguTag,
+            compareIndexInput => preIndexSQ,
                             
 		selectedDataOutput => sqSelectedOutput,
         ------------
@@ -1627,7 +1630,7 @@ begin
 
     LOAD_QUEUE: entity work.StoreQueue(Behavioral)
 	generic map(
-		QUEUE_SIZE => 8,
+		QUEUE_SIZE => LQ_SIZE,
 		IS_LOAD_QUEUE => true
 	)
 	port map(
@@ -1650,6 +1653,7 @@ begin
 		storeValueInput => DEFAULT_INSTRUCTION_SLOT, 
 		compareAddressInput => lqAddressInput,
         compareTagInput => preAguTag,
+            compareIndexInput => preIndexLQ,        
              
 		selectedDataOutput => lqSelectedOutput,
         ----------------
