@@ -212,7 +212,7 @@ architecture Behavioral of StoreQueue is
 
         function TMP_cmpIndexBefore(pStart, pEnd, index: SmallNumber)
         return std_logic_vector is
-            variable res: std_logic_vector(0 to content'length-1) := (others => '0');
+            variable res: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
             variable iv: SmallNumber := (others => '0'); 
         begin
             -- A) if index > start then i >= start && i < index
@@ -234,7 +234,7 @@ architecture Behavioral of StoreQueue is
 
         function TMP_cmpIndexAfter(pStart, pEnd, index: SmallNumber)
         return std_logic_vector is
-            variable res: std_logic_vector(0 to content'length-1) := (others => '0');
+            variable res: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
             variable iv: SmallNumber := (others => '0'); 
         begin
             -- A) if index > end then i < end || i => index
@@ -503,7 +503,11 @@ begin
                         else       pRenamed;
 
 
-    pFlush <= getNewPtr(content, execCausing, pStart, pTagged);
+    pFlush <= --getNewPtr(content, execCausing, pStart, pTagged);
+                execCausing.tags.lqPointer when IS_LOAD_QUEUE
+           else execCausing.tags.sqPointer;
+    
+    
     storePtr <= getStoreDataIndex(content, storeValueInput);
             
     drainReq <= not drainEqual;--bool2std(pDrain /= pStart);
