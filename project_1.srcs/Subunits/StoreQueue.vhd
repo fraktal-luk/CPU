@@ -71,7 +71,8 @@ architecture Behavioral of StoreQueue is
 
 	signal content, contentNext: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INSTRUCTION_STATE);
 	
-	signal addressMatchMask, newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ, tmpTagCmpMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+	signal addressMatchMask, newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ, tmpTagCmpMask,
+	                           newerLQ_T, olderSQ_T, newerRegLQ_T, olderRegSQ_T, newerNextLQ_T, olderNextSQ_T: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
 	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	
@@ -236,17 +237,18 @@ architecture Behavioral of StoreQueue is
             variable res: std_logic_vector(0 to content'length-1) := (others => '0');
             variable iv: SmallNumber := (others => '0'); 
         begin
-            -- A) if index > end then i <= end || i > index
-            -- B) if index < end then i <= end && i > index
-            -- C) if index = end then none -> can be coalesced into B):
-            -- B') if index <= end then i <= end && i > index    =>    i <= end && i > end   =>   i empty
+            -- A) if index > end then i < end || i => index
+            -- B) if index < end then i < end && i => index
+            -- C) if index = end then all (because in this case start = end and queue is full; otherwise index = end wouldn't be possible)
+            --           -> can be coalesced into A):
+            -- A') if index >= end then i < end || i => index    =>    i < end || i => end   =>   i all
         
             for i in 0 to res'length-1 loop
                 iv := i2slv(i, SMALL_NUMBER_SIZE);
-                if cmpLeU(index, pEnd) = '1' then -- case B')
-                    res(i) := cmpLeU(iv, pEnd) and cmpGtU(iv, index);
-                else    -- case A)
-                    res(i) := cmpLeU(iv, pEnd) or cmpGtU(iv, index);
+                if cmpGeU(index, pEnd) = '1' then
+                    res(i) := cmpLtU(iv, pEnd) or cmpGeU(iv, index);
+                else
+                    res(i) := cmpLtU(iv, pEnd) and cmpGeU(iv, index);
                 end if;
                 --res(i) := compareTagBefore(content(i).tags.renameIndex, tag); -- If grTag < tag then diff(high) = '1'
             end loop;
@@ -512,12 +514,22 @@ begin
 	olderSQ <=     olderRegSQ and addressMatchMask and whichAddressCompleted(content) when isLoadMemOp(compareAddressInput.ins) = '1'
 	          else (others => '0'); -- Only those with known address
 	
-	newerNextLQ <= TMP_cmpTagsAfter(content, compareTagInput);
-	olderNextSQ <= TMP_cmpTagsBefore(content, compareTagInput);
+	--newerNextLQ <= TMP_cmpTagsAfter(content, compareTagInput);
+	--olderNextSQ <= TMP_cmpTagsBefore(content, compareTagInput);
+	
+	    newerNextLQ <= newerNextLQ_T;
+        olderNextSQ <= olderNextSQ_T;	   
 	
 	addressMatchMask <= getMatchedAddresses(content, compareAddressInput);       
-	
+
+
+        newerLQ_T <=     newerRegLQ_T and addressMatchMask and whichAddressCompleted(content) when isStoreMemOp(compareAddressInput.ins) = '1'
+                  else (others => '0'); -- Only those with known address
+        olderSQ_T <=     olderRegSQ_T and addressMatchMask and whichAddressCompleted(content) when isLoadMemOp(compareAddressInput.ins) = '1'
+                  else (others => '0'); -- Only those with known address
+        
 	WHEN_LQ: if IS_LOAD_QUEUE generate
+	       newerNextLQ_T <= tmpTagCmpMask;
 	       tmpTagCmpMask <= TMP_cmpIndexAfter(pStart, pTagged, compareIndexInput);
 	
 	       nInRe <= i2slv(countOnes(getLoadMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE);
@@ -525,6 +537,7 @@ begin
 	end generate;
 	
 	WHEN_SQ: if not IS_LOAD_QUEUE generate
+	       olderNextSQ_T <= tmpTagCmpMask;
 	       tmpTagCmpMask <= TMP_cmpIndexBefore(pStart, pTagged, compareIndexInput);
 	
 	       nInRe <= i2slv(countOnes(getStoreMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE);	   
@@ -547,6 +560,8 @@ begin
         
             newerRegLQ <= newerNextLQ;
             olderRegSQ <= olderNextSQ;
+                newerRegLQ_T <= newerNextLQ_T;
+                olderRegSQ_T <= olderNextSQ_T;
 			
 			selectedDataOutputSig <= selectedDataSlot;
             
