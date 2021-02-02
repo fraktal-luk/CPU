@@ -114,9 +114,18 @@ architecture Behavioral of StoreQueue is
         variable slot: InstructionSlot;
         variable diff: SmallNumber := (others => '0');
 	    variable remv: std_logic_vector(0 to 2) := "000";
+	    variable aPtr, vPtr: SmallNumber := (others => '0');
 	    constant IS_STORE_OP: boolean := std2bool(isStoreOp(storeAddressInput.ins));
 	    constant IS_LOAD_OP: boolean := std2bool(isLoadOp(storeAddressInput.ins));
     begin
+        if isLQ then
+            aPtr := storeAddressInput.ins.tags.lqPointer;
+            vPtr := storeValueInput.ins.tags.lqPointer;
+        else          
+            aPtr := storeAddressInput.ins.tags.sqPointer;
+            vPtr := storeValueInput.ins.tags.sqPointer;
+        end if;
+    
         for i in 0 to QUEUE_SIZE-1 loop
            diff := subSN( i2slv(i, SMALL_NUMBER_SIZE), pTagged) and PTR_MASK_SN;    
            case diff(1 downto 0) is
@@ -154,21 +163,34 @@ architecture Behavioral of StoreQueue is
 
         -- Update target after mem execution
         for i in 0 to QUEUE_SIZE-1 loop
-           if content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
+           if --content(i).tags.renameIndex = storeValueInput.ins.tags.renameIndex
+                slv2u(vPtr) = i
                and storeValueInput.full = '1'
            then
                res(i).controlInfo.completed2 := '1'; -- data completed
                res(i).result := storeValueInput.ins.result;
            end if;
            
-           if content(i).tags.renameIndex = storeAddressInput.ins.tags.renameIndex
+           if --content(i).tags.renameIndex = storeAddressInput.ins.tags.renameIndex
+                slv2u(aPtr) = i
                and storeAddressInput.full = '1'
                and ((IS_STORE_OP and not isLQ) or (IS_LOAD_OP and isLQ))
            then
                res(i).controlInfo.completed := '1'; -- address completed           
                res(i).target := storeAddressInput.ins.result;
                res(i).controlInfo.orderViolation := '0';
-           end if;                      
+           end if;
+           
+           
+           if CLEAR_DEBUG_INFO then
+               res(i) := clearDbCounters(res(i));
+               res(i).tags.renameIndex := (others => '0');
+               res(i).tags.bqPointer := (others => '0');
+               res(i).tags.sqPointer := (others => '0');
+               res(i).tags.lqPointer := (others => '0');
+               res(i).tags.intPointer := (others => '0');
+               res(i).tags.floatPointer := (others => '0');
+           end if;                   
         end loop;
 
         return res;
@@ -508,8 +530,8 @@ begin
            else execCausing.tags.sqPointer;
     
     
-    storePtr <= getStoreDataIndex(content, storeValueInput);
-            
+    storePtr <= --getStoreDataIndex(content, storeValueInput);
+                    storeValueInput.ins.tags.sqPointer;
     drainReq <= not drainEqual;--bool2std(pDrain /= pStart);
             
             
