@@ -197,7 +197,7 @@ function getIgnoredMask(insVec: InstructionSlotArray) return std_logic_vector;
 
 
 
-function stageArrayNext(livingContent, newContent: InstructionSlotArray; full, sending, receiving, kill: std_logic)
+function stageArrayNext(livingContent, newContent: InstructionSlotArray; full, sending, receiving, kill, keepDest: std_logic)
 return InstructionSlotArray;
 
 -- general op tag handling
@@ -630,7 +630,7 @@ begin
 	return res;
 end function;
 
-function stageArrayNext(livingContent, newContent: InstructionSlotArray; full, sending, receiving, kill: std_logic)
+function stageArrayNext(livingContent, newContent: InstructionSlotArray; full, sending, receiving, kill, keepDest: std_logic)
 return InstructionSlotArray is 
     constant LEN: natural := livingContent'length;
 	variable res: InstructionSlotArray(0 to LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -651,7 +651,9 @@ begin
 		       res(i).ins.physicalArgSpec.intDestSel := '0';
 		       res(i).ins.virtualArgSpec.floatDestSel := '0';
 		    end if;
-			res(i).ins.physicalArgSpec.dest := (others => '0');
+		    if keepDest = '0' then
+			    res(i).ins.physicalArgSpec.dest := (others => '0');
+			end if;
 			res(i).ins.controlInfo.newEvent := '0';
 		end loop;
 		for i in 0 to LEN-1 loop

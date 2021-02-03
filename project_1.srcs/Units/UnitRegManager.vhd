@@ -351,7 +351,8 @@ begin
     SUBUNIT_RENAME_INT: entity work.GenericStage(Behavioral)--Renaming)
     generic map(
         USE_CLEAR => '0',
-        WIDTH => PIPE_WIDTH
+        WIDTH => PIPE_WIDTH,
+            KEEP_DEST => '1'
     )
     port map(
         clk => clk, reset => '0', en => '0',
@@ -376,7 +377,8 @@ begin
     SUBUNIT_RENAME_FLOAT: entity work.GenericStage(Behavioral)--Renaming)
     generic map(
         USE_CLEAR => '0',
-        WIDTH => PIPE_WIDTH
+        WIDTH => PIPE_WIDTH,
+            KEEP_DEST => '1'
     )
     port map(
         clk => clk, reset => '0', en => '0',
