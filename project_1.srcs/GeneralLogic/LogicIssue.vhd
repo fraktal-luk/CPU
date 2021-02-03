@@ -267,7 +267,7 @@ begin
 		    end if;
 		end if;
 
-	if res.state.immediate = '1' and USE_IMM then
+	if false and res.state.immediate = '1' and USE_IMM then
 		res.state.args(1) := res.ins.constantArgs.imm;
 		
 		if IMM_AS_REG then
@@ -278,7 +278,15 @@ begin
 		res.state.stored(1) := '1';
 	else
 		if res.state.zero(1) = '1' then
-			res.state.args(1) := (others => '0');
+		    if USE_IMM then
+		        res.state.args(1)(31 downto 16) := (others => res.ins.constantArgs.imm(16));
+		        res.state.args(1)(15 downto 0) := res.ins.constantArgs.imm(15 downto 0);
+		        if IMM_AS_REG then
+                    res.state.args(1)(PhysName'length-1 downto 0) := res.ins.physicalArgSpec.args(1);
+                end if;
+            else
+                res.state.args(1) := (others => '0');
+            end if;
 			res.state.stored(1) := '1';
 		elsif res.state.argLocsPhase(1)(1 downto 0) = "00" then
 			res.state.args(1) := fni.values0(slv2u(res.state.argLocsPipe(1)(1 downto 0)));

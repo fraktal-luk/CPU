@@ -797,7 +797,7 @@ begin
         if HAS_IMM and res(i).ins.constantArgs.immSel = '1' then
             res(i).state.missing(1) := '0';
             res(i).state.immediate := '1';
-            res(i).state.zero(1) := '0';
+            res(i).state.zero(1) := '1';
             
             if IMM_AS_REG then
                 res(i).ins.physicalArgSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);    
