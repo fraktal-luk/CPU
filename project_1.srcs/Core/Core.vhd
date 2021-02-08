@@ -61,7 +61,8 @@ end Core;
 architecture Behavioral of Core is
     signal pcDataSig, frontCausing, execCausing, lateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
-                frontEventSignal, bqAccepting, bqSending, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ, dbEmpty: std_logic := '0';
+                frontEventSignal, bqAccepting, bqSending, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ, dbEmpty,
+                canSendFront, canSendRename, canSendBuff: std_logic := '0';
 
     --        signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
     signal frontDataLastLiving, 
@@ -76,8 +77,9 @@ architecture Behavioral of Core is
     signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
 
     signal execEventSignal, lateEventSignal, lateEventSetPC, sendingBranchIns: std_logic := '0';
-    signal robSending, robAccepting, renamedSending, commitAccepting, oooAccepting, lsbrAccepting, renamedSendingBuff,
-                renameSendingBr,
+    signal robSending, robAccepting, renamedSending, commitAccepting, oooAccepting, lsbrAccepting, lsbrAcceptingMore, renamedSendingBuff,
+                issueQueuesAccepting, issueQueuesAcceptingMore,
+                renameSendingBr, stopRename,
                 queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0, dispatchAccepting,
                 robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0: std_logic := '0';
     signal commitGroupCtr, commitGroupCtrInc: InsTag := (others => '0');
@@ -198,7 +200,7 @@ begin
         bpSending => bpSending,
         bpData => bpData,
     
-        renameAccepting => oooAccepting,
+        renameAccepting => canSendFront,
         dataLastLiving => frontDataLastLiving,
         lastSending => frontLastSending,
         
@@ -212,13 +214,16 @@ begin
         lateEventSignal => lateEventSignal,
         lateEventSetPC => lateEventSetPC
     );    
-    
+
+            
     REGISTER_MANAGER: entity work.UnitRegManager(Behavioral)
     port map(
         clk => clk,
         renameAccepting => renameAccepting, -- to frontend
         frontLastSending => frontLastSending,
         frontDataLastLiving => frontDataLastLiving,
+        
+        nextAccepting => canSendRename,
         
         renamedDataLiving => renamedDataLivingRe,
         renamedDataLivingFloat => renamedDataLivingFloatPre,        
@@ -253,9 +258,13 @@ begin
 
     oooAccepting <= queuesAcceptingMore and renameAccepting;
     lsbrAccepting <= robAccepting and acceptingSQ and acceptingLQ;
+    lsbrAcceptingMore <= robAcceptingMore and not almostFullSQ and not almostFullLQ;
     
-    queuesAccepting <= lsbrAccepting and iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0;
-    queuesAcceptingMore <= robAcceptingMore and iqAcceptingMoreI0 and iqAcceptingMoreM0 and iqAcceptingMoreS0 and iqAcceptingMoreF0 and iqAcceptingMoreSF0 and not almostFullSQ and not almostFullLQ;
+        issueQueuesAccepting <= iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0;
+        issueQueuesAcceptingMore <= iqAcceptingMoreI0 and iqAcceptingMoreM0 and iqAcceptingMoreS0 and iqAcceptingMoreF0 and iqAcceptingMoreSF0;
+    
+    queuesAccepting <= lsbrAccepting and issueQueuesAccepting;
+    queuesAcceptingMore <= lsbrAcceptingMore and issueQueuesAcceptingMore;
 
     -- From Rename we send to OOO if it accepts and DB is empty. If DB is not empty, we have to drain it first!
     renamedDataLivingBuff <= dispatchBufferDataInt;
@@ -272,7 +281,8 @@ begin
         clk => clk,
         
         specialAction => specialAction,
-        nextAccepting => queuesAccepting,      
+        nextAccepting => canSendBuff,
+                                 
         accepting => dispatchAccepting,
         prevSending => renamedSending,
         dataIn => renamedDataLivingRe,            
@@ -310,6 +320,30 @@ begin
 		outputSpecial => specialOutROB		
 	);
 
+        
+         OLD_FLOW: if true generate
+            canSendFront <= oooAccepting;
+            canSendRename <= '1';
+            canSendBuff <= queuesAccepting;
+         end generate;
+         
+          NEW_FLOW: if false generate
+             canSendFront <= renameAccepting and not stopRename;
+             canSendRename <= dispatchAccepting;
+             canSendBuff <= not stopRename;
+          end generate;         
+         
+    STOP_RENAME: process (clk)
+    begin
+        if rising_edge(clk) then
+            if queuesAcceptingMore = '0' then
+                stopRename <= '1';
+            elsif queuesAcceptingMore = '1' then
+                stopRename <= '0';
+            end if;
+        end if;
+    end process;
+    
 
     MAIN_VIEW: if VIEW_ON generate
         use work.Viewing.all;
@@ -473,7 +507,7 @@ begin
             port map(
                 clk => clk, reset => '0', en => '0',
 
-                queuesAccepting => queuesAccepting,
+                queuesAccepting => canSendBuff,
         
                 acceptingOut => iqAcceptingI0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreI0,
@@ -589,7 +623,7 @@ begin
            port map(
                clk => clk, reset => '0', en => '0',
        
-               queuesAccepting => queuesAccepting,
+               queuesAccepting => canSendBuff,
        
                acceptingOut => iqAcceptingM0,--iqAcceptingI0rr(4),
                acceptingMore => iqAcceptingMoreM0,
@@ -809,7 +843,7 @@ begin
             port map(
                 clk => clk, reset => '0', en => '0',
 
-                queuesAccepting => queuesAccepting,
+                queuesAccepting => canSendBuff,
         
                 acceptingOut => iqAcceptingS0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreS0,
@@ -888,7 +922,7 @@ begin
             port map(
                 clk => clk, reset => '0', en => '0',
 
-                queuesAccepting => queuesAccepting,
+                queuesAccepting => canSendBuff,
        
                 acceptingOut => iqAcceptingSF0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreSF0,
@@ -978,7 +1012,7 @@ begin
             port map(
                 clk => clk, reset => '0', en => '0',
 
-                queuesAccepting => queuesAccepting,
+                queuesAccepting => canSendBuff,
         
                 acceptingOut => iqAcceptingF0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreF0,

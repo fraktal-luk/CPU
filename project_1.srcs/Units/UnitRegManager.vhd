@@ -29,6 +29,8 @@ port(
     renamedDataLivingFloat: out InstructionSlotArray(0 to PIPE_WIDTH-1);    
     renamedSending: out std_logic;
     
+    nextAccepting: in std_logic;
+    
         renamingBr: out std_logic;
     
         bqPointer: in SmallNumber;
@@ -364,7 +366,7 @@ begin
         acceptingOut => open,
         
         -- Interface with IQ
-        nextAccepting => '1',
+        nextAccepting => nextAccepting,
         sendingOut => renamedSendingSig,
         stageDataOut => renamedDataLivingPre,
         
@@ -390,7 +392,7 @@ begin
         acceptingOut => open,
         
         -- Interface with IQ
-        nextAccepting => '1',
+        nextAccepting => nextAccepting,
         sendingOut => open,
         stageDataOut => renamedDataLivingFloatPre,
         
