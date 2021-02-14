@@ -51,6 +51,9 @@ architecture Behavioral of ReorderBuffer is
 	
 	constant ROB_STATIC_DATA_SIZE: natural := 128;
 
+		signal outputData_T: InstructionSlotArray(0 to PIPE_WIDTH-1);
+		signal outputSpecial_T: InstructionSlot;
+
     
     type StaticGroupInfo is record
         specialOp: std_logic_vector(3 downto 0); -- TMP
@@ -130,14 +133,20 @@ architecture Behavioral of ReorderBuffer is
     begin
         res.virtualIntDestSel := isl.ins.virtualArgSpec.intDestSel;
         res.virtualFloatDestSel := isl.ins.virtualArgSpec.floatDestSel;
-        res.physicalIntDestSel := isl.ins.physicalArgSpec.intDestSel;
-        res.physicalFloatDestSel := isl.ins.physicalArgSpec.floatDestSel;        
+        
+        -- phys dest sel delds UNUSED?
+        res.physicalIntDestSel := --isl.ins.physicalArgSpec.intDestSel;
+                                  '0';
+        res.physicalFloatDestSel := --isl.ins.physicalArgSpec.floatDestSel;
+                                  '0';        
         res.virtualDest := isl.ins.virtualArgSpec.dest(4 downto 0);    
         res.physicalDest := isl.ins.physicalArgSpec.dest;
         
-        --res.operation := (others => 'U');
-        res.mainCluster := isl.ins.classInfo.mainCluster;
-        res.secCluster := isl.ins.classInfo.secCluster;
+        -- cluster-fields UNUSED?
+        res.mainCluster := --isl.ins.classInfo.mainCluster;
+                            '0';
+        res.secCluster := --isl.ins.classInfo.secCluster;
+                            '0';
         res.useSQ := --'U';
                         isl.ins.classInfo.secCluster; -- ??
         res.useLQ := isl.ins.classInfo.useLQ;
@@ -169,7 +178,6 @@ architecture Behavioral of ReorderBuffer is
         res.hasEvent := '0';
         res.hasException := '0';
         res.confirmedBranch := isl.ins.controlInfo.confirmedBranch;
-        res.hasException := '0';
         res.specialAction := isl.ins.controlInfo.specialAction; -- ???
         res.refetch := '0'; --isl.ins.controlInfo.refetch;
         
@@ -186,6 +194,35 @@ architecture Behavioral of ReorderBuffer is
         return res;
     end function;
     
+
+
+        function getDynamicOpInfo_T(isl: InstructionSlot) return DynamicOpInfo is
+            variable res: DynamicOpInfo;
+        begin
+            res.full := isl.full;
+            res.killed := isl.ins.controlInfo.killed;
+            res.causing := isl.ins.controlInfo.causing;
+            res.completed0 := isl.ins.controlInfo.completed; 
+            res.completed1 := isl.ins.controlInfo.completed2;
+            
+            res.hasEvent := isl.ins.controlInfo.newEvent;
+            res.hasException := isl.ins.controlInfo.hasException;
+            res.confirmedBranch := isl.ins.controlInfo.confirmedBranch;
+            res.specialAction := isl.ins.controlInfo.specialAction; -- ???
+            res.refetch := isl.ins.controlInfo.refetch; --isl.ins.controlInfo.refetch;
+            
+            return res;
+        end function;   
+    
+        function getDynamicOpInfoA_T(isa: InstructionSlotArray) return DynamicOpInfoArray is
+            variable res: DynamicOpInfoArray;
+        begin
+            for i in isa'range loop
+                res(i) := getDynamicOpInfo_T(isa(i));
+            end loop; 
+            
+            return res;
+        end function;
     
     --subtype BitVector is std_logic_vector(natural range 0 to natural'high);
 
@@ -244,11 +281,11 @@ begin
 	causingPtr <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
 	
     NEW_DEV: block
-        signal staticInput, DEL_inputStaticOpInfoA: StaticOpInfoArray;
-        signal dynamicInput, DEL_inputDynamicOpInfoA: DynamicOpInfoArray;
+        signal staticInput, staticOutput, staticOutput_T: StaticOpInfoArray;
+        signal dynamicInput, dynamicOutput, dynamicOutput_T: DynamicOpInfoArray;
 
-        signal staticGroupInput: StaticGroupInfo;
-        signal dynamicGroupInput: DynamicGroupInfo;
+        signal staticGroupInput, staticGroupOutput, staticGroupOutput_T: StaticGroupInfo;
+        signal dynamicGroupInput, dynamicGroupOutput, dynamicGroupOutput_T: DynamicGroupInfo;
         
         signal staticContent: StaticOpInfoArray2D;
         signal dynamicContent: DynamicOpInfoArray2D;
@@ -256,14 +293,14 @@ begin
         signal staticGroupContent: StaticGroupInfoArray;
         signal dynamicGroupContent: DynamicGroupInfoArray;
         
-        function writeStaticInput(content: StaticOpInfoArray2D; input: StaticOpInfoArray; ptr: SmallNumber) return StaticOpInfoArray2D is
-            variable res: StaticOpInfoArray2D := content;
-        begin
-            for i in input'range loop
-                res(slv2u(ptr), i) := input(i);
-            end loop;
-            return res;
-        end function;
+--        function writeStaticInput(content: StaticOpInfoArray2D; input: StaticOpInfoArray; ptr: SmallNumber) return StaticOpInfoArray2D is
+--            variable res: StaticOpInfoArray2D := content;
+--        begin
+--            for i in input'range loop
+--                res(slv2u(ptr), i) := input(i);
+--            end loop;
+--            return res;
+--        end function;
         
         procedure writeStaticInput(signal content: inout StaticOpInfoArray2D; input: StaticOpInfoArray; ptr: SmallNumber) is
         begin
@@ -292,6 +329,39 @@ begin
                 content(slv2u(ptr)) <= input;
             --end loop;
         end procedure;
+
+
+        function readStaticOutput(content: StaticOpInfoArray2D; ptr: SmallNumber) return StaticOpInfoArray is
+            variable res: StaticOpInfoArray;
+        begin
+            for i in res'range loop
+                res(i):= content(slv2u(ptr), i);
+            end loop;
+            return res;
+        end function;
+
+        function readDynamicOutput(content: DynamicOpInfoArray2D; ptr: SmallNumber) return DynamicOpInfoArray is
+            variable res: DynamicOpInfoArray;
+        begin
+            for i in res'range loop
+                res(i):= content(slv2u(ptr), i);
+            end loop;
+            return res;
+        end function;
+        
+        function readStaticGroupOutput(content: StaticGroupInfoArray; ptr: SmallNumber) return StaticGroupInfo is
+        begin
+            --for i in input'range loop
+            return content(slv2u(ptr));
+            --end loop;
+        end function;
+
+        function readDynamicGroupOutput(content: DynamicGroupInfoArray; ptr: SmallNumber) return DynamicGroupInfo is
+        begin
+            --for i in input'range loop
+            return content(slv2u(ptr));
+            --end loop;
+        end function;
 
         
         procedure updateDynamicContent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlotArray; cluster: natural) is
@@ -330,16 +400,16 @@ begin
 
             for i in 0 to PIPE_WIDTH-1 loop
                 if eventFound then
-                    content(groupInd, opInd).full <= '0';
-                    content(groupInd, opInd).killed <= '1';
+                    content(groupInd, i).full <= '0';
+                    content(groupInd, i).killed <= '1';
                     
                 elsif opInd = i then
                     if execInfo.ins.controlInfo.confirmedBranch = '1' then
-                        content(groupInd, opInd).confirmedBranch <= '1';                    
+                        content(groupInd, i).confirmedBranch <= '1';                    
                     end if;                
                 
                     if execInfo.ins.controlInfo.newEvent = '1' then
-                        content(groupInd, opInd).causing <= '1';                    
+                        content(groupInd, i).causing <= '1';                    
                     
                         eventFound:= true;
                     end if;
@@ -378,14 +448,14 @@ begin
 
             for i in 0 to PIPE_WIDTH-1 loop
                 if eventFound then
-                    content(groupInd, opInd).full <= '0';
-                    content(groupInd, opInd).killed <= '1';
+                    content(groupInd, i).full <= '0';
+                    content(groupInd, i).killed <= '1';
                     
                 elsif opInd = i then
                     if execInfo.ins.controlInfo.specialAction = '1' then
-                        content(groupInd, opInd).specialAction <= '1';   
-                        content(groupInd, opInd).refetch <= '1';                    
-                    
+                        content(groupInd, i).specialAction <= '1';   
+                        content(groupInd, i).refetch <= '1';                    
+                        content(groupInd, i).causing <= '1';                    
                         eventFound:= true;
                     end if;
                 end if;
@@ -410,7 +480,7 @@ begin
         end procedure;         
                        
 
-                                  
+             signal ch0, ch1, ch2, ch3: std_logic := '0';                     
     begin
         staticInput <= getStaticOpInfoA(inputData);
         dynamicInput <= getDynamicOpInfoA(inputData);
@@ -418,28 +488,48 @@ begin
         staticGroupInput <= getStaticGroupInfo(inputData, inputSpecial);
         dynamicGroupInput <= getDynamicGroupInfo(inputData, inputSpecial);
 
+            staticOutput_T <= getStaticOpInfoA(outputData_T);
+            dynamicOutput_T <= getDynamicOpInfoA_T(outputData_T);
+
+            staticGroupOutput_T <= getStaticGroupInfo(outputData_T, outputSpecial_T);
+            dynamicGroupOutput_T <= getDynamicGroupInfo(outputData_T, outputSpecial_T);
+        
+--            ch0 <= bool2std(staticOutput = staticOutput_T);
+--            ch1 <= bool2std(dynamicOutput = dynamicOutput_T);
+--            ch2 <= bool2std(staticGroupOutput = staticGroupOutput_T);
+--            ch3 <= bool2std(dynamicGroupOutput = dynamicGroupOutput_T);
+
+
+            ch0 <= bool2std(dynamicOutput(0) = dynamicOutput_T(0));
+            ch1 <= bool2std(dynamicOutput(1) = dynamicOutput_T(1));
+            ch2 <= bool2std(dynamicOutput(2) = dynamicOutput_T(2));
+            ch3 <= bool2std(dynamicOutput(3) = dynamicOutput_T(3));
         
         SYNCH: process (clk)
         begin
             if rising_edge(clk) then
-                if prevSending = '1' then
+                -- Update content
+                updateDynamicContent(dynamicContent, execEndSigs1, 0);
+                updateDynamicContent(dynamicContent, execEndSigs2, 1);
+
+                updateDynamicContentBranch(dynamicContent, execEndSigs1(0));
+                updateDynamicContentMemEvent(dynamicContent, execEndSigs1(2));
+
+                -- Write inputs
+                if prevSending = '1' then                    
                     writeStaticInput(staticContent, staticInput, endPtr);
                     writeStaticGroupInput(staticGroupContent, staticGroupInput, endPtr);
 
-                    updateDynamicContent(dynamicContent, execEndSigs1, 0);
-                    updateDynamicContent(dynamicContent, execEndSigs2, 1);
-
-                    updateDynamicContentBranch(dynamicContent, execEndSigs1(0));
-                    updateDynamicContentMemEvent(dynamicContent, execEndSigs1(2));
-
-                    -- kill groups: move endPtr on branch
-                    -- ...
-                    
-                    
                     writeDynamicInput(dynamicContent, dynamicInput, endPtr);
                     writeDynamicGroupInput(dynamicGroupContent, dynamicGroupInput, endPtr);
-                    
-                end if;
+                 end if;
+                   
+                -- Read output                    
+                staticOutput <= readStaticOutput(staticContent, startPtrNext);
+                staticGroupOutput <= readStaticGroupOutput(staticGroupContent, startPtrNext);
+
+                dynamicOutput <= readDynamicOutput(dynamicContent, startPtrNext);
+                dynamicGroupOutput <= readDynamicGroupOutput(dynamicGroupContent, startPtrNext);                    
             end if;
         end process;
 	end block;
@@ -590,6 +680,11 @@ begin
 	-- incorporating deserialized info
 	outputData <= ( replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2, constantFromBuf3));
 	outputSpecial <= replaceConstantInformationSpecial(outputSpecialReg, constantFromBuf3);
+
+
+
+	outputData_T <= ( replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2, constantFromBuf3));
+	outputSpecial_T <= replaceConstantInformationSpecial(outputSpecialReg, constantFromBuf3);
 
 
 	

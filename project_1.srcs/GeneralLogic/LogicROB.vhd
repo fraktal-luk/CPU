@@ -153,6 +153,7 @@ begin
 
             if execResult.ins.controlInfo.hasException = '1' then
                 res(k).ins.controlInfo.hasException := '1';
+                res(k).ins.controlInfo.causing := '1';                
                 eventFound := true;
             end if;
 
@@ -160,6 +161,7 @@ begin
             if ALLOW_MEM and execResult.ins.controlInfo.specialAction = '1' then -- TODO: remove it, not handled by Exec engine/
                 res(k).ins.controlInfo.specialAction := '1';
                 res(k).ins.controlInfo.refetch := '1';
+                res(k).ins.controlInfo.causing := '1';
                 eventFound := true;
             end if;
                                
@@ -335,6 +337,7 @@ end function;
                         -- CAREFUL: info aobut stores needed for StoreQueue
                         res(j).ops(i).ins.classInfo.secCluster := newInsState.classInfo.secCluster;
                         res(j).ops(i).ins.classInfo.useLQ := newInsState.classInfo.useLQ;
+                        res(j).ops(i).ins.classInfo.branchIns := newInsState.classInfo.branchIns;
                end loop;
 
                    newInsState := res(j).special.ins;
@@ -355,6 +358,7 @@ end function;
 	           res(i).ins.controlInfo := insVec(i).ins.controlInfo;
 	               res(i).ins.classInfo.secCluster := insVec(i).ins.classInfo.secCluster;
 	               res(i).ins.classInfo.useLQ := insVec(i).ins.classInfo.useLQ;
+	               res(i).ins.classInfo.branchIns := insVec(i).ins.classInfo.branchIns;
 	       end loop;       
 	   end if;
 	
