@@ -190,7 +190,8 @@ begin
     
         excInfoUpdate <= lateEventSending       -- TODO: what about dbtrap?
                                         and (stageDataLateCausingOut(0).ins.controlInfo.hasException or --bool2std(special.ins.operation = (System, sysCall)))
-                                                                      (special.ins.controlInfo.specialAction and bool2std(special.ins.specificOperation.system = opCall)))
+                                                                      (--special.ins.controlInfo.specialAction and 
+                                                                        bool2std(special.ins.specificOperation.system = opCall)))
                                         and not stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
         intInfoUpdate <= lateEventSending and stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
     

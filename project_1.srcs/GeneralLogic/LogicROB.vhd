@@ -334,6 +334,10 @@ end function;
                    newInsState := res(j).ops(i).ins;
                    res(j).ops(i).ins := DEFAULT_INSTRUCTION_STATE;
                    res(j).ops(i).ins.controlInfo := newInsState.controlInfo;
+                   
+                     res(j).ops(i).ins.controlInfo.frontBranch := '0';
+                     res(j).ops(i).ins.controlInfo.ignored := '0';
+                   
                         -- CAREFUL: info aobut stores needed for StoreQueue
                         res(j).ops(i).ins.classInfo.secCluster := newInsState.classInfo.secCluster;
                         res(j).ops(i).ins.classInfo.useLQ := newInsState.classInfo.useLQ;
@@ -387,8 +391,9 @@ end function;
 	   res.ins.specificOperation.system := SysOp'val(num); 
 	   
 	   if CLEAR_DEBUG_INFO then
+	       res.full := '0';
 	       res.ins := DEFAULT_INS_STATE;
-	       res.ins.controlInfo := special.ins.controlInfo;
+	       --res.ins.controlInfo := special.ins.controlInfo;
 	       res.ins.specificOperation.subpipe := None;
 	       res.ins.specificOperation.system := SysOp'val(num);
 	           res.ins.specificOperation.bits := --sop(None, res.ins.specificOperation.system).bits;

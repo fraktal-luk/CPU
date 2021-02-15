@@ -51,8 +51,8 @@ architecture Behavioral of ReorderBuffer is
 	
 	constant ROB_STATIC_DATA_SIZE: natural := 128;
 
-		signal outputData_T: InstructionSlotArray(0 to PIPE_WIDTH-1);
-		signal outputSpecial_T: InstructionSlot;
+		signal outputData_T, outputData_T2: InstructionSlotArray(0 to PIPE_WIDTH-1);
+		signal outputSpecial_T, outputSpecial_T2: InstructionSlot;
 
     
     type StaticGroupInfo is record
@@ -243,10 +243,74 @@ architecture Behavioral of ReorderBuffer is
             
             return res;
         end function;
+
     
-    --subtype BitVector is std_logic_vector(natural range 0 to natural'high);
+        function getOutputSlot_T(stat: StaticOpInfo; dyn: DynamicOpInfo) return InstructionSlot is
+            variable res: InstructionSlot := DEFAULT_INS_SLOT;
+        begin
+            res.full := dyn.full;
+            res.ins.controlInfo.killed := dyn.killed;
+            res.ins.controlInfo.causing := dyn.causing;
+            res.ins.controlInfo.completed := dyn.completed0; 
+            res.ins.controlInfo.completed2 := dyn.completed1;
+            
+            res.ins.controlInfo.newEvent := dyn.hasEvent;
+            res.ins.controlInfo.hasException := dyn.hasException;
+            res.ins.controlInfo.confirmedBranch := dyn.confirmedBranch;
+            res.ins.controlInfo.specialAction := dyn.specialAction; -- ???
+            res.ins.controlInfo.refetch := dyn.refetch; --isl.ins.controlInfo.refetch;
+            
+
+            res.ins.virtualArgSpec.intDestSel := stat.virtualIntDestSel;
+            res.ins.virtualArgSpec.floatDestSel := stat.virtualFloatDestSel;
+            
+            -- phys dest sel delds UNUSED?
+    --        res.physicalIntDestSel := --isl.ins.physicalArgSpec.intDestSel;
+    --                                  '0';
+    --        res.physicalFloatDestSel := --isl.ins.physicalArgSpec.floatDestSel;
+    --                                  '0';        
+            res.ins.virtualArgSpec.dest(4 downto 0) := stat.virtualDest;    
+            res.ins.physicalArgSpec.dest := stat.physicalDest;
+            
+    --        -- cluster-fields UNUSED?
+    --        res.mainCluster := --isl.ins.classInfo.mainCluster;
+    --                            '0';
+    --        res.secCluster := --isl.ins.classInfo.secCluster;
+    --                            '0';
+            res.ins.classInfo.secCluster := stat.useSQ--'U';
+                            ; -- ??
+            res.ins.classInfo.useLQ := stat.useLQ;
+            res.ins.classInfo.branchIns := stat.useBQ;
+                       
+            return res;
+        end function;   
+    
+        function getInstructionSlotArray_T(sa: StaticOpInfoArray; da: DynamicOpInfoArray; sgi: StaticGroupInfo; dgi: DynamicGroupInfo) return InstructionSlotArray is
+            variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
+        begin
+            for i in res'range loop
+                res(i) := getOutputSlot_T(sa(i), da(i));
+            end loop; 
+            
+            res(0).ins.controlInfo.firstBr := sgi.useBQ;
+            
+            return res;
+        end function;
 
 
+        function getSpecialSlot_T(si: StaticGroupInfo; di: DynamicGroupInfo) return InstructionSlot is
+            variable res: InstructionSlot := DEFAULT_INS_SLOT;
+        begin
+	        res.ins.specificOperation.subpipe := None;
+            res.ins.specificOperation.system := SysOp'val(slv2u(si.specialOp));
+            res.ins.specificOperation.bits := si.specialOp;
+            
+            --res.useBQ := isa(0).ins.controlInfo.firstBr;
+            return res;
+        end function;
+
+
+----------------------------------------------------------
     function serializeOp(isl: InstructionSlot) return std_logic_vector is
     begin
     
@@ -500,7 +564,8 @@ begin
         end procedure;         
                        
 
-             signal ch0, ch1, ch2, ch3: std_logic := '0';                     
+             signal ch0, ch1, ch2, ch3,
+                    chi, chii: std_logic := '0';                     
     begin
         staticInput <= getStaticOpInfoA(inputData);
         dynamicInput <= getDynamicOpInfoA(inputData);
@@ -513,17 +578,25 @@ begin
 
             staticGroupOutput_T <= getStaticGroupInfo(outputData_T, outputSpecial_T);
             dynamicGroupOutput_T <= getDynamicGroupInfo(outputData_T, outputSpecial_T);
+
+
+                outputData_T2 <= getInstructionSlotArray_T(staticOutput, dynamicOutput, staticGroupOutput, dynamicGroupOutput);
+                outputSpecial_T2 <= getSpecialSlot_T(staticGroupOutput, dynamicGroupOutput);
+
         
-            ch0 <= bool2std(staticOutput = staticOutput_T);
-            ch1 <= bool2std(dynamicOutput = dynamicOutput_T);
-            ch2 <= bool2std(staticGroupOutput = staticGroupOutput_T);
-            ch3 <= bool2std(dynamicGroupOutput = dynamicGroupOutput_T);
+--            ch0 <= bool2std(staticOutput = staticOutput_T);
+--            ch1 <= bool2std(dynamicOutput = dynamicOutput_T);
+--            ch2 <= bool2std(staticGroupOutput = staticGroupOutput_T);
+--            ch3 <= bool2std(dynamicGroupOutput = dynamicGroupOutput_T);
 
+                chi <=  bool2std(outputData_T = outputData_T2);
+                chii <= bool2std(outputSpecial_T = outputSpecial_T2);
+            
 
---            ch0 <= bool2std(dynamicOutput(0) = dynamicOutput_T(0));
---            ch1 <= bool2std(dynamicOutput(1) = dynamicOutput_T(1));
---            ch2 <= bool2std(dynamicOutput(2) = dynamicOutput_T(2));
---            ch3 <= bool2std(dynamicOutput(3) = dynamicOutput_T(3));
+            ch0 <= bool2std(outputData_T(0) = outputData_T2(0));
+            ch1 <= bool2std(outputData_T(1) = outputData_T2(1));
+            ch2 <= bool2std(outputData_T(2) = outputData_T2(2));
+            ch3 <= bool2std(outputData_T(3) = outputData_T2(3));
         
         SYNCH: process (clk)
         begin
