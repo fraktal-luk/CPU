@@ -76,6 +76,16 @@ architecture Behavioral of ReorderBuffer is
         useBQ:      std_logic;  -- May be better a Group param?
     end record;
 
+    constant DEFAULT_STATIC_GROUP_INFO: StaticGroupInfo := (
+        specialOp => (others => '0'),
+        others => '0'
+    );
+    
+    constant DEFAULT_STATIC_OP_INFO: StaticOpInfo := (
+        virtualDest => (others => '0'),
+        physicalDest => (others => '0'),
+        others => '0'
+    );
 
     
     type DynamicGroupInfo is record
@@ -95,6 +105,15 @@ architecture Behavioral of ReorderBuffer is
         specialAction: std_logic;
         refetch: std_logic;
     end record;
+
+    constant DEFAULT_DYNAMIC_GROUP_INFO: DynamicGroupInfo := (
+        others => '0'
+    );
+    
+    constant DEFAULT_DYNAMIC_OP_INFO: DynamicOpInfo := (
+        others => '0'
+    );
+
     
     type StaticOpInfoArray is array(0 to PIPE_WIDTH-1) of StaticOpInfo;
     type StaticOpInfoArray2D is array(0 to ROB_SIZE-1, 0 to PIPE_WIDTH-1) of StaticOpInfo;
@@ -111,7 +130,8 @@ architecture Behavioral of ReorderBuffer is
     function getStaticGroupInfo(isa: InstructionSlotArray; ssl: InstructionSlot) return StaticGroupInfo is
         variable res: StaticGroupInfo;
     begin
-        res.specialOp := ssl.ins.specificOperation.bits;
+        res.specialOp := --ssl.ins.specificOperation.bits;
+                            sop(None, ssl.ins.specificOperation.system).bits;
         
         res.useBQ := isa(0).ins.controlInfo.firstBr;
         return res;
@@ -121,7 +141,7 @@ architecture Behavioral of ReorderBuffer is
     function getDynamicGroupInfo(isa: InstructionSlotArray; ssl: InstructionSlot) return DynamicGroupInfo is
         variable res: DynamicGroupInfo;
     begin
-            res.full := '1';
+            res.full := '0';--'1';
                 
         return res;
     end function;
@@ -287,11 +307,11 @@ begin
         signal staticGroupInput, staticGroupOutput, staticGroupOutput_T: StaticGroupInfo;
         signal dynamicGroupInput, dynamicGroupOutput, dynamicGroupOutput_T: DynamicGroupInfo;
         
-        signal staticContent: StaticOpInfoArray2D;
-        signal dynamicContent: DynamicOpInfoArray2D;
+        signal staticContent: StaticOpInfoArray2D := (others => (others => DEFAULT_STATIC_OP_INFO));
+        signal dynamicContent: DynamicOpInfoArray2D := (others => (others => DEFAULT_DYNAMIC_OP_INFO));
 
-        signal staticGroupContent: StaticGroupInfoArray;
-        signal dynamicGroupContent: DynamicGroupInfoArray;
+        signal staticGroupContent: StaticGroupInfoArray := (others => DEFAULT_STATIC_GROUP_INFO);
+        signal dynamicGroupContent: DynamicGroupInfoArray := (others => DEFAULT_DYNAMIC_GROUP_INFO);
         
 --        function writeStaticInput(content: StaticOpInfoArray2D; input: StaticOpInfoArray; ptr: SmallNumber) return StaticOpInfoArray2D is
 --            variable res: StaticOpInfoArray2D := content;
@@ -494,16 +514,16 @@ begin
             staticGroupOutput_T <= getStaticGroupInfo(outputData_T, outputSpecial_T);
             dynamicGroupOutput_T <= getDynamicGroupInfo(outputData_T, outputSpecial_T);
         
---            ch0 <= bool2std(staticOutput = staticOutput_T);
---            ch1 <= bool2std(dynamicOutput = dynamicOutput_T);
---            ch2 <= bool2std(staticGroupOutput = staticGroupOutput_T);
---            ch3 <= bool2std(dynamicGroupOutput = dynamicGroupOutput_T);
+            ch0 <= bool2std(staticOutput = staticOutput_T);
+            ch1 <= bool2std(dynamicOutput = dynamicOutput_T);
+            ch2 <= bool2std(staticGroupOutput = staticGroupOutput_T);
+            ch3 <= bool2std(dynamicGroupOutput = dynamicGroupOutput_T);
 
 
-            ch0 <= bool2std(dynamicOutput(0) = dynamicOutput_T(0));
-            ch1 <= bool2std(dynamicOutput(1) = dynamicOutput_T(1));
-            ch2 <= bool2std(dynamicOutput(2) = dynamicOutput_T(2));
-            ch3 <= bool2std(dynamicOutput(3) = dynamicOutput_T(3));
+--            ch0 <= bool2std(dynamicOutput(0) = dynamicOutput_T(0));
+--            ch1 <= bool2std(dynamicOutput(1) = dynamicOutput_T(1));
+--            ch2 <= bool2std(dynamicOutput(2) = dynamicOutput_T(2));
+--            ch3 <= bool2std(dynamicOutput(3) = dynamicOutput_T(3));
         
         SYNCH: process (clk)
         begin

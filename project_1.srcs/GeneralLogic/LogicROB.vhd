@@ -391,6 +391,8 @@ end function;
 	       res.ins.controlInfo := special.ins.controlInfo;
 	       res.ins.specificOperation.subpipe := None;
 	       res.ins.specificOperation.system := SysOp'val(num);
+	           res.ins.specificOperation.bits := --sop(None, res.ins.specificOperation.system).bits;
+	                                              constInfo(SYS_OP_SIZE - 1 + 16 downto 16); 
 	   end if;
 	   
 	   return res;
