@@ -573,24 +573,30 @@ begin
         staticGroupInput <= getStaticGroupInfo(inputData, inputSpecial);
         dynamicGroupInput <= getDynamicGroupInfo(inputData, inputSpecial);
 
-            staticOutput_T <= getStaticOpInfoA(outputData_T);
-            dynamicOutput_T <= getDynamicOpInfoA_T(outputData_T);
+        --    staticOutput_T <= getStaticOpInfoA(outputData_T);
+        --    dynamicOutput_T <= getDynamicOpInfoA_T(outputData_T);
 
-            staticGroupOutput_T <= getStaticGroupInfo(outputData_T, outputSpecial_T);
-            dynamicGroupOutput_T <= getDynamicGroupInfo(outputData_T, outputSpecial_T);
+        --    staticGroupOutput_T <= getStaticGroupInfo(outputData_T, outputSpecial_T);
+        --    dynamicGroupOutput_T <= getDynamicGroupInfo(outputData_T, outputSpecial_T);
 
 
-                outputData_T2 <= getInstructionSlotArray_T(staticOutput, dynamicOutput, staticGroupOutput, dynamicGroupOutput);
-                outputSpecial_T2 <= getSpecialSlot_T(staticGroupOutput, dynamicGroupOutput);
+        outputData_T <= getInstructionSlotArray_T(staticOutput, dynamicOutput, staticGroupOutput, dynamicGroupOutput);
+        outputSpecial_T <= getSpecialSlot_T(staticGroupOutput, dynamicGroupOutput);
 
+        outputData <= outputData_T;
+        outputSpecial <= outputSpecial_T;
         
+
+        	chi <= bool2std(outputCompleted = groupCompleted(outputData_T));
+
+
 --            ch0 <= bool2std(staticOutput = staticOutput_T);
 --            ch1 <= bool2std(dynamicOutput = dynamicOutput_T);
 --            ch2 <= bool2std(staticGroupOutput = staticGroupOutput_T);
 --            ch3 <= bool2std(dynamicGroupOutput = dynamicGroupOutput_T);
 
-                chi <=  bool2std(outputData_T = outputData_T2);
-                chii <= bool2std(outputSpecial_T = outputSpecial_T2);
+                --chi <=  bool2std(outputData_T = outputData_T2);
+                --chii <= bool2std(outputSpecial_T = outputSpecial_T2);
             
 
             ch0 <= bool2std(outputData_T(0) = outputData_T2(0));
@@ -628,85 +634,83 @@ begin
 	end block;
 	
     
-    SERIAL_INFO: block
-        signal mem0, mem1: WordArray(0 to ROB_SIZE-1) := (others => (others => '0'));
-        signal inputConstant, inputConstant2, inputConstant3, iw0, iw1, ow0, ow1: Word := (others => '0');    
-    begin
-        -- Serialize some input
-        inputConstant <= inputData(3).ins.physicalArgSpec.dest & inputData(2).ins.physicalArgSpec.dest & inputData(1).ins.physicalArgSpec.dest & inputData(0).ins.physicalArgSpec.dest;
-        inputConstant2(19 downto 0) <= inputData(3).ins.virtualArgSpec.dest(4 downto 0) & inputData(2).ins.virtualArgSpec.dest(4 downto 0)
-                        & inputData(1).ins.virtualArgSpec.dest(4 downto 0) & inputData(0).ins.virtualArgSpec.dest(4 downto 0);
+--    SERIAL_INFO: block
+--        signal mem0, mem1: WordArray(0 to ROB_SIZE-1) := (others => (others => '0'));
+--        signal inputConstant, inputConstant2, inputConstant3, iw0, iw1, ow0, ow1: Word := (others => '0');    
+--    begin
+--        -- Serialize some input
+--        inputConstant <= inputData(3).ins.physicalArgSpec.dest & inputData(2).ins.physicalArgSpec.dest & inputData(1).ins.physicalArgSpec.dest & inputData(0).ins.physicalArgSpec.dest;
+--        inputConstant2(19 downto 0) <= inputData(3).ins.virtualArgSpec.dest(4 downto 0) & inputData(2).ins.virtualArgSpec.dest(4 downto 0)
+--                        & inputData(1).ins.virtualArgSpec.dest(4 downto 0) & inputData(0).ins.virtualArgSpec.dest(4 downto 0);
         
-        inputConstant3(15 downto 8) <=  inputData(3).ins.physicalArgSpec.intDestSel --& inputData(3).ins.physicalArgSpec.floatDestSel
-                                     & inputData(2).ins.physicalArgSpec.intDestSel --& inputData(2).ins.physicalArgSpec.floatDestSel
-                                     & inputData(1).ins.physicalArgSpec.intDestSel --& inputData(1).ins.physicalArgSpec.floatDestSel
-                                     & inputData(0).ins.physicalArgSpec.intDestSel --& inputData(0).ins.physicalArgSpec.floatDestSel;
+--        inputConstant3(15 downto 8) <=  inputData(3).ins.physicalArgSpec.intDestSel --& inputData(3).ins.physicalArgSpec.floatDestSel
+--                                     & inputData(2).ins.physicalArgSpec.intDestSel --& inputData(2).ins.physicalArgSpec.floatDestSel
+--                                     & inputData(1).ins.physicalArgSpec.intDestSel --& inputData(1).ins.physicalArgSpec.floatDestSel
+--                                     & inputData(0).ins.physicalArgSpec.intDestSel --& inputData(0).ins.physicalArgSpec.floatDestSel;
     
-                                     & inputData(3).ins.physicalArgSpec.floatDestSel
-                                     & inputData(2).ins.physicalArgSpec.floatDestSel
-                                     & inputData(1).ins.physicalArgSpec.floatDestSel
-                                     & inputData(0).ins.physicalArgSpec.floatDestSel;
+--                                     & inputData(3).ins.physicalArgSpec.floatDestSel
+--                                     & inputData(2).ins.physicalArgSpec.floatDestSel
+--                                     & inputData(1).ins.physicalArgSpec.floatDestSel
+--                                     & inputData(0).ins.physicalArgSpec.floatDestSel;
         
-        inputConstant3(7 downto 0) <=  inputData(3).ins.virtualArgSpec.intDestSel --& inputData(3).ins.virtualArgSpec.floatDestSel
-                                      & inputData(2).ins.virtualArgSpec.intDestSel --& inputData(2).ins.virtualArgSpec.floatDestSel
-                                      & inputData(1).ins.virtualArgSpec.intDestSel --& inputData(1).ins.virtualArgSpec.floatDestSel
-                                      & inputData(0).ins.virtualArgSpec.intDestSel --& inputData(0).ins.virtualArgSpec.floatDestSel;
+--        inputConstant3(7 downto 0) <=  inputData(3).ins.virtualArgSpec.intDestSel --& inputData(3).ins.virtualArgSpec.floatDestSel
+--                                      & inputData(2).ins.virtualArgSpec.intDestSel --& inputData(2).ins.virtualArgSpec.floatDestSel
+--                                      & inputData(1).ins.virtualArgSpec.intDestSel --& inputData(1).ins.virtualArgSpec.floatDestSel
+--                                      & inputData(0).ins.virtualArgSpec.intDestSel --& inputData(0).ins.virtualArgSpec.floatDestSel;
     
-                                      & inputData(3).ins.virtualArgSpec.floatDestSel
-                                      & inputData(2).ins.virtualArgSpec.floatDestSel
-                                      & inputData(1).ins.virtualArgSpec.floatDestSel
-                                      & inputData(0).ins.virtualArgSpec.floatDestSel;
+--                                      & inputData(3).ins.virtualArgSpec.floatDestSel
+--                                      & inputData(2).ins.virtualArgSpec.floatDestSel
+--                                      & inputData(1).ins.virtualArgSpec.floatDestSel
+--                                      & inputData(0).ins.virtualArgSpec.floatDestSel;
 
-        inputConstant3(SYS_OP_SIZE - 1 + 16 downto 16) <= i2slv(SysOp'pos(inputSpecial.ins.specificOperation.system), SYS_OP_SIZE);
+--        inputConstant3(SYS_OP_SIZE - 1 + 16 downto 16) <= i2slv(SysOp'pos(inputSpecial.ins.specificOperation.system), SYS_OP_SIZE);
 
-        iw0 <= inputConstant;
-        iw1 <= inputConstant3(SYS_OP_SIZE-1+16 downto 16) & inputConstant3(7 downto 0) & inputConstant2(19 downto 0);
+--        iw0 <= inputConstant;
+--        iw1 <= inputConstant3(SYS_OP_SIZE-1+16 downto 16) & inputConstant3(7 downto 0) & inputConstant2(19 downto 0);
 
         
-        -- Deserialize
-        constantFromBuf <= ow0;
-        constantFromBuf2(19 downto 0) <= ow1(19 downto 0);
-        constantFromBuf3(7 downto 0) <= ow1(27 downto 20);
-        constantFromBuf3(SYS_OP_SIZE-1+16 downto 16) <= ow1(31 downto 28);
+--        -- Deserialize
+--        constantFromBuf <= ow0;
+--        constantFromBuf2(19 downto 0) <= ow1(19 downto 0);
+--        constantFromBuf3(7 downto 0) <= ow1(27 downto 20);
+--        constantFromBuf3(SYS_OP_SIZE-1+16 downto 16) <= ow1(31 downto 28);
 
-        CONSTANT_MEM: process (clk)
-        begin
-            if rising_edge(clk) then
-                if prevSending = '1' then
-                    mem0(slv2u(endPtr)) <= iw0;
-                    mem1(slv2u(endPtr)) <= iw1;           
-                end if;
+--        CONSTANT_MEM: process (clk)
+--        begin
+--            if rising_edge(clk) then
+--                if prevSending = '1' then
+--                    mem0(slv2u(endPtr)) <= iw0;
+--                    mem1(slv2u(endPtr)) <= iw1;           
+--                end if;
                 
-                ow0 <= mem0(slv2u(startPtrNext));
-                ow1 <= mem1(slv2u(startPtrNext));                        
-            end if;
-        end process;
+--                ow0 <= mem0(slv2u(startPtrNext));
+--                ow1 <= mem1(slv2u(startPtrNext));                        
+--            end if;
+--        end process;
 
-    end block;
-
+--    end block;	
 	
-	
-	-- Main NEXT function
-	contentNext <= getNextRobContent(content, inputData,
-	                                 inputSpecial,
-	                                 execEndSigs1, execEndSigs2,
-	                                 isSending, prevSending,
-	                                 execEvent, lateEventSignal,
-	                                 startPtr, endPtr, causingPtr);
+--	-- Main NEXT function
+--	contentNext <= getNextRobContent(content, inputData,
+--	                                 inputSpecial,
+--	                                 execEndSigs1, execEndSigs2,
+--	                                 isSending, prevSending,
+--	                                 execEvent, lateEventSignal,
+--	                                 startPtr, endPtr, causingPtr);
 			
-	SYNCHRONOUS: process (clk)
-	begin
-		if rising_edge(clk) then		  
-		    -- Regular content
-            content <= contentNext;
+--	SYNCHRONOUS: process (clk)
+--	begin
+--		if rising_edge(clk) then		  
+--		    -- Regular content
+----            content <= contentNext;
             
-            --completedMask <= completedMaskNext;
-            outputDataReg <= content(slv2u(startPtrNext)).ops;
-            outputSpecialReg <= content(slv2u(startPtrNext)).special;
+------            completedMask <= completedMaskNext;
+----            outputDataReg <= content(slv2u(startPtrNext)).ops;
+----            outputSpecialReg <= content(slv2u(startPtrNext)).special;
          
 
-        end if;        
-    end process;         
+--        end if;        
+--    end process;         
 
 
     
@@ -766,18 +770,19 @@ begin
 	acceptingOut <= not isFull;
     acceptingMore <= not isAlmostFull;
 
-	outputCompleted <= groupCompleted(outputDataReg);
+	outputCompleted <= groupCompleted(outputData_T);
+	
     isSending <= outputCompleted and nextAccepting and not outputEmpty;
     
 	sendingOut <= isSending;
 	-- incorporating deserialized info
-	outputData <= ( replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2, constantFromBuf3));
-	outputSpecial <= replaceConstantInformationSpecial(outputSpecialReg, constantFromBuf3);
+--	outputData_T2 <= ( replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2, constantFromBuf3));
+--	outputSpecial_T2 <= replaceConstantInformationSpecial(outputSpecialReg, constantFromBuf3);
 
 
 
-	outputData_T <= ( replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2, constantFromBuf3));
-	outputSpecial_T <= replaceConstantInformationSpecial(outputSpecialReg, constantFromBuf3);
+--	outputData_T <= ( replaceConstantInformation(outputDataReg, constantFromBuf, constantFromBuf2, constantFromBuf3));
+--	outputSpecial_T <= replaceConstantInformationSpecial(outputSpecialReg, constantFromBuf3);
 
 
 	
