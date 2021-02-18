@@ -18,75 +18,431 @@ use work.PipelineGeneral.all;
 
 package LogicROB is
 
-
-
-	constant PTR_MASK_TAG: InsTag := i2slv(ROB_SIZE-1, TAG_SIZE);
-	constant PTR_MASK_SN: SmallNumber := i2slv(ROB_SIZE-1, SMALL_NUMBER_SIZE);
-	constant ROB_PTR_SIZE: natural := countOnes(PTR_MASK_SN);	
-
-
-
-
-type ReorderBufferEntry is record
-    full: std_logic;
-    ops: InstructionSlotArray(0 to PIPE_WIDTH-1);
-    special: InstructionSlot;
+constant PTR_MASK_TAG: InsTag := i2slv(ROB_SIZE-1, TAG_SIZE);
+constant PTR_MASK_SN: SmallNumber := i2slv(ROB_SIZE-1, SMALL_NUMBER_SIZE);
+constant ROB_PTR_SIZE: natural := countOnes(PTR_MASK_SN);	
+    
+type StaticGroupInfo is record
+    specialOp: std_logic_vector(3 downto 0); -- TMP
+    useBQ:      std_logic; -- Maybe only here?
 end record;
 
-constant DEFAULT_ROB_ENTRY: ReorderBufferEntry := (full => '0', ops => (others => DEFAULT_INSTRUCTION_SLOT), special => DEFAULT_INSTRUCTION_SLOT);
+type StaticOpInfo is record
+    virtualIntDestSel:     std_logic;
+    virtualFloatDestSel:   std_logic;
+    virtualDest:    RegName;    
+    physicalDest:   PhysName;
 
-type ReorderBufferArray is array (0 to ROB_SIZE-1) of ReorderBufferEntry;
-constant DEFAULT_ROB_ARRAY: ReorderBufferArray := (others => DEFAULT_ROB_ENTRY); 
+    useSQ:      std_logic;
+    useLQ:      std_logic;
+    useBQ:      std_logic;  -- May be better a Group param?
+end record;
 
-function getMaskBetween(constant LEN: natural; startP, endP: SmallNumber; full: std_logic) return std_logic_vector;
+constant DEFAULT_STATIC_GROUP_INFO: StaticGroupInfo := (
+    specialOp => (others => '0'),
+    others => '0'
+);
 
-function updateOpGroup(ops: InstructionSlotArray; execResult: InstructionSlot; constant NUM: natural; constant ALLOW_MEM: boolean)
-return InstructionSlotArray;
+constant DEFAULT_STATIC_OP_INFO: StaticOpInfo := (
+    virtualDest => (others => '0'),
+    physicalDest => (others => '0'),
+    others => '0'
+);
 
-function updateOpGroupCompleted(ops: InstructionSlotArray; execResult: InstructionSlot; constant NUM: natural; constant ALLOW_MEM: boolean)
-return InstructionSlotArray;
+type DynamicGroupInfo is record
+    full: std_logic;
+end record;
 
+type DynamicOpInfo is record
+    full:       std_logic;
+    killed:     std_logic;
+    causing:    std_logic;
+    completed0: std_logic;
+    completed1: std_logic;
+    
+    hasEvent:     std_logic;
+    hasException: std_logic;
+    confirmedBranch: std_logic;
+    specialAction: std_logic;
+    refetch: std_logic;
+end record;
+
+constant DEFAULT_DYNAMIC_GROUP_INFO: DynamicGroupInfo := (
+    others => '0'
+);
+
+constant DEFAULT_DYNAMIC_OP_INFO: DynamicOpInfo := (
+    others => '0'
+);
+
+type StaticOpInfoArray is array(0 to PIPE_WIDTH-1) of StaticOpInfo;
+type StaticOpInfoArray2D is array(0 to ROB_SIZE-1, 0 to PIPE_WIDTH-1) of StaticOpInfo;
+
+type StaticGroupInfoArray is array(0 to ROB_SIZE-1) of StaticGroupInfo;
+
+type DynamicOpInfoArray is array(0 to PIPE_WIDTH-1) of DynamicOpInfo;
+type DynamicOpInfoArray2D is array(0 to ROB_SIZE-1, 0 to PIPE_WIDTH-1) of DynamicOpInfo;
+
+type DynamicGroupInfoArray is array(0 to ROB_SIZE-1) of DynamicGroupInfo;
+
+
+function getStaticGroupInfo(isa: InstructionSlotArray; ssl: InstructionSlot) return StaticGroupInfo;
+function getDynamicGroupInfo(isa: InstructionSlotArray; ssl: InstructionSlot) return DynamicGroupInfo;
+function getStaticOpInfo(isl: InstructionSlot) return StaticOpInfo;
+function getStaticOpInfoA(isa: InstructionSlotArray) return StaticOpInfoArray;
+function getDynamicOpInfo(isl: InstructionSlot) return DynamicOpInfo;
+function getDynamicOpInfoA(isa: InstructionSlotArray) return DynamicOpInfoArray;
+
+    function getOutputSlot_T(stat: StaticOpInfo; dyn: DynamicOpInfo) return InstructionSlot;   
+    function getInstructionSlotArray_T(sa: StaticOpInfoArray; da: DynamicOpInfoArray; sgi: StaticGroupInfo; dgi: DynamicGroupInfo) return InstructionSlotArray;
+    function getSpecialSlot_T(si: StaticGroupInfo; di: DynamicGroupInfo) return InstructionSlot;
+
+function serializeOp(isl: InstructionSlot) return std_logic_vector;
+function deserializeOp(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray; 
+function serializeSpecialAction(isl: InstructionSlot) return std_logic_vector;
+function deserializeSpecialAction(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray;    
+function serializeOpGroup(insVec: InstructionSlotArray) return std_logic_vector;
+function deserializeOpGroup(insVec: InstructionSlotArray; serialData: std_logic_vector) return InstructionSlotArray;
+
+
+procedure writeStaticInput(signal content: inout StaticOpInfoArray2D; input: StaticOpInfoArray; ptr: SmallNumber);
+procedure writeDynamicInput(signal content: inout DynamicOpInfoArray2D; input: DynamicOpInfoArray; ptr: SmallNumber);
+procedure writeStaticGroupInput(signal content: inout StaticGroupInfoArray; input: StaticGroupInfo; ptr: SmallNumber);
+procedure writeDynamicGroupInput(signal content: inout DynamicGroupInfoArray; input: DynamicGroupInfo; ptr: SmallNumber);
+
+function readStaticOutput(content: StaticOpInfoArray2D; ptr: SmallNumber) return StaticOpInfoArray;
+function readDynamicOutput(content: DynamicOpInfoArray2D; ptr: SmallNumber) return DynamicOpInfoArray;
+function readStaticGroupOutput(content: StaticGroupInfoArray; ptr: SmallNumber) return StaticGroupInfo;
+function readDynamicGroupOutput(content: DynamicGroupInfoArray; ptr: SmallNumber) return DynamicGroupInfo;
+
+procedure updateDynamicContent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlotArray; constant CLUSTER: natural);
+procedure updateDynamicGroupBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; ind: natural);
+procedure updateDynamicContentBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot);
+procedure updateDynamicGroupMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; ind: natural);
+procedure updateDynamicContentMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot);
 
 function groupCompleted(insVec: InstructionSlotArray) return std_logic;
- 
- 
- 
-
-	function getNextRobContent_Input(content: ReorderBufferArray;
-	                           newGroup: InstructionSlotArray;
-	                           newSpecialAction: InstructionSlot;
-	                           receiving: std_logic;
-	                           endPtr: SmallNumber)
-	return ReorderBufferArray; 
-	
-	function getNextRobContent_Update(content: ReorderBufferArray;
-	                           execInfo1, execInfo2: InstructionSlotArray
-	                           )
-	return ReorderBufferArray;
-
-	function getNextRobContent_ClearDB(content: ReorderBufferArray) --;
-	                           --execInfo1, execInfo2: InstructionSlotArray;
-	                           --execEvent, lateEventSignal: std_logic;
-	                           --startPtr, endPtr, causingPtr: SmallNumber)
-	return ReorderBufferArray;
-	
-	function getNextRobContent(content: ReorderBufferArray;
-	                           newGroup: InstructionSlotArray;
-	                           newSpecialAction: InstructionSlot;
-	                           execInfo1, execInfo2: InstructionSlotArray;
-	                           sends, receiving, execEvent, lateEventSignal: std_logic;
-	                           startPtr, endPtr, causingPtr: SmallNumber)
-	return ReorderBufferArray;
-	
-	function replaceConstantInformation(insVec: InstructionSlotArray; constInfo, constInfo2, constInfo3: Word) return InstructionSlotArray;	
-	function replaceConstantInformationSpecial(special: InstructionSlot; constInfo: Word) return InstructionSlot; 
-
    
 end package;
 
 
 
 package body LogicROB is
+
+function getStaticGroupInfo(isa: InstructionSlotArray; ssl: InstructionSlot) return StaticGroupInfo is
+    variable res: StaticGroupInfo;
+begin
+    res.specialOp := sop(None, ssl.ins.specificOperation.system).bits;       
+    res.useBQ := isa(0).ins.controlInfo.firstBr;
+    return res;
+end function;
+    
+
+function getDynamicGroupInfo(isa: InstructionSlotArray; ssl: InstructionSlot) return DynamicGroupInfo is
+    variable res: DynamicGroupInfo;
+begin
+    res.full := '0';                
+    return res;
+end function;
+
+
+
+function getStaticOpInfo(isl: InstructionSlot) return StaticOpInfo is
+    variable res: StaticOpInfo;
+begin
+    res.virtualIntDestSel := isl.ins.virtualArgSpec.intDestSel;
+    res.virtualFloatDestSel := isl.ins.virtualArgSpec.floatDestSel;     
+    res.virtualDest := isl.ins.virtualArgSpec.dest(4 downto 0);    
+    res.physicalDest := isl.ins.physicalArgSpec.dest;
+
+    res.useSQ := isl.ins.classInfo.secCluster; -- ??
+    res.useLQ := isl.ins.classInfo.useLQ;
+    res.useBQ := isl.ins.classInfo.branchIns;
+    
+    return res;
+end function;
+
+function getStaticOpInfoA(isa: InstructionSlotArray) return StaticOpInfoArray is
+    variable res: StaticOpInfoArray;
+begin
+    for i in isa'range loop
+        res(i) := getStaticOpInfo(isa(i));
+    end loop;        
+    return res;
+end function;
+
+
+function getDynamicOpInfo(isl: InstructionSlot) return DynamicOpInfo is
+    variable res: DynamicOpInfo;
+begin
+    res.full := isl.full;
+    res.killed := '0';
+    res.causing := '0';
+    res.completed0 := not isl.ins.classInfo.mainCluster; 
+    res.completed1 := not isl.ins.classInfo.secCluster;
+    
+    res.hasEvent := '0';
+    res.hasException := '0';
+    res.confirmedBranch := isl.ins.controlInfo.confirmedBranch;
+    res.specialAction := isl.ins.controlInfo.specialAction; -- ???
+    res.refetch := '0';
+    return res;
+end function;
+
+function getDynamicOpInfoA(isa: InstructionSlotArray) return DynamicOpInfoArray is
+    variable res: DynamicOpInfoArray;
+begin
+    for i in isa'range loop
+        res(i) := getDynamicOpInfo(isa(i));
+    end loop;       
+    return res;
+end function;
+
+    function getOutputSlot_T(stat: StaticOpInfo; dyn: DynamicOpInfo) return InstructionSlot is
+        variable res: InstructionSlot := DEFAULT_INS_SLOT;
+    begin
+        res.full := dyn.full;
+        res.ins.controlInfo.killed := dyn.killed;
+        res.ins.controlInfo.causing := dyn.causing;
+        res.ins.controlInfo.completed := dyn.completed0; 
+        res.ins.controlInfo.completed2 := dyn.completed1;
+        
+        res.ins.controlInfo.newEvent := dyn.hasEvent;
+        res.ins.controlInfo.hasException := dyn.hasException;
+        res.ins.controlInfo.confirmedBranch := dyn.confirmedBranch;
+        res.ins.controlInfo.specialAction := dyn.specialAction; -- ???
+        res.ins.controlInfo.refetch := dyn.refetch; --isl.ins.controlInfo.refetch;
+        
+
+        res.ins.virtualArgSpec.intDestSel := stat.virtualIntDestSel;
+        res.ins.virtualArgSpec.floatDestSel := stat.virtualFloatDestSel;
+ 
+        res.ins.virtualArgSpec.dest(4 downto 0) := stat.virtualDest;    
+        res.ins.physicalArgSpec.dest := stat.physicalDest;
+
+        res.ins.classInfo.secCluster := stat.useSQ;
+        res.ins.classInfo.useLQ := stat.useLQ;
+        res.ins.classInfo.branchIns := stat.useBQ;
+                   
+        return res;
+    end function;   
+
+    function getInstructionSlotArray_T(sa: StaticOpInfoArray; da: DynamicOpInfoArray; sgi: StaticGroupInfo; dgi: DynamicGroupInfo) return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
+    begin
+        for i in res'range loop
+            res(i) := getOutputSlot_T(sa(i), da(i));
+        end loop; 
+        
+        res(0).ins.controlInfo.firstBr := sgi.useBQ;
+        
+        return res;
+    end function;
+
+
+    function getSpecialSlot_T(si: StaticGroupInfo; di: DynamicGroupInfo) return InstructionSlot is
+        variable res: InstructionSlot := DEFAULT_INS_SLOT;
+    begin
+        res.ins.specificOperation.subpipe := None;
+        res.ins.specificOperation.system := SysOp'val(slv2u(si.specialOp));
+        res.ins.specificOperation.bits := si.specialOp;
+        
+        --res.useBQ := isa(0).ins.controlInfo.firstBr;
+        return res;
+    end function;
+
+
+----------------------------------------------------------
+function serializeOp(isl: InstructionSlot) return std_logic_vector is
+begin
+
+end function;
+
+function deserializeOp(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray is
+begin
+
+end function; 
+
+
+function serializeSpecialAction(isl: InstructionSlot) return std_logic_vector is
+begin
+
+end function;
+
+function deserializeSpecialAction(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray is
+begin
+
+end function;    
+
+function serializeOpGroup(insVec: InstructionSlotArray) return std_logic_vector is
+begin
+
+end function;
+
+function deserializeOpGroup(insVec: InstructionSlotArray; serialData: std_logic_vector) return InstructionSlotArray is
+begin
+
+end function;
+
+
+procedure writeStaticInput(signal content: inout StaticOpInfoArray2D; input: StaticOpInfoArray; ptr: SmallNumber) is
+begin
+    for i in input'range loop
+        content(slv2u(ptr), i) <= input(i);
+    end loop;
+end procedure;
+
+procedure writeDynamicInput(signal content: inout DynamicOpInfoArray2D; input: DynamicOpInfoArray; ptr: SmallNumber) is
+begin
+    for i in input'range loop
+        content(slv2u(ptr), i) <= input(i);
+    end loop;
+end procedure;
+
+procedure writeStaticGroupInput(signal content: inout StaticGroupInfoArray; input: StaticGroupInfo; ptr: SmallNumber) is
+begin
+    content(slv2u(ptr)) <= input;
+end procedure;
+
+procedure writeDynamicGroupInput(signal content: inout DynamicGroupInfoArray; input: DynamicGroupInfo; ptr: SmallNumber) is
+begin
+    content(slv2u(ptr)) <= input;
+end procedure;
+
+
+function readStaticOutput(content: StaticOpInfoArray2D; ptr: SmallNumber) return StaticOpInfoArray is
+    variable res: StaticOpInfoArray;
+begin
+    for i in res'range loop
+        res(i):= content(slv2u(ptr), i);
+    end loop;
+    return res;
+end function;
+
+function readDynamicOutput(content: DynamicOpInfoArray2D; ptr: SmallNumber) return DynamicOpInfoArray is
+    variable res: DynamicOpInfoArray;
+begin
+    for i in res'range loop
+        res(i):= content(slv2u(ptr), i);
+    end loop;
+    return res;
+end function;
+
+function readStaticGroupOutput(content: StaticGroupInfoArray; ptr: SmallNumber) return StaticGroupInfo is
+begin
+    return content(slv2u(ptr));
+end function;
+
+function readDynamicGroupOutput(content: DynamicGroupInfoArray; ptr: SmallNumber) return DynamicGroupInfo is
+begin
+    return content(slv2u(ptr));
+end function;
+
+
+procedure updateDynamicContent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlotArray; constant CLUSTER: natural) is
+    variable groupInd, opInd: natural;
+    variable tagHigh,tagHighTrunc: SmallNumber;
+begin
+    for i in execInfo'range loop
+        tagHigh := getTagHighSN(execInfo(i).ins.tags.renameIndex);
+        tagHighTrunc := tagHigh and PTR_MASK_SN;
+        groupInd := slv2u(tagHighTrunc);
+        opInd := slv2u(getTagLow(execInfo(i).ins.tags.renameIndex));
+    
+        if execInfo(i).full = '1' then
+            if CLUSTER = 0 then
+                content(groupInd, opInd).completed0 <= '1';
+            else--elsif cluster = 1 then
+                content(groupInd, opInd).completed1 <= '1';                   
+            end if;
+        end if;
+    end loop;
+    
+end procedure;
+
+procedure updateDynamicGroupBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; ind: natural) is
+    variable groupInd, opInd: natural;
+    variable tagHigh,tagHighTrunc: SmallNumber;
+    variable eventFound: boolean := false;
+begin
+    tagHigh := getTagHighSN(execInfo.ins.tags.renameIndex);
+    tagHighTrunc := tagHigh and PTR_MASK_SN;
+    groupInd := slv2u(tagHighTrunc);
+    opInd := slv2u(getTagLow(execInfo.ins.tags.renameIndex));
+
+    for i in 0 to PIPE_WIDTH-1 loop
+        if eventFound then
+            content(groupInd, i).full <= '0';
+            content(groupInd, i).killed <= '1';              
+        elsif opInd = i then
+            if execInfo.ins.controlInfo.confirmedBranch = '1' then
+                content(groupInd, i).confirmedBranch <= '1';                    
+            end if;                
+        
+            if execInfo.ins.controlInfo.newEvent = '1' then
+                content(groupInd, i).causing <= '1';                        
+                eventFound:= true;
+            end if;
+        end if;
+    end loop;
+end procedure;
+ 
+procedure updateDynamicContentBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot) is
+    variable groupInd, opInd: natural;
+    variable tagHigh,tagHighTrunc: SmallNumber;
+begin
+    tagHigh := getTagHighSN(execInfo.ins.tags.renameIndex);
+    tagHighTrunc := tagHigh and PTR_MASK_SN;
+    groupInd := slv2u(tagHighTrunc);
+    --opInd := slv2u(getTagLow(execInfo.ins.tags.renameIndex));
+    if execInfo.full = '1' then
+        updateDynamicGroupBranch(content, execInfo, groupInd);
+    end if;         
+end procedure;         
+
+procedure updateDynamicGroupMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; ind: natural) is
+    variable groupInd, opInd: natural;
+    variable tagHigh,tagHighTrunc: SmallNumber;
+    variable eventFound: boolean := false;
+begin
+    tagHigh := getTagHighSN(execInfo.ins.tags.renameIndex);
+    tagHighTrunc := tagHigh and PTR_MASK_SN;
+    groupInd := slv2u(tagHighTrunc);
+    opInd := slv2u(getTagLow(execInfo.ins.tags.renameIndex));
+
+    for i in 0 to PIPE_WIDTH-1 loop
+        if eventFound then
+            content(groupInd, i).full <= '0';
+            content(groupInd, i).killed <= '1';                   
+        elsif opInd = i then
+            if execInfo.ins.controlInfo.specialAction = '1' then
+                content(groupInd, i).specialAction <= '1';   
+                content(groupInd, i).refetch <= '1';                    
+                content(groupInd, i).causing <= '1';                    
+                eventFound:= true;
+            end if;
+        end if;
+        
+    end loop;
+end procedure;
+
+ 
+procedure updateDynamicContentMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot) is
+    variable groupInd, opInd: natural;
+    variable tagHigh,tagHighTrunc: SmallNumber;
+begin
+        tagHigh := getTagHighSN(execInfo.ins.tags.renameIndex);
+        tagHighTrunc := tagHigh and PTR_MASK_SN;
+        groupInd := slv2u(tagHighTrunc);
+        --opInd := slv2u(getTagLow(execInfo.ins.tags.renameIndex));
+    
+        if execInfo.full = '1' then
+            updateDynamicGroupMemEvent(content, execInfo, groupInd);
+        end if;        
+end procedure;
+
+
+
 
 function groupCompleted(insVec: InstructionSlotArray) return std_logic is
 begin
@@ -100,308 +456,4 @@ begin
 	return '1';
 end function;
 
--- startP is inclusive; endP is exclusive: first empty slot
--- CAREFUL: if startP = endP, it may be either empty or full. Hence the need of 'full' flag
-function getMaskBetween(constant LEN: natural; startP, endP: SmallNumber; full: std_logic) return std_logic_vector is
-    variable res: std_logic_vector(0 to LEN-1) := (others => '0');
-    variable iv: SmallNumber := (others => '0');
-begin        
-    -- true if either:
-    --      when full, '1'; otherwise when end = start then nothing is between
-    --      i >= start && i < end && end > start
-    --      (i >= start || i < end) && end < start
-    for i in 0 to LEN-1 loop
-        iv := i2slv(i, SMALL_NUMBER_SIZE);
-        if full = '1' then
-            res(i) := '1';
-        elsif cmpGtU(endP, startP) = '1' then
-            res(i) := cmpGeU(iv, startP) and cmpLtU(iv, endP);
-        else
-            res(i) := cmpGeU(iv, startP) or cmpLtU(iv, endP);
-        end if;
-    end loop;
-    
-    return res;
-end function;
-
-function updateOpGroup(ops: InstructionSlotArray; execResult: InstructionSlot; constant NUM: natural; constant ALLOW_MEM: boolean)
-return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to ops'length-1) := ops;
-    variable il: SmallNumber := getTagLowSN(execResult.ins.tags.renameIndex);
-    constant ind: natural := slv2u(il);
-    variable eventFound: boolean := false;
-begin
-    if execResult.full = '0' then
-        return res;
-    end if;
-    
-    for k in 0 to PIPE_WIDTH-1 loop
-        if eventFound then
-            res(k).full := '0';
-            res(k).ins.controlInfo.killed := '1';
-        end if;
-
-        if ind = k then
-            if execResult.ins.controlInfo.confirmedBranch = '1' then
-                res(k).ins.controlInfo.confirmedBranch := '1';
-            end if;
-                
-            if execResult.ins.controlInfo.newEvent = '1' then -- CAREFUL: branches corrected to not taken need this!
-                res(k).ins.controlInfo.causing := '1';
-                eventFound := true;                   
-            end if;
-
-            if execResult.ins.controlInfo.hasException = '1' then
-                res(k).ins.controlInfo.hasException := '1';
-                res(k).ins.controlInfo.causing := '1';                
-                eventFound := true;
-            end if;
-
-            -- Only if this is Memory subpipe:
-            if ALLOW_MEM and execResult.ins.controlInfo.specialAction = '1' then -- TODO: remove it, not handled by Exec engine/
-                res(k).ins.controlInfo.specialAction := '1';
-                res(k).ins.controlInfo.refetch := '1';
-                res(k).ins.controlInfo.causing := '1';
-                eventFound := true;
-            end if;
-                               
-        end if;
-    end loop;
-    
-    return res;
-end function;
-
-
-
-function updateOpGroupCompleted(ops: InstructionSlotArray; execResult: InstructionSlot; constant NUM: natural; constant ALLOW_MEM: boolean)
-return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to ops'length-1) := ops;
-    variable il: SmallNumber := getTagLowSN(execResult.ins.tags.renameIndex);
-    constant ind: natural := slv2u(il);
-    variable eventFound: boolean := false;
-begin
-    if execResult.full = '0' then
-        return res;
-    end if;
-    
-    if NUM = 1 then
-        res(ind).ins.controlInfo.completed2 := '1';
-    else
-        res(ind).ins.controlInfo.completed := '1';
-    end if;                                
-    
-    return res;
-end function;
-
-
-
-	function getNextRobContent_Input(content: ReorderBufferArray;
-	                           newGroup: InstructionSlotArray;
-	                           newSpecialAction: InstructionSlot;
-	                           receiving: std_logic;
-	                           endPtr: SmallNumber)
-	return ReorderBufferArray is
-	   variable res: ReorderBufferArray := content;
-	begin
-	   
-	   -- Input
-	   if receiving = '1' then
-	       res(slv2u(endPtr)).ops := newGroup;
-	       res(slv2u(endPtr)).special := newSpecialAction;  
-	   end if;
-	   
-	   return res;
-	end function; 
-	
-	function getNextRobContent_Update(content: ReorderBufferArray;
-	                           execInfo1, execInfo2: InstructionSlotArray
-	                           )
-	return ReorderBufferArray is
-	   variable res: ReorderBufferArray := content;
-	   variable ptr1, ptr2,  iv: SmallNumber := (others => '0');
-	   variable newInsState: InstructionState := DEFAULT_INSTRUCTION_STATE;
-	begin
-	   
-	   -- Update
-       for j in 0 to 3 loop
-	   
-	       
-	       -- Update group!
-	       -- NOTE: tag comparison for slot will be simplified because tag bits directly show ROB slot:
-	       --          [ upper bits | ROB slot | index in group]
-	       --            (getTagHighSN([tag]) and PTR_MASK) == iv ?
-	       --             getTagLowSN == [group index] ? // this is within updateOpGroup  
-    	   for i in 0 to ROB_SIZE-1 loop
-    	       iv := i2slv(i, SMALL_NUMBER_SIZE);
-	       
-	           ptr1 := getTagHighSN(execInfo1(j).ins.tags.renameIndex) and PTR_MASK_SN;
-	           if ptr1 = iv then
-	               res(i).ops := updateOpGroup(res(i).ops, execInfo1(j), 0, j = 2); -- [2] is Mem subpipe
-	               res(i).ops := updateOpGroupCompleted(res(i).ops, execInfo1(j), 0, j = 2); -- [2] is Mem subpipe	               
-	           end if;
-	           
-               ptr2 := getTagHighSN(execInfo2(j).ins.tags.renameIndex) and PTR_MASK_SN;	           
-	           if ptr2 = iv then
-	               res(i).ops := updateOpGroup(res(i).ops, execInfo2(j), 1, false);
-	               res(i).ops := updateOpGroupCompleted(res(i).ops, execInfo2(j), 1, false);	               
-	           end if;
-	       end loop;
-
-	   end loop;
-        
-       return res;
-    end function;
-
-	function getNextRobContent_ClearDB(content: ReorderBufferArray) --;
-	                           --execInfo1, execInfo2: InstructionSlotArray;
-	                           --execEvent, lateEventSignal: std_logic;
-	                           --startPtr, endPtr, causingPtr: SmallNumber)
-	return ReorderBufferArray is
-	   variable res: ReorderBufferArray := content;
-	   variable ptr1, ptr2,  iv: SmallNumber := (others => '0');
-	   variable newInsState: InstructionState := DEFAULT_INSTRUCTION_STATE;
-	begin
-       -- Clear unused fields for better synthesis
-       if CLEAR_DEBUG_INFO then
-           for j in 0 to ROB_SIZE-1 loop
-               for i in 0 to PIPE_WIDTH-1 loop
-                   -- controlInfo survives here, other useful data is stored in separate mem array because the rest is immutable
-                   newInsState := res(j).ops(i).ins;
-                   res(j).ops(i).ins := DEFAULT_INSTRUCTION_STATE;
-                   res(j).ops(i).ins.controlInfo := newInsState.controlInfo;
-                        -- CAREFUL: info aobut stores needed for StoreQueue
-                        res(j).ops(i).ins.classInfo.secCluster := newInsState.classInfo.secCluster;
-                        res(j).ops(i).ins.classInfo.useLQ := newInsState.classInfo.useLQ;
-               end loop;
-
-                   newInsState := res(j).special.ins;
-                   res(j).special.ins.controlInfo := newInsState.controlInfo;
-                   res(j).special.ins.specificOperation := newInsState.specificOperation;                          
-           end loop;
-       end if;
-	   
-	   return res;
-	end function;
-	
-	function getNextRobContent(content: ReorderBufferArray;
-	                           newGroup: InstructionSlotArray;
-	                           newSpecialAction: InstructionSlot;
-	                           execInfo1, execInfo2: InstructionSlotArray;
-	                           sends, receiving, execEvent, lateEventSignal: std_logic;
-	                           startPtr, endPtr, causingPtr: SmallNumber)
-	return ReorderBufferArray is
-	   variable res: ReorderBufferArray := content;
-	   variable ptr1, ptr2,  iv: SmallNumber := (others => '0');
-	   variable newInsState: InstructionState := DEFAULT_INSTRUCTION_STATE;
-	begin
-	   
-	   -- Input
-	   if receiving = '1' then
-	       res(slv2u(endPtr)).ops := newGroup;
-	       res(slv2u(endPtr)).special := newSpecialAction;  
-	   end if;
-	   
-	   -- Update
-	   for i in 0 to ROB_SIZE-1 loop
-	       iv := i2slv(i, SMALL_NUMBER_SIZE);
-	       
-	       -- Update group!
-	       -- NOTE: tag comparison for slot will be simplified because tag bits directly show ROB slot:
-	       --          [ upper bits | ROB slot | index in group]
-	       --            (getTagHighSN([tag]) and PTR_MASK) == iv ?
-	       --             getTagLowSN == [group index] ? // this is within updateOpGroup  
-	       for j in 0 to 3 loop
-	           ptr1 := getTagHighSN(execInfo1(j).ins.tags.renameIndex) and PTR_MASK_SN;
-	           if ptr1 = iv then
-	               res(i).ops := updateOpGroup(res(i).ops, execInfo1(j), 0, j = 2); -- [2] is Mem subpipe
-	               res(i).ops := updateOpGroupCompleted(res(i).ops, execInfo1(j), 0, j = 2); -- [2] is Mem subpipe	               
-	           end if;
-	           
-               ptr2 := getTagHighSN(execInfo2(j).ins.tags.renameIndex) and PTR_MASK_SN;	           
-	           if ptr2 = iv then
-	               res(i).ops := updateOpGroup(res(i).ops, execInfo2(j), 1, false);
-	               res(i).ops := updateOpGroupCompleted(res(i).ops, execInfo2(j), 1, false);	               
-	           end if;
-	       end loop;
-
-	   end loop;
-
-       -- Clear unused fields for better synthesis
-       if CLEAR_DEBUG_INFO then
-           for j in 0 to ROB_SIZE-1 loop
-               for i in 0 to PIPE_WIDTH-1 loop
-                   -- controlInfo survives here, other useful data is stored in separate mem array because the rest is immutable
-                   newInsState := res(j).ops(i).ins;
-                   res(j).ops(i).ins := DEFAULT_INSTRUCTION_STATE;
-                   res(j).ops(i).ins.controlInfo := newInsState.controlInfo;
-                   
-                     res(j).ops(i).ins.controlInfo.frontBranch := '0';
-                     res(j).ops(i).ins.controlInfo.ignored := '0';
-                   
-                        -- CAREFUL: info aobut stores needed for StoreQueue
-                        res(j).ops(i).ins.classInfo.secCluster := newInsState.classInfo.secCluster;
-                        res(j).ops(i).ins.classInfo.useLQ := newInsState.classInfo.useLQ;
-                        res(j).ops(i).ins.classInfo.branchIns := newInsState.classInfo.branchIns;
-               end loop;
-
-                   newInsState := res(j).special.ins;
-                   res(j).special.ins.controlInfo := newInsState.controlInfo;
-                   res(j).special.ins.specificOperation := newInsState.specificOperation;                          
-           end loop;
-       end if;
-	   
-	   return res;
-	end function;
-	
-	function replaceConstantInformation(insVec: InstructionSlotArray; constInfo, constInfo2, constInfo3: Word) return InstructionSlotArray is
-	   variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-	begin
-	   if CLEAR_DEBUG_INFO then
-           for i in 0 to PIPE_WIDTH-1 loop
-	           res(i).ins := DEFAULT_INSTRUCTION_STATE;
-	           res(i).ins.controlInfo := insVec(i).ins.controlInfo;
-	               res(i).ins.classInfo.secCluster := insVec(i).ins.classInfo.secCluster;
-	               res(i).ins.classInfo.useLQ := insVec(i).ins.classInfo.useLQ;
-	               res(i).ins.classInfo.branchIns := insVec(i).ins.classInfo.branchIns;
-	       end loop;       
-	   end if;
-	
-	   for i in 0 to PIPE_WIDTH-1 loop
-	       res(i).ins.physicalArgSpec.dest := constInfo(8*i + 7 downto 8*i);
-	       res(i).ins.virtualArgSpec.dest := "000" & constInfo2(5*i + 4 downto 5*i);
-	       
-	       res(i).ins.virtualArgSpec.intDestSel := constInfo3(4 + i);
-	       res(i).ins.virtualArgSpec.floatDestSel := constInfo3(0 + i);
-	       
-	       --res(i).ins.physicalArgSpec.intDestSel := constInfo3(4 + i);
-	       --res(i).ins.physicalArgSpec.floatDestSel := constInfo3(0 + i);
-	              
-	   end loop;
-	   
-	   return res;
-	end function;
-	
-	function replaceConstantInformationSpecial(special: InstructionSlot; constInfo: Word) return InstructionSlot is
-	   variable res: InstructionSlot := special;
-	   variable num: natural := 0;
-	begin
-	   num := slv2u(constInfo(SYS_OP_SIZE - 1 + 16 downto 16));	   
-	   
-	   res.ins.specificOperation.subpipe := None;
-	   res.ins.specificOperation.system := SysOp'val(num); 
-	   
-	   if CLEAR_DEBUG_INFO then
-	       res.full := '0';
-	       res.ins := DEFAULT_INS_STATE;
-	       --res.ins.controlInfo := special.ins.controlInfo;
-	       res.ins.specificOperation.subpipe := None;
-	       res.ins.specificOperation.system := SysOp'val(num);
-	           res.ins.specificOperation.bits := --sop(None, res.ins.specificOperation.system).bits;
-	                                              constInfo(SYS_OP_SIZE - 1 + 16 downto 16); 
-	   end if;
-	   
-	   return res;
-	end function;
-
-    
 end package body;
