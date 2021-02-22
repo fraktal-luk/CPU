@@ -84,13 +84,27 @@ architecture Behavioral of StoreQueue is
 
     signal storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
     signal drainValue, selectedValue: Mword := (others => '0');
-    signal drainData: InstructionState := DEFAULT_INSTRUCTION_STATE;
+    signal drainData, drainDataUpdated, selectedDataUpdated: InstructionState := DEFAULT_INSTRUCTION_STATE;
               
     signal isFull, isAlmostFull, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDraining, isDrainingPrev: std_logic := '0';
     signal memEmpty: std_logic := '1'; -- CAREFUL! Starts with '1'
 
-    signal ch0, ch1, ch2, ch3: std_logic := '0';
+    signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
 
+
+
+            function TMP_clearOutputDebug(ins: InstructionState) return InstructionState is
+                variable res: InstructionState := ins;
+            begin
+                if CLEAR_DEBUG_INFO then                    
+                    res.classInfo := DEFAULT_CLASS_INFO;
+                    res.constantArgs := DEFAULT_CONSTANT_ARGS;
+                    res.virtualArgSpec := DEFAULT_ARG_SPEC;
+                    res.physicalArgSpec := DEFAULT_ARG_SPEC;
+                    
+                end if;
+                return res;
+            end function;
 
     function getMatchedAddresses(content: InstructionStateArray; cmpIns: InstructionSlot) return std_logic_vector is
         variable res: std_logic_vector(0 to content'length-1) := (others => '0');
@@ -361,7 +375,14 @@ architecture Behavioral of StoreQueue is
                 exit;
             end if;
         end loop;
-
+        
+        if CLEAR_DEBUG_INFO then
+            res.ins.classInfo := DEFAULT_CLASS_INFO;
+            res.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
+            res.ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+            res.ins.physicalArgSpec := DEFAULT_ARG_SPEC;
+        end if;
+        
         return res;
     end function;
 
@@ -627,12 +648,43 @@ begin
                 end loop;
                 return res;
             end function;
+
+
+            function getDrainOutput_T(elem: QueueEntry) return InstructionState is
+                variable res: InstructionState := DEFAULT_INS_STATE;
+            begin
+                for i in 0 to QUEUE_SIZE-1 loop
+                    if elem.isSysOp = '1' then
+                        res.specificOperation := sop(None, opStoreSys);
+                    else
+                        res.specificOperation := sop(None, opStore);                        
+                    end if;
+                    
+                    res.controlInfo.newEvent := elem.hasEvent; 
+                    
+                    res.controlInfo.firstBr := elem.first ;
+                    res.controlInfo.completed := elem.completedA;
+                    res.controlInfo.completed2 := elem.completedV;
+                    
+                    res.target := elem.address;
+                    res.result := elem.value;
+                    
+                end loop;
+                return res;
+            end function;
+
+
             
          signal selectedEntry, drainEntry: QueueEntry;
          signal isSelected: std_logic := '0';
+         
+         signal drain_T, selected_T: InstructionState := DEFAULT_INS_STATE;
     begin
         adrMatchVec<= getAddressMatching(queueContent, compareAddressInput.ins.result) and getAddressCompleted(queueContent) and getWhichMemOp(queueContent); 
 --        Indicate match in SQ only  when isLoadMemOp(compareAddressInput.ins) = '1'
+        
+            drain_T <= getDrainOutput_T(drainEntry);
+            selected_T <= getDrainOutput_T(selectedEntry);
         
             queueContent_T <= getQueueContent_T(content);
         
@@ -640,6 +692,11 @@ begin
                ch1 <= bool2std(selectedValue = selectedEntry.value or selectedDataOutputSig.full = '0');
                ch2 <= bool2std(isStoreMemOp(drainData) = not drainEntry.isSysOp or isDrainingPrev = '0');
                ch3 <= bool2std((drainValue = drainEntry.value and drainData.target = drainEntry.address) or isDrainingPrev = '0');
+
+
+               chi <= bool2std(drain_T = drainDataUpdated or (isDrainingPrev) = '0');
+               chii <= bool2std(selected_T = selectedDataUpdated or selectedDataOutputSig.full = '0');
+
         
         process (clk)
         begin
@@ -884,15 +941,18 @@ begin
 
     renamedPtr <= pRenamed;
 
-
-	selectedDataOutput <= (selectedDataOutputSig.full, setInstructionResult(selectedDataOutputSig.ins, selectedValue)) when not IS_LOAD_QUEUE
+	     selectedDataUpdated <= TMP_clearOutputDebug(setInstructionResult(selectedDataOutputSig.ins, selectedValue));
+	selectedDataOutput <= (selectedDataOutputSig.full, selectedDataUpdated) when not IS_LOAD_QUEUE
 	               else    selectedDataOutputSig;
 	
 	committedEmpty <= bool2std(pStart = pDrainPrev);
 	committedSending <= isDrainingPrev;
 	                       
+	                       
+	                       
+	     drainDataUpdated <= TMP_clearOutputDebug(setInstructionResult(drainData, drainValue));
 	committedDataOut(1 to PIPE_WIDTH-1) <= (others => DEFAULT_INSTRUCTION_SLOT);
-	committedDataOut(0) <= (isDrainingPrev and allowDrain, setInstructionResult(drainData, drainValue));
+	committedDataOut(0) <= (isDrainingPrev and allowDrain, drainDataUpdated);
 	               	               
 	VIEW: if VIEW_ON generate
        use work.Viewing.all;
