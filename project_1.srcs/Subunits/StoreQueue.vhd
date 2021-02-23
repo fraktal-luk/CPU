@@ -541,7 +541,12 @@ begin
 
         procedure updateElemOnInput(signal content: inout QueueData; ind: natural; isl: InstructionSlot) is
         begin
-            content(ind).isSysOp <= isStoreSysOp(isl.ins);        
+            if not IS_LOAD_QUEUE then
+                content(ind).isSysOp <= isStoreSysOp(isl.ins);
+            else
+                content(ind).isSysOp <= isLoadSysOp(isl.ins);                
+            end if;
+            
             content(ind).first <= '0'; -- TMP
             content(ind).hasEvent <= '0';
 
@@ -576,10 +581,21 @@ begin
 
         
         procedure updateAddress(signal content: inout QueueData; isl: InstructionSlot) is
-            constant indV: SmallNumber := isl.ins.tags.sqPointer and PTR_MASK_SN;
-            constant ind: natural := slv2u(indV);
+            variable indV: SmallNumber;
+            variable ind: natural;
+            variable allow: std_logic;
         begin
-            if isStoreOp(isl.ins) = '1' then
+            if not IS_LOAD_QUEUE then
+                indV := isl.ins.tags.sqPointer and PTR_MASK_SN;
+                allow := isStoreOp(isl.ins);           
+            else
+                indV := isl.ins.tags.lqPointer and PTR_MASK_SN;
+                allow := isLoadOp(isl.ins);
+            end if;
+            
+            ind := slv2u(indV);
+            
+            if allow = '1' then
                 content(ind).completedA <= '1';
                 content(ind).address <= isl.ins.result;
             end if;        
@@ -688,6 +704,7 @@ begin
         
             queueContent_T <= getQueueContent_T(content);
         
+        IF_SQ: if not IS_LOAD_QUEUE generate
                ch0 <= bool2std(selectedDataOutputSig.full = isSelected);
                ch1 <= bool2std(selectedValue = selectedEntry.value or selectedDataOutputSig.full = '0');
                ch2 <= bool2std(isStoreMemOp(drainData) = not drainEntry.isSysOp or isDrainingPrev = '0');
@@ -696,7 +713,18 @@ begin
 
                chi <= bool2std(drain_T = drainDataUpdated or (isDrainingPrev) = '0');
                chii <= bool2std(selected_T = selectedDataUpdated or selectedDataOutputSig.full = '0');
+        end generate;
 
+        IF_LQ: if IS_LOAD_QUEUE generate
+               ch0 <= bool2std(selectedDataOutputSig.full = isSelected);
+               ch1 <= '1';--bool2std(selectedValue = selectedEntry.value or selectedDataOutputSig.full = '0');
+               ch2 <= '1';--bool2std(isStoreMemOp(drainData) = not drainEntry.isSysOp or isDrainingPrev = '0');
+               ch3 <= '1';--bool2std((drainValue = drainEntry.value and drainData.target = drainEntry.address) or isDrainingPrev = '0');
+
+
+               chi <= '1';--bool2std(drain_T = drainDataUpdated or (isDrainingPrev) = '0');
+               chii <= '1';--bool2std(selected_T = selectedDataUpdated or selectedDataOutputSig.full = '0');
+        end generate;
         
         process (clk)
         begin
@@ -709,12 +737,19 @@ begin
                     updateAddress(queueContent, compareAddressInput);
                 end if;
                 
-                if storeValueInput.full = '1' then
+                if storeValueInput.full = '1' and not IS_LOAD_QUEUE then
                     updateValue(queueContent, storeValueInput);
                 end if;                               
                 
                 selectedEntry <= queueContent(slv2u(pSelect));
-                isSelected <= compareAddressInput.full and isLoadMemOp(compareAddressInput.ins) and isNonzero(olderSQ);
+                
+                
+                    -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
+                if not IS_LOAD_QUEUE then
+                    isSelected <= compareAddressInput.full and isLoadMemOp(compareAddressInput.ins) and isNonzero(olderSQ);
+                else
+                    isSelected <= compareAddressInput.full and isStoreMemOp(compareAddressInput.ins) and isNonzero(newerLQ);
+                end if;
                 
                 drainEntry <= queueContent(slv2u(pDrain));
             end if;
@@ -943,7 +978,8 @@ begin
 
 	     selectedDataUpdated <= TMP_clearOutputDebug(setInstructionResult(selectedDataOutputSig.ins, selectedValue));
 	selectedDataOutput <= (selectedDataOutputSig.full, selectedDataUpdated) when not IS_LOAD_QUEUE
-	               else    selectedDataOutputSig;
+	               else    --selectedDataOutputSig;
+	                      (selectedDataOutputSig.full, DEFAULT_INS_STATE);
 	
 	committedEmpty <= bool2std(pStart = pDrainPrev);
 	committedSending <= isDrainingPrev;
