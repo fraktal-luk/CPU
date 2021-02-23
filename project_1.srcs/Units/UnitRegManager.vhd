@@ -129,8 +129,8 @@ architecture Behavioral of UnitRegManager is
             
                 res(i).ins.tags.bqPointer := bqPointer;
             
-                res(i).ins.tags.sqPointer := addIntTrunc(sqPointer, countOnes(stores(0 to i-1)), SQ_PTR_SIZE);
-                res(i).ins.tags.lqPointer := addIntTrunc(lqPointer, countOnes(loads(0 to i-1)), LQ_PTR_SIZE);
+                res(i).ins.tags.sqPointer := addIntTrunc(sqPointer, countOnes(stores(0 to i-1)), SQ_PTR_SIZE + 1);
+                res(i).ins.tags.lqPointer := addIntTrunc(lqPointer, countOnes(loads(0 to i-1)), LQ_PTR_SIZE + 1);
             
             if TMP_PARAM_COMPRESS_PTRS then -- replace every except slot 0 with offset from slot 0
                 if i > 0 then

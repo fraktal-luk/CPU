@@ -77,8 +77,13 @@ architecture Behavioral of StoreQueue is
 
 	signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	
-	signal pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pTagged,  pFlush, storePtr, pSelect, pRenamed, pRenamedNext,
-	       pStartEffective, pStartEffectiveNext, causingPtr: SmallNumber := (others => '0');	
+	signal pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pTagged, pTaggedNext, pFlush, storePtr, pSelect, pRenamed, pRenamedNext,
+	       pStartEffective, pStartEffectiveNext, 
+
+           pStartLong, pStartLongNext, pDrainLong, pDrainLongNext, pDrainLongPrev, pTaggedLong, pTaggedLongNext, pFlushLong, pRenamedLong, pRenamedLongNext,
+	       pStartLongEffective, pStartLongEffectiveNext,
+	       	       
+	       causingPtr: SmallNumber := (others => '0');	
 	signal nFull, nFullNext, nFullRestored, nIn, nOut, nCommitted, nCommittedEffective, nInRe: SmallNumber := (others => '0');
 	signal recoveryCounter: SmallNumber := (others => '0');
 
@@ -134,11 +139,11 @@ architecture Behavioral of StoreQueue is
 	    constant IS_LOAD_OP: boolean := std2bool(isLoadOp(storeAddressInput.ins));
     begin
         if isLQ then
-            aPtr := storeAddressInput.ins.tags.lqPointer;
-            vPtr := storeValueInput.ins.tags.lqPointer;
+            aPtr := storeAddressInput.ins.tags.lqPointer and PTR_MASK_SN;
+            vPtr := storeValueInput.ins.tags.lqPointer and PTR_MASK_SN;
         else          
-            aPtr := storeAddressInput.ins.tags.sqPointer;
-            vPtr := storeValueInput.ins.tags.sqPointer;
+            aPtr := storeAddressInput.ins.tags.sqPointer and PTR_MASK_SN;
+            vPtr := storeValueInput.ins.tags.sqPointer and PTR_MASK_SN;
         end if;
     
         for i in 0 to QUEUE_SIZE-1 loop
@@ -247,10 +252,11 @@ architecture Behavioral of StoreQueue is
 	end function;
 
 
-        function TMP_cmpIndexBefore(pStart, pEnd, index: SmallNumber)
+        function TMP_cmpIndexBefore(pStart, pEnd, cmpIndex: SmallNumber)
         return std_logic_vector is
             variable res: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
-            variable iv: SmallNumber := (others => '0'); 
+            variable iv: SmallNumber := (others => '0');
+            constant index: SmallNumber := cmpIndex and PTR_MASK_SN;            
         begin
             -- A) if index > start then i >= start && i < index
             -- B) if index < start then i >= start || i < index
@@ -269,10 +275,11 @@ architecture Behavioral of StoreQueue is
             return res;
         end function;
 
-        function TMP_cmpIndexAfter(pStart, pEnd, index: SmallNumber)
+        function TMP_cmpIndexAfter(pStart, pEnd, cmpIndex: SmallNumber)
         return std_logic_vector is
             variable res: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
-            variable iv: SmallNumber := (others => '0'); 
+            variable iv: SmallNumber := (others => '0');
+            constant index: SmallNumber := cmpIndex and PTR_MASK_SN;
         begin
             -- A) if index > end then i < end || i => index
             -- B) if index < end then i < end && i => index
@@ -558,7 +565,7 @@ begin
         procedure updateOnInput(signal content: inout QueueData; ptr: SmallNumber; insVec: InstructionSlotArray) is
             variable queueInds, inputRevInds: IntArray(insVec'range);
             variable inputInds: IntArray(insVec'range) := (others => insVec'length);
-            variable tmpPtr: SmallNumber := ptr;
+            variable tmpPtr: SmallNumber := ptr and PTR_MASK_SN;
             --variable compressedInds
             constant fullMask: std_logic_vector(insVec'range) := extractFullMask(insVec);
         begin
@@ -759,7 +766,7 @@ begin
     end block;
 
 
-    causingPtr <= getCausingPtr(content, execCausing);
+    --causingPtr <= getCausingPtr(content, execCausing);
 
 
    --CAREFUL: this is only for SQ
@@ -768,12 +775,6 @@ begin
     nCommitted <= getNumCommitted(robData, IS_LOAD_QUEUE);
     nCommittedEffective <= getNumCommittedEffective(robData, IS_LOAD_QUEUE);
 
-    pStartEffectiveNext <= addTruncZ(pStartEffective, nCommittedEffective, QUEUE_PTR_SIZE) when committing = '1'
-                        else pStartNext when nowCancelled = '1' and drainEqual = '1'
-                        else pStartEffective;
-    pDrainNext <= addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE) when drainReq = '1' else pDrain;
-    pStartNext <= addTruncZ(pStart, nCommitted, QUEUE_PTR_SIZE) when committing = '1' else pStart; --pStartNewNext;        
-    	
 	contentNext <=
 				getNewContentSQ(content, dataIn,
 				                prevSending,
@@ -782,16 +783,51 @@ begin
 				                compareAddressInput,
 				                IS_LOAD_QUEUE, newerLQ);
 
+
+    pStartEffectiveNext <= addTruncZ(pStartEffective, nCommittedEffective, QUEUE_PTR_SIZE) when committing = '1'
+                        else pStartNext when nowCancelled = '1' and drainEqual = '1'
+                        else pStartEffective;
+    pDrainNext <= addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE) when drainReq = '1' else pDrain;
+    pStartNext <= addTruncZ(pStart, nCommitted, QUEUE_PTR_SIZE) when committing = '1' else pStart; --pStartNewNext;        
+
+    pTaggedNext <= pStartNext when lateEventSignal = '1'
+            else   pFlush when execEventSignal = '1' 
+            else   addIntTrunc(pTagged, countOnes(extractFullMask(dataIn)), QUEUE_PTR_SIZE) when prevSending = '1'
+            else   pTagged;
+                
     pRenamedNext <= pStart when lateEventSignal = '1'
             else       pFlush when execEventSignal = '1'
             else       addIntTrunc(pRenamed, slv2u(nInRe), QUEUE_PTR_SIZE) when prevSendingRe = '1'
             else       pRenamed;
 
 
-    pFlush <=   execCausing.tags.lqPointer when IS_LOAD_QUEUE
-           else execCausing.tags.sqPointer;
+        pStartLongEffectiveNext <= addTruncZ(pStartLongEffective, nCommittedEffective, QUEUE_PTR_SIZE+1) when committing = '1'
+                            else pStartLongNext when nowCancelled = '1' and drainEqual = '1'
+                            else pStartLongEffective;
+        pDrainLongNext <= addIntTrunc(pDrainLong, 1, QUEUE_PTR_SIZE+1) when drainReq = '1' else pDrain;
+        pStartLongNext <= addTruncZ(pStartLong, nCommitted, QUEUE_PTR_SIZE+1) when committing = '1' else pStart; --pStartNewNext;        
+
+        pTaggedLongNext <= pStartLongNext when lateEventSignal = '1'
+                else   pFlushLong when execEventSignal = '1' 
+                else   addIntTrunc(pTaggedLong, countOnes(extractFullMask(dataIn)), QUEUE_PTR_SIZE+1) when prevSending = '1'
+                else   pTaggedLong;
+                                
+        pRenamedLongNext <= pStartLong when lateEventSignal = '1'
+                else       pFlushLong when execEventSignal = '1'
+                else       addIntTrunc(pRenamedLong, slv2u(nInRe), QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
+                else       pRenamedLong;
+
+
+
+
+    pFlush <=   execCausing.tags.lqPointer and PTR_MASK_SN when IS_LOAD_QUEUE
+           else execCausing.tags.sqPointer and PTR_MASK_SN;
+    
+        pFlushLong <=   execCausing.tags.lqPointer when IS_LOAD_QUEUE
+               else execCausing.tags.sqPointer;
+
  
-    storePtr <= storeValueInput.ins.tags.sqPointer;
+    storePtr <= storeValueInput.ins.tags.sqPointer and PTR_MASK_SN;
     drainReq <= not drainEqual;
 
 
@@ -851,16 +887,28 @@ begin
                     pStart <= pStartNext;
                     pStartEffective <= pStartEffectiveNext;
 
-                
-                    if lateEventSignal = '1' then
-                        pTagged <= pStartNext;
-                    elsif execEventSignal = '1' then
-                       pTagged <= pFlush;
-                    elsif prevSending = '1' then -- + N
-                        pTagged <= addIntTrunc(pTagged, countOnes(extractFullMask(dataIn)), QUEUE_PTR_SIZE);
-                    end if;
-                    
+                    pTagged <= pTaggedNext;                    
                     pRenamed <= pRenamedNext;
+                    
+
+                        pDrainLong <= pDrainLongNext;
+                        pDrainLongPrev <= pDrainLong;
+    
+                        pStartLong <= pStartLongNext;
+                        pStartLongEffective <= pStartLongEffectiveNext;
+    
+                        pTaggedLong <= pTaggedLongNext;
+                        pRenamedLong <= pRenamedLongNext;
+                
+--                    if lateEventSignal = '1' then
+--                        pTagged <= pStartNext;
+--                    elsif execEventSignal = '1' then
+--                       pTagged <= pFlush;
+--                    elsif prevSending = '1' then -- + N
+--                        pTagged <= addIntTrunc(pTagged, countOnes(extractFullMask(dataIn)), QUEUE_PTR_SIZE);
+--                    end if;
+                    
+
 
             
 		      
