@@ -65,7 +65,7 @@ architecture Behavioral of Core is
                 canSendFront, canSendRename, canSendBuff: std_logic := '0';
 
     --        signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
-    signal frontDataLastLiving, 
+    signal frontDataLastLiving, TMP_frontDataSpMasked,
             renamedDataLivingFloatPre, renamedDataMerged, renamedDataLivingMem, renamedDataLivingRe, renamedDataLivingFloatRe,
             renamedDataLivingReMem, renamedDataLivingMemBuff, renamedDataLivingBuff, dispatchBufferDataInt,-- dispatchBufferDataFloat,
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData: 
@@ -222,6 +222,8 @@ begin
         renameAccepting => renameAccepting, -- to frontend
         frontLastSending => frontLastSending,
         frontDataLastLiving => frontDataLastLiving,
+        
+            TMP_spMaskedDataOut => TMP_frontDataSpMasked,
         
         nextAccepting => canSendRename,
         
@@ -1630,7 +1632,8 @@ begin
 	       prevSendingRe => frontLastSending,
 		prevSending => renamedSendingBuff,
 		
-		   dataInRe => frontDataLastLiving,
+		   dataInRe => --frontDataLastLiving,
+		                  TMP_frontDataSpMasked,
 		dataIn => renamedDataToSQ, -- !!!!!
             
             renamedPtr => sqPointer,
@@ -1678,7 +1681,8 @@ begin
 	       prevSendingRe => frontLastSending,				
 		prevSending => renamedSendingBuff,
 		
-		   dataInRe => frontDataLastLiving,		
+		   dataInRe => --frontDataLastLiving,
+		                  	TMP_frontDataSpMasked,
 		dataIn => renamedDataToLQ, -- !!!!!
 
             renamedPtr => lqPointer,

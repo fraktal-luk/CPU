@@ -24,6 +24,8 @@ port(
     renameAccepting: out std_logic;
     frontLastSending: in std_logic;
     frontDataLastLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+        
+        TMP_spMaskedDataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     
     renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     renamedDataLivingFloat: out InstructionSlotArray(0 to PIPE_WIDTH-1);    
@@ -590,4 +592,9 @@ begin
     renamedSending <= renamedSendingSig;   
     
          renamingBr <= frontLastSending and frontDataLastLiving(0).ins.controlInfo.firstBr;
+         
+         TMP_MASKED_OUT: for i in 0 to PIPE_WIDTH-1 generate
+            TMP_spMaskedDataOut(i) <= (renamedBase(i).full, frontDataLastLiving(i).ins);
+         end generate;
+         
 end Behavioral;
