@@ -71,7 +71,8 @@ architecture Behavioral of StoreQueue is
 
 	signal content, contentNext: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INSTRUCTION_STATE);
 	
-	signal addressMatchMask, newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+	signal addressMatchMask, newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ,
+	                         newerLQ_L, olderSQ_L, newerRegLQ_L, olderRegSQ_L, newerNextLQ_L, olderNextSQ_L  : std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 	                           --newerLQ_T, olderSQ_T, newerRegLQ_T, olderRegSQ_T, 
 	                          -- newerNextLQ_T, olderNextSQ_T
 
@@ -298,6 +299,63 @@ architecture Behavioral of StoreQueue is
             end loop;
             return res;
         end function;
+
+
+
+        
+                function TMP_cmpIndexBefore_L(pStartLong, pEndLong, cmpIndexLong: SmallNumber)
+                return std_logic_vector is
+                    variable res: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+                    variable iv: SmallNumber := (others => '0');
+                    constant index: SmallNumber := cmpIndexLong and PTR_MASK_SN;
+                    constant pStart: SmallNumber := pStartLong and PTR_MASK_SN;
+                    constant pEnd: SmallNumber := pEndLong and PTR_MASK_SN;
+                    constant sign: std_logic := pStartLong(QUEUE_PTR_SIZE) xor cmpIndexLong(QUEUE_PTR_SIZE);             
+                begin
+                    -- A) if index > start then i >= start && i < index
+                    -- B) if index < start then i >= start || i < index
+                    -- C) if index = start then none -> can be coalesced into A):
+                    -- A') if index >= start then i >= start && i < index    =>    i >= start && i < start   =>   i empty
+                
+                    for i in 0 to res'length-1 loop
+                        iv := i2slv(i, SMALL_NUMBER_SIZE);
+                        if sign = '0' then --cmpGeU(index, pStart) = '1' then
+                            res(i) := cmpGeU(iv, pStart) and cmpLtU(iv, index);
+                        else
+                            res(i) := cmpGeU(iv, pStart) or cmpLtU(iv, index);
+                        end if;
+                        --res(i) := compareTagBefore(content(i).tags.renameIndex, tag); -- If grTag < tag then diff(high) = '1'
+                    end loop;
+                    return res;
+                end function;
+        
+                function TMP_cmpIndexAfter_L(pStartLong, pEndLong, cmpIndexLong: SmallNumber)
+                return std_logic_vector is
+                    variable res: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+                    variable iv: SmallNumber := (others => '0');
+                    constant index: SmallNumber := cmpIndexLong and PTR_MASK_SN;
+                    constant pStart: SmallNumber := pStartLong and PTR_MASK_SN;
+                    constant pEnd: SmallNumber := pEndLong and PTR_MASK_SN;
+                    constant sign: std_logic := pEndLong(QUEUE_PTR_SIZE) xor cmpIndexLong(QUEUE_PTR_SIZE);                     
+                begin
+                    -- A) if index > end then i < end || i => index
+                    -- B) if index < end then i < end && i => index
+                    -- C) if index = end then all (because in this case start = end and queue is full; otherwise index = end wouldn't be possible)
+                    --           -> can be coalesced into A):
+                    -- A') if index >= end then i < end || i => index    =>    i < end || i => end   =>   i all
+                
+                    for i in 0 to res'length-1 loop
+                        iv := i2slv(i, SMALL_NUMBER_SIZE);
+                        if sign = '1' then
+                            res(i) := cmpLtU(iv, pEnd) or cmpGeU(iv, index);
+                        else
+                            res(i) := cmpLtU(iv, pEnd) and cmpGeU(iv, index);
+                        end if;
+                        --res(i) := compareTagBefore(content(i).tags.renameIndex, tag); -- If grTag < tag then diff(high) = '1'
+                    end loop;
+                    return res;
+                end function;
+
 
 
     
@@ -753,9 +811,9 @@ begin
                 
                     -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
                 if not IS_LOAD_QUEUE then
-                    isSelected <= compareAddressInput.full and isLoadMemOp(compareAddressInput.ins) and isNonzero(olderSQ);
+                    isSelected <= compareAddressInput.full and isLoadMemOp(compareAddressInput.ins) and isNonzero(olderSQ_L);
                 else
-                    isSelected <= compareAddressInput.full and isStoreMemOp(compareAddressInput.ins) and isNonzero(newerLQ);
+                    isSelected <= compareAddressInput.full and isStoreMemOp(compareAddressInput.ins) and isNonzero(newerLQ_L);
                 end if;
                 
                 drainEntry <= queueContent(slv2u(pDrain));
@@ -805,7 +863,7 @@ begin
                             else pStartLongNext when nowCancelled = '1' and drainEqual = '1'
                             else pStartLongEffective;
         pDrainLongNext <= addIntTrunc(pDrainLong, 1, QUEUE_PTR_SIZE+1) when drainReq = '1' else pDrain;
-        pStartLongNext <= addTruncZ(pStartLong, nCommitted, QUEUE_PTR_SIZE+1) when committing = '1' else pStart; --pStartNewNext;        
+        pStartLongNext <= addTruncZ(pStartLong, nCommitted, QUEUE_PTR_SIZE+1) when committing = '1' else pStartLong; --pStartNewNext;        
 
         pTaggedLongNext <= pStartLongNext when lateEventSignal = '1'
                 else   pFlushLong when execEventSignal = '1' 
@@ -834,12 +892,22 @@ begin
     ADR_FORW: block
     begin
 	    newerNextLQ <= TMP_cmpIndexAfter(pStart, pTagged, compareIndexInput);
-	    olderNextSQ <= TMP_cmpIndexBefore(pStart, pTagged, compareIndexInput);
+	    olderNextSQ <= TMP_cmpIndexBefore(pDrainPrev, pTagged, compareIndexInput); -- ERROR? Why not pDrainPrev?
+
+            newerNextLQ_L <= TMP_cmpIndexAfter_L(pStartLong, pTaggedLong, compareIndexInput);
+            olderNextSQ_L <= TMP_cmpIndexBefore_L(pDrainLongPrev, pTaggedLong, compareIndexInput);
+
                 
         newerLQ <=     newerRegLQ and addressMatchMask and whichAddressCompleted(content) when isStoreMemOp(compareAddressInput.ins) = '1'
                   else (others => '0'); -- Only those with known address
         olderSQ <=     olderRegSQ and addressMatchMask and whichAddressCompleted(content) when isLoadMemOp(compareAddressInput.ins) = '1'
                   else (others => '0'); -- Only those with known address
+
+
+            newerLQ_L <=     newerRegLQ_L and addressMatchMask and whichAddressCompleted(content) when isStoreMemOp(compareAddressInput.ins) = '1'
+                      else (others => '0'); -- Only those with known address
+            olderSQ_L <=     olderRegSQ_L and addressMatchMask and whichAddressCompleted(content) when isLoadMemOp(compareAddressInput.ins) = '1'
+                      else (others => '0'); -- Only those with known address
     
         addressMatchMask <= getMatchedAddresses(content, compareAddressInput);
 
@@ -858,7 +926,10 @@ begin
                 if rising_edge(clk) then                
                     newerRegLQ <= newerNextLQ;
                     olderRegSQ <= olderNextSQ;
-                    
+    
+                        newerRegLQ_L <= newerNextLQ_L;
+                        olderRegSQ_L <= olderNextSQ_L;
+                                            
         			selectedDataOutputSig <= selectedDataSlot;            
                 end if;      
          end process;              
@@ -868,12 +939,12 @@ begin
 
         
 	WHEN_LQ: if IS_LOAD_QUEUE generate	
-	   	       nInRe <= i2slv(countOnes(getLoadMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE);
+	   	       nInRe <= i2slv(countOnes(getLoadMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');
 	end generate;
 	
 	WHEN_SQ: if not IS_LOAD_QUEUE generate
 	    -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
-       	       nInRe <= i2slv(countOnes(getStoreMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE);	   	   
+       	       nInRe <= i2slv(countOnes(getStoreMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');	   	   
 	end generate;
      
      process (clk)   
@@ -1022,7 +1093,7 @@ begin
 	acceptingOut <= not isFull;
 	almostFull <= isAlmostFull;
 
-    renamedPtr <= pRenamed;
+    renamedPtr <= pRenamedLong;
 
 	     selectedDataUpdated <= TMP_clearOutputDebug(setInstructionResult(selectedDataOutputSig.ins, selectedValue));
 	selectedDataOutput <= (selectedDataOutputSig.full, selectedDataUpdated) when not IS_LOAD_QUEUE
