@@ -594,12 +594,18 @@ begin
             
         end record;
         
+        constant DEFAULT_QUEUE_ENTRY: QueueEntry := (
+            address => (others => '0'),
+            value => (others => '0'),
+            others => '0'
+        );
+        
         type QueueEntryArray is array (natural range <>) of QueueEntry;
         subtype QueueData is QueueEntryArray(0 to QUEUE_SIZE-1);
         
-        signal queueContent, queueContent_T: QueueData;
+        signal queueContent, queueContent_T: QueueData := (others => DEFAULT_QUEUE_ENTRY);
         
-        signal adrMatchVec: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+        signal adrMatchVec, av0, av1, av2: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
         
         --function getQueueInput(insVec: InstructionSlotArray) return 
         
@@ -679,7 +685,7 @@ begin
             variable res: std_logic_vector(content'range);
         begin
             for i in content'range loop
-                res(i) := '0';
+                res(i) := content(i).completedA;
             end loop;
             return res;
         end function;
@@ -761,8 +767,16 @@ begin
          
          signal drain_T, selected_T: InstructionState := DEFAULT_INS_STATE;
     begin
-        adrMatchVec<= getAddressMatching(queueContent, compareAddressInput.ins.result) and getAddressCompleted(queueContent) and getWhichMemOp(queueContent); 
+        adrMatchVec <= getAddressMatching(queueContent, compareAddressInput.ins.result) and getAddressCompleted(queueContent) and getWhichMemOp(queueContent);
+        addressMatchMask <= adrMatchVec;
+        
 --        Indicate match in SQ only  when isLoadMemOp(compareAddressInput.ins) = '1'
+
+
+        av0 <= getAddressMatching(queueContent, compareAddressInput.ins.result);
+        av1 <= getAddressCompleted(queueContent);
+        av2 <= getWhichMemOp(queueContent); 
+
         
             drain_T <= getDrainOutput_T(drainEntry);
             selected_T <= getDrainOutput_T(selectedEntry);
@@ -898,18 +912,18 @@ begin
             olderNextSQ_L <= TMP_cmpIndexBefore_L(pDrainLongPrev, pTaggedLong, compareIndexInput);
 
                 
-        newerLQ <=     newerRegLQ and addressMatchMask and whichAddressCompleted(content) when isStoreMemOp(compareAddressInput.ins) = '1'
+        newerLQ <=     newerRegLQ and addressMatchMask when isStoreMemOp(compareAddressInput.ins) = '1'
                   else (others => '0'); -- Only those with known address
-        olderSQ <=     olderRegSQ and addressMatchMask and whichAddressCompleted(content) when isLoadMemOp(compareAddressInput.ins) = '1'
+        olderSQ <=     olderRegSQ and addressMatchMask when isLoadMemOp(compareAddressInput.ins) = '1'
                   else (others => '0'); -- Only those with known address
 
 
-            newerLQ_L <=     newerRegLQ_L and addressMatchMask and whichAddressCompleted(content) when isStoreMemOp(compareAddressInput.ins) = '1'
+            newerLQ_L <=     newerRegLQ_L and addressMatchMask when isStoreMemOp(compareAddressInput.ins) = '1'
                       else (others => '0'); -- Only those with known address
-            olderSQ_L <=     olderRegSQ_L and addressMatchMask and whichAddressCompleted(content) when isLoadMemOp(compareAddressInput.ins) = '1'
+            olderSQ_L <=     olderRegSQ_L and addressMatchMask when isLoadMemOp(compareAddressInput.ins) = '1'
                       else (others => '0'); -- Only those with known address
     
-        addressMatchMask <= getMatchedAddresses(content, compareAddressInput);
+        --addressMatchMask <= getMatchedAddresses(content, compareAddressInput) and whichAddressCompleted(content);
 
         WHEN_LQ: if IS_LOAD_QUEUE generate	
            selectedDataSlot <= findOldestMatchIndex(content, newerLQ, pStart, pTagged, compareAddressInput);
