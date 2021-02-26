@@ -95,6 +95,11 @@ architecture Behavioral of StoreQueue is
     signal isFull, isAlmostFull, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDraining, isDrainingPrev: std_logic := '0';
     signal memEmpty: std_logic := '1'; -- CAREFUL! Starts with '1'
 
+
+         signal drain_T, selected_T: InstructionState := DEFAULT_INS_STATE;
+         signal isSelected: std_logic := '0';
+
+
     signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
 
 
@@ -381,7 +386,7 @@ architecture Behavioral of StoreQueue is
 
     function findNewestMatchIndex2(olderSQ: std_logic_vector; pStart, pEnd: SmallNumber)
     return SmallNumber is
-        constant LEN: integer := content'length;      
+        constant LEN: integer := QUEUE_SIZE;      
         variable tmpVec1: std_logic_vector(0 to LEN-1) := (others => '0');
         variable tmpVecExt: std_logic_vector(0 to 2*LEN-1) := (others => '0');
         
@@ -763,9 +768,7 @@ begin
 
             
          signal selectedEntry, drainEntry: QueueEntry;
-         signal isSelected: std_logic := '0';
          
-         signal drain_T, selected_T: InstructionState := DEFAULT_INS_STATE;
     begin
         adrMatchVec <= getAddressMatching(queueContent, compareAddressInput.ins.result) and getAddressCompleted(queueContent) and getWhichMemOp(queueContent);
         addressMatchMask <= adrMatchVec;
@@ -926,13 +929,13 @@ begin
         --addressMatchMask <= getMatchedAddresses(content, compareAddressInput) and whichAddressCompleted(content);
 
         WHEN_LQ: if IS_LOAD_QUEUE generate	
-           selectedDataSlot <= findOldestMatchIndex(content, newerLQ, pStart, pTagged, compareAddressInput);
+           --selectedDataSlot <= findOldestMatchIndex(content, newerLQ, pStart, pTagged, compareAddressInput);
         end generate;
         
         WHEN_SQ: if not IS_LOAD_QUEUE generate
             -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
            pSelect <=   findNewestMatchIndex2(olderSQ,  pDrainPrev, pTagged);
-           selectedDataSlot <=   findNewestMatchIndex3(content, olderSQ,  pDrainPrev, pTagged, compareAddressInput.full);       
+           --selectedDataSlot <=   findNewestMatchIndex3(content, olderSQ,  pDrainPrev, pTagged, compareAddressInput.full);       
         end generate;
             
         process (clk)
@@ -944,7 +947,7 @@ begin
                         newerRegLQ_L <= newerNextLQ_L;
                         olderRegSQ_L <= olderNextSQ_L;
                                             
-        			selectedDataOutputSig <= selectedDataSlot;            
+        			--selectedDataOutputSig <= selectedDataSlot;            
                 end if;      
          end process;              
     end block;
@@ -1002,7 +1005,7 @@ begin
 		    allowDrain <= not (nowCancelled or (not drainEqual and drainEffectiveEqual));
 
 		
-			content <= contentNext;
+			--content <= contentNext;
 		
             
             if storeValueInput.full = '1' then
@@ -1011,8 +1014,8 @@ begin
 
             
             if drainReq = '1' then
-                drainValue <= storeValues(slv2u(pDrain));
-                drainData <= content(slv2u(pDrain));
+                --drainValue <= storeValues(slv2u(pDrain));
+                --drainData <= content(slv2u(pDrain));
             end if;
             
             if true then    
@@ -1109,17 +1112,23 @@ begin
 
     renamedPtr <= pRenamedLong;
 
-	     selectedDataUpdated <= TMP_clearOutputDebug(setInstructionResult(selectedDataOutputSig.ins, selectedValue));
-	selectedDataOutput <= (selectedDataOutputSig.full, selectedDataUpdated) when not IS_LOAD_QUEUE
-	               else    --selectedDataOutputSig;
-	                      (selectedDataOutputSig.full, DEFAULT_INS_STATE);
+	     selectedDataUpdated <= --TMP_clearOutputDebug(setInstructionResult(selectedDataOutputSig.ins, selectedValue));
+	                           selected_T;
+--	selectedDataOutput <= (selectedDataOutputSig.full, selectedDataUpdated) when not IS_LOAD_QUEUE
+--	               else    --selectedDataOutputSig;
+--	                      (selectedDataOutputSig.full, DEFAULT_INS_STATE);
+        selectedDataOutput <= (isSelected, selectedDataUpdated) when not IS_LOAD_QUEUE
+                                             else    --selectedDataOutputSig;
+                              (isSelected, DEFAULT_INS_STATE);
+
 	
 	committedEmpty <= bool2std(pStart = pDrainPrev);
 	committedSending <= isDrainingPrev;
 	                       
 	                       
 	                       
-	     drainDataUpdated <= TMP_clearOutputDebug(setInstructionResult(drainData, drainValue));
+	     drainDataUpdated <= --TMP_clearOutputDebug(setInstructionResult(drainData, drainValue));
+	                           drain_T;
 	committedDataOut(1 to PIPE_WIDTH-1) <= (others => DEFAULT_INSTRUCTION_SLOT);
 	committedDataOut(0) <= (isDrainingPrev and allowDrain, drainDataUpdated);
 	               	               
