@@ -26,6 +26,7 @@ use work.PipelineGeneral.all;
 
 use work.LogicFront.all;
 
+use work.LogicIbuffer.all;
 
 entity InstructionBuffer is
 	port(
@@ -52,7 +53,8 @@ architecture Implem of InstructionBuffer is
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
     constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;    
 
-    
+
+    constant MEM_WIDTH: natural := PIPE_WIDTH * 64;    
     
     -- TODO: functions duplicated from STORE_QUEUE. To clean
     function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic is
@@ -119,6 +121,149 @@ begin
         type BufferEntryArray2D is array(0 to IBUFFER_SIZE-1, 0 to PIPE_WIDTH-1) of BufferEntry;
         
 
+
+
+        -- CAREFUL: only virtual because 5 bits per reg!
+        function serializeArgSpec(argSpec: InstructionArgSpec) return Word is
+            variable res: Word := (others => '0');
+            variable b: Byte := (others => '0');
+        begin
+            for i in 0 to 2 loop
+                b := '0' & argSpec.intArgSel(i) & argSpec.floatArgSel(i) & argSpec.args(i)(4 downto 0);
+                res(7*i + 7 downto 7*i) := b;
+            end loop;
+            
+            b := '0' & argSpec.intDestSel & argSpec.floatDestSel & argSpec.dest(4 downto 0);
+            res(28 downto 21) := b;
+            -- Bit 28 is '0' in the top byte!
+                        
+            return res;
+        end function;
+
+        function deserializeArgSpec(w: Word) return InstructionArgSpec is
+            variable res: InstructionArgSpec := DEFAULT_ARG_SPEC;
+            variable b: Byte := (others => '0');
+        begin
+            for i in 0 to 2 loop
+                b := w(7*i + 7 downto 7*i);
+                res.intArgSel(i) := b(6);
+                res.floatArgSel(i) := b(5);
+                res.args(i) := "000" & b(4 downto 0);
+            end loop;
+
+            b := w(28 downto 21);
+            res.intDestSel := b(6);
+            res.floatDestSel := b(5);
+            res.dest := "000" & b(4 downto 0);
+            return res;
+        end function;
+
+        function unfoldOp(op: SpecificOp) return SpecificOp is
+            variable res: SpecificOp := op;
+        begin          
+            case op.subpipe is
+                when ALU =>
+                    res.arith := ArithOp'val(slv2u(op.bits));
+                
+                when None =>
+                    res.system := SysOp'val(slv2u(op.bits));
+                
+                when FP =>
+                    res.float := FpOp'val(slv2u(op.bits));
+                
+                when others =>
+                    res.memory := MemOp'val(slv2u(op.bits));
+            end case;
+                    
+            return res;
+        end function;
+
+
+
+        
+        function serializeEntry(elem: BufferEntry) return Dword is
+            variable res: Dword := (others => '0');
+            
+            variable controlByte, opByte, restByte: Byte := (others => '0');
+            variable argSpecWord: Word := (others => '0');
+            --variable 
+        begin
+            
+            -- 8b
+            controlByte := elem.branchIns & elem.frontBranch & elem.confirmedBranch & elem.specialAction
+                        &  elem.fpRename  & elem.mainCluster & elem.secCluster & elem.useLQ;
+            
+            -- 8b (probably 2 unused)
+            opByte(7 downto 6) := i2slv(SubpipeType'pos(elem.specificOperation.subpipe), 2);
+            opByte(OP_VALUE_BITS-1 downto 0) := elem.specificOperation.bits;
+            
+            -- 28b
+            argSpecWord := serializeArgSpec(elem.argSpec);
+            
+            -- 4b (1 unused)
+            restByte := "0000" & '0' & elem.full & elem.firstBr & elem.constantArgs.immSel;
+            
+            res := restByte(3 downto 0) & argSpecWord(27 downto 0)
+                 & elem.constantArgs.imm(15 downto 0) & controlByte & opByte;
+            
+            return res;
+        end function;
+        
+        function serializeEntryArray(arr: BufferEntryArray) return std_logic_vector is
+            variable res: std_logic_vector(MEM_WIDTH-1 downto 0);   
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(64*i + 63 downto 64*i) := serializeEntry(arr(i));
+            end loop;
+            return res;
+        end function;
+
+
+
+        function deserializeEntry(d: Dword) return BufferEntry is
+            variable res: BufferEntry;
+            
+            constant controlByte: Byte := d(15 downto 8);
+            constant opByte: Byte := d(7 downto 0);
+            constant restByte: Byte := "0000" & d(63 downto 60);            
+            constant argSpecWord: Word := d(63 downto 32);
+        begin
+            
+            res.branchIns := controlByte(7);
+            res.frontBranch := controlByte(6);
+            res.confirmedBranch := controlByte(5);
+            res.specialAction := controlByte(4);
+            res.fpRename := controlByte(3);
+            res.mainCluster := controlByte(2);
+            res.secCluster := controlByte(1);
+            res.useLQ := controlByte(0);
+
+            res.specificOperation.subpipe := SubpipeType'val(slv2u(opByte(7 downto 6)));
+            res.specificOperation.bits := opByte(OP_VALUE_BITS-1 downto 0);
+            res.specificOperation := unfoldOp(res.specificOperation);
+            
+            res.argSpec := deserializeArgSpec(argSpecWord);
+
+            res.constantArgs.imm(31 downto 16) := (others => d(31));
+            res.constantArgs.imm(15 downto 0) := d(31 downto 16);
+            
+            res.full := restByte(2);            
+            res.firstBr := restByte(1);            
+            res.constantArgs.immSel := restByte(0);            
+            
+            return res;
+        end function;
+
+        function deserializeEntryArray(v: std_logic_vector) return BufferEntryArray is
+            variable res: BufferEntryArray;
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i) := deserializeEntry(v(64*i + 63 downto 64*i));
+            end loop;
+            return res;
+        end function;
+
+
         function getEntry(isl: InstructionSlot) return BufferEntry is
             variable res: BufferEntry;
         begin
@@ -150,28 +295,6 @@ begin
             for i in res'range loop
                 res(i) := getEntry(insVec(i));
             end loop;            
-            return res;
-        end function;
-        
-
-
-        function unfoldOp(op: SpecificOp) return SpecificOp is
-            variable res: SpecificOp := op;
-        begin          
-            case op.subpipe is
-                when ALU =>
-                    res.arith := ArithOp'val(slv2u(op.bits));
-                
-                when None =>
-                    res.system := SysOp'val(slv2u(op.bits));
-                
-                when FP =>
-                    res.float := FpOp'val(slv2u(op.bits));
-                
-                when others =>
-                    res.memory := MemOp'val(slv2u(op.bits));
-            end case;
-                    
             return res;
         end function;
 
@@ -236,9 +359,14 @@ begin
        
        signal input: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
        signal content: BufferEntryArray2D := (others => (others => DEFAULT_BUFFER_ENTRY));
-       signal output: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
+       signal output, output_D: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
        --signal output: InstructionSlotArray(0 to PIPE_WIDTH-1);
-        
+
+       
+       type SerialMemory is array(0 to IBUFFER_SIZE-1) of std_logic_vector(MEM_WIDTH-1 downto 0); 
+       
+       signal serialMemInput, serialMemOutput: std_logic_vector(MEM_WIDTH-1 downto 0) := (others => '0');
+       signal serialMem: SerialMemory := (others=> (others => '0'));
         
         signal mem: PipeStageArray(0 to 3) := (others => (others => DEFAULT_INS_SLOT));
             signal memImm: DwordArray(0 to 3) := (others => (others => '0'));
@@ -255,7 +383,7 @@ begin
         signal dataOutFull, dataOutFilling, dataOutStalled, isSending, isReading, memWriting, memReading, memBypassing, memDraining, isAccepting: std_logic := '0';
         signal memEmpty: std_logic := '1';
         
-        signal stageDataInFormatted, dataOut, dataOut_T, dataMemRead: PipeStage := (others => DEFAULT_INS_SLOT);
+        signal stageDataInFormatted, dataOut, dataOut_T, dataOut_T2, dataMemRead: PipeStage := (others => DEFAULT_INS_SLOT);
         
             signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8, ch9, cha: std_logic := '0';
         
@@ -484,6 +612,9 @@ begin
                     
             signal chWord0, chWord1: Word := (others => '0');   
     begin
+        
+    
+    
         dataOutStalled <= dataOutFull and not isSending;
         
         -- This means writing and keeping it there for later, not writing and using at the same time.
@@ -526,7 +657,9 @@ begin
            stageDataInFormatted <= formatInput(stageDataIn);
            
            input <= getEntryArray(stageDataInFormatted);
-           
+
+            serialMemInput <= serializeEntryArray(input);
+
                
         CLOCKED: process (clk)
         begin
@@ -545,17 +678,25 @@ begin
 
                         memOperation(slv2u(pEnd)) <= packOps(stageDataInFormatted);
                         
-                     updateQueue(content, pEndLong, input);                      
+                     updateQueue(content, pEndLong, input);
+                     
+                        serialMem(slv2u(pEnd)) <= serialMemInput;                     
                 end if;
                 
                 if memBypassing = '1' then
                     dataOut <= stageDataInFormatted;
                     dataOut_T <= stageDataInFormatted;
+                    dataOut_T2 <= stageDataInFormatted;
                 elsif memReading = '1' then
                     dataOut <= dataMemRead;
                     
                         output <= readQueue(content, pStartLong);
                         dataOut_T <= getInsSlotArray(readQueue(content, pStartLong));
+                        
+                        serialMemOutput <= serialMem(slv2u(pStart));
+                        
+                        dataOut_T2 <= getInsSlotArray(deserializeEntryArray(serialMem(slv2u(pStart))));
+                        
                 end if;
 
                 pStartLong <= pStartLongNext;
@@ -564,6 +705,8 @@ begin
                 memEmpty <= getQueueEmpty(pStartLongNext, pEndLongNext, QUEUE_PTR_SIZE);
             end if;
         end process;
+
+                output_D <= deserializeEntryArray(serialMemOutput);
 
             pStart <= pStartLong and PTR_MASK_SN;
             pEnd <= pEndLong and PTR_MASK_SN;
@@ -587,9 +730,18 @@ begin
             ch3 <= bool2std(dataOut(3) = dataOut_T(3));
             ch4 <= bool2std(dataOut = dataOut_T);
 
+            ch5 <= bool2std(output(0) = output_D(0));
+            ch6 <= bool2std(output(1) = output_D(1));
+            ch7 <= bool2std(output(2) = output_D(2));
+            ch8 <= bool2std(output(3) = output_D(3));
+            ch9 <= bool2std(output = output_D);
+
+            cha <= bool2std(dataOut = dataOut_T2);
+
+
         acceptingOut <= isAccepting;
-        stageDataOut <= dataOut;
-                        --dataOut_T;
+        stageDataOut <= --dataOut;
+                        dataOut_T2;
         sendingOut <= isSending;
     end block;
 
