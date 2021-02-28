@@ -70,12 +70,32 @@ architecture Behavioral of BranchQueue is
 
 	signal selectedDataSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
 
-	signal pStart, pStartNext, pTagged, pRenamed, pRenamedNext, pTaggedNext, pEnd, pSelect, pCausing: SmallNumber := (others => '0');
+	signal pStart, pStartNext, pEnd, pEndNext, pStartLong, pStartLongNext, pEndLong, pEndLongNext, pTagged,
+	       pRenamed, pRenamedNext, pTaggedNext, pTaggedLong, pTaggedLongNext, pRenamedLong, pRenamedLongNext,
+	       pSelect, pCausing, pSelectLong, pCausingLong: SmallNumber := (others => '0');
     signal isFull, isAlmostFull, isSending: std_logic := '0';
     
         signal TMP_fullMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
     
     signal recoveryCounter: SmallNumber := (others => '0');
+    
+    -- TODO: functions duplicated from STORE_QUEUE. To clean
+    function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic is
+        constant xored: SmallNumber := pStart xor pEnd;
+        constant template: SmallNumber := (others => '0');
+    begin
+        return bool2std(xored(QUEUE_PTR_SIZE downto 0) = template(QUEUE_PTR_SIZE downto 0));
+    end function;
+
+
+    function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber is
+        constant diff: SmallNumber := subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE);
+        constant xored: SmallNumber := pStart xor pEnd;        
+        variable result: SmallNumber := diff;
+    begin
+        result(QUEUE_PTR_SIZE) := xored(QUEUE_PTR_SIZE) and not isNonzero(xored(QUEUE_PTR_SIZE-1 downto 0));
+        return result;      
+    end function;    
 begin
 
 	SYNCH: process (clk)
@@ -100,11 +120,7 @@ begin
 	almostFull <= '0'; -- TODO: is it deprecated?
 
 	ALL_BRANCHES: block
-	   signal allBranches: PipeStageArray(0 to QUEUE_SIZE-1) := (others => (others => DEFAULT_INS_SLOT));
-	   signal allGroupTargets: InstructionStateArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_INS_STATE);
-	   
-	   signal allBranchOutput: PipeStage := (others => DEFAULT_INS_SLOT);
-	   signal allGroupTargetOutput: InstructionState := DEFAULT_INS_STATE;	   
+	   signal allBranches: PipeStageArray(0 to QUEUE_SIZE-1) := (others => (others => DEFAULT_INS_SLOT));   
 	   
 	   signal accepting, committingBr: std_logic := '0';	   
 	   signal memEmpty, taggedEmpty: std_logic := '1'; -- CAREFUL: starting with '1' 
@@ -118,51 +134,11 @@ begin
        signal intps, floatps: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
        
 
-	       signal ch0, ch1, ch2, ch3: std_logic := '0';
-        
-       function prepareInput(insVec: InstructionSlotArray) return InstructionSlotArray is
-           variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-       begin
-           for i in 0 to PIPE_WIDTh-1 loop
-               
-           end loop;
-       
-           return res;
-       end function;
-        
-	   function getMatchingPtr(content: PipeStageArray; tag: InsTag; startPtr: SmallNumber; taggedMask: std_logic_vector) return SmallNumber is
-	       variable res: SmallNumber := (others => '0');
-	       variable mask, maskTmp: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0'); 
-	       variable maskExt: std_logic_vector(0 to 2*QUEUE_SIZE-1) := (others => '0'); 
-	   begin
-	       for i in 0 to QUEUE_SIZE-1 loop
-	           if      getTagHigh(content(i)(0).ins.tags.renameIndex) = getTagHigh(tag) 
-	              and  taggedMask(i) = '1' then
-	               mask(i) := '1';
-	           end if;
-	       end loop;
-	       maskExt := mask & mask;
-	       
-	       for i in 0 to QUEUE_SIZE-1 loop
-	           maskTmp(i) := --maskExt(i + slv2u(startPtr));
-	                         maskExt(i);          
-	       end loop;
-	       
-	       for i in 0 to QUEUE_SIZE-1 loop
-               if maskTmp(i) = '1' then
-                   res := --addIntTrunc(startPtr, i, QUEUE_PTR_SIZE);
-                            i2slv(i, SMALL_NUMBER_SIZE);
-                   exit;
-               end if;
-           end loop;
-
-	       return res;
-	   end function;
-
-	   
+	       signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0';
+        	   
 	   function getMatchedSlot(allBranches: PipeStageArray; slotPtr: SmallNumber; cmpAdrSlot: InstructionSlot; ipBase: MWord; trgs, ress: MwordArray;
-	                           intps, floatps: SmallNumberArray
-	   ) return InstructionSlot is
+	                           intps, floatps: SmallNumberArray)
+	   return InstructionSlot is
 	       variable res: InstructionSlot := DEFAULT_INS_SLOT;
 	       variable lowPtr: natural := 0;
 	       variable resLow: Mword := (others => '0');
@@ -204,54 +180,12 @@ begin
                     res.ins.tags.floatPointer := add(floatps(0), tmpNumF);             
                 end if;
            end if;
-           
-           --    res.ins.controlInfo := DEFAULT_CONTROL_INFO;
-           --    res.ins.controlInfo.frontBranch := allBranches(slv2u(slotPtr))(lowPtr).ins.controlInfo.frontBranch;
-           
+  
 	       return res;
 	   end function;
-        
-       function calcTaggedMask(pStartNext, pTaggedNext: SmallNumber) return std_logic_vector is
-           variable res: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
-           constant start: natural := slv2u(pStartNext);
-           constant tagged: natural := slv2u(pTaggedNext);
-       begin
-           -- if pStart < pEnd:   i => pStart AND  i < pEnd 
-           -- if pStart > pEnd:   i >= pStart OR i < pEnd
-           -- if pStart = pEnd:   memFull    // when BQ empty this should never matter because no branches can be in Exec part -> compareAddressInput.full = '0'  
-           
-           -- Lets merge conditions 2 and 3: if pStart >= pEnd: i >= pStart OR i < pEnd; if pStart = pEnd then check condition is always true
-           
-           for i in 0 to QUEUE_SIZE-1 loop
-               if start < tagged then
-                   res(i) := bool2std(i >= start and i < tagged);
-               else
-                   res(i) := bool2std(i >= start or i < tagged);               
-               end if;
-           end loop;
-           
-           return res;
-       end function;
-        
-        
-            signal TMP_tags: InsTagArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
-            signal matchingTags, TMP_taggedMask, TMP_taggedMaskNext: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
-            signal TMP_nmt: natural := 0;
-            
-            signal allBranchesInputTmp: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
-	begin
-	           QQQ: for i in 0 to QUEUE_SIZE-1 generate
-	               TMP_tags(i) <= allBranches(i)(0).ins.tags.renameIndex;
-	               matchingTags(i) <= bool2std(getTagHigh(allBranches(i)(0).ins.tags.renameIndex) = getTagHigh(compareAddressInput.ins.tags.renameIndex)) --;
-	                           and    TMP_taggedMask(i);
-	           end generate;
-	           TMP_nmt <= countOnes(matchingTags);
-	       
-	       -- CAREFUL: it may look like full when queue is empty. It's never used in such situarion because it's used only for finding matching entry for branch op.
-	       --          When queue is empty, no branch ops are allowed to be in Exec. 
-	       TMP_taggedMaskNext <= calcTaggedMask(pStartNext, pTaggedNext);
-	
-       dataOutV <= allBranchOutput; -- !!!
+
+       signal allBranchesInputTmp: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
+	begin	
        isSending <= committingBr;
 
        selectedDataSlot <= getMatchedSlot(allBranches, pSelect, compareAddressInput, ipOutputA, trgs, ress, intps, floatps);
@@ -262,136 +196,127 @@ begin
        intps <= (intp0(slv2u(pSelect)), intp1(slv2u(pSelect)), intp2(slv2u(pSelect)), intp3(slv2u(pSelect)));
        floatps <= (floatp0(slv2u(pSelect)), floatp1(slv2u(pSelect)), floatp2(slv2u(pSelect)), floatp3(slv2u(pSelect)));
             
-       pSelect <= --getMatchingPtr(allBranches, compareAddressInput.ins.tags.renameIndex, pStart, TMP_taggedMask);
-                  compareAddressInput.ins.tags.bqPointer;
+       pSelect <= compareAddressInput.ins.tags.bqPointer and PTR_MASK_SN;
+
+           pSelectLong <= compareAddressInput.ins.tags.bqPointer;
 
 
        -- TODO: introduce bit in ROB which indicated whether the ROB entry uses a slot in this queue  
        committingBr <= committing and robData(0).ins.controlInfo.firstBr and not taggedEmpty;
    
 	   accepting <= bool2std(pStart /= addIntTrunc(pEnd, 2, QUEUE_PTR_SIZE)) and bool2std(pStart /= addIntTrunc(pEnd, 1, QUEUE_PTR_SIZE)); -- Need 2 reserve slots because one group could be on the way
-	   
-       pStartNext <= addIntTrunc(pStart, 1, QUEUE_PTR_SIZE) when committingBr = '1' else pStart;
+
+            pStartNext <= pStartLongNext and PTR_MASK_SN;
+            pTaggedNext <= pTaggedLongNext and PTR_MASK_SN;
+            pRenamedNext <= pRenamedLongNext and PTR_MASK_SN;
+            pEndNext <= pEndLongNext and PTR_MASK_SN;
+
+            pStart <= pStartLong and PTR_MASK_SN;
+            pTagged <= pTaggedLong and PTR_MASK_SN;
+            pRenamed <= pRenamedLong and PTR_MASK_SN;
+            pEnd <= pEndLong and PTR_MASK_SN;
+
+               pStartLongNext <= addIntTrunc(pStartLong, 1, QUEUE_PTR_SIZE+1) when committingBr = '1' else pStartLong;
+            
+                pTaggedLongNext <= pStartLong when lateEventSignal = '1'
+                    else       addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
+                    else       addIntTrunc(pTaggedLong, 1, QUEUE_PTR_SIZE+1) when prevSending = '1' and dataIn(0).ins.controlInfo.firstBr = '1'
+                    else       pTaggedLong;
+                
+                pRenamedLongNext <= pStartLong when lateEventSignal = '1'
+                    else       addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
+                    else       addIntTrunc(pRenamedLong, 1, QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
+                    else       pRenamedLong;
+         
         
-                pTaggedNext <= pStart when lateEventSignal = '1'
-                    else       addIntTrunc(pCausing, 1, QUEUE_PTR_SIZE) when execEventSignal = '1'
-                    else       addIntTrunc(pTagged, 1, QUEUE_PTR_SIZE) when prevSending = '1' and dataIn(0).ins.controlInfo.firstBr = '1'
-                    else       pTagged; 
-                
-                pRenamedNext <= pStart when lateEventSignal = '1'
-                        else       addIntTrunc(pCausing, 1, QUEUE_PTR_SIZE) when execEventSignal = '1'
-                        else       addIntTrunc(pRenamed, 1, QUEUE_PTR_SIZE) when prevSendingRe = '1'
-                        else       pRenamed; 
-                    
-                                    
-                
-                
-            allBranchesInputTmp <= prepareInput(dataInBr);
+                pEndLongNext <= pStartLong when lateEventSignal = '1'
+                    else    addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
+                    else    addIntTrunc(pEndLong, 1, QUEUE_PTR_SIZE+1) when prevSendingBr = '1' and dataInBr(0).ins.controlInfo.firstBr = '1'
+                    else    pEndLong;
+
+
+        allBranchesInputTmp <= dataInBr;
+
 
         
 	   SYNCH: process (clk)
 	   begin
 	       if rising_edge(clk) then	           
 	           pCausing <= pSelect;
-	           
-	           if lateEventSignal = '1' then
-	               pEnd <= pStart;
-	               --pTagged <= pStart;
-	               memEmpty <= '1';
-	               taggedEmpty <= '1';
-	           elsif execEventSignal = '1' then
-	               pEnd <= addIntTrunc(pCausing, 1, QUEUE_PTR_SIZE);
-	               --pTagged <= addIntTrunc(pCausing, 1, QUEUE_PTR_SIZE);	                   
-	               memEmpty <= '0'; -- ???
-	               taggedEmpty <= '0';
-	           else	           
-                   if prevSendingBr = '1' and dataInBr(0).ins.controlInfo.firstBr = '1' then
-                       --allBranches(slv2u(pEnd)) <= prepareInput(dataInBr);
-                         for i in 0 to PIPE_WIDTH-1 loop
-                            allBranches(slv2u(pEnd))(i).full <= allBranchesInputTmp(i).full;                         
-                            allBranches(slv2u(pEnd))(i).ins.controlInfo <= allBranchesInputTmp(i).ins.controlInfo;
-                         end loop;
-                       
-                                    -- TODO: here don't write fields which aren't provided by this input (renameIndex etc.)
-                       
-                            ipArray(slv2u(pEnd)) <= dataInBr(0).ins.ip;
-                            
-                            trg0(slv2u(pEnd)) <= dataInBr(0).ins.target;
-                            trg1(slv2u(pEnd)) <= dataInBr(1).ins.target;
-                            trg2(slv2u(pEnd)) <= dataInBr(2).ins.target;
-                            trg3(slv2u(pEnd)) <= dataInBr(3).ins.target;
-                            
-                            res0(slv2u(pEnd)) <= dataInBr(0).ins.result;
-                            res1(slv2u(pEnd)) <= dataInBr(1).ins.result;
-                            res2(slv2u(pEnd)) <= dataInBr(2).ins.result;
-                            res3(slv2u(pEnd)) <= dataInBr(3).ins.result;
-                            
-                       
-                       pEnd <= addIntTrunc(pEnd, 1, QUEUE_PTR_SIZE);
-                       memEmpty <= '0';
-                   end if;
-                   
-                   
-                   if prevSending = '1' and dataIn(0).ins.controlInfo.firstBr = '1' then
-                       allBranches(slv2u(pTagged))(0).ins.tags.renameIndex <= dataIn(0).ins.tags.renameIndex;
-                       for i in 0 to PIPE_WIDTH-1 loop
-                           allBranches(slv2u(pTagged))(i).ins.tags.intPointer <= dataIn(i).ins.tags.intPointer;
-                           allBranches(slv2u(pTagged))(i).ins.tags.floatPointer <= dataIn(i).ins.tags.floatPointer;
-                       end loop;
+	           pCausingLong <= pSelectLong;
+          
+               if prevSendingBr = '1' and dataInBr(0).ins.controlInfo.firstBr = '1' then
+                     for i in 0 to PIPE_WIDTH-1 loop
+                        allBranches(slv2u(pEnd))(i).full <= allBranchesInputTmp(i).full;                         
+                        allBranches(slv2u(pEnd))(i).ins.controlInfo <= allBranchesInputTmp(i).ins.controlInfo;
+                     end loop;
 
-                            intp0(slv2u(pTagged)) <= dataIn(0).ins.tags.intPointer;
-                            intp1(slv2u(pTagged)) <= dataIn(1).ins.tags.intPointer;
-                            intp2(slv2u(pTagged)) <= dataIn(2).ins.tags.intPointer;
-                            intp3(slv2u(pTagged)) <= dataIn(3).ins.tags.intPointer;
-                            
-                            floatp0(slv2u(pTagged)) <= dataIn(0).ins.tags.floatPointer;
-                            floatp1(slv2u(pTagged)) <= dataIn(1).ins.tags.floatPointer;
-                            floatp2(slv2u(pTagged)) <= dataIn(2).ins.tags.floatPointer;
-                            floatp3(slv2u(pTagged)) <= dataIn(3).ins.tags.floatPointer;
-                       
-                       allGroupTargets(slv2u(pTagged)).tags.renameIndex <= dataIn(0).ins.tags.renameIndex;
-                       --pTagged <= addIntTrunc(pTagged, 1, QUEUE_PTR_SIZE);
-                       taggedEmpty <= '0';                       
-                   end if;                
-	           end if;
+                        -- TODO: here don't write fields which aren't provided by this input (renameIndex etc.)
+                        ipArray(slv2u(pEnd)) <= dataInBr(0).ins.ip;
+                        
+                        trg0(slv2u(pEnd)) <= dataInBr(0).ins.target;
+                        trg1(slv2u(pEnd)) <= dataInBr(1).ins.target;
+                        trg2(slv2u(pEnd)) <= dataInBr(2).ins.target;
+                        trg3(slv2u(pEnd)) <= dataInBr(3).ins.target;
+                        
+                        res0(slv2u(pEnd)) <= dataInBr(0).ins.result;
+                        res1(slv2u(pEnd)) <= dataInBr(1).ins.result;
+                        res2(slv2u(pEnd)) <= dataInBr(2).ins.result;
+                        res3(slv2u(pEnd)) <= dataInBr(3).ins.result;
+               end if;
+                               
+               if prevSending = '1' and dataIn(0).ins.controlInfo.firstBr = '1' then
+
+                        intp0(slv2u(pTagged)) <= dataIn(0).ins.tags.intPointer;
+                        intp1(slv2u(pTagged)) <= dataIn(1).ins.tags.intPointer;
+                        intp2(slv2u(pTagged)) <= dataIn(2).ins.tags.intPointer;
+                        intp3(slv2u(pTagged)) <= dataIn(3).ins.tags.intPointer;
+                        
+                        floatp0(slv2u(pTagged)) <= dataIn(0).ins.tags.floatPointer;
+                        floatp1(slv2u(pTagged)) <= dataIn(1).ins.tags.floatPointer;
+                        floatp2(slv2u(pTagged)) <= dataIn(2).ins.tags.floatPointer;
+                        floatp3(slv2u(pTagged)) <= dataIn(3).ins.tags.floatPointer;                    
+               end if;                
 	           
 	           if true then
-	              allBranchOutput <= allBranches(slv2u(pStartNext));
-	              allGroupTargetOutput <= allGroupTargets(slv2u(pStartNext));
 	              targetOutput <= targetArray(slv2u(pStartNext));	              
 	           end if;
 	           
                if storeValueInput.full = '1' then
-                   allGroupTargets(slv2u(pCausing)).target <= storeValueInput.ins.target;
                    targetArray(slv2u(pCausing)) <= storeValueInput.ins.target;
-                   allGroupTargets(slv2u(pCausing)).controlInfo <= storeValueInput.ins.controlInfo;
-                       allGroupTargets(slv2u(pCausing)).controlInfo.confirmedBranch <= storeValueInput.ins.controlInfo.confirmedBranch;
                end if;
 
-               if committingBr = '1' and (prevSendingBr = '0' or dataInBr(0).ins.controlInfo.firstBr = '0')  and pStartNext = pEnd then -- that is memDraining
-                   memEmpty <= '1';
-               end if;
-               
-               if committingBr = '1' and (prevSending = '0' or dataIn(0).ins.controlInfo.firstBr = '0')  and pStartNext = pEnd then -- that is memDraining
-                   taggedEmpty <= '1';
-               end if;
                	           
-	           pStart <= pStartNext;
-	               pTagged <= pTaggedNext;
-	               TMP_taggedMask <= TMP_taggedMaskNext;
-	               
-	               pRenamed <= pRenamedNext;
+--	           pStart <= pStartNext;
+--               pTagged <= pTaggedNext;
+--               pEnd <= pEndNext;
+--               pRenamed <= pRenamedNext;
+               
+	           pStartLong <= pStartLongNext;
+               pTaggedLong <= pTaggedLongNext;
+               pEndLong <= pEndLongNext;
+               pRenamedLong <= pRenamedLongNext;
+               
+               memEmpty <= getQueueEmpty(pStartLongNext, pEndLongNext, QUEUE_PTR_SIZE);              
+               taggedEmpty <= getQueueEmpty(pStartLongNext, pTaggedLongNext, QUEUE_PTR_SIZE);              
 	       end if;
 	   end process;
 
-       committedDataOut <= (committingBr, setInstructionTarget(allGroupTargetOutput, targetOutput));	       
+       committedDataOut <= (committingBr, setInstructionTarget(DEFAULT_INS_STATE, targetOutput));	       
        acceptingBr <= accepting;
        
-            ch0 <= not compareAddressInput.full or bool2std(compareAddressInput.ins.tags.bqPointer = pSelect);
+--            ch0 <= not compareAddressInput.full or bool2std(compareAddressInput.ins.tags.bqPointer = pSelect);
+       
+--                ch3 <= not memEmpty xor ch1;
+--                ch4 <= not taggedEmpty xor ch2;
+        ch0 <= bool2std((pStartLong and PTR_MASK_SN) = pStart);
+        ch1 <= bool2std((pTaggedLong and PTR_MASK_SN) = pTagged);
+        ch2 <= bool2std((pEndLong and PTR_MASK_SN) = pEnd);
+        ch3 <= bool2std((pRenamedLong and PTR_MASK_SN) = pRenamed);
        
 	end block;
 	
-	       bqPtrOut <= pRenamed;
+	bqPtrOut <= pRenamedLong;
 	
 
 	VIEW: if VIEW_ON generate

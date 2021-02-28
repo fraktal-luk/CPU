@@ -35,7 +35,7 @@ return InstructionSlotArray;
 -- UNUSED
 function clearControlEvents(ins: InstructionState) return InstructionState;
 
-function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray; bqTargetData: InstructionSlot;
+function getNewEffective(sendingToCommit: std_logic; robDataLiving: InstructionSlotArray; bqTargetData: InstructionSlot;
 								 lastEffectiveIns, lateTargetIns: InstructionState;
 								 evtPhase2: std_logic)
 return InstructionSlot;
@@ -204,7 +204,7 @@ begin
 end function;
 
 
-function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray; bqTargetData: InstructionSlot;
+function getNewEffective(sendingToCommit: std_logic; robDataLiving: InstructionSlotArray; bqTargetData: InstructionSlot;
 						 lastEffectiveIns, lateTargetIns: InstructionState; evtPhase2: std_logic)
 return InstructionSlot is
 	variable res: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -222,8 +222,7 @@ begin
     end loop;
    
     for i in 0 to PIPE_WIDTH-1 loop 
-        if robDataLiving(i).full = '1' and --dataFromBQV(i).full = '1' and dataFromBQV(i).ins.controlInfo.confirmedBranch = '1' then
-                                           robDataLiving(i).ins.controlInfo.confirmedBranch = '1' then 
+        if robDataLiving(i).full = '1' and robDataLiving(i).ins.controlInfo.confirmedBranch = '1' then 
             anyConfirmed := true;
         end if;
     end loop;
