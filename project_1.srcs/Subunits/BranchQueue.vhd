@@ -12,7 +12,7 @@ use work.ArchDefs.all;
 use work.InstructionState.all;
 use work.CoreConfig.all;
 use work.PipelineGeneral.all;
-use work.LogicQueues.all;
+use work.LogicBQ.all;
 
 
 entity BranchQueue is
@@ -139,13 +139,18 @@ begin
 	   function getMatchedSlot(allBranches: PipeStageArray; slotPtr: SmallNumber; cmpAdrSlot: InstructionSlot; ipBase: MWord; trgs, ress: MwordArray;
 	                           intps, floatps: SmallNumberArray)
 	   return InstructionSlot is
-	       variable res: InstructionSlot := DEFAULT_INS_SLOT;
+	       variable res, storedIns: InstructionSlot := DEFAULT_INS_SLOT;
 	       variable lowPtr: natural := 0;
 	       variable resLow: Mword := (others => '0');
 	       variable tmpNumI, tmpNumF: SmallNumber := (others => '0');
 	   begin
 	       lowPtr := slv2u(getTagLow(cmpAdrSlot.ins.tags.renameIndex));
-	       res := allBranches(slv2u(slotPtr))(lowPtr);
+	       storedIns := allBranches(slv2u(slotPtr))(lowPtr);
+	       
+	       res.ins.controlInfo.frontBranch := storedIns.ins.controlInfo.frontBranch;
+	       res.ins.controlInfo.confirmedBranch := storedIns.ins.controlInfo.confirmedBranch;
+	       
+	       
 	       res.full := cmpAdrSlot.full;
 
            res.ins.ip := trgs(lowPtr);
@@ -248,7 +253,8 @@ begin
                if prevSendingBr = '1' and dataInBr(0).ins.controlInfo.firstBr = '1' then
                      for i in 0 to PIPE_WIDTH-1 loop
                         allBranches(slv2u(pEnd))(i).full <= allBranchesInputTmp(i).full;                         
-                        allBranches(slv2u(pEnd))(i).ins.controlInfo <= allBranchesInputTmp(i).ins.controlInfo;
+                        allBranches(slv2u(pEnd))(i).ins.controlInfo.frontBranch <= allBranchesInputTmp(i).ins.controlInfo.frontBranch;
+                        allBranches(slv2u(pEnd))(i).ins.controlInfo.confirmedBranch <= allBranchesInputTmp(i).ins.controlInfo.confirmedBranch;
                      end loop;
 
                         -- TODO: here don't write fields which aren't provided by this input (renameIndex etc.)
