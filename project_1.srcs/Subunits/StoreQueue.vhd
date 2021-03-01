@@ -106,14 +106,16 @@ architecture Behavioral of StoreQueue is
         return result;      
     end function;
 
+    signal drainValue, selectedValue: Mword := (others => '0');
+
     signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
 begin
     NEW_DEV: block
          signal queueContent: QueueEntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_QUEUE_ENTRY);
          signal selectedEntry, drainEntry: QueueEntry;     
     begin
-        drainOutput <= getDrainOutput_T(drainEntry);
-        selectedOutput <= getDrainOutput_T(selectedEntry);
+        drainOutput <= getDrainOutput_T(drainEntry, drainValue);
+        selectedOutput <= getDrainOutput_T(selectedEntry, selectedValue);
 
         addressMatchMask <= getAddressMatching(queueContent, compareAddressInput.ins.result) and getAddressCompleted(queueContent) and getWhichMemOp(queueContent);
         
@@ -133,6 +135,7 @@ begin
                 end if;                               
                 
                 selectedEntry <= queueContent(slv2u(pSelect));
+                selectedValue <= storeValues(slv2u(pSelect));
                 
                     -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
                 if not IS_LOAD_QUEUE then
@@ -142,6 +145,7 @@ begin
                 end if;
                 
                 drainEntry <= queueContent(slv2u(pDrain));
+                drainValue <= storeValues(slv2u(pDrain));
             end if;
         end process;
     end block;

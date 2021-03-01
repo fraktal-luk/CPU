@@ -46,7 +46,7 @@ package LogicQueues is
     function getAddressMatching(content: QueueEntryArray; adr: Mword) return std_logic_vector;
     function getWhichMemOp(content: QueueEntryArray) return std_logic_vector;
     function getQueueContent_T(ia: InstructionStateArray) return QueueEntryArray;
-    function getDrainOutput_T(elem: QueueEntry) return InstructionState;
+    function getDrainOutput_T(elem: QueueEntry; value: Mword) return InstructionState;
     
     function TMP_clearOutputDebug(ins: InstructionState) return InstructionState;
     function TMP_cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
@@ -135,7 +135,7 @@ package body LogicQueues is
             constant ind: natural := slv2u(indV);
         begin
             content(ind).completedV <= '1';
-            content(ind).value <= isl.ins.result;
+            --content(ind).value <= isl.ins.result;
         end procedure;
 
         
@@ -185,7 +185,7 @@ package body LogicQueues is
             end function;
 
 
-            function getDrainOutput_T(elem: QueueEntry) return InstructionState is
+            function getDrainOutput_T(elem: QueueEntry; value: Mword) return InstructionState is
                 variable res: InstructionState := DEFAULT_INS_STATE;
             begin
                 if elem.isSysOp = '1' then
@@ -202,6 +202,8 @@ package body LogicQueues is
                 
                 res.target := elem.address;
                 res.result := elem.value;
+                   
+                   res.result := value;
                     
                 return res;
             end function;
