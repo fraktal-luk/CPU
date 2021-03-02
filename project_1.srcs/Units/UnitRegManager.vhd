@@ -138,6 +138,13 @@ architecture Behavioral of UnitRegManager is
                 if i > 0 then
                     res(i).ins.tags.intPointer := i2slv(countOnes(takeVecInt(0 to i)), SMALL_NUMBER_SIZE);
                     res(i).ins.tags.floatPointer := i2slv(countOnes(takeVecFloat(0 to i)), SMALL_NUMBER_SIZE);
+                    
+                        res(i).ins.tags.intPointer(7) := takeVecInt(i);
+                        res(i).ins.tags.floatPointer(7) := takeVecFloat(i);
+
+                        res(i).ins.tags.intPointer(6 downto 0) := (others => '0');
+                        res(i).ins.tags.floatPointer(6 downto 0) := (others => '0');
+                                            
                 end if;
             end if;
         end loop;
