@@ -61,7 +61,7 @@ constant IMM_AS_REG: boolean := true;
     constant LQ_PTR_SIZE: natural := countOnes(LQ_PTR_MASK);
 
     constant TMP_PARAM_COMPRESS_RETURN: boolean := false;
-    constant TMP_PARAM_COMPRESS_PTRS: boolean := false;
+    constant TMP_PARAM_COMPRESS_PTRS: boolean := true;
     constant TMP_PARAM_SIMPLIFY_ISSUE: boolean := true;
     
     constant TMP_PARAM_DEST_MOVE: boolean := true;

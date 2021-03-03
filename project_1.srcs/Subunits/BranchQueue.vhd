@@ -196,19 +196,20 @@ begin
 	       signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0';
         	   
 	   function getMatchedSlot(allBranches: PipeStageArray; slotPtr: SmallNumber; cmpAdrSlot: InstructionSlot; ipBase: MWord; trgs, ress: MwordArray;
-	                           intps, floatps: SmallNumberArray)
+	                           intps, floatps: SmallNumberArray; frontBranches, intTakeVec, floatTakeVec: std_logic_vector)
 	   return InstructionSlot is
 	       variable res, storedIns: InstructionSlot := DEFAULT_INS_SLOT;
 	       variable lowPtr: natural := 0;
 	       variable resLow: Mword := (others => '0');
 	       variable tmpNumI, tmpNumF: SmallNumber := (others => '0');
 	       
-	       variable intTakeVec, floatTakeVec: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+	       --variable intTakeVec, floatTakeVec: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 	   begin
 	       lowPtr := slv2u(getTagLow(cmpAdrSlot.ins.tags.renameIndex));
 	       storedIns := allBranches(slv2u(slotPtr))(lowPtr);
 	       
-	       res.ins.controlInfo.frontBranch := storedIns.ins.controlInfo.frontBranch;
+	       res.ins.controlInfo.frontBranch := --storedIns.ins.controlInfo.frontBranch;
+	                                           frontBranches(lowPtr);
 	       res.ins.controlInfo.confirmedBranch := storedIns.ins.controlInfo.confirmedBranch;
 	       
 	       
@@ -237,8 +238,8 @@ begin
                res.ins.tags.floatPointer := floatps(lowPtr);
            else
                 for i in 1 to PIPE_WIDTH-1 loop
-                    intTakeVec(i) := intps(i)(7);
-                    floatTakeVec(i) := floatps(i)(7);
+                    --intTakeVec(i) := intps(i)(7);
+                    --floatTakeVec(i) := floatps(i)(7);
                 end loop;
            
                 tmpNumI(1 downto 0) := intps(lowPtr)(1 downto 0);
@@ -340,7 +341,8 @@ begin
 	begin	
        isSending <= committingBr;
 
-       selectedDataSlot <= getMatchedSlot(allBranches, pSelect, compareAddressInput, ipOutputA, trgs, ress, intps, floatps);
+       selectedDataSlot <= getMatchedSlot(allBranches, pSelect, compareAddressInput, ipOutputA, trgs, ress, intps, floatps,
+                                        frontBranches_T, intTakeVec, floatTakeVec);
         
               frontBranches <= getFrontBr(allBranches, pSelect, compareAddressInput, ipOutputA, trgs, ress, intps, floatps);
         
