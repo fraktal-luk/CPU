@@ -75,6 +75,12 @@ constant DEFAULT_DYNAMIC_OP_INFO: DynamicOpInfo := (
     others => '0'
 );
 
+
+constant TMP_SERIAL_MEM_WIDTH: natural := PIPE_WIDTH*18 + 6;
+
+type SerialMem is array(0 to ROB_SIZE-1) of std_logic_vector(TMP_SERIAL_MEM_WIDTH-1 downto 0);
+
+
 type StaticOpInfoArray is array(0 to PIPE_WIDTH-1) of StaticOpInfo;
 type StaticOpInfoArray2D is array(0 to ROB_SIZE-1, 0 to PIPE_WIDTH-1) of StaticOpInfo;
 
@@ -97,12 +103,24 @@ function getDynamicOpInfoA(isa: InstructionSlotArray) return DynamicOpInfoArray;
     function getInstructionSlotArray_T(sa: StaticOpInfoArray; da: DynamicOpInfoArray; sgi: StaticGroupInfo; dgi: DynamicGroupInfo) return InstructionSlotArray;
     function getSpecialSlot_T(si: StaticGroupInfo; di: DynamicGroupInfo) return InstructionSlot;
 
-function serializeOp(isl: InstructionSlot) return std_logic_vector;
-function deserializeOp(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray; 
-function serializeSpecialAction(isl: InstructionSlot) return std_logic_vector;
-function deserializeSpecialAction(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray;    
-function serializeOpGroup(insVec: InstructionSlotArray) return std_logic_vector;
-function deserializeOpGroup(insVec: InstructionSlotArray; serialData: std_logic_vector) return InstructionSlotArray;
+
+
+function serializeStaticInfo(info: StaticOpInfo) return std_logic_vector;
+function serializeStaticInfoA(ia: StaticOpInfoArray) return std_logic_vector;
+function serializeStaticGroupInfo(info: StaticGroupInfo) return std_logic_vector;
+function serializeStatic(ia: StaticOpInfoArray; gr: StaticGroupInfo) return std_logic_vector;
+
+function deserializeStaticInfo(w: Word) return StaticOpInfo;
+function deserializeStaticInfoA(v: std_logic_vector) return StaticOpInfoArray;
+function deserializeStaticGroupInfo(v: std_logic_vector) return StaticGroupInfo;
+
+
+        function serializeOp(isl: InstructionSlot) return std_logic_vector;
+        function deserializeOp(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray; 
+        function serializeSpecialAction(isl: InstructionSlot) return std_logic_vector;
+        function deserializeSpecialAction(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray;    
+        function serializeOpGroup(insVec: InstructionSlotArray) return std_logic_vector;
+        function deserializeOpGroup(insVec: InstructionSlotArray; serialData: std_logic_vector) return InstructionSlotArray;
 
 
 procedure writeStaticInput(signal content: inout StaticOpInfoArray2D; input: StaticOpInfoArray; ptr: SmallNumber);
@@ -253,6 +271,97 @@ end function;
 
 
 ----------------------------------------------------------
+
+function serializeStaticInfo(info: StaticOpInfo) return std_logic_vector is
+    variable res: Word := (others => '0');
+begin
+    res(0) := info.virtualIntDestSel;
+    res(1) := info.virtualFloatDestSel;
+    res(2) := info.useSQ;
+    res(3) := info.useLQ;
+    res(4) := info.useBQ;
+    
+    res(9 downto 5) := info.virtualDest(4 downto 0);
+    res(17 downto 10) := info.physicalDest;
+
+    return res;
+end function;
+
+function serializeStaticInfoA(ia: StaticOpInfoArray) return std_logic_vector is
+    variable res: std_logic_vector(PIPE_WIDTH*18 - 1 downto 0); -- CAREFUL: temp num of bits
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(18*i + 17 downto 18*i) := serializeStaticInfo(ia(i))(17 downto 0);
+    end loop;
+    return res;
+end function;
+
+function serializeStaticGroupInfo(info: StaticGroupInfo) return std_logic_vector is
+    variable res: Byte := (others => '0');
+begin
+    res(3 downto 0) := info.specialOp; -- CAREFUL: temporary num of bits
+    res(4) := info.useBQ;
+    return res;
+end function;
+
+function serializeStatic(ia: StaticOpInfoArray; gr: StaticGroupInfo) return std_logic_vector is
+    variable res: std_logic_vector(PIPE_WIDTH*18 + 6 - 1 downto 0);
+begin
+    res(PIPE_WIDTH*18 - 1 downto 0) := serializeStaticInfoA(ia);
+    res(PIPE_WIDTH*18 + 6 - 1 downto PIPE_WIDTH*18) := serializeStaticGroupInfo(gr)(5 downto 0);
+    return res;
+end function;
+
+
+
+
+function deserializeStaticInfo(w: Word) return StaticOpInfo is
+    variable res: StaticOpInfo;
+begin
+    res.virtualIntDestSel := w(0);
+    res.virtualFloatDestSel := w(1);
+    res.useSQ := w(2);
+    res.useLQ := w(3);
+    res.useBQ := w(4);
+    
+    res.virtualDest := (others => '0');
+    res.virtualDest(4 downto 0) := w(9 downto 5);
+    res.physicalDest := w(17 downto 10);
+    return res;
+end function;
+
+function deserializeStaticInfoA(v: std_logic_vector) return StaticOpInfoArray is
+    variable res: StaticOpInfoArray;--std_logic_vector(PIPE_WIDTH*18 - 1 downto 0); -- CAREFUL: temp num of bits
+    variable w: Word := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+       w(17 downto 0) :=  v(18*i + 17 downto 18*i);
+       res(i) := deserializeStaticInfo(w);
+    end loop;
+    return res;
+end function;
+
+function deserializeStaticGroupInfo(v: std_logic_vector) return StaticGroupInfo is
+    variable res: StaticGroupInfo;
+    variable b: Byte := "00" & v(PIPE_WIDTH*18 + 6 - 1 downto PIPE_WIDTH*18);
+begin
+    res.specialOp := b(3 downto 0);
+    res.useBQ := b(4);
+    return res;
+end function;
+
+--function deserializeStatic(ia: StaticOpInfoArray; gr: StaticGroupInfo) return std_logic_vector is
+--    variable res: std_logic_vector(PIPE_WIDTH*18 + 6 - 1 downto 0);
+--begin
+--    res(PIPE_WIDTH*18 - 1 downto 0) := serializeStaticInfoA(ia);
+--    res(PIPE_WIDTH*18 + 6 - 1 downto PIPE_WIDTH*18) := serializeStaticGroupInfo(gr);
+--    return res;
+--end function;
+
+
+
+
+
 function serializeOp(isl: InstructionSlot) return std_logic_vector is
 begin
 

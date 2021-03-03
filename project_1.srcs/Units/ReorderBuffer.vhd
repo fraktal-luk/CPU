@@ -52,31 +52,40 @@ architecture Behavioral of ReorderBuffer is
 	signal isSending, isEmpty, outputCompleted, outputEmpty, execEvent, isFull, isAlmostFull: std_logic := '0';
 	signal startPtr, startPtrNext, endPtr, endPtrNext, causingPtr: SmallNumber := (others => '0');	
 
+        signal ch0, ch1, ch2, ch3: std_logic := '0';
 begin
 	execEvent <= execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
 	causingPtr <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
 	
     NEW_DEV: block
-        signal staticInput, staticOutput: StaticOpInfoArray;
+        signal staticInput, staticOutput, staticOutput_D: StaticOpInfoArray;
         signal dynamicInput, dynamicOutput: DynamicOpInfoArray;
 
-        signal staticGroupInput, staticGroupOutput: StaticGroupInfo;
+        signal staticGroupInput, staticGroupOutput, staticGroupOutput_D: StaticGroupInfo;
         signal dynamicGroupInput, dynamicGroupOutput: DynamicGroupInfo;
         
         signal staticContent: StaticOpInfoArray2D := (others => (others => DEFAULT_STATIC_OP_INFO));
         signal dynamicContent: DynamicOpInfoArray2D := (others => (others => DEFAULT_DYNAMIC_OP_INFO));
 
         signal staticGroupContent: StaticGroupInfoArray := (others => DEFAULT_STATIC_GROUP_INFO);
-        signal dynamicGroupContent: DynamicGroupInfoArray := (others => DEFAULT_DYNAMIC_GROUP_INFO);                         
+        signal dynamicGroupContent: DynamicGroupInfoArray := (others => DEFAULT_DYNAMIC_GROUP_INFO);
+        
+            signal serialInput, serialOutput: std_logic_vector(TMP_SERIAL_MEM_WIDTH-1 downto 0) := (others=> '0');
+            signal serialMemContent: SerialMem := (others => (others => '0'));                         
     begin
+                serialInput <= serializeStatic(staticInput, staticGroupInput);
+                
+                --staticOutput_D <= deserializeStaticInfoA(serialOutput);
+                --staticGroupOutput_D <= deserializeStaticGroupInfo(serialOutput);
+                
         staticInput <= getStaticOpInfoA(inputData);
         dynamicInput <= getDynamicOpInfoA(inputData);
         
         staticGroupInput <= getStaticGroupInfo(inputData, inputSpecial);
         dynamicGroupInput <= getDynamicGroupInfo(inputData, inputSpecial);
 
-        outputDataSig <= getInstructionSlotArray_T(staticOutput, dynamicOutput, staticGroupOutput, dynamicGroupOutput);
-        outputSpecialSig <= getSpecialSlot_T(staticGroupOutput, dynamicGroupOutput);
+        outputDataSig <= getInstructionSlotArray_T(staticOutput_D, dynamicOutput, staticGroupOutput_D, dynamicGroupOutput);
+        outputSpecialSig <= getSpecialSlot_T(staticGroupOutput_D, dynamicGroupOutput);
 
     	outputCompleted <= groupCompleted(outputDataSig);
     
@@ -97,6 +106,8 @@ begin
 
                     writeDynamicInput(dynamicContent, dynamicInput, endPtr);
                     writeDynamicGroupInput(dynamicGroupContent, dynamicGroupInput, endPtr);
+                    
+                        serialMemContent(slv2u(endPtr)) <= serialInput;
                  end if;
                    
                 -- Read output                    
@@ -104,11 +115,23 @@ begin
                 staticGroupOutput <= readStaticGroupOutput(staticGroupContent, startPtrNext);
 
                 dynamicOutput <= readDynamicOutput(dynamicContent, startPtrNext);
-                dynamicGroupOutput <= readDynamicGroupOutput(dynamicGroupContent, startPtrNext);                    
+                dynamicGroupOutput <= readDynamicGroupOutput(dynamicGroupContent, startPtrNext);
+                
+                    serialOutput <= serialMemContent(slv2u(startPtrNext));
+                    staticOutput_D <= deserializeStaticInfoA(serialMemContent(slv2u(startPtrNext)));                    
+                    staticGroupOutput_D <= deserializeStaticGroupInfo(serialMemContent(slv2u(startPtrNext)));
+                                    
             end if;
         end process;
+        
+            
+            ch0 <= bool2std(staticOutput_D = staticOutput);
+            ch1 <= bool2std(staticGroupOutput_D = staticGroupOutput);
+
+            ch2 <= bool2std(staticOutput_D(2) = staticOutput(2));
+            ch3 <= bool2std(staticOutput_D(3) = staticOutput(3));
 	end block;
-   
+
 
     CTR_MANAGEMENT: block
         signal recoveryCounter,
