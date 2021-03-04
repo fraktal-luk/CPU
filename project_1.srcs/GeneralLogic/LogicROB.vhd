@@ -20,6 +20,7 @@ package LogicROB is
 
 constant PTR_MASK_TAG: InsTag := i2slv(ROB_SIZE-1, TAG_SIZE);
 constant PTR_MASK_SN: SmallNumber := i2slv(ROB_SIZE-1, SMALL_NUMBER_SIZE);
+constant PTR_MASK_SN_LONG: SmallNumber := i2slv(2*ROB_SIZE-1, SMALL_NUMBER_SIZE);
 constant ROB_PTR_SIZE: natural := countOnes(PTR_MASK_SN);	
     
 type StaticGroupInfo is record

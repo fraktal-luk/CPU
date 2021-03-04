@@ -51,11 +51,31 @@ architecture Behavioral of ReorderBuffer is
         
 	signal isSending, isEmpty, outputCompleted, outputEmpty, execEvent, isFull, isAlmostFull: std_logic := '0';
 	signal startPtr, startPtrNext, endPtr, endPtrNext, causingPtr: SmallNumber := (others => '0');	
+	signal startPtrLong, startPtrLongNext, endPtrLong, endPtrLongNext, causingPtrLong: SmallNumber := (others => '0');	
 
         signal ch0, ch1, ch2, ch3: std_logic := '0';
+        
+    -- TODO: duplicated from SQ, unduplicate  
+    function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic is
+            constant xored: SmallNumber := pStart xor pEnd;
+            constant template: SmallNumber := (others => '0');
+        begin
+            return bool2std(xored(QUEUE_PTR_SIZE downto 0) = template(QUEUE_PTR_SIZE downto 0));
+        end function;
+    
+    
+        function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber is
+            constant diff: SmallNumber := subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE);
+            constant xored: SmallNumber := pStart xor pEnd;        
+            variable result: SmallNumber := diff;
+        begin
+            result(QUEUE_PTR_SIZE) := xored(QUEUE_PTR_SIZE) and not isNonzero(xored(QUEUE_PTR_SIZE-1 downto 0));
+            return result;      
+        end function;        
 begin
 	execEvent <= execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
 	causingPtr <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
+	causingPtrLong <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN_LONG; -- TEMP!
 	
     NEW_DEV: block
         signal staticInput, staticOutput, staticOutput_D: StaticOpInfoArray;
@@ -125,8 +145,9 @@ begin
         end process;
         
             
-            ch0 <= bool2std(staticOutput_D = staticOutput);
-            ch1 <= bool2std(staticGroupOutput_D = staticGroupOutput);
+            ch0 <= --bool2std(staticOutput_D = staticOutput);
+                    getQueueEmpty(startPtrLong, endPtrLong, ROB_PTR_SIZE+1);
+            ch1 <= not isEmpty xor ch0;
 
             ch2 <= bool2std(staticOutput_D(2) = staticOutput(2));
             ch3 <= bool2std(staticOutput_D(3) = staticOutput(3));
@@ -138,32 +159,52 @@ begin
                nFull, nFullNext, nFullRestored, nIn, nOut,
                ptrDiff, flowDiff: SmallNumber := (others => '0');
     begin
-        startPtrNext <= startPtr when isSending = '0' else addIntTrunc(startPtr, 1, ROB_PTR_SIZE);
+--        startPtrNext <= startPtr when isSending = '0' else addIntTrunc(startPtr, 1, ROB_PTR_SIZE);
         
-        endPtrNext <= startPtrNext when lateEventSignal = '1'
-                else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE) when execEvent = '1'
-                else  addIntTrunc(endPtr, 1, ROB_PTR_SIZE) when prevSending = '1'
-                else  endPtr;
-        
-        -- UNUSED                        
-        isEmpty <= bool2std(startPtr = endPtr); -- CAREFUL: elsewhere it MUST be assured that ROB never gets full because this would become incorrect. 'isFull' must mean 1 free slot
+--        endPtrNext <= startPtrNext when lateEventSignal = '1'
+--                else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE) when execEvent = '1'
+--                else  addIntTrunc(endPtr, 1, ROB_PTR_SIZE) when prevSending = '1'
+--                else  endPtr;
 
+            startPtrLongNext <= startPtrLong when isSending = '0' else addIntTrunc(startPtrLong, 1, ROB_PTR_SIZE+1);
+            
+            endPtrLongNext <= startPtrLongNext when lateEventSignal = '1'
+                    else  addIntTrunc(causingPtrLong, 1, ROB_PTR_SIZE+1) when execEvent = '1'
+                    else  addIntTrunc(endPtrLong, 1, ROB_PTR_SIZE+1) when prevSending = '1'
+                    else  endPtrLong;
+        
+
+        isEmpty <= getQueueEmpty(startPtrLong, endPtrLong, ROB_PTR_SIZE+1);
         -- nFull logic
         nIn <= i2slv(1, SMALL_NUMBER_SIZE) when prevSending = '1' else (others => '0');
         nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');
    
-        ptrDiff <= subSN(endPtr, startPtrNext);
-        nFullRestored <= ptrDiff and PTR_MASK_SN;
+        ptrDiff <= subTruncZ(endPtr, startPtrNext, ROB_PTR_SIZE);
+        nFullRestored <= i2slv(ROB_SIZE, SMALL_NUMBER_SIZE) when startPtr = endPtr and isEmpty = '0'   
+                        else subTruncZ(endPtr, startPtrNext, ROB_PTR_SIZE);
+
+--            nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and memEmpty = '0'
+--                               else subTruncZ(pTagged, pStartNext, QUEUE_PTR_SIZE);
           
         flowDiff <= subSN(addSN(nFull, nIn), nOut);
         nFullNext <=     nFullRestored when cmpEqU(recoveryCounter, 1) = '1'
                     else flowDiff and PTR_MASK_SN;
  
+            
+            startPtr <= startPtrLong and PTR_MASK_SN;
+            endPtr <= endPtrLong and PTR_MASK_SN;
+            startPtrNext <= startPtrLongNext and PTR_MASK_SN;
+            endPtrNext <= endPtrLongNext and PTR_MASK_SN;
+            
+ 
         MANAAGEMENT: process (clk)
         begin
             if rising_edge(clk) then
-                startPtr <= startPtrNext;
-                endPtr <= endPtrNext;        
+                --startPtr <= startPtrNext;
+                --endPtr <= endPtrNext;        
+
+                        startPtrLong <= startPtrLongNext;
+                        endPtrLong <= endPtrLongNext;
             	            
                 outputEmpty <= bool2std(startPtrNext = endPtr) or lateEventSignal;                
                 
@@ -177,8 +218,8 @@ begin
                 
                 nFull <= nFullNext;
     
-                isFull <= cmpGtU(nFullNext, ROB_SIZE-1-1);
-                isAlmostFull <= cmpGtU(nFullNext, ROB_SIZE-1-2);
+                isFull <= cmpGtU(nFullNext, ROB_SIZE-1-1 + 1);
+                isAlmostFull <= cmpGtU(nFullNext, ROB_SIZE-1-2 + 1);
     
             end if;		
         end process;
