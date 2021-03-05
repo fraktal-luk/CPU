@@ -184,7 +184,12 @@ function makeSlotArray(ia: InstructionStateArray; fm: std_logic_vector) return I
 
 --function killByTag(before, ei, int: std_logic) return std_logic; PRIVATE
 
+-- UNUSED?
 function getKillMask(content: InstructionStateArray; fullMask: std_logic_vector;
+							causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
+return std_logic_vector;
+
+function getKillMask(content: SchedulerEntrySlotArray; fullMask: std_logic_vector;
 							causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector;
 
@@ -630,6 +635,20 @@ begin
 	return res;
 end function;
 
+function getKillMask(content: SchedulerEntrySlotArray; fullMask: std_logic_vector;
+							causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
+return std_logic_vector is
+	variable res: std_logic_vector(0 to fullMask'length-1);
+begin
+	for i in 0 to fullMask'length-1 loop
+		res(i) := killByTag(compareTagBefore(causing.tags.renameIndex, content(i).state.renameIndex),
+									execEventSig, lateEventSig) and fullMask(i);
+	end loop;
+	return res;
+end function;
+
+
+
 function stageArrayNext(livingContent, newContent: InstructionSlotArray; full, sending, receiving, kill, keepDest: std_logic)
 return InstructionSlotArray is 
     constant LEN: natural := livingContent'length;
@@ -794,11 +813,16 @@ begin
             
             
             res(i).state.renameIndex := res(i).ins.tags.renameIndex;
+            res(i).state.bqPointer := res(i).ins.tags.bqPointer;
+            res(i).state.sqPointer := res(i).ins.tags.sqPointer;
+            res(i).state.lqPointer := res(i).ins.tags.lqPointer;
+            
+            
             res(i).state.branchIns := res(i).ins.classInfo.branchIns;
             res(i).state.operation := res(i).ins.specificOperation;
             res(i).state.argSpec := res(i).ins.physicalArgSpec;
             res(i).state.immValue := res(i).ins.constantArgs.imm(15 downto 0);
-             
+
 
         -- Set 'missing' flags for non-const arguments
         res(i).state.missing := (res(i).ins.physicalArgSpec.intArgSel and not res(i).state.zero)

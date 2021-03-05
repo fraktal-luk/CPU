@@ -266,6 +266,11 @@ type SchedulerState is record
         branchIns: std_logic;
         
         renameIndex: InsTag;
+        
+		bqPointer: SmallNumber;
+        sqPointer: SmallNumber;
+        lqPointer: SmallNumber;        
+        
         operation: SpecificOp;
         argSpec: InstructionArgSpec;
         
@@ -294,6 +299,11 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
 	                branchIns => '0',
 	          
                     renameIndex => (others => '0'),
+			        
+			        bqPointer => (others => '0'),
+                    sqPointer => (others => '0'),
+                    lqPointer => (others => '0'),                    
+                    
                     operation => DEFAULT_SPECIFIC_OP,
                     argSpec => DEFAULT_ARG_SPEC,          
 	                   

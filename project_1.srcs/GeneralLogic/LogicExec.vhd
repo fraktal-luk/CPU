@@ -128,7 +128,9 @@ package body LogicExec is
 		elsif queueData.controlInfo.frontBranch = '0' and branchTaken = '1' then					
 			res.controlInfo.newEvent := '1';
 			res.controlInfo.confirmedBranch := '1';			
-			if ins.constantArgs.immSel = '0' then -- if branch reg			
+			if --ins.constantArgs.immSel = '0' then -- if branch reg	
+			   st.immediate = '0' then
+					
 				trueTarget := st.args(1);
 			else
 				trueTarget := queueData.target;
@@ -137,7 +139,8 @@ package body LogicExec is
 		elsif queueData.controlInfo.frontBranch = '0' and branchTaken = '0' then
 			trueTarget := queueData.result;
 		else -- taken -> taken
-			if ins.constantArgs.immSel = '0' then -- if branch reg
+			if --ins.constantArgs.immSel = '0' then -- if branch reg
+			   st.immediate = '0' then
 				if targetMatch = '0' then
 					res.controlInfo.newEvent := '1';	-- Need to correct the target!	
 				end if;

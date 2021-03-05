@@ -18,6 +18,8 @@ use work.PipelineGeneral.all;
 
 package LogicIssue is
 
+function TMP_restoreState(full: std_logic; ins: InstructionState; st: SchedulerState) return SchedulerEntrySlot;
+
 function getDispatchArgValues(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo;
 											prevSending: std_logic;
 											USE_IMM: boolean; REGS_ONLY, DELAY_ONLY: boolean)
@@ -232,6 +234,46 @@ end function;
 
 
 
+
+function TMP_restoreState(full: std_logic; ins: InstructionState; st: SchedulerState) return SchedulerEntrySlot is
+	variable res: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+	variable v0, v1: std_logic_vector(1 downto 0) := "00";
+	variable selected0, selected1: Mword := (others => '0');
+	variable ready: std_logic_vector(0 to 2) := (others=>'0');
+	variable locs: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
+	constant Z3: std_logic_vector(0 to 2) := (others => '0');
+	constant ZZ3: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
+	variable imm: Word := (others => '0');
+begin
+    res.full := full;
+	res.ins := ins;
+	res.state := st;
+
+        imm(15 downto 0) := res.state.immValue;
+        imm(31 downto 16) := (others => res.state.immValue(15));
+    
+        res.ins.tags.renameIndex := st.renameIndex;
+        res.ins.tags.bqPointer := st.bqPointer;
+        res.ins.tags.sqPointer := st.sqPointer;
+        res.ins.tags.lqPointer := st.lqPointer;
+
+        res.ins.specificOperation := st.operation;
+
+        res.ins.physicalArgSpec.dest := res.state.argSpec.dest;
+        res.ins.physicalArgSpec.intDestSel := res.state.argSpec.intDestSel;
+        res.ins.physicalArgSpec.floatDestSel := res.state.argSpec.floatDestSel;
+        
+        res.ins.physicalArgSpec.intArgSel := (others => '0');
+        res.ins.physicalArgSpec.floatArgSel := (others => '0');
+            
+        res.ins.physicalArgSpec.args := res.state.argSpec.args;
+    
+	return res;
+end function;
+
+
+
+
 function getDispatchArgValues(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo;
 											prevSending: std_logic;
 											USE_IMM: boolean; REGS_ONLY, DELAY_ONLY: boolean)
@@ -250,7 +292,24 @@ begin
 
         imm(15 downto 0) := res.state.immValue;
         imm(31 downto 16) := (others => res.state.immValue(15));
+    
+--        res.ins.tags.renameIndex := st.renameIndex;
+--        res.ins.specificOperation := st.operation;
 
+--        res.ins.physicalArgSpec.dest := res.state.argSpec.dest;
+--        res.ins.physicalArgSpec.intDestSel := res.state.argSpec.intDestSel;
+--        res.ins.physicalArgSpec.floatDestSel := res.state.argSpec.floatDestSel;
+        
+--            res.ins.physicalArgSpec.intArgSel := (others => '0');
+--            res.ins.physicalArgSpec.floatArgSel := (others => '0');
+            
+--            if REGS_ONLY or DELAY_ONLY then
+--                res.ins.physicalArgSpec.args := res.state.argSpec.args; 
+--            else
+--                res.ins.physicalArgSpec.args := (others => (others => '0'));
+--            end if;
+            
+    
     if prevSending = '0' or
       --(ins.physicalArgSpec.intDestSel = '0'
         --and ins.physicalArgSpec.floatDestSel = '0') -- ???
@@ -481,16 +540,24 @@ begin
 
            res(i).ins.controlInfo := DEFAULT_CONTROL_INFO;
 
+            res(i).ins.specificOperation := DEFAULT_SPECIFIC_OP;
+
+                res(i).ins.constantArgs := DEFAULT_CONSTANT_ARGS;
                 res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+                        res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;
+                        --   res(i).ins.physicalArgSpec.args(0) := (others => '0');
                 
                 br := res(i).ins.classInfo.branchIns;
                 
                 res(i).ins.classInfo := DEFAULT_CLASS_INFO;
-                res(i).ins.classInfo.branchIns := br;
+                --res(i).ins.classInfo.branchIns := br;
 
            if IMM_AS_REG then        
                res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
            end if;
+           
+           
+           res(i).ins := DEFAULT_INS_STATE;
        end if;	
 	end loop;
 
