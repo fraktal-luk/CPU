@@ -152,9 +152,9 @@ type InstructionTags is record
     renameIndex: InsTag;	-- group + group position
     intPointer: SmallNumber;
     floatPointer: SmallNumber;
-        bqPointer: SmallNumber;
-        sqPointer: SmallNumber;
-        lqPointer: SmallNumber;
+    bqPointer: SmallNumber;
+    sqPointer: SmallNumber;
+    lqPointer: SmallNumber;
     commitCtr: Word;
 end record;
 
@@ -262,6 +262,15 @@ type InstructionSlotArray is array(integer range <>) of InstructionSlot;
 type SchedulerState is record
 	issued: std_logic;
     newInQueue: std_logic;
+        
+        branchIns: std_logic;
+        
+        renameIndex: InsTag;
+        operation: SpecificOp;
+        argSpec: InstructionArgSpec;
+        
+        immValue: Hword;
+        
     immediate: std_logic;
     zero: std_logic_vector(0 to 2);
     readyNow: std_logic_vector(0 to 2);
@@ -281,6 +290,15 @@ end record;
 constant DEFAULT_SCHEDULER_STATE: SchedulerState := ( 
               issued => '0',
 	          newInQueue => '0',
+	          
+	                branchIns => '0',
+	          
+                    renameIndex => (others => '0'),
+                    operation => DEFAULT_SPECIFIC_OP,
+                    argSpec => DEFAULT_ARG_SPEC,          
+	                   
+	                immValue => (others => '0'),
+	          
 			  immediate => '0',
 			  zero => (others => '0'),
 			  readyNow => (others=>'0'),

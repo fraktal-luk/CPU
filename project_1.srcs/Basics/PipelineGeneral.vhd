@@ -791,6 +791,15 @@ begin
                 res(i).state.argLocsPhase(j) := "00000010"; -- Like arg in register
         end loop;
 
+            
+            
+            res(i).state.renameIndex := res(i).ins.tags.renameIndex;
+            res(i).state.branchIns := res(i).ins.classInfo.branchIns;
+            res(i).state.operation := res(i).ins.specificOperation;
+            res(i).state.argSpec := res(i).ins.physicalArgSpec;
+            res(i).state.immValue := res(i).ins.constantArgs.imm(15 downto 0);
+             
+
         -- Set 'missing' flags for non-const arguments
         res(i).state.missing := (res(i).ins.physicalArgSpec.intArgSel and not res(i).state.zero)
                                        or (res(i).ins.physicalArgSpec.floatArgSel);
@@ -803,8 +812,10 @@ begin
             
             if IMM_AS_REG then
                 res(i).ins.physicalArgSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);    
+                res(i).state.argSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);    
                 if CLEAR_DEBUG_INFO then
                     res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
+                    res(i).state.immValue(PhysName'length-1 downto 0) := (others => '0');
                 end if;
             end if;
         end if;

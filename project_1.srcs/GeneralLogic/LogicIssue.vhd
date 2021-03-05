@@ -243,15 +243,22 @@ return SchedulerEntrySlot is
 	variable locs: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
 	constant Z3: std_logic_vector(0 to 2) := (others => '0');
 	constant ZZ3: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
+	variable imm: Word := (others => '0');
 begin
 	res.ins := ins;
 	res.state := st;
 
-    if prevSending = '0' or 
-        (ins.physicalArgSpec.intDestSel = '0'
-            and ins.physicalArgSpec.floatDestSel = '0') -- ???
+        imm(15 downto 0) := res.state.immValue;
+        imm(31 downto 16) := (others => res.state.immValue(15));
+
+    if prevSending = '0' or
+      --(ins.physicalArgSpec.intDestSel = '0'
+        --and ins.physicalArgSpec.floatDestSel = '0') -- ???
+        (st.argSpec.intDestSel = '0'
+            and st.argSpec.floatDestSel = '0') -- ???          
     then
         res.ins.physicalArgSpec.dest := (others => '0'); -- Don't allow false notifications of args
+            res.state.argSpec.dest := (others => '0'); -- Don't allow false notifications of args
     end if;
 
 		if res.state.zero(0) = '1' then
@@ -268,22 +275,29 @@ begin
 		end if;
 
 	if false and res.state.immediate = '1' and USE_IMM then
-		res.state.args(1) := res.ins.constantArgs.imm;
+		res.state.args(1) := --res.ins.constantArgs.imm;
+		                      imm;
 		
 		if IMM_AS_REG then
-		    res.state.args(1)(PhysName'length-1 downto 0) := res.ins.physicalArgSpec.args(1);
+		    res.state.args(1)(PhysName'length-1 downto 0) := --res.ins.physicalArgSpec.args(1);
+		                                                     res.state.argSpec.args(1);
 		end if;
 		
-		res.state.args(1)(31 downto 17) := (others => res.ins.constantArgs.imm(16)); -- 16b + addditional sign bit
+		--res.state.args(1)(31 downto 17) := (others => res.ins.constantArgs.imm(16)); -- 16b + addditional sign bit
 		res.state.stored(1) := '1';
 	else
 		if res.state.zero(1) = '1' then
 		    if USE_IMM then
-		        res.state.args(1)(31 downto 16) := (others => res.ins.constantArgs.imm(16));
-		        res.state.args(1)(15 downto 0) := res.ins.constantArgs.imm(15 downto 0);
+		        res.state.args(1)(31 downto 16) := --(others => res.ins.constantArgs.imm(16));
+		                                           --(others => res.ins.constantArgs.imm(15));
+		                                           (others => res.state.immValue(15));
+		        res.state.args(1)(15 downto 0) := --res.ins.constantArgs.imm(15 downto 0);
+		                                          res.state.immValue;
 		        if IMM_AS_REG then
-                    res.state.args(1)(PhysName'length-1 downto 0) := res.ins.physicalArgSpec.args(1);
+                    res.state.args(1)(PhysName'length-1 downto 0) := --res.ins.physicalArgSpec.args(1);
+                                                                     res.state.argSpec.args(1);
                 end if;
+                                                                
             else
                 res.state.args(1) := (others => '0');
             end if;
@@ -322,9 +336,9 @@ begin
         
 --        -- This breaks store tests:        
 --        if not DELAY_ONLY then
---            res.ins.physicalArgSpec.args := (others => (others => '0'));
---            res.ins.physicalArgSpec.intArgSel := (others => '0');
---            res.ins.physicalArgSpec.floatArgSel := (others => '0');
+--            res.ins.argSpec.args := (others => (others => '0'));
+--            res.ins.argSpec.intArgSel := (others => '0');
+--            res.ins.argSpec.floatArgSel := (others => '0');
 --        end if;      
     end if;
     
@@ -390,7 +404,9 @@ return SchedulerEntrySlotArray is
 	variable xVecS: SchedulerEntrySlotArray(0 to QUEUE_SIZE + PIPE_WIDTH - 1);
 	variable fullMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := fullMask;
 	variable livingMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := livingMask;
-	variable fillMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');	
+	variable fillMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+	
+	variable br: std_logic := '0';	
 begin
 	-- Important, new instrucitons in queue must be marked!	
 	for i in 0 to PIPE_WIDTH-1 loop
@@ -464,6 +480,13 @@ begin
            res(i).ins.tags.floatPointer := (others => '0');
 
            res(i).ins.controlInfo := DEFAULT_CONTROL_INFO;
+
+                res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+                
+                br := res(i).ins.classInfo.branchIns;
+                
+                res(i).ins.classInfo := DEFAULT_CLASS_INFO;
+                res(i).ins.classInfo.branchIns := br;
 
            if IMM_AS_REG then        
                res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
@@ -571,14 +594,23 @@ end function;
 function findForwardingMatches(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo) return ForwardingMatches is
     variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
 begin
-	res.a0cmp0 := findRegTag(ins.physicalArgSpec.args(0), fni.tags0);
-    res.a1cmp0 := findRegTag(ins.physicalArgSpec.args(1), fni.tags0);
-    res.a0cmp1 := findRegTag(ins.physicalArgSpec.args(0), fni.tags1);
-    res.a1cmp1 := findRegTag(ins.physicalArgSpec.args(1), fni.tags1);
-    res.a0cmpM1 := findRegTag(ins.physicalArgSpec.args(0), fni.nextTagsM1);
-    res.a1cmpM1 := findRegTag(ins.physicalArgSpec.args(1), fni.nextTagsM1);
-    res.a0cmpM2 := findRegTag(ins.physicalArgSpec.args(0), fni.nextTagsM2);
-    res.a1cmpM2 := findRegTag(ins.physicalArgSpec.args(1), fni.nextTagsM2);     
+--	res.a0cmp0 := findRegTag(ins.physicalArgSpec.args(0), fni.tags0);
+--    res.a1cmp0 := findRegTag(ins.physicalArgSpec.args(1), fni.tags0);
+--    res.a0cmp1 := findRegTag(ins.physicalArgSpec.args(0), fni.tags1);
+--    res.a1cmp1 := findRegTag(ins.physicalArgSpec.args(1), fni.tags1);
+--    res.a0cmpM1 := findRegTag(ins.physicalArgSpec.args(0), fni.nextTagsM1);
+--    res.a1cmpM1 := findRegTag(ins.physicalArgSpec.args(1), fni.nextTagsM1);
+--    res.a0cmpM2 := findRegTag(ins.physicalArgSpec.args(0), fni.nextTagsM2);
+--    res.a1cmpM2 := findRegTag(ins.physicalArgSpec.args(1), fni.nextTagsM2);     
+
+	res.a0cmp0 := findRegTag(st.argSpec.args(0), fni.tags0);
+    res.a1cmp0 := findRegTag(st.argSpec.args(1), fni.tags0);
+    res.a0cmp1 := findRegTag(st.argSpec.args(0), fni.tags1);
+    res.a1cmp1 := findRegTag(st.argSpec.args(1), fni.tags1);
+    res.a0cmpM1 := findRegTag(st.argSpec.args(0), fni.nextTagsM1);
+    res.a1cmpM1 := findRegTag(st.argSpec.args(1), fni.nextTagsM1);
+    res.a0cmpM2 := findRegTag(st.argSpec.args(0), fni.nextTagsM2);
+    res.a1cmpM2 := findRegTag(st.argSpec.args(1), fni.nextTagsM2); 
     
     return res;
 end function;

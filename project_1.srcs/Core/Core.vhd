@@ -578,7 +578,8 @@ begin
           
             branchData <= basicBranch(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins);                  
             
-            dataToBranch(0) <= (slotIssueI0.full and not sentCancelledI0 and isBranchIns(slotIssueI0.ins), branchData);
+            dataToBranch(0) <= (slotIssueI0.full and not sentCancelledI0 and --isBranchIns(slotIssueI0.ins), branchData);
+                                                                             slotIssueI0.state.branchIns, branchData);
             sendingBranchIns <= dataToBranch(0).full;
             
             bqCompare <= (sendingBranchIns, slotIssueI0.ins);
