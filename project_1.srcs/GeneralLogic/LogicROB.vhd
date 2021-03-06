@@ -140,7 +140,7 @@ procedure updateDynamicContentBranch(signal content: inout DynamicOpInfoArray2D;
 procedure updateDynamicGroupMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; ind: natural);
 procedure updateDynamicContentMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot);
 
-function groupCompleted(insVec: InstructionSlotArray) return std_logic;
+function groupCompleted(insVec: InstructionSlotArray; da: DynamicOpInfoArray) return std_logic;
    
 end package;
 
@@ -554,11 +554,12 @@ end procedure;
 
 
 
-function groupCompleted(insVec: InstructionSlotArray) return std_logic is
+function groupCompleted(insVec: InstructionSlotArray; da: DynamicOpInfoArray) return std_logic is
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if      insVec(i).full = '1' 
-		    and (insVec(i).ins.controlInfo.completed and insVec(i).ins.controlInfo.completed2) = '0'
+		    --and (insVec(i).ins.controlInfo.completed and insVec(i).ins.controlInfo.completed2) = '0'
+		    and (da(i).completed0 and da(i).completed1) = '0'
 		then
 			return '0'; 
 		end if;

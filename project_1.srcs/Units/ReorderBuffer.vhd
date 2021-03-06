@@ -107,7 +107,7 @@ begin
         outputDataSig <= getInstructionSlotArray_T(staticOutput_D, dynamicOutput, staticGroupOutput_D, dynamicGroupOutput);
         outputSpecialSig <= getSpecialSlot_T(staticGroupOutput_D, dynamicGroupOutput);
 
-    	outputCompleted <= groupCompleted(outputDataSig);
+    	outputCompleted <= groupCompleted(outputDataSig, dynamicOutput);
     
         SYNCH: process (clk)
         begin

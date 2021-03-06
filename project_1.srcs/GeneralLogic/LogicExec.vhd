@@ -414,7 +414,8 @@ package body LogicExec is
              res.controlInfo.dataMiss := '1';
          elsif storeForwardSending = '1' then
              res.result := storeForwardIns.result;
-             if storeForwardIns.controlInfo.completed2 = '0' then
+             if --storeForwardIns.controlInfo.completed2 = '0' then
+                storeForwardIns.controlInfo.sqMiss = '1' then
                  res.controlInfo.sqMiss := '1';
                  res.controlInfo.specialAction := '1';
                  res.controlInfo.newEvent := '1';
