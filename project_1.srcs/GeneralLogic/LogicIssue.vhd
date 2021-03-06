@@ -51,7 +51,6 @@ end LogicIssue;
 
 package body LogicIssue is
 
-
 function getWakeupPhase(fnm: ForwardingMap; ready1, ready0, readyM1, readyM2: std_logic_vector; progress: boolean) return SmallNumberArray is
     variable res: SmallNumberArray(0 to 2) := (others => "11111110"); -- -2 
 begin
@@ -233,8 +232,6 @@ begin
 end function;
 
 
-
-
 function TMP_restoreState(full: std_logic; ins: InstructionState; st: SchedulerState) return SchedulerEntrySlot is
 	variable res: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 	variable v0, v1: std_logic_vector(1 downto 0) := "00";
@@ -249,29 +246,23 @@ begin
 	res.ins := ins;
 	res.state := st;
 
-        imm(15 downto 0) := res.state.immValue;
-        imm(31 downto 16) := (others => res.state.immValue(15));
+    res.ins.tags.renameIndex := st.renameIndex;
+    res.ins.tags.bqPointer := st.bqPointer;
+    res.ins.tags.sqPointer := st.sqPointer;
+    res.ins.tags.lqPointer := st.lqPointer;
+
+    res.ins.specificOperation := st.operation;
+
+    res.ins.physicalArgSpec.dest := res.state.argSpec.dest;
+    res.ins.physicalArgSpec.intDestSel := res.state.argSpec.intDestSel;
+    res.ins.physicalArgSpec.floatDestSel := res.state.argSpec.floatDestSel;
     
-        res.ins.tags.renameIndex := st.renameIndex;
-        res.ins.tags.bqPointer := st.bqPointer;
-        res.ins.tags.sqPointer := st.sqPointer;
-        res.ins.tags.lqPointer := st.lqPointer;
-
-        res.ins.specificOperation := st.operation;
-
-        res.ins.physicalArgSpec.dest := res.state.argSpec.dest;
-        res.ins.physicalArgSpec.intDestSel := res.state.argSpec.intDestSel;
-        res.ins.physicalArgSpec.floatDestSel := res.state.argSpec.floatDestSel;
+    res.ins.physicalArgSpec.intArgSel := (others => '0');
+    res.ins.physicalArgSpec.floatArgSel := (others => '0');
         
-        res.ins.physicalArgSpec.intArgSel := (others => '0');
-        res.ins.physicalArgSpec.floatArgSel := (others => '0');
-            
-        res.ins.physicalArgSpec.args := res.state.argSpec.args;
-    
+    res.ins.physicalArgSpec.args := res.state.argSpec.args;    
 	return res;
 end function;
-
-
 
 
 function getDispatchArgValues(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo;
@@ -290,34 +281,14 @@ begin
 	res.ins := ins;
 	res.state := st;
 
-        imm(15 downto 0) := res.state.immValue;
-        imm(31 downto 16) := (others => res.state.immValue(15));
-    
---        res.ins.tags.renameIndex := st.renameIndex;
---        res.ins.specificOperation := st.operation;
-
---        res.ins.physicalArgSpec.dest := res.state.argSpec.dest;
---        res.ins.physicalArgSpec.intDestSel := res.state.argSpec.intDestSel;
---        res.ins.physicalArgSpec.floatDestSel := res.state.argSpec.floatDestSel;
-        
---            res.ins.physicalArgSpec.intArgSel := (others => '0');
---            res.ins.physicalArgSpec.floatArgSel := (others => '0');
-            
---            if REGS_ONLY or DELAY_ONLY then
---                res.ins.physicalArgSpec.args := res.state.argSpec.args; 
---            else
---                res.ins.physicalArgSpec.args := (others => (others => '0'));
---            end if;
-            
+    imm(15 downto 0) := res.state.immValue;
+    imm(31 downto 16) := (others => res.state.immValue(15));
     
     if prevSending = '0' or
-      --(ins.physicalArgSpec.intDestSel = '0'
-        --and ins.physicalArgSpec.floatDestSel = '0') -- ???
-        (st.argSpec.intDestSel = '0'
-            and st.argSpec.floatDestSel = '0') -- ???          
+          (st.argSpec.intDestSel = '0' and st.argSpec.floatDestSel = '0') -- ???          
     then
         res.ins.physicalArgSpec.dest := (others => '0'); -- Don't allow false notifications of args
-            res.state.argSpec.dest := (others => '0'); -- Don't allow false notifications of args
+        res.state.argSpec.dest := (others => '0'); -- Don't allow false notifications of args
     end if;
 
 		if res.state.zero(0) = '1' then
@@ -334,29 +305,19 @@ begin
 		end if;
 
 	if false and res.state.immediate = '1' and USE_IMM then
-		res.state.args(1) := --res.ins.constantArgs.imm;
-		                      imm;
-		
+		res.state.args(1) := imm;
 		if IMM_AS_REG then
-		    res.state.args(1)(PhysName'length-1 downto 0) := --res.ins.physicalArgSpec.args(1);
-		                                                     res.state.argSpec.args(1);
-		end if;
-		
-		--res.state.args(1)(31 downto 17) := (others => res.ins.constantArgs.imm(16)); -- 16b + addditional sign bit
+		    res.state.args(1)(PhysName'length-1 downto 0) := res.state.argSpec.args(1);
+		end if;		
 		res.state.stored(1) := '1';
 	else
 		if res.state.zero(1) = '1' then
 		    if USE_IMM then
-		        res.state.args(1)(31 downto 16) := --(others => res.ins.constantArgs.imm(16));
-		                                           --(others => res.ins.constantArgs.imm(15));
-		                                           (others => res.state.immValue(15));
-		        res.state.args(1)(15 downto 0) := --res.ins.constantArgs.imm(15 downto 0);
-		                                          res.state.immValue;
+		        res.state.args(1)(31 downto 16) := (others => res.state.immValue(15));
+		        res.state.args(1)(15 downto 0) := res.state.immValue;
 		        if IMM_AS_REG then
-                    res.state.args(1)(PhysName'length-1 downto 0) := --res.ins.physicalArgSpec.args(1);
-                                                                     res.state.argSpec.args(1);
-                end if;
-                                                                
+                    res.state.args(1)(PhysName'length-1 downto 0) := res.state.argSpec.args(1);
+                end if;                                                               
             else
                 res.state.args(1) := (others => '0');
             end if;
@@ -387,18 +348,8 @@ begin
 
         res.ins.classInfo := DEFAULT_CLASS_INFO;
         res.ins.constantArgs.imm := (others => '0');
-        
-        res.ins.virtualArgSpec.args := (others => (others => '0'));
-        res.ins.virtualArgSpec.intArgSel := (others => '0');
-        res.ins.virtualArgSpec.floatArgSel := (others => '0');
 
-        
---        -- This breaks store tests:        
---        if not DELAY_ONLY then
---            res.ins.argSpec.args := (others => (others => '0'));
---            res.ins.argSpec.intArgSel := (others => '0');
---            res.ins.argSpec.floatArgSel := (others => '0');
---        end if;      
+        res.ins.virtualArgSpec := DEFAULT_ARG_SPEC;
     end if;
     
 	return res;
@@ -418,7 +369,6 @@ begin
 	res.state := st;
 
 	-- Clear 'missing' flag where readyNext indicates.
-	--res.state.missing := res.state.missing and not (res.state.readyNext and not res.state.zero);
 
     if res.state.argLocsPhase(0)(1 downto 0) = "00" and res.state.stored(0) = '0' then
         res.state.args(0) := vals(slv2u(res.state.argLocsPipe(0)(1 downto 0)));
@@ -463,9 +413,7 @@ return SchedulerEntrySlotArray is
 	variable xVecS: SchedulerEntrySlotArray(0 to QUEUE_SIZE + PIPE_WIDTH - 1);
 	variable fullMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := fullMask;
 	variable livingMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := livingMask;
-	variable fillMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
-	
-	variable br: std_logic := '0';	
+	variable fillMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');	
 begin
 	-- Important, new instrucitons in queue must be marked!	
 	for i in 0 to PIPE_WIDTH-1 loop
@@ -523,42 +471,15 @@ begin
 	-- Fill output array
 	for i in 0 to res'right loop
 	   res(i).full := iqFullMaskNext(i);
-	   res(i).ins := iqDataNextS(i).ins;
+	   if not CLEAR_DEBUG_INFO then
+	       res(i).ins := iqDataNextS(i).ins;
+	   else
+	       res(i).ins := DEFAULT_INS_STATE;
+       end if; 
 
-	   res(i).state := iqDataNextS(i).state;
-	
+	   res(i).state := iqDataNextS(i).state;	
 	   res(i).state.stored := (others => '0');
 	   res(i).state.args := (others => (others => '0'));
-	   
-       if CLEAR_DEBUG_INFO then
-           res(i).ins := clearAbstractInfo(res(i).ins);           
-           res(i).ins := clearDbCounters(res(i).ins);
-           
-           --  These ptrs are kept in BQ
-           res(i).ins.tags.intPointer := (others => '0');
-           res(i).ins.tags.floatPointer := (others => '0');
-
-           res(i).ins.controlInfo := DEFAULT_CONTROL_INFO;
-
-            res(i).ins.specificOperation := DEFAULT_SPECIFIC_OP;
-
-                res(i).ins.constantArgs := DEFAULT_CONSTANT_ARGS;
-                res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
-                        res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;
-                        --   res(i).ins.physicalArgSpec.args(0) := (others => '0');
-                
-                br := res(i).ins.classInfo.branchIns;
-                
-                res(i).ins.classInfo := DEFAULT_CLASS_INFO;
-                --res(i).ins.classInfo.branchIns := br;
-
-           if IMM_AS_REG then        
-               res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
-           end if;
-           
-           
-           res(i).ins := DEFAULT_INS_STATE;
-       end if;	
 	end loop;
 
 	return res;
@@ -615,7 +536,6 @@ begin
     end if;
     
 	readyBefore := not res.state.missing;
-
     readyNew := (isNonzero(wakeupVec0), isNonzero(wakeupVec1), '0');
 
 	-- Update arg tracking
@@ -661,15 +581,6 @@ end function;
 function findForwardingMatches(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo) return ForwardingMatches is
     variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
 begin
---	res.a0cmp0 := findRegTag(ins.physicalArgSpec.args(0), fni.tags0);
---    res.a1cmp0 := findRegTag(ins.physicalArgSpec.args(1), fni.tags0);
---    res.a0cmp1 := findRegTag(ins.physicalArgSpec.args(0), fni.tags1);
---    res.a1cmp1 := findRegTag(ins.physicalArgSpec.args(1), fni.tags1);
---    res.a0cmpM1 := findRegTag(ins.physicalArgSpec.args(0), fni.nextTagsM1);
---    res.a1cmpM1 := findRegTag(ins.physicalArgSpec.args(1), fni.nextTagsM1);
---    res.a0cmpM2 := findRegTag(ins.physicalArgSpec.args(0), fni.nextTagsM2);
---    res.a1cmpM2 := findRegTag(ins.physicalArgSpec.args(1), fni.nextTagsM2);     
-
 	res.a0cmp0 := findRegTag(st.argSpec.args(0), fni.tags0);
     res.a1cmp0 := findRegTag(st.argSpec.args(1), fni.tags0);
     res.a0cmp1 := findRegTag(st.argSpec.args(0), fni.tags1);

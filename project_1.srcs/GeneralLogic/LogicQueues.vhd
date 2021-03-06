@@ -45,10 +45,10 @@ package LogicQueues is
     function getAddressCompleted(content: QueueEntryArray) return std_logic_vector;
     function getAddressMatching(content: QueueEntryArray; adr: Mword) return std_logic_vector;
     function getWhichMemOp(content: QueueEntryArray) return std_logic_vector;
-    function getQueueContent_T(ia: InstructionStateArray) return QueueEntryArray;
+    --function getQueueContent_T(ia: InstructionStateArray) return QueueEntryArray;
     function getDrainOutput_T(elem: QueueEntry; value: Mword) return InstructionState;
     
-    function TMP_clearOutputDebug(ins: InstructionState) return InstructionState;
+    --function TMP_clearOutputDebug(ins: InstructionState) return InstructionState;
     function TMP_cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
     function TMP_cmpIndexAfter(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
     function findNewestMatchIndex2(olderSQ: std_logic_vector; pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
@@ -166,23 +166,23 @@ package body LogicQueues is
             return res;
         end function;
         
-            function getQueueContent_T(ia: InstructionStateArray) return QueueEntryArray is
-                variable res: QueueEntryArray;
-            begin
-                for i in ia'range loop
-                    res(i).isSysOp := isStoreSysOp(ia(i));
-                    res(i).hasEvent := ia(i).controlInfo.newEvent;
+--            function getQueueContent_T(ia: InstructionStateArray) return QueueEntryArray is
+--                variable res: QueueEntryArray;
+--            begin
+--                for i in ia'range loop
+--                    res(i).isSysOp := isStoreSysOp(ia(i));
+--                    res(i).hasEvent := ia(i).controlInfo.newEvent;
                     
-                    res(i).first := ia(i).controlInfo.firstBr;
-                    res(i).completedA := ia(i).controlInfo.completed;
-                    res(i).completedV := ia(i).controlInfo.completed2;
+--                    res(i).first := ia(i).controlInfo.firstBr;
+--                    res(i).completedA := ia(i).controlInfo.completed;
+--                    res(i).completedV := ia(i).controlInfo.completed2;
                     
-                    res(i).address := ia(i).target;
-                    res(i).value := ia(i).result;
+--                    res(i).address := ia(i).target;
+--                    res(i).value := ia(i).result;
                     
-                end loop;
-                return res;
-            end function;
+--                end loop;
+--                return res;
+--            end function;
 
 
             function getDrainOutput_T(elem: QueueEntry; value: Mword) return InstructionState is
@@ -209,19 +209,19 @@ package body LogicQueues is
             end function;
 
 
-    
-    function TMP_clearOutputDebug(ins: InstructionState) return InstructionState is
-        variable res: InstructionState := ins;
-    begin
-        if CLEAR_DEBUG_INFO then                    
-            res.classInfo := DEFAULT_CLASS_INFO;
-            res.constantArgs := DEFAULT_CONSTANT_ARGS;
-            res.virtualArgSpec := DEFAULT_ARG_SPEC;
-            res.physicalArgSpec := DEFAULT_ARG_SPEC;
+  
+--    function TMP_clearOutputDebug(ins: InstructionState) return InstructionState is
+--        variable res: InstructionState := ins;
+--    begin
+--        if CLEAR_DEBUG_INFO then                    
+--            res.classInfo := DEFAULT_CLASS_INFO;
+--            res.constantArgs := DEFAULT_CONSTANT_ARGS;
+--            res.virtualArgSpec := DEFAULT_ARG_SPEC;
+--            res.physicalArgSpec := DEFAULT_ARG_SPEC;
             
-        end if;
-        return res;
-    end function;
+--        end if;
+--        return res;
+--    end function;
 
     function TMP_cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber)
     return std_logic_vector is
