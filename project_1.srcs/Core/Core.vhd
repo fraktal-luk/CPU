@@ -808,7 +808,8 @@ begin
            );
            
            -- TEMP mem interface    
-		   dread <= '1';
+		   dread <= --'1';
+		              slotM0_E0(0).full;
            dadr <= slotM0_E0(0).ins.result;
            sysRegReadSel <= slotM0_E0(0).ins.result(4 downto 0);
            sysRegRead <= sendingM0_E0 and isLoadSysOp(slotM0_E0(0).ins);

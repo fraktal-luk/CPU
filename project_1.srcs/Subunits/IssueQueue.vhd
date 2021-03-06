@@ -62,16 +62,16 @@ architecture Behavioral of IssueQueue is
 	                   stayMask, selMask, selMaskPrev, cancelledMask, issuedMask, remainMask: std_logic_vector(0 to IQ_SIZE-1) := (others=>'0');	
 
 	signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-	signal newContent, newContentRR, newSchedData, inputStagePreRR, inputStage, inputStageUpdated, inputStageNext:
-	                                                                                   SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	signal newContent, newContentRR, newSchedData, inputStagePreRR, inputStageUpdated: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 
+                                                                                                                                                            
 	signal anyReadyAll, anyReadyFull, anyReadyLive, sends, sends_A, sends_AN,
-	            sendPossible, sendingKilled, sent, sentKilled, sentUnexpected, inputStageAny, inputStageLivingAny,
-	               inputReadingAny, anyCancelled, inputStageSending, inputStageMoving, acceptingForInputStage: std_logic := '0';
+	            sendPossible, sendingKilled, sent, sentKilled, sendingEmpty, sentEmpty, 
+	            sentUnexpected,
+	               anyCancelled, inputStageSending, inputStageMoving, acceptingForInputStage: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
     signal fma: ForwardingMatchesArray(0 to IQ_SIZE-1) := (others => DEFAULT_FORWARDING_MATCHES);
-    signal fmaInputStage: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
 
 	-- Select item at first '1', or the last one if all zeros
 	function prioSelect(elems: SchedulerEntrySlotArray; selVec: std_logic_vector) return SchedulerEntrySlot is
@@ -179,24 +179,38 @@ architecture Behavioral of IssueQueue is
 	   end loop;   
 	   return res;
 	end function;
-    	
+    
+    signal ch0: std_logic := '0';	
 begin
-	fmaInputStage <= findForwardingMatchesArray(inputStage, fni);    
-    inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
 
-    inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, true, false) when not ALT_INPUT
-                     else newArr_Alt;
-    newArrOut <= inputStageUpdated;
-    
-    inputStageSending <= inputStageAny and queuesAccepting and not execEventSignal and not lateEventSignal;
-    
-    inputStageNext <= iqInputStageNext(inputStageUpdated, newContent, prevSendingOK, inputStageSending, execEventSignal, lateEventSignal);
-    inputReadingAny <= prevSendingOK and isNonzero(extractFullMask(newArr));
-    inputStageAny <= isNonzero(extractFullMask(inputStage));
-    inputStageLivingAny <= inputStageAny and not execEventSignal and not lateEventSignal;
+    INPUT_STAGE: block
+        signal fmaInputStage: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);    
+        signal inputStage, inputStageNext: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);          
+        signal inputStageAny, inputStageLivingAny, inputReadingAny: std_logic := '0';        
+    begin
+        inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!    
+        fmaInputStage <= findForwardingMatchesArray(inputStage, fni);    
         
-    cancelledMask <= (killMaskPrev and selMaskPrev);
-    anyCancelled <= isNonzero(cancelledMask);
+        -- intf
+        inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, true, false) when not ALT_INPUT
+                         else newArr_Alt;
+        newArrOut <= inputStageUpdated;
+        
+        -- intf
+        inputStageSending <= inputStageAny and queuesAccepting and not execEventSignal and not lateEventSignal;
+    
+        inputStageNext <= iqInputStageNext(inputStageUpdated, newContent, prevSendingOK, inputStageSending, execEventSignal, lateEventSignal);
+            inputReadingAny <= prevSendingOK and isNonzero(extractFullMask(newArr));
+            inputStageLivingAny <= inputStageAny and not execEventSignal and not lateEventSignal;
+        inputStageAny <= isNonzero(extractFullMask(inputStage));
+            
+        INPUT_SYNCHRONOUS: process(clk) 	
+        begin
+            if rising_edge(clk) then
+                inputStagePreRR <= inputStageNext;			
+            end if;
+        end process;
+    end block;
         
 	QUEUE_SYNCHRONOUS: process(clk) 	
 	begin
@@ -206,16 +220,23 @@ begin
 			selMaskPrev <= selMask;
 			killMaskPrev <= killMask;
 			sentKilled <= sendingKilled;
-			
-            inputStagePreRR <= inputStageNext;			
+			sentEmpty <= sendingEmpty;			
 		end if;
 	end process;	
 
+    sendingKilled <= isNonzero(killMask and selMask);
+    cancelledMask <= (killMaskPrev and selMaskPrev);
+    anyCancelled <= --isNonzero(cancelledMask);
+                    sentKilled;-- or sentEmpty;
+    
 	livingMask <= fullMask and not killMask;
 	fullMask <= extractFullMask(queueContent);
 
 	sends <= anyReadyFull and nextAccepting;
+	         --sends_A;
 	   sends_A <= anyReadyAll and nextAccepting;
+	
+	       ch0 <= not anyCancelled xor sentKilled;
 	
 	dispatchDataNew <= clearOutput(clearDestIfEmpty(prioSelect(queueContentUpdatedSel, readyMaskFull), not sends));
 
@@ -225,7 +246,8 @@ begin
     remainMask <= TMP_setUntil(issuedMask, '1'); 
     issuedMask <= TMP_getIssuedMask(queueContent);
     sent <= isNonzero(issuedMask);
-    sendingKilled <= isNonzero(killMask and selMask);
+        sendingEmpty <= --sends_A and not sends;
+                        (anyReadyAll and not anyReadyFull) and nextAccepting;
     
     queueContentNext <= iqContentNext(queueContentUpdated, inputStageUpdated,
                                       remainMask, fullMask, livingMask, selMask, issuedMask,                                             
@@ -354,7 +376,7 @@ begin
 
         iqText <= getInsStringArray(queueContent, args);        
         queueText <= getInsStringArray(queueContent);
-        inputStageText <= getInsStringArray(inputStage);
+        --inputStageText <= getInsStringArray(inputStage);
     end generate;
 	   	   
 end Behavioral;
