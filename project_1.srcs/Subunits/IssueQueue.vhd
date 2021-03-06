@@ -58,14 +58,15 @@ end IssueQueue;
 
 
 architecture Behavioral of IssueQueue is
-	signal fullMask, fullMaskNext, killMask, killMaskPrev, livingMask, readyMask, readyMaskLive,
+	signal fullMask, fullMaskNext, killMask, killMaskPrev, livingMask, readyMaskAll, readyMaskFull, readyMaskLive,
 	                   stayMask, selMask, selMaskPrev, cancelledMask, issuedMask, remainMask: std_logic_vector(0 to IQ_SIZE-1) := (others=>'0');	
 
 	signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 	signal newContent, newContentRR, newSchedData, inputStagePreRR, inputStage, inputStageUpdated, inputStageNext:
 	                                                                                   SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 
-	signal anyReadyFull, anyReadyLive, sends, sendPossible, sendingKilled, sent, sentKilled, sentUnexpected, inputStageAny, inputStageLivingAny,
+	signal anyReadyAll, anyReadyFull, anyReadyLive, sends, sends_A, sends_AN,
+	            sendPossible, sendingKilled, sent, sentKilled, sentUnexpected, inputStageAny, inputStageLivingAny,
 	               inputReadingAny, anyCancelled, inputStageSending, inputStageMoving, acceptingForInputStage: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
@@ -212,17 +213,15 @@ begin
 
 	livingMask <= fullMask and not killMask;
 	fullMask <= extractFullMask(queueContent);
-    fullMaskNext <= extractFullMask(queueContentNext);
 
-	sends <= anyReadyLive and nextAccepting when not TMP_PARAM_SIMPLIFY_ISSUE -- CHECK: can we use full instead of living?
-	   else  anyReadyFull and nextAccepting;
-	sendPossible <= anyReadyFull and nextAccepting; -- Includes ops that would send but are killed
+	sends <= anyReadyFull and nextAccepting;
+	   sends_A <= anyReadyAll and nextAccepting;
 	
-	dispatchDataNew <= clearOutput(clearDestIfEmpty(prioSelect(queueContentUpdatedSel, readyMask), not sends));
+	dispatchDataNew <= clearOutput(clearDestIfEmpty(prioSelect(queueContentUpdatedSel, readyMaskFull), not sends));
 
     newContent <= newArr;
             
-    selMask <= getFirstOne(readyMask);
+    selMask <= getFirstOne(readyMaskFull);
     remainMask <= TMP_setUntil(issuedMask, '1'); 
     issuedMask <= TMP_getIssuedMask(queueContent);
     sent <= isNonzero(issuedMask);
@@ -241,27 +240,29 @@ begin
 	queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, waitingFM, true, false);
 	queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, selectionFM, false, false);
 
-	readyMask <= extractReadyMaskNew(queueContentUpdatedSel) and fullMask;	
-	readyMaskLive <= readyMask and livingMask;
+    readyMaskAll <= extractReadyMaskNew(queueContentUpdatedSel);
+	readyMaskFull <= readyMaskAll and fullMask;	
+	readyMaskLive <= readyMaskAll and livingMask;
+	
+	anyReadyLive <= isNonzero(readyMaskLive);
+    anyReadyFull <= isNonzero(readyMaskFull);
+    anyReadyAll <= isNonzero(readyMaskAll);
+    
 	
 	killMask <= getKillMask(queueContent, fullMask, execCausing, execEventSignal, lateEventSignal);
 	
+	
+
 	acceptingForInputStage <= not fullMask(IQ_SIZE-PIPE_WIDTH);
-	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH);-- and not inputStageAny;
-	               
-	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);
-	
-	anyReadyLive <= isNonzero(readyMaskLive);
-	anyReadyFull <= isNonzero(readyMask);
-	
+	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH);-- and not inputStageAny;	               
+	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);	
 	anyReady <= anyReadyLive; -- OUTPUT
 	
 	schedulerOut <= TMP_restoreState(sends, dispatchDataNew.ins, dispatchDataNew.state);
 
 	sending <= sends;
-    sentCancelled <= sentKilled when not TMP_PARAM_SIMPLIFY_ISSUE
-                else anyCancelled;
-    
+    sentCancelled <= anyCancelled;
+                    
     -- CAREFUL! If queue becomes noncollapsing, we'll need to see all full bits! 
     empty <= not fullMask(0); -- not isNonzero(fullMask);
     
@@ -280,6 +281,9 @@ begin
         signal inputStageText: InsStringArray(0 to PIPE_WIDTH-1);
         signal iqText: InsStringArray(0 to IQ_SIZE-1) := (others => (others => ' '));            
     begin
+    
+        fullMaskNext <= extractFullMask(queueContentNext);
+    
         -- Monitor:
         -- fma - forward matches array
         
@@ -294,7 +298,7 @@ begin
                 tmpFull := countOnes(fullMask);
                 newFull := countOnes(fullMaskNext); 
             
-                prevReadyMask <= readyMask;
+                prevReadyMask <= readyMaskFull;
                 
                 if std2bool(isNonzero(issuedMask)) then -- something is removed
                     tmpFull := tmpFull - 1;

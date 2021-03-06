@@ -630,7 +630,7 @@ return std_logic_vector is
 begin
 	for i in 0 to fullMask'length-1 loop
 		res(i) := killByTag(compareTagBefore(causing.tags.renameIndex, content(i).tags.renameIndex),
-									execEventSig, lateEventSig) and fullMask(i);
+									execEventSig, lateEventSig);-- and fullMask(i);
 	end loop;
 	return res;
 end function;
