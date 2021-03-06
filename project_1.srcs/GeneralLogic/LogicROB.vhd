@@ -223,8 +223,8 @@ end function;
         res.full := dyn.full;
         res.ins.controlInfo.killed := dyn.killed;
         res.ins.controlInfo.causing := dyn.causing;
-        res.ins.controlInfo.completed := dyn.completed0; 
-        res.ins.controlInfo.completed2 := dyn.completed1;
+        --res.ins.controlInfo.completed := dyn.completed0; 
+        --res.ins.controlInfo.completed2 := dyn.completed1;
         
         res.ins.controlInfo.newEvent := dyn.hasEvent;
         res.ins.controlInfo.hasException := dyn.hasException;

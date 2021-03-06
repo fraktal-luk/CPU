@@ -151,8 +151,8 @@ architecture Behavioral of UnitRegManager is
 
         -- Setting 'complete' for ops not using Exec resources
         for i in 0 to PIPE_WIDTH-1 loop        -- TEMP!                           
-		    res(i).ins.controlInfo.completed := not res(i).ins.classInfo.mainCluster;
-            res(i).ins.controlInfo.completed2 := not res(i).ins.classInfo.secCluster;
+		    --res(i).ins.controlInfo.completed := not res(i).ins.classInfo.mainCluster;
+            --res(i).ins.controlInfo.completed2 := not res(i).ins.classInfo.secCluster;
         end loop;
                 
         -- If found special instruction or exception, kill next ones

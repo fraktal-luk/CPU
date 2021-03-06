@@ -119,8 +119,8 @@ architecture Behavioral of IssueQueue is
             res.ins := clearAbstractInfo(res.ins);
         end if;
 
-        res.ins.controlInfo.completed := '0';
-        res.ins.controlInfo.completed2 := '0';
+--        res.ins.controlInfo.completed := '0';
+--        res.ins.controlInfo.completed2 := '0';
     
         res.ins.controlInfo.newEvent := '0';
         res.ins.controlInfo.hasInterrupt := '0';

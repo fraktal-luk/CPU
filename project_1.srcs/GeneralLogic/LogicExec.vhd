@@ -377,14 +377,14 @@ package body LogicExec is
     function setAddressCompleted(ins: InstructionState; state: std_logic) return InstructionState is
         variable res: InstructionState := ins;
     begin
-        res.controlInfo.completed := state;
+        --res.controlInfo.completed := state;
         return res;
     end function;
     
     function setDataCompleted(ins: InstructionState; state: std_logic) return InstructionState is
         variable res: InstructionState := ins;
     begin
-        res.controlInfo.completed2 := state;
+        --res.controlInfo.completed2 := state;
         return res;
     end function;
     
