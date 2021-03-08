@@ -64,7 +64,7 @@ architecture Behavioral of Core is
                 frontEventSignal, bqAccepting, bqSending, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ, dbEmpty,
                 canSendFront, canSendRename, canSendBuff: std_logic := '0';
 
-    --        signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
+            signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
     signal frontDataLastLiving, TMP_frontDataSpMasked,
             renamedDataLivingFloatPre, renamedDataMerged, renamedDataLivingMem, renamedDataLivingRe, renamedDataLivingFloatRe,
             renamedDataLivingReMem, renamedDataLivingMemBuff, renamedDataLivingBuff, dispatchBufferDataInt,-- dispatchBufferDataFloat,
@@ -407,7 +407,7 @@ begin
         -- TODO? Change syntax to array per subpipe rather then independent vars for each stage? Consider forking pipes like Mem 
         
         -- Selection from IQ and state after Issue stage
-        signal slotSelI0, slotIssueI0,
+        signal slotSelI0, slotIssueI0,      slotIssueI0_A,
                slotSelI1, slotIssueI1,
                slotSelM0, slotIssueM0,
                slotSel3, slotIssue3,
@@ -513,7 +513,6 @@ begin
         
                 acceptingOut => iqAcceptingI0,--iqAcceptingI0rr(4),
                 acceptingMore => iqAcceptingMoreI0,
-                sentCancelled => sentCancelledI0,
                 prevSendingOK => renamedSending,
                 newArr => dataToQueueI0,--,schArrays(4),
                     newArr_Alt => NEW_ARR_DUMMY,
@@ -526,12 +525,20 @@ begin
                 execCausing => execCausing,
                 lateEventSignal => lateEventSignal,
                 execEventSignal => execEventSignal,
-                empty => emptyI0,
-                anyReady => open,--iqReadyArr(4),
-                schedulerOut => slotSelI0,--dataToIssueAlu,
-                sending => sendingSelI0 --sendingToIssueAlu
+                
+                anyReady => open,
+                schedulerOut => slotSelI0,
+                sending => sendingSelI0,
+                sentCancelled => sentCancelledI0,
+                
+--                anyReady_A => open,
+--                schedulerOut_A => slotSelI0,
+--                sending_A => sendingSelI0,
+--                sentCancelled_A => sentCancelledI0,
+
+                empty => emptyI0
             );
-     
+
             ISSUE_STAGE_I0: entity work.IssueStage
             generic map(USE_IMM => true)
             port map(
@@ -553,7 +560,30 @@ begin
                 fni => fni,
                 regValues => regValsI0 --(others => (others => '0'))     
             );
-          
+                ISSUE_STAGE_I0_A: entity work.IssueStage
+                generic map(USE_IMM => true)
+                port map(
+                    clk => clk,
+                    reset => '0',
+                    en => '0',
+            
+                    prevSending => sendingSelI0,--sendingToIssueAlu,
+                    nextAccepting => '1',
+            
+                    input => slotSelI0,-- dataToIssueAlu,
+                    
+                    acceptingOut => open,
+                    output => slotIssueI0_A,--dataToExecAlu,
+                    
+                    execEventSignal => execEventSignal,
+                    lateEventSignal => lateEventSignal,
+                    execCausing => execCausing,
+                    fni => fni,
+                    regValues => regValsI0 --(others => (others => '0'))     
+                );
+              
+                    --slotIssueI0 slotIssueI0_A
+                
             dataToAlu(0) <= (slotIssueI0.full and not sentCancelledI0, executeAlu(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins, branchData));
           
             STAGE_I0_E0: entity work.GenericStage(Behavioral)

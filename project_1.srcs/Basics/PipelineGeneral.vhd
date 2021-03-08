@@ -170,6 +170,7 @@ function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray;
 function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
 
 function clearDestIfEmpty(elem: SchedulerEntrySlot; empty: std_logic) return SchedulerEntrySlot;
+function clearDestIfEmpty(elem: SchedulerEntrySlot) return SchedulerEntrySlot;
 
 
 function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector;
@@ -1084,6 +1085,18 @@ function clearDestIfEmpty(elem: SchedulerEntrySlot; empty: std_logic) return Sch
     variable res: SchedulerEntrySlot := elem;
 begin
     if empty = '1' then
+        res.ins.physicalArgSpec.intDestSel := '0';
+        res.ins.physicalArgSpec.floatDestSel := '0';
+        res.ins.physicalArgSpec.dest := (others => '0');
+    end if;
+
+    return res;
+end function;
+
+function clearDestIfEmpty(elem: SchedulerEntrySlot) return SchedulerEntrySlot is
+    variable res: SchedulerEntrySlot := elem;
+begin
+    if not elem.full = '1' then
         res.ins.physicalArgSpec.intDestSel := '0';
         res.ins.physicalArgSpec.floatDestSel := '0';
         res.ins.physicalArgSpec.dest := (others => '0');

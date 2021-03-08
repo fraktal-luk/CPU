@@ -41,7 +41,6 @@ entity IssueQueue is
 		selectionFM: in ForwardingMap; 
 		readyRegFlags: in std_logic_vector(0 to 3*PIPE_WIDTH-1);
 
-		sentCancelled: out std_logic;
 		
 		acceptingMore: out std_logic;
 		acceptingOut: out std_logic;
@@ -51,8 +50,14 @@ entity IssueQueue is
 		empty: out std_logic;
 		
 		anyReady: out std_logic;
+		sentCancelled: out std_logic;		
 		schedulerOut: out SchedulerEntrySlot;
-		sending: out std_logic
+		sending: out std_logic;
+		
+		anyReady_A: out std_logic;
+        sentCancelled_A: out std_logic;        
+        schedulerOut_A: out SchedulerEntrySlot;
+        sending_A: out std_logic		
 	);
 end IssueQueue;
 
@@ -66,10 +71,10 @@ architecture Behavioral of IssueQueue is
 
                                                                                                                                                             
 	signal anyReadyAll, anyReadyFull, anyReadyLive, sends, sends_A, sends_AN,
-	            sendPossible, sendingKilled, sent, sentKilled, sendingEmpty, sentEmpty, 
+	            sendPossible, sendingKilled, sent, sent_A, isSent, isSent_A, sentKilled, sendingEmpty, sentEmpty, 
 	            sentUnexpected,
-	               anyCancelled, inputStageSending, inputStageMoving, acceptingForInputStage: std_logic := '0';
-	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+	               anyCancelled, anyCancelled_A, inputStageSending, inputStageMoving, acceptingForInputStage: std_logic := '0';
+	signal dispatchDataNew, dispatchDataNew_A: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
     signal fma: ForwardingMatchesArray(0 to IQ_SIZE-1) := (others => DEFAULT_FORWARDING_MATCHES);
 
@@ -180,7 +185,7 @@ architecture Behavioral of IssueQueue is
 	   return res;
 	end function;
     
-    signal ch0: std_logic := '0';	
+    signal ch0, ch1, ch2, ch3: std_logic := '0';
 begin
 
     INPUT_STAGE: block
@@ -220,14 +225,17 @@ begin
 			selMaskPrev <= selMask;
 			killMaskPrev <= killMask;
 			sentKilled <= sendingKilled;
-			sentEmpty <= sendingEmpty;			
+			sentEmpty <= sendingEmpty;
+			
+			 isSent <= sends;			
+			 isSent_A <= sends_A;			
 		end if;
 	end process;	
 
     sendingKilled <= isNonzero(killMask and selMask);
     cancelledMask <= (killMaskPrev and selMaskPrev);
-    anyCancelled <= --isNonzero(cancelledMask);
-                    sentKilled;-- or sentEmpty;
+    anyCancelled <= sentKilled;-- or sentEmpty;
+        anyCancelled_A <= sentKilled or sentEmpty;
     
 	livingMask <= fullMask and not killMask;
 	fullMask <= extractFullMask(queueContent);
@@ -236,16 +244,21 @@ begin
 	         --sends_A;
 	   sends_A <= anyReadyAll and nextAccepting;
 	
-	       ch0 <= not anyCancelled xor sentKilled;
-	
-	dispatchDataNew <= clearOutput(clearDestIfEmpty(prioSelect(queueContentUpdatedSel, readyMaskFull), not sends));
+	       ch0 <= sent and not anyCancelled;	       
+	       ch1 <= sent_A and not anyCancelled_A;
+	       ch2 <= not ch0 xor ch1;
+
+	dispatchDataNew <= prioSelect(queueContentUpdatedSel, readyMaskFull);
+    	dispatchDataNew_A <= prioSelect(queueContentUpdatedSel, readyMaskAll);
 
     newContent <= newArr;
             
     selMask <= getFirstOne(readyMaskFull);
     remainMask <= TMP_setUntil(issuedMask, '1'); 
     issuedMask <= TMP_getIssuedMask(queueContent);
-    sent <= isNonzero(issuedMask);
+    sent <= isSent;
+    sent_A <= isSent_A;
+
         sendingEmpty <= --sends_A and not sends;
                         (anyReadyAll and not anyReadyFull) and nextAccepting;
     
@@ -279,11 +292,16 @@ begin
 	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH);-- and not inputStageAny;	               
 	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);	
 	anyReady <= anyReadyLive; -- OUTPUT
+	       anyReady_A <= anyReadyAll;
 	
-	schedulerOut <= TMP_restoreState(sends, dispatchDataNew.ins, dispatchDataNew.state);
+	schedulerOut <= clearOutput(clearDestIfEmpty(TMP_restoreState(sends, dispatchDataNew.ins, dispatchDataNew.state)));
+    	schedulerOut_A <= clearOutput(clearDestIfEmpty(TMP_restoreState(sends_A, dispatchDataNew_A.ins, dispatchDataNew_A.state)));
 
 	sending <= sends;
+    	sending_A <= sends_A;
+
     sentCancelled <= anyCancelled;
+        sentCancelled_A <= anyCancelled_A;
                     
     -- CAREFUL! If queue becomes noncollapsing, we'll need to see all full bits! 
     empty <= not fullMask(0); -- not isNonzero(fullMask);
