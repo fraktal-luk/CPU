@@ -134,27 +134,6 @@ architecture Behavioral of IssueQueue is
 	   return res;
 	end function;
 	
-	function TMP_setUntil(selVec: std_logic_vector; nextAccepting: std_logic) return std_logic_vector is
-		variable res: std_logic_vector(0 to selVec'length-1) := (others => '0');
-	begin
-		for i in res'range loop
-			if (selVec(i) and nextAccepting) = '1' then
-				exit;
-			else
-				res(i) := '1';
-			end if;
-		end loop;
-		return res;
-	end function;
-
-	function TMP_getIssuedMask(elems: SchedulerEntrySlotArray) return std_logic_vector is
-        variable res: std_logic_vector(0 to elems'length-1) := (others => '0');
-	begin
-		for i in 0 to elems'length-1 loop
-		    res(i) := elems(i).state.issued;
-		end loop;
-		return res;
-    end function;
 
 	function iqInputStageNext(content, newContent: SchedulerEntrySlotArray; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerEntrySlotArray is
 	   variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := content;
@@ -232,17 +211,29 @@ begin
 		end if;
 	end process;	
 
+
+	killMask <= getKillMask(queueContent, fullMask, execCausing, execEventSignal, lateEventSignal);
+
+ 	fullMask <= extractFullMask(queueContent);   
+	livingMask <= fullMask and not killMask;
+
+    readyMaskAll <= extractReadyMaskNew(queueContentUpdatedSel);
+	readyMaskFull <= readyMaskAll and fullMask;	
+	readyMaskLive <= readyMaskAll and livingMask;
+	
+	anyReadyLive <= isNonzero(readyMaskLive);
+    anyReadyFull <= isNonzero(readyMaskFull);
+    anyReadyAll <= isNonzero(readyMaskAll);
+    	
+
     sendingKilled <= isNonzero(killMask and selMask);
     cancelledMask <= (killMaskPrev and selMaskPrev);
-    anyCancelled <= sentKilled;-- or sentEmpty;
-        anyCancelled_A <= sentKilled or sentEmpty;
-    
-	livingMask <= fullMask and not killMask;
-	fullMask <= extractFullMask(queueContent);
+    anyCancelled <= sentKilled;
+    anyCancelled_A <= sentKilled or sentEmpty;
+ 
 
 	sends <= anyReadyFull and nextAccepting;
-	         --sends_A;
-	   sends_A <= anyReadyAll and nextAccepting;
+    sends_A <= anyReadyAll and nextAccepting;
 	
 	       ch0 <= sent and not anyCancelled;	       
 	       ch1 <= sent_A and not anyCancelled_A;
@@ -259,11 +250,10 @@ begin
     sent <= isSent;
     sent_A <= isSent_A;
 
-        sendingEmpty <= --sends_A and not sends;
-                        (anyReadyAll and not anyReadyFull) and nextAccepting;
+        sendingEmpty <= (anyReadyAll and not anyReadyFull) and nextAccepting;
     
     queueContentNext <= iqContentNext(queueContentUpdated, inputStageUpdated,
-                                      remainMask, fullMask, livingMask, selMask, issuedMask,                                             
+                                      killMask, selMask,                                           
                                       sends, sent,
                                       sentUnexpected,
                                       inputStageSending
@@ -274,33 +264,20 @@ begin
 	
 	queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, waitingFM, true, false);
 	queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, selectionFM, false, false);
-
-    readyMaskAll <= extractReadyMaskNew(queueContentUpdatedSel);
-	readyMaskFull <= readyMaskAll and fullMask;	
-	readyMaskLive <= readyMaskAll and livingMask;
-	
-	anyReadyLive <= isNonzero(readyMaskLive);
-    anyReadyFull <= isNonzero(readyMaskFull);
-    anyReadyAll <= isNonzero(readyMaskAll);
-    
-	
-	killMask <= getKillMask(queueContent, fullMask, execCausing, execEventSignal, lateEventSignal);
-	
 	
 
 	acceptingForInputStage <= not fullMask(IQ_SIZE-PIPE_WIDTH);
 	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH);-- and not inputStageAny;	               
 	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);	
-	anyReady <= anyReadyLive; -- OUTPUT
-	       anyReady_A <= anyReadyAll;
 	
+	anyReady <= anyReadyLive; -- OUTPUT
 	schedulerOut <= clearOutput(clearDestIfEmpty(TMP_restoreState(sends, dispatchDataNew.ins, dispatchDataNew.state)));
-    	schedulerOut_A <= clearOutput(clearDestIfEmpty(TMP_restoreState(sends_A, dispatchDataNew_A.ins, dispatchDataNew_A.state)));
-
 	sending <= sends;
-    	sending_A <= sends_A;
-
     sentCancelled <= anyCancelled;
+    
+	    anyReady_A <= anyReadyAll;
+    	schedulerOut_A <= clearOutput(clearDestIfEmpty(TMP_restoreState(sends_A, dispatchDataNew_A.ins, dispatchDataNew_A.state)));    
+        sending_A <= sends_A;
         sentCancelled_A <= anyCancelled_A;
                     
     -- CAREFUL! If queue becomes noncollapsing, we'll need to see all full bits! 

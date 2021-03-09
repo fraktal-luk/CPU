@@ -29,8 +29,14 @@ function updateDispatchArgs(ins: InstructionState; st: SchedulerState; vals: Mwo
 return SchedulerEntrySlot;
 
 
+	function TMP_getIssuedMask(elems: SchedulerEntrySlotArray) return std_logic_vector;
+	function TMP_setUntil(selVec: std_logic_vector; nextAccepting: std_logic) return std_logic_vector;
+
 function iqContentNext(queueContent: SchedulerEntrySlotArray; inputDataS: SchedulerEntrySlotArray;
-								 remainMask, fullMask, livingMask, selMask, issuedMask: std_logic_vector;
+                                 killMask,
+								 --remainMask,-- fullMask,-- livingMask,
+								 selMask--, issuedMask
+								 : std_logic_vector;
 								 sends, sent, sentUnexpected, prevSending: std_logic)
 return SchedulerEntrySlotArray;
 
@@ -396,8 +402,33 @@ begin
 end function;
 
 
+	function TMP_getIssuedMask(elems: SchedulerEntrySlotArray) return std_logic_vector is
+        variable res: std_logic_vector(0 to elems'length-1) := (others => '0');
+	begin
+		for i in 0 to elems'length-1 loop
+		    res(i) := elems(i).state.issued;
+		end loop;
+		return res;
+    end function;
+
+	function TMP_setUntil(selVec: std_logic_vector; nextAccepting: std_logic) return std_logic_vector is
+		variable res: std_logic_vector(0 to selVec'length-1) := (others => '0');
+	begin
+		for i in res'range loop
+			if (selVec(i) and nextAccepting) = '1' then
+				exit;
+			else
+				res(i) := '1';
+			end if;
+		end loop;
+		return res;
+	end function;
+	
 function iqContentNext(queueContent: SchedulerEntrySlotArray; inputDataS: SchedulerEntrySlotArray;
-								 remainMask, fullMask, livingMask, selMask, issuedMask: std_logic_vector;
+                                 killMask,
+								 --remainMask,-- fullMask,-- livingMask,
+								 selMask--, issuedMask
+								 : std_logic_vector;
 								 sends, sent, sentUnexpected, prevSending: std_logic)
 return SchedulerEntrySlotArray is
 	constant QUEUE_SIZE: natural := queueContent'length;
@@ -411,7 +442,12 @@ return SchedulerEntrySlotArray is
     variable iqRemainingMaskSh: std_logic_vector(0 to QUEUE_SIZE + 4 - 1) := (others => '0');
 
 	variable xVecS: SchedulerEntrySlotArray(0 to QUEUE_SIZE + PIPE_WIDTH - 1);
+	constant fullMask: std_logic_vector(0 to QUEUE_SIZE-1) := extractFullMask(queueContent);
+	constant issuedMask: std_logic_vector(0 to QUEUE_SIZE-1) := TMP_getIssuedMask(queueContent);
+	constant remainMask: std_logic_vector(0 to QUEUE_SIZE-1) := TMP_setUntil(issuedMask, '1');
+	
 	variable fullMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := fullMask;
+	constant livingMask: std_logic_vector(0 to QUEUE_SIZE-1) := fullMask and not killMask;	
 	variable livingMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := livingMask;
 	variable fillMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');	
 begin

@@ -186,7 +186,7 @@ function makeSlotArray(ia: InstructionStateArray; fm: std_logic_vector) return I
 --function killByTag(before, ei, int: std_logic) return std_logic; PRIVATE
 
 -- UNUSED?
-function getKillMask(content: InstructionStateArray; fullMask: std_logic_vector;
+function getKillMask(content: InstructionStateArray;-- fullMask: std_logic_vector;
 							causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector;
 
@@ -624,12 +624,12 @@ begin
     return (before and ei) or int;
 end function;
 
-function getKillMask(content: InstructionStateArray; fullMask: std_logic_vector;
+function getKillMask(content: InstructionStateArray;-- fullMask: std_logic_vector;
 							causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector is
-	variable res: std_logic_vector(0 to fullMask'length-1);
+	variable res: std_logic_vector(0 to content'length-1);
 begin
-	for i in 0 to fullMask'length-1 loop
+	for i in 0 to content'length-1 loop
 		res(i) := killByTag(compareTagBefore(causing.tags.renameIndex, content(i).tags.renameIndex),
 									execEventSig, lateEventSig);-- and fullMask(i);
 	end loop;
@@ -639,11 +639,11 @@ end function;
 function getKillMask(content: SchedulerEntrySlotArray; fullMask: std_logic_vector;
 							causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector is
-	variable res: std_logic_vector(0 to fullMask'length-1);
+	variable res: std_logic_vector(0 to content'length-1);
 begin
-	for i in 0 to fullMask'length-1 loop
+	for i in 0 to content'length-1 loop
 		res(i) := killByTag(compareTagBefore(causing.tags.renameIndex, content(i).state.renameIndex),
-									execEventSig, lateEventSig) and fullMask(i);
+									execEventSig, lateEventSig);-- and fullMask(i);
 	end loop;
 	return res;
 end function;
