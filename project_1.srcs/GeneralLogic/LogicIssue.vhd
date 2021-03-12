@@ -18,6 +18,86 @@ use work.PipelineGeneral.all;
 
 package LogicIssue is
 
+-- S       branchIns: std_logic;
+-- S	bqPointer: SmallNumber;
+-- S       sqPointer: SmallNumber;
+-- S       lqPointer: SmallNumber;        
+-- S       operation: SpecificOp;
+-- S       immValue: Hword;
+-- S   immediate: std_logic;
+-- S?   zero: std_logic_vector(0 to 2);
+
+
+-- D	issued: std_logic;
+-- D   newInQueue: std_logic;
+-- D       renameIndex: InsTag;
+-- D!      argSpec: InstructionArgSpec;
+-- D   readyNow: std_logic_vector(0 to 2);
+-- D   readyNext: std_logic_vector(0 to 2);
+-- D   readyM2:    std_logic_vector(0 to 2);
+-- D   locs: SmallNumberArray(0 to 2);
+-- D   nextLocs: SmallNumberArray(0 to 2);
+-- D   locsM2: SmallNumberArray(0 to 2);
+-- D   missing: std_logic_vector(0 to 2);
+-- D   stored:  std_logic_vector(0 to 2);
+-- D   args: MwordArray(0 to 2);
+--  D  argLocsPipe: SmallNumberArray(0 to 2);
+--  D  argLocsPhase: SmallNumberArray(0 to 2);
+
+
+type StaticInfo is record
+    operation: SpecificOp;
+    
+    branchIns: std_logic;
+    bqPointer: SmallNumber;
+    sqPointer: SmallNumber;
+    lqPointer: SmallNumber;        
+    
+    immediate: std_logic;    
+    immValue: Hword;
+    zero: std_logic_vector(0 to 2);    
+end record;
+
+type StaticInfoArray is array(natural range <>) of StaticInfo;
+
+type DynamicInfo is record
+    full: std_logic;
+
+    issued: std_logic;
+    newInQueue: std_logic;
+
+    renameIndex: InsTag;
+    argSpec: InstructionArgSpec;
+
+    staticPtr: SmallNumber; -- points to entry with static info
+
+    stored:  std_logic_vector(0 to 2);
+    missing: std_logic_vector(0 to 2);
+    readyNow: std_logic_vector(0 to 2);
+    readyNext: std_logic_vector(0 to 2);
+    readyM2:    std_logic_vector(0 to 2);
+    
+    --    locs: SmallNumberArray(0 to 2);
+    --    nextLocs: SmallNumberArray(0 to 2);
+    --    locsM2: SmallNumberArray(0 to 2);
+
+    argLocsPipe: SmallNumberArray(0 to 2);
+    argLocsPhase: SmallNumberArray(0 to 2);
+
+    --    args: MwordArray(0 to 2);
+end record;
+
+type DynamicInfoArray is array(natural range <>) of DynamicInfo;
+
+
+function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean) return StaticInfo; 
+function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean) return DynamicInfo;
+
+function getIssueStaticInfoArray(insVec: InstructionSlotArray; constant HAS_IMM: boolean) return StaticInfoArray;
+function getIssueDynamicInfoArray(insVec: InstructionSlotArray; stA: StaticInfoArray; constant HAS_IMM: boolean) return DynamicInfoArray;
+
+
+
 function TMP_restoreState(full: std_logic; ins: InstructionState; st: SchedulerState) return SchedulerEntrySlot;
 
 function getDispatchArgValues(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo;
@@ -56,6 +136,105 @@ end LogicIssue;
 
 
 package body LogicIssue is
+
+function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean) return StaticInfo is
+    variable res: StaticInfo;
+begin
+    res.operation := isl.ins.specificOperation;
+
+    res.branchIns := isl.ins.classInfo.branchIns;
+    res.bqPointer := isl.ins.tags.bqPointer;
+    res.sqPointer := isl.ins.tags.sqPointer;
+    res.lqPointer := isl.ins.tags.lqPointer;        
+    
+    res.immediate := isl.ins.constantArgs.immSel and bool2std(HAS_IMM);    
+    res.immValue := isl.ins.constantArgs.imm;
+    
+    for j in 0 to 2 loop
+        res.zero(j) :=         (isl.ins.physicalArgSpec.intArgSel(j) and not isNonzero(isl.ins.virtualArgSpec.args(j)(4 downto 0)))
+                                       or (not isl.ins.physicalArgSpec.intArgSel(j) and not isl.ins.physicalArgSpec.floatArgSel(j));
+    end loop;
+    
+    if HAS_IMM and isl.ins.constantArgs.immSel = '1' then
+        res.zero(1) := '1';
+    
+        if IMM_AS_REG then
+            --res(i).ins.physicalArgSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);    
+            --res(i).state.argSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);    
+            if CLEAR_DEBUG_INFO then
+                --res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
+                res.immValue(PhysName'length-1 downto 0) := (others => '0');
+            end if;
+        end if;
+    end if;
+    
+    if not HAS_IMM then
+        res.immediate := '0';            
+    end if;        
+                   
+    return res;
+end function; 
+
+
+
+
+function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean) return DynamicInfo is
+    variable res: DynamicInfo;
+begin
+    res.full := isl.full;
+
+    res.issued := '0';
+    res.newInQueue := '1';
+    
+    res.renameIndex := isl.ins.tags.renameIndex;
+    res.argSpec := isl.ins.physicalArgSpec;
+    
+    res.staticPtr := (others => '0'); -- points to entry with static info
+    
+    res.stored := (others => '0');
+
+    res.missing := (isl.ins.physicalArgSpec.intArgSel and not stInfo.zero)
+                                       or (isl.ins.physicalArgSpec.floatArgSel);                                   
+    res.readyNow := (others => '0');
+    res.readyNext := (others => '0');
+    res.readyM2  := (others => '0');
+    
+    --    locs: SmallNumberArray(0 to 2);
+    --    nextLocs: SmallNumberArray(0 to 2);
+    --    locsM2: SmallNumberArray(0 to 2);
+    
+    res.argLocsPipe := (others => (others => '0'));
+    res.argLocsPhase:= (others => (others => '0'));
+    
+    if HAS_IMM and isl.ins.constantArgs.immSel = '1' then
+        if IMM_AS_REG then
+            res.argSpec.args(1) := isl.ins.constantArgs.imm(PhysName'length-1 downto 0);
+        end if;
+    end if;
+      
+                   
+    return res;
+end function; 
+
+function getIssueStaticInfoArray(insVec: InstructionSlotArray; constant HAS_IMM: boolean) return StaticInfoArray is
+    variable res: StaticInfoArray(insVec'range);
+begin
+    for i in res'range loop
+        res(i) := getIssueStaticInfo(insVec(i), HAS_IMM);
+    end loop;
+    return res;
+end function;
+
+function getIssueDynamicInfoArray(insVec: InstructionSlotArray; stA: StaticInfoArray; constant HAS_IMM: boolean) return DynamicInfoArray is
+    variable res: DynamicInfoArray(insVec'range);
+begin
+    for i in res'range loop
+        res(i) := getIssueDynamicInfo(insVec(i), stA(i), HAS_IMM);
+    end loop;
+    return res;
+end function;
+
+
 
 function getWakeupPhase(fnm: ForwardingMap; ready1, ready0, readyM1, readyM2: std_logic_vector; progress: boolean) return SmallNumberArray is
     variable res: SmallNumberArray(0 to 2) := (others => "11111110"); -- -2 
@@ -433,8 +612,8 @@ function iqContentNext(queueContent: SchedulerEntrySlotArray; inputDataS: Schedu
 return SchedulerEntrySlotArray is
 	constant QUEUE_SIZE: natural := queueContent'length;
 	variable res: SchedulerEntrySlotArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT); 	
-	variable newMask: std_logic_vector(0 to PIPE_WIDTH-1) := extractFullMask(inputDataS);--inputData.fullMask;--
-	variable compMask: std_logic_vector(0 to PIPE_WIDTH-1) := compactMask(newMask);
+	constant newMask: std_logic_vector(0 to PIPE_WIDTH-1) := extractFullMask(inputDataS);--inputData.fullMask;--
+	constant compMask: std_logic_vector(0 to PIPE_WIDTH-1) := compactMask(newMask);
 	variable dataNewDataS: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := inputDataS;
 	
 	variable iqDataNextS: SchedulerEntrySlotArray(0 to QUEUE_SIZE - 1) := (others => DEFAULT_SCH_ENTRY_SLOT);

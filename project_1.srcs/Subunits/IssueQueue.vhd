@@ -239,7 +239,8 @@ begin
 	       ch1 <= sent_A and not anyCancelled_A;
 	       ch2 <= not ch0 xor ch1;
 
-	dispatchDataNew <= prioSelect(queueContentUpdatedSel, readyMaskFull);
+	dispatchDataNew <= --prioSelect(queueContentUpdatedSel, readyMaskFull);
+	                   dispatchDataNew_A;
     	dispatchDataNew_A <= prioSelect(queueContentUpdatedSel, readyMaskAll);
 
     newContent <= newArr;

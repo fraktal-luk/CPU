@@ -281,9 +281,9 @@ type SchedulerState is record
     readyNow: std_logic_vector(0 to 2);
     readyNext: std_logic_vector(0 to 2);
     readyM2:    std_logic_vector(0 to 2);
-    locs: SmallNumberArray(0 to 2);
-    nextLocs: SmallNumberArray(0 to 2);
-    locsM2: SmallNumberArray(0 to 2);
+--    locs: SmallNumberArray(0 to 2);
+--    nextLocs: SmallNumberArray(0 to 2);
+--    locsM2: SmallNumberArray(0 to 2);
     missing: std_logic_vector(0 to 2);
     stored:  std_logic_vector(0 to 2);
     args: MwordArray(0 to 2);
@@ -314,9 +314,9 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
 			  readyNow => (others=>'0'),
 			  readyNext => (others=>'0'),
 			  readyM2 => (others => '0'),
-			  locs => (others => (others => '0')),
-			  nextLocs => (others => (others => '0')),
-			  locsM2 => (others => (others => '0')),
+--			  locs => (others => (others => '0')),
+--			  nextLocs => (others => (others => '0')),
+--			  locsM2 => (others => (others => '0')),
 			  missing => (others=>'0'),
 			  stored => (others => '0'),
 			  args => (others => (others=>'0')),

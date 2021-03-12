@@ -498,7 +498,15 @@ begin
            signal dataToAlu, dataToBranch: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);           
            signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
            signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
+           
+           signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
+           signal staticInfoA: work.LogicIssue.StaticInfoArray(0 to PIPE_WIDTH-1);
+           signal dynamicInfoA: work.LogicIssue.DynamicInfoArray(0 to PIPE_WIDTH-1);
         begin
+                inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe));
+                staticInfoA <= work.LogicIssue.getIssueStaticInfoArray(inputDataArray, true);
+                dynamicInfoA <= work.LogicIssue.getIssueDynamicInfoArray(inputDataArray, staticInfoA, true);
+        
             schedDataI0 <= getSchedData(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe), true);
             dataToQueueI0 <= work.LogicIssue.updateSchedulerArray(schedDataI0, fni, fmaInt, ENQUEUE_FN_MAP, true, true);
                              

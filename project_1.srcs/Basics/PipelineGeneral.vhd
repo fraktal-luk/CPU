@@ -854,6 +854,8 @@ begin
             res(i).ins.bits := (others => '0');
             res(i).ins.target := (others => '0');
             res(i).ins.result := (others => '0');
+            
+                res(i).ins := DEFAULT_INS_STATE;
         end if;
 
     end loop;
