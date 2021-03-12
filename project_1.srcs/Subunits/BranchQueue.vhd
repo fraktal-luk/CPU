@@ -134,15 +134,21 @@ begin
        signal intps, floatps: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
                signal intps_T, floatps_T: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+               signal sqs, lqs: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
        
             constant STATIC0_SIZE: natural := 3*PIPE_WIDTH-2;
+            constant STATIC1_SIZE: natural := (4 + PIPE_WIDTH-1) + (4 + PIPE_WIDTH-1); -- TMP: sqPtr + sqSelects, lqPtr + lqSelects
+            
             signal staticInput0, staticOutput0: std_logic_vector(STATIC0_SIZE-1 downto 0) := (others => '0');
+            signal staticInput1, staticOutput1: std_logic_vector(STATIC1_SIZE-1 downto 0) := (others => '0');
             
             type StaticMem0 is array(0 to BQ_SIZE-1) of std_logic_vector(STATIC0_SIZE-1 downto 0);
+            type StaticMem1 is array(0 to BQ_SIZE-1) of std_logic_vector(STATIC1_SIZE-1 downto 0);
             
             type FrontBranchesMem0 is array(0 to BQ_SIZE-1) of std_logic_vector(0 to PIPE_WIDTH-1);
             
             signal staticMemContent0: StaticMem0 := (others => (others => '0'));
+            signal staticMemContent1: StaticMem1 := (others => (others => '0'));
             signal frontBranchesContent0: FrontBranchesMem0 := (others => (others => '0'));
 
             constant DEST_FLAGS_SIZE: natural := 2*PIPE_WIDTH-2; 
@@ -151,7 +157,7 @@ begin
             function getStaticInput0(insVec: InstructionSlotArray) return std_logic_vector is
                 variable res: std_logic_vector(STATIC0_SIZE-1 downto 0);-- := (others => '0');
                 --variable v3: std_logic_vector(2 to 0);
-            begin            
+            begin
                 for i in 0 to PIPE_WIDTH-2 loop -- -2 cause [0] is not used
                     res(i) := insVec(1+i).ins.virtualArgSpec.intDestSel;
                     res(i + PIPE_WIDTH-1) := insVec(1+i).ins.virtualArgSpec.floatDestSel;
@@ -159,6 +165,21 @@ begin
                 
                 for i in 0 to PIPE_WIDTH-1 loop
                     res(DEST_FLAGS_SIZE + i) := insVec(i).ins.controlInfo.frontBranch;
+                end loop;
+                     
+                return res;
+            end function;
+
+            function getStaticInput1(insVec: InstructionSlotArray) return std_logic_vector is
+                variable res: std_logic_vector(STATIC1_SIZE-1 downto 0);-- := (others => '0');
+                --variable v3: std_logic_vector(2 to 0);
+            begin
+                res(3 downto 0) := insVec(0).ins.tags.sqPointer(3 downto 0);
+                res(7 downto 4) := insVec(0).ins.tags.lqPointer(3 downto 0);
+            
+                for i in 0 to PIPE_WIDTH-2 loop -- -2 cause [0] is not used
+                    res(8 + i) := insVec(i).ins.classInfo.secCluster;
+                    res(8 + 3 + i) := insVec(i).ins.classInfo.useLQ;
                 end loop;
                      
                 return res;
@@ -191,12 +212,30 @@ begin
                 return res;
             end function;            
 
+                function getVecSQ(static1: std_logic_vector) return std_logic_vector is
+                    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+                begin
+                    for i in 0 to PIPE_WIDTH-2 loop
+                        res(i) := static1(8 + i);
+                    end loop;
+                    return res;
+                end function;
+    
+                function getVecLQ(static1: std_logic_vector) return std_logic_vector is
+                    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+                begin
+                    for i in 0 to PIPE_WIDTH-2 loop
+                        res(i) := static1(8 + 3 + i);
+                    end loop;
+                    return res;
+                end function;
+
             
             
 	       signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0';
         	   
 	   function getMatchedSlot(allBranches: PipeStageArray; slotPtr: SmallNumber; cmpAdrSlot: InstructionSlot; ipBase: MWord; trgs, ress: MwordArray;
-	                           intps, floatps: SmallNumberArray; frontBranches, intTakeVec, floatTakeVec: std_logic_vector)
+	                           intps, floatps, sqs, lqs: SmallNumberArray; frontBranches, intTakeVec, floatTakeVec: std_logic_vector)
 	   return InstructionSlot is
 	       variable res, storedIns: InstructionSlot := DEFAULT_INS_SLOT;
 	       variable lowPtr: natural := 0;
@@ -253,6 +292,10 @@ begin
                     res.ins.tags.floatPointer := --add(floatps(0), tmpNumF);
                                                  addInt(floatps(0), countOnes(floatTakeVec(1 to lowPtr)));                                 
                 end if;
+                
+                    res.ins.tags.sqPointer := sqs(lowPtr);
+                    res.ins.tags.lqPointer := lqs(lowPtr);
+                
            end if;
   
 	       return res;
@@ -334,14 +377,61 @@ begin
                    return res;
                end function;
 
+
+               function TMP_unfoldSQ(static1: std_logic_vector; usingSQ, usingLQ: std_logic_vector)
+               return SmallNumberArray is
+                   variable res: SmallNumberArray(0 to PIPE_WIDTH-1);
+                   variable lowPtr: natural := 0;
+                   variable resLow: Mword := (others => '0');
+                   variable tmpNumL, tmpNumS: SmallNumber := (others => '0');
+                   
+                   --variable intTakeVec, floatTakeVec: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+               begin
+                    tmpNumS(3 downto 0) := static1(3 downto 0);
+                    tmpNumL(3 downto 0) := static1(7 downto 4);
+               
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        if i = 0 then
+                            res(i) := tmpNumS;
+                        else
+                            res(i) := addIntTrunc(tmpNumS, countOnes(usingSQ(0 to i-1)), 4);                                 
+                        end if;
+                    end loop;
+          
+                   return res;
+               end function;
+
+               function TMP_unfoldLQ(static1: std_logic_vector; usingSQ, usingLQ: std_logic_vector)
+               return SmallNumberArray is
+                   variable res: SmallNumberArray(0 to PIPE_WIDTH-1);
+                   variable lowPtr: natural := 0;
+                   variable resLow: Mword := (others => '0');
+                   variable tmpNumL, tmpNumS: SmallNumber := (others => '0');
+                   
+                   --variable intTakeVec, floatTakeVec: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+               begin
+                    tmpNumS(3 downto 0) := static1(3 downto 0);
+                    tmpNumL(3 downto 0) := static1(7 downto 4);
+               
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        if i = 0 then
+                            res(i) := tmpNumL;
+                        else
+                            res(i) := addIntTrunc(tmpNumL, countOnes(usingLQ(0 to i-1)), 4);                                 
+                        end if;
+                    end loop;
+          
+                   return res;
+               end function;
+
        signal allBranchesInputTmp: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
        
-                   signal intTakeVec, floatTakeVec, frontBranches, frontBranches_T: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+                   signal intTakeVec, floatTakeVec, frontBranches, frontBranches_T, usingSQ, usingLQ: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
        
 	begin	
        isSending <= committingBr;
 
-       selectedDataSlot <= getMatchedSlot(allBranches, pSelect, compareAddressInput, ipOutputA, trgs, ress, intps, floatps,
+       selectedDataSlot <= getMatchedSlot(allBranches, pSelect, compareAddressInput, ipOutputA, trgs, ress, intps, floatps, sqs, lqs,
                                         frontBranches_T, intTakeVec, floatTakeVec);
         
               frontBranches <= getFrontBr(allBranches, pSelect, compareAddressInput, ipOutputA, trgs, ress, intps, floatps);
@@ -350,11 +440,17 @@ begin
                 intTakeVec <= getTakenVecInt(staticOutput0);
                 floatTakeVec <= getTakenVecFloat(staticOutput0);
         
+                usingSQ <= getVecSQ(staticOutput1);
+                usingLQ <= getVecLQ(staticOutput1);
+        
                intps_T <= TMP_unfoldIntPs(allBranches, pSelect, compareAddressInput, ipOutputA, trgs, ress, intps, floatps, intTakeVec, floatTakeVec);
                floatps_T <= TMP_unfoldFloatPs(allBranches, pSelect, compareAddressInput, ipOutputA, trgs, ress, intps, floatps, intTakeVec, floatTakeVec);
-        
+                
+                sqs <= TMP_unfoldSQ(staticOutput1, usingSQ, usingLQ);
+                lqs <= TMP_unfoldLQ(staticOutput1, usingSQ, usingLQ);
         
             staticInput0 <= getStaticInput0(dataIn);
+            staticInput1 <= getStaticInput1(dataIn);
         
        ipOutputA <= ipArray(slv2u(pSelect));
        trgs <= (trg0(slv2u(pSelect)), trg1(slv2u(pSelect)), trg2(slv2u(pSelect)), trg3(slv2u(pSelect)));
@@ -363,6 +459,7 @@ begin
        floatps <= (floatp0(slv2u(pSelect)), floatp1(slv2u(pSelect)), floatp2(slv2u(pSelect)), floatp3(slv2u(pSelect)));
        
             staticOutput0 <= staticMemContent0(slv2u(pSelect));
+            staticOutput1 <= staticMemContent1(slv2u(pSelect));
        
        pSelect <= compareAddressInput.ins.tags.bqPointer and PTR_MASK_SN;
 
@@ -450,6 +547,7 @@ begin
                         floatp3(slv2u(pTagged)) <= dataIn(3).ins.tags.floatPointer;
                         
                         staticMemContent0(slv2u(pTagged)) <= staticInput0;                  
+                        staticMemContent1(slv2u(pTagged)) <= staticInput1;                  
                end if;                
 	           
 	           if true then

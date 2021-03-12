@@ -614,6 +614,10 @@ begin
                 execCausing => DEFAULT_INSTRUCTION_STATE--execCausing
             );      
           
+          
+                ch0 <= bool2std(bqSelected.ins.tags.sqPointer = branchData.tags.sqPointer) or not bqSelected.full or not sendingBranchIns;
+                ch1 <= bool2std(bqSelected.ins.tags.lqPointer = branchData.tags.lqPointer) or not bqSelected.full or not sendingBranchIns;
+          
             branchData <= basicBranch(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins);                  
             
             dataToBranch(0) <= (slotIssueI0.full and not sentCancelledI0 and --isBranchIns(slotIssueI0.ins), branchData);
