@@ -148,7 +148,7 @@ begin
     res.lqPointer := isl.ins.tags.lqPointer;        
     
     res.immediate := isl.ins.constantArgs.immSel and bool2std(HAS_IMM);    
-    res.immValue := isl.ins.constantArgs.imm;
+    res.immValue := isl.ins.constantArgs.imm(15 downto 0);
     
     for j in 0 to 2 loop
         res.zero(j) :=         (isl.ins.physicalArgSpec.intArgSel(j) and not isNonzero(isl.ins.virtualArgSpec.args(j)(4 downto 0)))

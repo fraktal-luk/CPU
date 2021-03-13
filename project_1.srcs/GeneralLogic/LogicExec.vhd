@@ -157,6 +157,8 @@ package body LogicExec is
 		res.result := queueData.result;
 		res.tags.intPointer := queueData.tags.intPointer;
 		res.tags.floatPointer := queueData.tags.floatPointer;
+    		res.tags.sqPointer := queueData.tags.sqPointer;
+	       	res.tags.lqPointer := queueData.tags.lqPointer;
 		
 		if CLEAR_DEBUG_INFO then
 		    res := clearDbCounters(res);
