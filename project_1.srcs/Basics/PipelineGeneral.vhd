@@ -802,6 +802,8 @@ begin
         res(i).ins := insArr(i);
         res(i).full := fullMask(i);
         
+            res(i).state.newInQueue := '1';
+        
         -- CAREFUL, TODO: define precisely what 'zero' designation means
         -- Set state markers: "zero" bit; only valid for Int args because FP doesn't use HW zero
         for j in 0 to 2 loop
@@ -1122,6 +1124,7 @@ function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return Schedule
 begin
     for i in 1 to PIPE_WIDTH-1 loop
         res(i).ins.tags.renameIndex := clearTagLow(res(0).ins.tags.renameIndex) or i2slv(i, TAG_SIZE);
+            res(i).state.renameIndex := clearTagLow(res(0).state.renameIndex) or i2slv(i, TAG_SIZE);
     end loop;
 
     return res;

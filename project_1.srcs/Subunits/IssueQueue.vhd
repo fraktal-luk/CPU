@@ -30,6 +30,8 @@ entity IssueQueue is
 		
 		prevSendingOK: in std_logic;
 		newArr: in SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
+		  newArr_N: in SchedulerInfoArray(0 to PIPE_WIDTH-1);
+		
 		  newArr_Alt: in SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
 		  newArrOut: out SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
 		nextAccepting: in std_logic;
@@ -67,7 +69,9 @@ architecture Behavioral of IssueQueue is
 	                   stayMask, selMask, selMaskPrev, cancelledMask, issuedMask, remainMask: std_logic_vector(0 to IQ_SIZE-1) := (others=>'0');	
 
 	signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerEntrySlotArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-	signal newContent, newContentRR, newSchedData, inputStagePreRR, inputStageUpdated: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+	signal newContent, inputStagePreRR, inputStageUpdated, inputStageUpdated_T: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+
+    	signal inputStagePreRR_N, inputStageUpdated_N: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
 
                                                                                                                                                             
 	signal anyReadyAll, anyReadyFull, anyReadyLive, sends, sends_A, sends_AN,
@@ -159,39 +163,110 @@ architecture Behavioral of IssueQueue is
 	begin
 	   for i in 0 to PIPE_WIDTH-1 loop
 	       rrf := rr(3*i to 3*i + 2);                                              
-           res(i).state.missing := res(i).state.missing and not rrf;	       
+           res(i).state.missing := res(i).state.missing and not rrf;
+           
+                res(i).ins := DEFAULT_INS_STATE;       
 	   end loop;   
 	   return res;
 	end function;
+
+
+        function iqInputStageNext_N(content, newContent: SchedulerInfoArray; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray is
+           variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content;
+        begin
+           if execEventSignal = '1' or lateEventSignal = '1' then
+               for i in 0 to PIPE_WIDTH-1 loop
+                   res(i).dynamic.full := '0';
+               end loop; 	       
+           elsif prevSending = '1' then
+               res := newContent;	       
+           elsif isSending = '1' then -- Clearing everything - sent to main queue
+               for i in 0 to PIPE_WIDTH-1 loop
+                   res(i).dynamic.full := '0';
+               end loop;    
+           end if;
+           
+           return res;
+        end function;
+
+        function updateRR_N(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray is
+           variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := newContent;
+           variable rrf: std_logic_vector(0 to 2) := (others=>'0');      	   
+        begin
+           for i in 0 to PIPE_WIDTH-1 loop
+               rrf := rr(3*i to 3*i + 2);                                              
+               res(i).dynamic.missing := res(i).dynamic.missing and not rrf;	       
+           end loop;   
+           return res;
+        end function;
+
+        function restoreRenameIndexSch(content: SchedulerInfoArray) return SchedulerInfoArray is
+            variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content;
+        begin
+            for i in 1 to PIPE_WIDTH-1 loop
+                res(i).dynamic.renameIndex := clearTagLow(res(0).dynamic.renameIndex) or i2slv(i, TAG_SIZE);
+            end loop;
+        
+            return res;
+        end function;
+
+        function extractFullMask(queueContent: SchedulerInfoArray) return std_logic_vector is
+            variable res: std_logic_vector(0 to queueContent'length-1) := (others => '0');
+        begin
+            for i in res'range loop
+                res(i) := queueContent(i).dynamic.full;
+            end loop;
+            return res;
+        end function;
+
     
     signal ch0, ch1, ch2, ch3: std_logic := '0';
 begin
 
     INPUT_STAGE: block
-        signal fmaInputStage: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);    
-        signal inputStage, inputStageNext: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);          
-        signal inputStageAny, inputStageLivingAny, inputReadingAny: std_logic := '0';        
+        signal fmaInputStage, fmaInputStage_N: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);    
+        signal inputStage, inputStageNext, inputStage_T: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);          
+            signal inputStage_N, inputStageNext_N: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);          
+        signal inputStageAny, inputStageAny_N, inputStageLivingAny, inputReadingAny: std_logic := '0';        
     begin
         inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!    
+            inputStage_N <= updateRR_N(restoreRenameIndexSch(inputStagePreRR_N), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!    
+    
+            inputStage_T <= getSchedEntrySlotArray(inputStage_N);
+    
+                ch0 <= bool2std(inputStageUpdated_T(3).state = inputStageUpdated(3).state);
+                ch1 <= bool2std(inputStageUpdated_T(1).state = inputStageUpdated(1).state);
+                ch2 <= bool2std(inputStageUpdated_T(2).state = inputStageUpdated(2).state);
+                ch3 <= bool2std(inputStageUpdated_T(0).state = inputStageUpdated(0).state);
+    
         fmaInputStage <= findForwardingMatchesArray(inputStage, fni);    
+            fmaInputStage_N <= findForwardingMatchesArray(inputStage_N, fni);    
         
         -- intf
         inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, true, false) when not ALT_INPUT
                          else newArr_Alt;
+            inputStageUpdated_N <= updateSchedulerArray(inputStage_N, fni, fmaInputStage_N, waitingFM, true, false);
+                   
+            inputStageUpdated_T <= getSchedEntrySlotArray(inputStageUpdated_N);
+                   
+                                                
         newArrOut <= inputStageUpdated;
         
         -- intf
         inputStageSending <= inputStageAny and queuesAccepting and not execEventSignal and not lateEventSignal;
     
-        inputStageNext <= iqInputStageNext(inputStageUpdated, newContent, prevSendingOK, inputStageSending, execEventSignal, lateEventSignal);
-            inputReadingAny <= prevSendingOK and isNonzero(extractFullMask(newArr));
-            inputStageLivingAny <= inputStageAny and not execEventSignal and not lateEventSignal;
+        inputStageNext <= iqInputStageNext(inputStageUpdated, newArr, prevSendingOK, inputStageSending, execEventSignal, lateEventSignal);
+            inputStageNext_N <= iqInputStageNext_N(inputStageUpdated_N, newArr_N, prevSendingOK, inputStageSending, execEventSignal, lateEventSignal);
+        --    inputReadingAny <= prevSendingOK and isNonzero(extractFullMask(newArr));
+        --    inputStageLivingAny <= inputStageAny and not execEventSignal and not lateEventSignal;
         inputStageAny <= isNonzero(extractFullMask(inputStage));
+            inputStageAny_N <= isNonzero(extractFullMask(inputStage_N));
             
         INPUT_SYNCHRONOUS: process(clk) 	
         begin
             if rising_edge(clk) then
                 inputStagePreRR <= inputStageNext;			
+                    inputStagePreRR_N <= inputStageNext_N;			
             end if;
         end process;
     end block;
@@ -235,9 +310,9 @@ begin
 	sends <= anyReadyFull and nextAccepting;
     sends_A <= anyReadyAll and nextAccepting;
 	
-	       ch0 <= sent and not anyCancelled;	       
-	       ch1 <= sent_A and not anyCancelled_A;
-	       ch2 <= not ch0 xor ch1;
+	       --ch0 <= sent and not anyCancelled;	       
+	       --ch1 <= sent_A and not anyCancelled_A;
+	       --ch2 <= not ch0 xor ch1;
 
 	dispatchDataNew <= --prioSelect(queueContentUpdatedSel, readyMaskFull);
 	                   dispatchDataNew_A;

@@ -502,10 +502,13 @@ begin
            signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
            signal staticInfoA: work.LogicIssue.StaticInfoArray(0 to PIPE_WIDTH-1);
            signal dynamicInfoA: work.LogicIssue.DynamicInfoArray(0 to PIPE_WIDTH-1);
+           signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
         begin
                 inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe));
-                staticInfoA <= work.LogicIssue.getIssueStaticInfoArray(inputDataArray, true);
-                dynamicInfoA <= work.LogicIssue.getIssueDynamicInfoArray(inputDataArray, staticInfoA, true);
+                --staticInfoA <= work.LogicIssue.getIssueStaticInfoArray(inputDataArray, true);
+                --dynamicInfoA <= work.LogicIssue.getIssueDynamicInfoArray(inputDataArray, staticInfoA, true);
+                schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
+                schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, true);        
         
             schedDataI0 <= getSchedData(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe), true);
             dataToQueueI0 <= work.LogicIssue.updateSchedulerArray(schedDataI0, fni, fmaInt, ENQUEUE_FN_MAP, true, true);
@@ -523,6 +526,8 @@ begin
                 acceptingMore => iqAcceptingMoreI0,
                 prevSendingOK => renamedSending,
                 newArr => dataToQueueI0,--,schArrays(4),
+                    newArr_N => schedInfoUpdatedA,
+                
                     newArr_Alt => NEW_ARR_DUMMY,
                     newArrOut => newArrShared,
                 fni => fni,
@@ -653,7 +658,9 @@ begin
             
         SUBPIPE_MEM: block
            signal sendingIntLoad, sendingFloatLoad: std_logic := '0';
-           signal dataToAgu, dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                               
+           signal dataToAgu, dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+           
+           signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);                                         
         begin        
            memMaskInt <= getMemMask(renamedDataLivingRe);
      
@@ -675,6 +682,7 @@ begin
                sentCancelled => sentCancelledM0,               
                prevSendingOK => renamedSending,
                newArr => dataToQueueM0,--,schArrays(4),
+                    newArr_N => schedInfoUpdatedA,
                     newArr_Alt => newArrShared,
                fni => fni,
                waitingFM => WAITING_FN_MAP,
@@ -868,6 +876,8 @@ begin
                         SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);             
             signal fmaIntSV, fmaFloatSV: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
             signal sendingToRegReadI, sendingToRegReadF: std_logic := '0';
+            
+            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
         begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
 
@@ -896,6 +906,7 @@ begin
                 sentCancelled => sentCancelledSVI,                
                 prevSendingOK => renamedSending,
                 newArr => dataToStoreValueIQ,--,schArrays(4),
+                    newArr_N => schedInfoUpdatedA,
                     newArr_Alt => NEW_ARR_DUMMY,
                 fni => fni,
                 waitingFM => WAITING_FN_MAP_SV,
@@ -975,6 +986,7 @@ begin
                 sentCancelled => sentCancelledSVF,                
                 prevSendingOK => renamedSending,
                 newArr => dataToStoreValueFloatIQ,--,schArrays(4),
+                    newArr_N => schedInfoUpdatedA,
                     newArr_Alt => NEW_ARR_DUMMY,                
                 fni => fniFloat,
                 waitingFM => WAITING_FN_MAP_FLOAT_SV,
@@ -1044,6 +1056,7 @@ begin
         SUBPIPE_FP0: block
             signal dataToFpu0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
             signal fmaF0: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
+            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
         begin
             fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedDataF0, fniFloat);
         
@@ -1065,6 +1078,7 @@ begin
                 sentCancelled => sentCancelledF0,                
                 prevSendingOK => renamedSending,
                 newArr => dataToQueueF0,--,schArrays(4),
+                    newArr_N => schedInfoUpdatedA,
                     newArr_Alt => NEW_ARR_DUMMY,                
                 fni => fniFloat,
                 waitingFM => WAITING_FN_MAP_FLOAT,
