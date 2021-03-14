@@ -492,8 +492,6 @@ begin
        signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);                                                                      
     begin
         
-        fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedDataI0, fni);
-        
         SUBPIPE_ALU: block
            signal dataToAlu, dataToBranch: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);           
            signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -504,14 +502,17 @@ begin
            signal dynamicInfoA: work.LogicIssue.DynamicInfoArray(0 to PIPE_WIDTH-1);
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
         begin
+            fmaInt <= --work.LogicIssue.findForwardingMatchesArray(schedDataI0, fni);
+                      work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);
+        
                 inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe));
                 --staticInfoA <= work.LogicIssue.getIssueStaticInfoArray(inputDataArray, true);
                 --dynamicInfoA <= work.LogicIssue.getIssueDynamicInfoArray(inputDataArray, staticInfoA, true);
                 schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
                 schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, true);        
         
-            schedDataI0 <= getSchedData(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe), true);
-            dataToQueueI0 <= work.LogicIssue.updateSchedulerArray(schedDataI0, fni, fmaInt, ENQUEUE_FN_MAP, true, true);
+            --schedDataI0 <= getSchedData(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe), true);
+            --dataToQueueI0 <= work.LogicIssue.updateSchedulerArray(schedDataI0, fni, fmaInt, ENQUEUE_FN_MAP, true, true);
                              
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
@@ -659,13 +660,20 @@ begin
         SUBPIPE_MEM: block
            signal sendingIntLoad, sendingFloatLoad: std_logic := '0';
            signal dataToAgu, dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
-           
+
+           signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);           
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);                                         
         begin        
            memMaskInt <= getMemMask(renamedDataLivingRe);
+
+                inputDataArray <= makeSlotArray(removeArg2(extractData(renamedDataLivingReMem)), memMaskInt);
+                schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
+                schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, true);        
+        
+
      
-           schedDataM0 <= getSchedData(removeArg2(extractData(renamedDataLivingReMem)), memMaskInt, true);
-           dataToQueueM0 <= work.LogicIssue.updateSchedulerArray(schedDataM0, fni, fmaInt, ENQUEUE_FN_MAP, true, true);
+           --schedDataM0 <= getSchedData(removeArg2(extractData(renamedDataLivingReMem)), memMaskInt, true);
+           --dataToQueueM0 <= work.LogicIssue.updateSchedulerArray(schedDataM0, fni, fmaInt, ENQUEUE_FN_MAP, true, true);
                            
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
@@ -876,21 +884,33 @@ begin
                         SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);             
             signal fmaIntSV, fmaFloatSV: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
             signal sendingToRegReadI, sendingToRegReadF: std_logic := '0';
-            
-            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
+
+            signal inputDataArrayInt, inputDataArrayFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);            
+            signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoFloatA, schedInfoUpdatedFloatA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
         begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
 
-            fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedDataStoreValue, fni);
-            fmaFloatSV <= work.LogicIssue.findForwardingMatchesArray(schedDataStoreValueFloat, fniFloat);
+                inputDataArrayInt <= makeSlotArray(prepareForStoreValueIQ(extractData(renamedDataLivingReMem)), intStoreMask);
+                schedInfoIntA <= work.LogicIssue.getIssueInfoArray(inputDataArrayInt, false);
+                schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, ENQUEUE_FN_MAP_SV, true, true);  
+
+                inputDataArrayFloat <= makeSlotArray(prepareForStoreValueFloatIQ(extractData(renamedDataLivingReMem), extractData(renamedDataLivingFloatRe)), floatStoreMask);
+                schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(inputDataArrayFloat, false);
+                schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, ENQUEUE_FN_MAP_FLOAT_SV, true, true);
+
+
+            fmaIntSV <= --work.LogicIssue.findForwardingMatchesArray(schedDataStoreValue, fni);
+                        work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
+            fmaFloatSV <= --work.LogicIssue.findForwardingMatchesArray(schedDataStoreValueFloat, fniFloat);
+                          work.LogicIssue.findForwardingMatchesArray(schedInfoFloatA, fniFloat);
             
             intStoreMask <= getStoreMask(renamedDataLivingReMem) and not floatStoreMask;                                        
-            schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLivingReMem)), intStoreMask, false);
-            dataToStoreValueIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValue, fni, fmaIntSV, ENQUEUE_FN_MAP_SV, true, true);
+            --schedDataStoreValue <= getSchedData(prepareForStoreValueIQ(extractData(renamedDataLivingReMem)), intStoreMask, false);
+            --dataToStoreValueIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValue, fni, fmaIntSV, ENQUEUE_FN_MAP_SV, true, true);
             
             floatStoreMask <= getFloatStoreMask(renamedDataLivingReMem, renamedDataLivingFloatRe);
-            schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLivingReMem), extractData(renamedDataLivingFloatRe)), floatStoreMask, false);       
-            dataToStoreValueFloatIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValueFloat, fniFloat, fmaFloatSV, ENQUEUE_FN_MAP_FLOAT_SV, true, true);
+            --schedDataStoreValueFloat <= getSchedData(prepareForStoreValueFloatIQ(extractData(renamedDataLivingReMem), extractData(renamedDataLivingFloatRe)), floatStoreMask, false);       
+            --dataToStoreValueFloatIQ <= work.LogicIssue.updateSchedulerArray(schedDataStoreValueFloat, fniFloat, fmaFloatSV, ENQUEUE_FN_MAP_FLOAT_SV, true, true);
                     
             IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
@@ -906,7 +926,7 @@ begin
                 sentCancelled => sentCancelledSVI,                
                 prevSendingOK => renamedSending,
                 newArr => dataToStoreValueIQ,--,schArrays(4),
-                    newArr_N => schedInfoUpdatedA,
+                    newArr_N => schedInfoUpdatedIntA,
                     newArr_Alt => NEW_ARR_DUMMY,
                 fni => fni,
                 waitingFM => WAITING_FN_MAP_SV,
@@ -986,7 +1006,7 @@ begin
                 sentCancelled => sentCancelledSVF,                
                 prevSendingOK => renamedSending,
                 newArr => dataToStoreValueFloatIQ,--,schArrays(4),
-                    newArr_N => schedInfoUpdatedA,
+                    newArr_N => schedInfoUpdatedFloatA,
                     newArr_Alt => NEW_ARR_DUMMY,                
                 fni => fniFloat,
                 waitingFM => WAITING_FN_MAP_FLOAT_SV,
@@ -1056,12 +1076,19 @@ begin
         SUBPIPE_FP0: block
             signal dataToFpu0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
             signal fmaF0: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
+            
+            signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);            
             signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
         begin
-            fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedDataF0, fniFloat);
+            fmaF0 <= --work.LogicIssue.findForwardingMatchesArray(schedDataF0, fniFloat);
+                     work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat);
+
+                inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), getFpuMask(renamedDataLivingFloatRe));
+                schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, false);
+                schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, ENQUEUE_FN_MAP_FLOAT, true, true);
         
-            schedDataF0 <= getSchedData(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), getFpuMask(renamedDataLivingFloatRe), false);
-            dataToQueueF0 <= work.LogicIssue.updateSchedulerArray(schedDataF0, fniFloat, fmaF0, ENQUEUE_FN_MAP_FLOAT, true, true);
+            --schedDataF0 <= getSchedData(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), getFpuMask(renamedDataLivingFloatRe), false);
+            --dataToQueueF0 <= work.LogicIssue.updateSchedulerArray(schedDataF0, fniFloat, fmaF0, ENQUEUE_FN_MAP_FLOAT, true, true);
             
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(

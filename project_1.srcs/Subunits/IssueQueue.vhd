@@ -229,43 +229,43 @@ begin
             signal inputStage_N, inputStageNext_N: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);          
         signal inputStageAny, inputStageAny_N, inputStageLivingAny, inputReadingAny: std_logic := '0';        
     begin
-        inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!    
+        --inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!    
             inputStage_N <= updateRR_N(restoreRenameIndexSch(inputStagePreRR_N), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!    
     
             inputStage_T <= getSchedEntrySlotArray(inputStage_N);
     
-                ch0 <= bool2std(inputStageUpdated_T(3).state = inputStageUpdated(3).state);
-                ch1 <= bool2std(inputStageUpdated_T(1).state = inputStageUpdated(1).state);
-                ch2 <= bool2std(inputStageUpdated_T(2).state = inputStageUpdated(2).state);
-                ch3 <= bool2std(inputStageUpdated_T(0).state = inputStageUpdated(0).state);
+                ch0 <= bool2std(inputStageUpdated_T(3) = inputStageUpdated(3));
+                ch1 <= bool2std(inputStageUpdated_T(1) = inputStageUpdated(1));
+                ch2 <= bool2std(inputStageUpdated_T(2) = inputStageUpdated(2));
+                ch3 <= bool2std(inputStageUpdated_T(0) = inputStageUpdated(0));
     
-        fmaInputStage <= findForwardingMatchesArray(inputStage, fni);    
+        --fmaInputStage <= findForwardingMatchesArray(inputStage, fni);    
             fmaInputStage_N <= findForwardingMatchesArray(inputStage_N, fni);    
         
         -- intf
-        inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, true, false) when not ALT_INPUT
-                         else newArr_Alt;
+        --inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, true, false) when not ALT_INPUT
+        --                 else newArr_Alt;
             inputStageUpdated_N <= updateSchedulerArray(inputStage_N, fni, fmaInputStage_N, waitingFM, true, false);
                    
             inputStageUpdated_T <= getSchedEntrySlotArray(inputStageUpdated_N);
                    
                                                 
-        newArrOut <= inputStageUpdated;
+        newArrOut <= inputStageUpdated_T;
         
         -- intf
-        inputStageSending <= inputStageAny and queuesAccepting and not execEventSignal and not lateEventSignal;
+        inputStageSending <= inputStageAny_N and queuesAccepting and not execEventSignal and not lateEventSignal;
     
-        inputStageNext <= iqInputStageNext(inputStageUpdated, newArr, prevSendingOK, inputStageSending, execEventSignal, lateEventSignal);
+        --inputStageNext <= iqInputStageNext(inputStageUpdated, newArr, prevSendingOK, inputStageSending, execEventSignal, lateEventSignal);
             inputStageNext_N <= iqInputStageNext_N(inputStageUpdated_N, newArr_N, prevSendingOK, inputStageSending, execEventSignal, lateEventSignal);
         --    inputReadingAny <= prevSendingOK and isNonzero(extractFullMask(newArr));
         --    inputStageLivingAny <= inputStageAny and not execEventSignal and not lateEventSignal;
-        inputStageAny <= isNonzero(extractFullMask(inputStage));
+        --inputStageAny <= isNonzero(extractFullMask(inputStage));
             inputStageAny_N <= isNonzero(extractFullMask(inputStage_N));
             
         INPUT_SYNCHRONOUS: process(clk) 	
         begin
             if rising_edge(clk) then
-                inputStagePreRR <= inputStageNext;			
+                --inputStagePreRR <= inputStageNext;			
                     inputStagePreRR_N <= inputStageNext_N;			
             end if;
         end process;
@@ -328,7 +328,8 @@ begin
 
         sendingEmpty <= (anyReadyAll and not anyReadyFull) and nextAccepting;
     
-    queueContentNext <= iqContentNext(queueContentUpdated, inputStageUpdated,
+    queueContentNext <= iqContentNext(queueContentUpdated, --inputStageUpdated,
+                                                           inputStageUpdated_T, 
                                       killMask, selMask,                                           
                                       sends, sent,
                                       sentUnexpected,
