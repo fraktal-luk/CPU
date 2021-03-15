@@ -153,7 +153,7 @@ constant SELECTION_FN_MAP_FLOAT: ForwardingMap := (
 function adjustStage(content: InstructionSlotArray) return InstructionSlotArray;
 
 function compactMask(vec: std_logic_vector) return std_logic_vector; -- WARNING: only for 4 elements
---function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector;  PRIVATE
+function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector;
 
 function getNewElem(remv: std_logic_vector; newContent: InstructionSlotArray) return InstructionSlot;
 function getNewElemSch(remv: std_logic_vector; newContent: SchedulerEntrySlotArray)
