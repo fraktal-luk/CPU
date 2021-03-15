@@ -221,11 +221,11 @@ function compareTagBefore(tagA, tagB: InsTag) return std_logic;
 function compareTagAfter(tagA, tagB: InsTag) return std_logic;
 --
 
-function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector; HAS_IMM: boolean) return SchedulerEntrySlotArray;
+--function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector; HAS_IMM: boolean) return SchedulerEntrySlotArray;
 
 
 function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray;
-function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return SchedulerEntrySlotArray;
+--function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return SchedulerEntrySlotArray;
 
 function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot;
 
@@ -795,74 +795,74 @@ begin
 end function;
 
 
-function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector; HAS_IMM: boolean) return SchedulerEntrySlotArray is
-    variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        res(i).ins := insArr(i);
-        res(i).full := fullMask(i);
+--function getSchedData(insArr: InstructionStateArray; fullMask: std_logic_vector; HAS_IMM: boolean) return SchedulerEntrySlotArray is
+--    variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+--begin
+--    for i in 0 to PIPE_WIDTH-1 loop
+--        res(i).ins := insArr(i);
+--        res(i).full := fullMask(i);
         
-            res(i).state.newInQueue := '1';
+--            res(i).state.newInQueue := '1';
         
-        -- CAREFUL, TODO: define precisely what 'zero' designation means
-        -- Set state markers: "zero" bit; only valid for Int args because FP doesn't use HW zero
-        for j in 0 to 2 loop
-            res(i).state.zero(j) :=         (res(i).ins.physicalArgSpec.intArgSel(j) and not isNonzero(res(i).ins.virtualArgSpec.args(j)(4 downto 0)))
-                                               or (not res(i).ins.physicalArgSpec.intArgSel(j) and not res(i).ins.physicalArgSpec.floatArgSel(j));
+--        -- CAREFUL, TODO: define precisely what 'zero' designation means
+--        -- Set state markers: "zero" bit; only valid for Int args because FP doesn't use HW zero
+--        for j in 0 to 2 loop
+--            res(i).state.zero(j) :=         (res(i).ins.physicalArgSpec.intArgSel(j) and not isNonzero(res(i).ins.virtualArgSpec.args(j)(4 downto 0)))
+--                                               or (not res(i).ins.physicalArgSpec.intArgSel(j) and not res(i).ins.physicalArgSpec.floatArgSel(j));
                                                
-                res(i).state.argLocsPhase(j) := "00000010"; -- Like arg in register
-        end loop;
+--                res(i).state.argLocsPhase(j) := "00000010"; -- Like arg in register
+--        end loop;
 
             
             
-            res(i).state.renameIndex := res(i).ins.tags.renameIndex;
-            res(i).state.bqPointer := res(i).ins.tags.bqPointer;
-            res(i).state.sqPointer := res(i).ins.tags.sqPointer;
-            res(i).state.lqPointer := res(i).ins.tags.lqPointer;
+--            res(i).state.renameIndex := res(i).ins.tags.renameIndex;
+--            res(i).state.bqPointer := res(i).ins.tags.bqPointer;
+--            res(i).state.sqPointer := res(i).ins.tags.sqPointer;
+--            res(i).state.lqPointer := res(i).ins.tags.lqPointer;
             
             
-            res(i).state.branchIns := res(i).ins.classInfo.branchIns;
-            res(i).state.operation := res(i).ins.specificOperation;
-            res(i).state.argSpec := res(i).ins.physicalArgSpec;
-            res(i).state.immValue := res(i).ins.constantArgs.imm(15 downto 0);
+--            res(i).state.branchIns := res(i).ins.classInfo.branchIns;
+--            res(i).state.operation := res(i).ins.specificOperation;
+--            res(i).state.argSpec := res(i).ins.physicalArgSpec;
+--            res(i).state.immValue := res(i).ins.constantArgs.imm(15 downto 0);
 
 
-        -- Set 'missing' flags for non-const arguments
-        res(i).state.missing := (res(i).ins.physicalArgSpec.intArgSel and not res(i).state.zero)
-                                       or (res(i).ins.physicalArgSpec.floatArgSel);
+--        -- Set 'missing' flags for non-const arguments
+--        res(i).state.missing := (res(i).ins.physicalArgSpec.intArgSel and not res(i).state.zero)
+--                                       or (res(i).ins.physicalArgSpec.floatArgSel);
         
-        -- Handle possible immediate arg
-        if HAS_IMM and res(i).ins.constantArgs.immSel = '1' then
-            res(i).state.missing(1) := '0';
-            res(i).state.immediate := '1';
-            res(i).state.zero(1) := '1';
+--        -- Handle possible immediate arg
+--        if HAS_IMM and res(i).ins.constantArgs.immSel = '1' then
+--            res(i).state.missing(1) := '0';
+--            res(i).state.immediate := '1';
+--            res(i).state.zero(1) := '1';
             
-            if IMM_AS_REG then
-                res(i).ins.physicalArgSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);    
-                res(i).state.argSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);    
-                if CLEAR_DEBUG_INFO then
-                    res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
-                    res(i).state.immValue(PhysName'length-1 downto 0) := (others => '0');
-                end if;
-            end if;
-        end if;
+--            if IMM_AS_REG then
+--                res(i).ins.physicalArgSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);    
+--                res(i).state.argSpec.args(1) := res(i).ins.constantArgs.imm(PhysName'length-1 downto 0);    
+--                if CLEAR_DEBUG_INFO then
+--                    res(i).ins.constantArgs.imm(PhysName'length-1 downto 0) := (others => '0');
+--                    res(i).state.immValue(PhysName'length-1 downto 0) := (others => '0');
+--                end if;
+--            end if;
+--        end if;
         
-        if not HAS_IMM then
-            res(i).ins.constantArgs.imm := (others => '0');            
-        end if;
+--        if not HAS_IMM then
+--            res(i).ins.constantArgs.imm := (others => '0');            
+--        end if;
         
-        if CLEAR_DEBUG_INFO then
-            res(i).ins.ip := (others => '0');
-            res(i).ins.bits := (others => '0');
-            res(i).ins.target := (others => '0');
-            res(i).ins.result := (others => '0');
+--        if CLEAR_DEBUG_INFO then
+--            res(i).ins.ip := (others => '0');
+--            res(i).ins.bits := (others => '0');
+--            res(i).ins.target := (others => '0');
+--            res(i).ins.result := (others => '0');
             
-                res(i).ins := DEFAULT_INS_STATE;
-        end if;
+--                res(i).ins := DEFAULT_INS_STATE;
+--        end if;
 
-    end loop;
-    return res;
-end function;
+--    end loop;
+--    return res;
+--end function;
 
 function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
@@ -1119,16 +1119,16 @@ begin
     return res;
 end function;
 
-function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return SchedulerEntrySlotArray is
-    variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := content;
-begin
-    for i in 1 to PIPE_WIDTH-1 loop
-        res(i).ins.tags.renameIndex := clearTagLow(res(0).ins.tags.renameIndex) or i2slv(i, TAG_SIZE);
-            res(i).state.renameIndex := clearTagLow(res(0).state.renameIndex) or i2slv(i, TAG_SIZE);
-    end loop;
+--function restoreRenameIndexSch(content: SchedulerEntrySlotArray) return SchedulerEntrySlotArray is
+--    variable res: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := content;
+--begin
+--    for i in 1 to PIPE_WIDTH-1 loop
+--        res(i).ins.tags.renameIndex := clearTagLow(res(0).ins.tags.renameIndex) or i2slv(i, TAG_SIZE);
+--            res(i).state.renameIndex := clearTagLow(res(0).state.renameIndex) or i2slv(i, TAG_SIZE);
+--    end loop;
 
-    return res;
-end function;
+--    return res;
+--end function;
     
 
 function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot is
