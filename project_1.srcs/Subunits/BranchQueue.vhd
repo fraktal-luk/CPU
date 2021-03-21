@@ -129,128 +129,88 @@ begin
 	   signal targetOutput, ipOutputA: Mword := (others => '0');
  
        signal trg0, trg1, trg2, trg3, res0, res1, res2, res3: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
-       signal intp0, intp1, intp2, intp3, floatp0, floatp1, floatp2, floatp3: SmallNumberArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
        signal trgs, ress: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-       signal intps, floatps: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
-               signal intps_T, floatps_T: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-               signal sqs, lqs: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+       signal intps_T, floatps_T: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
        
-            constant STATIC0_SIZE: natural := 3*PIPE_WIDTH-2;
-            constant STATIC1_SIZE: natural := (4 + PIPE_WIDTH-1) + (4 + PIPE_WIDTH-1); -- TMP: sqPtr + sqSelects, lqPtr + lqSelects
-            
-            signal staticInput0, staticOutput0: std_logic_vector(STATIC0_SIZE-1 downto 0) := (others => '0');
-            signal staticInput1, staticOutput1: std_logic_vector(STATIC1_SIZE-1 downto 0) := (others => '0');
-            
-            type StaticMem0 is array(0 to BQ_SIZE-1) of std_logic_vector(STATIC0_SIZE-1 downto 0);
-            type StaticMem1 is array(0 to BQ_SIZE-1) of std_logic_vector(STATIC1_SIZE-1 downto 0);
-            
-            type FrontBranchesMem0 is array(0 to BQ_SIZE-1) of std_logic_vector(0 to PIPE_WIDTH-1);
-            
-            signal staticMemContent0: StaticMem0 := (others => (others => '0'));
-            signal staticMemContent1: StaticMem1 := (others => (others => '0'));
-            signal frontBranchesContent0: FrontBranchesMem0 := (others => (others => '0'));
-
-            constant DEST_FLAGS_SIZE: natural := 2*PIPE_WIDTH-2; 
-
-
-            function getStaticInput0(insVec: InstructionSlotArray) return std_logic_vector is
-                variable res: std_logic_vector(STATIC0_SIZE-1 downto 0);-- := (others => '0');
-                --variable v3: std_logic_vector(2 to 0);
-            begin
-                for i in 0 to PIPE_WIDTH-2 loop -- -2 cause [0] is not used
-                    res(i) := insVec(1+i).ins.virtualArgSpec.intDestSel;
-                    res(i + PIPE_WIDTH-1) := insVec(1+i).ins.virtualArgSpec.floatDestSel;
-                end loop;
-                
-                for i in 0 to PIPE_WIDTH-1 loop
-                    res(DEST_FLAGS_SIZE + i) := insVec(i).ins.controlInfo.frontBranch;
-                end loop;
-                     
-                return res;
-            end function;
-
-            function getStaticInput1(insVec: InstructionSlotArray) return std_logic_vector is
-                variable res: std_logic_vector(STATIC1_SIZE-1 downto 0);-- := (others => '0');
-                --variable v3: std_logic_vector(2 to 0);
-            begin
-                res(3 downto 0) := insVec(0).ins.tags.sqPointer(3 downto 0);
-                res(7 downto 4) := insVec(0).ins.tags.lqPointer(3 downto 0);
-            
-                for i in 0 to PIPE_WIDTH-2 loop -- -2 cause [0] is not used
-                    res(8 + i) := insVec(i).ins.classInfo.secCluster;
-                    res(8 + 3 + i) := insVec(i).ins.classInfo.useLQ;
-                end loop;
-                     
-                return res;
-            end function;
-            
-            function getTakenVecInt(static0: std_logic_vector) return std_logic_vector is
-                variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-            begin
-                for i in 0 to PIPE_WIDTH-2 loop
-                    res(1 + i) := static0(i);
-                end loop;
-                return res;
-            end function;
-
-            function getTakenVecFloat(static0: std_logic_vector) return std_logic_vector is
-                variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-            begin
-                for i in 0 to PIPE_WIDTH-2 loop
-                    res(1 + i) := static0(i + PIPE_WIDTH-1);
-                end loop;
-                return res;
-            end function;
-            
-            function getFrontBranch(static0: std_logic_vector) return std_logic_vector is
-                variable res: std_logic_vector(0 to PIPE_WIDTH-1);
-            begin
-                for i in 0 to PIPE_WIDTH-1 loop
-                    res(i) := static0(i + DEST_FLAGS_SIZE);
-                end loop;
-                return res;
-            end function;            
-
-                function getVecSQ(static1: std_logic_vector) return std_logic_vector is
-                    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-                begin
-                    for i in 0 to PIPE_WIDTH-2 loop
-                        res(i) := static1(8 + i);
-                    end loop;
-                    return res;
-                end function;
+        constant STATIC0_SIZE: natural := 3*PIPE_WIDTH-2;
+        constant STATIC1_SIZE: natural := (4 + PIPE_WIDTH-1) + (4 + PIPE_WIDTH-1); -- TMP: sqPtr + sqSelects, lqPtr + lqSelects
+        
+        signal staticInput0, staticOutput0: std_logic_vector(STATIC0_SIZE-1 downto 0) := (others => '0');
+        signal staticInput1, staticOutput1: std_logic_vector(STATIC1_SIZE-1 downto 0) := (others => '0');
+        
+        type StaticMem0 is array(0 to BQ_SIZE-1) of std_logic_vector(STATIC0_SIZE-1 downto 0);
+        type StaticMem1 is array(0 to BQ_SIZE-1) of std_logic_vector(STATIC1_SIZE-1 downto 0);
+        
+        type FrontBranchesMem0 is array(0 to BQ_SIZE-1) of std_logic_vector(0 to PIPE_WIDTH-1);
+        
+        signal staticMemContent0: StaticMem0 := (others => (others => '0'));
+        signal staticMemContent1: StaticMem1 := (others => (others => '0'));
+        signal frontBranchesContent0: FrontBranchesMem0 := (others => (others => '0'));
     
-                function getVecLQ(static1: std_logic_vector) return std_logic_vector is
-                    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-                begin
-                    for i in 0 to PIPE_WIDTH-2 loop
-                        res(i) := static1(8 + 3 + i);
-                    end loop;
-                    return res;
-                end function;
+        constant DEST_FLAGS_SIZE: natural := 2*PIPE_WIDTH-2; 
 
+
+        function getStaticInput0(insVec: InstructionSlotArray) return std_logic_vector is
+            variable res: std_logic_vector(STATIC0_SIZE-1 downto 0);-- := (others => '0');
+        begin
+            for i in 0 to PIPE_WIDTH-2 loop -- -2 cause [0] is not used
+                res(i) := insVec(1+i).ins.virtualArgSpec.intDestSel;
+                res(i + PIPE_WIDTH-1) := insVec(1+i).ins.virtualArgSpec.floatDestSel;
+            end loop;
             
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(DEST_FLAGS_SIZE + i) := insVec(i).ins.controlInfo.frontBranch;
+            end loop;
+                 
+            return res;
+        end function;
+
+        function getStaticInput1(insVec: InstructionSlotArray) return std_logic_vector is
+            variable res: std_logic_vector(STATIC1_SIZE-1 downto 0);-- := (others => '0');
+        begin
+            res(3 downto 0) := insVec(0).ins.tags.sqPointer(3 downto 0);
+            res(7 downto 4) := insVec(0).ins.tags.lqPointer(3 downto 0);
+        
+            for i in 0 to PIPE_WIDTH-2 loop -- -2 cause [0] is not used
+                res(8 + i) := insVec(i).ins.classInfo.secCluster;
+                res(8 + 3 + i) := insVec(i).ins.classInfo.useLQ;
+            end loop;
+                 
+            return res;
+        end function;
             
 	       signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0';
         	   
-	   function getMatchedSlot(allBranches: PipeStageArray; slotPtr: SmallNumber; cmpAdrSlot: InstructionSlot; ipBase: MWord; trgs, ress: MwordArray;
-	                           intps, floatps, sqs, lqs: SmallNumberArray; frontBranches, intTakeVec, floatTakeVec: std_logic_vector)
+	   function getMatchedSlot(allBranches: PipeStageArray; slotPtr: SmallNumber; cmpAdrSlot: InstructionSlot;-- ipBase: Mword; trgs, ress: MwordArray;
+	                           frontBranches: std_logic_vector;
+	                           earlySelected: EarlyInfo;
+	                           lateSelected: LateInfo)
 	   return InstructionSlot is
 	       variable res, storedIns: InstructionSlot := DEFAULT_INS_SLOT;
+	       constant ipBase: Mword := earlySelected.ip;
+	       constant trgs: MwordArray := earlySelected.targets;
+	       constant ress: MwordArray := earlySelected.links;
+	       variable intBase, floatBase, sqBase, lqBase: SmallNumber;
+	       variable useVecInt, useVecFloat, useVecSQ, useVecLQ: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 	       variable lowPtr: natural := 0;
 	       variable resLow: Mword := (others => '0');
-	       variable tmpNumI, tmpNumF: SmallNumber := (others => '0');
-	       
-	       --variable intTakeVec, floatTakeVec: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 	   begin
+	       intBase := lateSelected.intPtr;
+	       floatBase := lateSelected.floatPtr;
+	       sqBase := lateSelected.sqPtr;
+	       lqBase := lateSelected.lqPtr;
+	   
+	       useVecInt(1 to PIPE_WIDTH-1) := lateSelected.usingInt;
+	       useVecFloat(1 to PIPE_WIDTH-1) := lateSelected.usingFloat;
+	       useVecSQ(1 to PIPE_WIDTH-1) := lateSelected.usingSQ;
+	       useVecLQ(1 to PIPE_WIDTH-1) := lateSelected.usingLQ;
+	   
 	       lowPtr := slv2u(getTagLow(cmpAdrSlot.ins.tags.renameIndex));
 	       storedIns := allBranches(slv2u(slotPtr))(lowPtr);
 	       
-	       res.ins.controlInfo.frontBranch := --storedIns.ins.controlInfo.frontBranch;
-	                                           frontBranches(lowPtr);
+	       res.ins.controlInfo.frontBranch := frontBranches(lowPtr);
 	       res.ins.controlInfo.confirmedBranch := storedIns.ins.controlInfo.confirmedBranch;
-	       
 	       
 	       res.full := cmpAdrSlot.full;
 
@@ -272,31 +232,17 @@ begin
                                 
            res.ins.target := trgs(lowPtr);
            
-           if not TMP_PARAM_COMPRESS_PTRS then
-               res.ins.tags.intPointer := intps(lowPtr);
-               res.ins.tags.floatPointer := floatps(lowPtr);
-           else
-                for i in 1 to PIPE_WIDTH-1 loop
-                    --intTakeVec(i) := intps(i)(7);
-                    --floatTakeVec(i) := floatps(i)(7);
-                end loop;
-           
-                tmpNumI(1 downto 0) := intps(lowPtr)(1 downto 0);
-                tmpNumF(1 downto 0) := floatps(lowPtr)(1 downto 0);
-                if lowPtr = 0 then
-                    res.ins.tags.intPointer := intps(0);
-                    res.ins.tags.floatPointer := floatps(0);                  
-                else
-                    res.ins.tags.intPointer := --add(intps(0), tmpNumI);
-                                                 addInt(intps(0), countOnes(intTakeVec(1 to lowPtr)));
-                    res.ins.tags.floatPointer := --add(floatps(0), tmpNumF);
-                                                 addInt(floatps(0), countOnes(floatTakeVec(1 to lowPtr)));                                 
-                end if;
-                
-                    res.ins.tags.sqPointer := sqs(lowPtr);
-                    res.ins.tags.lqPointer := lqs(lowPtr);
-                
-           end if;
+            if lowPtr = 0 then
+                res.ins.tags.intPointer := intBase;
+                res.ins.tags.floatPointer := floatBase;
+                res.ins.tags.sqPointer := sqBase;                 
+                res.ins.tags.lqPointer := lqBase;                 
+            else
+                res.ins.tags.intPointer := addInt(intBase, countOnes(useVecInt(1 to lowPtr)));
+                res.ins.tags.floatPointer := addInt(floatBase, countOnes(useVecFloat(1 to lowPtr)));                                 
+                res.ins.tags.sqPointer := addInt(sqBase, countOnes(useVecSQ(1 to lowPtr)));                                 
+                res.ins.tags.lqPointer := addInt(lqBase, countOnes(useVecLQ(1 to lowPtr)));                                 
+            end if;
   
 	       return res;
 	   end function;
@@ -311,160 +257,67 @@ begin
 	               end loop;
 	               return res;
 	           end function;
-
-               function getFrontBr(allBranches: PipeStageArray; slotPtr: SmallNumber; cmpAdrSlot: InstructionSlot; ipBase: MWord; trgs, ress: MwordArray;
-                                       intps, floatps: SmallNumberArray)
-               return std_logic_vector is
-	               variable res: std_logic_vector(0 to PIPE_WIDTH-1);
-	           begin    
-	               for i in 0 to PIPE_WIDTH-1 loop
-	                   res(i) := allBranches(slv2u(slotPtr))(i).ins.controlInfo.frontBranch;
-	               end loop;
-	               return res;
-	           end function;
 	           
-	           
-
-               function TMP_unfoldIntPs(allBranches: PipeStageArray; slotPtr: SmallNumber; cmpAdrSlot: InstructionSlot; ipBase: MWord; trgs, ress: MwordArray;
-                                       intps, floatps: SmallNumberArray; intTakeVec, floatTakeVec: std_logic_vector)
-               return SmallNumberArray is
-                   variable res: SmallNumberArray(0 to PIPE_WIDTH-1);
-                   variable lowPtr: natural := 0;
-                   variable resLow: Mword := (others => '0');
-                   variable tmpNumI, tmpNumF: SmallNumber := (others => '0');
-                   
-                   --variable intTakeVec, floatTakeVec: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-               begin
---                        for i in 1 to PIPE_WIDTH-1 loop
---                            intTakeVec(i) := allBranches(slv2u(slotPtr))(i).ins.virtualArgSpec.intDestSel;
---                            floatTakeVec(i) := allBranches(slv2u(slotPtr))(i).ins.virtualArgSpec.floatDestSel;
---                        end loop;
-
-                        for i in 0 to PIPE_WIDTH-1 loop
-                            if i = 0 then
-                                res(i) := intps(0);
-                            else
-                                res(i) := addInt(intps(0), countOnes(intTakeVec(1 to i)));                                 
-                            end if;
-                        end loop;
-          
-                   return res;
-               end function;
-
-               function TMP_unfoldFloatPs(allBranches: PipeStageArray; slotPtr: SmallNumber; cmpAdrSlot: InstructionSlot; ipBase: MWord; trgs, ress: MwordArray;
-                                       intps, floatps: SmallNumberArray; intTakeVec, floatTakeVec: std_logic_vector)
-               return SmallNumberArray is
-                   variable res: SmallNumberArray(0 to PIPE_WIDTH-1);
-                   variable lowPtr: natural := 0;
-                   variable resLow: Mword := (others => '0');
-                   variable tmpNumI, tmpNumF: SmallNumber := (others => '0');
-                   
-                   --variable intTakeVec, floatTakeVec: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-               begin
---                        for i in 1 to PIPE_WIDTH-1 loop
---                            intTakeVec(i) := allBranches(slv2u(slotPtr))(i).ins.virtualArgSpec.intDestSel;
---                            floatTakeVec(i) := allBranches(slv2u(slotPtr))(i).ins.virtualArgSpec.floatDestSel;
---                        end loop;
-
-                        for i in 0 to PIPE_WIDTH-1 loop
-                            if i = 0 then
-                                res(i) := floatps(0);
-                            else
-                                res(i) := addInt(floatps(0), countOnes(floatTakeVec(1 to i)));                                 
-                            end if;
-                        end loop;
-          
-                   return res;
-               end function;
-
-
-               function TMP_unfoldSQ(static1: std_logic_vector; usingSQ, usingLQ: std_logic_vector)
-               return SmallNumberArray is
-                   variable res: SmallNumberArray(0 to PIPE_WIDTH-1);
-                   variable lowPtr: natural := 0;
-                   variable resLow: Mword := (others => '0');
-                   variable tmpNumL, tmpNumS: SmallNumber := (others => '0');
-                   
-                   --variable intTakeVec, floatTakeVec: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-               begin
-                    tmpNumS(3 downto 0) := static1(3 downto 0);
-                    tmpNumL(3 downto 0) := static1(7 downto 4);
-               
-                    for i in 0 to PIPE_WIDTH-1 loop
-                        if i = 0 then
-                            res(i) := tmpNumS;
-                        else
-                            res(i) := addIntTrunc(tmpNumS, countOnes(usingSQ(0 to i-1)), 4);                                 
-                        end if;
-                    end loop;
-          
-                   return res;
-               end function;
-
-               function TMP_unfoldLQ(static1: std_logic_vector; usingSQ, usingLQ: std_logic_vector)
-               return SmallNumberArray is
-                   variable res: SmallNumberArray(0 to PIPE_WIDTH-1);
-                   variable lowPtr: natural := 0;
-                   variable resLow: Mword := (others => '0');
-                   variable tmpNumL, tmpNumS: SmallNumber := (others => '0');
-                   
-                   --variable intTakeVec, floatTakeVec: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-               begin
-                    tmpNumS(3 downto 0) := static1(3 downto 0);
-                    tmpNumL(3 downto 0) := static1(7 downto 4);
-               
-                    for i in 0 to PIPE_WIDTH-1 loop
-                        if i = 0 then
-                            res(i) := tmpNumL;
-                        else
-                            res(i) := addIntTrunc(tmpNumL, countOnes(usingLQ(0 to i-1)), 4);                                 
-                        end if;
-                    end loop;
-          
-                   return res;
-               end function;
-
        signal allBranchesInputTmp: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
        
-                   signal intTakeVec, floatTakeVec, frontBranches, frontBranches_T, usingSQ, usingLQ: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+       signal frontBranches, frontBranches_T: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+
+       signal earlyInfoMem: EarlyInfoArray(0 to BQ_SIZE-1) := (others => DEFAULT_EARLY_INFO);
+       signal earlyInput, earlySelected, earlyOutput, earlySelected_T, earlyOutput_T: EarlyInfo := DEFAULT_EARLY_INFO;
+        
+       signal lateInfoMem: LateInfoArray(0 to BQ_SIZE-1) := (others => DEFAULT_LATE_INFO);
+       signal lateInput, lateSelected, lateOutput, lateSelected_T, lateOutput_T: LateInfo := DEFAULT_LATE_INFO;
        
-	begin	
+       signal earlyInputSending, lateInputSending: std_logic := '0';
+       
+       signal earlySerialInput, earlySerialOutput, earlySerialSelected:  std_logic_vector(EARLY_INFO_SIZE-1 downto 0) := (others => '0');
+       signal lateSerialInput, lateSerialOutput, lateSerialSelected:  std_logic_vector(LATE_INFO_SIZE-1 downto 0) := (others => '0');
+       signal earlySerialMem: EarlyInfoSerialArray := (others => (others => '0'));
+       signal lateSerialMem: LateInfoSerialArray := (others => (others => '0'));
+	begin
+       earlyInputSending <= prevSendingBr and dataInBr(0).ins.controlInfo.firstBr;
+       lateInputSending <= prevSending and dataIn(0).ins.controlInfo.firstBr;
+	
+	
        isSending <= committingBr;
 
-       selectedDataSlot <= getMatchedSlot(allBranches, pSelect, compareAddressInput, ipOutputA, trgs, ress, intps, floatps, sqs, lqs,
-                                        frontBranches_T, intTakeVec, floatTakeVec);
+       earlyInput <= getEarlyInfo(dataInBr);
+       lateInput <= getLateInfo(dataIn);
+       
+            earlySerialInput <= serializeEarlyInfo(earlyInput);
+            lateSerialInput <= serializeLateInfo(lateInput);
+    
+            earlySelected_T <= deserializeEarlyInfo(earlySerialSelected);
+            lateSelected_T <= deserializeLateInfo(lateSerialSelected);
+
+       
+       selectedDataSlot <= getMatchedSlot(allBranches, pSelect, compareAddressInput,-- ipOutputA,
+                                          --trgs, ress,
+                                          frontBranches,
+                                          earlySelected_T,
+                                          lateSelected_T);
         
-              frontBranches <= getFrontBr(allBranches, pSelect, compareAddressInput, ipOutputA, trgs, ress, intps, floatps);
+       frontBranches <= frontBranchesContent0(slv2u(pSelect));
         
-                frontBranches_T <= frontBranchesContent0(slv2u(pSelect));--getFrontBranch(staticOutput0);
-                intTakeVec <= getTakenVecInt(staticOutput0);
-                floatTakeVec <= getTakenVecFloat(staticOutput0);
-        
-                usingSQ <= getVecSQ(staticOutput1);
-                usingLQ <= getVecLQ(staticOutput1);
-        
-               intps_T <= TMP_unfoldIntPs(allBranches, pSelect, compareAddressInput, ipOutputA, trgs, ress, intps, floatps, intTakeVec, floatTakeVec);
-               floatps_T <= TMP_unfoldFloatPs(allBranches, pSelect, compareAddressInput, ipOutputA, trgs, ress, intps, floatps, intTakeVec, floatTakeVec);
-                
-                sqs <= TMP_unfoldSQ(staticOutput1, usingSQ, usingLQ);
-                lqs <= TMP_unfoldLQ(staticOutput1, usingSQ, usingLQ);
-        
-            staticInput0 <= getStaticInput0(dataIn);
-            staticInput1 <= getStaticInput1(dataIn);
+       --staticInput0 <= getStaticInput0(dataIn);
+       --staticInput1 <= getStaticInput1(dataIn);
         
        ipOutputA <= ipArray(slv2u(pSelect));
        trgs <= (trg0(slv2u(pSelect)), trg1(slv2u(pSelect)), trg2(slv2u(pSelect)), trg3(slv2u(pSelect)));
        ress <= (res0(slv2u(pSelect)), res1(slv2u(pSelect)), res2(slv2u(pSelect)), res3(slv2u(pSelect)));
-       intps <= (intp0(slv2u(pSelect)), intp1(slv2u(pSelect)), intp2(slv2u(pSelect)), intp3(slv2u(pSelect)));
-       floatps <= (floatp0(slv2u(pSelect)), floatp1(slv2u(pSelect)), floatp2(slv2u(pSelect)), floatp3(slv2u(pSelect)));
        
-            staticOutput0 <= staticMemContent0(slv2u(pSelect));
-            staticOutput1 <= staticMemContent1(slv2u(pSelect));
+       earlySelected <= earlyInfoMem(slv2u(pSelect));
+       lateSelected <= lateInfoMem(slv2u(pSelect));
+
+           earlySerialSelected <= earlySerialMem(slv2u(pSelect));
+           lateSerialSelected <= lateSerialMem(slv2u(pSelect));
+       
+       --staticOutput0 <= staticMemContent0(slv2u(pSelect));
+       --staticOutput1 <= staticMemContent1(slv2u(pSelect));
        
        pSelect <= compareAddressInput.ins.tags.bqPointer and PTR_MASK_SN;
 
-           pSelectLong <= compareAddressInput.ins.tags.bqPointer;
-
+       pSelectLong <= compareAddressInput.ins.tags.bqPointer;
 
        -- TODO: introduce bit in ROB which indicated whether the ROB entry uses a slot in this queue  
        committingBr <= committing and robData(0).ins.controlInfo.firstBr and not taggedEmpty;
@@ -481,36 +334,36 @@ begin
             pRenamed <= pRenamedLong and PTR_MASK_SN;
             pEnd <= pEndLong and PTR_MASK_SN;
 
-               pStartLongNext <= addIntTrunc(pStartLong, 1, QUEUE_PTR_SIZE+1) when committingBr = '1' else pStartLong;
-            
-                pTaggedLongNext <= pStartLong when lateEventSignal = '1'
-                    else       addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
-                    else       addIntTrunc(pTaggedLong, 1, QUEUE_PTR_SIZE+1) when prevSending = '1' and dataIn(0).ins.controlInfo.firstBr = '1'
-                    else       pTaggedLong;
-                
-                pRenamedLongNext <= pStartLong when lateEventSignal = '1'
-                    else       addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
-                    else       addIntTrunc(pRenamedLong, 1, QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
-                    else       pRenamedLong;
-         
+           pStartLongNext <= addIntTrunc(pStartLong, 1, QUEUE_PTR_SIZE+1) when committingBr = '1' else pStartLong;
         
-                pEndLongNext <= pStartLong when lateEventSignal = '1'
-                    else    addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
-                    else    addIntTrunc(pEndLong, 1, QUEUE_PTR_SIZE+1) when prevSendingBr = '1' and dataInBr(0).ins.controlInfo.firstBr = '1'
-                    else    pEndLong;
+            pTaggedLongNext <= pStartLong when lateEventSignal = '1'
+                else       addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
+                else       addIntTrunc(pTaggedLong, 1, QUEUE_PTR_SIZE+1) when --prevSending = '1' and dataIn(0).ins.controlInfo.firstBr = '1'
+                                                                                lateInputSending = '1'
+                else       pTaggedLong;
+            
+            pRenamedLongNext <= pStartLong when lateEventSignal = '1'
+                else       addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
+                else       addIntTrunc(pRenamedLong, 1, QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
+                else       pRenamedLong;
+     
+    
+            pEndLongNext <= pStartLong when lateEventSignal = '1'
+                else    addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
+                else    addIntTrunc(pEndLong, 1, QUEUE_PTR_SIZE+1) when --prevSendingBr = '1' and dataInBr(0).ins.controlInfo.firstBr = '1'
+                                                                        earlyInputSending = '1'
+                else    pEndLong;
 
 
         allBranchesInputTmp <= dataInBr;
-
-
-        
+       
 	   SYNCH: process (clk)
 	   begin
 	       if rising_edge(clk) then	           
 	           pCausing <= pSelect;
 	           pCausingLong <= pSelectLong;
           
-               if prevSendingBr = '1' and dataInBr(0).ins.controlInfo.firstBr = '1' then
+               if earlyInputSending = '1' then
                      for i in 0 to PIPE_WIDTH-1 loop
                         allBranches(slv2u(pEnd))(i).full <= allBranchesInputTmp(i).full;                         
                         allBranches(slv2u(pEnd))(i).ins.controlInfo.frontBranch <= allBranchesInputTmp(i).ins.controlInfo.frontBranch;
@@ -529,25 +382,18 @@ begin
                         res1(slv2u(pEnd)) <= dataInBr(1).ins.result;
                         res2(slv2u(pEnd)) <= dataInBr(2).ins.result;
                         res3(slv2u(pEnd)) <= dataInBr(3).ins.result;
-                        
-                        
+                                                
                         frontBranchesContent0(slv2u(pEnd)) <= extractFrontBr(dataInBr);
+                   
+                   earlyInfoMem(slv2u(pEnd)) <= earlyInput;
+
+                   earlySerialMem(slv2u(pEnd)) <= earlySerialInput;
                end if;
                                
-               if prevSending = '1' and dataIn(0).ins.controlInfo.firstBr = '1' then
+               if lateInputSending = '1' then
+                   lateInfoMem(slv2u(pTagged)) <= lateInput;                 
 
-                        intp0(slv2u(pTagged)) <= dataIn(0).ins.tags.intPointer;
-                        intp1(slv2u(pTagged)) <= dataIn(1).ins.tags.intPointer;
-                        intp2(slv2u(pTagged)) <= dataIn(2).ins.tags.intPointer;
-                        intp3(slv2u(pTagged)) <= dataIn(3).ins.tags.intPointer;
-                        
-                        floatp0(slv2u(pTagged)) <= dataIn(0).ins.tags.floatPointer;
-                        floatp1(slv2u(pTagged)) <= dataIn(1).ins.tags.floatPointer;
-                        floatp2(slv2u(pTagged)) <= dataIn(2).ins.tags.floatPointer;
-                        floatp3(slv2u(pTagged)) <= dataIn(3).ins.tags.floatPointer;
-                        
-                        staticMemContent0(slv2u(pTagged)) <= staticInput0;                  
-                        staticMemContent1(slv2u(pTagged)) <= staticInput1;                  
+                   lateSerialMem(slv2u(pTagged)) <= lateSerialInput;                 
                end if;                
 	           
 	           if true then
@@ -558,12 +404,6 @@ begin
                    targetArray(slv2u(pCausing)) <= storeValueInput.ins.target;
                end if;
 
-               	           
---	           pStart <= pStartNext;
---               pTagged <= pTaggedNext;
---               pEnd <= pEndNext;
---               pRenamed <= pRenamedNext;
-               
 	           pStartLong <= pStartLongNext;
                pTaggedLong <= pTaggedLongNext;
                pEndLong <= pEndLongNext;
@@ -577,7 +417,8 @@ begin
        committedDataOut <= (committingBr, setInstructionTarget(DEFAULT_INS_STATE, targetOutput));	       
        acceptingBr <= accepting;
        
---            ch0 <= not compareAddressInput.full or bool2std(compareAddressInput.ins.tags.bqPointer = pSelect);
+           ch0 <= bool2std(earlySelected = earlySelected_T);
+           ch1 <= bool2std(lateSelected = lateSelected_T);
        
 --                ch3 <= not memEmpty xor ch1;
 --                ch4 <= not taggedEmpty xor ch2;
@@ -586,8 +427,8 @@ begin
 --        ch2 <= bool2std((pEndLong and PTR_MASK_SN) = pEnd);
 --        ch3 <= bool2std((pRenamedLong and PTR_MASK_SN) = pRenamed);
        
-        ch0 <= bool2std(intps = intps_T);
-        ch1 <= bool2std(floatps = floatps_T);
+       -- ch0 <= bool2std(intps = intps_T);
+       -- ch1 <= bool2std(floatps = floatps_T);
         ch2 <= bool2std(frontBranches = frontBranches_T);
         
 	end block;
