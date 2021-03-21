@@ -498,7 +498,7 @@ begin
               
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => 8 --IQ_SIZES(4)
+                IQ_SIZE => IQ_SIZE_I0
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -647,8 +647,8 @@ begin
                         
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
-               IQ_SIZE => 8 --IQ_SIZES(4),
-               ,ALT_INPUT => false --true
+               IQ_SIZE => IQ_SIZE_M0,
+               ALT_INPUT => false --true
            )
            port map(
                clk => clk, reset => '0', en => '0',
@@ -874,7 +874,7 @@ begin
         
             IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => 8 --IQ_SIZES(4)
+                IQ_SIZE => IQ_SIZE_INT_SV
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -954,7 +954,7 @@ begin
             
             IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => 8 -- CAREFUL: not IS_FP because doesn't have destination
+                IQ_SIZE => IQ_SIZE_FLOAT_SV -- CAREFUL: not IS_FP because doesn't have destination
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -1047,7 +1047,7 @@ begin
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => 8,
+                IQ_SIZE => IQ_SIZE_F0,
                 IS_FP => true
             )
             port map(

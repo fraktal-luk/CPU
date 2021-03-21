@@ -13,8 +13,6 @@ constant CLEAR_DEBUG_INFO: boolean := true;
 constant VIEW_ON: boolean := false;
 
    constant DEBUG_LOG_COMMITTED: boolean := true;
-   --constant COMMITTED_FILE: string := "committed_out.txt";
-
 
 --constant SYNTH_CHECK: boolean := checkSynthesis;
 
@@ -37,28 +35,32 @@ constant PHYS_REG_BITS: natural := 6 + LOG2_PIPE_WIDTH;
 -- CAREFUL, TODO: compute it by log2 from number of phys regs
 constant PHYS_REG_BITS_EFFECTIVE: natural := PHYS_REG_BITS - 1;
 
-constant N_PHYSICAL_REGS: natural := --64 * PIPE_WIDTH;
-                                        128;
+constant N_PHYSICAL_REGS: natural := 128;
 constant N_PHYS: natural := N_PHYSICAL_REGS;
 	
-constant FREE_LIST_SIZE: positive := --N_PHYSICAL_REGS;
-                                        256;
+constant FREE_LIST_SIZE: positive := 256;
 
 -- Optimize immediate field by keeping part of it in physical register field
 constant IMM_AS_REG: boolean := true;
 
 
-    constant BQ_SIZE: natural := 8;
-    constant SQ_SIZE: natural := 8;
-    constant LQ_SIZE: natural := 8;
-	
-	constant BQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
-	constant SQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
-	constant LQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
+constant IQ_SIZE_I0: natural := 8;
+constant IQ_SIZE_M0: natural := 8;
+constant IQ_SIZE_F0: natural := 8;
+constant IQ_SIZE_INT_SV: natural := 8;
+constant IQ_SIZE_FLOAT_SV: natural := 8;
 
-    constant BQ_PTR_SIZE: natural := countOnes(BQ_PTR_MASK);
-    constant SQ_PTR_SIZE: natural := countOnes(SQ_PTR_MASK);
-    constant LQ_PTR_SIZE: natural := countOnes(LQ_PTR_MASK);
+constant BQ_SIZE: natural := 8;
+constant SQ_SIZE: natural := 8;
+constant LQ_SIZE: natural := 8;
+
+constant BQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
+constant SQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
+constant LQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
+
+constant BQ_PTR_SIZE: natural := countOnes(BQ_PTR_MASK);
+constant SQ_PTR_SIZE: natural := countOnes(SQ_PTR_MASK);
+constant LQ_PTR_SIZE: natural := countOnes(LQ_PTR_MASK);
 
     constant TMP_PARAM_COMPRESS_RETURN: boolean := false;
     constant TMP_PARAM_COMPRESS_PTRS: boolean := true;

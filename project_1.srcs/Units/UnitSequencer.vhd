@@ -91,20 +91,16 @@ architecture Behavioral of UnitSequencer is
 	signal resetSig, enSig: std_logic := '0';							
 
     signal pcNext: Mword := (others => '0');        
-    signal stageDataOutPC: InstructionState := DEFAULT_INSTRUCTION_STATE;
+    signal stageDataOutPC, newLateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
     signal sendingToPC, sendingOutPC, acceptingOutPC, sendingToLastEffective, running: std_logic := '0';
-    signal stageDataLateCausingOut: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);    
-    signal sendingToLateCausing, committingEvent, sendingToCommit, sendingOutCommit, acceptingOutCommit, lockCommit, unlockCommit, commitLocked: std_logic := '0';
-    signal stageDataToCommit, stageDataOutCommit: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);                              
+    signal eventOccurred, killPC, eventCommitted, intCommitted, intSuppressed, lateEventSending, dbtrapOn, restartPC: std_logic := '0';    
+    signal sendingToLateCausing, committingEvent, sendingToCommit, sendingOutCommit, commitLocked: std_logic := '0';
     signal commitGroupCtr, commitGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
     signal commitGroupCtrInc, commitGroupCtrIncNext: InsTag := INITIAL_GROUP_TAG_INC;
-    signal lateCausingSig, newLateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;                
-    signal eventOccurred, killPC, eventCommitted, intCommitted, intSuppressed, lateEventSending: std_logic := '0';    
-    signal intWaiting, addDbEvent, intAllow, intAck, dbtrapOn, restartPC: std_logic := '0';
-    signal stageDataCommitInA, stageDataCommitOutA: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);    
-    signal stageDataToPC, tmpPcOutA, stageDataLastEffectiveInA, stageDataLastEffectiveOutA, stageDataLateCausingIn:
-                        InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
+    signal stageDataLateCausingOut, stageDataToPC, tmpPcOutA, stageDataLastEffectiveInA, stageDataLastEffectiveOutA, stageDataLateCausingIn:
+                        InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal stageDataToCommit, stageDataCommitOutA: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);                              
     signal special: InstructionSlot := DEFAULT_INS_SLOT;
 
     signal intTypeCommitted: std_logic_vector(0 to 1) := (others => '0');
@@ -118,7 +114,6 @@ architecture Behavioral of UnitSequencer is
     alias linkRegInt is sysRegArray(3);
     alias savedStateExc is sysRegArray(4);
     alias savedStateInt is sysRegArray(5);
-
 
     constant HAS_RESET_SEQ: std_logic := '0';
     constant HAS_EN_SEQ: std_logic := '0';
@@ -189,9 +184,7 @@ begin
         sysStoreValue <= dataFromSB.ins.result;
     
         excInfoUpdate <= lateEventSending       -- TODO: what about dbtrap?
-                                        and (stageDataLateCausingOut(0).ins.controlInfo.hasException or --bool2std(special.ins.operation = (System, sysCall)))
-                                                                      (--special.ins.controlInfo.specialAction and 
-                                                                        bool2std(special.ins.specificOperation.system = opCall)))
+                                        and (stageDataLateCausingOut(0).ins.controlInfo.hasException or (bool2std(special.ins.specificOperation.system = opCall)))
                                         and not stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
         intInfoUpdate <= lateEventSending and stageDataLateCausingOut(0).ins.controlInfo.hasInterrupt;
     

@@ -75,13 +75,14 @@ type SpecificOp is record
     system: SysOp;
 end record;
 
-constant DEFAULT_SPECIFIC_OP: SpecificOp := (   subpipe => None,
-                                                bits => (others => '0'),
-                                                arith => opAnd,
-                                                memory => opLoad,
-                                                float => opMove,
-                                                system => opNone);
-                                                
+constant DEFAULT_SPECIFIC_OP: SpecificOp := (   
+    subpipe => None,
+    bits => (others => '0'),
+    arith => opAnd,
+    memory => opLoad,
+    float => opMove,
+    system => opNone);
+                                        
 function sop(sub: SubpipeType; func: ArithOp) return SpecificOp;
 function sop(sub: SubpipeType; func: MemOp) return SpecificOp;
 function sop(sub: SubpipeType; func: FpOp) return SpecificOp;
@@ -98,11 +99,7 @@ constant INITIAL_GROUP_TAG_INC: InsTag := i2slv(0, TAG_SIZE);
 
 type InsTagArray is array (integer range <>) of InsTag;
 
-
 type InstructionControlInfo is record
-	--completed: std_logic;
-	--completed2: std_logic;
-	
 	newEvent: std_logic; -- True if any new event appears
 	hasInterrupt: std_logic;
 	hasException: std_logic;
@@ -116,9 +113,9 @@ type InstructionControlInfo is record
     dataMiss: std_logic;
     sqMiss:    std_logic;
     firstBr: std_logic;
-        killed: std_logic;
-        causing: std_logic;
-        ignored: std_logic;
+    killed: std_logic;
+    causing: std_logic;
+    ignored: std_logic;
 end record;
 
 type InstructionClassInfo is record
@@ -175,58 +172,56 @@ end record;
 type InstructionStateArray is array(integer range <>) of InstructionState;
 
 constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
-                                    --completed => '0',
-                                    --completed2 => '0',
-                                    newEvent => '0',
-                                    hasInterrupt => '0',
-                                    hasException => '0',
-                                    refetch => '0',
-                                    frontBranch => '0',
-                                    confirmedBranch => '0',												    											
-                                    specialAction => '0',
-                                    dbtrap => '0',
-                                    orderViolation => '0',
-                                    tlbMiss => '0',
-                                    dataMiss => '0',
-                                    sqMiss => '0',
-                                    firstBr => '0',
-                                        killed => '0',
-                                        causing => '0',
-                                        ignored => '0'
-                                 );
+    newEvent => '0',
+    hasInterrupt => '0',
+    hasException => '0',
+    refetch => '0',
+    frontBranch => '0',
+    confirmedBranch => '0',												    											
+    specialAction => '0',
+    dbtrap => '0',
+    orderViolation => '0',
+    tlbMiss => '0',
+    dataMiss => '0',
+    sqMiss => '0',
+    firstBr => '0',
+    killed => '0',
+    causing => '0',
+    ignored => '0'
+);
 
 constant DEFAULT_CLASS_INFO: InstructionClassInfo := ( 
-                                    short => '0',
-                                    mainCluster => '0',
-                                    secCluster => '0',
-                                    fpRename => '0',
-                                    branchIns => '0',
-                                    useLQ => '0'									
-                                  );
+    short => '0',
+    mainCluster => '0',
+    secCluster => '0',
+    fpRename => '0',
+    branchIns => '0',
+    useLQ => '0'									
+);
 
 
 constant DEFAULT_CONSTANT_ARGS: InstructionConstantArgs := ('0', (others=>'0'));
 
 constant DEFAULT_ARG_SPEC: InstructionArgSpec := (
-			intDestSel => '0',
-			floatDestSel => '0',
-			dest => (others => '0'),
-			intArgSel => (others => '0'),
-			floatArgSel => (others => '0'),
-			args => ((others => '0'), (others => '0'), (others => '0'))
+    intDestSel => '0',
+    floatDestSel => '0',
+    dest => (others => '0'),
+    intArgSel => (others => '0'),
+    floatArgSel => (others => '0'),
+    args => ((others => '0'), (others => '0'), (others => '0'))
 );
 
 constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
-			fetchCtr => (others => '0'),
-			decodeCtr => (others => '0'),
-			renameCtr => (others => '0'),
-			renameIndex => (others => '0'),
-			intPointer => (others => '0'),
-			floatPointer => (others => '0'),
-			    bqPointer => (others => '0'),
-			    sqPointer => (others => '0'),
-			    lqPointer => (others => '0'),
-			commitCtr => (others => '0')
+    fetchCtr => (others => '0'),
+    decodeCtr => (others => '0'),
+    renameCtr => (others => '0'),
+    renameIndex => (others => '0'),
+    intPointer => (others => '0'),
+    floatPointer => (others => '0'),
+    bqPointer => (others => '0'),
+    sqPointer => (others => '0'),
+    lqPointer => (others => '0'),
+    commitCtr => (others => '0')
 );
 
 constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
@@ -263,27 +258,23 @@ type SchedulerState is record
 	issued: std_logic;
     newInQueue: std_logic;
         
-        branchIns: std_logic;
+    branchIns: std_logic;
         
-        renameIndex: InsTag;
+    renameIndex: InsTag;    
+    bqPointer: SmallNumber;
+    sqPointer: SmallNumber;
+    lqPointer: SmallNumber;        
         
-		bqPointer: SmallNumber;
-        sqPointer: SmallNumber;
-        lqPointer: SmallNumber;        
+    operation: SpecificOp;
+    argSpec: InstructionArgSpec;
+
+    immediate: std_logic;        
+    immValue: Hword;
         
-        operation: SpecificOp;
-        argSpec: InstructionArgSpec;
-        
-        immValue: Hword;
-        
-    immediate: std_logic;
     zero: std_logic_vector(0 to 2);
     readyNow: std_logic_vector(0 to 2);
     readyNext: std_logic_vector(0 to 2);
     readyM2:    std_logic_vector(0 to 2);
---    locs: SmallNumberArray(0 to 2);
---    nextLocs: SmallNumberArray(0 to 2);
---    locsM2: SmallNumberArray(0 to 2);
     missing: std_logic_vector(0 to 2);
     stored:  std_logic_vector(0 to 2);
     args: MwordArray(0 to 2);
@@ -293,36 +284,32 @@ type SchedulerState is record
 end record;
 
 constant DEFAULT_SCHEDULER_STATE: SchedulerState := ( 
-              issued => '0',
-	          newInQueue => '0',
-	          
-	                branchIns => '0',
-	          
-                    renameIndex => (others => '0'),
-			        
-			        bqPointer => (others => '0'),
-                    sqPointer => (others => '0'),
-                    lqPointer => (others => '0'),                    
-                    
-                    operation => DEFAULT_SPECIFIC_OP,
-                    argSpec => DEFAULT_ARG_SPEC,          
-	                   
-	                immValue => (others => '0'),
-	          
-			  immediate => '0',
-			  zero => (others => '0'),
-			  readyNow => (others=>'0'),
-			  readyNext => (others=>'0'),
-			  readyM2 => (others => '0'),
---			  locs => (others => (others => '0')),
---			  nextLocs => (others => (others => '0')),
---			  locsM2 => (others => (others => '0')),
-			  missing => (others=>'0'),
-			  stored => (others => '0'),
-			  args => (others => (others=>'0')),
-		      argLocsPipe => (others => (others => '0')),
-			  argLocsPhase => (others => (others => '0'))
-			  );
+      issued => '0',
+      newInQueue => '0',
+
+      branchIns => '0',
+      
+      renameIndex => (others => '0'),    
+      bqPointer => (others => '0'),
+      sqPointer => (others => '0'),
+      lqPointer => (others => '0'),                    
+            
+      operation => DEFAULT_SPECIFIC_OP,
+      argSpec => DEFAULT_ARG_SPEC,          
+
+      immediate => '0',	                   
+      immValue => (others => '0'),
+      
+      zero => (others => '0'),
+      readyNow => (others=>'0'),
+      readyNext => (others=>'0'),
+      readyM2 => (others => '0'),
+      missing => (others=>'0'),
+      stored => (others => '0'),
+      args => (others => (others=>'0')),
+      argLocsPipe => (others => (others => '0')),
+      argLocsPhase => (others => (others => '0'))
+      );
 
 constant DEFAULT_SCHED_STATE: SchedulerState := DEFAULT_SCHEDULER_STATE;
 																				

@@ -308,6 +308,8 @@ begin
 	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);	
 	
 	anyReady <= anyReadyLive; -- OUTPUT
+	
+	               -- TODO: make a single function
 	schedulerOut <= clearOutput(clearDestIfEmpty(TMP_restoreState(sends, dispatchDataNew.ins, dispatchDataNew.state)));
 	sending <= sends;
     sentCancelled <= anyCancelled;
