@@ -126,7 +126,7 @@ begin
                 dataOutFull <= (memReading or memBypassing or dataOutStalled) and not execEventSignal;
 
                 if prevSending = '1' then
-                     updateQueue(content, pEndLong, input);
+                     --updateQueue(content, pEndLong, input);
                      serialMem(slv2u(pEnd)) <= serialMemInput;                     
                 end if;
                 

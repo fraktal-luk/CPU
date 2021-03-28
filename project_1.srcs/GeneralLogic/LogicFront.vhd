@@ -56,7 +56,6 @@ package body LogicFront is
 function getInstructionClassInfo(ins: InstructionState) return InstructionClassInfo is
 	variable ci: InstructionClassInfo := DEFAULT_CLASS_INFO;
 begin 
-    -- Which clusters?
     ci.mainCluster := '1';
     if ins.specificOperation.subpipe = Mem then 
         if (ins.specificOperation.memory = opStore or ins.specificOperation.memory = opStoreSys) then
@@ -82,8 +81,6 @@ end function;
 function decodeInstruction(inputState: InstructionState) return InstructionState is
 	variable res: InstructionState := inputState;
     variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
-	--variable tmpVirtualArgs: InstructionVirtualArgs;
-	--variable tmpVirtualDestArgs: InstructionVirtualDestArgs;
 begin
 	decodedIns := decodeFromWord(inputState.bits);
 	
@@ -105,17 +102,15 @@ begin
         end if;        
     end if;
 
-        if true then
-            res.constantArgs.immSel := decodeImmSel(inputState.bits);
-            res.classInfo.branchIns := decodeBranchIns(inputState.bits);
-            
-            res.classInfo.mainCluster := decodeMainCluster(inputState.bits);
-            res.classInfo.secCluster := decodeSecCluster(inputState.bits);
-            
-                res.controlInfo.specialAction := not (res.classInfo.mainCluster or res.classInfo.secCluster);
-            
-            res.classInfo.fpRename := decodeFpRename(inputState.bits);
-        end if;
+    res.constantArgs.immSel := decodeImmSel(inputState.bits);
+    res.classInfo.branchIns := decodeBranchIns(inputState.bits);
+    
+    res.classInfo.mainCluster := decodeMainCluster(inputState.bits);
+    res.classInfo.secCluster := decodeSecCluster(inputState.bits);
+    
+    res.controlInfo.specialAction := not (res.classInfo.mainCluster or res.classInfo.secCluster);
+
+    res.classInfo.fpRename := decodeFpRename(inputState.bits);
 
 	return res;
 end function;
@@ -124,25 +119,21 @@ end function;
 function isJumpLink(w: Word) return std_logic is
 begin
     return bool2std(w(31 downto 26) = opcode2slv(jl));
-           -- w(31);
 end function;
 
 function isJumpCond(w: Word) return std_logic is
 begin
     return bool2std(w(31 downto 26) = opcode2slv(jz)) or bool2std(w(31 downto 26) = opcode2slv(jnz));
-           -- w(30);
 end function;
 
 function isJumpLong(w: Word) return std_logic is
 begin
     return bool2std(w(31 downto 26) = opcode2slv(j));
-           -- w(29);
 end function;
 
 function isJumpReg(w: Word) return std_logic is
 begin
     return bool2std(w(31 downto 26) = opcode2slv(ext1)) and bool2std(w(15 downto 10) = opcont2slv(ext1, jzR) or w(15 downto 10) = opcont2slv(ext1, jzR));
-           -- w(28);
 end function;
 
 
@@ -244,9 +235,9 @@ begin
 	for i in 0 to FETCH_WIDTH-1 loop
 	   res(i).full := fullOut(i);
 
-            if res(i).full = '1' and res(i).ins.classInfo.branchIns = '1' then
-                res(0).ins.controlInfo.firstBr := '1'; -- TMP, indicating that group has a branch
-            end if;
+        if res(i).full = '1' and res(i).ins.classInfo.branchIns = '1' then
+            res(0).ins.controlInfo.firstBr := '1'; -- TMP, indicating that group has a branch
+        end if;
 	   
        if CLEAR_DEBUG_INFO then
           res(i).ins.specificOperation.arith := opAnd;
@@ -254,9 +245,7 @@ begin
           res(i).ins.specificOperation.float := opMove;
           res(i).ins.specificOperation.system := opNone;
 
-          res(i) := clearRawInfo(res(i));
-          --res(i).bits := (others => '0');
-          
+          res(i) := clearRawInfo(res(i));          
           res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;        
        end if;	   
 	end loop;
@@ -331,32 +320,19 @@ begin
             end if;
         end if;         
     end loop;
-    
-    
-	for i in insVec'range loop
-	   res(i).full := branchMask(i) and insVecSh(i).full; -- TODO: getBranchMask already check for 'full' - remove it here?
        
+	for i in insVec'range loop
+	   res(i).full := branchMask(i) and insVecSh(i).full; -- TODO: getBranchMask already check for 'full' - remove it here?   
        if CLEAR_DEBUG_INFO then -- Otherwise everything remains
            res(i).ins := DEFAULT_INS_STATE;
-           --     res(i).ins.ip := insVecSh(i).ins.ip;
-           
            res(i).ins.controlInfo := insVecSh(i).ins.controlInfo;
            res(i).ins.target := insVecSh(i).ins.target;
            res(i).ins.result := insVecSh(i).ins.result;
 	   end if;
-	   
-	       if res(i).ins.controlInfo.frontBranch = '1' then
-	           --res(i).ins.ip := res(i).ins.result;
-	       else
-	           --res(i).ins.ip := res(i).ins.target;
-	       end if;
-	   
 	end loop;
 
-    
-        -- TMP!
+    -- TMP!
     res(0).ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) := ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS);
-    --    res(1).ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ins.ins.ip(MWORD_SIZE-1 downto ALIGN_BITS), 1);
     
 	return res;
 end function;

@@ -14,8 +14,6 @@ use work.CoreConfig.all;
 
 use work.PipelineGeneral.all;
 
---use work.LogicFront.all;
-
 
 package LogicIbuffer is
 
@@ -61,37 +59,23 @@ constant DEFAULT_BUFFER_ENTRY: BufferEntry := (
 type BufferEntryArray is array(0 to PIPE_WIDTH-1) of BufferEntry;
 type BufferEntryArray2D is array(0 to IBUFFER_SIZE-1, 0 to PIPE_WIDTH-1) of BufferEntry;
 
-
 type SerialMemory is array(0 to IBUFFER_SIZE-1) of std_logic_vector(MEM_WIDTH-1 downto 0);
 
-
 function formatInput(insVec: PipeStage) return PipeStage;
-
 
 -- CAREFUL: only virtual because 5 bits per reg!
 function serializeArgSpec(argSpec: InstructionArgSpec) return Word;
 function deserializeArgSpec(w: Word) return InstructionArgSpec;
-function unfoldOp(op: SpecificOp) return SpecificOp;
 
-
-
-function serializeEntry(elem: BufferEntry) return Dword;
 function serializeEntryArray(arr: BufferEntryArray) return std_logic_vector;
-
-
-function deserializeEntry(d: Dword) return BufferEntry;
 function deserializeEntryArray(v: std_logic_vector) return BufferEntryArray;
 
-function getEntry(isl: InstructionSlot) return BufferEntry;
-
-        function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray;
-
-        
-function getInsSlot(elem: BufferEntry) return InstructionSlot;
+function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray;        
 function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray;
 
 procedure updateQueue(signal content: inout BufferEntryArray2D; ptr: SmallNumber; newRow: BufferEntryArray);
 function readQueue(content: BufferEntryArray2D; ptr: SmallNumber) return BufferEntryArray;
+
 end package;
 
 
@@ -153,36 +137,26 @@ function unfoldOp(op: SpecificOp) return SpecificOp is
 begin          
     case op.subpipe is
         when ALU =>
-            res.arith := ArithOp'val(slv2u(op.bits));
-        
+            res.arith := ArithOp'val(slv2u(op.bits));     
         when None =>
             res.system := SysOp'val(slv2u(op.bits));
-        
         when FP =>
             res.float := FpOp'val(slv2u(op.bits));
-        
         when others =>
             res.memory := MemOp'val(slv2u(op.bits));
     end case;
-            
     return res;
 end function;
 
 
-
-
 function serializeEntry(elem: BufferEntry) return Dword is
-    variable res: Dword := (others => '0');
-    
+    variable res: Dword := (others => '0');    
     variable controlByte, opByte, restByte: Byte := (others => '0');
     variable argSpecWord: Word := (others => '0');
-    --variable 
-begin
-    
+begin 
     -- 8b
     controlByte := elem.branchIns & elem.frontBranch & elem.confirmedBranch & elem.specialAction
                 &  elem.fpRename  & elem.mainCluster & elem.secCluster & elem.useLQ;
-    
     -- 8b (probably 2 unused)
     opByte(7 downto 6) := i2slv(SubpipeType'pos(elem.specificOperation.subpipe), 2);
     opByte(OP_VALUE_BITS-1 downto 0) := elem.specificOperation.bits;
