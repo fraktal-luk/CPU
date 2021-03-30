@@ -152,21 +152,25 @@ begin
     IMPL: block
         signal listContent32: WordArray(0 to FREE_LIST_SIZE/4 - 1) := initFreeList32(IS_FP);
         
-        signal listPtrTake, listPtrTakeNext_N, listPtrTake_N, listPtrTakeStable, listPtrTakeStable_N, listPtrTakeStableNext_N, causingTag: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
-        signal listPtrPut, listPtrPutNext_N, listPtrPut_N: SmallNumber := i2slv(N_PHYS - 32 - FP_1, SMALL_NUMBER_SIZE);
+        signal listPtrTake, listPtrTakeNext, listPtrTake_N, listPtrTakeStable, listPtrTakeStable_N, listPtrTakeStableNext, causingTag: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
+        signal listPtrPut, listPtrPutNext, listPtrPut_N: SmallNumber := i2slv(N_PHYS - 32 - FP_1, SMALL_NUMBER_SIZE);
         
-        signal listFront, listBack: PhysNameArray(0 to 7) := (others => (others => '0'));
+        signal memWord, memInput: Word := (others => '0');
+        
+        signal listFront, listBack, listFront_N, listBack_N, 
+                        listFrontNext, listBackNext, listFrontNext_N, listBackNext_N
+                     --, listFrontNextShift, listFrontNextMemNoTake, listFrontNextMemTake
+                     : PhysNameArray(0 to 7) := (others => (others => '0'));
         signal memData: Word := (others => '0');
-        signal physPtrTake, physPtrTakeNext_N, physPtrTake_N, effectivePhysPtrTake: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
-        signal physPtrPut, physPtrPutNext_N, physPtrPut_N: SmallNumber := i2slv(N_PHYS - 32 - FP_1, SMALL_NUMBER_SIZE);
+        signal physPtrTake, physPtrTakeNext, physPtrTake_N, effectivePhysPtrTake: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
+        signal physPtrPut, physPtrPutNext, physPtrPut_N: SmallNumber := i2slv(N_PHYS - 32 - FP_1, SMALL_NUMBER_SIZE);
     
-        signal numFront, numBack, numBackReduced, numFront_N, numFrontNext_N, numBack_N, numBackNext_N,  numToTake: SmallNumber := (others => '0');
+        signal numFront, numBack, numBackReduced, numFront_N, numFrontNext, numBack_N, numBackNext,  numToTake: SmallNumber := (others => '0');
         signal memRead, needTake, doTake, canWriteBack: std_logic := '0';
         
-        signal memTemp: PhysNameArray(0 to 3) := (others => (others => '0'));
+        signal memTemp, memTemp_N: PhysNameArray(0 to 3) := (others => (others => '0'));
 
-        signal listFrontNext, listFrontNextShift, listFrontNextMemNoTake, listFrontNextMemTake: PhysNameArray(0 to 7) := (others => (others => '0'));
-        signal overNF, overNFmNT: std_logic_vector(0 to 7) := (others => '0');
+        --signal overNF, overNFmNT: std_logic_vector(0 to 7) := (others => '0');
 
         function nextShift(list: PhysNameArray; memData: PhysNameArray; allow: std_logic; nF, nT: SmallNumber) return PhysNameArray is
             variable res: PhysNameArray(0 to 7) := (others => (others => '0'));
@@ -222,170 +226,235 @@ begin
             end loop;        
             return res;
         end function;
+        
+        
+            function getNumFrontNext(numFront, causingTag: SmallNumber; freeListRewind, freeListTakeAllow, memRead: std_logic; freeListTakeSel: std_logic_vector)
+            return SmallNumber is
+                variable res: SmallNumber := numFront;
+                variable nTaken, tmpTag2: SmallNumber := (others => '0');
+            begin
+
+                nTaken := i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE);
+                res := numFront;
+                
+                if freeListRewind = '1' then                     
+                    tmpTag2(1 downto 0) := causingTag(1 downto 0);
+                    res := subSN(i2slv(0, SMALL_NUMBER_SIZE), tmpTag2); -- TODO: find simpler notation for uminus
+                end if;
+                
+                if freeListTakeAllow = '1' and freeListRewind = '0' then
+                    res := subSN(res, nTaken);
+                end if;
+                
+                if freeListRewind = '0' then
+                     if cmpLeS(res, 4) = '1' and memRead = '1' then
+                         res := addInt(res, 4); 
+                     end if;               
+                end if;
+
+                res(7 downto 5) := (others => res(4));
+                                
+                return res;
+            end function;
+
+        
+        function moveFrontList(list: PhysNameArray; numFront, numToTake: SmallNumber; doTake: std_logic; input: PhysNameArray) return PhysNameArray is
+            variable res: PhysNameArray(0 to 7) := list;          
+            variable overNF, overNFmNT: std_logic_vector(0 to 7) := (others => '0');
+            variable listFrontNextShift, listFrontNextMemNoTake, listFrontNextMemTake: PhysNameArray(0 to 7) := (others => (others => '0'));
+        begin
+            overNF := getOverNF(numFront, numToTake);
+            overNFmNT := getOverNFmNT(numFront, numToTake);
+            
+            
+            for i in 0 to 7 loop
+                listFrontNextShift :=       nextShift      (list, input, '1', numFront, numToTake);
+                listFrontNextMemNoTake :=   nextMemNoTake  (list, input, '1', numFront, numToTake);
+                listFrontNextMemTake :=     nextMemTake    (list, input, '1', numFront, numToTake);
+                
+                if   (    doTake and     overNFmNT(i)) = '1' then
+                    res(i) := listFrontNextMemTake(i);
+                elsif (    doTake and not overNFmNT(i)) = '1' then
+                    res(i) := listFrontNextShift(i);
+                elsif (not doTake and     overNF(i)) = '1' then
+                    res(i) := listFrontNextMemNoTake(i);
+                else
+                    res(i) := list(i);                    
+                end if;        
+
+            end loop;
+            return res;
+        end function;
+
+
+        function moveBackList(list: PhysNameArray; canWriteBack, putAllow: std_logic; numReduced: SmallNumber; input: PhysNameArray) return PhysNameArray is
+            variable listExt: PhysNameArray(0 to 11) := (others => (others => '0'));
+            variable res: PhysNameArray(0 to 7) := (others => (others => '0'));
+        begin
+            listExt(0 to 7) := list;
+            
+            if canWriteBack = '1' then
+                listExt(0 to 7) := listExt(4 to 11);
+            end if;
+            
+            if putAllow = '1' then
+                for i in 0 to 3 loop
+                    listExt(slv2u(numReduced) + i) := input(i);
+                end loop;
+            end if;
+            
+            res(0 to 6) := listExt(0 to 6);
+            return res;
+        end function;
+ 
+            function splitWord(w: Word) return PhysNameArray is
+                variable res: PhysNameArray(0 to 3) := (others => (others => '0'));
+            begin                   
+                res(0) := w(7 downto 0);
+                res(1) := w(15 downto 8);
+                res(2) := w(23 downto 16);
+                res(3) := w(31 downto 24);
+                return res;
+            end function; 
                     
     begin
+            memTemp <= splitWord(memWord);
+    
+    
         doTake <= freeListTakeAllow and isNonzero(freeListTakeSel);
-        GEN_MEM_TEMP: for i in 0 to 3 generate
-            memTemp(i) <= memData(8*i + 7 downto 8*i);
-        end generate;
-        
-        GEN_VEC: for i in 0 to 7 generate
-            overNF <= getOverNF(numFront, numToTake);
-            overNFmNT <= getOverNFmNT(numFront, numToTake);
-                
-            listFrontNextShift <=       nextShift      (listFront, memTemp, '1', numFront, numToTake);
-            listFrontNextMemNoTake <=   nextMemNoTake  (listFront, memTemp, '1', numFront, numToTake);
-            listFrontNextMemTake <=     nextMemTake    (listFront, memTemp, '1', numFront, numToTake);
-                        
-            listFrontNext(i) <= listFrontNextMemTake(i)     when (    doTake and     overNFmNT(i)) = '1'
-                           else listFrontNextShift(i)       when (    doTake and not overNFmNT(i)) = '1'
-                           else listFrontNextMemNoTake(i)   when (not doTake and     overNF(i)) = '1'
-                           else listFront(i);                          
-        end generate;
+
 
         freeListTakeNumTags(0) <= i2slv((slv2u(listPtrTake)) mod FREE_LIST_SIZE, SMALL_NUMBER_SIZE);
         newPhysDestsAsync(0 to PIPE_WIDTH-1) <= listFront(0 to PIPE_WIDTH-1);
       
-        effectivePhysPtrTake <= addInt(physPtrTake, 4) when (needTake and memRead) = '1' else physPtrTake;
         needTake <= cmpLeS(numFront, addInt(numToTake, 4));
         numToTake <= i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE) when freeListTakeAllow = '1' else (others => '0');
 
         causingTag <= listPtrTakeStable when lateEventSignal = '1' else causingPointer;
+
+
+        effectivePhysPtrTake <= addInt(physPtrTake, 4) when (needTake and memRead) = '1' else physPtrTake;
         
-            listPtrTakeNext_N <= causingTag when freeListRewind = '1'
-                        else     addIntTrunc(listPtrTake_N, countOnes(freeListTakeSel), 8) when freeListTakeAllow = '1'
-                        else     listPtrTake_N;
+            listPtrTakeNext <= causingTag when freeListRewind = '1'
+                        else   addInt(listPtrTake, countOnes(freeListTakeSel)) when freeListTakeAllow = '1'
+                        else   listPtrTake;
             
-            physPtrTakeNext_N <= causingTag(SMALL_NUMBER_SIZE-1 downto 2) & physPtrTake_N(1 downto 0) when freeListRewind = '1'
-                        else     effectivePhysPtrTake;
-            
---            numFrontNext_N <= addInt("111111" & not causingTag(1 downto 0), 1) when freeListRewind = '1'
---                        else  subIntTrunc(numFront_N, countOnes(freeListTakeSel), 3) when freeListTakeAllow = '1'
---                        else    
+            physPtrTakeNext <= causingTag(SMALL_NUMBER_SIZE-1 downto 2) & physPtrTake(1 downto 0) when freeListRewind = '1'
+                        else   effectivePhysPtrTake;
 
+            listPtrTakeStableNext <= addInt(listPtrTakeStable, countOnes(stableTakeUpdate)) when freeListPutAllow = '1'
+                             else    listPtrTakeStable;
 
+            listPtrPutNext <= addInt(listPtrPut, countOnes(freeListPutSel)) when freeListPutAllow = '1'
+                        else  listPtrPut;
 
-             listPtrTakeStableNext_N <= addInt(listPtrTakeStable_N, countOnes(stableTakeUpdate)) when freeListPutAllow = '1'
-                                else    listPtrTakeStable;
+            physPtrPutNext <= addInt(physPtrPut, 4) when canWriteBack = '1'
+                        else  physPtrPut;
 
-
-
-
-
-             listPtrPutNext_N <= addInt(listPtrPut_N, countOnes(freeListPutSel)) when freeListPutAllow = '1'
-                           else  listPtrPut_N;
-
-
-            physPtrPutNext_N <= addInt(physPtrPut_N, 4) when canWriteBack = '1'
-                        else    physPtrPut_N;
-        
-
-
-                numBackNext_N <= addIntTrunc(numBackReduced, countOnes(freeListPutSel), 3) when freeListPutAllow = '1'
-                            else numBackReduced;
+            numFrontNext <= getNumFrontNext(numFront, causingTag, freeListRewind, freeListTakeAllow, memRead, freeListTakeSel);
+                    
+            numBackNext <= addIntTrunc(numBackReduced, countOnes(freeListPutSel), 3) when freeListPutAllow = '1'
+                      else numBackReduced;            
+            numBackReduced <= numBack and "00000011";
                 
-                numBackReduced <= numBack_N and "00000011";
-                
-                        
-            ch0 <= bool2std(listPtrTake_N = listPtrTake);
-            ch1 <= bool2std(physPtrTake_N = physPtrTake);
-            ch2 <= bool2std(listPtrTakeStable_N = listPtrTakeStable);
-        
-            ch3 <= bool2std(listPtrPut_N = listPtrPut);
-            ch4 <= bool2std(physPtrPut_N = physPtrPut);            
+            listFrontNext <= moveFrontList(listFront, numFront, numToTake, doTake, memTemp);
+            listBackNext <= moveBackList(listBack, canWriteBack, freeListPutAllow, numBackReduced, physCommitFreedDelayed);
 
-            ch5 <= bool2std(numBack_N = numBack);            
-            
             
             canWriteBack <= cmpGeS(numBack, 4);
 
 
-                    listPtrTake <= listPtrTake_N;
-                    physPtrTake <= physPtrTake_N;
-                    listPtrTakeStable <= listPtrTakeStable_N;
+--                    listPtrTake <= listPtrTake;
+--                    physPtrTake <= physPtrTake;
+--                    listPtrTakeStable <= listPtrTakeStable;
 
-                    listPtrPut <= listPtrPut_N;
-                    physPtrPut <= physPtrPut_N;
+--                    listPtrPut <= listPtrPut;
+--                    physPtrPut <= physPtrPut;
                     
-                    numBack <= numBack_N;
+--                    numFront <= numFront;
+--                    numBack <= numBack;
+                    
+--                    listFront <= listFront;
+--                    listBack <= listBack;
+
+--             memTemp <= memTemp; 
+
+                   
+                   memInput <= listBack(3) & listBack(2) & listBack(1) & listBack(0);
                     
         SYNCHRONOUS: process(clk)
-            variable nTaken, nPut, numFrontVar, numBackVar: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
-            variable physPtrTakeVar, physPtrPutVar, tmpTag2: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
-            variable listBackExt: PhysNameArray(0 to 11) := (others => (others => '0'));
+        
+            function readRegGroup(arr: WordArray; adr: SmallNumber) return PhysNameArray is
+                variable res: PhysNameArray(0 to 3) := (others => (others => '0'));
+                variable w: Word := (others => '0');
+            begin
+                w := arr(slv2u(adr(7 downto 2)));
+                
+                res(0) := w(7 downto 0);
+                res(1) := w(15 downto 8);
+                res(2) := w(23 downto 16);
+                res(3) := w(31 downto 24);
+                return res;
+            end function;
+
+
+            function readRegGroup_W(arr: WordArray; adr: SmallNumber) return Word is
+                variable res: PhysNameArray(0 to 3) := (others => (others => '0'));
+                variable w: Word := (others => '0');
+            begin
+                w := arr(slv2u(adr(7 downto 2)));
+                
+--                res(0) := w(7 downto 0);
+--                res(1) := w(15 downto 8);
+--                res(2) := w(23 downto 16);
+--                res(3) := w(31 downto 24);
+                return w;
+            end function;
+
+            procedure writeRegGroup(signal arr: inout WordArray; adr: in SmallNumber; input: in PhysNameArray) is
+                variable w: Word := (others => '0');
+            begin
+                w := input(3) & input(2) & input(1) & input(0);
+                
+                arr(slv2u(adr(7 downto 2))) <= w;
+            end procedure;
+
+            procedure writeRegGroup_W(signal arr: inout WordArray; adr: in SmallNumber; w: in Word) is
+            begin                
+                arr(slv2u(adr(7 downto 2))) <= w;
+            end procedure;
+                    
         begin
             if rising_edge(clk) then
-                    listPtrTake_N <= listPtrTakeNext_N;
-                    physPtrTake_N <= physPtrTakeNext_N;
-                    listPtrTakeStable_N <= listPtrTakeStableNext_N;
+                    listPtrTake <= listPtrTakeNext;
+                    physPtrTake <= physPtrTakeNext;
+                    listPtrTakeStable <= listPtrTakeStableNext;
 
-                    listPtrPut_N <= listPtrPutNext_N;
-                    physPtrPut_N <= physPtrPutNext_N;
+                    listPtrPut <= listPtrPutNext;
+                    physPtrPut <= physPtrPutNext;
 
                     
-                    numFront_N <= numFrontNext_N;
-                    numBack_N <= numBackNext_N;
+                    numFront <= numFrontNext;
+                    numBack <= numBackNext;
+                    
+                    listFront <= listFrontNext;
+                    listBack <= listBackNext;
+                    
                 ----------------------------------------------------------------------
                 -- Front side
                 memRead <= not freeListRewind;
+                --memTemp <= readRegGroup(listContent32, effectivePhysPtrTake);
+                    memWord <= --readRegGroup_W(listContent32, effectivePhysPtrTake);
+                               listContent32(slv2u(effectivePhysPtrTake(7 downto 2)));
                 
-                listFront <= listFrontNext;
-            
-                nTaken := i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE);
-                numFrontVar := numFront;
-                
-                if freeListRewind = '1' then                     
-                    tmpTag2(1 downto 0) := causingTag(1 downto 0);
-                    numFrontVar := subSN(i2slv(0, SMALL_NUMBER_SIZE), tmpTag2); -- TODO: find simpler notation for uminus
-                end if;
-                
-                if freeListTakeAllow = '1' and freeListRewind = '0' then
-                    numFrontVar := subSN(numFrontVar, nTaken);
-                end if;
-                
-                if freeListRewind = '0' then
-                     if cmpLeS(numFrontVar, 4) = '1' and memRead = '1' then
-                         numFrontVar := addInt(numFrontVar, 4); 
-                     end if;               
-                end if;
-                
-                memData <= listContent32(slv2u(effectivePhysPtrTake)/4);                        
-                numFront <= numFrontVar;
-                numFront(7 downto 5) <= (others => numFrontVar(4));
-                
-
                 ----------------------------------------------------------------------                
                 -- Back side
-                listBackExt(0 to 7) := listBack;
-                numBackVar := numBack;
-    
-    
-                    -- numBackNext_N <= addIf[freeListPutAllow](subtractIfGreater(numBack_N, 4), nPut);
-                    --          numBackReduced <= numBack_N and "00000011";
-                    --          numBackNext_N <= addIntTrunc(numBackReduced, nPut, 3) when  
-    
                 if canWriteBack = '1' then
-                    
-                    listContent32((slv2u(physPtrPut)/4)) <= listBackExt(3) & listBackExt(2) & listBackExt(1) & listBackExt(0); 
-    
-                    listBackExt(0 to 7) := listBackExt(4 to 11);
-                    --numBackVar := addInt(numBackVar, -4);               
+                    --writeRegGroup_W(listContent32, physPtrPut, memInput);
+                        listContent32(slv2u(physPtrPut(7 downto 2))) <= memInput;
                 end if;                        
-
-                --nPut := i2slv(countOnes(freeListPutSel), SMALL_NUMBER_SIZE);
                 
-                if freeListPutAllow = '1' then
-                    for i in 0 to PIPE_WIDTH-1 loop
-                        --listBackExt(slv2u(numBackVar) + i) := physCommitFreedDelayed(i);
-                            listBackExt(slv2u(numBackReduced) + i) := physCommitFreedDelayed(i);
-                    end loop;
-                    --numBackVar := addSN(numBackVar, nPut);                 
-                end if;
                 
-                listBack <= listBackExt(0 to 7);
-                listBack(7) <= (others => '0'); -- slot 7 never filled because when full >= 4, 4 elems are always removed
-                --numBack <= numBackVar  and X"07"; -- Only 3 bits needed because list never gets 8 full
-                                    
                 -- CHECK: 3 cycles to restore?
                 if freeListRewind = '1' then
                     recoveryCounter <= i2slv(3, SMALL_NUMBER_SIZE);
