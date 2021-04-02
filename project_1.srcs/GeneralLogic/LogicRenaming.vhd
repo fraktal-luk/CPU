@@ -28,11 +28,7 @@ function getPhysicalArgs(insVec: InstructionSlotArray) return PhysNameArray;
 function getPhysicalDests(insVec: InstructionSlotArray) return PhysNameArray;
 
 function whichTakeReg(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector;
-function whichTakeReg_T(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector;
-function whichPutReg(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector; -- UNUSED
-
 function findOverriddenDests(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector;
-
 
 function getPhysicalIntDestSels(insVec: InstructionSlotArray) return std_logic_vector;
 function getPhysicalFloatDestSels(insVec: InstructionSlotArray) return std_logic_vector;
@@ -41,7 +37,6 @@ function getVirtualFloatDestSels(insVec: InstructionSlotArray) return std_logic_
 
 
 function initMap(constant IS_FP: boolean) return PhysNameArray;    
-function selectPhysDests(newDests: PhysNameArray; taking: std_logic_vector) return PhysNameArray;   
 
 function getSelectedA(adr: RegNameArray; mask: std_logic_vector; constant IS_FP: boolean) return RegMaskArray;
 
@@ -78,23 +73,6 @@ begin
     end loop;
     return res;
 end function;
-
-function selectPhysDests(newDests: PhysNameArray; taking: std_logic_vector) return PhysNameArray is
-    variable res: PhysNameArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
-    variable num: natural := 0;
-begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        num := countOnes(taking(0 to i-1));
-        res(i) := newDests(num);
-    end loop;
-    
-        if TMP_PARAM_DEST_MOVE then
-            res := newDests;
-        end if;
-    
-    return res;
-end function;
-
 
 function getSelMask(adr: RegName; en: std_logic) return std_logic_vector is
     variable res: std_logic_vector(0 to 31) := (others => '0');
@@ -252,7 +230,6 @@ begin
 end function;
 
 
-
 function whichTakeReg(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector is
     variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
@@ -261,27 +238,6 @@ begin
     end loop;
     return res;
 end function;
-
-function whichTakeReg_T(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector is
-    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        res(i) := ((insVec(i).ins.virtualArgSpec.intDestSel and not bool2std(fp)) or (insVec(i).ins.virtualArgSpec.floatDestSel and bool2std(fp)))
-          ;--  and insVec(i).full;        
-    end loop;
-    return res;
-end function;
-
-function whichPutReg(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector is
-    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        res(i) := ((insVec(i).ins.virtualArgSpec.intDestSel and not bool2std(fp)) or (insVec(i).ins.virtualArgSpec.floatDestSel and bool2std(fp)))
-             and (insVec(i).full);
-    end loop;
-    return res;
-end function;
-
 
 function findOverriddenDests(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector is
 	variable res: std_logic_vector(insVec'range) := (others => '0');

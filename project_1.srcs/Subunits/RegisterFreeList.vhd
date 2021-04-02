@@ -29,7 +29,6 @@ entity RegisterFreeList is
 		
 		sendingToReserve: in std_logic;
 		takeAllow: in std_logic;
-		auxTakeAllow: in std_logic;
 		stageDataToReserve: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		
 		newPhysDests: out PhysNameArray(0 to PIPE_WIDTH-1);
