@@ -729,7 +729,7 @@ begin
                execCausing => execCausing
            );
 
-	       dataInMem0(0) <= (sendingM0_E0, setDataCompleted(setAddressCompleted(slotM0_E0(0).ins, '0'), '0'));
+	       dataInMem0(0) <= (sendingM0_E0, slotM0_E0(0).ins);
            sqAddressInput <= dataInMem0(0);
            lqAddressInput <= dataInMem0(0);
 

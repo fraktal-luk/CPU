@@ -264,7 +264,7 @@ begin
  	fullMask <= extractFullMask(queueContent);
 	livingMask <= fullMask and not killMask;
 
-    readyMaskAll <= extractReadyMaskNew(queueContentUpdatedSel);
+    readyMaskAll <= extractReadyMask(queueContentUpdatedSel);
 	readyMaskFull <= readyMaskAll and fullMask;	
 	readyMaskLive <= readyMaskAll and livingMask;
 	
@@ -291,7 +291,7 @@ begin
     sendingEmpty <= (anyReadyAll and not anyReadyFull) and nextAccepting;
 
 
-    queueContentNext <= iqContentNext_N(queueContentUpdated, inputStageUpdated, 
+    queueContentNext <= iqContentNext(queueContentUpdated, inputStageUpdated, 
                                           killMask, selMask,                  
                                           sends, sent,
                                           sentUnexpected,

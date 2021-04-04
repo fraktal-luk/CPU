@@ -24,29 +24,22 @@ package LogicExec is
 	function execLogicOr(ins: InstructionState) return InstructionState;
 	function execLogicXor(ins: InstructionState) return InstructionState;
 
-	-- set exception flags
-	function raiseExecException(ins: InstructionState) return InstructionState;
-
 	function basicBranch(ins: InstructionState; st: SchedulerState; queueData: InstructionState) return InstructionState;
 
 	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState; branchIns: InstructionState) return InstructionState;
 
 	function executeFpu(ins: InstructionState; st: SchedulerState) return InstructionState;
 
-    function calcEffectiveAddress(ins: InstructionState; st: SchedulerState;
-                                            fromDLQ: std_logic; dlqData: InstructionState)
+    function calcEffectiveAddress(ins: InstructionState; st: SchedulerState; fromDLQ: std_logic; dlqData: InstructionState)
     return InstructionState;        
-    
-    function setAddressCompleted(ins: InstructionState; state: std_logic) return InstructionState;
-    function setDataCompleted(ins: InstructionState; state: std_logic) return InstructionState;
-    
+
     function getLSResultData(ins: InstructionState;
-                                      tlbReady: std_logic; tlbValue: Mword;
-                                      memLoadReady: std_logic; memLoadValue: Mword;
-                                      sysLoadReady: std_logic; sysLoadValue: Mword;
-                                      storeForwardSending: std_logic; storeForwardIns: InstructionState;
-                                      lqSelectedOutput: InstructionSlot
-                                        ) return InstructionState;
+                              tlbReady: std_logic; tlbValue: Mword;
+                              memLoadReady: std_logic; memLoadValue: Mword;
+                              sysLoadReady: std_logic; sysLoadValue: Mword;
+                              storeForwardSending: std_logic; storeForwardIns: InstructionState;
+                              lqSelectedOutput: InstructionSlot
+                             ) return InstructionState;
                                         
     function getStoreDataOp(ss: SchedulerEntrySlot) return SchedulerEntrySlot;                                            
 end LogicExec;
@@ -80,14 +73,6 @@ package body LogicExec is
 	end function;	
 
 
-	function raiseExecException(ins: InstructionState) return InstructionState is
-		variable res: InstructionState := ins;
-	begin
-		res.controlInfo.newEvent := '1';
-		res.controlInfo.hasException := '1';			
-		return res;	
-	end function;
-
 	function resolveBranchCondition(ss: SchedulerState; op: ArithOp) return std_logic is
 		variable isZero: std_logic;
 	begin
@@ -105,8 +90,7 @@ package body LogicExec is
 		
 	end function;
 
-	function basicBranch(ins: InstructionState; st: SchedulerState; queueData: InstructionState --; qs: std_logic
-									) return InstructionState is
+	function basicBranch(ins: InstructionState; st: SchedulerState; queueData: InstructionState) return InstructionState is
 		variable res: InstructionState := ins;
 		variable branchTaken, targetMatch: std_logic := '0';
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
@@ -124,30 +108,24 @@ package body LogicExec is
 		if queueData.controlInfo.frontBranch = '1' and branchTaken = '0' then						
 			res.controlInfo.newEvent := '1';
 			trueTarget := queueData.result;
-			                        -- ip;
 		elsif queueData.controlInfo.frontBranch = '0' and branchTaken = '1' then					
 			res.controlInfo.newEvent := '1';
 			res.controlInfo.confirmedBranch := '1';			
-			if --ins.constantArgs.immSel = '0' then -- if branch reg	
-			   st.immediate = '0' then
-					
+			if st.immediate = '0' then
 				trueTarget := st.args(1);
 			else
 				trueTarget := queueData.target;
-				                        --ip;
 			end if;
 		elsif queueData.controlInfo.frontBranch = '0' and branchTaken = '0' then
 			trueTarget := queueData.result;
 		else -- taken -> taken
-			if --ins.constantArgs.immSel = '0' then -- if branch reg
-			   st.immediate = '0' then
+			if st.immediate = '0' then
 				if targetMatch = '0' then
 					res.controlInfo.newEvent := '1';	-- Need to correct the target!	
 				end if;
 				trueTarget := st.args(1); -- reg destination
 			else
 				trueTarget := queueData.target;
-				                         --ip;		
 			end if;
 			res.controlInfo.confirmedBranch := '1';			
 		end if;
@@ -157,8 +135,8 @@ package body LogicExec is
 		res.result := queueData.result;
 		res.tags.intPointer := queueData.tags.intPointer;
 		res.tags.floatPointer := queueData.tags.floatPointer;
-    		res.tags.sqPointer := queueData.tags.sqPointer;
-	       	res.tags.lqPointer := queueData.tags.lqPointer;
+    	res.tags.sqPointer := queueData.tags.sqPointer;
+	    res.tags.lqPointer := queueData.tags.lqPointer;
 		
 		if CLEAR_DEBUG_INFO then
 		    res := clearDbCounters(res);
@@ -177,10 +155,7 @@ package body LogicExec is
 		    res.physicalArgSpec.args := (others => (others => '0'));
 		    
 		    res.result := (others => '0');
-		end if;
-					
-			--		res.ip := queueData.ip;
-							
+		end if;		
 		return res;
 	end function;
 	
@@ -343,8 +318,7 @@ package body LogicExec is
 	end function;
 
             
-    function calcEffectiveAddress(ins: InstructionState; st: SchedulerState;
-                                            fromDLQ: std_logic; dlqData: InstructionState)
+    function calcEffectiveAddress(ins: InstructionState; st: SchedulerState; fromDLQ: std_logic; dlqData: InstructionState)
     return InstructionState is
         variable res: InstructionState := ins;
     begin
@@ -352,7 +326,6 @@ package body LogicExec is
             res := dlqData;
         else
             res.result := add(st.args(0), st.args(1));
-            --return res;
         end if;
 
 		if CLEAR_DEBUG_INFO then
@@ -374,29 +347,15 @@ package body LogicExec is
         
         return res;
     end function;
-    
-    
-    function setAddressCompleted(ins: InstructionState; state: std_logic) return InstructionState is
-        variable res: InstructionState := ins;
-    begin
-        --res.controlInfo.completed := state;
-        return res;
-    end function;
-    
-    function setDataCompleted(ins: InstructionState; state: std_logic) return InstructionState is
-        variable res: InstructionState := ins;
-    begin
-        --res.controlInfo.completed2 := state;
-        return res;
-    end function;
+
     
     function getLSResultData(ins: InstructionState;
-                                      tlbReady: std_logic; tlbValue: Mword;	    
-                                      memLoadReady: std_logic; memLoadValue: Mword;
-                                      sysLoadReady: std_logic; sysLoadValue: Mword;
-                                      storeForwardSending: std_logic; storeForwardIns: InstructionState;
-                                      lqSelectedOutput: InstructionSlot                                         
-                                        ) return InstructionState is
+                              tlbReady: std_logic; tlbValue: Mword;	    
+                              memLoadReady: std_logic; memLoadValue: Mword;
+                              sysLoadReady: std_logic; sysLoadValue: Mword;
+                              storeForwardSending: std_logic; storeForwardIns: InstructionState;
+                              lqSelectedOutput: InstructionSlot                                         
+                             ) return InstructionState is
         variable res: InstructionState := ins;
     begin
         -- mfc/mtc?
@@ -416,8 +375,7 @@ package body LogicExec is
              res.controlInfo.dataMiss := '1';
          elsif storeForwardSending = '1' then
              res.result := storeForwardIns.result;
-             if --storeForwardIns.controlInfo.completed2 = '0' then
-                storeForwardIns.controlInfo.sqMiss = '1' then
+             if storeForwardIns.controlInfo.sqMiss = '1' then
                  res.controlInfo.sqMiss := '1';
                  res.controlInfo.specialAction := '1';
                  res.controlInfo.newEvent := '1';
@@ -434,7 +392,6 @@ package body LogicExec is
          end if;
 
         -- TODO: remember about miss/hit status and reason of miss if relevant!
-        res := setAddressCompleted(res, '1'); -- TEMP
         return res;
     end function;
     
