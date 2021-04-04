@@ -75,24 +75,7 @@ architecture Behavioral of BranchQueue is
 	       pSelect, pCausing, pSelectLong, pCausingLong: SmallNumber := (others => '0');
     signal isFull, isAlmostFull, isSending: std_logic := '0';
     
-    signal recoveryCounter: SmallNumber := (others => '0');
-    
-    -- TODO: functions duplicated from STORE_QUEUE. To clean
-    function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic is
-        constant xored: SmallNumber := pStart xor pEnd;
-        constant template: SmallNumber := (others => '0');
-    begin
-        return bool2std(xored(QUEUE_PTR_SIZE downto 0) = template(QUEUE_PTR_SIZE downto 0));
-    end function;
-
-    function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber is
-        constant diff: SmallNumber := subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE);
-        constant xored: SmallNumber := pStart xor pEnd;        
-        variable result: SmallNumber := diff;
-    begin
-        result(QUEUE_PTR_SIZE) := xored(QUEUE_PTR_SIZE) and not isNonzero(xored(QUEUE_PTR_SIZE-1 downto 0));
-        return result;      
-    end function;    
+    signal recoveryCounter: SmallNumber := (others => '0');    
 begin
 
 	SYNCH: process (clk)
@@ -165,32 +148,32 @@ begin
    
 	   accepting <= bool2std(pStart /= addIntTrunc(pEnd, 2, QUEUE_PTR_SIZE)) and bool2std(pStart /= addIntTrunc(pEnd, 1, QUEUE_PTR_SIZE)); -- Need 2 reserve slots because one group could be on the way
 
-            pStartNext <= pStartLongNext and PTR_MASK_SN;
-            pTaggedNext <= pTaggedLongNext and PTR_MASK_SN;
-            pRenamedNext <= pRenamedLongNext and PTR_MASK_SN;
-            pEndNext <= pEndLongNext and PTR_MASK_SN;
+        pStartNext <= pStartLongNext and PTR_MASK_SN;
+        pTaggedNext <= pTaggedLongNext and PTR_MASK_SN;
+        pRenamedNext <= pRenamedLongNext and PTR_MASK_SN;
+        pEndNext <= pEndLongNext and PTR_MASK_SN;
 
-            pStart <= pStartLong and PTR_MASK_SN;
-            pTagged <= pTaggedLong and PTR_MASK_SN;
-            pRenamed <= pRenamedLong and PTR_MASK_SN;
-            pEnd <= pEndLong and PTR_MASK_SN;
+        pStart <= pStartLong and PTR_MASK_SN;
+        pTagged <= pTaggedLong and PTR_MASK_SN;
+        pRenamed <= pRenamedLong and PTR_MASK_SN;
+        pEnd <= pEndLong and PTR_MASK_SN;
 
-           pStartLongNext <= addIntTrunc(pStartLong, 1, QUEUE_PTR_SIZE+1) when committingBr = '1' else pStartLong;
+       pStartLongNext <= addIntTrunc(pStartLong, 1, QUEUE_PTR_SIZE+1) when committingBr = '1' else pStartLong;
+    
+        pTaggedLongNext <= pStartLong when lateEventSignal = '1'
+            else       addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
+            else       addIntTrunc(pTaggedLong, 1, QUEUE_PTR_SIZE+1) when lateInputSending = '1'
+            else       pTaggedLong;
         
-            pTaggedLongNext <= pStartLong when lateEventSignal = '1'
-                else       addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
-                else       addIntTrunc(pTaggedLong, 1, QUEUE_PTR_SIZE+1) when lateInputSending = '1'
-                else       pTaggedLong;
-            
-            pRenamedLongNext <= pStartLong when lateEventSignal = '1'
-                else       addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
-                else       addIntTrunc(pRenamedLong, 1, QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
-                else       pRenamedLong;
-  
-            pEndLongNext <= pStartLong when lateEventSignal = '1'
-                else    addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
-                else    addIntTrunc(pEndLong, 1, QUEUE_PTR_SIZE+1) when earlyInputSending = '1'
-                else    pEndLong;
+        pRenamedLongNext <= pStartLong when lateEventSignal = '1'
+            else       addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
+            else       addIntTrunc(pRenamedLong, 1, QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
+            else       pRenamedLong;
+
+        pEndLongNext <= pStartLong when lateEventSignal = '1'
+            else    addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
+            else    addIntTrunc(pEndLong, 1, QUEUE_PTR_SIZE+1) when earlyInputSending = '1'
+            else    pEndLong;
        
 	   SYNCH: process (clk)
 	   begin

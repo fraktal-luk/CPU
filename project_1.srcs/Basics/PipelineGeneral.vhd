@@ -274,6 +274,10 @@ function clearDbCausing(ins: InstructionState) return InstructionState;
 -- For setting dest sel flags in stages after ROB!
 function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray;
 
+
+function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic;
+function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
+    
 end package;
 
 
@@ -1179,4 +1183,22 @@ begin
     return res;
 end function;
 
+
+function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic is
+    constant xored: SmallNumber := pStart xor pEnd;
+    constant template: SmallNumber := (others => '0');
+begin
+    return bool2std(xored(QUEUE_PTR_SIZE downto 0) = template(QUEUE_PTR_SIZE downto 0));
+end function;
+
+
+function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber is
+    constant diff: SmallNumber := subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE);
+    constant xored: SmallNumber := pStart xor pEnd;        
+    variable result: SmallNumber := diff;
+begin
+    result(QUEUE_PTR_SIZE) := xored(QUEUE_PTR_SIZE) and not isNonzero(xored(QUEUE_PTR_SIZE-1 downto 0));
+    return result;      
+end function;
+    
 end package body;

@@ -89,22 +89,6 @@ architecture Behavioral of StoreQueue is
     signal drainOutput, selectedOutput: InstructionState := DEFAULT_INS_STATE;
     signal isSelected: std_logic := '0';
 
-    function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic is
-        constant xored: SmallNumber := pStart xor pEnd;
-        constant template: SmallNumber := (others => '0');
-    begin
-        return bool2std(xored(QUEUE_PTR_SIZE downto 0) = template(QUEUE_PTR_SIZE downto 0));
-    end function;
-
-
-    function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber is
-        constant diff: SmallNumber := subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE);
-        constant xored: SmallNumber := pStart xor pEnd;        
-        variable result: SmallNumber := diff;
-    begin
-        result(QUEUE_PTR_SIZE) := xored(QUEUE_PTR_SIZE) and not isNonzero(xored(QUEUE_PTR_SIZE-1 downto 0));
-        return result;      
-    end function;
 
     signal drainValue, selectedValue: Mword := (others => '0');
 
@@ -218,13 +202,13 @@ begin
          end process;              
     end block;
 
-        ch0 <= memEmpty;
-        ch1 <= --(not pStartLong(QUEUE_PTR_SIZE) xor pTaggedLong(QUEUE_PTR_SIZE)) and bool2std(pStart = pTagged);
-                getQueueEmpty(pStartLong, pTaggedLong, QUEUE_PTR_SIZE);
-        ch2 <= --(not pDrainLongPrev(QUEUE_PTR_SIZE) xor pTaggedLong(QUEUE_PTR_SIZE)) and bool2std(pDrainPrev = pTagged);
-                getQueueEmpty(pDrainLongPrev, pTaggedLong, QUEUE_PTR_SIZE);        
-        ch3 <= not ch0 xor ch1;
-        chi <= not ch0 xor ch2;
+--        ch0 <= memEmpty;
+--        ch1 <= --(not pStartLong(QUEUE_PTR_SIZE) xor pTaggedLong(QUEUE_PTR_SIZE)) and bool2std(pStart = pTagged);
+--                getQueueEmpty(pStartLong, pTaggedLong, QUEUE_PTR_SIZE);
+--        ch2 <= --(not pDrainLongPrev(QUEUE_PTR_SIZE) xor pTaggedLong(QUEUE_PTR_SIZE)) and bool2std(pDrainPrev = pTagged);
+--                getQueueEmpty(pDrainLongPrev, pTaggedLong, QUEUE_PTR_SIZE);        
+--        ch3 <= not ch0 xor ch1;
+--        chi <= not ch0 xor ch2;
 
 	WHEN_LQ: if IS_LOAD_QUEUE generate	
 	   nInRe <= i2slv(countOnes(getLoadMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');
@@ -331,8 +315,10 @@ begin
 		end if;
 	end process;
 
-	nFullNext <=  nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
-				else subTruncZ(add(nFull, nIn), nOut, QUEUE_CAP_SIZE);
+	nFullNext <= -- nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
+				--else subTruncZ(add(nFull, nIn), nOut, QUEUE_CAP_SIZE);
+				    nFullNext_T;
+				
 	nIn <= i2slv( countOnes(extractFullMask(dataIn)), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
 		
 		
@@ -357,6 +343,9 @@ begin
                             else subTruncZ(pTagged, pDrain, QUEUE_PTR_SIZE); -- CAREFUL: nFullRestored can be outside PTR range but it's handled in the other branch
     end generate;
     
+    
+        ch0 <= bool2std(nFullNext_T = nFullNext);
+        
     isDraining <= drainReq;
      
 	acceptingOut <= not isFull;

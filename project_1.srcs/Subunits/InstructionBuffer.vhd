@@ -49,27 +49,82 @@ end InstructionBuffer;
 
 
 architecture Implem of InstructionBuffer is
+   signal input: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
+   signal content: BufferEntryArray2D := (others => (others => DEFAULT_BUFFER_ENTRY));
+   signal output, output_D: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
    
+   signal serialMemInput, serialMemOutput: std_logic_vector(MEM_WIDTH-1 downto 0) := (others => '0');
+   signal serialMem: SerialMemory := (others=> (others => '0'));
+        
+   signal full: std_logic_vector(0 to 3) := (others => '0');
+   signal pStart, pEnd, pStartNext, pEndNext, pStartLong, pStartLongNext, pEndLong, pEndLongNext, nFullGroups: SmallNumber := (others => '0');
+   signal dataOutFull, dataOutFilling, dataOutStalled, isSending, isReading, memWriting, memReading, memBypassing, memDraining, isAccepting: std_logic := '0';
+   signal memEmpty: std_logic := '1';
     
-    -- TODO: functions duplicated from STORE_QUEUE. To clean
-    function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic is
-        constant xored: SmallNumber := pStart xor pEnd;
-        constant template: SmallNumber := (others => '0');
-    begin
-        return bool2std(xored(QUEUE_PTR_SIZE downto 0) = template(QUEUE_PTR_SIZE downto 0));
-    end function;
-
-
-    function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber is
-        constant diff: SmallNumber := subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE);
-        constant xored: SmallNumber := pStart xor pEnd;        
-        variable result: SmallNumber := diff;
-    begin
-        result(QUEUE_PTR_SIZE) := xored(QUEUE_PTR_SIZE) and not isNonzero(xored(QUEUE_PTR_SIZE-1 downto 0));
-        return result;      
-    end function;
+   signal stageDataInFormatted, dataOut: PipeStage := (others => DEFAULT_INS_SLOT);
     
+       signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8, ch9, cha: std_logic := '0';
 begin
+    dataOutStalled <= dataOutFull and not isSending;
+    
+    -- This means writing and keeping it there for later, not writing and using at the same time.
+    -- Actual storage of value can happen also when bypassing - but is not used later.
+    memWriting <= prevSending and (dataOutStalled or not memEmpty); -- Writing to emty mem: when dataOut stalled
+                                                                    -- Writing to non empty mem: when prevSending and mem already full            
+    memBypassing <= prevSending and not memWriting and not execEventSignal;
+
+    memReading <= (isSending or not dataOutFull) and not memEmpty and not execEventSignal;
+    
+    memDraining <= memReading and not memWriting and bool2std(addIntTrunc(pStart, 1, 2) = pEnd);
+    
+    isAccepting <= bool2std(pStart /= pEnd) or memEmpty;
+    
+    isSending <= dataOutFull and nextAccepting and not execEventSignal;
+    
+    nFullGroups <=  getNumFull(pStartLong, pEndLong, QUEUE_PTR_SIZE+1);
+       
+   stageDataInFormatted <= formatInput(stageDataIn);           
+   input <= getEntryArray(stageDataInFormatted);
+   serialMemInput <= serializeEntryArray(input);
+          
+    CLOCKED: process (clk)
+    begin
+    
+        if rising_edge(clk) then
+            dataOutFull <= (memReading or memBypassing or dataOutStalled) and not execEventSignal;
+
+            if prevSending = '1' then
+                 --updateQueue(content, pEndLong, input);
+                 serialMem(slv2u(pEnd)) <= serialMemInput;                     
+            end if;
+            
+            if memBypassing = '1' then
+                dataOut <= stageDataInFormatted;
+            elsif memReading = '1' then                        
+                dataOut <= getInsSlotArray(deserializeEntryArray(serialMem(slv2u(pStart))));
+            end if;
+
+            pStartLong <= pStartLongNext;
+            pEndLong <= pEndLongNext;
+            
+            memEmpty <= getQueueEmpty(pStartLongNext, pEndLongNext, QUEUE_PTR_SIZE);
+        end if;
+    end process;
+
+    pStart <= pStartLong and PTR_MASK_SN;
+    pEnd <= pEndLong and PTR_MASK_SN;
+
+    pStartLongNext <= addIntTrunc(pStartLong, 1, QUEUE_PTR_SIZE+1) when (memReading or memBypassing) = '1'
+            else  pStartLong;
+            
+    pEndLongNext <= pStartLong when execEventSignal = '1'
+        else    addIntTrunc(pEndLong, 1, QUEUE_PTR_SIZE+1) when prevSending = '1'
+        else    pEndLong;
+
+    acceptingOut <= isAccepting;
+    stageDataOut <= dataOut;
+    sendingOut <= isSending;
+
 	
 	VIEW: if VIEW_ON generate
        use work.Viewing.all;
@@ -77,85 +132,5 @@ begin
 	begin
 	   --queueTxt <= getInsStringArray(queueData);
 	end generate;	
-
-    NEW_IMPL: block 
-       signal input: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
-       signal content: BufferEntryArray2D := (others => (others => DEFAULT_BUFFER_ENTRY));
-       signal output, output_D: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
-       
-       signal serialMemInput, serialMemOutput: std_logic_vector(MEM_WIDTH-1 downto 0) := (others => '0');
-       signal serialMem: SerialMemory := (others=> (others => '0'));
-            
-       signal full: std_logic_vector(0 to 3) := (others => '0');
-       signal pStart, pEnd, pStartNext, pEndNext, pStartLong, pStartLongNext, pEndLong, pEndLongNext, nFullGroups: SmallNumber := (others => '0');
-       signal dataOutFull, dataOutFilling, dataOutStalled, isSending, isReading, memWriting, memReading, memBypassing, memDraining, isAccepting: std_logic := '0';
-       signal memEmpty: std_logic := '1';
-        
-       signal stageDataInFormatted, dataOut: PipeStage := (others => DEFAULT_INS_SLOT);
-        
-           signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8, ch9, cha: std_logic := '0';
- 
-    begin
-        dataOutStalled <= dataOutFull and not isSending;
-        
-        -- This means writing and keeping it there for later, not writing and using at the same time.
-        -- Actual storage of value can happen also when bypassing - but is not used later.
-        memWriting <= prevSending and (dataOutStalled or not memEmpty); -- Writing to emty mem: when dataOut stalled
-                                                                        -- Writing to non empty mem: when prevSending and mem already full            
-        memBypassing <= prevSending and not memWriting and not execEventSignal;
-
-        memReading <= (isSending or not dataOutFull) and not memEmpty and not execEventSignal;
-        
-        memDraining <= memReading and not memWriting and bool2std(addIntTrunc(pStart, 1, 2) = pEnd);
-        
-        isAccepting <= bool2std(pStart /= pEnd) or memEmpty;
-        
-        isSending <= dataOutFull and nextAccepting and not execEventSignal;
-        
-        nFullGroups <=      i2slv(IBUFFER_SIZE, SMALL_NUMBER_SIZE) when memEmpty = '0' and pEnd = pStart
-                        else subTruncZ(pEnd, pStart, 2); -- range 0:4     
-           
-       stageDataInFormatted <= formatInput(stageDataIn);           
-       input <= getEntryArray(stageDataInFormatted);
-       serialMemInput <= serializeEntryArray(input);
-              
-        CLOCKED: process (clk)
-        begin
-        
-            if rising_edge(clk) then
-                dataOutFull <= (memReading or memBypassing or dataOutStalled) and not execEventSignal;
-
-                if prevSending = '1' then
-                     --updateQueue(content, pEndLong, input);
-                     serialMem(slv2u(pEnd)) <= serialMemInput;                     
-                end if;
-                
-                if memBypassing = '1' then
-                    dataOut <= stageDataInFormatted;
-                elsif memReading = '1' then                        
-                    dataOut <= getInsSlotArray(deserializeEntryArray(serialMem(slv2u(pStart))));
-                end if;
-
-                pStartLong <= pStartLongNext;
-                pEndLong <= pEndLongNext;
-                
-                memEmpty <= getQueueEmpty(pStartLongNext, pEndLongNext, QUEUE_PTR_SIZE);
-            end if;
-        end process;
-
-        pStart <= pStartLong and PTR_MASK_SN;
-        pEnd <= pEndLong and PTR_MASK_SN;
-
-        pStartLongNext <= addIntTrunc(pStartLong, 1, QUEUE_PTR_SIZE+1) when (memReading or memBypassing) = '1'
-                else  pStartLong;
-                
-        pEndLongNext <= pStartLong when execEventSignal = '1'
-            else    addIntTrunc(pEndLong, 1, QUEUE_PTR_SIZE+1) when prevSending = '1'
-            else    pEndLong;
-
-        acceptingOut <= isAccepting;
-        stageDataOut <= dataOut;
-        sendingOut <= isSending;
-    end block;
 
 end Implem;
