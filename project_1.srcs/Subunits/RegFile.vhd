@@ -21,21 +21,17 @@ entity RegFile is
 		WRITE_WIDTH: natural := 1;
 		MAX_WIDTH: natural := 4		
 	);
-    Port ( clk : in  STD_LOGIC;
-           reset : in  STD_LOGIC;
-           en : in  STD_LOGIC;
+    Port (clk : in  STD_LOGIC;
+          reset : in  STD_LOGIC;
+          en : in  STD_LOGIC;
 
-			  writeAllow: in std_logic;
-					writeInput: in InstructionSlotArray(0 to WRITE_WIDTH-1);
-			  
---			  writeVec: in std_logic_vector(0 to WIDTH-1);			  
---			  selectWrite: in PhysNameArray(0 to WIDTH-1);			  	
---			  writeValues: in MwordArray(0 to WIDTH-1);	
-
-			  readAllowVec: in std_logic_vector(0 to 3*WIDTH-1);
-			  selectRead: in PhysNameArray(0 to 3*WIDTH-1);
-			  readValues: out MwordArray(0 to 3*WIDTH-1)
-			  );
+          writeAllow: in std_logic;
+          writeInput: in InstructionSlotArray(0 to WRITE_WIDTH-1);
+          
+          readAllowVec: in std_logic_vector(0 to 3*WIDTH-1);
+          selectRead: in PhysNameArray(0 to 3*WIDTH-1);
+          readValues: out MwordArray(0 to 3*WIDTH-1)
+          );
 end RegFile;
 
 
@@ -48,10 +44,9 @@ architecture Behavioral of RegFile is
 	signal selectReadMW: PhysNameArray(0 to 3*MAX_WIDTH-1) := (others => (others => '0'));	
 	signal readValuesMW: MwordArray(0 to 3*MAX_WIDTH-1) := (others => (others => '0'));	
 
-
-			signal  writeVec: std_logic_vector(0 to WIDTH-1) := (others => '0');
-			signal  selectWrite: PhysNameArray(0 to WIDTH-1) := (others => (others => '0'));
-			signal  writeValues: MwordArray(0 to WIDTH-1) := (others => (others => '0'));
+    signal  writeVec: std_logic_vector(0 to WIDTH-1) := (others => '0');
+    signal  selectWrite: PhysNameArray(0 to WIDTH-1) := (others => (others => '0'));
+    signal  writeValues: MwordArray(0 to WIDTH-1) := (others => (others => '0'));
 
 	-- Memory block
 	signal content: MwordArray(0 to N_PHYSICAL_REGS-1) := (others => (others => '0'));
@@ -65,18 +60,13 @@ begin
 	resetSig <= reset and HAS_RESET_REGFILE;
 	enSig <= en or not HAS_EN_REGFILE;
 
-		
-		--writeVec(0 to INTEGER_WRITE_WIDTH-1) <= 
-		--								getArrayDestMask(extractData(writeInput), extractFullMask(writeInput));
-		writeVec(0) <= writeInput(0).full 
+	writeVec(0) <= writeInput(0).full 
 		      and ((writeInput(0).ins.physicalArgSpec.intDestSel and not bool2std(IS_FP)) or (writeInput(0).ins.physicalArgSpec.floatDestSel and bool2std(IS_FP)));
-		--selectWrite(0 to INTEGER_WRITE_WIDTH-1) <= getArrayPhysicalDests(extractData(writeInput));
-		selectWrite(0) <= writeInput(0).ins.physicalArgSpec.dest;
-		--writeValues(0 to INTEGER_WRITE_WIDTH-1) <= getArrayResults(extractData(writeInput));
-        writeValues(0) <= writeInput(0).ins.result;
+	selectWrite(0) <= writeInput(0).ins.physicalArgSpec.dest;
+    writeValues(0) <= writeInput(0).ins.result;
 
 	writeVecMW(0 to WIDTH-1) <= writeVec;
-		writeVecMW(WIDTH to MAX_WIDTH-1) <= (others => '0');
+	writeVecMW(WIDTH to MAX_WIDTH-1) <= (others => '0');
 	selectWriteMW(0 to WIDTH-1) <= selectWrite;
 	writeValuesMW(0 to WIDTH-1) <= writeValues;
 	

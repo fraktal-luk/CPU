@@ -69,7 +69,7 @@ entity UnitSequencer is
     
     -- Counter outputs
     commitGroupCtrOut: out InsTag;
-    commitGroupCtrIncOut: out InsTag;
+    --commitGroupCtrIncOut: out InsTag;
 
     committedOut: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     committedSending: out std_logic;
@@ -408,7 +408,6 @@ begin
     intRejOut <= sendingToLateCausing and intSuppressed;
     
     commitGroupCtrOut <= commitGroupCtr;
-    commitGroupCtrIncOut <= commitGroupCtrInc;
     
     commitAccepting <= not commitLocked; -- Blocked while procesing event
                         

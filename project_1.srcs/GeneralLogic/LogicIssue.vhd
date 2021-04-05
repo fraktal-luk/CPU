@@ -128,7 +128,6 @@ return SchedulerEntrySlot;
 function updateDispatchArgs(ins: InstructionState; st: SchedulerState; vals: MwordArray; regValues: MwordArray)
 return SchedulerEntrySlot;
 
---function TMP_getIssuedMask(elems: SchedulerEntrySlotArray) return std_logic_vector;
 function TMP_setUntil(selVec: std_logic_vector; nextAccepting: std_logic) return std_logic_vector;
 
 function iqContentNext(queueContent: SchedulerInfoArray; inputDataS: SchedulerInfoArray;
@@ -139,7 +138,6 @@ return SchedulerInfoArray;
 function extractReadyMask(entryVec: SchedulerInfoArray) return std_logic_vector;
 
 function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector;
-function findLoc2b(cmp: std_logic_vector) return SmallNumber;
 
 function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; progressLocs, dynamic: boolean)
 return SchedulerInfoArray;
@@ -147,6 +145,15 @@ return SchedulerInfoArray;
 function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo) return ForwardingMatchesArray;
 
 function extractFullMask(queueContent: SchedulerInfoArray) return std_logic_vector;
+
+
+function prioSelect(elems: SchedulerInfoArray; selVec: std_logic_vector) return SchedulerInfo;
+function iqInputStageNext(content, newContent: SchedulerInfoArray; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray;
+function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray;
+
+function getKillMask(content: SchedulerInfoArray; fullMask: std_logic_vector; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
+return std_logic_vector;
+
 
 end LogicIssue;
 
@@ -344,25 +351,6 @@ begin
     return res;
 end function;
 
---function getWakeupReady(fnm: ForwardingMap; ready1, ready0, readyM1, readyM2: std_logic_vector) return std_logic_vector is
---    variable res: std_logic_vector(0 to 2) := (others => '0');
---begin
---    for i in res'range loop
---        if true then
---            if fnm.maskM2(i) = '1' then
---                res(i) := readyM2(i);
---            elsif fnm.maskM1(i) = '1' then
---                res(i) := readyM1(i);        
---            elsif fnm.maskR0(i) = '1' then
---                res(i) := ready0(i);
---            else
---                res(i) := ready1(i);        
---            end if;
---        end if;
---    end loop;
-
---    return res;
---end function;
 
 function getWakeupVector(fnm: ForwardingMap; ready1, ready0, readyM1, readyM2: std_logic_vector) return std_logic_vector is
     variable res: std_logic_vector(0 to 2) := (others => '0');
@@ -394,23 +382,8 @@ begin
 	return res;
 end function;
 
-function findLoc2b(cmp: std_logic_vector) return SmallNumber is
-	variable res: SmallNumber := (others => '0');
-begin
-	-- TODO: if more than 3 source subpipes possible, need to update 
-	if cmp(1) = '1' then
-		res(1 downto 0) := "01";
-	elsif cmp(2) = '1' then
-		res(1 downto 0) := "10";
-	end if;
-	
-	res(0) := cmp(1);
-	res(1) := cmp(2);
-	return res;
-end function;
 
-
-function updateArgLocs_Issue(ss: SchedulerState)
+function updateIssueArgLocs(ss: SchedulerState)
 return SchedulerState is
 	variable res: SchedulerState := ss;
 begin
@@ -451,8 +424,8 @@ begin
 	       wakeupPhases := wakeupPhases1;
 	   end if;
 	
-	   if progress then
-            if readyBefore(i) = '1' then
+        if readyBefore(i) = '1' then
+            if progress then
                 case res.argLocsPhase(i)(1 downto 0) is
                     when "11" =>
                         res.argLocsPhase(i) := "00000000";
@@ -461,29 +434,17 @@ begin
                     when others =>
                         res.argLocsPhase(i) := "00000010";
                 end case;
-            else
-                for j in 0 to 2 loop
-                    if wakeupVec(j) = '1' then
-                        res.argLocsPipe(i) := i2slv(j, SMALL_NUMBER_SIZE);                    
-                        res.argLocsPhase(i) := wakeupPhases(j);
-                        exit;                    
-                    end if;
-                end loop;
             end if;
-	   else -- not progress
-            if readyBefore(i) = '1' then
-
-            else
-                for j in 0 to 2 loop
-                    if wakeupVec(j) = '1' then
-                        res.argLocsPipe(i) := i2slv(j, SMALL_NUMBER_SIZE);                    
-                        res.argLocsPhase(i) := wakeupPhases(j);
-                        exit;                    
-                    end if;
-                end loop;
-            end if;       
+        else
+            for j in 0 to 2 loop
+                if wakeupVec(j) = '1' then
+                    res.argLocsPipe(i) := i2slv(j, SMALL_NUMBER_SIZE);                    
+                    res.argLocsPhase(i) := wakeupPhases(j);
+                    exit;                    
+                end if;
+            end loop;
         end if;
-        
+       
 		res.argLocsPhase(i)(7 downto 2) := "000000";
 		res.argLocsPipe(i)(7 downto 2) := "000000";
 	end loop;
@@ -520,7 +481,22 @@ begin
     res.ins.physicalArgSpec.intArgSel := (others => '0');
     res.ins.physicalArgSpec.floatArgSel := (others => '0');
         
-    res.ins.physicalArgSpec.args := res.state.argSpec.args;    
+    res.ins.physicalArgSpec.args := res.state.argSpec.args;
+
+    -- Clear dest if empty
+    if not res.full = '1' then
+        res.ins.physicalArgSpec.intDestSel := '0';
+        res.ins.physicalArgSpec.floatDestSel := '0';
+        res.ins.physicalArgSpec.dest := (others => '0');
+    end if;
+    
+    -- Clear unused fields       
+    if CLEAR_DEBUG_INFO then
+        res.ins := clearAbstractInfo(res.ins);
+    end if;
+    res.ins.controlInfo.newEvent := '0';
+    res.ins.controlInfo.hasInterrupt := '0';
+        
 	return res;
 end function;
 
@@ -577,7 +553,7 @@ begin
         res.state.stored := (others => '0');
     end if;
 
-    res.state := updateArgLocs_Issue(res.state);
+    res.state := updateIssueArgLocs(res.state);
     
     if CLEAR_DEBUG_INFO then
         res.ins := clearDbCounters(res.ins);
@@ -836,5 +812,88 @@ begin
     return res;
 end function;
 
+
+
+function prioSelect(elems: SchedulerInfoArray; selVec: std_logic_vector) return SchedulerInfo is
+    variable ind, ind0, ind1: std_logic_vector(2 downto 0) := "000";
+    variable ch0, ch1: SchedulerInfo;
+begin
+    if selVec(0 to 3) = "0000" then
+        ind(2) := '1';
+    else
+        ind(2) := '0';
+    end if;
+    
+    if selVec(0) = '1' then
+        ch0 := elems(0);
+    elsif selVec(1) = '1' then
+        ch0 := elems(1);
+    elsif selVec(2) = '1' then
+        ch0 := elems(2);
+    else
+        ch0 := elems(3);
+    end if;
+
+    if selVec(4) = '1' then
+        ch1 := elems(4);
+    elsif selVec(5) = '1' then
+        ch1 := elems(5);
+    elsif selVec(6) = '1' then
+        ch1 := elems(6);
+    else
+        ch1 := elems(7);
+    end if;
+
+    if ind(2) = '0' then
+        return ch0;
+    else
+        return ch1;
+    end if;
+end function;
+
+function iqInputStageNext(content, newContent: SchedulerInfoArray; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray is
+   variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content;
+begin
+   if execEventSignal = '1' or lateEventSignal = '1' then
+       for i in 0 to PIPE_WIDTH-1 loop
+           res(i).dynamic.full := '0';
+       end loop; 	       
+   elsif prevSending = '1' then
+       res := newContent;	       
+   elsif isSending = '1' then -- Clearing everything - sent to main queue
+       for i in 0 to PIPE_WIDTH-1 loop
+           res(i).dynamic.full := '0';
+       end loop;    
+   end if;
+   
+   return res;
+end function;
+
+function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray is
+   variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := newContent;
+   variable rrf: std_logic_vector(0 to 2) := (others=>'0');      	   
+begin
+   for i in 0 to PIPE_WIDTH-1 loop
+       rrf := rr(3*i to 3*i + 2);                                              
+       res(i).dynamic.missing := res(i).dynamic.missing and not rrf;	       
+   end loop;
+   
+   for i in 1 to PIPE_WIDTH-1 loop
+       res(i).dynamic.renameIndex := clearTagLow(res(0).dynamic.renameIndex) or i2slv(i, TAG_SIZE);
+   end loop;         
+   return res;
+end function;
+
+function getKillMask(content: SchedulerInfoArray; fullMask: std_logic_vector;
+                            causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
+return std_logic_vector is
+    variable res: std_logic_vector(0 to content'length-1);
+begin
+    for i in 0 to content'length-1 loop
+        res(i) := killByTag(compareTagBefore(causing.tags.renameIndex, content(i).dynamic.renameIndex),
+                                    execEventSig, lateEventSig);
+    end loop;
+    return res;
+end function;
 
 end LogicIssue;

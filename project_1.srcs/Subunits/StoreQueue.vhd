@@ -26,37 +26,32 @@ entity StoreQueue is
 		en: in std_logic;
 
 		acceptingOut: out std_logic;
-			almostFull: out std_logic;
+		almostFull: out std_logic;
 		
-		--acceptingBr: out std_logic;
-		  prevSendingRe: in std_logic;
+   	    prevSendingRe: in std_logic;
 		prevSending: in std_logic;
-		--	prevSendingBr: in std_logic;
-		  dataInRe: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-		dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-		--	dataInBr: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 
-            renamedPtr: out SmallNumber;
+        dataInRe: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+		dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+
+        renamedPtr: out SmallNumber;
 
 		storeValueInput: in InstructionSlot;
 		compareAddressInput: in InstructionSlot;
-        compareTagInput:    in InsTag;
-            compareIndexInput: in SmallNumber;
+        compareIndexInput: in SmallNumber;
 
 		selectedDataOutput: out InstructionSlot;
 
 		committing: in std_logic;
 		robData: in InstructionSlotArray(0 to PIPE_WIDTH-1);		
-		groupCtrInc: in InsTag;
+		--groupCtrInc: in InsTag;
 
 		lateEventSignal: in std_logic;
 		execEventSignal: in std_logic;
 		execCausing: in InstructionState;
 		
 		nextAccepting: in std_logic;		
-		sendingSQOut: out std_logic;
-		dataOutV: out InstructionSlotArray(0 to PIPE_WIDTH-1);
-		
+
 		committedEmpty: out std_logic;
 		committedSending: out std_logic;
 		committedDataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1)
@@ -70,26 +65,19 @@ architecture Behavioral of StoreQueue is
     constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;
 	
 	signal addressMatchMask, newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
-
-	--signal selectedDataSlot, selectedDataOutputSig: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	
 	signal pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pTagged, pTaggedNext, pFlush, storePtr, pSelect, pRenamed, pRenamedNext,
 	       pStartEffective, pStartEffectiveNext,
            pStartLong, pStartLongNext, pDrainLong, pDrainLongNext, pDrainLongPrev, pTaggedLong, pTaggedLongNext, pFlushLong, pRenamedLong, pRenamedLongNext,
-	       pStartLongEffective, pStartLongEffectiveNext: SmallNumber := (others => '0');
-	       	
-	signal nFull, nFullNext, nFull_T, nFullNext_T, nFullRestored, nIn, nOut, nCommitted, nCommittedEffective, nInRe: SmallNumber := (others => '0');
-	signal recoveryCounter: SmallNumber := (others => '0');
+	       pStartLongEffective, pStartLongEffectiveNext,
+	       nFull, nFullNext, nIn, nOut, nCommitted, nCommittedEffective, nInRe, recoveryCounter: SmallNumber := (others => '0');
 
     signal storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
      
-    signal isFull, isAlmostFull, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDraining, isDrainingPrev: std_logic := '0';
+    signal isFull, isAlmostFull, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDraining, isDrainingPrev, isSelected: std_logic := '0';
     signal memEmpty: std_logic := '1'; -- CAREFUL! Starts with '1'
 
     signal drainOutput, selectedOutput: InstructionState := DEFAULT_INS_STATE;
-    signal isSelected: std_logic := '0';
-
-
     signal drainValue, selectedValue: Mword := (others => '0');
 
     signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
@@ -134,8 +122,7 @@ begin
         end process;
     end block;
 
-
-   --CAREFUL: this is only for SQ
+    --CAREFUL: this is only for SQ
     drainEqual <= bool2std(pDrain = pStart);
     drainEffectiveEqual <= bool2std(pDrain = pStartEffective);       
     nCommitted <= getNumCommitted(robData, IS_LOAD_QUEUE);
@@ -147,50 +134,42 @@ begin
     pTaggedNext <= pTaggedLongNext and PTR_MASK_SN;
     pRenamedNext <= pRenamedLongNext and PTR_MASK_SN;
 
+    pStartLongEffectiveNext <= addTruncZ(pStartLongEffective, nCommittedEffective, QUEUE_PTR_SIZE+1) when committing = '1'
+                        else pStartLongNext when nowCancelled = '1' and drainEqual = '1'
+                        else pStartLongEffective;
+    pDrainLongNext <= addIntTrunc(pDrainLong, 1, QUEUE_PTR_SIZE+1) when drainReq = '1' else pDrainLong;
+    pStartLongNext <= addTruncZ(pStartLong, nCommitted, QUEUE_PTR_SIZE+1) when committing = '1' else pStartLong; --pStartNewNext;        
 
-        pStartLongEffectiveNext <= addTruncZ(pStartLongEffective, nCommittedEffective, QUEUE_PTR_SIZE+1) when committing = '1'
-                            else pStartLongNext when nowCancelled = '1' and drainEqual = '1'
-                            else pStartLongEffective;
-        pDrainLongNext <= addIntTrunc(pDrainLong, 1, QUEUE_PTR_SIZE+1) when drainReq = '1' else pDrainLong;
-        pStartLongNext <= addTruncZ(pStartLong, nCommitted, QUEUE_PTR_SIZE+1) when committing = '1' else pStartLong; --pStartNewNext;        
-
-        pTaggedLongNext <= pStartLongNext when lateEventSignal = '1'
-                else   pFlushLong when execEventSignal = '1' 
-                else   addIntTrunc(pTaggedLong, countOnes(extractFullMask(dataIn)), QUEUE_PTR_SIZE+1) when prevSending = '1'
-                else   pTaggedLong;
-                                
-        pRenamedLongNext <= pStartLong when lateEventSignal = '1'
-                else       pFlushLong when execEventSignal = '1'
-                else       addIntTrunc(pRenamedLong, slv2u(nInRe), QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
-                else       pRenamedLong;
-
-
-
+    pTaggedLongNext <= pStartLongNext when lateEventSignal = '1'
+            else   pFlushLong when execEventSignal = '1' 
+            else   addIntTrunc(pTaggedLong, countOnes(extractFullMask(dataIn)), QUEUE_PTR_SIZE+1) when prevSending = '1'
+            else   pTaggedLong;
+                            
+    pRenamedLongNext <= pStartLong when lateEventSignal = '1'
+            else       pFlushLong when execEventSignal = '1'
+            else       addIntTrunc(pRenamedLong, slv2u(nInRe), QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
+            else       pRenamedLong;
 
     pFlush <=   execCausing.tags.lqPointer and PTR_MASK_SN when IS_LOAD_QUEUE
            else execCausing.tags.sqPointer and PTR_MASK_SN;
     
-        pFlushLong <=   execCausing.tags.lqPointer when IS_LOAD_QUEUE
-               else execCausing.tags.sqPointer;
+    pFlushLong <= execCausing.tags.lqPointer when IS_LOAD_QUEUE
+             else execCausing.tags.sqPointer;
 
- 
     storePtr <= storeValueInput.ins.tags.sqPointer and PTR_MASK_SN;
     drainReq <= not drainEqual;
 
-
     ADR_FORW: block
     begin
-        newerNextLQ <= TMP_cmpIndexAfter(pStartLong, pTaggedLong, compareIndexInput, QUEUE_SIZE, PTR_MASK_SN);
-        olderNextSQ <= TMP_cmpIndexBefore(pDrainLongPrev, pTaggedLong, compareIndexInput, QUEUE_SIZE, PTR_MASK_SN);
+        newerNextLQ <= cmpIndexAfter(pStartLong, pTaggedLong, compareIndexInput, QUEUE_SIZE, PTR_MASK_SN);
+        olderNextSQ <= cmpIndexBefore(pDrainLongPrev, pTaggedLong, compareIndexInput, QUEUE_SIZE, PTR_MASK_SN);
 
-        newerLQ <=     newerRegLQ and addressMatchMask when isStoreMemOp(compareAddressInput.ins) = '1'
-                  else (others => '0'); -- Only those with known address
-        olderSQ <=     olderRegSQ and addressMatchMask when isLoadMemOp(compareAddressInput.ins) = '1'
-                  else (others => '0'); -- Only those with known address
+        newerLQ <=     newerRegLQ and addressMatchMask when isStoreMemOp(compareAddressInput.ins) = '1' else (others => '0'); -- Only those with known address
+        olderSQ <=     olderRegSQ and addressMatchMask when isLoadMemOp(compareAddressInput.ins) = '1' else (others => '0'); -- Only those with known address
 
         WHEN_SQ: if not IS_LOAD_QUEUE generate
             -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
-           pSelect <=   findNewestMatchIndex2(olderSQ,  pDrainPrev, pTagged, QUEUE_PTR_SIZE);
+           pSelect <=   findNewestMatchIndex(olderSQ,  pDrainPrev, pTagged, QUEUE_PTR_SIZE);
         end generate;
             
         process (clk)
@@ -202,32 +181,14 @@ begin
          end process;              
     end block;
 
---        ch0 <= memEmpty;
---        ch1 <= --(not pStartLong(QUEUE_PTR_SIZE) xor pTaggedLong(QUEUE_PTR_SIZE)) and bool2std(pStart = pTagged);
---                getQueueEmpty(pStartLong, pTaggedLong, QUEUE_PTR_SIZE);
---        ch2 <= --(not pDrainLongPrev(QUEUE_PTR_SIZE) xor pTaggedLong(QUEUE_PTR_SIZE)) and bool2std(pDrainPrev = pTagged);
---                getQueueEmpty(pDrainLongPrev, pTaggedLong, QUEUE_PTR_SIZE);        
---        ch3 <= not ch0 xor ch1;
---        chi <= not ch0 xor ch2;
+    pDrain <= pDrainLong and PTR_MASK_SN;
+    pDrainPrev <= pDrainLongPrev and PTR_MASK_SN;
 
-	WHEN_LQ: if IS_LOAD_QUEUE generate	
-	   nInRe <= i2slv(countOnes(getLoadMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');
-	end generate;
-	
-	WHEN_SQ: if not IS_LOAD_QUEUE generate
-	    -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
-        nInRe <= i2slv(countOnes(getStoreMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');	   	   
-	end generate;
+    pStart <= pStartLong and PTR_MASK_SN;
+    pStartEffective <= pStartLongEffective and PTR_MASK_SN;
 
-
-        pDrain <= pDrainLong and PTR_MASK_SN;
-        pDrainPrev <= pDrainLongPrev and PTR_MASK_SN;
-    
-        pStart <= pStartLong and PTR_MASK_SN;
-        pStartEffective <= pStartLongEffective and PTR_MASK_SN;
-    
-        pTagged <= pTaggedLong and PTR_MASK_SN;
-        pRenamed <= pRenamedLong and PTR_MASK_SN;
+    pTagged <= pTaggedLong and PTR_MASK_SN;
+    pRenamed <= pRenamedLong and PTR_MASK_SN;
      
      process (clk)   
      begin
@@ -257,16 +218,8 @@ begin
                 nowCancelled <= '0';
             end if;
 
+
             --- ctr management
-                        
-            if lateEventSignal = '1' or execEventSignal = '1' then
-                recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
-            elsif isNonzero(recoveryCounter) = '1' then
-                recoveryCounter <= addInt(recoveryCounter, -1);
-            end if;
-	        
-	        recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here
-	        
 	        isFull <= cmpGtU(nFullNext, QUEUE_SIZE-4);
             isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
 
@@ -276,75 +229,34 @@ begin
                 memEmpty <= getQueueEmpty(pDrainLong, pTaggedLongNext, QUEUE_PTR_SIZE);
             else
                 memEmpty <= getQueueEmpty(pStartLongNext, pTaggedLongNext, QUEUE_PTR_SIZE);
-            end if;        
---            -- TODO: include execEventSignal in both cases!
---            if not IS_LOAD_QUEUE then -- SQ
---               if prevSending = '1' and isNonzero(extractFullMask(dataIn)) = '1' then 
---                  memEmpty <= '0';
---               end if;
-                
---               if lateEventSignal = '1' and pStart = pDrainPrev then
---                  memEmpty <= '1';
---               end if;
-               
---               if execEventSignal = '1' and pFlush = pStartNext then -- if execEventSignal, content can't grow
---                  memEmpty <= '1';
---               end if;
-               
---	           if isDrainingPrev = '1' and (prevSending = '0' or isNonzero(extractFullMask(dataIn)) = '0') and pDrain = pTagged then
---	              memEmpty  <= '1';
---	           end if;
-             
---             else -- LQ
---                if prevSending = '1' and isNonzero(extractFullMask(dataIn)) = '1' then 
---                   memEmpty <= '0';
---                end if;
-                 
---                if lateEventSignal = '1' then
---                   memEmpty <= '1';
---                end if;
-
---                if execEventSignal = '1' and pFlush = pStartNext then -- if execEventSignal, content can't grow
---                   memEmpty <= '1';
---                end if;
-                
---                if committing = '1' and (prevSending = '0' or isNonzero(extractFullMask(dataIn)) = '0') and pStartNext = pTagged then
---                   memEmpty  <= '1';
---                end if;	           
---	        end if;
+            end if;
+            
+            
+            if lateEventSignal = '1' or execEventSignal = '1' then
+                recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
+            elsif isNonzero(recoveryCounter) = '1' then
+                recoveryCounter <= addInt(recoveryCounter, -1);
+            end if;
+            
+            recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here       
 		end if;
 	end process;
-
-	nFullNext <= -- nFullRestored when recoveryCounter = i2slv(1, SMALL_NUMBER_SIZE)
-				--else subTruncZ(add(nFull, nIn), nOut, QUEUE_CAP_SIZE);
-				    nFullNext_T;
 				
 	nIn <= i2slv( countOnes(extractFullMask(dataIn)), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
 		
-		
-		
 	LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
-    	   nFullNext_T <= getNumFull(pStartLongNext, pTaggedLongNext, QUEUE_PTR_SIZE);
-	
-	
-        nOut <= nCommitted when committing = '1'
-                else (others => '0');
-        nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pStartNext = pTagged and memEmpty = '0'
-                           else subTruncZ(pTagged, pStartNext, QUEUE_PTR_SIZE); -- CAREFUL: nFullRestored can be outside PTR range but it's handled in the other branch 
+    	nFullNext <= getNumFull(pStartLongNext, pTaggedLongNext, QUEUE_PTR_SIZE);
+    	
+	    nInRe <= i2slv(countOnes(getLoadMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
+        nOut <= nCommitted when committing = '1' else (others => '0');
     end generate;
     
     STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
-    	   nFullNext_T <= getNumFull(pDrainLong, pTaggedLongNext, QUEUE_PTR_SIZE);
-    
-    
-        nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isDrainingPrev = '1'
-              else (others => '0');		  
-        nFullRestored <= i2slv(QUEUE_SIZE, SMALL_NUMBER_SIZE) when pDrainPrev = pTagged and memEmpty = '0'
-                            else subTruncZ(pTagged, pDrain, QUEUE_PTR_SIZE); -- CAREFUL: nFullRestored can be outside PTR range but it's handled in the other branch
+    	nFullNext <= getNumFull(pDrainLong, pTaggedLongNext, QUEUE_PTR_SIZE);
+	    -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
+        nInRe <= i2slv(countOnes(getStoreMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    	
+        nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isDrainingPrev = '1' else (others => '0');		  
     end generate;
-    
-    
-        ch0 <= bool2std(nFullNext_T = nFullNext);
         
     isDraining <= drainReq;
      

@@ -155,9 +155,8 @@ function adjustStage(content: InstructionSlotArray) return InstructionSlotArray;
 function compactMask(vec: std_logic_vector) return std_logic_vector; -- WARNING: only for 4 elements
 function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector;
 
-function getNewElem(remv: std_logic_vector; newContent: InstructionSlotArray) return InstructionSlot;
-function getNewElemSch(remv: std_logic_vector; newContent: SchedulerEntrySlotArray)
-return SchedulerEntrySlot;
+function getNewElem(remv: std_logic_vector; newContent: InstructionSlotArray) return InstructionSlot; -- UNUSED 
+function getNewElemSch(remv: std_logic_vector; newContent: SchedulerEntrySlotArray) return SchedulerEntrySlot;
 
 -- general InstructionState handling 
 function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionState; -- UNUSED
@@ -168,10 +167,6 @@ function setInstructionResult(ins: InstructionState; result: Mword) return Instr
 function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray;
 function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray;
 function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
-
-function clearDestIfEmpty(elem: SchedulerEntrySlot; empty: std_logic) return SchedulerEntrySlot;
-function clearDestIfEmpty(elem: SchedulerEntrySlot) return SchedulerEntrySlot;
-
 
 function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector;
 function extractFullMask(queueContent: SchedulerEntrySlotArray) return std_logic_vector;
@@ -186,8 +181,7 @@ function makeSlotArray(ia: InstructionStateArray; fm: std_logic_vector) return I
 function killByTag(before, ei, int: std_logic) return std_logic;
 
 -- UNUSED?
-function getKillMask(content: InstructionStateArray;-- fullMask: std_logic_vector;
-							causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
+function getKillMask(content: InstructionStateArray; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector;
 
 
@@ -277,6 +271,8 @@ function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray;
 
 function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic;
 function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
+
+function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray; 
     
 end package;
 
@@ -991,32 +987,6 @@ begin
     res.ins.physicalArgSpec.dest := insS0.ins.physicalArgSpec.dest or insS1.ins.physicalArgSpec.dest;
     return res;
 end function;
-
--- REMOVE?
-function clearDestIfEmpty(elem: SchedulerEntrySlot; empty: std_logic) return SchedulerEntrySlot is
-    variable res: SchedulerEntrySlot := elem;
-begin
-    if empty = '1' then
-        res.ins.physicalArgSpec.intDestSel := '0';
-        res.ins.physicalArgSpec.floatDestSel := '0';
-        res.ins.physicalArgSpec.dest := (others => '0');
-    end if;
-
-    return res;
-end function;
-
--- REMOVE?
-function clearDestIfEmpty(elem: SchedulerEntrySlot) return SchedulerEntrySlot is
-    variable res: SchedulerEntrySlot := elem;
-begin
-    if not elem.full = '1' then
-        res.ins.physicalArgSpec.intDestSel := '0';
-        res.ins.physicalArgSpec.floatDestSel := '0';
-        res.ins.physicalArgSpec.dest := (others => '0');
-    end if;
-
-    return res;
-end function;
         
 function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := content;
@@ -1200,5 +1170,15 @@ begin
     result(QUEUE_PTR_SIZE) := xored(QUEUE_PTR_SIZE) and not isNonzero(xored(QUEUE_PTR_SIZE-1 downto 0));
     return result;      
 end function;
-    
+
+function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := dataInt;
+begin
+    for i in res'range loop
+        res(i).full := dataFloat(i).full;
+        res(i).ins.physicalArgSpec.args := dataFloat(i).ins.physicalArgSpec.args;
+    end loop;
+    return res;
+end function; 
+     
 end package body;

@@ -24,7 +24,7 @@ entity ReorderBuffer is
 		en: in std_logic;
 		
 		lateEventSignal: in std_logic;
-		commitGroupCtr: in InsTag;
+		--commitGroupCtr: in InsTag;
 
 		execEndSigs1: in InstructionSlotArray(0 to 3);
 		execEndSigs2: in InstructionSlotArray(0 to 3);

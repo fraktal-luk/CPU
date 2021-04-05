@@ -29,8 +29,8 @@ entity IssueQueue is
 		en: in std_logic;
 		
 		prevSendingOK: in std_logic;
-		newArr: in SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
-		  newArr_N: in SchedulerInfoArray(0 to PIPE_WIDTH-1);
+		--newArr_N: in SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
+		newArr: in SchedulerInfoArray(0 to PIPE_WIDTH-1);
 		
 		  newArr_Alt: in SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
 		  newArrOut: out SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
@@ -77,146 +77,6 @@ architecture Behavioral of IssueQueue is
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
     signal fma: ForwardingMatchesArray(0 to IQ_SIZE-1) := (others => DEFAULT_FORWARDING_MATCHES);
-
---	-- Select item at first '1', or the last one if all zeros
---	function prioSelect(elems: SchedulerEntrySlotArray; selVec: std_logic_vector) return SchedulerEntrySlot is
---		variable ind, ind0, ind1: std_logic_vector(2 downto 0) := "000";
---		variable ch0, ch1: SchedulerEntrySlot;
---	begin
---		if selVec(0 to 3) = "0000" then
---			ind(2) := '1';
---		else
---			ind(2) := '0';
---		end if;
-		
---		if selVec(0) = '1' then
---			ch0 := elems(0);
---		elsif selVec(1) = '1' then
---			ch0 := elems(1);
---		elsif selVec(2) = '1' then
---			ch0 := elems(2);
---		else
---			ch0 := elems(3);
---		end if;
-
---		if selVec(4) = '1' then
---			ch1 := elems(4);
---		elsif selVec(5) = '1' then
---			ch1 := elems(5);
---		elsif selVec(6) = '1' then
---			ch1 := elems(6);
---		else
---			ch1 := elems(7);
---		end if;
-
---		if ind(2) = '0' then
---			return ch0;
---		else
---			return ch1;
---		end if;
---	end function;
-
-
-	function prioSelect(elems: SchedulerInfoArray; selVec: std_logic_vector) return SchedulerInfo is
-		variable ind, ind0, ind1: std_logic_vector(2 downto 0) := "000";
-		variable ch0, ch1: SchedulerInfo;
-	begin
-		if selVec(0 to 3) = "0000" then
-			ind(2) := '1';
-		else
-			ind(2) := '0';
-		end if;
-		
-		if selVec(0) = '1' then
-			ch0 := elems(0);
-		elsif selVec(1) = '1' then
-			ch0 := elems(1);
-		elsif selVec(2) = '1' then
-			ch0 := elems(2);
-		else
-			ch0 := elems(3);
-		end if;
-
-		if selVec(4) = '1' then
-			ch1 := elems(4);
-		elsif selVec(5) = '1' then
-			ch1 := elems(5);
-		elsif selVec(6) = '1' then
-			ch1 := elems(6);
-		else
-			ch1 := elems(7);
-		end if;
-
-		if ind(2) = '0' then
-			return ch0;
-		else
-			return ch1;
-		end if;
-	end function;
-
-
-	function clearOutput(elem: SchedulerEntrySlot) return SchedulerEntrySlot is
-		variable res: SchedulerEntrySlot := elem;
-    begin
-	    -- Clear unused fields       
-        if CLEAR_DEBUG_INFO then
-            res.ins := clearAbstractInfo(res.ins);
-        end if;
-        res.ins.controlInfo.newEvent := '0';
-        res.ins.controlInfo.hasInterrupt := '0';
-	   return res;
-	end function;
-
-    function iqInputStageNext(content, newContent: SchedulerInfoArray; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray is
-       variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content;
-    begin
-       if execEventSignal = '1' or lateEventSignal = '1' then
-           for i in 0 to PIPE_WIDTH-1 loop
-               res(i).dynamic.full := '0';
-           end loop; 	       
-       elsif prevSending = '1' then
-           res := newContent;	       
-       elsif isSending = '1' then -- Clearing everything - sent to main queue
-           for i in 0 to PIPE_WIDTH-1 loop
-               res(i).dynamic.full := '0';
-           end loop;    
-       end if;
-       
-       return res;
-    end function;
-
-    function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray is
-       variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := newContent;
-       variable rrf: std_logic_vector(0 to 2) := (others=>'0');      	   
-    begin
-       for i in 0 to PIPE_WIDTH-1 loop
-           rrf := rr(3*i to 3*i + 2);                                              
-           res(i).dynamic.missing := res(i).dynamic.missing and not rrf;	       
-       end loop;   
-       return res;
-    end function;
-
-    function restoreRenameIndexSch(content: SchedulerInfoArray) return SchedulerInfoArray is
-        variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content;
-    begin
-        for i in 1 to PIPE_WIDTH-1 loop
-            res(i).dynamic.renameIndex := clearTagLow(res(0).dynamic.renameIndex) or i2slv(i, TAG_SIZE);
-        end loop;
-    
-        return res;
-    end function;
-
-        function getKillMask(content: SchedulerInfoArray; fullMask: std_logic_vector;
-                                    causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
-        return std_logic_vector is
-            variable res: std_logic_vector(0 to content'length-1);
-        begin
-            for i in 0 to content'length-1 loop
-                res(i) := killByTag(compareTagBefore(causing.tags.renameIndex, content(i).dynamic.renameIndex),
-                                            execEventSig, lateEventSig);-- and fullMask(i);
-            end loop;
-            return res;
-        end function;
    
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
 begin
@@ -226,17 +86,17 @@ begin
         signal inputStage, inputStageNext: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);          
         signal inputStageAny, inputStageLivingAny, inputReadingAny: std_logic := '0';        
     begin
-        inputStage <= updateRR(restoreRenameIndexSch(inputStagePreRR), readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
+        inputStage <= updateRR(inputStagePreRR, readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
 
         fmaInputStage <= findForwardingMatchesArray(inputStage, fni);
         inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, true, false);                   
   
         inputStageSending <= inputStageAny and queuesAccepting and not execEventSignal and not lateEventSignal;
 
-        inputStageNext <= iqInputStageNext(inputStageUpdated, newArr_N, prevSendingOK, inputStageSending, execEventSignal, lateEventSignal);
+        inputStageNext <= iqInputStageNext(inputStageUpdated, newArr, prevSendingOK, inputStageSending, execEventSignal, lateEventSignal);
         inputStageAny <= isNonzero(extractFullMask(inputStage));
             
-        INPUT_SYNCHRONOUS: process(clk) 	
+        INPUT_SYNCHRONOUS: process(clk)
         begin
             if rising_edge(clk) then
                 inputStagePreRR <= inputStageNext;			
@@ -292,11 +152,11 @@ begin
 
 
     queueContentNext <= iqContentNext(queueContentUpdated, inputStageUpdated, 
-                                          killMask, selMask,                  
-                                          sends, sent,
-                                          sentUnexpected,
-                                          inputStageSending
-                                          );
+                                      killMask, selMask,                  
+                                      sends, sent,
+                                      sentUnexpected,
+                                      inputStageSending
+                                      );
 
     fma <= findForwardingMatchesArray(queueContent, fni);
 
@@ -309,8 +169,7 @@ begin
 	
 	anyReady <= anyReadyLive; -- OUTPUT
 	
-	               -- TODO: make a single function
-	schedulerOut <= clearOutput(clearDestIfEmpty(TMP_restoreState(sends, dispatchDataNew.ins, dispatchDataNew.state)));
+	schedulerOut <= TMP_restoreState(sends, dispatchDataNew.ins, dispatchDataNew.state);
 	sending <= sends;
     sentCancelled <= anyCancelled;
     

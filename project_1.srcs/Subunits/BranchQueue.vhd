@@ -46,7 +46,7 @@ entity BranchQueue is
 
 		committing: in std_logic;
 		robData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-		groupCtrInc: in InsTag;
+		--groupCtrInc: in InsTag;
 
 		lateEventSignal: in std_logic;
 		execEventSignal: in std_logic;
