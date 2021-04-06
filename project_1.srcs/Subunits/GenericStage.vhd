@@ -16,6 +16,7 @@ entity GenericStage is
 	generic(
 		USE_CLEAR: std_logic := '1';
 		COMPARE_TAG: std_logic := '0';
+		KEEP_DEST: std_logic := '0';
 		WIDTH: natural := 1
 	);
 	port(
@@ -45,7 +46,7 @@ architecture Behavioral of GenericStage is
 begin
 	stageDataNext <= stageArrayNext(stageData, stageDataIn,
 								    living, sending, prevSending,
-								    kill and USE_CLEAR);
+								    kill and USE_CLEAR, KEEP_DEST);
 
 	PIPE_CLOCKED: process(clk) 
 	begin

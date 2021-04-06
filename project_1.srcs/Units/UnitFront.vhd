@@ -136,7 +136,15 @@ begin
     end process;
     
 	earlyBranchMultiDataInA <= getFrontEventMulti(predictedAddress, stageDataOutFetch1(0).ins, fetchedLine1);	                                                                   
-	                                                                   
+	
+	TMP_DEC: block
+	    signal TMP_ds0, TMP_ds1: TMP_decStructArray;    
+	begin
+	    TMP_ds0 <= TMP_getDecStructArray(earlyBranchMultiDataInA);
+	    TMP_ds1 <= TMP_getRefStructArray(earlyBranchMultiDataInA);
+	end block;
+	   
+	                      
 	SUBUNIT_EARLY_BRANCH_MULTI: entity work.GenericStage(Behavioral)
 	generic map(
 		WIDTH => PIPE_WIDTH
@@ -231,10 +239,10 @@ begin
 	dataToBranchTransfer <= prepareForBQ(--earlyBranchMultiDataInA);
 	                                      stageDataOutFetch1(0), dataToIbuffer);
 
-    bpData <= --dataBranchTransferOut;
-                dataToBranchTransfer;
-    bpSending <= --sendingToBQ;
-                 sendingToBranchTransfer;
+    bpData <= dataBranchTransferOut;
+              --  dataToBranchTransfer;
+    bpSending <= sendingToBQ;
+                -- sendingToBranchTransfer;
 
     SUBUNIT_BRANCH_TRANSFER: entity work.GenericStage(Behavioral)
 	generic map(

@@ -373,8 +373,8 @@ function sprintTransfer(ins: InstructionState) return string is
     variable ctrl: string(1 to 5) := "     ";
 begin
     if ins.specificOperation.subpipe = Mem then
-        c1(1) := std_logic'image(ins.controlInfo.completed)(2);
-        c2(1) := std_logic'image(ins.controlInfo.completed2)(2);
+        --c1(1) := std_logic'image(ins.controlInfo.completed)(2);
+        --c2(1) := std_logic'image(ins.controlInfo.completed2)(2);
         c1(2) := ':';
         c2(2) := ':';
 
@@ -426,12 +426,12 @@ function sprintStatus(ins: InstructionState) return string is
     variable comp: string(1 to 2) := "00";
     variable ctrl: string(1 to 3) := "   ";
 begin
-    if ins.controlInfo.completed = '1' then
-        comp(1) := '1';
-    end if;
-    if ins.controlInfo.completed2 = '1' then
-        comp(2) := '1';
-    end if;
+    --if ins.controlInfo.completed = '1' then
+    --    comp(1) := '1';
+    --end if;
+    --if ins.controlInfo.completed2 = '1' then
+    --    comp(2) := '1';
+    --end if;
  
      if ins.controlInfo.frontBranch = '1' then
         ctrl(1) := 'F';
@@ -568,12 +568,12 @@ begin
         tmpStr := (others => ' ');
         if ia(i).full = '1' then
             tmpStr(1 to 2) := "00";
-            if ia(i).ins.controlInfo.completed = '1' then
-                tmpStr(1) := '1';
-            end if;
-            if ia(i).ins.controlInfo.completed2 = '1' then
-                tmpStr(2) := '1';
-            end if;
+            --if ia(i).ins.controlInfo.completed = '1' then
+            --    tmpStr(1) := '1';
+            --end if;
+            --if ia(i).ins.controlInfo.completed2 = '1' then
+            --    tmpStr(2) := '1';
+            --end if;
             if ia(i).ins.controlInfo.frontBranch = '1' then
                 tmpStr(3) := 'F';
             end if;

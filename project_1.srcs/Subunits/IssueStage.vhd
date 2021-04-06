@@ -37,32 +37,20 @@ entity IssueStage is
 		lateEventSignal: in std_logic;
 		execCausing: in InstructionState;
 		
-			fni: in ForwardingInfo;
-		
-		--resultTags: in PhysNameArray(0 to N_RES_TAGS-1);
-		--resultVals: in MwordArray(0 to N_RES_TAGS-1);
+		fni: in ForwardingInfo;
 		regValues: in MwordArray(0 to 2)		
 	);
 end IssueStage;
 
 
 architecture Alternative of IssueStage is
-	signal inputDataWithArgs, dispatchDataUpdated, inputDataWithArgs_T, dispatchDataUpdated_T:
-						SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
-	signal lockSend: std_logic := '0';
-	
+	signal inputDataWithArgs, dispatchDataUpdated: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 	signal sendingOut: std_logic := '0';
 	signal stageDataSaved, stageDataIn: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
-    
-	signal argState: SchedulerState := DEFAULT_SCHEDULER_STATE;
-	--	signal ch0: std_logic := '0';
-		
+	signal argState: SchedulerState := DEFAULT_SCHEDULER_STATE;		
 begin
-
-	inputDataWithArgs <= getDispatchArgValues(input.ins, input.state, fni,-- resultTags, resultVals,
-														prevSending, USE_IMM,
-														REGS_ONLY, DELAY_ONLY);
-	
+	inputDataWithArgs <= getDispatchArgValues(input.ins, input.state, fni, prevSending, 
+											  USE_IMM, REGS_ONLY, DELAY_ONLY);	
 	stageDataIn <= (prevSending, inputDataWithArgs.ins);
 	
 	BASIC_LOGIC: entity work.GenericStage(Behavioral)
@@ -84,8 +72,7 @@ begin
 		lateEventSignal => lateEventSignal,
 		execCausing => execCausing
 	);
-
-		
+	
 	SAVE_SCH_STATE: process(clk)
 	begin
 		if rising_edge(clk) then
@@ -95,14 +82,8 @@ begin
 		end if;
 	end process;
 
-	dispatchDataUpdated <= updateDispatchArgs(stageDataSaved.ins, argState,
-															--resultVals(0 to 2),--N_NEXT_RES_TAGS-1),
-															fni.values0,
-															regValues);
+	dispatchDataUpdated <= updateDispatchArgs(stageDataSaved.ins, argState, fni.values0, regValues);
 
-	-- CAREFUL: this does nothing. To make it work:
-	--											nextAcceptingEffective <= nextAccepting and not lockSend
-	--lockSend <= BLOCK_ISSUE_WHEN_MISSING and isNonzero(dispatchDataUpdated.state.missing);
 	output <= (sendingOut, dispatchDataUpdated.ins, dispatchDataUpdated.state);	
 end Alternative;
 

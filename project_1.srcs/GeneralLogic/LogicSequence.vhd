@@ -31,15 +31,10 @@ return InstructionState;
 function recreateGroup(insVec: InstructionSlotArray; bqGroup: InstructionSlotArray; prevTarget: Mword; commitCtr32: Word)
 return InstructionSlotArray;
 
-
--- UNUSED
-function clearControlEvents(ins: InstructionState) return InstructionState;
-
-function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray; bqTargetData: InstructionSlot;
+function getNewEffective(sendingToCommit: std_logic; robDataLiving: InstructionSlotArray; bqTargetData: InstructionSlot;
 								 lastEffectiveIns, lateTargetIns: InstructionState;
 								 evtPhase2: std_logic)
 return InstructionSlot;
-
 
 function anyEvent(insVec: InstructionSlotArray) return std_logic;
 
@@ -137,39 +132,24 @@ begin
 end function;
 
 
-function clearControlEvents(ins: InstructionState) return InstructionState is
-	variable res: InstructionState := ins;
-begin
-	res.controlInfo.newEvent := '0';
-	res.controlInfo.hasInterrupt := '0';
-	res.controlInfo.hasException := '0';	
-	res.controlInfo.specialAction := '0';
-	return res;
-end function;
-
-
+-- TODO: move to Visibility?
 -- Unifies content of ROB slot with BQ, others queues etc. to restore full state needed at Commit
 function recreateGroup(insVec: InstructionSlotArray; bqGroup: InstructionSlotArray; prevTarget: Mword; commitCtr32: Word)
 return InstructionSlotArray is
 	variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
 	variable targets: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 	variable confBr: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-	variable ind: integer := 0;
 	variable prevTrg: Mword := prevTarget;
 begin
-	
 	for i in 0 to PIPE_WIDTH-1 loop
 		targets(i) := prevTrg;
 	end loop;
 	
 	-- Take branch targets to correct places
 	for i in 0 to PIPE_WIDTH-1 loop
-		if --bqGroup(i).full = '1' then
-		      insVec(i).full = '1' and insVec(i).ins.controlInfo.confirmedBranch = '1' then
-			ind := --slv2u(getTagLow(bqGroup(i).ins.tags.renameIndex));
-			       i;
-			targets(ind) := bqGroup(i).ins.target;
-			confBr(ind) := '1';
+		if insVec(i).full = '1' and insVec(i).ins.controlInfo.confirmedBranch = '1' then
+			targets(i) := bqGroup(i).ins.target;
+			confBr(i) := '1';
 		end if;
 	end loop;
 
@@ -204,7 +184,7 @@ begin
 end function;
 
 
-function getNewEffective(sendingToCommit: std_logic; robDataLiving, dataFromBQV: InstructionSlotArray; bqTargetData: InstructionSlot;
+function getNewEffective(sendingToCommit: std_logic; robDataLiving: InstructionSlotArray; bqTargetData: InstructionSlot;
 						 lastEffectiveIns, lateTargetIns: InstructionState; evtPhase2: std_logic)
 return InstructionSlot is
 	variable res: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -222,8 +202,7 @@ begin
     end loop;
    
     for i in 0 to PIPE_WIDTH-1 loop 
-        if robDataLiving(i).full = '1' and --dataFromBQV(i).full = '1' and dataFromBQV(i).ins.controlInfo.confirmedBranch = '1' then
-                                           robDataLiving(i).ins.controlInfo.confirmedBranch = '1' then 
+        if robDataLiving(i).full = '1' and robDataLiving(i).ins.controlInfo.confirmedBranch = '1' then 
             anyConfirmed := true;
         end if;
     end loop;
