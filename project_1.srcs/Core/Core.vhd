@@ -12,8 +12,9 @@ use work.CoreConfig.all;
 use work.InstructionState.all;
 
 use work.PipelineGeneral.all;
+use work.ForwardingNetwork.all;
 
-use work.Arith.all;
+--use work.Arith.all;
 
 entity Core is
     generic(
