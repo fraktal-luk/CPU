@@ -60,7 +60,9 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
     or_i, or_r,
     xor_i, xor_r,
     
-    add_i, add_r,
+    add_i,
+    add_h,
+     add_r,
            sub_r,
     
     shl_i, shl_r, -- direction defined by shift value, not opcode 

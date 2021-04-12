@@ -46,7 +46,7 @@ ARCHITECTURE Behavior OF CoreTB IS
         signal emulReady, emulPrepare, emulRunning: std_logic := '0';
     
     
-    constant EMULATION: boolean := false;
+    constant EMULATION: boolean := true;
     constant LOG_EMULATION_TRACE: boolean := true;
     constant CORE_SIMULATION: boolean := true;
     
@@ -384,6 +384,10 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal outStartOffsets, outEndOffsets: IntArray(0 to 999);
 
     signal linkOffsets: IntArray(0 to 100);
+    
+    
+    signal insDef: work.InstructionSet.InstructionDefinition;
+    signal defTable: work.InstructionSet.GeneralTable := work.InstructionSet.buildGeneralTable;
 BEGIN
    okFlag <= bool2std(opFlags = "001");
    errorFlag <= bool2std(opFlags = "100");

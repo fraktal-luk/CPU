@@ -173,7 +173,7 @@ constant MainTable: OpcodeTable0 := (
     
     
     16 => (addI, intAdd, intImm16, add_i),
-    17 => (addH, intAdd, intImm16, undef),
+    17 => (addH, intAdd, intImm16, add_h),
     
     others => (none, none, none, undef)
 );
@@ -187,18 +187,18 @@ constant TableIntAlu: OpcodeTable1 := (
 );
 
 constant TableIntMem: OpcodeTable1 := (
-    0 => (intLoadW, intLoadW, intImm10, undef),
+    0 => (intLoadW, intLoadW, intImm10, ldi_i),
 
-    32 => (intStoreW, intStoreW, intStore10, undef),
+    32 => (intStoreW, intStoreW, intStore10, sti_i),
     
     others => (none, none, none, undef)
 );
 
 
 constant TableFloatMem: OpcodeTable1 := (
-    0 => (floatLoadW, floatLoadW, floatLoad10, undef),
+    0 => (floatLoadW, floatLoadW, floatLoad10, ldf_i),
 
-    32 => (floatStoreW, floatStoreW, floatStore10, undef),
+    32 => (floatStoreW, floatStoreW, floatStore10, stf_i),
     
     others => (none, none, none, undef)
 );
@@ -291,7 +291,7 @@ constant Tables2: TableArray1 := (
 -- 
 -- 
 
-
+function findEncoding(mnem: ProcMnemonic) return InstructionDefinition;
 
 end InstructionSet;
 
@@ -331,6 +331,11 @@ function makeRow(i, j, k: integer) return InstructionDefinition is
     variable op: Operation;
     variable fmt: Format;
 begin
+    report "Row: ";
+        report integer'image(i);
+        report integer'image(j);
+        report integer'image(k);
+
     if i /= -1 then
         op0 := MainTable(i).name;
         fmt := MainTable(i).fmt;
@@ -343,7 +348,7 @@ begin
             
             if k /= -1 then
                 op2 := Tables2(op1)(k).name;
-                op := Tables2(op1)(j).op; 
+                op := Tables2(op1)(k).op; 
             end if;
         end if;
     end if;
@@ -357,13 +362,18 @@ function buildGeneralTable return GeneralTable is
     variable tab1: OpcodeTable1;
     variable tab2: OpcodeTable2;
     variable res: GeneralTable;
+    variable found: boolean := false;
 begin
+            report "Build table";
+        
     -- Search in main table
     for i in 0 to 63 loop
+        --found := false;
         if MainTable(i).op /= none then
             -- Add this to the table
             res(MainTable(i).mnem) := makeRow(i, -1, -1);
         else
+            --found := false;
             -- Enter level 1 table 
             tab1 := Tables1(MainTable(i).name);
                   
@@ -371,17 +381,23 @@ begin
                 if tab1(j).op /= none then
                     -- Add to table
                     res(tab1(j).mnem) := makeRow(i, j, -1);
+                    --exit;
                 else
                     -- Enter level 2 table
-                    tab2 := Tables2(tab1(i).name);
+                    tab2 := Tables2(tab1(j).name);
                 
                     for k in 0 to 31 loop
                         if tab2(k).op /= none then
                             -- Add to table
                             res(tab2(k).mnem) := makeRow(i, j, k);
+                            --found := true;
+                            --exit;
                         end if;
-                        
                     end loop;
+                    
+--                    if found then
+--                        exit;
+--                    end if;
                 end if;
             end loop;
         end if;
@@ -390,5 +406,9 @@ begin
     return res;
 end function;
 
+function findEncoding(mnem: ProcMnemonic) return InstructionDefinition is
+begin
+    return TheTable(mnem);    
+end function;
 
 end InstructionSet;
