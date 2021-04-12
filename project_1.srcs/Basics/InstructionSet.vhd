@@ -159,8 +159,8 @@ constant EmptyTable2: OpcodeTable2 := (others => (none, none, undef));
 constant MainTable: OpcodeTable0 := (
     0 => (intAlu, none, none, undef), -- TableIntAlu
     
-    1 => (intMem, none, none, undef), -- TableIntMem
-    2 => (floatMem, none, none, undef), -- TableFloatMem
+    2 => (intMem, none, none, undef), -- TableIntMem
+    3 => (floatMem, none, none, undef), -- TableFloatMem
     
     4 => (sysMem, none, none, undef),  -- TableSysMem
     

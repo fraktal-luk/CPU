@@ -10,7 +10,7 @@ package CoreConfig is
 --function checkSynthesis return boolean;
 
 constant CLEAR_DEBUG_INFO: boolean := true;
-constant VIEW_ON: boolean := false;
+constant VIEW_ON: boolean := true;
 
    constant DEBUG_LOG_COMMITTED: boolean := true;
 

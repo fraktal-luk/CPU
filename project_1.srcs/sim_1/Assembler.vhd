@@ -43,31 +43,23 @@ type LabelArray is array(integer range <>) of string(1 to MAX_LABEL_SIZE);
 constant EMPTY_LABEL_ARRAY: LabelArray(0 to 0) := (others => (others => ' '));
 
 
-
 -- Structure for import or export of label: name and where the source or required replacement is
 type Xref is record
     name: line;
     address: integer;
 end record;
 
---constant DEFAULT_XREF: Xref := (null, -1); -- Illegal bc constant can't have pointers
 
 type XrefArray is array(integer range <>) of Xref;
 
 procedure printXrefArray(xa: XrefArray);
 
-
-    function parseInstructionString(str: string) return GroupBuffer; -- TEMP!
-
+function parseInstructionString(str: string) return GroupBuffer; -- TEMP!
 
 function readSourceFile(name: string) return ProgramBuffer;
 
 function processProgram(p: ProgramBuffer) return WordArray;
---procedure processProgramWithExports(p: in ProgramBuffer; machineCode: out WordArray; outLabels, outExports: out LabelArray; outStartOffsets, outEndOffsets: out IntArray);
-
---procedure processProgramNew(p: in ProgramBuffer; machineCode: out WordArray; outLabels, outExports: out LabelArray; outStartOffsets, outEndOffsets: out IntArray);
 procedure processProgramNew2(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray);
-
 
 type OpcodeArray is array(0 to 63) of ProcOpcode;
 type OpcontArray is array(0 to 63) of ProcOpcont;
@@ -141,9 +133,7 @@ constant OPCONT_TABLE_FP: OpcontArray := (
     others => undef 
 );
 
-
 function asm(str: string) return Word;
-
 
 function disasmWithAddress(a: natural; w: Word) return string;
 function disasmWord(w: Word) return string;
@@ -154,8 +144,8 @@ function matchXrefs(imp, exp: XrefArray) return IntArray;
 
 function fillXrefs(code: WordArray; imports: XrefArray; offsets: IntArray; imgStart, libStart: integer) return WordArray;
 
-    procedure stringAssign(signal s: out string; sIn: string);
-    procedure stringFromLine(s: out string; variable ln: in line);
+procedure stringAssign(signal s: out string; sIn: string);
+procedure stringFromLine(s: out string; variable ln: in line);
 
 end Assembler;
 
@@ -163,25 +153,25 @@ end Assembler;
 
 package body Assembler is
 
-    procedure stringAssign(signal s: out string; sIn: string) is
-        constant nOut: natural := s'length;
-        variable nIn: natural := sIn'length;
-    begin
-        if nIn > nOut then
-            nIn := nOut;
-        end if;
-        
-        s <= (others => ' ');
-        s(1 to nIn) <= sIn(1 to nIn);
-    end procedure;
+procedure stringAssign(signal s: out string; sIn: string) is
+    constant nOut: natural := s'length;
+    variable nIn: natural := sIn'length;
+begin
+    if nIn > nOut then
+        nIn := nOut;
+    end if;
+    
+    s <= (others => ' ');
+    s(1 to nIn) <= sIn(1 to nIn);
+end procedure;
 
 
-    -- Differs from simple ln.all in that it's written to a string of predefined length
-    procedure stringFromLine(s: out string; variable ln: in line) is
-    begin
-        s := (others => cr);
-        s(1 to ln.all'length) := ln.all;        
-    end procedure; 
+-- Differs from simple ln.all in that it's written to a string of predefined length
+procedure stringFromLine(s: out string; variable ln: in line) is
+begin
+    s := (others => cr);
+    s(1 to ln.all'length) := ln.all;        
+end procedure; 
 
 
 procedure printXrefArray(xa: XrefArray) is
@@ -192,11 +182,9 @@ begin
         if xa(i).name = null then
             return;
         end if;
-        --report xa(i).name.all & ": " & natural'image(xa(i).address);
         report xa(i).name.all; report natural'image(xa(i).address);
     end loop;
 end procedure;
-
 
 
 -- TODO: change name to something true (isExtendedAlphanum?)
@@ -244,7 +232,6 @@ begin
 end function;
 
 
-
 function readSourceFile(name: string) return ProgramBuffer is
     file src: text open read_mode is name;
     variable ln: line;
@@ -286,7 +273,6 @@ begin
 end function;
 
 
-
 function matches(a, b: string) return boolean is
     variable aLen, bLen: integer := 0;
 begin
@@ -317,8 +303,6 @@ begin
     return -1;
 end function;
 
-
-
 function TMP_str2int(s: string) return integer is
     constant LEN: natural := s'length;
     variable str0: string(1 to LEN) := s;
@@ -331,45 +315,11 @@ begin
     return integer'value(str0);
 end function;
 
-
---function parseInteger(str: string) return integer is
---    variable res, first, last: integer := -1;
---    variable prefix, number: boolean := true;
---begin
---    -- Find start and end of digits
---    for i in str'range loop
---        if str(i) >= '0' and str(i) <= '9' then
---            if prefix then
---                -- end of prefix
---                prefix := false;
---                first := i;
---            else
---                --prefix := false;
---            end if;
---        elsif prefix then
---            null;
---        else -- Not a digit and not in prefix
---            last := i-1;
---            exit;
---        end if;
-        
---    end loop;
-    
---    res := integer'value(str(first to last));
-    
---    return res;
---end function;
-
-
 function parseArg(s: string) return integer is
     variable x: integer := -1;
 begin
     if s(1) = '$' or s(1) = '@' then
-        -- Label!
---        x := 4*(findLabel(ar(i), labels) - num); -- branch offset
---        if not fillLabels then
---            undefOffset := true;
---        end if;
+    
     elsif s(1) = 'r' and s(2) >= '0' and s(2) <= '9' then
         -- register
         x := TMP_str2int(s(2 to s'length));
@@ -599,6 +549,60 @@ begin
 end function;
 
 
+-- TODO: make it dependent on addresses, not instruction and labels indices
+function fillOffset(w: Word; k: natural; import: string; labels, imports: LabelArray) return Word is
+    variable res: Word := w;
+    variable numL, numI, offset: integer := -1;
+    variable offsetWord: Word := (others => 'U'); 
+begin
+    numL := (findLabel(import, labels)); -- branch offset
+    if numL /= -1 then
+        offset := 4*(numL - k);
+    else 
+        numI := findLabel(import, imports);
+        if numI /= -1 then
+            offset := 4*(numI - k);
+        else
+            report "Using unknown label" severity error;
+            return res; 
+        end if;
+    end if;
+    
+    offsetWord := i2slv(offset, 32);
+    for i in res'range loop
+        if res(i) = 'U' then
+            res(i) := offsetWord(i);
+        end if;
+    end loop;
+    return res;
+end function;
+
+
+function fillOffsetConst(w: Word; offset: integer) return Word is
+    variable res: Word := w;
+    variable offsetWord: Word := (others => 'U'); 
+begin 
+    offsetWord := i2slv(offset, 32);
+    for i in res'range loop
+        if res(i) = 'U' then
+            res(i) := offsetWord(i);
+        end if;
+    end loop;
+    return res;
+end function;
+
+
+function tmpStrip(s: string) return string is
+begin
+    for i in s'range loop
+        if s(i) = ' ' or s(i) = ht or s(i) = cr then
+            return s(1 to i-1);
+        end if;
+    end loop;
+    return s;
+end function;
+
+
 
 function processProgram(p: ProgramBuffer) return WordArray is
     variable insIndex: integer := 0; -- Actual number of instruction
@@ -632,118 +636,6 @@ begin
 end function;
 
 
--- TODO: make it dependent on addresses, not instruction and labels indices
-function fillOffset(w: Word; k: natural; import: string; labels, imports: LabelArray) return Word is
-    variable res: Word := w;
-    variable numL, numI, offset: integer := -1;
-    variable offsetWord: Word := (others => 'U'); 
-begin
-    numL := (findLabel(import, labels)); -- branch offset
-    if numL /= -1 then
-        offset := 4*(numL - k);
-    else 
-        numI := findLabel(import, imports);
-        if numI /= -1 then
-            offset := 4*(numI - k);
-        else
-            report "Using unknown label" severity error;
-            return res; 
-        end if;
-    end if;
-    
-    offsetWord := i2slv(offset, 32);
-    for i in res'range loop
-        if res(i) = 'U' then
-            res(i) := offsetWord(i);
-        end if;
-    end loop;
-    return res;
-end function;
-
-
-function fillOffsetConst(w: Word; offset: integer) return Word is
-    variable res: Word := w;
-    variable offsetWord: Word := (others => 'U'); 
-begin
-    
-    offsetWord := i2slv(offset, 32);
-    for i in res'range loop
-        if res(i) = 'U' then
-            res(i) := offsetWord(i);
-        end if;
-    end loop;
-    return res;
-end function;
-
-
---procedure processProgramNew(p: in ProgramBuffer; machineCode: out WordArray; outLabels, outExports: out LabelArray; outStartOffsets, outEndOffsets: out IntArray) is
---    variable insIndex, procIndex: integer := 0; -- Actual number of instruction
---    variable labels, exports: LabelArray(0 to p'length-1) := (others => (others => cr));
---    variable startOffsets, endOffsets: IntArray(0 to p'length-1) := (others => -1);
---    variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
---    variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext2, 0, 0, error, 0, 0));
---    variable tmpStr: string(1 to 10) :=(others => ' ');
---    variable tmpImport: string(1 to 20) := (others => ' ');
---    variable tmpHasImport: boolean := false;
---begin
---    --        return;
-
---    for i in 0 to p'length-1 loop
---        if p(i)(0)(1) = '@' then -- Keyword
---            tmpStr(1 to  p(i)(0)'length-1) := p(i)(0)(2 to p(i)(0)'length);
---            -- TODO
---            -- when proc
---            if matches(tmpStr, "proc") then
---                -- add name to labels
---                -- add name to export
---                -- add insIndex to offsets
---                labels(insIndex)(1 to 10) := p(i)(1);
---                exports(insIndex)(1 to 10) := p(i)(1);
---                startOffsets(procIndex) := insIndex; 
---                --procIndex := procIndex + 1;
---            -- when end
---            elsif matches(tmpStr, "end") then
---                -- ignore
---                -- set proc end (if such action needed and defined)
---                endOffsets(procIndex) := insIndex;
---                procIndex := procIndex + 1;
---            end if;
---        elsif p(i)(0)(1) = '$' then -- label
---           labels(insIndex)(1 to 10) := p(i)(0);            
---        elsif p(i)(0)(1) = cr then -- the line is empty
---           null;
---        else -- instruction
---           pSqueezed(insIndex) := p(i);
---           insIndex := insIndex + 1;  
---        end if;
-        
---    end loop;
-    
---    for i in 0 to p'length-1 loop
---        processInstructionNew(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, false, commands(i), tmpHasImport, tmpImport);
---    end loop; 
-
---        machineCode := commands;
-    
---        outLabels := labels;
---        outExports := exports;
---        outStartOffsets := startOffsets;
---        outEndOffsets := endOffsets;
---end procedure;
-
-
-
-function tmpStrip(s: string) return string is
-begin
-    for i in s'range loop
-        if s(i) = ' ' or s(i) = ht or s(i) = cr then
-            return s(1 to i-1);
-        end if;
-    end loop;
-    return s;
-end function;
-
-
 procedure processProgramNew2(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray) is
     variable insIndex, procIndex: integer := 0; -- Actual number of instruction
     variable labels, exports: LabelArray(0 to p'length-1) := (others => (others => cr));
@@ -756,8 +648,6 @@ procedure processProgramNew2(p: in ProgramBuffer; machineCode: out WordArray; im
     
     variable ne, ni: natural := 0;
 begin
-    --        return;
-
     for i in 0 to p'length-1 loop
         if p(i)(0)(1) = '@' then -- Keyword
             tmpStr(1 to  p(i)(0)'length-1) := p(i)(0)(2 to p(i)(0)'length);
@@ -770,10 +660,7 @@ begin
                 labels(insIndex)(1 to 10) := p(i)(1);
                 exports(insIndex)(2 to 11) := p(i)(1);
                 exports(insIndex)(1) := '$';
-                startOffsets(procIndex) := insIndex; 
-                --procIndex := procIndex + 1;
-            -- when end
-                
+                startOffsets(procIndex) := insIndex;
                 outExports(ne) := (new string'('$' & tmpStrip(p(i)(1))), 4*insIndex);
                 ne := ne + 1;
             elsif matches(tmpStr, "end") then
@@ -795,10 +682,6 @@ begin
     
     for i in 0 to p'length-1 loop
         processInstructionNew(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true, commands(i), tmpHasImport, tmpImport);
-        
-        --    report "iter: " & integer'image(i);
-        --    report boolean'image(tmpHasImport);
-        
         if tmpHasImport then
             commands(i) := fillOffset(commands(i), i, tmpImport, labels, EMPTY_LABEL_ARRAY);
             imports(ni) := (new string'(tmpStrip(tmpImport)), 4*i);
@@ -806,12 +689,7 @@ begin
         end if;
     end loop; 
 
-        machineCode := commands;
-    
-        --outLabels := labels;
-   --     outExports := exports;
-        --outStartOffsets := startOffsets;
-        --outEndOffsets := endOffsets;
+    machineCode := commands;
 end procedure;
 
 
@@ -1124,7 +1002,6 @@ begin
 end procedure;
 
 
-
 procedure assemblePrograms is
 begin
     -- run first pass: assemble with possible missing labels
@@ -1134,7 +1011,6 @@ begin
     -- run second pass: fill missing addresses using export list
 
 end procedure;
-
 
 
 function matchXrefs(imp, exp: XrefArray) return IntArray is
@@ -1150,22 +1026,9 @@ begin
             
             l0 := imp(i).name;
             l1 := exp(j).name;
---            stringFromLine(str0, l0);
---            stringFromLine(str1, l1);
-
-
-                    
-
---                    report "matching: " & integer'image(i) & " to " & integer'image(j); 
---                        report l0.all;
---                        report "";
---                        report l1.all;
---                        report "";
 
             if matches(l0.all, l1.all) then
-
-                res(i) := --j;
-                          exp(j).address;
+                res(i) := exp(j).address;
                 exit;
             end if;
         end loop;
@@ -1177,8 +1040,6 @@ function fillXrefs(code: WordArray; imports: XrefArray; offsets: IntArray; imgSt
     variable res: WordArray(code'range) := code;
     variable currentPos: integer := -1;
 begin
-          --      report "Fil xrefs";
-
     for i in imports'range loop
         if imports(i).name = null then
             return res;
@@ -1186,13 +1047,9 @@ begin
     
         currentPos := imports(i).address/4;
         res(currentPos) := fillOffsetConst(res(currentPos), offsets(i) - imports(i).address + libStart - imgStart);
-        --    report ">>>>> " & imports(i).name.all; report integer'image( imports(i).address); report integer'image( offsets(i)); 
-        --    report integer'image( libStart - imgStart); 
     end loop;
     
     return res;
 end function;
-
-
 
 end Assembler;
