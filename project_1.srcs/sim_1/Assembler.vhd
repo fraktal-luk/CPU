@@ -58,8 +58,7 @@ function parseInstructionString(str: string) return GroupBuffer; -- TEMP!
 
 function readSourceFile(name: string) return ProgramBuffer;
 
-function processProgram(p: ProgramBuffer) return WordArray;
-procedure processProgramNew2(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray);
+procedure processProgramNew(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray);
 
 type OpcodeArray is array(0 to 63) of ProcOpcode;
 type OpcontArray is array(0 to 63) of ProcOpcont;
@@ -141,7 +140,6 @@ function disasmWord(w: Word) return string;
 procedure disasmToFile(name: string; arr: WordArray);
 
 function matchXrefs(imp, exp: XrefArray) return IntArray;
-
 function fillXrefs(code: WordArray; imports: XrefArray; offsets: IntArray; imgStart, libStart: integer) return WordArray;
 
 procedure stringAssign(signal s: out string; sIn: string);
@@ -463,42 +461,6 @@ begin
 end function;
 
 
-function processInstruction(ar: GroupBuffer; num: integer; labels, imports: LabelArray; fillLabels: boolean) return word is
-    variable mnem: ProcMnemonic;
-    variable res: word := (others => '0');
-    variable vals: IntArray(0 to ar'length-1) := (others => -1);
-    variable x: integer := 0;
-    variable undefOffset: boolean := false;
-begin
-    -- First elem must be opcode. Find it in opcode list
-    mnem := undef;
-    for m in ProcMnemonic loop
-        if matches(ar(0), ProcMnemonic'image(m)) then
-            mnem := m;
-        end if;
-    end loop;
-    
-    -- Convert other arg to numbers
-    for i in 1 to ar'length-1 loop
-        undefOffset := false;
-        if ar(i)(1) = '$' then
-            -- Label!
-            x := 4*(findLabel(ar(i), labels) - num); -- branch offset
-            if not fillLabels then
-                undefOffset := true;
-            end if;
-         else
-            x := parseArg(ar(i));            
-         end if;
-        
-        vals(i) := x;
-    end loop;
-    
-    res := makeMachineWord(mnem, vals, ar(1), undefOffset);
-    return res;
-end function;
-
-
 procedure processInstructionNew(ar: GroupBuffer; num: integer; labels, imports: LabelArray; fillLabels: boolean; command: out Word; hasImport: out boolean; import: out string) is
     variable mnem: ProcMnemonic;
     variable undefOffset: boolean := false; 
@@ -533,8 +495,10 @@ end procedure;
 
 function processSingleInstruction(gb: GroupBuffer) return Word is
     variable res: Word;
+    variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
+    variable tmpHasImport: boolean := false;    
 begin
-    res := processInstruction(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true);
+    processInstructionNew(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true,  res, tmpHasImport, tmpImport);    
     return res;
 end function;
 
@@ -603,40 +567,7 @@ begin
 end function;
 
 
-
-function processProgram(p: ProgramBuffer) return WordArray is
-    variable insIndex: integer := 0; -- Actual number of instruction
-    variable labels: LabelArray(0 to p'length-1) := (others => (others => cr));
-    variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
-    variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext2, 0, 0, error, 0, 0));
-begin
-    for i in 0 to p'length-1 loop
-    
-        if p(i)(0)(1) = '$' then -- label
-           labels(insIndex) := p(i)(0);            
-        elsif p(i)(0)(1) = cr then -- the line is empty
-           null;
-        else -- instruction
-           pSqueezed(insIndex) := p(i);
-           insIndex := insIndex + 1;  
-        end if;
-    end loop;
-    
-    for i in 0 to p'length-1 loop
-        if pSqueezed(i)(0)(1) = '$' then -- label
-           null;
-        elsif pSqueezed(i)(0)(1) = cr then -- the line is empty
-           null;
-        else -- instruction        
-           commands(i) := processInstruction(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true);
-        end if;
-    end loop;    
-    
-    return commands;
-end function;
-
-
-procedure processProgramNew2(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray) is
+procedure processProgramNew(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray) is
     variable insIndex, procIndex: integer := 0; -- Actual number of instruction
     variable labels, exports: LabelArray(0 to p'length-1) := (others => (others => cr));
     variable startOffsets, endOffsets: IntArray(0 to p'length-1) := (others => -1);

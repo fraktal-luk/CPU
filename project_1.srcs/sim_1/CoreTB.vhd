@@ -37,13 +37,13 @@ END CoreTB;
  
 ARCHITECTURE Behavior OF CoreTB IS
 
-    signal currentTest, currentSuite: string(1 to 30);    
+    signal currentSuite, currentTest: string(1 to 30);    
     signal testToDo, testDone, testFail: std_logic := '0';
     
     
-        signal simDone, emulDone: std_logic := '1';
+    signal simDone, emulDone: std_logic := '1';
         
-        signal emulReady, emulPrepare, emulRunning: std_logic := '0';
+    signal emulReady: std_logic := '0';
     
     
     constant EMULATION: boolean := true;
@@ -87,33 +87,8 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal reset : std_logic := '0';
     signal en : std_logic := '0';
     
-    
-    -- CPU ports
-    -- Inputs
-    signal ivalid : std_logic := '0';
-    signal iin : WordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-    signal intallow, intack: std_logic := '0';
-    signal int0 : std_logic := '0';
-    signal int1 : std_logic := '0';
-    signal int0a, int0b: std_logic := '0';
-    signal iaux : std_logic_vector(31 downto 0) := (others => '0');
 
-    signal dread: std_logic;
-	signal dwrite: std_logic;
-    signal dadr : Mword;
-	signal doutadr: Mword;
-	signal dvalid: std_logic;
-    signal din :  Mword;
-    signal dout : Mword;
-
-	signal filladr: Mword := (others => '0');
-	signal fillready: std_logic := '0';
-
- 	--Outputs
-    signal iadrvalid : std_logic;
-    signal iadr : std_logic_vector(31 downto 0);
-    signal oaux : std_logic_vector(31 downto 0);
-	-- end CP ports
+    signal int0a, int0b, int1sig: std_logic := '0';
 
     signal resetDataMem: std_logic := '0';
     
@@ -123,15 +98,11 @@ ARCHITECTURE Behavior OF CoreTB IS
     constant TIME_STEP: time := 1 ns; -- for 1 instruction in emulation
 	
     signal testProgram: WordArray(0 to 2047);
-
     
     alias programMemory is testProgram;
     
-    signal dataMemory: ByteArray(0 to 4095);
-    
-    alias cpuEndFlag is oaux(0);
-    alias cpuErrorFlag is oaux(1);
-
+    signal cpuEndFlag: std_logic := '0';
+    signal cpuErrorFlag: std_logic := '0';
 
     type Instruction is record
         address: Mword;
@@ -139,10 +110,6 @@ ARCHITECTURE Behavior OF CoreTB IS
         disasm: string(1 to 51);
         internalOp: InternalOperation;
     end record;
-    
-    signal currentInstruction: Instruction;
-    
-    signal cpuState: CoreState := INIT_CORE_STATE;
         
     signal opFlags: std_logic_vector(0 to 2);
     signal okFlag, errorFlag: std_logic := '0';
@@ -203,17 +170,16 @@ ARCHITECTURE Behavior OF CoreTB IS
             end if;            
         end loop;
     end procedure;
-        
-        
-        procedure cycle(signal clk: in std_logic) is
-        begin
-            wait until rising_edge(clk);
-        end procedure;
+              
+    procedure cycle(signal clk: in std_logic) is
+    begin
+        wait until rising_edge(clk);
+    end procedure;
 
-        procedure cycle is
-        begin
-            wait until rising_edge(clk);
-        end procedure;
+    procedure cycle is
+    begin
+        wait until rising_edge(clk);
+    end procedure;
 
         
     procedure checkTestResult(variable testName: in line; signal testDone, testFail: out std_logic) is
@@ -294,7 +260,6 @@ ARCHITECTURE Behavior OF CoreTB IS
         report "Test to run: " & name;
     end procedure;
     
-
     procedure startTest(signal testToDo, int0b: out std_logic) is
     begin
       cycle(clk);
@@ -319,18 +284,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     begin
         assert isNonzero(address(1 downto 0)) = '0' report "Unaligned instruction address!" severity error;
     
-        programMem(startAdr to startAdr + LEN - 1) <= insSeq;
-        
-    end procedure;
-    
-    procedure loadProgramFromFile(filename: in string; signal testProgram: out WordArray) is        
-	    constant prog: ProgramBuffer := readSourceFile(filename);
-        variable machineCode: WordArray(0 to prog'length-1);
-    begin
-        machineCode := processProgram(prog); -- TODO: include common imports
-    
-        testProgram <= (others => (others => 'U'));
-        testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+        programMem(startAdr to startAdr + LEN - 1) <= insSeq;    
     end procedure;
 
     procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
@@ -338,20 +292,18 @@ ARCHITECTURE Behavior OF CoreTB IS
         variable machineCode: WordArray(0 to prog'length-1);
         variable imp, exp: XrefArray(0 to 100);
     begin
-        processProgramNew2(prog, machineCode, imp, exp);
+        processProgramNew(prog, machineCode, imp, exp);
         machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
     
         testProgram <= (others => (others => 'U'));
         testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
     end procedure;
 
-
     procedure setProgram(signal testProgram: inout WordArray; program: WordArray; offset: Mword) is
         constant offsetInt: natural := slv2u(offset)/4; 
     begin
         testProgram(offsetInt to offsetInt + program'length-1) <= program;
     end procedure;
-
 
     -- Differs from simple ln.all in that it's written to a string of predefined length
     procedure fillStringFromLine(signal s: out string; variable ln: in line) is
@@ -370,57 +322,15 @@ ARCHITECTURE Behavior OF CoreTB IS
         res := (cpuState.nextIP, insWordVar,  disasmWithAddress(slv2u(cpuState.nextIP), insWordVar), intOpVar); 
         return res;
     end function;
-    
-    
-    procedure loadCommonAsm(signal machineCode: out WordArray) is
-        variable prog: ProgramBuffer := readSourceFile("common_asm.txt");
-    begin
-        machineCode <= processProgram(prog);     
-    end procedure;
-    
-    signal commonCode, commonCode2: WordArray(0 to 999);
-      
-    signal outLabels, outExports: LabelArray(0 to 999);
-    signal outStartOffsets, outEndOffsets: IntArray(0 to 999);
 
-    signal linkOffsets: IntArray(0 to 100);
-    
-    
+    signal commonCode: WordArray(0 to 999);
+
+     
     signal insDef: work.InstructionSet.InstructionDefinition;
     signal defTable: work.InstructionSet.GeneralTable := work.InstructionSet.buildGeneralTable;
 BEGIN
    okFlag <= bool2std(opFlags = "001");
    errorFlag <= bool2std(opFlags = "100");
-
-   -- Instantiate the Unit Under Test (UUT)
-   uut: Core PORT MAP (
-      clk => clk,
-      reset => reset,
-      en => en,
-      iadrvalid => iadrvalid,
-      iadr => iadr,
-      ivalid => ivalid,
-      iin => iin,
-         
-      dread => dread,
-      dwrite => dwrite,
-      dadr => dadr,
-      doutadr => doutadr,
-      dvalid => dvalid,
-      din => din,
-      dout => dout,			 
-         
-      intallow => intallow,
-      intack => intack,
-      int0 => int0,
-      int1 => int1,
-         
-      filladr => filladr,
-      fillready => fillready,
-         
-      iaux => iaux,
-      oaux => oaux
-   );
 
    -- Clock process definitions
    clk_process: process
@@ -431,11 +341,8 @@ BEGIN
 		wait for clk_period/2;
    end process;
  	
-	reset <= '1' after 105 ns, '0' after 115 ns;
-	en <= '1' after 105 ns;
-	
-	int0 <= int0a or int0b;
-
+   reset <= '1' after 105 ns, '0' after 115 ns;
+   en <= '1' after 105 ns;
 	
    -- Stimulus process
    stim_proc: process
@@ -443,21 +350,16 @@ BEGIN
        file suiteFile: text open read_mode is "suite_names.txt";
        file testFile: text;
 
-       variable opResultVar: OperationResult;
-         
-       variable match: boolean := true;
+       variable machineCodeVar: WordArray(0 to 999);         
        variable currentInstructionVar: Instruction;
-        variable machineCodeVar, machineCodeVar2, machineCodeVar3: WordArray(0 to 999);
-        
-        variable outLabelsVar, outExportsVar: LabelArray(0 to 999);
-        variable outStartOffsetsVar, outEndOffsetsVar: IntArray(0 to 999);
-        
-        variable exp, imp: XrefArray(0 to 100);
-        variable exp2, imp2: XrefArray(0 to 100);
-        variable linkOffsetsVar: IntArray(0 to 100);
+       variable opResultVar: OperationResult;
+                
+       variable exp, imp: XrefArray(0 to 100);
+       
+       variable match: boolean := true;
    begin
-      processProgramNew2(readSourceFile("common_asm.txt"), machineCodeVar2, imp, exp);
-      commonCode <= machineCodeVar2;
+      processProgramNew(readSourceFile("common_asm.txt"), machineCodeVar, imp, exp);
+      commonCode <= machineCodeVar;
 	           
 	  wait for 110 ns;
 
@@ -482,25 +384,21 @@ BEGIN
                   next;
               end if;
 
-
               announceTest(currentTest, currentSuite, testName.all, suiteName.all);    
               loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);
 
+              -- Reset handler
+              testProgram(slv2u(RESET_BASE)/4) <= asm("ja -512");
+              
+              -- Call handler
+              testProgram(slv2u(CALL_BASE)/4) <= asm("sys send");
+              testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("ja 0");        
 
-                  -- Reset handler
-                  testProgram(slv2u(RESET_BASE)/4) <= asm("ja -512");
-                  
-                  -- Call handler
-                  testProgram(slv2u(CALL_BASE)/4) <= asm("sys send");
-                  testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("ja 0");        
-
-                  -- Common lib
-                  setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
+              -- Common lib
+              setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
 
               setForOneCycle(resetDataMem, clk);
-
               disasmToFile(testName.all & "_disasm.txt", testProgram);
-
 
               if CORE_SIMULATION then
                   startTest(testToDo, int0b);
@@ -517,10 +415,8 @@ BEGIN
               end loop;
           end loop;
           
-          report "All tests in suite done!";
-          
+          report "All tests in suite done!";          
           cycle;
-
       end loop;
         
       if EMULATION and LOG_EMULATION_TRACE and CORE_SIMULATION then -- TODO: scenario where emulation happens along with Core sim?
@@ -529,8 +425,7 @@ BEGIN
           assert match report "Traces are divergent!" severity error;
       end if;
       
-      report "All suites done!";
-        
+      report "All suites done!";        
       cycle;
       
       -----------------------------------------------
@@ -538,30 +433,27 @@ BEGIN
 
       -- Test error signal  
       announceTest(currentTest, currentSuite, "err signal", "");      
-
-          
-          testProgram(0) <= asm("sys error");
-          testProgram(1) <= asm("ja 0");
+    
+      testProgram(0) <= asm("sys error");
+      testProgram(1) <= asm("ja 0");
 	  
-	      -- Common lib, unneeded here
-	      setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
+	  -- Common lib, unneeded here
+	  setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
 
-      setForOneCycle(resetDataMem, clk);              
-      
-      --cycle;
+      setForOneCycle(resetDataMem, clk);
       
       disasmToFile("error_disasm.txt", testProgram);
-      
 
       if CORE_SIMULATION then
           startTest(testToDo, int0b);  
           report "Waiting for completion...";
           checkErrorTestResult("check_error", testDone, testFail);  
       end if;
-                -- Wait for emulation to end 
-                while emulReady /= '1' loop           
-                    cycle;
-                end loop;
+      
+        -- Wait for emulation to end 
+        while emulReady /= '1' loop           
+            cycle;
+        end loop;
 
       cycle;
       
@@ -593,10 +485,11 @@ BEGIN
     
           checkTestResult("events", testDone, testFail);   
        end if;
-                -- Wait for emulation to end 
-                while emulReady /= '1' loop           
-                    cycle;
-                end loop;
+       
+        -- Wait for emulation to end 
+        while emulReady /= '1' loop           
+            cycle;
+        end loop;
       
       -------
       -------
@@ -633,14 +526,15 @@ BEGIN
           wait for 22 * 10 ns;
           cycle;
     
-          setForOneCycle(int1, clk);
+          setForOneCycle(int1sig, clk);
     
           checkTestResult("events2", testDone, testFail);  
       end if;
-                -- Wait for emulation to end 
-                  while emulReady /= '1' loop           
-                      cycle;
-                  end loop;      
+      
+      -- Wait for emulation to end 
+      while emulReady /= '1' loop           
+          cycle;
+      end loop;      
       
         
       report "All test runs have been completed successfully";
@@ -651,7 +545,9 @@ BEGIN
 
     
   TMP_EMULATION: block
-  
+      signal cpuState: CoreState := INIT_CORE_STATE;
+      signal dataMemory: ByteArray(0 to 4095);
+      signal currentInstruction: Instruction;      
   begin
         TMP_EMUL: process (clk)
             type EmulState is (ready, prepare, running);
@@ -667,8 +563,7 @@ BEGIN
                         if resetDataMem = '1' then
                             emulDone <= '0';
                             state := prepare;
-                            
-                            
+                          
                             currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
                               
                             opFlags <= (others => '0');
@@ -679,79 +574,134 @@ BEGIN
                     when prepare =>
                         if testToDo = '1' then
                             state := running;
-                            cnt := 0;
                         end if;
                         
                     when running =>
-                        if cnt = 100 then
-                            --state := ready;
-                        else
-                            cnt := cnt + 1;
-                        end if; 
-                           
-                             if EMULATION then    
-                                -- Now doing the actual test 
-                                if opFlags /= "100" and opFlags /= "001" then -- ERROR or SEND (completed)
-                                    currentInstructionVar := getInstruction(cpuState, programMemory);
-                                    currentInstruction <= currentInstructionVar;
-                                    performOp(cpuState, dataMemory, currentInstructionVar.internalOp, opFlags, opResultVar);
-                                    
-                                    if LOG_EMULATION_TRACE then
-                                        write(disasmText, disasmWithAddress(slv2u(cpuState.nextIP), currentInstructionVar.bits));
-                                        writeline(traceFile, disasmText);
-                                    end if;
-                                    
-                                    --wait for TIME_STEP;
-                                else
-                                    state := ready;
+                        if EMULATION then    
+                            -- Now doing the actual test 
+                            if opFlags /= "100" and opFlags /= "001" then -- ERROR or SEND (completed)
+                                currentInstructionVar := getInstruction(cpuState, programMemory);
+                                currentInstruction <= currentInstructionVar;
+                                performOp(cpuState, dataMemory, currentInstructionVar.internalOp, opFlags, opResultVar);
+                                
+                                if LOG_EMULATION_TRACE then
+                                    write(disasmText, disasmWithAddress(slv2u(cpuState.nextIP), currentInstructionVar.bits));
+                                    writeline(traceFile, disasmText);
                                 end if;
+                                
                             else
-                                    state := ready;
+                                state := ready;
                             end if;
+                        else
+                            state := ready;
+                        end if;
                                           
                     when others =>
                 end case;            
                 
-                emulReady <= bool2std(state = ready);
-                emulPrepare <= bool2std(state = prepare);
-                emulRunning <= bool2std(state = running);
-                
+                emulReady <= bool2std(state = ready);                
             end if;
         end process;
     end block;
-    
-
-	PROGRAM_MEM: process (clk)
-		variable baseIP: Mword := (others => '0');
-	begin
-		if rising_edge(clk) then							
-            -- CAREFUL! don't fetch if adr not valid, cause it may ovewrite previous, valid fetch block.
-            --				If fetch block is valid but cannot be sent further (pipe stall etc.),
-            --				it must remain in fetch buffer until it can be sent.
-            --				So we can't get new instruction bits when Fetch stalls, cause they'd destroy
-            --				stalled content in fetch buffer!
-            baseIP := iadr and i2slv(-PIPE_WIDTH*4, MWORD_SIZE); -- Clearing low bits
-            for i in 0 to PIPE_WIDTH-1 loop
-                iin(i) <= testProgram(slv2u(baseIP(12 downto 2)) + i); -- CAREFUL! 2 low bits unused (32b memory) 									
-            end loop;
-            
-            ivalid <= iadrvalid and not isNonzero(iadr(iadr'high downto 12));
-		end if;	
-	end process;	
 
 
-    DATA_MEM: block
-        signal memReadDone, memReadDonePrev, memWriteDone: std_logic := '0';
-        signal memReadValue, memReadValuePrev, memWriteAddress, memWriteValue: Mword := (others => '0');
-        signal dataMem: WordArray(0 to 255) := (others => (others => '0'));
-    begin
-        SYNCH: process (clk)
+
+    SIMULATION: block
         
+        -- CPU ports
+        -- Inputs
+        signal ivalid : std_logic := '0';
+        signal iin : WordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+        signal intallow, intack: std_logic := '0';
+        signal int0 : std_logic := '0';
+        signal int1 : std_logic := '0';
+        signal iaux : std_logic_vector(31 downto 0) := (others => '0');
+    
+        signal dread: std_logic;
+        signal dwrite: std_logic;
+        signal dadr : Mword;
+        signal doutadr: Mword;
+        signal dvalid: std_logic;
+        signal din :  Mword;
+        signal dout : Mword;
+    
+        signal filladr: Mword := (others => '0');
+        signal fillready: std_logic := '0';
+    
+         --Outputs
+        signal iadrvalid : std_logic;
+        signal iadr : std_logic_vector(31 downto 0);
+        signal oaux : std_logic_vector(31 downto 0);
+        -- end CP ports    
+    begin
+
+        int0 <= int0a or int0b;
+        int1 <= int1sig;
+
+        cpuEndFlag <= oaux(0);
+        cpuErrorFlag <= oaux(1);    
+    
+       -- Instantiate the Unit Under Test (UUT)
+       uut: Core PORT MAP (
+          clk => clk,
+          reset => reset,
+          en => en,
+          iadrvalid => iadrvalid,
+          iadr => iadr,
+          ivalid => ivalid,
+          iin => iin,
+             
+          dread => dread,
+          dwrite => dwrite,
+          dadr => dadr,
+          doutadr => doutadr,
+          dvalid => dvalid,
+          din => din,
+          dout => dout,			 
+             
+          intallow => intallow,
+          intack => intack,
+          int0 => int0,
+          int1 => int1,
+             
+          filladr => filladr,
+          fillready => fillready,
+             
+          iaux => iaux,
+          oaux => oaux
+       );    
+    
+        PROGRAM_MEM: process (clk)
+            variable baseIP: Mword := (others => '0');
         begin
-            if rising_edge(clk) then
-                if resetDataMem = '1' then
-                    dataMem <= (others => (others => '0'));
-                elsif en = '1' then			
+            if rising_edge(clk) then							
+                -- CAREFUL! don't fetch if adr not valid, cause it may ovewrite previous, valid fetch block.
+                --				If fetch block is valid but cannot be sent further (pipe stall etc.),
+                --				it must remain in fetch buffer until it can be sent.
+                --				So we can't get new instruction bits when Fetch stalls, cause they'd destroy
+                --				stalled content in fetch buffer!
+                baseIP := iadr and i2slv(-PIPE_WIDTH*4, MWORD_SIZE); -- Clearing low bits
+                for i in 0 to PIPE_WIDTH-1 loop
+                    iin(i) <= testProgram(slv2u(baseIP(12 downto 2)) + i); -- CAREFUL! 2 low bits unused (32b memory) 									
+                end loop;
+                
+                ivalid <= iadrvalid and not isNonzero(iadr(iadr'high downto 12));
+            end if;	
+        end process;	
+    
+    
+        DATA_MEM: block
+            signal memReadDone, memReadDonePrev, memWriteDone: std_logic := '0';
+            signal memReadValue, memReadValuePrev, memWriteAddress, memWriteValue: Mword := (others => '0');
+            signal dataMem: WordArray(0 to 255) := (others => (others => '0'));
+        begin
+            SYNCH: process (clk)
+            
+            begin
+                if rising_edge(clk) then
+                    if resetDataMem = '1' then
+                        dataMem <= (others => (others => '0'));
+                    elsif en = '1' then			
                     -- TODO: define effective address exact size
                 
                     -- Reading
@@ -767,12 +717,14 @@ BEGIN
                     if dwrite = '1' then
                         dataMem(slv2u(doutadr(MWORD_SIZE-1 downto 2))) <= dout; -- CAREFUL: pseudo-byte addressing		
                     end if;
-                    
-                end if;
-            end if;	
-        end process;
-    
-        din <= memReadValue;
-        dvalid <= memReadDone;
-	end block;
+                        
+                    end if;
+                end if;	
+            end process;
+        
+            din <= memReadValue;
+            dvalid <= memReadDone;
+        end block;
+        
+    end block;
 END;
