@@ -58,7 +58,7 @@ function parseInstructionString(str: string) return GroupBuffer; -- TEMP!
 
 function readSourceFile(name: string) return ProgramBuffer;
 
-procedure processProgramNew(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray);
+procedure processProgram(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray; constant USE_NEW: boolean);
 
 type OpcodeArray is array(0 to 63) of ProcOpcode;
 type OpcontArray is array(0 to 63) of ProcOpcont;
@@ -451,17 +451,105 @@ end function;
 
 
 function makeMachineWordNew(mnemonic: ProcMnemonic; vals: IntArray; strArg: string; undefOffset: boolean) return Word is
-    variable res: Word := (others => '0');
-    variable insDef: InstructionDefinition; 
+    variable res: Word := (others => 'X');
+    variable insDef: InstructionDefinition;
+    alias qa is res(25 downto 21); 
+    alias qb is res(20 downto 16); 
+    alias qc is res(9 downto 5); 
+    alias qd is res(4 downto 0);
+    alias imm16 is res(15 downto 0);
+    alias imm10 is res(9 downto 0);
+    constant TheTable: GeneralTable := buildGeneralTable;
 begin
-    insDef := findEncoding(mnemonic);
+    insDef := --findEncoding(mnemonic);
+              TheTable(mnemonic);
     
+    --    report ProcMnemonic'image(mnemonic);
+    --    report integer'image(insDef.i);
+    res(31 downto 26) := i2slv(insDef.i, 6);
+    res(15 downto 10) := i2slv(insDef.j, 6);
+    res(4 downto 0) := i2slv(insDef.k, 5);
+
+    -- Fill args
+    case insDef.fmt is
+        when noRegs =>
+            qa := (others => '0');
+            qb := (others => '0');
+            qc := (others => '0');
+            if insDef.k = -1 then
+                qd := (others => '0');
+            end if;            
+        when jumpLong =>
+            if undefOffset then
+                res(25 downto 0) := (others => 'U');
+            else
+                res(25 downto 0) := i2slv(vals(1), 26);
+            end if;
+        when jumpCond | jumpLink =>
+            qa := i2slv(vals(1), 5);
+            if undefOffset then
+                res(20 downto 0) := (others => 'U');
+            else            
+                res(20 downto 0) := i2slv(vals(2), 21);
+            end if;        
+        when intImm16 => 
+            qa := i2slv(vals(1), 5);
+            qb := i2slv(vals(2), 5);
+            imm16 := i2slv(vals(3), 16);
+        when intImm10 => 
+            qa := i2slv(vals(1), 5);
+            qb := i2slv(vals(2), 5);
+            imm10 := i2slv(vals(3), 10);
+        when intRR =>
+            qa := i2slv(vals(1), 5);
+            qb := i2slv(vals(2), 5);            
+            qc := i2slv(vals(3), 5);
+            if insDef.k = -1 then
+                qd := (others => '0');
+            end if;
+        
+        when intStore16 =>
+            qa := i2slv(vals(1), 5);
+            qb := i2slv(vals(2), 5);
+            imm16 := i2slv(vals(3), 16);        
+        when intStore10 =>
+            qa := i2slv(vals(1), 5);
+            qb := i2slv(vals(2), 5);
+            imm10 := i2slv(vals(3), 10);        
+        when floatLoad10 =>
+            qa := i2slv(vals(1), 5);
+            qb := i2slv(vals(2), 5);
+            imm10 := i2slv(vals(3), 10);
+        when floatLoad16 =>
+            qa := i2slv(vals(1), 5);
+            qb := i2slv(vals(2), 5);
+            imm16 := i2slv(vals(3), 16);
+        when floatStore10 =>
+            qa := i2slv(vals(1), 5);
+            qb := i2slv(vals(2), 5);
+            imm10 := i2slv(vals(3), 10); 
+        when floatStore16 =>
+            qa := i2slv(vals(1), 5);
+            qb := i2slv(vals(2), 5);
+            imm16 := i2slv(vals(3), 16);        
+        when sysLoad =>
+            qa := i2slv(vals(1), 5);
+            qb := i2slv(0, 5);
+            imm10 := i2slv(vals(3), 10);        
+        when sysStore =>      
+            qa := i2slv(vals(1), 5);
+            qb := i2slv(0, 5);
+            imm10 := i2slv(vals(3), 10);
+        when others =>
+            --report "Invalid ins format!" severity failure;
+    end case;
     
     return res;
 end function;
 
 
-procedure processInstructionNew(ar: GroupBuffer; num: integer; labels, imports: LabelArray; fillLabels: boolean; command: out Word; hasImport: out boolean; import: out string) is
+procedure processInstruction(ar: GroupBuffer; num: integer; labels, imports: LabelArray; fillLabels: boolean; command: out Word; hasImport: out boolean; import: out string;
+                                constant USE_NEW: boolean) is
     variable mnem: ProcMnemonic;
     variable undefOffset: boolean := false; 
     variable vals: IntArray(0 to ar'length-1) := (others => -1);
@@ -488,28 +576,34 @@ begin
         end if;
     end loop;
     
-    command := makeMachineWordNew(mnem, vals, ar(1), undefOffset);
-    command := makeMachineWord(mnem, vals, ar(1), undefOffset);
+    if USE_NEW then    
+        command := makeMachineWordNew(mnem, vals, ar(1), undefOffset);
+    else
+        command := makeMachineWord(mnem, vals, ar(1), undefOffset);
+    end if;
 end procedure;
 
 
-function processSingleInstruction(gb: GroupBuffer) return Word is
-    variable res: Word;
-    variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
-    variable tmpHasImport: boolean := false;    
-begin
-    processInstructionNew(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true,  res, tmpHasImport, tmpImport);    
-    return res;
-end function;
+--function processSingleInstruction(gb: GroupBuffer) return Word is
+--    variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
+--    variable tmpHasImport: boolean := false;    
+--begin
+--    --processInstructionNew(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true,  res, tmpHasImport, tmpImport);    
+--    --return res;
+--end function;
 
 function asm(str: string) return Word is
     constant LEN: natural := str'length;
     variable str0: string(1 to LEN+1) := (others => cr);    
     variable gb: GroupBuffer;
+    variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
+    variable tmpHasImport: boolean := false;
+    variable res: Word;      
 begin
     str0(1 to LEN) := str;
     gb := parseInstructionString(str0);
-    return processSingleInstruction(gb);
+    processInstruction(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true,  res, tmpHasImport, tmpImport, false);        
+    return res;
 end function;
 
 
@@ -567,7 +661,7 @@ begin
 end function;
 
 
-procedure processProgramNew(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray) is
+procedure processProgram(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray; constant USE_NEW: boolean) is
     variable insIndex, procIndex: integer := 0; -- Actual number of instruction
     variable labels, exports: LabelArray(0 to p'length-1) := (others => (others => cr));
     variable startOffsets, endOffsets: IntArray(0 to p'length-1) := (others => -1);
@@ -612,7 +706,7 @@ begin
     end loop;
     
     for i in 0 to p'length-1 loop
-        processInstructionNew(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true, commands(i), tmpHasImport, tmpImport);
+        processInstruction(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true, commands(i), tmpHasImport, tmpImport, USE_NEW);
         if tmpHasImport then
             commands(i) := fillOffset(commands(i), i, tmpImport, labels, EMPTY_LABEL_ARRAY);
             imports(ni) := (new string'(tmpStrip(tmpImport)), 4*i);

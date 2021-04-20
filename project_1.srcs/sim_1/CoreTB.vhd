@@ -50,37 +50,6 @@ ARCHITECTURE Behavior OF CoreTB IS
     constant LOG_EMULATION_TRACE: boolean := true;
     constant CORE_SIMULATION: boolean := true;
     
-    -- Component Declaration for the Unit Under Test (UUT)
-
-    COMPONENT Core -- FrontPipe0
-    PORT(
-        clk : IN  std_logic;
-        reset : IN  std_logic;
-        en : IN  std_logic;
-        iadrvalid : OUT  std_logic;
-        iadr : OUT  std_logic_vector(31 downto 0);
-        ivalid : IN  std_logic;
-        iin : IN  WordArray(0 to PIPE_WIDTH-1);
-			
-		dread: out std_logic;
-		dwrite: out std_logic;
-        dadr : out  Mword;
-		doutadr: out Mword;
-		dvalid: in std_logic;
-        din : in  Mword;
-        dout : out  Mword;			
-			
-		intallow: out std_logic;
-		intack: out std_logic;
-        int0 : IN  std_logic;
-        int1 : IN  std_logic;
-        filladr: in Mword;
-        fillready: in std_logic;
-        iaux : IN  std_logic_vector(31 downto 0);
-        oaux : OUT  std_logic_vector(31 downto 0)
-    );
-    END COMPONENT;
-    
 
     --Inputs
     signal clk : std_logic := '0';
@@ -95,7 +64,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     -- Clock period definitions
     constant clk_period : time := 10 ns;
 
-    constant TIME_STEP: time := 1 ns; -- for 1 instruction in emulation
+    --constant TIME_STEP: time := 1 ns; -- for 1 instruction in emulation
 	
     signal testProgram: WordArray(0 to 2047);
     
@@ -113,6 +82,15 @@ ARCHITECTURE Behavior OF CoreTB IS
         
     signal opFlags: std_logic_vector(0 to 2);
     signal okFlag, errorFlag: std_logic := '0';
+
+
+
+    signal commonCode, commonCode2: WordArray(0 to 999);
+
+     
+    signal insDef: work.InstructionSet.InstructionDefinition;
+    signal defTable: work.InstructionSet.GeneralTable := work.InstructionSet.buildGeneralTable;
+                                                        --work.InstructionSet.TheTable;
         
     file traceFile: text open write_mode is "emulation_trace.txt";
     
@@ -292,7 +270,7 @@ ARCHITECTURE Behavior OF CoreTB IS
         variable machineCode: WordArray(0 to prog'length-1);
         variable imp, exp: XrefArray(0 to 100);
     begin
-        processProgramNew(prog, machineCode, imp, exp);
+        processProgram(prog, machineCode, imp, exp, false);
         machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
     
         testProgram <= (others => (others => 'U'));
@@ -323,11 +301,7 @@ ARCHITECTURE Behavior OF CoreTB IS
         return res;
     end function;
 
-    signal commonCode: WordArray(0 to 999);
 
-     
-    signal insDef: work.InstructionSet.InstructionDefinition;
-    signal defTable: work.InstructionSet.GeneralTable := work.InstructionSet.buildGeneralTable;
 BEGIN
    okFlag <= bool2std(opFlags = "001");
    errorFlag <= bool2std(opFlags = "100");
@@ -350,7 +324,7 @@ BEGIN
        file suiteFile: text open read_mode is "suite_names.txt";
        file testFile: text;
 
-       variable machineCodeVar: WordArray(0 to 999);         
+       variable machineCodeVar, machineCodeVar2: WordArray(0 to 999);         
        variable currentInstructionVar: Instruction;
        variable opResultVar: OperationResult;
                 
@@ -358,8 +332,11 @@ BEGIN
        
        variable match: boolean := true;
    begin
-      processProgramNew(readSourceFile("common_asm.txt"), machineCodeVar, imp, exp);
+      processProgram(readSourceFile("common_asm.txt"), machineCodeVar, imp, exp, false);
       commonCode <= machineCodeVar;
+	           
+              processProgram(readSourceFile("common_asm.txt"), machineCodeVar2, imp, exp, true);
+              commonCode2 <= machineCodeVar2;	           
 	           
 	  wait for 110 ns;
 
@@ -607,7 +584,37 @@ BEGIN
 
 
     SIMULATION: block
-        
+        -- Component Declaration for the Unit Under Test (UUT)
+    
+        COMPONENT Core -- FrontPipe0
+        PORT(
+            clk : IN  std_logic;
+            reset : IN  std_logic;
+            en : IN  std_logic;
+            iadrvalid : OUT  std_logic;
+            iadr : OUT  std_logic_vector(31 downto 0);
+            ivalid : IN  std_logic;
+            iin : IN  WordArray(0 to PIPE_WIDTH-1);
+                
+            dread: out std_logic;
+            dwrite: out std_logic;
+            dadr : out  Mword;
+            doutadr: out Mword;
+            dvalid: in std_logic;
+            din : in  Mword;
+            dout : out  Mword;            
+                
+            intallow: out std_logic;
+            intack: out std_logic;
+            int0 : IN  std_logic;
+            int1 : IN  std_logic;
+            filladr: in Mword;
+            fillready: in std_logic;
+            iaux : IN  std_logic_vector(31 downto 0);
+            oaux : OUT  std_logic_vector(31 downto 0)
+        );
+        END COMPONENT;
+              
         -- CPU ports
         -- Inputs
         signal ivalid : std_logic := '0';

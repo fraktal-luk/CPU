@@ -136,15 +136,19 @@ end record;
 
 
 type InstructionDefinition is record
+        mnem: ProcMnemonic;
     opc0: Opcode0;
     opc1: Opcode1;
     opc2: Opcode2;
     op: Operation;    
-    fmt: Format;    
+    fmt: Format;
+    i: integer;
+    j: integer;
+    k: integer;  
 end record;
 
 
-type GeneralTable is array (ProcMnemonic) of InstructionDefinition;
+type GeneralTable is array (ProcMnemonic'left to ProcMnemonic'right) of InstructionDefinition;
 
 function buildGeneralTable return GeneralTable;
 
@@ -299,28 +303,28 @@ end InstructionSet;
 
 package body InstructionSet is
 
-function findMnemonic(mnem: ProcMnemonic) return boolean is
-    variable op0, op1, op2: integer := -1;
-    variable fmt: Format := none;
-    variable tab1: OpcodeTable1;
-begin
-    -- Search in main table
-    for i in 0 to 63 loop
-        if MainTable(i).mnem = mnem and MainTable(i).op /= none then
-            op0 := i;
-            fmt := MainTable(i).fmt;
+--function findMnemonic(mnem: ProcMnemonic) return boolean is
+--    variable op0, op1, op2: integer := -1;
+--    variable fmt: Format := none;
+--    variable tab1: OpcodeTable1;
+--begin
+--    -- Search in main table
+--    for i in 0 to 63 loop
+--        if MainTable(i).mnem = mnem and MainTable(i).op /= none then
+--            op0 := i;
+--            fmt := MainTable(i).fmt;
             
-            return true;
-        end if;
-    end loop;
+--            return true;
+--        end if;
+--    end loop;
     
-    -- Search in 1 level tables
-    for t in Tables1'range loop
+--    -- Search in 1 level tables
+--    for t in Tables1'range loop
         
-    end loop;
+--    end loop;
     
-    return false;
-end function;
+--    return false;
+--end function;
 
 
 function makeRow(i, j, k: integer) return InstructionDefinition is
@@ -353,7 +357,7 @@ begin
         end if;
     end if;
   
-    return (op0, op1, op2, op, fmt);
+    return (undef, op0, op1, op2, op, fmt, i, j ,k);
 end function;
 
 function buildGeneralTable return GeneralTable is
@@ -372,6 +376,7 @@ begin
         if MainTable(i).op /= none then
             -- Add this to the table
             res(MainTable(i).mnem) := makeRow(i, -1, -1);
+            res(MainTable(i).mnem).mnem := MainTable(i).mnem;
         else
             --found := false;
             -- Enter level 1 table 
@@ -381,6 +386,7 @@ begin
                 if tab1(j).op /= none then
                     -- Add to table
                     res(tab1(j).mnem) := makeRow(i, j, -1);
+                    res(tab1(j).mnem).mnem := tab1(j).mnem;
                     --exit;
                 else
                     -- Enter level 2 table
@@ -390,6 +396,7 @@ begin
                         if tab2(k).op /= none then
                             -- Add to table
                             res(tab2(k).mnem) := makeRow(i, j, k);
+                            res(tab2(k).mnem).mnem := tab2(k).mnem;
                             --found := true;
                             --exit;
                         end if;
