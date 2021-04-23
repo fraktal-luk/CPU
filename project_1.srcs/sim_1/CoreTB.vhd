@@ -66,9 +66,10 @@ ARCHITECTURE Behavior OF CoreTB IS
 
     --constant TIME_STEP: time := 1 ns; -- for 1 instruction in emulation
 	
-    signal testProgram: WordArray(0 to 2047);
+    signal testProgram, testProgram2: WordArray(0 to 2047);
     
     alias programMemory is testProgram;
+    alias programMemory2 is testProgram2;
     
     signal cpuEndFlag: std_logic := '0';
     signal cpuErrorFlag: std_logic := '0';
@@ -265,16 +266,23 @@ ARCHITECTURE Behavior OF CoreTB IS
         programMem(startAdr to startAdr + LEN - 1) <= insSeq;    
     end procedure;
 
-    procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
+    procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram, testProgram2: out WordArray) is        
 	    constant prog: ProgramBuffer := readSourceFile(filename);
-        variable machineCode: WordArray(0 to prog'length-1);
+        variable machineCode, machineCode2: WordArray(0 to prog'length-1);
         variable imp, exp: XrefArray(0 to 100);
     begin
         processProgram(prog, machineCode, imp, exp, false);
         machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
+
+        processProgram(prog, machineCode2, imp, exp, true);
+        machineCode2 := fillXrefs(machineCode2, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
+    
     
         testProgram <= (others => (others => 'U'));
         testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+        
+        testProgram2 <= (others => (others => 'U'));
+        testProgram2(0 to machineCode2'length-1) <= machineCode2(0 to machineCode2'length-1);        
     end procedure;
 
     procedure setProgram(signal testProgram: inout WordArray; program: WordArray; offset: Mword) is
@@ -362,7 +370,7 @@ BEGIN
               end if;
 
               announceTest(currentTest, currentSuite, testName.all, suiteName.all);    
-              loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);
+              loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory, programMemory2);
 
               -- Reset handler
               testProgram(slv2u(RESET_BASE)/4) <= asm("ja -512");
@@ -438,7 +446,7 @@ BEGIN
       -------------
       announceTest(currentTest, currentSuite, "exc return", "");
       
-      loadProgramFromFileWithImports("events.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);
+      loadProgramFromFileWithImports("events.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory, programMemory2);
       
           -- Reset handler      
           testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");       
@@ -472,7 +480,7 @@ BEGIN
       -------
       announceTest(currentTest, currentSuite, "interrupt", "");      
 
-      loadProgramFromFileWithImports("events2.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory);      
+      loadProgramFromFileWithImports("events2.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory, programMemory2);      
           
           -- Reset handler
           testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");

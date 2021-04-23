@@ -19,13 +19,15 @@ package InstructionSet is
 -- 
 
 
-type Opcode0 is (none, jumpLong, jumpLink, jumpZ, jumpNZ, intAlu, intMem, floatMem, addI, addH, sysMem, sysControl);
+type Opcode0 is (none, jumpLong, jumpLink, jumpZ, jumpNZ, intAlu, floatOp, intMem, floatMem, addI, addH, sysMem, sysControl);
 
 type Opcode1 is (none,
                  
                  -- intAlu
                  intLogic, intArith, jumpReg,
                  
+                 -- floatOp
+                 floatMove,
                  
                  -- intMem
                  intLoadW, intStoreW,
@@ -55,13 +57,17 @@ type Opcode2 is (none,
                 intAnd, intOr, intXor,
                 
                 intAdd, intSub, 
-                    
+                
+                
+                floatMove,
+                  
                     jumpRegZ, jumpRegNZ
                     
                 
                 );
 
 type Format is (none, noRegs, jumpLong, jumpCond, jumpLink, intImm16, intImm10, intRR, 
+                                                                                floatRR,
                     intStore16, intStore10, floatLoad10, floatLoad16, floatStore10, floatStore16,
                     sysLoad, sysStore);
 
@@ -83,6 +89,8 @@ type Operation is (none,
                     
                     
                     intAdd, intSub,
+                    
+                    floatMove,
                     
                     
                     intLoadW, intLoadD,
@@ -162,6 +170,7 @@ constant EmptyTable2: OpcodeTable2 := (others => (none, none, undef));
 
 constant MainTable: OpcodeTable0 := (
     0 => (intAlu, none, none, undef), -- TableIntAlu
+    1 => (floatOp, none, none, undef), -- TableFloatOp 
     
     2 => (intMem, none, none, undef), -- TableIntMem
     3 => (floatMem, none, none, undef), -- TableFloatMem
@@ -189,6 +198,13 @@ constant TableIntAlu: OpcodeTable1 := (
     
     others => (none, none, none, undef)
 );
+
+constant TableFloatOp: OpcodeTable1 := (
+    0 => (floatMove, none, floatRR, undef),
+    
+    others => (none, none, none, undef)
+);
+
 
 constant TableIntMem: OpcodeTable1 := (
     0 => (intLoadW, intLoadW, intImm10, ldi_i),
@@ -218,14 +234,14 @@ constant TableSysMem: OpcodeTable1 := (
 
 constant TableSysControl: OpcodeTable1 := (
     0 => (sysUndef, undef, noRegs, undef),
-    1 => (sysError, undef, noRegs, undef),
-    2 => (sysCall,  call, noRegs, sys),
-    3 => (sysSync,  sync, noRegs, sys),
-    4 => (sysReplay,  replay, noRegs, sys),
-    5 => (sysHalt,  halt, noRegs, sys),
-    6 => (sysSend,  send, noRegs, sys),
-    7 => (sysRetE,  retE, noRegs, sys),
-    8 => (sysRetI,  retI, noRegs, sys),
+    1 => (sysError, undef, noRegs, sys_error),
+    2 => (sysCall,  call, noRegs, sys_call),
+    3 => (sysSync,  sync, noRegs, sys_sync),
+    4 => (sysReplay,  replay, noRegs, sys_replay),
+    5 => (sysHalt,  halt, noRegs, sys_halt),
+    6 => (sysSend,  send, noRegs, sys_send),
+    7 => (sysRetE,  retE, noRegs, sys_retE),
+    8 => (sysRetI,  retI, noRegs, sys_retI),
     
     others => (none, none, none, undef)
 );
@@ -253,8 +269,17 @@ constant TableJumpReg: OpcodeTable2 := (
     others => (none, none, undef)
 );
 
+
+constant TableFloatMove: OpcodeTable2 := (
+    0 => (floatMove, floatMove, mov_f),
+    others => (none, none, undef)
+);
+
+
+
 constant Tables1: TableArray0 := (
     intAlu => TableIntAlu,
+    floatOp => TableFloatOp,
     intMem => TableIntMem,
     floatMem => TableFloatMem,
     sysMem => TableSysMem,
@@ -267,6 +292,7 @@ constant Tables2: TableArray1 := (
     intLogic => TableIntLogic,
     intArith => TableIntArith,
     jumpReg => TableJumpReg,
+    floatMove => TableFloatMove,
     
     others => EmptyTable2
 );
@@ -335,10 +361,10 @@ function makeRow(i, j, k: integer) return InstructionDefinition is
     variable op: Operation;
     variable fmt: Format;
 begin
-    report "Row: ";
-        report integer'image(i);
-        report integer'image(j);
-        report integer'image(k);
+--    report "Row: ";
+--        report integer'image(i);
+--        report integer'image(j);
+--        report integer'image(k);
 
     if i /= -1 then
         op0 := MainTable(i).name;
@@ -368,7 +394,7 @@ function buildGeneralTable return GeneralTable is
     variable res: GeneralTable;
     variable found: boolean := false;
 begin
-            report "Build table";
+    --        report "Build table";
         
     -- Search in main table
     for i in 0 to 63 loop

@@ -463,6 +463,31 @@ function makeMachineWordNew(mnemonic: ProcMnemonic; vals: IntArray; strArg: stri
 begin
     insDef := --findEncoding(mnemonic);
               TheTable(mnemonic);
+
+--    if mnemonic = sys then
+--            insDef.fmt := noRegs;
+--            --indDef.i := 
+            
+--            if matches(strArg, "halt") then
+--               res := ins655655(ext2, 0, 0, halt, 0, 0);
+--            elsif matches(strArg, "reti") then
+--               res := ins655655(ext2, 0, 0, retI, 0, 0);
+--            elsif matches(strArg, "rete") then
+--               res := ins655655(ext2, 0, 0, retE, 0, 0);
+--            elsif matches(strArg, "sync") then
+--               res := ins655655(ext2, 0, 0, sync, 0, 0);            
+--            elsif matches(strArg, "replay") then
+--               res := ins655655(ext2, 0, 0, replay, 0, 0);            
+--            elsif matches(strArg, "error") then
+--               res := ins655655(ext2, 0, 0, error, 0, 0);
+--            elsif matches(strArg, "call") then
+--                  res := ins655655(ext2, 0, 0, call, 0, 0);
+--            elsif matches(strArg, "send") then
+--                  res := ins655655(ext2, 0, 0, send, 0, 0);                                            
+--            else
+--               res := ins6L(undef, 0);            
+--            end if;
+--    end if;
     
     --    report ProcMnemonic'image(mnemonic);
     --    report integer'image(insDef.i);
@@ -501,6 +526,13 @@ begin
             qb := i2slv(vals(2), 5);
             imm10 := i2slv(vals(3), 10);
         when intRR =>
+            qa := i2slv(vals(1), 5);
+            qb := i2slv(vals(2), 5);            
+            qc := i2slv(vals(3), 5);
+            if insDef.k = -1 then
+                qd := (others => '0');
+            end if;
+        when floatRR =>
             qa := i2slv(vals(1), 5);
             qb := i2slv(vals(2), 5);            
             qc := i2slv(vals(3), 5);
@@ -576,8 +608,27 @@ begin
         end if;
     end loop;
     
-    if USE_NEW then    
+    if USE_NEW then
+        if matches(ar(0), "sys") then
+            for m in ProcMnemonic loop
+                    report "sys_" & ar(1);
+            
+                if matches("sys_" & ar(1), ProcMnemonic'image(m)) then
+                    mnem := m;
+                end if;
+            end loop;            
+        end if;
+        
         command := makeMachineWordNew(mnem, vals, ar(1), undefOffset);
+        
+--                if matches(ar(0), "sys") then
+--                    command := (others => '-');
+--                end if;
+                
+--                if mnem = sys_call then
+--                    command := (others => 'Z');
+--                end if;
+                
     else
         command := makeMachineWord(mnem, vals, ar(1), undefOffset);
     end if;
