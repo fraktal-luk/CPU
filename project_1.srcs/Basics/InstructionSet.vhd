@@ -19,7 +19,13 @@ package InstructionSet is
 -- 
 
 
-type Opcode0 is (none, jumpLong, jumpLink, jumpZ, jumpNZ, intAlu, floatOp, intMem, floatMem, addI, addH, sysMem, sysControl);
+type Opcode0 is (none, jumpLong, jumpLink, jumpZ, jumpNZ, intAlu, floatOp, intMem, floatMem, 
+                    addI, addH, 
+                    
+                    intLoadW16, intStoreW16,
+                    floatLoadW16, floatStoreW16,
+                    
+                    sysMem, sysControl);
 
 type Opcode1 is (none,
                  
@@ -190,8 +196,14 @@ constant MainTable: OpcodeTable0 := (
     16 => (addI, intAdd, intImm16, add_i),
     17 => (addH, intAdd, intImm16, add_h),
     
+    20 => (intLoadW16, intLoadW, intImm16, ldi_i),
+    21 => (intStoreW16, intStoreW, intStore16, sti_i),
+    22 => (floatLoadW16, floatLoadW, floatLoad16, ldf_i),
+    23 => (floatStoreW16, floatStoreW, floatStore16, stf_i),
+    
     others => (none, none, none, undef)
 );
+
 
 constant TableIntAlu: OpcodeTable1 := (
     0 => (intLogic, none, intRR, undef),
@@ -209,18 +221,18 @@ constant TableFloatOp: OpcodeTable1 := (
 
 
 constant TableIntMem: OpcodeTable1 := (
-    0 => (intLoadW, intLoadW, intImm10, ldi_i),
+    --0 => (intLoadW, intLoadW, intImm10, ldi_i),
 
-    32 => (intStoreW, intStoreW, intStore10, sti_i),
+    --32 => (intStoreW, intStoreW, intStore10, sti_i),
     
     others => (none, none, none, undef)
 );
 
 
 constant TableFloatMem: OpcodeTable1 := (
-    0 => (floatLoadW, floatLoadW, floatLoad10, ldf_i),
+    --0 => (floatLoadW, floatLoadW, floatLoad10, ldf_i),
 
-    32 => (floatStoreW, floatStoreW, floatStore10, stf_i),
+    --32 => (floatStoreW, floatStoreW, floatStore10, stf_i),
     
     others => (none, none, none, undef)
 );

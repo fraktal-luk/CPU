@@ -137,6 +137,7 @@ function asmNew(str: string) return Word;
 
 function disasmWithAddress(a: natural; w: Word) return string;
 function disasmWord(w: Word) return string;
+function disasmWord2(w: Word) return string;
 
 procedure disasmToFile(name: string; arr: WordArray);
 
@@ -1059,6 +1060,46 @@ begin
 
     return res;
 end function;
+
+
+function disasmWord2(w: Word) return string is
+    variable res: string(1 to 24) := (others => ' ');
+    variable ind: integer := -1;
+    variable opc: ProcOpcode;
+begin
+    
+    ind := slv2u(w(31 downto 26)); 
+    opc := OPCODE_TABLE(ind);
+    
+    case opc is
+        -- format 655H
+        when andI | orI | addI | subI | ld | st | ldf | stf =>
+            return disasm655H(w, opc);
+        -- constant jumps
+        when j | jz | jnz | jl =>
+            return disasmJump(w, opc);
+        
+        when ext0 =>
+            return disasmExt0(w, opc);
+
+        when ext1 =>
+            return disasmExt1(w, opc);
+            
+        when ext2 =>
+            return disasmExt2(w, opc);
+
+        when fop =>
+            return disasmFP(w, opc);
+                                    
+        when others =>
+            res(1 to 3) := "???";
+    end case;
+      
+
+    return res;
+end function;
+
+
 
 
 function disasmWithAddress(a: natural; w: Word) return string is
