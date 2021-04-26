@@ -133,6 +133,7 @@ constant OPCONT_TABLE_FP: OpcontArray := (
 );
 
 function asm(str: string) return Word;
+function asmNew(str: string) return Word;
 
 function disasmWithAddress(a: natural; w: Word) return string;
 function disasmWord(w: Word) return string;
@@ -654,6 +655,20 @@ begin
     str0(1 to LEN) := str;
     gb := parseInstructionString(str0);
     processInstruction(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true,  res, tmpHasImport, tmpImport, false);        
+    return res;
+end function;
+
+function asmNew(str: string) return Word is
+    constant LEN: natural := str'length;
+    variable str0: string(1 to LEN+1) := (others => cr);    
+    variable gb: GroupBuffer;
+    variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
+    variable tmpHasImport: boolean := false;
+    variable res: Word;      
+begin
+    str0(1 to LEN) := str;
+    gb := parseInstructionString(str0);
+    processInstruction(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true,  res, tmpHasImport, tmpImport, true);        
     return res;
 end function;
 

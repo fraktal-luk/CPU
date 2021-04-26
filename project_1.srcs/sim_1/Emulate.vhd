@@ -8,6 +8,7 @@ use work.ArchDefs.all;
 use work.Assembler.all;
 
 use work.Arith.all;
+use work.InstructionSet.all;
 
 package Emulate is
 
@@ -281,6 +282,9 @@ constant DEFAULT_INTERNAL_OP: InternalOperation := DEFAULT_INTERNAL_OPERATION;
 
     -- TMP
     function decode(adr: Mword; w: Word) return InternalOperation;
+    
+    function decode2(adr: Mword; w: Word) return InternalOperation;
+
     procedure performOp(signal state: inout CoreState; signal memory: inout ByteArray; op: in InternalOperation;
                         signal outSigs: out std_logic_vector(0 to 2);
                         result: out OperationResult);
@@ -411,6 +415,24 @@ begin
     return undef;   
 end function;
 
+function getSystemOperation(mnem: ProcMnemonic) return AbstractOperation is
+begin
+        case mnem is
+            when sys_retE => return retE;
+            when sys_retI => return retI;
+            when sys_halt => return halt;
+            when sys_sync => return sync;
+            when sys_replay => return replay;
+            when sys_error => return error;
+            when sys_call => return call;
+            when sys_send => return send;
+            
+            when others => return undef;
+        end case;
+    
+    return undef;   
+end function;
+
 
 function getMnemonic(opcode: ProcOpcode; opcont: ProcOpcont) return ProcMnemonic is
 begin
@@ -435,7 +457,7 @@ function getArgSpec(fmt: FormatSpec; desc: OpDescription; w: Word) return Intern
     variable imm: Word := w;  
 begin
     
-    res.intSources := (qb, qc, qd);
+    res.intSources := (qb, qc, (others => '0'));
     if fmt.arg0inA = '1' then
         res.intSources(0) := qa;
     end if;
@@ -449,7 +471,9 @@ begin
     
     res.hasImm := fmt.imm;
     
-    if fmt.imm26 = '1' then
+    if res.hasImm /= '1' then
+        imm := (others => '0');
+    elsif fmt.imm26 = '1' then
         imm(31 downto 26) := (others => imm(25));
     elsif fmt.imm20 = '1' then
         imm(31 downto 20) := (others => imm(19));
@@ -616,6 +640,75 @@ begin
     
     return res;
 end function;
+
+
+
+
+function decode2(adr: Mword; w: Word) return InternalOperation is
+    variable res: InternalOperation;
+    constant opcode: ProcOpcode := bin2opcode(w(31 downto 26));
+    constant opcont: ProcOpcont := bin2opcont(opcode, w(15 downto 10));
+
+    variable mnem: ProcMnemonic := undef;
+    variable fmt: FormatSpec := FMT_DEFAULT;
+    variable desc: OpDescription := DESC_DEFAULT;
+    variable isSystemOp: boolean := false;
+    variable operation, systemOp: AbstractOperation := undef;
+    variable i, j, k: integer;
+    variable insDef: InstructionDefinition;
+begin
+        i := slv2u(w(31 downto 26));
+        j := slv2u(w(15 downto 10));
+        k := slv2u(w(4 downto 0));
+
+        insDef := getDef(i, j, k);
+        
+    -- Get menemonic
+    --mnem := getMnemonic(opcode, opcont);
+        mnem := insDef.mnem;
+    
+        case mnem is
+            when 	
+                sys_retE |
+                sys_retI |
+                sys_halt |
+                sys_sync |
+                sys_replay |
+                sys_error |
+                sys_call |
+                sys_send 
+                =>
+                
+                isSystemOp := true;
+            when others =>
+                            
+        end case; 
+    
+    -- Get operation type description
+    -- Different track for system instructions
+    --systemOp := getSystemOperation(mnem);
+    if isSystemOp then
+        operation := getSystemOperation(mnem);
+        fmt := FMT_DEFAULT;
+        desc := DESC_SYS_OP;
+    else
+        operation := OP_TABLE(mnem).op;
+        fmt := OP_TABLE(mnem).format;
+        desc := OP_TABLE(mnem).desc;        
+    end if;
+    
+    -- Get arg specifications
+    res := getArgSpec(fmt, desc, w);
+    
+    res := fillProperties(res, desc);
+    
+    res.operation := operation;
+    res.ip := adr;
+    
+    return res;
+end function;
+
+
 
 
 procedure getArgs(state: in CoreState; op: in InternalOperation; intArgs: out MwordArray(0 to 2); fpArgs: out MwordArray(0 to 2)) is

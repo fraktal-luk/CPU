@@ -93,6 +93,8 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal defTable: work.InstructionSet.GeneralTable := work.InstructionSet.buildGeneralTable;
                                                         --work.InstructionSet.TheTable;
         
+    signal ch0, ch1, ch2, ch3: std_logic := '0';
+    
     file traceFile: text open write_mode is "emulation_trace.txt";
     
     function compareTraceLines(sa, sb: string) return boolean is
@@ -309,6 +311,18 @@ ARCHITECTURE Behavior OF CoreTB IS
         return res;
     end function;
 
+    
+    function getInstruction2(signal cpuState: in CoreState; signal programMemory: in WordArray) return Instruction is
+        variable res: Instruction;
+        variable insWordVar: Word;
+        variable intOpVar: InternalOperation;
+    begin
+        insWordVar := programMemory(slv2u(cpuState.nextIP)/4);
+        intOpVar := decode2(cpuState.nextIP, insWordVar);
+        res := (cpuState.nextIP, insWordVar,  disasmWithAddress(slv2u(cpuState.nextIP), insWordVar), intOpVar); 
+        return res;
+    end function;
+
 
 BEGIN
    okFlag <= bool2std(opFlags = "001");
@@ -377,10 +391,18 @@ BEGIN
               
               -- Call handler
               testProgram(slv2u(CALL_BASE)/4) <= asm("sys send");
-              testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("ja 0");        
+              testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("ja 0");      
+
+                      -- Reset handler
+                      testProgram2(slv2u(RESET_BASE)/4) <= asmNew("ja -512");
+                      
+                      -- Call handler
+                      testProgram2(slv2u(CALL_BASE)/4) <= asmNew("sys send");
+                      testProgram2(slv2u(CALL_BASE)/4 + 1) <= asmNew("ja 0");
 
               -- Common lib
               setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
+                    setProgram(testProgram2, commonCode2, i2slv(4*1024, 32));	           
 
               setForOneCycle(resetDataMem, clk);
               disasmToFile(testName.all & "_disasm.txt", testProgram);
@@ -421,9 +443,14 @@ BEGIN
     
       testProgram(0) <= asm("sys error");
       testProgram(1) <= asm("ja 0");
+
+          testProgram2(0) <= asmNew("sys error");
+          testProgram2(1) <= asmNew("ja 0");
 	  
 	  -- Common lib, unneeded here
 	  setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
+    	  setProgram(testProgram2, commonCode2, i2slv(4*1024, 32));	           
+
 
       setForOneCycle(resetDataMem, clk);
       
@@ -457,6 +484,18 @@ BEGIN
           
           -- Common lib
           setProgram(testProgram, commonCode, i2slv(4*1024, 32));      
+
+
+              -- Reset handler      
+              testProgram2(slv2u(RESET_BASE)/4) <=     asmNew("ja -512");       
+              
+              -- Call handler - special
+              testProgram2(slv2u(CALL_BASE)/4) <=     asmNew("add_i r20, r0, 55");  
+              testProgram2(slv2u(CALL_BASE)/4 + 1) <= asmNew("sys rete");
+              
+              -- Common lib
+              setProgram(testProgram2, commonCode2, i2slv(4*1024, 32)); 
+
 
 
       setForOneCycle(resetDataMem, clk); 
@@ -496,6 +535,21 @@ BEGIN
           -- Common lib
           setProgram(testProgram, commonCode, i2slv(4*1024, 32));          
 
+
+              -- Reset handler
+              testProgram2(slv2u(RESET_BASE)/4) <=     asmNew("ja -512");
+              
+              -- Call handler - special
+              testProgram2(slv2u(CALL_BASE)/4) <=     asmNew("add_i r20, r0, 55");
+              testProgram2(slv2u(CALL_BASE)/4 + 1) <= asmNew("sys rete");
+              
+              -- Int handler - special
+              testProgram2(slv2u(INT_BASE)/4) <=     asmNew("add_i r0, r0, 0"); -- NOP
+              testProgram2(slv2u(INT_BASE)/4 + 1) <= asmNew("sys reti");
+              
+              -- Common lib
+              setProgram(testProgram2, commonCode2, i2slv(4*1024, 32));  
+              
       
       setForOneCycle(resetDataMem, clk);
       
@@ -532,13 +586,13 @@ BEGIN
   TMP_EMULATION: block
       signal cpuState: CoreState := INIT_CORE_STATE;
       signal dataMemory: ByteArray(0 to 4095);
-      signal currentInstruction: Instruction;      
+      signal currentInstruction, currentInstruction2: Instruction;      
   begin
         TMP_EMUL: process (clk)
             type EmulState is (ready, prepare, running);
             variable state: EmulState := ready;
             variable cnt: natural := 0;
-            variable currentInstructionVar: Instruction;
+            variable currentInstructionVar, currentInstructionVar2: Instruction;
             variable opResultVar: OperationResult;
             variable  disasmText: line;
         begin
@@ -550,6 +604,7 @@ BEGIN
                             state := prepare;
                           
                             currentInstruction <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
+                                currentInstruction2 <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);
                               
                             opFlags <= (others => '0');
                             cpuState <= INIT_CORE_STATE;
@@ -567,6 +622,8 @@ BEGIN
                             if opFlags /= "100" and opFlags /= "001" then -- ERROR or SEND (completed)
                                 currentInstructionVar := getInstruction(cpuState, programMemory);
                                 currentInstruction <= currentInstructionVar;
+                                    currentInstructionVar2 := getInstruction2(cpuState, programMemory2);
+                                    currentInstruction2 <= currentInstructionVar2;
                                 performOp(cpuState, dataMemory, currentInstructionVar.internalOp, opFlags, opResultVar);
                                 
                                 if LOG_EMULATION_TRACE then
@@ -587,6 +644,10 @@ BEGIN
                 emulReady <= bool2std(state = ready);                
             end if;
         end process;
+        
+           ch0 <= bool2std(currentInstruction2.internalOp = currentInstruction.internalOp);
+
+        
     end block;
 
 

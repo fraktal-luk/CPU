@@ -158,6 +158,8 @@ end record;
 
 type GeneralTable is array (ProcMnemonic'left to ProcMnemonic'right) of InstructionDefinition;
 
+function getDef(i, j, k: integer) return InstructionDefinition;
+
 function buildGeneralTable return GeneralTable;
 
 constant TheTable: GeneralTable --(ProcMnemonic'left to ProcMnemonic'right)
@@ -351,6 +353,48 @@ package body InstructionSet is
     
 --    return false;
 --end function;
+
+
+
+function getDef(i, j, k: integer) return InstructionDefinition is
+    variable res: InstructionDefinition;
+    variable op0: Opcode0 := none;
+    variable op1: Opcode1 := none;
+    variable op2: Opcode2 := none;
+    variable op: Operation;
+    variable fmt: Format;
+    variable mnem: ProcMnemonic;
+begin
+--    report "Row: ";
+--        report integer'image(i);
+--        report integer'image(j);
+--        report integer'image(k);
+
+    if i /= -1 then
+        op0 := MainTable(i).name;
+        fmt := MainTable(i).fmt;
+        op := MainTable(i).op;
+        mnem := MainTable(i).mnem;
+        
+        --if j /= -1 then
+        if op = none then
+            op1 := Tables1(op0)(j).name;
+            fmt := Tables1(op0)(j).fmt;
+            op := Tables1(op0)(j).op;
+            mnem := Tables1(op0)(j).mnem;
+            
+            --if k /= -1 then
+            if op = none then
+                op2 := Tables2(op1)(k).name;
+                op := Tables2(op1)(k).op;
+                mnem := Tables2(op1)(k).mnem;
+            end if;
+        end if;
+    end if;
+  
+    return (mnem, op0, op1, op2, op, fmt, i, j ,k);
+end function;
+
 
 
 function makeRow(i, j, k: integer) return InstructionDefinition is
