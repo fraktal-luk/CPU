@@ -321,7 +321,7 @@ ARCHITECTURE Behavior OF CoreTB IS
         insWordVar := programMemory(slv2u(cpuState.nextIP)/4);
         intOpVar := decode2(cpuState.nextIP, insWordVar);
         res := (cpuState.nextIP, insWordVar,  --disasmWithAddress(slv2u(cpuState.nextIP), insWordVar), intOpVar);
-                                              disasmWord2(insWordVar), intOpVar); 
+                                              work.CpuText.padLeft(disasmWord2(insWordVar), 51), intOpVar); 
         return res;
     end function;
 

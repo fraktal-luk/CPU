@@ -5,10 +5,13 @@ use IEEE.STD_LOGIC_1164.ALL;
 use work.BasicTypes.all;
 use work.Helpers.all;
 use work.ArchDefs.all;
-use work.Assembler.all;
+--use work.Assembler.all;
 
 use work.Arith.all;
 use work.InstructionSet.all;
+
+use work.CpuText.all;
+
 
 package Emulate is
 
@@ -38,7 +41,7 @@ end record;
 type FormatSpec is record    
     imm: std_logic;
     imm16: std_logic;
-    imm20: std_logic;
+    imm21: std_logic;
     imm26: std_logic;
     arg0inA: std_logic;
     arg2inA: std_logic;
@@ -284,6 +287,9 @@ constant DEFAULT_INTERNAL_OP: InternalOperation := DEFAULT_INTERNAL_OPERATION;
     function decode(adr: Mword; w: Word) return InternalOperation;
     
     function decode2(adr: Mword; w: Word) return InternalOperation;
+    
+    function getOpDisasm(w: Word) return string;
+
 
     procedure performOp(signal state: inout CoreState; signal memory: inout ByteArray; op: in InternalOperation;
                         signal outSigs: out std_logic_vector(0 to 2);
@@ -475,8 +481,8 @@ begin
         imm := (others => '0');
     elsif fmt.imm26 = '1' then
         imm(31 downto 26) := (others => imm(25));
-    elsif fmt.imm20 = '1' then
-        imm(31 downto 20) := (others => imm(19));
+    elsif fmt.imm21 = '1' then
+        imm(31 downto 20) := (others => imm(20));
     elsif fmt.imm16 = '1' then
         imm(31 downto 16) := (others => imm(15));
     else
@@ -708,6 +714,142 @@ begin
     return res;
 end function;
 
+
+
+
+function decodeMnem2(w: Word) return ProcMnemonic is
+    variable res: InternalOperation;
+    constant opcode: ProcOpcode := bin2opcode(w(31 downto 26));
+    constant opcont: ProcOpcont := bin2opcont(opcode, w(15 downto 10));
+
+    variable mnem: ProcMnemonic := undef;
+    variable fmt: FormatSpec := FMT_DEFAULT;
+    variable desc: OpDescription := DESC_DEFAULT;
+    variable isSystemOp: boolean := false;
+    variable operation, systemOp: AbstractOperation := undef;
+    variable i, j, k: integer;
+    variable insDef: InstructionDefinition;
+begin
+        i := slv2u(w(31 downto 26));
+        j := slv2u(w(15 downto 10));
+        k := slv2u(w(4 downto 0));
+
+        insDef := getDef(i, j, k);
+        
+    -- Get menemonic
+    --mnem := getMnemonic(opcode, opcont);
+        mnem := insDef.mnem;
+    
+    return mnem;
+end function;
+
+
+
+-- TODO: replace with reg2str
+function reg2txt(n: natural; fp: boolean) return string is
+    variable res: string(1 to 3) := "r00";
+begin
+    assert n < 32 report "Register number too large: " & natural'image(n) severity error;
+
+    if fp then
+        res(1) := 'f';
+    end if;
+    
+    if n < 0 then
+        null;
+    elsif n < 10 then
+        res(3 to 3) := natural'image(n);
+    elsif n < 32 then
+        res(2 to 3) := natural'image(n);    
+    end if;
+    
+    return res;
+end function;
+
+
+function getOpDisasm(w: Word) return string is
+    constant mnem: ProcMnemonic := decodeMnem2(w);
+    constant otr: OpTableRow := OP_TABLE(mnem);
+    constant qa: slv5 := w(25 downto 21); 
+    constant qb: slv5 := w(20 downto 16); 
+    constant qc: slv5 := w(9 downto 5); 
+    constant qd: slv5 := w(4 downto 0);
+    variable d, s0, s1, s2, immValue: integer;
+    variable noDest: boolean := false;
+    
+    variable res: string(1 to 30) := (others => ' ');
+    variable rd, r0, r1: string(1 to 3);
+begin
+    -- mnem to str    
+    
+    -- dest = qa unless ...
+    -- src0 = qb unless...
+    -- src1 = qc 
+
+
+    if otr.format.arg0inA = '1' or otr.format.arg2inA = '1' then
+        noDest := true;
+    else
+        d := slv2u(qa);
+    end if;
+
+    if otr.format.arg0inA = '1' then
+        s0 := slv2u(qa);
+    else
+        s0 := slv2u(qb);
+    end if;
+
+    -- src0 = qa
+    -- src1 = qb
+    -- src2 = qa if applicable
+
+    
+    if otr.format.imm = '1' then
+        -- imm10, 16, ...
+        if otr.format.imm26 = '1' then
+            immValue := slv2s(w(25 downto 0));
+        elsif otr.format.imm21 = '1' then
+            immValue := slv2s(w(20 downto 0));            
+        elsif otr.format.imm16 = '1' then        
+            immValue := slv2s(w(15 downto 0));
+        else
+            immValue := slv2s(w(9 downto 0));            
+        end if;
+        
+        --s1 := immValue;
+    else
+        s1 := slv2u(qc);
+    end if;
+    
+
+    rd := reg2txt(d, std2bool(otr.format.fpDestSelect));
+    r0 := reg2txt(s0, std2bool(otr.format.fpArgSelect(0)));
+    r1 := reg2txt(s1, std2bool(otr.format.fpArgSelect(1)));
+         
+    if otr.format.imm26 = '1' then
+        -- op immValue
+        res := padLeft(ProcMnemonic'image(mnem) & " " & integer'image(immValue), 30);        
+    elsif otr.format.imm21 = '1' then
+        if otr.format.arg0inA = '1' then
+            res := padLeft(ProcMnemonic'image(mnem) & " " & rd & ", " & integer'image(immValue), 30);        
+        else
+            res := padLeft(ProcMnemonic'image(mnem) & " " & r0 & ", " & integer'image(immValue), 30);                    
+        end if;
+    else
+        -- op d, s0, s1
+    
+
+        --r2 := reg2str(s2, std2bool(otr.format.fpArgSelect(2)));
+
+        if otr.format.imm = '1' then
+            res := padLeft(ProcMnemonic'image(mnem) & " " & rd & ", " & r0 & ", " & integer'image(immValue), 30);        
+        else
+            res := padLeft(ProcMnemonic'image(mnem) & " " & rd & ", " & r0 & ", " & r1 , 30);            
+        end if;       
+    end if;
+    
+    return res;
+end function;
 
 
 
