@@ -141,6 +141,7 @@ function asm(str: string) return Word;
 function asmNew(str: string) return Word;
 
 function disasmWithAddress(a: natural; w: Word) return string;
+function disasmWithAddress2(a: natural; w: Word) return string;
 function disasmWord(w: Word) return string;
 function disasmWord2(w: Word) return string;
 
@@ -618,8 +619,7 @@ begin
     if USE_NEW then
         if matches(ar(0), "sys") then
             for m in ProcMnemonic loop
-                    report "sys_" & ar(1);
-            
+                --    report "sys_" & ar(1);      
                 if matches("sys_" & ar(1), ProcMnemonic'image(m)) then
                     mnem := m;
                 end if;
@@ -1091,6 +1091,23 @@ begin
     res(11 to 18) := w2hex(w);
     res(19 to 21) := "   ";
     res(22 to 22 + 24-1) := disasmWord(w);
+    -- synthesis translate_on
+    
+    return res;
+end function;
+
+function disasmWithAddress2(a: natural; w: Word) return string is
+    variable res: string(1 to 1 + 10 + 10 + 30) := (others => ' ');
+    variable aw: Word := i2slv(a, 32);
+    constant HEX_TAB: string(1 to 16) := "0123456789abcdef";
+    variable c: character;
+begin
+    -- synthesis translate_off   
+    res(1 to 8) := w2hex(aw);
+    res(1 + 8 to 1 + 9) := ": "; res(10) := ' ';--cr;
+    res(11 to 18) := w2hex(w);
+    res(19 to 21) := "   ";
+    res(22 to 22 + 24-1) := disasmWord2(w);
     -- synthesis translate_on
     
     return res;

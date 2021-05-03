@@ -81,7 +81,7 @@ ARCHITECTURE Behavior OF CoreTB IS
         internalOp: InternalOperation;
     end record;
         
-    signal opFlags: std_logic_vector(0 to 2);
+    signal opFlags, opFlags2: std_logic_vector(0 to 2);
     signal okFlag, errorFlag: std_logic := '0';
 
 
@@ -96,6 +96,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal ch0, ch1, ch2, ch3: std_logic := '0';
     
     file traceFile: text open write_mode is "emulation_trace.txt";
+    file traceFile2: text open write_mode is "emulation_trace2.txt";
     
     function compareTraceLines(sa, sb: string) return boolean is
     begin
@@ -588,6 +589,9 @@ BEGIN
   TMP_EMULATION: block
       signal cpuState: CoreState := INIT_CORE_STATE;
       signal dataMemory: ByteArray(0 to 4095);
+
+      signal cpuState2: CoreState := INIT_CORE_STATE;
+      signal dataMemory2: ByteArray(0 to 4095);
       signal currentInstruction, currentInstruction2: Instruction;      
   begin
         TMP_EMUL: process (clk)
@@ -596,6 +600,7 @@ BEGIN
             variable cnt: natural := 0;
             variable currentInstructionVar, currentInstructionVar2: Instruction;
             variable opResultVar: OperationResult;
+            variable opResultVar2: OperationResult;
             variable  disasmText: line;
         begin
             if rising_edge(clk) then
@@ -610,7 +615,11 @@ BEGIN
                               
                             opFlags <= (others => '0');
                             cpuState <= INIT_CORE_STATE;
-                            dataMemory <= (others => (others => '0'));                            
+                            dataMemory <= (others => (others => '0'));
+
+                                opFlags2 <= (others => '0');                            
+                                cpuState2 <= INIT_CORE_STATE;
+                                dataMemory2 <= (others => (others => '0'));                                                       
                         end if;
                     
                     when prepare =>
@@ -627,10 +636,13 @@ BEGIN
                                     currentInstructionVar2 := getInstruction2(cpuState, programMemory2);
                                     currentInstruction2 <= currentInstructionVar2;
                                 performOp(cpuState, dataMemory, currentInstructionVar.internalOp, opFlags, opResultVar);
+                                    performOp(cpuState2, dataMemory2, currentInstructionVar2.internalOp, opFlags2, opResultVar2);
                                 
                                 if LOG_EMULATION_TRACE then
                                     write(disasmText, disasmWithAddress(slv2u(cpuState.nextIP), currentInstructionVar.bits));
                                     writeline(traceFile, disasmText);
+                                        write(disasmText, disasmWithAddress2(slv2u(cpuState.nextIP), currentInstructionVar2.bits));
+                                        writeline(traceFile2, disasmText);                                    
                                 end if;
                                 
                             else
@@ -648,6 +660,9 @@ BEGIN
         end process;
         
            ch0 <= bool2std(currentInstruction2.internalOp = currentInstruction.internalOp);
+           ch1 <= bool2std(cpuState2 = cpuState);
+           ch2 <= bool2std(dataMemory2 = dataMemory);
+           ch3 <= bool2std(opFlags2 = opFlags);
 
         
     end block;

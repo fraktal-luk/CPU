@@ -848,6 +848,11 @@ begin
         end if;       
     end if;
     
+    -- TMP: system instructions - no args
+    if res(1 to 4) = "sys_" then
+        res := padLeft(ProcMnemonic'image(mnem), 30);
+    end if;
+    
     return res;
 end function;
 
