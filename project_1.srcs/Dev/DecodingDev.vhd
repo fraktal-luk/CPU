@@ -347,6 +347,153 @@ end function;
 --);
 
 
+function decodeOperation(op0, op1: slv6; op2: slv5) return SpecificOp is
+    variable specificOperation: SpecificOp := DEFAULT_SPECIFIC_OP;
+    
+    variable isUndef: boolean := false;
+    variable isAluOp, isFpOp, isMemOp, isSysOp: boolean := false;
+    variable aluOp: ArithOp; 
+    variable floatOp: FpOp; 
+    variable memoryOp: MemOp; 
+    variable systemOp: SysOp; 
+begin
+
+    isAluOp :=        op0 = "000000"
+                or  op0 = "001000"     
+                or  op0 = "001001"
+                or  op0 = "001010"
+                or  op0 = "001011"
+                or  op0 = "010000"
+                or  op0 = "010001";
+                
+     isFpOp :=        op0 = "000001";
+    
+     isMemOp :=      op0 = "000010"
+               or  op0 = "000011"     
+               or  op0 = "000100"     
+               or  op0 = "010100"
+               or  op0 = "010101"
+               or  op0 = "010110"
+               or  op0 = "010111";    
+    
+     isSysOp :=     op0 = "000111";
+     
+     isUndef := not (isAluOp or isMemOp or isSysOp);
+
+    -- 
+
+    if op0 = "010000" then
+        aluOp := opAdd;
+    elsif op0 = "010001" then
+        aluOp := opAdd;
+    elsif op0 = "001000" then
+        aluOp := opJ;
+    elsif op0 = "001001" then
+        aluOp := opJl;        
+    elsif op0 = "001010" then
+        aluOp := opJz;        
+    elsif op0 = "001011" then
+        aluOp := opJnz;        
+    
+    elsif op0 = "000000" then
+        
+        if op1 = "000000" then
+            if op2 = "00000" then
+                aluOp := opAnd;
+            elsif op2 = "00001" then
+                aluOp := opOr;
+            else 
+                isUndef := true;
+            end if;
+        elsif op1 = "000001" then
+            if op2 = "00000" then
+                aluOp := opAdd;
+            elsif op2 = "00001" then
+                aluOp := opSub;
+            else 
+                isUndef := true;
+            end if;
+        elsif op1 = "000010" then
+            if op2 = "00000" then
+                aluOp := opJz;
+            elsif op2 = "00001" then
+                aluOp := opJnz;
+            else 
+                isUndef := true;
+            end if;
+         else
+            isUndef := true;
+        end if;
+        
+    end if;
+    
+    -- Mem
+    if op0 = "010100" or op0 = "010110" then
+        memoryOp := opLoad;    
+    elsif op0 = "010101" or op0 = "010111" then
+        memoryOp := opStore;
+    elsif op0 = "000010" then 
+        isUndef := true;
+    elsif op0 = "000011" then 
+        isUndef := true;
+    elsif op0 = "000100" then 
+        if op1 = "000000" then
+            memoryOp := opLoadSys;
+        elsif op1 = "100000" then
+            memoryOp := opStoreSys;
+        else
+            isUndef := true; 
+        end if;
+    end if;
+    
+    -- Fp
+    if op0 = "000001" then
+        if op1 = "000000" and op2 = "00000" then
+            floatOp := opMove;
+        else
+            isUndef := true;
+        end if;
+    end if;
+    
+    -- Sys
+    if op0 = "000111" then
+        if op1 = "000001" then
+            systemOp := opError;        
+        elsif op1 = "000010" then
+            systemOp := opCall;        
+        elsif op1 = "000011" then
+            systemOp := opSync;        
+        elsif op1 = "000100" then
+            systemOp := opReplay;        
+        elsif op1 = "000101" then
+            systemOp := opHalt;        
+        elsif op1 = "000110" then
+            systemOp := opSend;        
+        elsif op1 = "000111" then
+            systemOp := opRetE;        
+        elsif op1 = "001000" then
+            systemOp := opRetI;
+        else
+            isUndef := true;      
+        end if;
+    end if;
+    
+    
+    if isUndef then
+        specificOperation := sop(None, opUndef);
+    elsif isAluOp then
+        specificOperation := sop(ALU, aluOp);
+    elsif isFpOp then
+        specificOperation := sop(FP, floatOp);
+    elsif isMemOp then
+        specificOperation := sop(Mem, memoryOp);
+    else
+        specificOperation := sop(None, systemOp);
+    end if;
+    
+    return specificOperation;
+end function;
+
 
 function decodeFromWordNew(w: word) return InstructionState is
     variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
@@ -369,9 +516,7 @@ function decodeFromWordNew(w: word) return InstructionState is
                 isBranch, hasImm26, hasImm21, hasImm16, hasImm10, hasFpDest, hasIntDest, hasNoIntDest,
                 src2a, src0a,
                 intSrc0, intSrc1, intSrc2,
-                fpSrc0, fpSrc1, fpSrc2: boolean := false;
-                
-    variable    aluOp, fpOp, memOp, sysOp: boolean := false;
+                fpSrc0, fpSrc1, fpSrc2: boolean := false;                
 begin
     isBranch :=     op0 = "001000"
                  or op0 = "001001"
@@ -432,31 +577,9 @@ begin
                     or  (op0 = "000100" and op1 = "100000");      
     
     fpSrc2 :=        op0 = "010111";
-    
-    
-    aluOp :=        op0 = "000000"
-                or  op0 = "001000"     
-                or  op0 = "001001"
-                or  op0 = "001010"
-                or  op0 = "001011"
-                or  op0 = "010000"
-                or  op0 = "010001";
-                
-     fpOp :=        op0 = "000001";
-    
-     memOp :=      op0 = "000010"
-               or  op0 = "000011"     
-               or  op0 = "000100"     
-               or  op0 = "010100"
-               or  op0 = "010101"
-               or  op0 = "010110"
-               or  op0 = "010111";    
-    
-     sysOp := not (aluOp or memOp or sysOp);
-    
      
      
-    --res.specificOperation := specificOperation;
+    res.specificOperation := decodeOperation(op0, op1, op2);
     
     res.classInfo.fpRename := bool2std(hasFpDest or fpSrc0 or fpSrc1 or fpSrc2);
     
