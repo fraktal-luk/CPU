@@ -8,6 +8,7 @@ use IEEE.STD_LOGIC_1164.ALL;
 use work.BasicTypes.all;
 use work.Helpers.all;
 use work.ArchDefs.all;
+use work.InstructionSet.all;
 
 use work.InstructionState.all;
 
@@ -134,7 +135,7 @@ constant DECODE_TABLE: InsDefArray(0 to 40) := (
 
 function decodeFromWord(w: word) return InstructionState;
 
-
+function decodeFromWordNew(w: word) return InstructionState;
 
 
 
@@ -296,6 +297,229 @@ begin
     
     return res;
 end function;
+
+
+
+
+
+--constant FMT_DEFAULT: InstructionFormat := ('0', '0', '0', '0', "000",  '0', "000",  '0');
+--constant FMT_INT2   : InstructionFormat := ('0', '0', '0', '1', "110",  '0', "000",  '0');
+--constant FMT_INT3   : InstructionFormat := ('0', '0', '0', '1', "111",  '0', "000",  '0');
+--constant FMT_IMM    : InstructionFormat := ('0', '1', '0', '1', "110",  '0', "000",  '1');
+--constant FMT_SHIFT  : InstructionFormat := ('0', '1', '0', '1', "110",  '0', "000",  '0');
+--constant FMT_FP1    : InstructionFormat := ('0', '0', '0', '0', "000",  '1', "100",  '0');
+--constant FMT_FP2    : InstructionFormat := ('0', '0', '0', '0', "000",  '1', "110",  '0');
+--constant FMT_FP3    : InstructionFormat := ('0', '0', '0', '0', "000",  '1', "111",  '0');
+--constant FMT_FLOAD  : InstructionFormat := ('0', '1', '0', '0', "110",  '1', "000",  '1');
+--constant FMT_ISTORE : InstructionFormat := ('0', '1', '1', '0', "111",  '0', "000",  '1');
+--constant FMT_FSTORE : InstructionFormat := ('0', '1', '1', '0', "110",  '0', "001",  '1');
+--constant FMT_JL     : InstructionFormat := ('0', '1', '0', '1', "000",  '0', "000",  '0'); -- Jump link
+--constant FMT_JC     : InstructionFormat := ('1', '1', '0', '0', "100",  '0', "000",  '0'); -- Jump cond
+--constant FMT_SSTORE : InstructionFormat := ('0', '1', '1', '0', "011",  '0', "000",  '0'); -- mtc
+
+--constant FMT_JA     : InstructionFormat := ('0', '1', '0', '0', "000",  '0', "000",  '0'); -- Jump long
+--constant FMT_ILOAD  : InstructionFormat := FMT_IMM;
+--constant FMT_JR     : InstructionFormat := FMT_INT2;  -- Jump reg
+--constant FMT_SLOAD  : InstructionFormat := FMT_SHIFT; -- mfc
+
+--constant MainTable: OpcodeTable0 := (
+--    0 => (intAlu, none, none, undef), -- TableIntAlu
+--    1 => (floatOp, none, none, undef), -- TableFloatOp     
+--    2 => (intMem, none, none, undef), -- TableIntMem
+--    3 => (floatMem, none, none, undef), -- TableFloatMem
+--    4 => (sysMem, none, none, undef),  -- TableSysMem
+    
+--    7 => (sysControl, none, none, undef),
+--    8 => (jumpLong, jump, jumpLong, ja),
+--    9 => (jumpLink, jump, jumpLink, jl),
+--    10 => (jumpZ, jump, jumpCond, jz_i),
+--    11 => (jumpNZ, jump, jumpCond, jnz_i),
+    
+--    16 => (addI, intAdd, intImm16, add_i),
+--    17 => (addH, intAdd, intImm16, add_h),
+    
+--    20 => (intLoadW16, intLoadW, intImm16, ldi_i),
+--    21 => (intStoreW16, intStoreW, intStore16, sti_i),
+--    22 => (floatLoadW16, floatLoadW, floatLoad16, ldf_i),
+--    23 => (floatStoreW16, floatStoreW, floatStore16, stf_i),
+    
+--    others => (none, none, none, undef)
+--);
+
+
+
+function decodeFromWordNew(w: word) return InstructionState is
+    variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
+    variable fmt: InstructionFormat := FMT_DEFAULT;
+    variable specificOperation: SpecificOp := DEFAULT_SPECIFIC_OP;
+    
+    constant op0: slv6 := w(31 downto 26);
+    constant op1: slv6 := w(15 downto 10);
+    constant op2: slv5 := w(4 downto 0);
+    
+    constant qa: slv5 := w(25 downto 21);
+    constant qb: slv5 := w(20 downto 16);
+    constant qc: slv5 := w(9 downto 5);
+    constant qd: slv5 := w(4 downto 0);
+    
+    --constant imm16: Hword := w(15 downto 0);
+    --constant imm10: Hword :=
+    
+    variable    hasOp1, hasOp2,
+                isBranch, hasImm26, hasImm21, hasImm16, hasImm10, hasFpDest, hasIntDest, hasNoIntDest,
+                src2a, src0a,
+                intSrc0, intSrc1, intSrc2,
+                fpSrc0, fpSrc1, fpSrc2: boolean := false;
+                
+    variable    aluOp, fpOp, memOp, sysOp: boolean := false;
+begin
+    isBranch :=     op0 = "001000"
+                 or op0 = "001001"
+                 or op0 = "001010"
+                 or op0 = "001011"
+                 or (op0 = "000000" and (op1 = "000010"));
+    
+    hasImm26 :=     op0 = "001000";
+    
+    hasImm21 :=     op0 = "001001"
+                 or op0 = "001010"
+                 or op0 = "001011";
+    
+    hasImm16 :=     op0(4) = '1';
+    
+    -- TODO: add shift instructions 
+    hasImm10 :=     op0 = "000010"
+                 or op0 = "000011"
+                 or op0 = "000100";
+    
+    hasFpDest :=    op0 = "010110"
+                or  op0 = "000001";
+    
+    hasNoIntDest :=   op0 = "000001"
+                  or  op0 = "000011"
+                  or  op0 = "000111"
+                  or  op0 = "001000"
+                  or  op0 = "001010"
+                  or  op0 = "001011"
+                  or  op0 = "010101"
+                  or  op0 = "010110"
+                  or  op0 = "010111"
+                  or  (op0 = "000100" and op1 = "100000");
+
+    hasIntDest := not hasNoIntDest;
+    
+    src2a :=           op0 = "010101"
+                   or  op0 = "010111"
+                   or  (op0 = "000100" and op1 = "100000");
+    
+    src0a :=          op0 = "001010"
+                  or  op0 = "001011";
+    
+    intSrc0 :=          op0 = "000000"
+                    or  op0 = "000010"     
+                    or  op0 = "000011"
+                    or  op0 = "001010"
+                    or  op0 = "001011"
+
+                    or  op0(4) = '1';
+    
+    intSrc1 :=             op0 = "000000";
+    
+    --fpSrc1  :=             op0 = "000001"
+    
+    intSrc2 :=          op0 = "010101"
+                    or  op0 = "010111"
+                    or  (op0 = "000100" and op1 = "100000");      
+    
+    fpSrc2 :=        op0 = "010111";
+    
+    
+    aluOp :=        op0 = "000000"
+                or  op0 = "001000"     
+                or  op0 = "001001"
+                or  op0 = "001010"
+                or  op0 = "001011"
+                or  op0 = "010000"
+                or  op0 = "010001";
+                
+     fpOp :=        op0 = "000001";
+    
+     memOp :=      op0 = "000010"
+               or  op0 = "000011"     
+               or  op0 = "000100"     
+               or  op0 = "010100"
+               or  op0 = "010101"
+               or  op0 = "010110"
+               or  op0 = "010111";    
+    
+     sysOp := not (aluOp or memOp or sysOp);
+    
+     
+     
+    --res.specificOperation := specificOperation;
+    
+    res.classInfo.fpRename := bool2std(hasFpDest or fpSrc0 or fpSrc1 or fpSrc2);
+    
+    -- assign register definitions
+    res.virtualArgSpec.dest := "000" & qa;
+    if hasIntDest and isNonzero(res.virtualArgSpec.dest) = '1' then
+        res.virtualArgSpec.intDestSel := '1';
+    elsif hasFpDest then
+        res.virtualArgSpec.floatDestSel := '1';
+    else -- When none selected, set 0
+        --res.virtualArgSpec.dest := (others => '0');
+    end if;
+    
+    if src0a then
+       res.virtualArgSpec.args(0) := "000" & qa;
+    else
+       res.virtualArgSpec.args(0) := "000" & qb;
+    end if;
+
+    res.virtualArgSpec.intArgSel := (bool2std(intSrc0), bool2std(intSrc1), bool2std(intSrc2));
+    res.virtualArgSpec.floatArgSel := (bool2std(fpSrc0), bool2std(fpSrc1), bool2std(fpSrc2));
+
+    if fmt.src1i = '1' then
+        res.virtualArgSpec.args(1) := (others => '0');
+    else
+        res.virtualArgSpec.args(1) := "000" & qc;
+    end if;
+    
+    if fmt.intSrcSel(1) = '1' then
+        res.virtualArgSpec.intArgSel(1) := '1';
+    elsif fmt.fpSrcSel(1) = '1' then
+        res.virtualArgSpec.floatArgSel(1) := '1';
+    else -- When none selected, set 0
+        --res.virtualArgSpec.dest := (others => '0');
+    end if;
+
+    if fmt.src1i = '1' then -- When immediate, suppres register source 1??
+        res.virtualArgSpec.intArgSel(1) := '0';
+        res.virtualArgSpec.floatArgSel(1) := '0';
+    end if;
+
+    if src2a then
+       res.virtualArgSpec.args(2) := "000" & qa;
+    else
+       res.virtualArgSpec.args(2) := "000" & qd;
+    end if;
+    
+    -- process immediate
+    res.constantArgs.immSel := bool2std(hasImm16 or hasImm10 or hasImm26 or hasImm21);
+    res.constantArgs.imm := w;
+    if fmt.imm16 = '1' then -- Put imm in proper form 
+        res.constantArgs.imm(31 downto 16) := (others => w(15));
+    else
+        res.constantArgs.imm(31 downto 10) := (others => w(9));
+    end if;
+    
+    return res;
+end function;
+
+
+
+
+
 
 
 
