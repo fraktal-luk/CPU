@@ -1,7 +1,7 @@
 	jl  r31, $f1
-	and_i r0, r0, 0
-	and_i r0, r0, 0
-	and_i r0, r0, 0
+	add_i r0, r0, 0
+	add_i r0, r0, 0
+	add_i r0, r0, 0
 
 	sys call
 	sys error

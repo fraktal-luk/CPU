@@ -26,7 +26,7 @@ $L6	; ....
 	sys error
 
 $L7
-	and_i r0, r0, 0	;   	64
+	add_i r0, r0, 0	;   	64
 	ja $L8				;			1->2
 $L8
 	ja $L9				;			2->1
@@ -47,7 +47,7 @@ $L11
 	
 	sys error			; 112
 $L12	
-	and_i r0, r0, 0
+	add_i r0, r0, 0
 	ja $L13					;		2->3
 $L13
 	ja $L14					;		3->2
@@ -61,21 +61,21 @@ $L14
 	sys error			; 144
 	sys error
 $L15	
-	and_i r0, r0, 0
+	add_i r0, r0, 0
 	ja $L16					;		3->3
 	
 	sys error			; 160
 	sys error
 	sys error
 $L16	
-	and_i r0, r0, 0	
+	add_i r0, r0, 0	
 	
 	
 	
-	and_i r0, r0, 0		; 176
-	and_i r0, r0, 0
-	and_i r0, r0, 0
-	and_i r0, r0, 0
+	add_i r0, r0, 0		; 176
+	add_i r0, r0, 0
+	add_i r0, r0, 0
+	add_i r0, r0, 0
 
 	;ja $L7
 	
