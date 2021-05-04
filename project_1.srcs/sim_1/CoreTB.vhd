@@ -93,7 +93,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal defTable: work.InstructionSet.GeneralTable := work.InstructionSet.buildGeneralTable;
                                                         --work.InstructionSet.TheTable;
         
-    signal ch0, ch1, ch2, ch3: std_logic := '0';
+    signal ch0, ch1, ch2, ch3,  ch4, ch5, ch6, ch7: std_logic := '0';
     
     file traceFile: text open write_mode is "emulation_trace.txt";
     file traceFile2: text open write_mode is "emulation_trace2.txt";
@@ -592,7 +592,25 @@ BEGIN
 
       signal cpuState2: CoreState := INIT_CORE_STATE;
       signal dataMemory2: ByteArray(0 to 4095);
-      signal currentInstruction, currentInstruction2: Instruction;      
+      signal currentInstruction, currentInstruction2: Instruction;
+      
+      
+      use work.InstructionState.all;
+      
+      signal ins0, ins1: InstructionState;
+      
+      function cmpDecode(w1, w2: Word) return std_logic is
+          --variable w1, w2: Word;
+          variable ins1, ins2: InstructionState;
+      begin
+          --w1 := asm(str);
+          ins1 := work.DecodingDev.decodeFromWord(w1);
+          
+          --w2 := asmNew(str);
+          ins2 := work.DecodingDev.decodeFromWordNew(w2);
+          
+          return bool2std(ins1 = ins2);  
+      end function;      
   begin
         TMP_EMUL: process (clk)
             type EmulState is (ready, prepare, running);
@@ -644,6 +662,10 @@ BEGIN
                                         write(disasmText, disasmWithAddress2(slv2u(cpuState.nextIP), currentInstructionVar2.bits));
                                         writeline(traceFile2, disasmText);                                    
                                 end if;
+                                
+                                    ins0 <= work.DecodingDev.decodeFromWord(currentInstructionVar.bits);
+                                    ins1 <= work.DecodingDev.decodeFromWordNew(currentInstructionVar2.bits);
+                                    ch4 <= cmpDecode(currentInstructionVar.bits, currentInstructionVar2.bits);
                                 
                             else
                                 state := ready;

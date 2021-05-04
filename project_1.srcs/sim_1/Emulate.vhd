@@ -831,9 +831,9 @@ begin
         res := padLeft(ProcMnemonic'image(mnem) & " " & integer'image(immValue), 30);        
     elsif otr.format.imm21 = '1' then
         if otr.format.arg0inA = '1' then
-            res := padLeft(ProcMnemonic'image(mnem) & " " & rd & ", " & integer'image(immValue), 30);        
+            res := padLeft(ProcMnemonic'image(mnem) & " " & r0 & ", " & integer'image(immValue), 30);        
         else
-            res := padLeft(ProcMnemonic'image(mnem) & " " & r0 & ", " & integer'image(immValue), 30);                    
+            res := padLeft(ProcMnemonic'image(mnem) & " " & rd & ", " & integer'image(immValue), 30);                    
         end if;
     else
         -- op d, s0, s1

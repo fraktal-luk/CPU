@@ -602,7 +602,7 @@ begin
     res.virtualArgSpec.intArgSel := (bool2std(intSrc0), bool2std(intSrc1), bool2std(intSrc2));
     res.virtualArgSpec.floatArgSel := (bool2std(fpSrc0), bool2std(fpSrc1), bool2std(fpSrc2));
 
-    if fmt.src1i = '1' then
+    if hasImm16 or hasImm10 then
         res.virtualArgSpec.args(1) := (others => '0');
     else
         res.virtualArgSpec.args(1) := "000" & qc;
