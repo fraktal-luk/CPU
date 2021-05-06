@@ -276,7 +276,8 @@ begin
     if fmt.src2a = '1' then
         res.virtualArgSpec.args(2) := parts.qa;
     else
-        res.virtualArgSpec.args(2) := parts.qd;
+        res.virtualArgSpec.args(2) := --parts.qd;
+                                        (others => '0');
     end if;
     if fmt.intSrcSel(2) = '1' then
         res.virtualArgSpec.intArgSel(2) := '1';
@@ -378,7 +379,7 @@ begin
     
      isSysOp :=     op0 = "000111";
      
-     isUndef := not (isAluOp or isMemOp or isSysOp);
+     isUndef := not (isAluOp or isFpOp or isMemOp or isSysOp);
 
     -- 
 
@@ -389,7 +390,7 @@ begin
     elsif op0 = "001000" then
         aluOp := opJ;
     elsif op0 = "001001" then
-        aluOp := opJl;        
+        aluOp := opJ;        
     elsif op0 = "001010" then
         aluOp := opJz;        
     elsif op0 = "001011" then
@@ -570,11 +571,15 @@ begin
     
     intSrc1 :=             op0 = "000000";
     
-    --fpSrc1  :=             op0 = "000001"
     
     intSrc2 :=          op0 = "010101"
-                    or  op0 = "010111"
+                    --or  op0 = "010111"
                     or  (op0 = "000100" and op1 = "100000");      
+
+    fpSrc0 :=       op0 = "000001"
+                        and (op1 = "000000");
+    --fpSrc1  :=    op0 = "000001" 
+    --                   and (op1 = ... ); 
     
     fpSrc2 :=        op0 = "010111";
      
@@ -602,7 +607,7 @@ begin
     res.virtualArgSpec.intArgSel := (bool2std(intSrc0), bool2std(intSrc1), bool2std(intSrc2));
     res.virtualArgSpec.floatArgSel := (bool2std(fpSrc0), bool2std(fpSrc1), bool2std(fpSrc2));
 
-    if hasImm16 or hasImm10 then
+    if hasImm16 or hasImm10 or hasImm26 or hasImm21 then
         res.virtualArgSpec.args(1) := (others => '0');
     else
         res.virtualArgSpec.args(1) := "000" & qc;
@@ -624,12 +629,21 @@ begin
     if src2a then
        res.virtualArgSpec.args(2) := "000" & qa;
     else
-       res.virtualArgSpec.args(2) := "000" & qd;
+       res.virtualArgSpec.args(2) := "000" & --qd;
+                                             "00000";
     end if;
     
     -- process immediate
     res.constantArgs.immSel := bool2std(hasImm16 or hasImm10 or hasImm26 or hasImm21);
-    res.constantArgs.imm := w;
+    
+    if res.constantArgs.immSel = '1' then
+        res.constantArgs.imm := w;    
+    else
+            res.constantArgs.imm := w;    
+
+        res.constantArgs.imm(4 downto 0) := (others => '0'); -- TMP!
+    end if;
+    
     if fmt.imm16 = '1' then -- Put imm in proper form 
         res.constantArgs.imm(31 downto 16) := (others => w(15));
     else

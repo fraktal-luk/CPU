@@ -444,7 +444,7 @@ begin
             end if;
         
         when mov_f =>
-            res := ins6556X(fop, vals(1), vals(2), fmov, 0);
+            res := ins655655(fop, vals(1), vals(2), fmov, -1, 0); -- TMP!
             
         when or_f =>
             res := ins655655(fop, vals(1), vals(2), fmov, vals(3), 0);
