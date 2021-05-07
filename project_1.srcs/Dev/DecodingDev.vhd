@@ -71,7 +71,7 @@ constant FMT_SSTORE : InstructionFormat := ('0', '1', '1', '0', "011",  '0', "00
 constant FMT_JA     : InstructionFormat := ('0', '1', '0', '0', "000",  '0', "000",  '0'); -- Jump long
 constant FMT_ILOAD  : InstructionFormat := FMT_IMM;
 constant FMT_JR     : InstructionFormat := FMT_INT2;  -- Jump reg
-constant FMT_SLOAD  : InstructionFormat := FMT_SHIFT; -- mfc
+constant FMT_SLOAD  : InstructionFormat := ('0', '1', '0', '1', "010",  '0', "000",  '0'); -- mfc
 
 type InsDef is record
     opcd: ProcOpcode;
@@ -164,6 +164,12 @@ function decodeBranchIns(w: Word) return std_logic;
 function decodeMainCluster(w: Word) return std_logic;
 function decodeSecCluster(w: Word) return std_logic;
 function decodeFpRename(w: Word) return std_logic;
+
+function decodeBranchInsNew(w: Word) return std_logic;
+function decodeMainClusterNew(w: Word) return std_logic;
+function decodeSecClusterNew(w: Word) return std_logic;
+function decodeFpRenameNew(w: Word) return std_logic;
+
 
 function decodeSrc2a(w: Word) return std_logic;
 function decodeSrc0a(w: Word) return std_logic;
@@ -681,22 +687,19 @@ function decodeImmSel(w: Word) return std_logic is
     constant opcont: slv6 := w(15 downto 10);
     variable res: std_logic := '0';
 begin
-    
     -- if opcode in [opcodes with imm]
     -- or opcode is opcA and opcont in [imm(opcA)] 
     -- ...
     -- or opcode is opcZ and opcont in [imm(opcZ)]
     --  -> '1'
     -- else -> '0';
-    
+
     res :=                                              logicFunction(LTABLE_immSel_none, opcode) 
             or (bool2std(opcode = opcode2slv(ext0)) and logicFunction(LTABLE_immSel_ext0, opcont))
             or (bool2std(opcode = opcode2slv(ext2)) and logicFunction(LTABLE_immSel_ext2, opcont));
     
     return res;
 end function; 
-
-
 
 
 -- ......
@@ -734,8 +737,6 @@ begin
     return res;
 end function;
 
-
-
 function decodeFpRename(w: Word) return std_logic is
     constant opcode: slv6 := w(31 downto 26);
     constant opcont: slv6 := w(15 downto 10);
@@ -745,6 +746,73 @@ begin
     
     return res;
 end function;
+
+
+
+
+
+function decodeBranchInsNew(w: Word) return std_logic is
+    constant opcode: slv6 := w(31 downto 26);
+    constant opcont: slv6 := w(15 downto 10);
+    variable res: std_logic := '0';
+begin
+    res :=  bool2std(
+                w(31 downto 26) = "001000"
+             or  w(31 downto 26) = "001001"
+             or  w(31 downto 26) = "001010"
+             or  w(31 downto 26) = "001011"
+             or  (w(31 downto 26) = "000000" and  w(15 downto 10) = "000010" and (w(4 downto 0) = "00000" or w(4 downto 0) = "00001"))
+         );
+    
+    return res;
+end function;
+
+
+function decodeMainClusterNew(w: Word) return std_logic is
+    constant opcode: slv6 := w(31 downto 26);
+    constant opcont: slv6 := w(15 downto 10);
+    variable res: std_logic := '0';
+begin
+    res :=  bool2std(
+                w(31 downto 26) /= "000111"
+         );
+    
+    return res;
+end function;
+
+function decodeSecClusterNew(w: Word) return std_logic is
+    constant opcode: slv6 := w(31 downto 26);
+    constant opcont: slv6 := w(15 downto 10);
+    variable res: std_logic := '0';
+begin
+    res :=  bool2std(
+            w(31 downto 26) = "010101"
+         or  w(31 downto 26) = "010111"
+         or  (w(31 downto 26) = "000100" and  w(15 downto 10) = "100000")
+     );
+    return res;
+end function;
+
+function decodeFpRenameNew(w: Word) return std_logic is
+    constant opcode: slv6 := w(31 downto 26);
+    constant opcont: slv6 := w(15 downto 10);
+    variable res: std_logic := '0';
+begin
+    res :=  bool2std(
+           w(31 downto 26) = "000001"
+        or w(31 downto 26) = "010110"
+        or w(31 downto 26) = "010111"
+       -- or  (w(31 downto 26) = "000100" and  w(15 downto 10) = "100000")
+    );
+    
+    return res;
+end function;
+
+
+
+
+
+
 
 function decodeSrc2a(w: Word) return std_logic is
     constant opcode: slv6 := w(31 downto 26);

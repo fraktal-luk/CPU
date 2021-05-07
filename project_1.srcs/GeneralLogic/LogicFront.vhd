@@ -23,6 +23,8 @@ package LogicFront is
 
 function decodeInstruction(inputState: InstructionState) return InstructionState;
 
+function decodeInstructionNew(inputState: InstructionState) return InstructionState;
+
 function getFrontEventMulti(predictedAddress: Mword; ins: InstructionState; fetchLine: WordArray(0 to FETCH_WIDTH-1))
 return InstructionSlotArray;
 
@@ -83,6 +85,9 @@ function decodeInstruction(inputState: InstructionState) return InstructionState
     variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
 begin
 	decodedIns := decodeFromWord(inputState.bits);
+    if TMP_PARAM_NEW_DECODE then
+    	decodedIns := decodeFromWordNew(inputState.bits);
+	end if;
 	
 	res.specificOperation := decodedIns.specificOperation;
 	res.constantArgs := decodedIns.constantArgs;
@@ -102,37 +107,124 @@ begin
         end if;        
     end if;
 
-    res.constantArgs.immSel := decodeImmSel(inputState.bits);
+    if not TMP_PARAM_NEW_DECODE then
+        res.constantArgs.immSel := decodeImmSel(inputState.bits);
+    end if;
+    
     res.classInfo.branchIns := decodeBranchIns(inputState.bits);
     
     res.classInfo.mainCluster := decodeMainCluster(inputState.bits);
     res.classInfo.secCluster := decodeSecCluster(inputState.bits);
+
+    res.classInfo.fpRename := decodeFpRename(inputState.bits);
+
+        if TMP_PARAM_NEW_DECODE then
+            --res.constantArgs.immSel := decodeImmSelNew(inputState.bits);
+            res.classInfo.branchIns := decodeBranchInsNew(inputState.bits);
+            
+            res.classInfo.mainCluster := decodeMainClusterNew(inputState.bits);
+            res.classInfo.secCluster := decodeSecClusterNew(inputState.bits);
+        
+            res.classInfo.fpRename := decodeFpRenameNew(inputState.bits);        
+        end if;
+
     
     res.controlInfo.specialAction := not (res.classInfo.mainCluster or res.classInfo.secCluster);
 
-    res.classInfo.fpRename := decodeFpRename(inputState.bits);
 
 	return res;
 end function;
 
 
+
+function decodeInstructionNew(inputState: InstructionState) return InstructionState is
+	variable res: InstructionState := inputState;
+    variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
+begin
+	decodedIns := decodeFromWord(inputState.bits);
+    if true then
+    	decodedIns := decodeFromWordNew(inputState.bits);
+	end if;
+	
+	res.specificOperation := decodedIns.specificOperation;
+	res.constantArgs := decodedIns.constantArgs;
+	res.virtualArgSpec := decodedIns.virtualArgSpec;
+	
+	res.classInfo := getInstructionClassInfo(res);	
+    res.classInfo.fpRename := decodedIns.classInfo.fpRename;
+
+     if res.specificOperation.subpipe = none then                 	
+        res.controlInfo.specialAction := '1'; -- TODO: move this to classInfo?
+        -- CAREFUL: Those ops don't get issued, they are handled at retirement
+        res.classInfo.mainCluster := '0';
+        res.classInfo.secCluster := '0';
+        
+        if res.specificOperation.system = opUndef then
+            res.controlInfo.hasException := '1';
+        end if;        
+    end if;
+
+    --res.constantArgs.immSel := decodeImmSel(inputState.bits);
+    res.classInfo.branchIns := decodeBranchIns(inputState.bits);
+    
+    res.classInfo.mainCluster := decodeMainCluster(inputState.bits);
+    res.classInfo.secCluster := decodeSecCluster(inputState.bits);
+
+    res.classInfo.fpRename := decodeFpRename(inputState.bits);
+
+        if true then
+            --res.constantArgs.immSel := decodeImmSelNew(inputState.bits);
+            res.classInfo.branchIns := decodeBranchInsNew(inputState.bits);
+            
+            res.classInfo.mainCluster := decodeMainClusterNew(inputState.bits);
+            res.classInfo.secCluster := decodeSecClusterNew(inputState.bits);
+        
+            res.classInfo.fpRename := decodeFpRenameNew(inputState.bits);        
+        end if;
+
+    
+    res.controlInfo.specialAction := not (res.classInfo.mainCluster or res.classInfo.secCluster);
+
+
+	return res;
+end function;
+
+
+
+
 function isJumpLink(w: Word) return std_logic is
 begin
+    if TMP_PARAM_NEW_DECODE then
+        return bool2std(w(31 downto 26) = "001001");
+    end if;
+
     return bool2std(w(31 downto 26) = opcode2slv(jl));
 end function;
 
 function isJumpCond(w: Word) return std_logic is
 begin
+    if TMP_PARAM_NEW_DECODE then
+        return bool2std(w(31 downto 26) = "001010" or w(31 downto 26) = "001011");
+    end if;
+
     return bool2std(w(31 downto 26) = opcode2slv(jz)) or bool2std(w(31 downto 26) = opcode2slv(jnz));
 end function;
 
 function isJumpLong(w: Word) return std_logic is
 begin
+    if TMP_PARAM_NEW_DECODE then
+        return bool2std(w(31 downto 26) = "001000");
+    end if;
+
     return bool2std(w(31 downto 26) = opcode2slv(j));
 end function;
 
 function isJumpReg(w: Word) return std_logic is
 begin
+    if TMP_PARAM_NEW_DECODE then
+        return bool2std(w(31 downto 26) = "000000" and w(15 downto 10) = "000010" and (w(4 downto 0) = "00000" or w(4 downto 0) = "00001"));
+    end if;
+    
     return bool2std(w(31 downto 26) = opcode2slv(ext1)) and bool2std(w(15 downto 10) = opcont2slv(ext1, jzR) or w(15 downto 10) = opcont2slv(ext1, jzR));
 end function;
 

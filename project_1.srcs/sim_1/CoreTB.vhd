@@ -601,13 +601,21 @@ BEGIN
       
       function cmpDecode(w1, w2: Word) return std_logic is
           --variable w1, w2: Word;
-          variable ins1, ins2: InstructionState;
+          variable ins1, ins2, insa, insb: InstructionState := DEFAULT_INS_STATE;
       begin
+            insa.bits := w1;
+            insb.bits := w2;
+      
           --w1 := asm(str);
-          ins1 := work.DecodingDev.decodeFromWord(w1);
-          
+          ins1 := --work.DecodingDev.decodeFromWord(w1);
+                  work.LogicFront.decodeInstruction(insa);
           --w2 := asmNew(str);
-          ins2 := work.DecodingDev.decodeFromWordNew(w2);
+          ins2 := --work.DecodingDev.decodeFromWordNew(w2);
+                  work.LogicFront.decodeInstructionNew(insb);
+          
+          
+            ins1.bits := (others => '0');
+            ins2.bits := (others => '0');
           
           return bool2std(ins1 = ins2);  
       end function;      
@@ -620,6 +628,7 @@ BEGIN
             variable opResultVar: OperationResult;
             variable opResultVar2: OperationResult;
             variable  disasmText: line;
+            variable insa, insb: InstructionState; 
         begin
             if rising_edge(clk) then
                 case state is
@@ -662,9 +671,15 @@ BEGIN
                                         write(disasmText, disasmWithAddress2(slv2u(cpuState.nextIP), currentInstructionVar2.bits));
                                         writeline(traceFile2, disasmText);                                    
                                 end if;
-                                
-                                    ins0 <= work.DecodingDev.decodeFromWord(currentInstructionVar.bits);
-                                    ins1 <= work.DecodingDev.decodeFromWordNew(currentInstructionVar2.bits);
+
+
+                                    insa.bits := currentInstructionVar.bits;
+                                    insb.bits := currentInstructionVar2.bits;
+                                            
+                                    ins0 <= --work.DecodingDev.decodeFromWord(currentInstructionVar.bits);
+                                            work.LogicFront.decodeInstruction(insa);
+                                    ins1 <= --work.DecodingDev.decodeFromWordNew(currentInstructionVar2.bits);
+                                            work.LogicFront.decodeInstructionNew(insb);
                                     ch4 <= cmpDecode(currentInstructionVar.bits, currentInstructionVar2.bits);
                                 
                             else
