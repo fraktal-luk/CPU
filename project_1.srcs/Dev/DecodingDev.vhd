@@ -646,8 +646,10 @@ begin
         res.constantArgs.imm := w;    
     else
             res.constantArgs.imm := w;    
-
-        res.constantArgs.imm(4 downto 0) := (others => '0'); -- TMP!
+        
+        if false then
+            res.constantArgs.imm(4 downto 0) := (others => '0'); -- TMP!
+        end if;
     end if;
     
     if fmt.imm16 = '1' then -- Put imm in proper form 

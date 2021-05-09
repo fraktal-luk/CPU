@@ -812,7 +812,7 @@ BEGIN
                 --				stalled content in fetch buffer!
                 baseIP := iadr and i2slv(-PIPE_WIDTH*4, MWORD_SIZE); -- Clearing low bits
                 for i in 0 to PIPE_WIDTH-1 loop
-                    iin(i) <= testProgram(slv2u(baseIP(12 downto 2)) + i); -- CAREFUL! 2 low bits unused (32b memory) 									
+                    iin(i) <= testProgram2(slv2u(baseIP(12 downto 2)) + i); -- CAREFUL! 2 low bits unused (32b memory) 									
                 end loop;
                 
                 ivalid <= iadrvalid and not isNonzero(iadr(iadr'high downto 12));

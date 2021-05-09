@@ -85,9 +85,9 @@ function decodeInstruction(inputState: InstructionState) return InstructionState
     variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
 begin
 	decodedIns := decodeFromWord(inputState.bits);
-    if TMP_PARAM_NEW_DECODE then
-    	decodedIns := decodeFromWordNew(inputState.bits);
-	end if;
+--    if TMP_PARAM_NEW_DECODE then
+--    	decodedIns := decodeFromWordNew(inputState.bits);
+--	end if;
 	
 	res.specificOperation := decodedIns.specificOperation;
 	res.constantArgs := decodedIns.constantArgs;
@@ -107,9 +107,9 @@ begin
         end if;        
     end if;
 
-    if not TMP_PARAM_NEW_DECODE then
+    --if not TMP_PARAM_NEW_DECODE then
         res.constantArgs.immSel := decodeImmSel(inputState.bits);
-    end if;
+    --end if;
     
     res.classInfo.branchIns := decodeBranchIns(inputState.bits);
     
@@ -118,15 +118,15 @@ begin
 
     res.classInfo.fpRename := decodeFpRename(inputState.bits);
 
-        if TMP_PARAM_NEW_DECODE then
-            --res.constantArgs.immSel := decodeImmSelNew(inputState.bits);
-            res.classInfo.branchIns := decodeBranchInsNew(inputState.bits);
+--        if TMP_PARAM_NEW_DECODE then
+--            --res.constantArgs.immSel := decodeImmSelNew(inputState.bits);
+--            res.classInfo.branchIns := decodeBranchInsNew(inputState.bits);
             
-            res.classInfo.mainCluster := decodeMainClusterNew(inputState.bits);
-            res.classInfo.secCluster := decodeSecClusterNew(inputState.bits);
+--            res.classInfo.mainCluster := decodeMainClusterNew(inputState.bits);
+--            res.classInfo.secCluster := decodeSecClusterNew(inputState.bits);
         
-            res.classInfo.fpRename := decodeFpRenameNew(inputState.bits);        
-        end if;
+--            res.classInfo.fpRename := decodeFpRenameNew(inputState.bits);        
+--        end if;
 
     
     res.controlInfo.specialAction := not (res.classInfo.mainCluster or res.classInfo.secCluster);
@@ -248,7 +248,7 @@ begin
 		end if;
 
         res(i).ins.bits := fetchLine(i);
-		res(i).ins := decodeInstruction(res(i).ins); -- Here decoding!
+		res(i).ins := decodeInstructionNew(res(i).ins); -- Here decoding!
 		res(i).ins.tags.fetchCtr := ins.tags.fetchCtr(31 downto LOG2_PIPE_WIDTH) & i2slv(i, LOG2_PIPE_WIDTH);
 
         res(i).ins.ip := ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);    -- !! Only for BQ, indirect   
