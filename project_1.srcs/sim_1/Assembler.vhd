@@ -55,94 +55,15 @@ type XrefArray is array(integer range <>) of Xref;
 
 procedure printXrefArray(xa: XrefArray);
 
-
 function reg2str(n: natural; fp: boolean) return string;
 
-
 function parseInstructionString(str: string) return GroupBuffer; -- TEMP!
-
 function readSourceFile(name: string) return ProgramBuffer;
+procedure processProgram(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray);
 
-procedure processProgram(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray; constant USE_NEW: boolean);
-
-type OpcodeArray is array(0 to 63) of ProcOpcode;
-type OpcontArray is array(0 to 63) of ProcOpcont;
-
-constant OPCODE_TABLE: OpcodeArray := (
-      0 => andI,   -- 000000
-      1 => orI,    -- 000001
-      2 => addI,   -- 000010
-      3 => subI,   -- 000011
-      4 => jz,     -- 000100
-      5 => jnz,    -- 000101
-      6 => j,      -- 000110
-      7 => jl,     -- 000111
-
-      8 => ld,     -- 001000
-      9 => st,     -- 001001
-     10 => ldf,    -- 001010
-     11 => stf,    -- 001011
-     12 => ext0,   -- 001100
-     13 => ext1,   -- 001101
-     14 => ext2,   -- 001110
-     15 => fop,    -- 001111
-    
-    others => undef
-);
-
-
-constant OPCONT_TABLE_EXT0: OpcontArray := (
-      0 => andR,   -- 000000
-      1 => orR,    -- 000001
-      2 => shlC,   -- 000010
-      3 => shaC,   -- 000011
-      4 => addR,     -- 000100
-      5 => subR,    -- 000101
-      6 => muls,      -- 000110
-      7 => mulu,     -- 000111
-
-      8 => divs,     -- 001000
-      9 => divu,     -- 001001
-    
-    others => undef 
-);
-
-constant OPCONT_TABLE_EXT1: OpcontArray := (
-      0 => jzR,   -- 000000
-      1 => jnzR,    -- 000001
-    
-    others => undef 
-);
-
-constant OPCONT_TABLE_EXT2: OpcontArray := (
-      0 => retE,   -- 000000
-      1 => retI,    -- 000001
-      2 => halt,   -- 000010
-      3 => sync,   -- 000011
-      4 => replay,     -- 000100
-      5 => error,    -- 000101
-      6 => call,      -- 000110
-      7 => send,     -- 000111
-  
-      8 => mfc,     -- 001000
-      9 => mtc,     -- 001001
-
-    others => undef 
-);
-
-constant OPCONT_TABLE_FP: OpcontArray := (
-       0 => fmov,    -- 000000
-       1 => forr,    -- 000001
-
-    others => undef 
-);
-
---function asm(str: string) return Word;
 function asmNew(str: string) return Word;
 
-function disasmWithAddress(a: natural; w: Word) return string;
 function disasmWithAddress2(a: natural; w: Word) return string;
-function disasmWord(w: Word) return string;
 function disasmWord2(w: Word) return string;
 
 procedure disasmToFile(name: string; arr: WordArray);
@@ -346,118 +267,6 @@ begin
 end function;
 
 
-function makeMachineWord(mnemonic: ProcMnemonic; vals: IntArray; strArg: string; undefOffset: boolean) return Word is
-    variable res: Word := (others => '0');
-begin
-    case mnemonic is
-        when and_i =>
-            res := ins655H(andI, vals(1), vals(2), vals(3));
-        when or_i =>
-            res := ins655H(orI, vals(1), vals(2), vals(3));
-        when xor_i =>
-                --res := ins655H(xorI, vals(1), vals(2), vals(3));
-        when add_i =>
-            res := ins655H(addI, vals(1), vals(2), vals(3));
-    
-        when and_r =>
-            res := ins655655(ext0, vals(1), vals(2), andR, vals(3), 0);
-        when or_r =>
-            res := ins655655(ext0, vals(1), vals(2), orR, vals(3), 0);
-        when xor_r =>
-                --res := ins655H(xorI, vals(1), vals(2), vals(3));
-        when add_r =>
-            res := ins655655(ext0, vals(1), vals(2), addR, vals(3), 0);
-        when sub_r =>
-            res := ins655655(ext0, vals(1), vals(2), subR, vals(3), 0);
-                       
-        when shl_i =>
-            res := ins6556X(ext0, vals(1), vals(2), shlC, vals(3));
-        when sha_i =>
-            res := ins6556X(ext0, vals(1), vals(2), shaC, vals(3));
-        when mul =>
-            res := ins655655(ext0, vals(1), vals(2), muls, vals(3), 0);
-        when ldi_i => 
-            res := ins655H(ld, vals(1), vals(2), vals(3));
-        when sti_i =>
-            res := ins655H(st, vals(1), vals(2), vals(3));
-        
-        when ldf_i =>
-            res := ins655H(ldf, vals(1), vals(2), vals(3));
-        
-        when stf_i =>
-            res := ins655H(stf, vals(1), vals(2), vals(3));
-        
-        
-        when lds =>
-            res := ins6556X(ext2, vals(1), vals(2), mfc, vals(3));
-    
-        when sts =>
-            res := ins6556X(ext2, vals(1), vals(2), mtc, vals(3));
-    
-    
-        when jz_i =>
-            res := ins65J(jz, vals(1), vals(2));
-                if undefOffset then
-                    res := ins65J(jz, vals(1));
-                end if;
-        when jz_r =>
-            res := ins655655(ext1, vals(1), vals(2), jzR, vals(3), 0);
-            
-        when jnz_i =>
-            res := ins65J(jnz, vals(1), vals(2));
-                if undefOffset then
-                    res := ins65J(jnz, vals(1));
-                end if;            
-        when jnz_r =>
-            res := ins655655(ext1, vals(1), vals(2), jnzR, vals(3), 0);
-            
-        when ja =>
-            res := ins6L(j, vals(1));
-                if undefOffset then
-                    res := ins6L(j);
-                end if;            
-        when jl =>
-            res := ins65J(jl, vals(1), vals(2));
-                if undefOffset then
-                    res := ins65J(jl, vals(1));
-                end if;            
-            
-        when sys =>
-            if matches(strArg, "halt") then
-               res := ins655655(ext2, 0, 0, halt, 0, 0);
-            elsif matches(strArg, "reti") then
-               res := ins655655(ext2, 0, 0, retI, 0, 0);
-            elsif matches(strArg, "rete") then
-               res := ins655655(ext2, 0, 0, retE, 0, 0);
-            elsif matches(strArg, "sync") then
-               res := ins655655(ext2, 0, 0, sync, 0, 0);            
-            elsif matches(strArg, "replay") then
-               res := ins655655(ext2, 0, 0, replay, 0, 0);            
-            elsif matches(strArg, "error") then
-               res := ins655655(ext2, 0, 0, error, 0, 0);
-            elsif matches(strArg, "call") then
-                  res := ins655655(ext2, 0, 0, call, 0, 0);
-            elsif matches(strArg, "send") then
-                  res := ins655655(ext2, 0, 0, send, 0, 0);                                            
-            else
-               res := ins6L(undef, 0);            
-            end if;
-        
-        when mov_f =>
-            res := ins655655(fop, vals(1), vals(2), fmov, -1, 0); -- TMP!
-            
-        when or_f =>
-            res := ins655655(fop, vals(1), vals(2), fmov, vals(3), 0);
-        
-        when others => 
-            res := ins6L(undef, 0);
-    end case;
-    
-    return res;
-end function;
-
-
-
 function makeMachineWordNew(mnemonic: ProcMnemonic; vals: IntArray; strArg: string; undefOffset: boolean) return Word is
     variable res: Word := (others => 'X');
     variable insDef: InstructionDefinition;
@@ -469,36 +278,8 @@ function makeMachineWordNew(mnemonic: ProcMnemonic; vals: IntArray; strArg: stri
     alias imm10 is res(9 downto 0);
     constant TheTable: GeneralTable := buildGeneralTable;
 begin
-    insDef := --findEncoding(mnemonic);
-              TheTable(mnemonic);
+    insDef := TheTable(mnemonic);
 
---    if mnemonic = sys then
---            insDef.fmt := noRegs;
---            --indDef.i := 
-            
---            if matches(strArg, "halt") then
---               res := ins655655(ext2, 0, 0, halt, 0, 0);
---            elsif matches(strArg, "reti") then
---               res := ins655655(ext2, 0, 0, retI, 0, 0);
---            elsif matches(strArg, "rete") then
---               res := ins655655(ext2, 0, 0, retE, 0, 0);
---            elsif matches(strArg, "sync") then
---               res := ins655655(ext2, 0, 0, sync, 0, 0);            
---            elsif matches(strArg, "replay") then
---               res := ins655655(ext2, 0, 0, replay, 0, 0);            
---            elsif matches(strArg, "error") then
---               res := ins655655(ext2, 0, 0, error, 0, 0);
---            elsif matches(strArg, "call") then
---                  res := ins655655(ext2, 0, 0, call, 0, 0);
---            elsif matches(strArg, "send") then
---                  res := ins655655(ext2, 0, 0, send, 0, 0);                                            
---            else
---               res := ins6L(undef, 0);            
---            end if;
---    end if;
-    
-    --    report ProcMnemonic'image(mnemonic);
-    --    report integer'image(insDef.i);
     res(31 downto 26) := i2slv(insDef.i, 6);
     res(15 downto 10) := i2slv(insDef.j, 6);
     res(4 downto 0) := i2slv(insDef.k, 5);
@@ -588,8 +369,7 @@ begin
 end function;
 
 
-procedure processInstruction(ar: GroupBuffer; num: integer; labels, imports: LabelArray; fillLabels: boolean; command: out Word; hasImport: out boolean; import: out string;
-                                constant USE_NEW: boolean) is
+procedure processInstruction(ar: GroupBuffer; num: integer; labels, imports: LabelArray; fillLabels: boolean; command: out Word; hasImport: out boolean; import: out string) is
     variable mnem: ProcMnemonic;
     variable undefOffset: boolean := false; 
     variable vals: IntArray(0 to ar'length-1) := (others => -1);
@@ -616,53 +396,18 @@ begin
         end if;
     end loop;
     
-    if USE_NEW then
-        if matches(ar(0), "sys") then
-            for m in ProcMnemonic loop
-                --    report "sys_" & ar(1);      
-                if matches("sys_" & ar(1), ProcMnemonic'image(m)) then
-                    mnem := m;
-                end if;
-            end loop;            
-        end if;
-        
-        command := makeMachineWordNew(mnem, vals, ar(1), undefOffset);
-        
---                if matches(ar(0), "sys") then
---                    command := (others => '-');
---                end if;
-                
---                if mnem = sys_call then
---                    command := (others => 'Z');
---                end if;
-                
-    else
-        command := makeMachineWord(mnem, vals, ar(1), undefOffset);
+    if matches(ar(0), "sys") then
+        for m in ProcMnemonic loop
+            --    report "sys_" & ar(1);      
+            if matches("sys_" & ar(1), ProcMnemonic'image(m)) then
+                mnem := m;
+            end if;
+        end loop;            
     end if;
+    
+    command := makeMachineWordNew(mnem, vals, ar(1), undefOffset);
 end procedure;
 
-
---function processSingleInstruction(gb: GroupBuffer) return Word is
---    variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
---    variable tmpHasImport: boolean := false;    
---begin
---    --processInstructionNew(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true,  res, tmpHasImport, tmpImport);    
---    --return res;
---end function;
-
---function asm(str: string) return Word is
---    constant LEN: natural := str'length;
---    variable str0: string(1 to LEN+1) := (others => cr);    
---    variable gb: GroupBuffer;
---    variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
---    variable tmpHasImport: boolean := false;
---    variable res: Word;      
---begin
---    str0(1 to LEN) := str;
---    gb := parseInstructionString(str0);
---    processInstruction(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true,  res, tmpHasImport, tmpImport, false);        
---    return res;
---end function;
 
 function asmNew(str: string) return Word is
     constant LEN: natural := str'length;
@@ -674,7 +419,7 @@ function asmNew(str: string) return Word is
 begin
     str0(1 to LEN) := str;
     gb := parseInstructionString(str0);
-    processInstruction(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true,  res, tmpHasImport, tmpImport, true);        
+    processInstruction(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true,  res, tmpHasImport, tmpImport);        
     return res;
 end function;
 
@@ -733,7 +478,7 @@ begin
 end function;
 
 
-procedure processProgram(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray; constant USE_NEW: boolean) is
+procedure processProgram(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray) is
     variable insIndex, procIndex: integer := 0; -- Actual number of instruction
     variable labels, exports: LabelArray(0 to p'length-1) := (others => (others => cr));
     variable startOffsets, endOffsets: IntArray(0 to p'length-1) := (others => -1);
@@ -778,7 +523,7 @@ begin
     end loop;
     
     for i in 0 to p'length-1 loop
-        processInstruction(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true, commands(i), tmpHasImport, tmpImport, USE_NEW);
+        processInstruction(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true, commands(i), tmpHasImport, tmpImport);
         if tmpHasImport then
             commands(i) := fillOffset(commands(i), i, tmpImport, labels, EMPTY_LABEL_ARRAY);
             imports(ni) := (new string'(tmpStrip(tmpImport)), 4*i);
@@ -810,263 +555,6 @@ begin
 end function;
 
 
-function disasm655H(w: Word; opc: ProcOpcode) return string is
-    variable res: string(1 to 24) := (others => ' ');
-    variable qa, qb, qc, qd, imm: integer;
-    variable aFP: boolean := false; 
-begin
-    qa := slv2u(w(25 downto 21));
-    qb := slv2u(w(20 downto 16));
-    qc := slv2u(w(9 downto 5));
-    qd := slv2u(w(4 downto 0));
-    
-    imm := slv2s(w(15 downto 0));
-    
-    case opc is
-        when ldf | stf =>
-            aFP := true;
-        when others =>
-    end case;
-
-    res(1 to 5) := padLeft(ProcOpcode'image(opc), 5);
-    res(8 to 10) := reg2str(qa, aFP);
-    res(11 to 12) := ", ";
-    res(13 to 15) := reg2str(qb, false);
-    res(16 to 17) := ", ";
-    
-    res(18 to 25) := padLeft(integer'image(imm), 24-17+1);
-    
-    return res;
-end function;
-
-
-function disasmJump(w: Word; opc: ProcOpcode) return string is
-    variable res: string(1 to 24) := (others => ' ');
-    variable qa, qb, qc, qd, imm: integer;
-    variable aFP: boolean := false;
-    variable immStart, immSize: natural := 0;
-begin
-    qa := slv2u(w(25 downto 21));
-    qb := slv2u(w(20 downto 16));
-    qc := slv2u(w(9 downto 5));
-    qd := slv2u(w(4 downto 0));
-    
-    
-    res(1 to 5) := padLeft(ProcOpcode'image(opc), 5);
-    
-    case opc is
-        when j =>
-            imm := slv2s(w(25 downto 0));
-            immSize := 10;
-            immStart := 8;           
-        when jz | jnz | jl =>
-            imm := slv2s(w(20 downto 0));
-            immSize := 7;
-
-            res(8 to 10) := reg2str(qa, aFP);
-            res(11 to 12) := ", ";
-            immStart := 14;
-        when others =>
-    end case;
-
-    res(immStart to immStart - 1 + immSize) := padLeft(integer'image(imm), immSize);
-    
-    return res;
-end function;
-
-
-function disasmExt0(w: Word; opc: ProcOpcode) return string is
-    variable res: string(1 to 24) := (others => ' ');
-    variable qa, qb, qc, qd, imm: integer;
-    variable aFP, bFP, cFP, dFP: boolean := false;
-    variable immStart, immSize: natural := 0;
-    variable opct: ProcOpcont;
-begin
-    qa := slv2u(w(25 downto 21));
-    qb := slv2u(w(20 downto 16));
-    qc := slv2u(w(9 downto 5));
-    qd := slv2u(w(4 downto 0));
-    
-    imm := slv2s(w(9 downto 0));
-    
-    opct := OPCONT_TABLE_EXT0(slv2u(w(15 downto 10)));
-
-    res(1 to 5) := padLeft(ProcOpcont'image(opct), 5);
-    res(8 to 10) := reg2str(qa, aFP);
-    res(11 to 12) := ", ";
-    res(13 to 15) := reg2str(qb, bFP);
-    res(16 to 17) := ", ";
-    
-    case opct is
-        -- 2 sources
-        when andR | orR | addR | subR | divs | divu | muls | mulu =>             
-            res(18 to 20) := reg2str(qc, cFP);
-                     
-        when shlC | shaC =>
-        
-            res(18 to 25) := padLeft(integer'image(imm), 24-17+1);
-        when others =>
-    end case;
-    
-    return res;
-end function;
-
-function disasmExt1(w: Word; opc: ProcOpcode) return string is
-    variable res: string(1 to 24) := (others => ' ');
-    variable qa, qb, qc, qd, imm: integer;
-    variable aFP, bFP, cFP, dFP: boolean := false;
-    variable immStart, immSize: natural := 0;
-    variable opct: ProcOpcont;
-begin
-    qa := slv2u(w(25 downto 21));
-    qb := slv2u(w(20 downto 16));
-    qc := slv2u(w(9 downto 5));
-    qd := slv2u(w(4 downto 0));
-    
-    imm := slv2s(w(9 downto 0));
-    
-    opct := OPCONT_TABLE_EXT1(slv2u(w(15 downto 10)));
-
-    res(1 to 5) := padLeft(ProcOpcont'image(opct), 5);
-    res(8 to 10) := reg2str(qa, aFP);
-    res(11 to 12) := ", ";
-    res(13 to 15) := reg2str(qb, bFP);
-    res(16 to 17) := ", ";
-    
-    case opct is
-        -- 2 sources
-        when jzR | jnzR =>             
-            res(18 to 20) := reg2str(qc, cFP);
-        when others =>
-    end case;
-    
-    return res;
-end function;
-
-function disasmExt2(w: Word; opc: ProcOpcode) return string is
-    variable res: string(1 to 24) := (others => ' ');
-    variable qa, qb, qc, qd, imm: integer;
-    variable aFP, bFP, cFP, dFP: boolean := false;
-    variable immStart, immSize: natural := 0;
-    variable opct: ProcOpcont;
-begin
-    qa := slv2u(w(25 downto 21));
-    qb := slv2u(w(20 downto 16));
-    qc := slv2u(w(9 downto 5));
-    qd := slv2u(w(4 downto 0));
-    
-    imm := slv2s(w(9 downto 0));
-    
-    opct := OPCONT_TABLE_EXT2(slv2u(w(15 downto 10)));
-
-    res(1 to 5) := padLeft(ProcOpcont'image(opct), 5);
-
-    case opct is
-        -- 0 sources
-        when retE | retI | halt | sync | replay | error | call | send =>
-        
-        -- system move
-        when mfc | mtc =>
-
-            res(8 to 10) := reg2str(qa, aFP);
-            res(11 to 12) := ", ";
-            res(13 to 15) := reg2str(0, bFP);
-            res(16 to 17) := ", ";
-
-            res(18 to 25) := padLeft(integer'image(imm), 24-17+1);
-        -- FP 1 source
-        when fmov => 
-            res(8 to 10) := reg2str(qa, aFP);
-            res(11 to 12) := ", ";
-            res(13 to 15) := reg2str(qb, bFP);
-            res(16 to 17) := ", ";
-                    
-        -- FP 2 sources
-        when forr =>             
-            res(18 to 20) := reg2str(qc, cFP);
-
-        when others =>
-    end case;
-    
-    return res;
-end function;
-
-function disasmFP(w: Word; opc: ProcOpcode) return string is
-    variable res: string(1 to 24) := (others => ' ');
-    variable qa, qb, qc, qd, imm: integer;
-    variable aFP, bFP, cFP, dFP: boolean := true;
-    variable immStart, immSize: natural := 0;
-    variable opct: ProcOpcont;
-begin
-    qa := slv2u(w(25 downto 21));
-    qb := slv2u(w(20 downto 16));
-    qc := slv2u(w(9 downto 5));
-    qd := slv2u(w(4 downto 0));
-    
-    imm := slv2s(w(9 downto 0));
-    
-    opct := OPCONT_TABLE_FP(slv2u(w(15 downto 10)));
-
-    res(1 to 5) := padLeft(ProcOpcont'image(opct), 5);
-
-    res(8 to 10) := reg2str(qa, aFP);
-    res(11 to 12) := ", ";
-    res(13 to 15) := reg2str(qb, bFP);
-    res(16 to 17) := ", ";
-
-    case opct is
-        when fmov => 
-            
-        -- FP 2 sources
-        when forr =>             
-            res(18 to 20) := reg2str(qc, cFP);
-
-        when others =>
-    end case;
-    
-    return res;
-end function;
-
-
-
-function disasmWord(w: Word) return string is
-    variable res: string(1 to 24) := (others => ' ');
-    variable ind: integer := -1;
-    variable opc: ProcOpcode;
-begin
-    
-    ind := slv2u(w(31 downto 26)); 
-    opc := OPCODE_TABLE(ind);
-    
-    case opc is
-        -- format 655H
-        when andI | orI | addI | subI | ld | st | ldf | stf =>
-            return disasm655H(w, opc);
-        -- constant jumps
-        when j | jz | jnz | jl =>
-            return disasmJump(w, opc);
-        
-        when ext0 =>
-            return disasmExt0(w, opc);
-
-        when ext1 =>
-            return disasmExt1(w, opc);
-            
-        when ext2 =>
-            return disasmExt2(w, opc);
-
-        when fop =>
-            return disasmFP(w, opc);
-                                    
-        when others =>
-            res(1 to 3) := "???";
-    end case;
-      
-
-    return res;
-end function;
-
-
 function disasmWord2(w: Word) return string is
     variable res: string(1 to 24) := (others => ' ');
     variable ind: integer := -1;
@@ -1076,25 +564,6 @@ begin
     return res;
 end function;
 
-
-
-
-function disasmWithAddress(a: natural; w: Word) return string is
-    variable res: string(1 to 1 + 10 + 10 + 30) := (others => ' ');
-    variable aw: Word := i2slv(a, 32);
-    constant HEX_TAB: string(1 to 16) := "0123456789abcdef";
-    variable c: character;
-begin
-    -- synthesis translate_off   
-    res(1 to 8) := w2hex(aw);
-    res(1 + 8 to 1 + 9) := ": "; res(10) := ' ';--cr;
-    res(11 to 18) := w2hex(w);
-    res(19 to 21) := "   ";
-    res(22 to 22 + 24-1) := disasmWord(w);
-    -- synthesis translate_on
-    
-    return res;
-end function;
 
 function disasmWithAddress2(a: natural; w: Word) return string is
     variable res: string(1 to 1 + 10 + 10 + 30) := (others => ' ');
@@ -1120,7 +589,7 @@ procedure disasmToFile(name: string; arr: WordArray) is
     variable tmpStr: string(1 to 51);
 begin
     for i in 0 to arr'length-1 loop 
-       tmpStr := disasmWithAddress(4*i, arr(i));
+       tmpStr := disasmWithAddress2(4*i, arr(i));
        write(outputLine, tmpStr); 
        writeline(outFile, outputLine);
     end loop;

@@ -66,9 +66,10 @@ ARCHITECTURE Behavior OF CoreTB IS
 
     --constant TIME_STEP: time := 1 ns; -- for 1 instruction in emulation
 	
-    signal testProgram, testProgram2: WordArray(0 to 2047);
+    signal --testProgram, 
+            testProgram2: WordArray(0 to 2047);
     
-    alias programMemory is testProgram;
+   -- alias programMemory is testProgram;
     alias programMemory2 is testProgram2;
     
     signal cpuEndFlag: std_logic := '0';
@@ -269,20 +270,21 @@ ARCHITECTURE Behavior OF CoreTB IS
         programMem(startAdr to startAdr + LEN - 1) <= insSeq;    
     end procedure;
 
-    procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram, testProgram2: out WordArray) is        
+    procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal --testProgram,
+                                                                                                                     testProgram2: out WordArray) is        
 	    constant prog: ProgramBuffer := readSourceFile(filename);
         variable machineCode, machineCode2: WordArray(0 to prog'length-1);
         variable imp, exp: XrefArray(0 to 100);
     begin
-        processProgram(prog, machineCode, imp, exp, false);
-        machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
+        --processProgram(prog, machineCode, imp, exp, false);
+        --machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
 
-        processProgram(prog, machineCode2, imp, exp, true);
+        processProgram(prog, machineCode2, imp, exp);
         machineCode2 := fillXrefs(machineCode2, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
     
     
-        testProgram <= (others => (others => 'U'));
-        testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+        --testProgram <= (others => (others => 'U'));
+        --testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
         
         testProgram2 <= (others => (others => 'U'));
         testProgram2(0 to machineCode2'length-1) <= machineCode2(0 to machineCode2'length-1);        
@@ -301,17 +303,17 @@ ARCHITECTURE Behavior OF CoreTB IS
         s(1 to ln.all'length) <= ln.all;
     end procedure;
     
-    function getInstruction(signal cpuState: in CoreState; signal programMemory: in WordArray) return Instruction is
-        variable res: Instruction;
-        variable insWordVar: Word;
-        variable intOpVar: InternalOperation;
-    begin
-        insWordVar := programMemory(slv2u(cpuState.nextIP)/4);
-        intOpVar := decode(cpuState.nextIP, insWordVar);
-        res := (cpuState.nextIP, insWordVar,  --disasmWithAddress(slv2u(cpuState.nextIP), insWordVar), intOpVar);
-                                              disasmWord(insWordVar), intOpVar);
-        return res;
-    end function;
+--    function getInstruction(signal cpuState: in CoreState; signal programMemory: in WordArray) return Instruction is
+--        variable res: Instruction;
+--        variable insWordVar: Word;
+--        variable intOpVar: InternalOperation;
+--    begin
+--        insWordVar := programMemory(slv2u(cpuState.nextIP)/4);
+--        intOpVar := decode(cpuState.nextIP, insWordVar);
+--        res := (cpuState.nextIP, insWordVar,  --disasmWithAddress(slv2u(cpuState.nextIP), insWordVar), intOpVar);
+--                                              disasmWord(insWordVar), intOpVar);
+--        return res;
+--    end function;
 
     
     function getInstruction2(signal cpuState: in CoreState; signal programMemory: in WordArray) return Instruction is
@@ -357,10 +359,10 @@ BEGIN
        
        variable match: boolean := true;
    begin
-      processProgram(readSourceFile("common_asm.txt"), machineCodeVar, imp, exp, false);
-      commonCode <= machineCodeVar;
+      --processProgram(readSourceFile("common_asm.txt"), machineCodeVar, imp, exp, false);
+      --commonCode <= machineCodeVar;
 	           
-              processProgram(readSourceFile("common_asm.txt"), machineCodeVar2, imp, exp, true);
+              processProgram(readSourceFile("common_asm.txt"), machineCodeVar2, imp, exp);
               commonCode2 <= machineCodeVar2;	           
 	           
 	  wait for 110 ns;
@@ -387,7 +389,8 @@ BEGIN
               end if;
 
               announceTest(currentTest, currentSuite, testName.all, suiteName.all);    
-              loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory, programMemory2);
+              loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), --programMemory, 
+                                                                                                            programMemory2);
 
               -- Reset handler
               --testProgram(slv2u(RESET_BASE)/4) <= asm("ja -512");
@@ -404,11 +407,11 @@ BEGIN
                       testProgram2(slv2u(CALL_BASE)/4 + 1) <= asmNew("ja 0");
 
               -- Common lib
-              setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
+--              setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
                     setProgram(testProgram2, commonCode2, i2slv(4*1024, 32));	           
 
               setForOneCycle(resetDataMem, clk);
-              disasmToFile(testName.all & "_disasm.txt", testProgram);
+              disasmToFile(testName.all & "_disasm.txt", testProgram2);
 
               if CORE_SIMULATION then
                   startTest(testToDo, int0b);
@@ -451,13 +454,13 @@ BEGIN
           testProgram2(1) <= asmNew("ja 0");
 	  
 	  -- Common lib, unneeded here
-	  setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
+--	  setProgram(testProgram, commonCode, i2slv(4*1024, 32));	           
     	  setProgram(testProgram2, commonCode2, i2slv(4*1024, 32));	           
 
 
       setForOneCycle(resetDataMem, clk);
       
-      disasmToFile("error_disasm.txt", testProgram);
+      disasmToFile("error_disasm.txt", testProgram2);
 
       if CORE_SIMULATION then
           startTest(testToDo, int0b);  
@@ -476,7 +479,8 @@ BEGIN
       -------------
       announceTest(currentTest, currentSuite, "exc return", "");
       
-      loadProgramFromFileWithImports("events.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory, programMemory2);
+      loadProgramFromFileWithImports("events.txt", exp, i2slv(4*1024, MWORD_SIZE), --programMemory, 
+                                                                                        programMemory2);
       
           -- Reset handler      
 --          testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");       
@@ -486,7 +490,7 @@ BEGIN
   --        testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
           
           -- Common lib
-          setProgram(testProgram, commonCode, i2slv(4*1024, 32));      
+--          setProgram(testProgram, commonCode, i2slv(4*1024, 32));      
 
 
               -- Reset handler      
@@ -503,7 +507,7 @@ BEGIN
 
       setForOneCycle(resetDataMem, clk); 
 
-      disasmToFile("events_disasm.txt", testProgram);
+      disasmToFile("events_disasm.txt", testProgram2);
       
       if CORE_SIMULATION then
           startTest(testToDo, int0b);      
@@ -522,7 +526,8 @@ BEGIN
       -------
       announceTest(currentTest, currentSuite, "interrupt", "");      
 
-      loadProgramFromFileWithImports("events2.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory, programMemory2);      
+      loadProgramFromFileWithImports("events2.txt", exp, i2slv(4*1024, MWORD_SIZE), --programMemory,
+                                                                                         programMemory2);      
           
           -- Reset handler
 --          testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");
@@ -536,7 +541,7 @@ BEGIN
    --       testProgram(slv2u(INT_BASE)/4 + 1) <= asm("sys reti");
           
           -- Common lib
-          setProgram(testProgram, commonCode, i2slv(4*1024, 32));          
+--          setProgram(testProgram, commonCode, i2slv(4*1024, 32));          
 
 
               -- Reset handler
@@ -556,7 +561,7 @@ BEGIN
       
       setForOneCycle(resetDataMem, clk);
       
-      disasmToFile("events2_disasm.txt", testProgram);
+      disasmToFile("events2_disasm.txt", testProgram2);
       
       if CORE_SIMULATION then
           startTest(testToDo, int0b);

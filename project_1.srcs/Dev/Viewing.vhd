@@ -256,7 +256,7 @@ end function;
 function sprintHex(ins: InstructionState) return string is
 begin
    -- synthesis translate_off
-   return work.Assembler.disasmWithAddress(slv2u(ins.ip), ins.bits);
+   return work.Assembler.disasmWithAddress2(slv2u(ins.ip), ins.bits);
    -- synthesis translate_on
 end function;
 
@@ -616,7 +616,7 @@ procedure printOp(ins: InstructionState; file f: text) is
     variable outputLine: line;
 begin
     -- synthesis translate_off
-    write(outputLine, work.Assembler.disasmWithAddress(slv2u(ins.ip), ins.bits));
+    write(outputLine, work.Assembler.disasmWithAddress2(slv2u(ins.ip), ins.bits));
     -- synthesis translate_on
     if ins.controlInfo.hasInterrupt = '1' then
         write(outputLine, string'(" # Interrupt "));

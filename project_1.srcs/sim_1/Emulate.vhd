@@ -24,20 +24,6 @@ procedure memWriteDword(signal memory: inout ByteArray; address: in Mword; data:
 procedure memWriteMword(signal memory: inout ByteArray; address: in Mword; data: in Mword);
 
 
--- TODO: probably should be defined in ArchDefs!
---type MnemonicCoding is record
---    mnemonic: ProcMnemonic;
-    
---    opcode: ProcOpcode;
---    opcont: ProcOpcont;
---end record;
-
-
-type OperationCoding is record
-    opcode: ProcOpcode;
-    opcont: ProcOpcont;
-end record;
-
 type FormatSpec is record
     imm: std_logic;
     imm16: std_logic;
@@ -205,7 +191,6 @@ type OpTableRow is record
 end record;
 
  
---type MnemonicCodingTable is array(ProcMnemonic range <>) of OperationCoding;
 type OpTable is array(ProcMnemonic range <>) of OpTableRow;
 
 constant OP_TABLE: OpTable(ProcMnemonic'left to ProcMnemonic'right) := (
@@ -282,19 +267,12 @@ function defaultInternalOp return InternalOperation;
 constant DEFAULT_INTERNAL_OPERATION: InternalOperation := defaultInternalOp;
 constant DEFAULT_INTERNAL_OP: InternalOperation := DEFAULT_INTERNAL_OPERATION;
 
+function decode2(adr: Mword; w: Word) return InternalOperation;  
+function getOpDisasm(w: Word) return string;
 
-    -- TMP
-    function decode(adr: Mword; w: Word) return InternalOperation;
-    
-    function decode2(adr: Mword; w: Word) return InternalOperation;
-    
-    function getOpDisasm(w: Word) return string;
-
-
-    procedure performOp(signal state: inout CoreState; signal memory: inout ByteArray; op: in InternalOperation;
-                        signal outSigs: out std_logic_vector(0 to 2);
-                        result: out OperationResult);
-
+procedure performOp(signal state: inout CoreState; signal memory: inout ByteArray; op: in InternalOperation;
+                    signal outSigs: out std_logic_vector(0 to 2);
+                    result: out OperationResult);
 
 end package;
 
@@ -308,118 +286,6 @@ begin
     return res;
 end function;
 
-
-function bin2opcode(v: std_logic_vector(5 downto 0)) return ProcOpcode is
-begin
-    case v(5 downto 0) is
-        when "000000" => return andI;
-        when "000001" => return orI;
-        when "000010" => return addI;
-        when "000011" => return subI;
-
-        when "000100" => return jz;
-        when "000101" => return jnz;
-        when "000110" => return j;
-        when "000111" => return jl;
-            
-        when "001000" => return ld;
-        when "001001" => return st;
-        when "001010" => return ldf;
-        when "001011" => return stf;
-
-        when "001100" => return ext0;
-        when "001101" => return ext1;
-        when "001110" => return ext2;
-        when "001111" => return fop;
-                  
-        when others   => return undef;
-    end case;
-    
-end function;
-
-function bin2opcont(opcode: ProcOpcode; v: std_logic_vector(5 downto 0)) return ProcOpcont is
-begin
-    case opcode is
-        --
-        when ext0 =>
-            case v(5 downto 0) is
-                when "000000" => return andR;
-                when "000001" => return orR;
-                when "000010" => return shlC;
-                when "000011" => return shaC;
-        
-                when "000100" => return addR;
-                when "000101" => return subR;
-                when "000110" => return muls;
-                when "000111" => return mulu;
-                    
-                when "001000" => return divs;
-                when "001001" => return divu;
-          
-                when others => return undef;
-            end case;
-        
-        --
-        when ext1 =>
-            case v(5 downto 0) is
-                when "000000" => return jzR;
-                when "000001" => return jnzR;
-
-                when others => return undef;
-            end case;
-        
-        --
-        when ext2 =>
-            case v(5 downto 0) is
-                when "000000" => return retE;
-                when "000001" => return retI;
-                when "000010" => return halt;
-                when "000011" => return sync;
-        
-                when "000100" => return replay;
-                when "000101" => return error;
-                when "000110" => return call;
-                when "000111" => return send;
-                    
-                when "001000" => return mfc;
-                when "001001" => return mtc;
-                
-                when others => return undef;
-            end case;
-        
-        --
-        when fop =>
-            case v(5 downto 0) is
-                when "000000" => return fmov;
-                when "000001" => return forr;
-                
-                when others => return undef;
-            end case;
-            
-        when others => return none;
-    end case;
-    
-end function;
-
-function getSystemOp(opcode: ProcOpcode; opcont: ProcOpcont) return AbstractOperation is
-begin
-    if opcode = ext2 then
-        case opcont is
-            when retE => return retE;
-            when retI => return retI;
-            when halt => return halt;
-            when sync => return sync;
-            when replay => return replay;
-            when error => return error;
-            when call => return call;
-            when send => return send;
-            
-            when others => return undef;
-        end case;
-    end if;
-    
-    return undef;
-end function;
 
 function getSystemOperation(mnem: ProcMnemonic) return AbstractOperation is
 begin
@@ -435,18 +301,6 @@ begin
             
             when others => return undef;
         end case;
-    
-    return undef;
-end function;
-
-
-function getMnemonic(opcode: ProcOpcode; opcont: ProcOpcont) return ProcMnemonic is
-begin
-    for m in ProcMnemonic'left to ProcMnemonic'right loop
-        if OP_TABLE(m).opcode = opcode and OP_TABLE(m).opcont = opcont then
-            return m;
-        end if;
-    end loop;
     
     return undef;
 end function;
@@ -605,55 +459,10 @@ begin
 end procedure;
 
 
-
-
-
-function decode(adr: Mword; w: Word) return InternalOperation is
-    variable res: InternalOperation;
-    constant opcode: ProcOpcode := bin2opcode(w(31 downto 26));
-    constant opcont: ProcOpcont := bin2opcont(opcode, w(15 downto 10));
-
-    variable mnem: ProcMnemonic := undef;
-    variable fmt: FormatSpec := FMT_DEFAULT;
-    variable desc: OpDescription := DESC_DEFAULT;
-    variable isSystemOp: boolean := false;
-    variable operation, systemOp: AbstractOperation := undef;
-begin
-    -- Get menemonic
-    mnem := getMnemonic(opcode, opcont);
-    
-    -- Get operation type description
-    -- Different track for system instructions
-    systemOp := getSystemOp(opcode, opcont);
-    if systemOp /= undef then
-        isSystemOp := true;
-        operation := systemOp;
-        fmt := FMT_DEFAULT;
-        desc := DESC_SYS_OP;
-    else
-        operation := OP_TABLE(mnem).op;
-        fmt := OP_TABLE(mnem).format;
-        desc := OP_TABLE(mnem).desc;
-    end if;
-    
-    -- Get arg specifications
-    res := getArgSpec(fmt, desc, w);
-    
-    res := fillProperties(res, desc);
-    
-    res.operation := operation;
-    res.ip := adr;
-    
-    return res;
-end function;
-
-
-
-
 function decode2(adr: Mword; w: Word) return InternalOperation is
     variable res: InternalOperation;
-    constant opcode: ProcOpcode := bin2opcode(w(31 downto 26));
-    constant opcont: ProcOpcont := bin2opcont(opcode, w(15 downto 10));
+    --constant opcode: ProcOpcode := bin2opcode(w(31 downto 26));
+    --constant opcont: ProcOpcont := bin2opcont(opcode, w(15 downto 10));
 
     variable mnem: ProcMnemonic := undef;
     variable fmt: FormatSpec := FMT_DEFAULT;
@@ -719,14 +528,14 @@ end function;
 
 function decodeMnem2(w: Word) return ProcMnemonic is
     variable res: InternalOperation;
-    constant opcode: ProcOpcode := bin2opcode(w(31 downto 26));
-    constant opcont: ProcOpcont := bin2opcont(opcode, w(15 downto 10));
+--    constant opcode: ProcOpcode := bin2opcode(w(31 downto 26));
+--    constant opcont: ProcOpcont := bin2opcont(opcode, w(15 downto 10));
 
     variable mnem: ProcMnemonic := undef;
-    variable fmt: FormatSpec := FMT_DEFAULT;
-    variable desc: OpDescription := DESC_DEFAULT;
-    variable isSystemOp: boolean := false;
-    variable operation, systemOp: AbstractOperation := undef;
+--    variable fmt: FormatSpec := FMT_DEFAULT;
+--    variable desc: OpDescription := DESC_DEFAULT;
+--    variable isSystemOp: boolean := false;
+--    variable operation, systemOp: AbstractOperation := undef;
     variable i, j, k: integer;
     variable insDef: InstructionDefinition;
 begin
