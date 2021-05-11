@@ -21,7 +21,7 @@ use work.DecodingDev.all;
 
 package LogicFront is
 
-function decodeInstruction(inputState: InstructionState) return InstructionState;
+--function decodeInstruction(inputState: InstructionState) return InstructionState;
 
 function decodeInstructionNew(inputState: InstructionState) return InstructionState;
 
@@ -80,60 +80,60 @@ begin
 	return ci;
 end function;
 
-function decodeInstruction(inputState: InstructionState) return InstructionState is
-	variable res: InstructionState := inputState;
-    variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
-begin
-	decodedIns := decodeFromWord(inputState.bits);
---    if TMP_PARAM_NEW_DECODE then
---    	decodedIns := decodeFromWordNew(inputState.bits);
---	end if;
+--function decodeInstruction(inputState: InstructionState) return InstructionState is
+--	variable res: InstructionState := inputState;
+--    variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
+--begin
+--	decodedIns := decodeFromWord(inputState.bits);
+----    if TMP_PARAM_NEW_DECODE then
+----    	decodedIns := decodeFromWordNew(inputState.bits);
+----	end if;
 	
-	res.specificOperation := decodedIns.specificOperation;
-	res.constantArgs := decodedIns.constantArgs;
-	res.virtualArgSpec := decodedIns.virtualArgSpec;
+--	res.specificOperation := decodedIns.specificOperation;
+--	res.constantArgs := decodedIns.constantArgs;
+--	res.virtualArgSpec := decodedIns.virtualArgSpec;
 	
-	res.classInfo := getInstructionClassInfo(res);	
-    res.classInfo.fpRename := decodedIns.classInfo.fpRename;
+--	res.classInfo := getInstructionClassInfo(res);	
+--    res.classInfo.fpRename := decodedIns.classInfo.fpRename;
 
-     if res.specificOperation.subpipe = none then                 	
-        res.controlInfo.specialAction := '1'; -- TODO: move this to classInfo?
-        -- CAREFUL: Those ops don't get issued, they are handled at retirement
-        res.classInfo.mainCluster := '0';
-        res.classInfo.secCluster := '0';
+--     if res.specificOperation.subpipe = none then                 	
+--        res.controlInfo.specialAction := '1'; -- TODO: move this to classInfo?
+--        -- CAREFUL: Those ops don't get issued, they are handled at retirement
+--        res.classInfo.mainCluster := '0';
+--        res.classInfo.secCluster := '0';
         
-        if res.specificOperation.system = opUndef then
-            res.controlInfo.hasException := '1';
-        end if;        
-    end if;
+--        if res.specificOperation.system = opUndef then
+--            res.controlInfo.hasException := '1';
+--        end if;        
+--    end if;
 
-    --if not TMP_PARAM_NEW_DECODE then
-        res.constantArgs.immSel := decodeImmSel(inputState.bits);
-    --end if;
+--    --if not TMP_PARAM_NEW_DECODE then
+--        res.constantArgs.immSel := decodeImmSel(inputState.bits);
+--    --end if;
     
-    res.classInfo.branchIns := decodeBranchIns(inputState.bits);
+--    res.classInfo.branchIns := decodeBranchIns(inputState.bits);
     
-    res.classInfo.mainCluster := decodeMainCluster(inputState.bits);
-    res.classInfo.secCluster := decodeSecCluster(inputState.bits);
+--    res.classInfo.mainCluster := decodeMainCluster(inputState.bits);
+--    res.classInfo.secCluster := decodeSecCluster(inputState.bits);
 
-    res.classInfo.fpRename := decodeFpRename(inputState.bits);
+--    res.classInfo.fpRename := decodeFpRename(inputState.bits);
 
---        if TMP_PARAM_NEW_DECODE then
---            --res.constantArgs.immSel := decodeImmSelNew(inputState.bits);
---            res.classInfo.branchIns := decodeBranchInsNew(inputState.bits);
+----        if TMP_PARAM_NEW_DECODE then
+----            --res.constantArgs.immSel := decodeImmSelNew(inputState.bits);
+----            res.classInfo.branchIns := decodeBranchInsNew(inputState.bits);
             
---            res.classInfo.mainCluster := decodeMainClusterNew(inputState.bits);
---            res.classInfo.secCluster := decodeSecClusterNew(inputState.bits);
+----            res.classInfo.mainCluster := decodeMainClusterNew(inputState.bits);
+----            res.classInfo.secCluster := decodeSecClusterNew(inputState.bits);
         
---            res.classInfo.fpRename := decodeFpRenameNew(inputState.bits);        
---        end if;
+----            res.classInfo.fpRename := decodeFpRenameNew(inputState.bits);        
+----        end if;
 
     
-    res.controlInfo.specialAction := not (res.classInfo.mainCluster or res.classInfo.secCluster);
+--    res.controlInfo.specialAction := not (res.classInfo.mainCluster or res.classInfo.secCluster);
 
 
-	return res;
-end function;
+--	return res;
+--end function;
 
 
 
@@ -141,7 +141,7 @@ function decodeInstructionNew(inputState: InstructionState) return InstructionSt
 	variable res: InstructionState := inputState;
     variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
 begin
-	decodedIns := decodeFromWord(inputState.bits);
+	--decodedIns := decodeFromWord(inputState.bits);
     if true then
     	decodedIns := decodeFromWordNew(inputState.bits);
 	end if;
@@ -165,12 +165,12 @@ begin
     end if;
 
     --res.constantArgs.immSel := decodeImmSel(inputState.bits);
-    res.classInfo.branchIns := decodeBranchIns(inputState.bits);
+--    res.classInfo.branchIns := decodeBranchIns(inputState.bits);
     
-    res.classInfo.mainCluster := decodeMainCluster(inputState.bits);
-    res.classInfo.secCluster := decodeSecCluster(inputState.bits);
+--    res.classInfo.mainCluster := decodeMainCluster(inputState.bits);
+--    res.classInfo.secCluster := decodeSecCluster(inputState.bits);
 
-    res.classInfo.fpRename := decodeFpRename(inputState.bits);
+--    res.classInfo.fpRename := decodeFpRename(inputState.bits);
 
         if true then
             --res.constantArgs.immSel := decodeImmSelNew(inputState.bits);
@@ -435,13 +435,13 @@ end function;
     begin
         for i in 0 to PIPE_WIDTH-1 loop
             
-            res(i).immSel := decodeImmSel(insVec(i).ins.bits);
+--            res(i).immSel := decodeImmSel(insVec(i).ins.bits);
             
-            res(i).branchIns := decodeBranchIns(insVec(i).ins.bits);            
-            res(i).mainCluster := decodeMainCluster(insVec(i).ins.bits);
-            res(i).secCluster := decodeSecCluster(insVec(i).ins.bits);
+--            res(i).branchIns := decodeBranchIns(insVec(i).ins.bits);            
+--            res(i).mainCluster := decodeMainCluster(insVec(i).ins.bits);
+--            res(i).secCluster := decodeSecCluster(insVec(i).ins.bits);
             
-            res(i).fpRename := decodeFpRename(insVec(i).ins.bits);
+--            res(i).fpRename := decodeFpRename(insVec(i).ins.bits);
         end loop;
         return res;
     end function;

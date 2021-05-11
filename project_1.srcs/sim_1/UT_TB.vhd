@@ -28,8 +28,8 @@ architecture Behavioral of UT_TB is
         variable w1, w2: Word;
         variable ins1, ins2: InstructionState;
     begin
-        w1 := asm(str);
-        ins1 := decodeFromWord(w1);
+        --w1 := asm(str);
+        --ins1 := decodeFromWord(w1);
         
         w2 := asmNew(str);
         ins2 := decodeFromWordNew(w2);
@@ -42,8 +42,8 @@ architecture Behavioral of UT_TB is
         variable w1, w2: Word;
         variable ins1, ins2: InstructionState;
     begin
-        w1 := asm("ja 0");
-        ins1 := decodeFromWord(w1);
+        --w1 := asm("ja 0");
+        --ins1 := decodeFromWord(w1);
         
         w2 := asmNew("ja 0");
         ins2 := decodeFromWordNew(w2);        
@@ -58,11 +58,11 @@ architecture Behavioral of UT_TB is
     signal ch0, ch1, ch2: std_logic := '0';
 begin
 
-        ins0 <= decodeFromWord(asm("ja 0"));
+--        ins0 <= decodeFromWord(asm("ja 0"));
         ins1 <= decodeFromWordNew(asmNew("ja 0"));
 
 
-        ins2 <= decodeFromWord(asm("ldi_i r11, r15, 40"));
+--        ins2 <= decodeFromWord(asm("ldi_i r11, r15, 40"));
         ins3 <= decodeFromWordNew(asmNew("ldi_i r11, r15, 40"));
         
 

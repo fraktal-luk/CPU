@@ -137,7 +137,7 @@ constant OPCONT_TABLE_FP: OpcontArray := (
     others => undef 
 );
 
-function asm(str: string) return Word;
+--function asm(str: string) return Word;
 function asmNew(str: string) return Word;
 
 function disasmWithAddress(a: natural; w: Word) return string;
@@ -346,115 +346,115 @@ begin
 end function;
 
 
-function makeMachineWord(mnemonic: ProcMnemonic; vals: IntArray; strArg: string; undefOffset: boolean) return Word is
-    variable res: Word := (others => '0');
-begin
-    case mnemonic is
-        when and_i =>
-            res := ins655H(andI, vals(1), vals(2), vals(3));
-        when or_i =>
-            res := ins655H(orI, vals(1), vals(2), vals(3));
-        when xor_i =>
-                --res := ins655H(xorI, vals(1), vals(2), vals(3));
-        when add_i =>
-            res := ins655H(addI, vals(1), vals(2), vals(3));
+--function makeMachineWord(mnemonic: ProcMnemonic; vals: IntArray; strArg: string; undefOffset: boolean) return Word is
+--    variable res: Word := (others => '0');
+--begin
+--    case mnemonic is
+--        when and_i =>
+--            res := ins655H(andI, vals(1), vals(2), vals(3));
+--        when or_i =>
+--            res := ins655H(orI, vals(1), vals(2), vals(3));
+--        when xor_i =>
+--                --res := ins655H(xorI, vals(1), vals(2), vals(3));
+--        when add_i =>
+--            res := ins655H(addI, vals(1), vals(2), vals(3));
     
-        when and_r =>
-            res := ins655655(ext0, vals(1), vals(2), andR, vals(3), 0);
-        when or_r =>
-            res := ins655655(ext0, vals(1), vals(2), orR, vals(3), 0);
-        when xor_r =>
-                --res := ins655H(xorI, vals(1), vals(2), vals(3));
-        when add_r =>
-            res := ins655655(ext0, vals(1), vals(2), addR, vals(3), 0);
-        when sub_r =>
-            res := ins655655(ext0, vals(1), vals(2), subR, vals(3), 0);
+--        when and_r =>
+--            res := ins655655(ext0, vals(1), vals(2), andR, vals(3), 0);
+--        when or_r =>
+--            res := ins655655(ext0, vals(1), vals(2), orR, vals(3), 0);
+--        when xor_r =>
+--                --res := ins655H(xorI, vals(1), vals(2), vals(3));
+--        when add_r =>
+--            res := ins655655(ext0, vals(1), vals(2), addR, vals(3), 0);
+--        when sub_r =>
+--            res := ins655655(ext0, vals(1), vals(2), subR, vals(3), 0);
                        
-        when shl_i =>
-            res := ins6556X(ext0, vals(1), vals(2), shlC, vals(3));
-        when sha_i =>
-            res := ins6556X(ext0, vals(1), vals(2), shaC, vals(3));
-        when mul =>
-            res := ins655655(ext0, vals(1), vals(2), muls, vals(3), 0);
-        when ldi_i => 
-            res := ins655H(ld, vals(1), vals(2), vals(3));
-        when sti_i =>
-            res := ins655H(st, vals(1), vals(2), vals(3));
+--        when shl_i =>
+--            res := ins6556X(ext0, vals(1), vals(2), shlC, vals(3));
+--        when sha_i =>
+--            res := ins6556X(ext0, vals(1), vals(2), shaC, vals(3));
+--        when mul =>
+--            res := ins655655(ext0, vals(1), vals(2), muls, vals(3), 0);
+--        when ldi_i => 
+--            res := ins655H(ld, vals(1), vals(2), vals(3));
+--        when sti_i =>
+--            res := ins655H(st, vals(1), vals(2), vals(3));
         
-        when ldf_i =>
-            res := ins655H(ldf, vals(1), vals(2), vals(3));
+--        when ldf_i =>
+--            res := ins655H(ldf, vals(1), vals(2), vals(3));
         
-        when stf_i =>
-            res := ins655H(stf, vals(1), vals(2), vals(3));
+--        when stf_i =>
+--            res := ins655H(stf, vals(1), vals(2), vals(3));
         
         
-        when lds =>
-            res := ins6556X(ext2, vals(1), vals(2), mfc, vals(3));
+--        when lds =>
+--            res := ins6556X(ext2, vals(1), vals(2), mfc, vals(3));
     
-        when sts =>
-            res := ins6556X(ext2, vals(1), vals(2), mtc, vals(3));
+--        when sts =>
+--            res := ins6556X(ext2, vals(1), vals(2), mtc, vals(3));
     
     
-        when jz_i =>
-            res := ins65J(jz, vals(1), vals(2));
-                if undefOffset then
-                    res := ins65J(jz, vals(1));
-                end if;
-        when jz_r =>
-            res := ins655655(ext1, vals(1), vals(2), jzR, vals(3), 0);
+--        when jz_i =>
+--            res := ins65J(jz, vals(1), vals(2));
+--                if undefOffset then
+--                    res := ins65J(jz, vals(1));
+--                end if;
+--        when jz_r =>
+--            res := ins655655(ext1, vals(1), vals(2), jzR, vals(3), 0);
             
-        when jnz_i =>
-            res := ins65J(jnz, vals(1), vals(2));
-                if undefOffset then
-                    res := ins65J(jnz, vals(1));
-                end if;            
-        when jnz_r =>
-            res := ins655655(ext1, vals(1), vals(2), jnzR, vals(3), 0);
+--        when jnz_i =>
+--            res := ins65J(jnz, vals(1), vals(2));
+--                if undefOffset then
+--                    res := ins65J(jnz, vals(1));
+--                end if;            
+--        when jnz_r =>
+--            res := ins655655(ext1, vals(1), vals(2), jnzR, vals(3), 0);
             
-        when ja =>
-            res := ins6L(j, vals(1));
-                if undefOffset then
-                    res := ins6L(j);
-                end if;            
-        when jl =>
-            res := ins65J(jl, vals(1), vals(2));
-                if undefOffset then
-                    res := ins65J(jl, vals(1));
-                end if;            
+--        when ja =>
+--            res := ins6L(j, vals(1));
+--                if undefOffset then
+--                    res := ins6L(j);
+--                end if;            
+--        when jl =>
+--            res := ins65J(jl, vals(1), vals(2));
+--                if undefOffset then
+--                    res := ins65J(jl, vals(1));
+--                end if;            
             
-        when sys =>
-            if matches(strArg, "halt") then
-               res := ins655655(ext2, 0, 0, halt, 0, 0);
-            elsif matches(strArg, "reti") then
-               res := ins655655(ext2, 0, 0, retI, 0, 0);
-            elsif matches(strArg, "rete") then
-               res := ins655655(ext2, 0, 0, retE, 0, 0);
-            elsif matches(strArg, "sync") then
-               res := ins655655(ext2, 0, 0, sync, 0, 0);            
-            elsif matches(strArg, "replay") then
-               res := ins655655(ext2, 0, 0, replay, 0, 0);            
-            elsif matches(strArg, "error") then
-               res := ins655655(ext2, 0, 0, error, 0, 0);
-            elsif matches(strArg, "call") then
-                  res := ins655655(ext2, 0, 0, call, 0, 0);
-            elsif matches(strArg, "send") then
-                  res := ins655655(ext2, 0, 0, send, 0, 0);                                            
-            else
-               res := ins6L(undef, 0);            
-            end if;
+--        when sys =>
+--            if matches(strArg, "halt") then
+--               res := ins655655(ext2, 0, 0, halt, 0, 0);
+--            elsif matches(strArg, "reti") then
+--               res := ins655655(ext2, 0, 0, retI, 0, 0);
+--            elsif matches(strArg, "rete") then
+--               res := ins655655(ext2, 0, 0, retE, 0, 0);
+--            elsif matches(strArg, "sync") then
+--               res := ins655655(ext2, 0, 0, sync, 0, 0);            
+--            elsif matches(strArg, "replay") then
+--               res := ins655655(ext2, 0, 0, replay, 0, 0);            
+--            elsif matches(strArg, "error") then
+--               res := ins655655(ext2, 0, 0, error, 0, 0);
+--            elsif matches(strArg, "call") then
+--                  res := ins655655(ext2, 0, 0, call, 0, 0);
+--            elsif matches(strArg, "send") then
+--                  res := ins655655(ext2, 0, 0, send, 0, 0);                                            
+--            else
+--               res := ins6L(undef, 0);            
+--            end if;
         
-        when mov_f =>
-            res := ins655655(fop, vals(1), vals(2), fmov, -1, 0); -- TMP!
+--        when mov_f =>
+--            res := ins655655(fop, vals(1), vals(2), fmov, -1, 0); -- TMP!
             
-        when or_f =>
-            res := ins655655(fop, vals(1), vals(2), fmov, vals(3), 0);
+--        when or_f =>
+--            res := ins655655(fop, vals(1), vals(2), fmov, vals(3), 0);
         
-        when others => 
-            res := ins6L(undef, 0);
-    end case;
+--        when others => 
+--            res := ins6L(undef, 0);
+--    end case;
     
-    return res;
-end function;
+--    return res;
+--end function;
 
 
 
@@ -637,7 +637,7 @@ begin
 --                end if;
                 
     else
-        command := makeMachineWord(mnem, vals, ar(1), undefOffset);
+--        command := makeMachineWord(mnem, vals, ar(1), undefOffset);
     end if;
 end procedure;
 
@@ -650,19 +650,19 @@ end procedure;
 --    --return res;
 --end function;
 
-function asm(str: string) return Word is
-    constant LEN: natural := str'length;
-    variable str0: string(1 to LEN+1) := (others => cr);    
-    variable gb: GroupBuffer;
-    variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
-    variable tmpHasImport: boolean := false;
-    variable res: Word;      
-begin
-    str0(1 to LEN) := str;
-    gb := parseInstructionString(str0);
-    processInstruction(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true,  res, tmpHasImport, tmpImport, false);        
-    return res;
-end function;
+--function asm(str: string) return Word is
+--    constant LEN: natural := str'length;
+--    variable str0: string(1 to LEN+1) := (others => cr);    
+--    variable gb: GroupBuffer;
+--    variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
+--    variable tmpHasImport: boolean := false;
+--    variable res: Word;      
+--begin
+--    str0(1 to LEN) := str;
+--    gb := parseInstructionString(str0);
+--    processInstruction(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true,  res, tmpHasImport, tmpImport, false);        
+--    return res;
+--end function;
 
 function asmNew(str: string) return Word is
     constant LEN: natural := str'length;

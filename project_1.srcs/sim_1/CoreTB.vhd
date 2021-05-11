@@ -390,11 +390,11 @@ BEGIN
               loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory, programMemory2);
 
               -- Reset handler
-              testProgram(slv2u(RESET_BASE)/4) <= asm("ja -512");
+              --testProgram(slv2u(RESET_BASE)/4) <= asm("ja -512");
               
               -- Call handler
-              testProgram(slv2u(CALL_BASE)/4) <= asm("sys send");
-              testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("ja 0");      
+              --testProgram(slv2u(CALL_BASE)/4) <= asm("sys send");
+              --testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("ja 0");      
 
                       -- Reset handler
                       testProgram2(slv2u(RESET_BASE)/4) <= asmNew("ja -512");
@@ -444,8 +444,8 @@ BEGIN
       -- Test error signal  
       announceTest(currentTest, currentSuite, "err signal", "");      
     
-      testProgram(0) <= asm("sys error");
-      testProgram(1) <= asm("ja 0");
+--      testProgram(0) <= asm("sys error");
+ --     testProgram(1) <= asm("ja 0");
 
           testProgram2(0) <= asmNew("sys error");
           testProgram2(1) <= asmNew("ja 0");
@@ -479,11 +479,11 @@ BEGIN
       loadProgramFromFileWithImports("events.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory, programMemory2);
       
           -- Reset handler      
-          testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");       
+--          testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");       
           
           -- Call handler - special
-          testProgram(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");  
-          testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
+  --        testProgram(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");  
+  --        testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
           
           -- Common lib
           setProgram(testProgram, commonCode, i2slv(4*1024, 32));      
@@ -525,15 +525,15 @@ BEGIN
       loadProgramFromFileWithImports("events2.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory, programMemory2);      
           
           -- Reset handler
-          testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");
+--          testProgram(slv2u(RESET_BASE)/4) <=     asm("ja -512");
           
           -- Call handler - special
-          testProgram(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");
-          testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
+  --        testProgram(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");
+  --        testProgram(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
           
           -- Int handler - special
-          testProgram(slv2u(INT_BASE)/4) <=     asm("add_i r0, r0, 0"); -- NOP
-          testProgram(slv2u(INT_BASE)/4 + 1) <= asm("sys reti");
+   --       testProgram(slv2u(INT_BASE)/4) <=     asm("add_i r0, r0, 0"); -- NOP
+   --       testProgram(slv2u(INT_BASE)/4 + 1) <= asm("sys reti");
           
           -- Common lib
           setProgram(testProgram, commonCode, i2slv(4*1024, 32));          
@@ -607,8 +607,8 @@ BEGIN
             insb.bits := w2;
       
           --w1 := asm(str);
-          ins1 := --work.DecodingDev.decodeFromWord(w1);
-                  work.LogicFront.decodeInstruction(insa);
+     --     ins1 := --work.DecodingDev.decodeFromWord(w1);
+    --              work.LogicFront.decodeInstruction(insa);
           --w2 := asmNew(str);
           ins2 := --work.DecodingDev.decodeFromWordNew(w2);
                   work.LogicFront.decodeInstructionNew(insb);
@@ -676,8 +676,8 @@ BEGIN
                                     insa.bits := currentInstructionVar.bits;
                                     insb.bits := currentInstructionVar2.bits;
                                             
-                                    ins0 <= --work.DecodingDev.decodeFromWord(currentInstructionVar.bits);
-                                            work.LogicFront.decodeInstruction(insa);
+  --                                  ins0 <= --work.DecodingDev.decodeFromWord(currentInstructionVar.bits);
+--                                            work.LogicFront.decodeInstruction(insa);
                                     ins1 <= --work.DecodingDev.decodeFromWordNew(currentInstructionVar2.bits);
                                             work.LogicFront.decodeInstructionNew(insb);
                                     ch4 <= cmpDecode(currentInstructionVar.bits, currentInstructionVar2.bits);
