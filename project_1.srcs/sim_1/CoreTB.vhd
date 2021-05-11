@@ -658,16 +658,16 @@ BEGIN
                         if EMULATION then    
                             -- Now doing the actual test 
                             if opFlags /= "100" and opFlags /= "001" then -- ERROR or SEND (completed)
-                                currentInstructionVar := getInstruction(cpuState, programMemory);
-                                currentInstruction <= currentInstructionVar;
-                                    currentInstructionVar2 := getInstruction2(cpuState, programMemory2);
+                                --currentInstructionVar := getInstruction(cpuState, programMemory);
+                                --currentInstruction <= currentInstructionVar;
+                                    currentInstructionVar2 := getInstruction2(cpuState2, programMemory2);
                                     currentInstruction2 <= currentInstructionVar2;
-                                performOp(cpuState, dataMemory, currentInstructionVar.internalOp, opFlags, opResultVar);
-                                    performOp(cpuState2, dataMemory2, currentInstructionVar2.internalOp, opFlags2, opResultVar2);
+                               -- performOp(cpuState, dataMemory, currentInstructionVar.internalOp, opFlags2, opResultVar);
+                                    performOp(cpuState2, dataMemory2, currentInstructionVar2.internalOp, opFlags, opResultVar2);
                                 
                                 if LOG_EMULATION_TRACE then
-                                    write(disasmText, disasmWithAddress(slv2u(cpuState.nextIP), currentInstructionVar.bits));
-                                    writeline(traceFile, disasmText);
+                                   -- write(disasmText, disasmWithAddress(slv2u(cpuState.nextIP), currentInstructionVar.bits));
+                                   -- writeline(traceFile, disasmText);
                                         write(disasmText, disasmWithAddress2(slv2u(cpuState.nextIP), currentInstructionVar2.bits));
                                         writeline(traceFile2, disasmText);                                    
                                 end if;
