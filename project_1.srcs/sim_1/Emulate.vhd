@@ -88,7 +88,6 @@ constant FMT_SHIFT:      FormatSpec := FMT_IMM10;
 --    constant FMT_SLOAD  : InstructionFormat := ('0', '1', '0', '1', "010",  '0', "000",  '0'); -- mfc
 
 
-
 type OpDescription is record
     jump:       std_logic;
    
@@ -212,8 +211,7 @@ type AbstractOperation is (
     error,
     call,
     send,
-    
-    
+        
     undef
 );
 
@@ -294,7 +292,6 @@ type InternalOperation is record
     isSysStore: std_logic;
     affectsSys: std_logic;
     
-    
 end record;
 
 function defaultInternalOp return InternalOperation;
@@ -324,18 +321,18 @@ end function;
 
 function getSystemOperation(mnem: ProcMnemonic) return AbstractOperation is
 begin
-        case mnem is
-            when sys_retE => return retE;
-            when sys_retI => return retI;
-            when sys_halt => return halt;
-            when sys_sync => return sync;
-            when sys_replay => return replay;
-            when sys_error => return error;
-            when sys_call => return call;
-            when sys_send => return send;
-            
-            when others => return undef;
-        end case;
+    case mnem is
+        when sys_retE => return retE;
+        when sys_retI => return retI;
+        when sys_halt => return halt;
+        when sys_sync => return sync;
+        when sys_replay => return replay;
+        when sys_error => return error;
+        when sys_call => return call;
+        when sys_send => return send;
+        
+        when others => return undef;
+    end case;
     
     return undef;
 end function;
@@ -356,10 +353,10 @@ begin
     if fmt.arg0inA = '1' then
         res.intSources(0) := qa;
     end if;
+
     if fmt.arg2inA = '1' then
         res.intSources(2) := qa;
-            res.intSources(0) := (others => '0');
-            --res.floatSources(0) := (others => '0');
+        res.intSources(0) := (others => '0');
     end if;
     
     res.floatSources := res.intSources;
@@ -549,34 +546,21 @@ begin
 end function;
 
 
-
-
 function decodeMnem2(w: Word) return ProcMnemonic is
     variable res: InternalOperation;
---    constant opcode: ProcOpcode := bin2opcode(w(31 downto 26));
---    constant opcont: ProcOpcont := bin2opcont(opcode, w(15 downto 10));
-
     variable mnem: ProcMnemonic := undef;
---    variable fmt: FormatSpec := FMT_DEFAULT;
---    variable desc: OpDescription := DESC_DEFAULT;
---    variable isSystemOp: boolean := false;
---    variable operation, systemOp: AbstractOperation := undef;
     variable i, j, k: integer;
     variable insDef: InstructionDefinition;
 begin
-        i := slv2u(w(31 downto 26));
-        j := slv2u(w(15 downto 10));
-        k := slv2u(w(4 downto 0));
+    i := slv2u(w(31 downto 26));
+    j := slv2u(w(15 downto 10));
+    k := slv2u(w(4 downto 0));
 
-        insDef := getDef(i, j, k);
-        
-    -- Get menemonic
-    --mnem := getMnemonic(opcode, opcont);
-        mnem := insDef.mnem;
+    insDef := getDef(i, j, k);
+    mnem := insDef.mnem;
     
     return mnem;
 end function;
-
 
 
 -- TODO: replace with reg2str
@@ -614,12 +598,6 @@ function getOpDisasm(w: Word) return string is
     variable res: string(1 to 30) := (others => ' ');
     variable rd, r0, r1, r2: string(1 to 3);
 begin
-    -- mnem to str
-    
-    -- dest = qa unless ...
-    -- src0 = qb unless...
-    -- src1 = qc
-
 
     if otr.format.arg0inA = '1' or otr.format.arg2inA = '1' then
         noDest := true;
@@ -640,10 +618,8 @@ begin
     -- src0 = qa
     -- src1 = qb
     -- src2 = qa if applicable
-
     
     if otr.format.imm = '1' then
-        -- imm10, 16, ...
         if otr.format.imm26 = '1' then
             immValue := slv2s(w(25 downto 0));
         elsif otr.format.imm21 = '1' then
@@ -653,8 +629,7 @@ begin
         else
             immValue := slv2s(w(9 downto 0));
         end if;
-        
-        --s1 := immValue;
+
     else
         s1 := slv2u(qc);
     end if;
@@ -676,10 +651,6 @@ begin
         end if;
     else
         -- op d, s0, s1
-    
-
-        --r2 := reg2str(s2, std2bool(otr.format.fpArgSelect(2)));
-
         if otr.format.imm = '1' then         
             if otr.format.arg2inA = '1' then
                 res := padLeft(ProcMnemonic'image(mnem) & " " & r2 & ", " & r0 & ", " & integer'image(immValue), 30);            
@@ -698,7 +669,6 @@ begin
     
     return res;
 end function;
-
 
 
 procedure getArgs(state: in CoreState; op: in InternalOperation; intArgs: out MwordArray(0 to 2); fpArgs: out MwordArray(0 to 2)) is
@@ -737,10 +707,8 @@ begin
         when arithShift => intResult := bitArithmeticShift(ia0, ia1);
         when add => intResult := add(ia0, ia1);
         when sub => intResult := sub(ia0, ia1);
-        
-        
+               
         when j | jl | jz | jnz => intResult := incrementedIP;
-
         
         -- FP
         when fpMove => fpResult := fa0;
@@ -836,15 +804,12 @@ begin
            
         when error =>
             newIP := EXC_BASE;
-            sysRegs(2) <= --thisIP;
-                            normalNextIP;
+            sysRegs(2) <= normalNextIP;
             sysRegs(4) <= sysRegs(1);
            
         when call =>
             newIP := CALL_BASE;
-            --exc := true;
-            sysRegs(2) <= --thisIP;
-                            normalNextIP;
+            sysRegs(2) <= normalNextIP;
             sysRegs(4) <= sysRegs(1);
                        
         when send =>
@@ -859,14 +824,12 @@ begin
     end case;
     
     if exc then
-        sysRegs(2) <= --thisIP;
-                        normalNextIP;
+        sysRegs(2) <= normalNextIP;
         sysRegs(4) <= sysRegs(1);
         
          newIP := EXC_BASE;
     elsif int then
-        sysRegs(3) <= --thisIP;
-                        normalNextIP;
+        sysRegs(3) <= normalNextIP;
         sysRegs(5) <= sysRegs(1);
         newIP := INT_BASE;
     end if;
