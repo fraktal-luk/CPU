@@ -54,6 +54,41 @@ constant FMT_JUMP_COND:  FormatSpec := ('1', '0', '1', '0', '1', '0', '0', "000"
 constant FMT_JUMP_REG:   FormatSpec := ('0', '0', '0', '0', '0', '0', '0', "000"); -- Equal to default?
 constant FMT_SHIFT:      FormatSpec := FMT_IMM10;
 
+
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+-- Format specs from old HW decoder implementation
+
+--    type InstructionFormat is record
+--        src0a, src1i, src2a: std_logic; -- src0 from qa? src1 from imm? src2 from qa?
+--        intDestSel: std_logic;
+--        intSrcSel: std_logic_vector(0 to 2);
+--        fpDestSel: std_logic;
+--        fpSrcSel: std_logic_vector(0 to 2);
+--        imm16: std_logic; -- Sizes 26, 21 are only for jumps, so not needed in back end (kept as full jump targets)
+--    end record;
+    
+--    constant FMT_DEFAULT: InstructionFormat := ('0', '0', '0', '0', "000",  '0', "000",  '0');
+--    constant FMT_INT2   : InstructionFormat := ('0', '0', '0', '1', "110",  '0', "000",  '0');
+--    constant FMT_INT3   : InstructionFormat := ('0', '0', '0', '1', "111",  '0', "000",  '0');
+--    constant FMT_IMM    : InstructionFormat := ('0', '1', '0', '1', "110",  '0', "000",  '1');
+--    constant FMT_SHIFT  : InstructionFormat := ('0', '1', '0', '1', "110",  '0', "000",  '0');
+--    constant FMT_FP1    : InstructionFormat := ('0', '0', '0', '0', "000",  '1', "100",  '0');
+--    constant FMT_FP2    : InstructionFormat := ('0', '0', '0', '0', "000",  '1', "110",  '0');
+--    constant FMT_FP3    : InstructionFormat := ('0', '0', '0', '0', "000",  '1', "111",  '0');
+--    constant FMT_FLOAD  : InstructionFormat := ('0', '1', '0', '0', "110",  '1', "000",  '1');
+--    constant FMT_ISTORE : InstructionFormat := ('0', '1', '1', '0', "111",  '0', "000",  '1');
+--    constant FMT_FSTORE : InstructionFormat := ('0', '1', '1', '0', "110",  '0', "001",  '1');
+--    constant FMT_JL     : InstructionFormat := ('0', '1', '0', '1', "000",  '0', "000",  '0'); -- Jump link
+--    constant FMT_JC     : InstructionFormat := ('1', '1', '0', '0', "100",  '0', "000",  '0'); -- Jump cond
+--    constant FMT_SSTORE : InstructionFormat := ('0', '1', '1', '0', "011",  '0', "000",  '0'); -- mtc
+    
+--    constant FMT_JA     : InstructionFormat := ('0', '1', '0', '0', "000",  '0', "000",  '0'); -- Jump long
+--    constant FMT_ILOAD  : InstructionFormat := FMT_IMM;
+--    constant FMT_JR     : InstructionFormat := FMT_INT2;  -- Jump reg
+--    constant FMT_SLOAD  : InstructionFormat := ('0', '1', '0', '1', "010",  '0', "000",  '0'); -- mfc
+
+
+
 type OpDescription is record
     jump:       std_logic;
    
@@ -461,9 +496,6 @@ end procedure;
 
 function decode2(adr: Mword; w: Word) return InternalOperation is
     variable res: InternalOperation;
-    --constant opcode: ProcOpcode := bin2opcode(w(31 downto 26));
-    --constant opcont: ProcOpcont := bin2opcont(opcode, w(15 downto 10));
-
     variable mnem: ProcMnemonic := undef;
     variable fmt: FormatSpec := FMT_DEFAULT;
     variable desc: OpDescription := DESC_DEFAULT;
@@ -472,36 +504,29 @@ function decode2(adr: Mword; w: Word) return InternalOperation is
     variable i, j, k: integer;
     variable insDef: InstructionDefinition;
 begin
-        i := slv2u(w(31 downto 26));
-        j := slv2u(w(15 downto 10));
-        k := slv2u(w(4 downto 0));
+    i := slv2u(w(31 downto 26));
+    j := slv2u(w(15 downto 10));
+    k := slv2u(w(4 downto 0));
 
-        insDef := getDef(i, j, k);
-        
-    -- Get menemonic
-    --mnem := getMnemonic(opcode, opcont);
-        mnem := insDef.mnem;
-    
-        case mnem is
-            when
-                sys_retE |
-                sys_retI |
-                sys_halt |
-                sys_sync |
-                sys_replay |
-                sys_error |
-                sys_call |
-                sys_send
-                =>
-                
-                isSystemOp := true;
-            when others =>
-                            
-        end case;
-    
-    -- Get operation type description
-    -- Different track for system instructions
-    --systemOp := getSystemOperation(mnem);
+    insDef := getDef(i, j, k);
+
+    mnem := insDef.mnem;
+    case mnem is
+        when
+            sys_retE |
+            sys_retI |
+            sys_halt |
+            sys_sync |
+            sys_replay |
+            sys_error |
+            sys_call |
+            sys_send
+            =>
+            
+            isSystemOp := true;
+        when others =>            
+    end case;
+
     if isSystemOp then
         operation := getSystemOperation(mnem);
         fmt := FMT_DEFAULT;

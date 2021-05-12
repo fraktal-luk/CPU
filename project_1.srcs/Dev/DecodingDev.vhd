@@ -619,18 +619,18 @@ begin
         res.virtualArgSpec.args(1) := "000" & qc;
     end if;
     
-    if fmt.intSrcSel(1) = '1' then
-        res.virtualArgSpec.intArgSel(1) := '1';
-    elsif fmt.fpSrcSel(1) = '1' then
-        res.virtualArgSpec.floatArgSel(1) := '1';
-    else -- When none selected, set 0
-        --res.virtualArgSpec.dest := (others => '0');
-    end if;
+--    if fmt.intSrcSel(1) = '1' then
+--        res.virtualArgSpec.intArgSel(1) := '1';
+--    elsif fmt.fpSrcSel(1) = '1' then
+--        res.virtualArgSpec.floatArgSel(1) := '1';
+--    else -- When none selected, set 0
+--        --res.virtualArgSpec.dest := (others => '0');
+--    end if;
 
-    if fmt.src1i = '1' then -- When immediate, suppres register source 1??
-        res.virtualArgSpec.intArgSel(1) := '0';
-        res.virtualArgSpec.floatArgSel(1) := '0';
-    end if;
+--    if fmt.src1i = '1' then -- When immediate, suppres register source 1??
+--        res.virtualArgSpec.intArgSel(1) := '0';
+--        res.virtualArgSpec.floatArgSel(1) := '0';
+--    end if;
 
     if src2a then
        res.virtualArgSpec.args(2) := "000" & qa;
@@ -652,7 +652,8 @@ begin
         end if;
     end if;
     
-    if fmt.imm16 = '1' then -- Put imm in proper form 
+    if --fmt.imm16 = '1' then -- Put imm in proper form
+        hasImm16 then
         res.constantArgs.imm(31 downto 16) := (others => w(15));
     else
         res.constantArgs.imm(31 downto 10) := (others => w(9));
