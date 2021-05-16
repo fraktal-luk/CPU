@@ -7,7 +7,13 @@ use work.Helpers.all;
 
 
 package CpuText is
-    
+
+function isAlphanum(c: character) return boolean;
+
+function matches(a, b: string) return boolean;
+
+function TMP_str2int(s: string) return integer;
+
     
 function padLeft(s: string; n: natural) return string;
 function padRight(s: string; n: natural) return string;  
@@ -28,6 +34,48 @@ end package;
 
 
 package body CpuText is
+
+
+-- TODO: change name to something true (isExtendedAlphanum?)
+function isAlphanum(c: character) return boolean is
+begin
+    return (c >= '0' and c <= '9')
+        or (c >= 'A' and c <= 'Z')
+        or (c >= 'a' and c <= 'z')
+        or (c = '_')
+        or (c = '$') -- To serve as label marker
+        or (c = '@'); -- To serve as keyword marker
+end function;
+
+function matches(a, b: string) return boolean is
+    variable aLen, bLen: integer := 0;
+begin
+    aLen := a'length;
+    bLen := b'length;
+    if aLen > bLen then 
+        aLen := bLen;
+    end if;
+    
+    for i in 1 to aLen loop
+        if a(i) /= b(i) then
+            return false;
+        end if;
+    end loop;
+    
+    return true;
+end function;
+
+function TMP_str2int(s: string) return integer is
+    constant LEN: natural := s'length;
+    variable str0: string(1 to LEN) := s;
+begin
+    for i in str0'range loop
+        if str0(i) = cr then
+            str0(i) := ' ';
+        end if;
+    end loop;
+    return integer'value(str0);
+end function;
 
 function padLeft(s: string; n: natural) return string is
     variable res: string(1 to n) := (others => ' ');

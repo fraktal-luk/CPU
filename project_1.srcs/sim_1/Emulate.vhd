@@ -37,20 +37,29 @@ end record;
 
 --                                      imm   16   20   26   0a   2a   fp  fpArgs
 constant FMT_DEFAULT:    FormatSpec := ('0', '0', '0', '0', '0', '0', '0', "000");
-constant FMT_IMM16:      FormatSpec := ('1', '1', '0', '0', '0', '0', '0', "000");
-constant FMT_INT_REG:    FormatSpec := ('0', '0', '0', '0', '0', '0', '0', "000");
-constant FMT_INT_LOAD:   FormatSpec := ('1', '1', '0', '0', '0', '0', '0', "000"); -- Equal to FMT_IMM16?
-constant FMT_IMM10:      FormatSpec := ('1', '0', '0', '0', '0', '0', '0', "000");
-constant FMT_INT_STORE:  FormatSpec := ('1', '1', '0', '0', '0', '1', '0', "000");
-constant FMT_FP_REG:     FormatSpec := ('0', '0', '0', '0', '0', '0', '1', "111");
-constant FMT_FP_LOAD:    FormatSpec := ('1', '1', '0', '0', '0', '0', '1', "000");
-constant FMT_FP_STORE:   FormatSpec := ('1', '1', '0', '0', '0', '1', '0', "001");
-constant FMT_SYS_LOAD:   FormatSpec := ('1', '0', '0', '0', '0', '0', '0', "000");
-constant FMT_SYS_STORE:  FormatSpec := ('1', '0', '0', '0', '0', '1', '0', "000");
 
 constant FMT_JUMP:       FormatSpec := ('1', '0', '0', '1', '0', '0', '0', "000");
 constant FMT_JUMP_LINK:  FormatSpec := ('1', '0', '1', '0', '0', '0', '0', "000");
 constant FMT_JUMP_COND:  FormatSpec := ('1', '0', '1', '0', '1', '0', '0', "000");
+
+constant FMT_INT_LOAD:   FormatSpec := ('1', '1', '0', '0', '0', '0', '0', "000"); -- Equal to FMT_IMM16?
+constant FMT_INT_STORE:  FormatSpec := ('1', '1', '0', '0', '0', '1', '0', "000");
+
+constant FMT_FP_LOAD:    FormatSpec := ('1', '1', '0', '0', '0', '0', '1', "000");
+constant FMT_FP_STORE:   FormatSpec := ('1', '1', '0', '0', '0', '1', '0', "001");
+
+constant FMT_SYS_LOAD:   FormatSpec := ('1', '0', '0', '0', '0', '0', '0', "000");
+constant FMT_SYS_STORE:  FormatSpec := ('1', '0', '0', '0', '0', '1', '0', "000");
+
+constant FMT_IMM16:      FormatSpec := ('1', '1', '0', '0', '0', '0', '0', "000");
+constant FMT_IMM10:      FormatSpec := ('1', '0', '0', '0', '0', '0', '0', "000");
+
+constant FMT_INT_REG:    FormatSpec := ('0', '0', '0', '0', '0', '0', '0', "000");
+constant FMT_FP_REG:     FormatSpec := ('0', '0', '0', '0', '0', '0', '1', "111");
+
+
+constant FMT_NO_REGS:    FormatSpec := FMT_DEFAULT;
+
 constant FMT_JUMP_REG:   FormatSpec := ('0', '0', '0', '0', '0', '0', '0', "000"); -- Equal to default?
 constant FMT_SHIFT:      FormatSpec := FMT_IMM10;
 

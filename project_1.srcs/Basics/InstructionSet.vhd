@@ -5,7 +5,7 @@ use IEEE.STD_LOGIC_1164.ALL;
 
 use work.BasicTypes.all;
 use work.ArchDefs.all;
-
+use work.CpuText.all;
 
 package InstructionSet is
 
@@ -72,10 +72,178 @@ type Opcode2 is (none,
                 
                 );
 
-type Format is (none, noRegs, jumpLong, jumpCond, jumpLink, intImm16, intImm10, intRR, 
-                                                                                floatRR,
+type Format is (none, 
+                    noRegs,
+                        jumpLong, jumpLink, jumpCond,
+                        intImm16, intImm10,
+                        intRR, 
+                        floatRR,
                     intStore16, intStore10, floatLoad10, floatLoad16, floatStore10, floatStore16,
                     sysLoad, sysStore);
+
+--  
+--  no regs
+--  ja, jl, j(c)
+--  int3r, int2r, int1r
+--  fp3r, fp2r, fp1r,
+--  int imm16, int imm10
+--  int load16, int load10 -> equal to immN
+--  int store16, int store10
+--  fp load16, fp load10
+--  fp store16, fp store10
+--  sys load10
+--  sys store10
+--  int to fp
+--  fp to int
+
+type NEW_Format is (
+    None,
+    
+    NoRegs,
+    
+    JumpLong, JumpLink, JumpCond,
+    
+    IntImm16, IntImm10,
+    IntStore16, IntStore10,
+    
+    FloatLoad16, FloatLoad10,
+    FloatStore16, FloatStore10,
+    
+    SysLoad, SysStore,
+    
+    Int3R, Int2R, Int1R,
+    Float3R, Float2R, Float1R,
+    
+    FloatToInt, IntToFloat
+);
+
+-- Format description has 3 parts:
+-- asm form, decoding, type spec
+-- 
+-- "d012",  "a,bcd",   "i,iii"   -- example
+type NEW_FormatDescription is record
+    asmForm: string(1 to 4);
+    decoding: string(1 to 5);
+    typeSpec: string(1 to 5);
+end record;
+
+type NEW_FormatDescriptionTable is array(NEW_Format range <>) of NEW_FormatDescription;
+
+constant FormatDescriptions: NEW_FormatDescriptionTable(None to IntToFloat) := (
+    None =>         ("    ", "0,000", "0,000"),
+
+    NoRegs =>       ("    ", "0,000", "0,000"),
+
+    JumpLong =>     ("1   ", "0,0L0", "i,ic0"),
+    JumpLink =>     ("d1  ", "a,0J0", "i,ic0"),
+    JumpCond =>     ("01  ", "0,aJ0", "i,ic0"),
+    
+    IntImm16 =>     ("d01 ", "a,bH0", "i,ic0"),
+    IntImm10 =>     ("d01 ", "a,bX0", "i,ic0"),
+    
+    IntStore16 =>   ("201 ", "0,bHa", "i,ici"),
+    IntStore10 =>   ("201 ", "0,bXa", "i,ici"),
+    
+    FloatLoad16 =>  ("d01 ", "a,bH0", "f,ic0"),
+    FloatLoad10 =>  ("d01 ", "a,bX0", "f,ic0"),
+    
+    FloatStore16 => ("201 ", "0,bHa", "i,icf"),
+    FloatStore10 => ("201 ", "0,bXa", "i,icf"),
+
+    SysLoad =>      ("d1  ", "a,0X0", "i,ic0"),
+    
+    SysStore =>     ("21  ", "0,0Xa", "0,ici"),
+
+    Int3R =>        ("d012", "a,bcd", "i,iii"),
+    Int2R =>        ("d01 ", "a,bc0", "i,ii0"),
+    Int1R =>        ("d0  ", "a,b00", "i,i00"),
+
+    Float3R =>      ("d012", "a,bcd", "f,fff"),
+    Float2R =>      ("d01 ", "a,bc0", "f,ff0"),
+    Float1R =>      ("d0  ", "a,b00", "f,f00"),
+    
+    FloatToInt =>   ("d0  ", "a,b00", "i,f00"),
+    
+    IntToFloat =>   ("d0  ", "a,b00", "f,i00"),    
+
+
+    others =>       ("    ", "0,000", "0,000")
+);
+
+
+type FormatAssignments is array(ProcMnemonic range <>) of NEW_Format;
+
+constant FormatList: FormatAssignments(undef to sys_send) :=
+(
+    undef => None,
+
+
+and_i => None,
+and_r => Int2R,
+or_i => None,
+or_r => Int2R,
+xor_i => None,
+xor_r => Int2R,
+
+add_i => IntImm16,
+add_h => IntImm16,
+ add_r => Int2R,
+       sub_r => Int2R,
+
+shl_i => IntImm10,
+shl_r => Int2R, -- direction defined by shift value, not opcode 
+sha_i => IntImm10,
+sha_r => Int2R, --   
+
+mul => Int2R,
+mulh_s => Int2R,
+mulh_u => Int2R,
+div_u => Int2R,
+div_s => Int2R,
+
+mov_f => Float1R,
+or_f => Float2R,    -- Float operations
+
+ldi_i => IntImm16,
+ldi_r => None, -- int
+
+sti_i => IntStore16,
+sti_r => None,
+
+ldf_i => FloatLoad16,
+ldf_r => None, -- float
+
+stf_i => FloatStore16,
+stf_r => None, 
+
+lds => sysLoad, -- load sys
+sts => SysStore, -- store sys
+
+jz_i => JumpCond,
+jz_r => Int2R,
+jnz_i => JumpCond,
+jnz_r => Int2R,
+ja => JumpLong,
+jl => JumpLink,
+
+sys => NoRegs, -- system operation
+
+        sys_retE => NoRegs,
+        sys_retI => NoRegs,
+        sys_halt => NoRegs,
+        sys_sync => NoRegs,
+        sys_replay => NoRegs,
+        sys_error => NoRegs,
+        sys_call => NoRegs,
+        sys_send => NoRegs,
+
+
+    others => None
+);
+
+
+
+
 
 type Operation is (none,
                     
@@ -337,6 +505,9 @@ constant Tables2: TableArray1 := (
 
 function findEncoding(mnem: ProcMnemonic) return InstructionDefinition;
 
+function TMP_processStrings(cmd, a0, a1, a2, a3: string) return Word;
+
+
 end InstructionSet;
 
 
@@ -496,8 +667,284 @@ begin
 end function;
 
 function findEncoding(mnem: ProcMnemonic) return InstructionDefinition is
+    constant Table: GeneralTable := buildGeneralTable;
 begin
-    return TheTable(mnem);    
+    return Table(mnem);    
 end function;
+
+
+
+
+type ArgArray is array(0 to 3) of string(1 to 10);
+
+function TMP_orderArgs(a0, a1, a2, a3: string; desc: NEW_FormatDescription) return ArgArray is
+    variable res: ArgArray := (others => (others => ' '));
+begin
+    case desc.asmForm(1) is
+        when 'd' =>
+            res(0) := padLeft(a0, 10);
+        when '0' =>
+            res(1) := padLeft(a0, 10);
+        when '1' =>
+            res(2) := padLeft(a0, 10);
+        when '2' =>
+            res(3) := padLeft(a0, 10);       
+        when others =>
+    end case;
+
+    case desc.asmForm(2) is
+        when 'd' =>
+            res(0) := padLeft(a1, 10);
+        when '0' =>
+            res(1) := padLeft(a1, 10);
+        when '1' =>
+            res(2) := padLeft(a1, 10);
+        when '2' =>
+            res(3) := padLeft(a1, 10);       
+        when others =>
+    end case;
+    
+    case desc.asmForm(3) is
+        when 'd' =>
+            res(0) := padLeft(a2, 10);
+        when '0' =>
+            res(1) := padLeft(a2, 10);
+        when '1' =>
+            res(2) := padLeft(a2, 10);
+        when '2' =>
+            res(3) := padLeft(a2, 10);       
+        when others =>
+    end case;
+    
+    case desc.asmForm(4) is
+        when 'd' =>
+            res(0) := padLeft(a3, 10);
+        when '0' =>
+            res(1) := padLeft(a3, 10);
+        when '1' =>
+            res(2) := padLeft(a3, 10);
+        when '2' =>
+            res(3) := padLeft(a3, 10);       
+        when others =>
+    end case;
+
+    return res;
+end function;
+
+-- check if their form is according to description 
+function TMP_checkArgs(argList: ArgArray; desc: NEW_FormatDescription) return boolean is
+begin
+    if desc.typeSpec(1) = 'i' then
+        if argList(0)(1) /= 'r' then return false; end if;
+    elsif desc.typeSpec(1) = 'f' then
+        if argList(0)(1) /= 'f' then return false; end if;
+    else
+        if argList(0)(1) /= ' ' then return false; end if;
+    end if;
+
+    for i in 1 to 3 loop
+        if desc.typeSpec(i + 1) = 'i' then
+            if argList(i)(1) /= 'r' then return false; end if;
+        elsif desc.typeSpec(i + 1) = 'f' then
+            if argList(i)(1) /= 'f' then return false; end if;
+        elsif desc.typeSpec(i + 1) = 'c' then
+            -- TODO: check for correct constant?
+            --if argList(i)(1) /= 'f' then return false; end if;            
+        else
+            if argList(i)(1) /= ' ' then return false; end if;
+        end if;        
+    end loop;
+    
+    return true;
+end function;
+
+
+function TMP_getArgs(argList: ArgArray) return IntArray is
+
+    -- TMP, remove
+    function parseArg(s: string) return integer is
+        variable x: integer := -1;
+    begin
+        if s(1) = '$' or s(1) = '@' then
+        
+        elsif s(1) = 'r' and s(2) >= '0' and s(2) <= '9' then
+            -- register
+            x := TMP_str2int(s(2 to s'length));
+        elsif s(1) = 'f' and s(2) >= '0' and s(2) <= '9' then
+            -- register (FP)
+            x := TMP_str2int(s(2 to s'length ));            
+        elsif s(1) = '-' then
+            x := -TMP_str2int(s(2 to s'length));                  
+        elsif not isAlphanum(s(1)) then
+            x := -1;
+        elsif s(1) >= '0' and s(1) <= '9' then
+            -- Hope it's a number 
+            x := TMP_str2int(s);
+        else
+            x := 0;
+        end if;    
+        return x;
+    end function;
+
+    variable res: IntArray(0 to 3) := (others => 0);
+begin
+    for i in 0 to 3 loop
+        res(i) := parseArg(argList(i));
+    end loop;
+    return res;
+end function;
+
+-- Insert args into word
+function TMP_fillArgs(args: IntArray; desc: NEW_FormatDescription; undefOffset: boolean) return Word is
+    variable res: Word := (others => '0');
+begin
+    case desc.decoding(1) is
+        when 'a' =>
+            res(25 downto 21) := i2slv(args(0), 5);
+        when 'b' =>
+            res(20 downto 16) := i2slv(args(0), 5);
+        when 'c' =>
+            res(9 downto 5) := i2slv(args(0), 5);
+        when 'd' =>
+            res(4 downto 0) := i2slv(args(0), 5);                                                
+        when others =>
+    end case;
+
+    case desc.decoding(3) is -- Skip the comma!
+        when 'a' =>
+            res(25 downto 21) := i2slv(args(1), 5);
+        when 'b' =>
+            res(20 downto 16) := i2slv(args(1), 5);
+        when 'c' =>
+            res(9 downto 5) := i2slv(args(1), 5);
+        when 'd' =>
+            res(4 downto 0) := i2slv(args(1), 5);
+        when 'X' =>
+            res(9 downto 0) := i2slv(args(1), 10);
+        when 'H' =>
+            res(15 downto 0) := i2slv(args(1), 16);
+        when 'J' =>
+            res(20 downto 0) := i2slv(args(1), 21);
+        when 'L' =>
+            res(25 downto 0) := i2slv(args(1), 26);                                                            
+        when others =>
+    end case;
+    
+    case desc.decoding(4) is
+        when 'a' =>
+            res(25 downto 21) := i2slv(args(2), 5);
+        when 'b' =>
+            res(20 downto 16) := i2slv(args(2), 5);
+        when 'c' =>
+            res(9 downto 5) := i2slv(args(2), 5);
+        when 'd' =>
+            res(4 downto 0) := i2slv(args(2), 5);
+        when 'X' =>     
+            res(9 downto 0) := i2slv(args(2), 10);
+            if undefOffset then
+                res(9 downto 0) := (others => 'U');
+            end if;
+        when 'H' =>
+            res(15 downto 0) := i2slv(args(2), 16);
+            if undefOffset then
+                res(15 downto 0) := (others => 'U');
+            end if;
+        when 'J' =>
+            res(20 downto 0) := i2slv(args(2), 21);
+            if undefOffset then
+                res(20 downto 0) := (others => 'U');
+            end if;
+        when 'L' =>
+            res(25 downto 0) := i2slv(args(2), 26);
+            if undefOffset then
+                res(25 downto 0) := (others => 'U');
+            end if;                                                            
+        when others =>
+    end case;
+    
+    case desc.decoding(5) is
+        when 'a' =>
+            res(25 downto 21) := i2slv(args(3), 5);
+        when 'b' =>
+            res(20 downto 16) := i2slv(args(3), 5);
+        when 'c' =>
+            res(9 downto 5) := i2slv(args(3), 5);
+        when 'd' =>
+            res(4 downto 0) := i2slv(args(3), 5);
+        when 'X' =>
+            res(9 downto 0) := i2slv(args(3), 10);
+        when 'H' =>
+            res(15 downto 0) := i2slv(args(3), 16);
+        when 'J' =>
+            res(20 downto 0) := i2slv(args(3), 21);
+        when 'L' =>
+            res(25 downto 0) := i2slv(args(3), 26);                                                            
+        when others =>
+    end case;   
+
+    return res;
+end function;
+
+function TMP_fillOp(w: Word; insDef: InstructionDefinition) return Word is
+    variable res: Word := w;
+begin
+    res(31 downto 26) := i2slv(insDef.i, 6);
+    
+    if insDef.j = -1 then return res; end if;
+    
+    res(15 downto 10) := i2slv(insDef.j, 6);
+
+    if insDef.k = -1 then return res; end if;
+
+    res(4 downto 0) := i2slv(insDef.k, 5);
+    
+    return res;
+end function;
+
+
+
+function TMP_processStrings(cmd, a0, a1, a2, a3: string) return Word is
+    variable mnem: ProcMnemonic;
+    
+    variable fmt: NEW_Format;
+    variable desc: NEW_FormatDescription;
+    variable args: IntArray(0 to 3) := (others => 0);
+    variable w: Word;
+    variable argList: ArgArray;
+    variable undefOffset: boolean := false;
+begin
+    mnem := undef;
+    for m in ProcMnemonic loop
+        if matches(cmd, ProcMnemonic'image(m)) then
+            mnem := m;
+        end if;
+    end loop;
+    
+    fmt := FormatList(mnem);
+    desc := FormatDescriptions(fmt);
+    
+    argList := TMP_orderArgs(a0, a1, a2, a3, desc);
+    
+    if not TMP_checkArgs(argList, desc) then
+        report "Wrong args!";     
+    end if;
+    
+    args := TMP_getArgs(argList);
+    
+        -- TMP
+        if argList(2)(1) = '$' then
+            undefOffset := true;
+        end if;
+    
+    w := TMP_fillArgs(args, desc, undefOffset);
+    
+    -- Fill op spec
+    w := TMP_fillOp(w, findEncoding(mnem));
+    
+    return w;
+end function;
+
+
+
 
 end InstructionSet;

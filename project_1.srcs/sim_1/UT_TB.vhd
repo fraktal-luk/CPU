@@ -56,6 +56,8 @@ architecture Behavioral of UT_TB is
 
     signal ins2, ins3: InstructionState; 
     signal ch0, ch1, ch2: std_logic := '0';
+    
+    signal w0, w1: Word;
 begin
 
 --        ins0 <= decodeFromWord(asm("ja 0"));
@@ -67,10 +69,10 @@ begin
         
 
         
-        ch0 <= bool2std(ins0 = ins1);
+        ch0 <= bool2std(w0 = w1);
         
-        ch1 <= cmpEncodings("and_i r3, r7, 20");
-        ch2 <= cmpEncodings("ldi_i r11, r15, 40");
+--        ch1 <= cmpEncodings("and_i r3, r7, 20");
+--        ch2 <= cmpEncodings("ldi_i r11, r15, 40");
 
     process 
     begin
@@ -78,6 +80,25 @@ begin
         
         testDecoder;
         
+            wait for 10 ns;
+            
+            w0 <= asmNew ("add_r r12, r13, r14");
+            w1 <= asmNew2("add_r r12, r13, r14");
+            
+            wait for 10 ns;
+            
+            w0 <= asmNew ("sub_r r12, r13, r14");
+            w1 <= asmNew2("sub_r r12, r13, r14");
+            
+            wait for 10 ns;
+            
+            w0 <= asmNew ("add_i r31, r16, -1");
+            w1 <= asmNew2("add_i r31, r16, -1");
+            
+            wait for 10 ns;
+            
+            w0 <= asmNew ("jz_i r1, $r");
+            w1 <= asmNew2("jz_i r1, $r");                                    
         wait;
     end process;
     

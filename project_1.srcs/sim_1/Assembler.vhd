@@ -63,6 +63,9 @@ procedure processProgram(p: in ProgramBuffer; machineCode: out WordArray; import
 
 function asmNew(str: string) return Word;
 
+function asmNew2(str: string) return Word;
+
+
 function disasmWithAddress2(a: natural; w: Word) return string;
 function disasmWord2(w: Word) return string;
 
@@ -112,18 +115,6 @@ begin
         report xa(i).name.all; report natural'image(xa(i).address);
     end loop;
 end procedure;
-
-
--- TODO: change name to something true (isExtendedAlphanum?)
-function isAlphanum(c: character) return boolean is
-begin
-    return (c >= '0' and c <= '9')
-        or (c >= 'A' and c <= 'Z')
-        or (c >= 'a' and c <= 'z')
-        or (c = '_')
-        or (c = '$') -- To serve as label marker
-        or (c = '@'); -- To serve as keyword marker
-end function;
 
 
 function parseInstructionString(str: string) return GroupBuffer is
@@ -200,23 +191,6 @@ begin
 end function;
 
 
-function matches(a, b: string) return boolean is
-    variable aLen, bLen: integer := 0;
-begin
-    aLen := a'length;
-    bLen := b'length;
-    if aLen > bLen then 
-        aLen := bLen;
-    end if;
-    
-    for i in 1 to aLen loop
-        if a(i) /= b(i) then
-            return false;
-        end if;
-    end loop;
-    
-    return true;
-end function;
 
 
 function findLabel(s: string; labels: LabelArray) return integer is
@@ -230,17 +204,7 @@ begin
     return -1;
 end function;
 
-function TMP_str2int(s: string) return integer is
-    constant LEN: natural := s'length;
-    variable str0: string(1 to LEN) := s;
-begin
-    for i in str0'range loop
-        if str0(i) = cr then
-            str0(i) := ' ';
-        end if;
-    end loop;
-    return integer'value(str0);
-end function;
+
 
 function parseArg(s: string) return integer is
     variable x: integer := -1;
@@ -409,6 +373,51 @@ begin
 end procedure;
 
 
+procedure processInstruction2(ar: GroupBuffer; num: integer; labels, imports: LabelArray; fillLabels: boolean; command: out Word; hasImport: out boolean; import: out string) is
+    variable mnem: ProcMnemonic;
+    variable undefOffset: boolean := false; 
+    variable vals: IntArray(0 to ar'length-1) := (others => -1);
+begin
+    hasImport := false;
+    import := (others => cr);
+    -- First elem must be opcode. Find it in opcode list
+    mnem := undef;
+    for m in ProcMnemonic loop
+        if matches(ar(0), ProcMnemonic'image(m)) then
+            mnem := m;
+        end if;
+    end loop;
+            
+    -- Convert other arg to numbers
+    for i in 1 to ar'length-1 loop
+        if ar(i)(1) = '$' then -- Label!
+           undefOffset := true;
+           vals(i) := -1;
+           import(ar(i)'range) := ar(i);
+           hasImport := true;
+        else
+           vals(i) := parseArg(ar(i));            
+        end if;
+    end loop;
+    
+    if matches(ar(0), "sys") then
+        for m in ProcMnemonic loop
+            --    report "sys_" & ar(1);      
+            if matches("sys_" & ar(1), ProcMnemonic'image(m)) then
+                mnem := m;
+            end if;
+        end loop;            
+    end if;
+    
+    command := --makeMachineWordNew(mnem, vals, ar(1), undefOffset);
+                TMP_processStrings(ProcMnemonic'image(mnem), ar(1), ar(2), ar(3), ar(4));
+end procedure;
+
+
+
+
+
+
 function asmNew(str: string) return Word is
     constant LEN: natural := str'length;
     variable str0: string(1 to LEN+1) := (others => cr);    
@@ -422,6 +431,22 @@ begin
     processInstruction(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true,  res, tmpHasImport, tmpImport);        
     return res;
 end function;
+
+
+function asmNew2(str: string) return Word is
+    constant LEN: natural := str'length;
+    variable str0: string(1 to LEN+1) := (others => cr);    
+    variable gb: GroupBuffer;
+    variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
+    variable tmpHasImport: boolean := false;
+    variable res: Word;      
+begin
+    str0(1 to LEN) := str;
+    gb := parseInstructionString(str0);
+    processInstruction2(gb, 0, EMPTY_LABEL_ARRAY, EMPTY_LABEL_ARRAY, true,  res, tmpHasImport, tmpImport);        
+    return res;
+end function;
+
 
 
 -- TODO: make it dependent on addresses, not instruction and labels indices
