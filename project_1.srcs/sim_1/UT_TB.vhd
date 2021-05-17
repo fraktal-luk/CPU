@@ -98,7 +98,22 @@ begin
             wait for 10 ns;
             
             w0 <= asmNew ("jz_i r1, $r");
-            w1 <= asmNew2("jz_i r1, $r");                                    
+            w1 <= asmNew2("jz_i r1, $r");
+            
+            wait for 10 ns;
+            
+            w0 <= asmNew ("sys call");
+            w1 <= asmNew2("sys call");
+            
+            wait for 10 ns;
+            
+            w0 <= asmNew ("..");
+            w1 <= asmNew2("..");
+            
+            wait for 10 ns;
+            
+            w0 <= asmNew ("");
+            w1 <= asmNew2("");                                                                      
         wait;
     end process;
     

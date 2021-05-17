@@ -555,23 +555,6 @@ begin
 end function;
 
 
-function decodeMnem2(w: Word) return ProcMnemonic is
-    variable res: InternalOperation;
-    variable mnem: ProcMnemonic := undef;
-    variable i, j, k: integer;
-    variable insDef: InstructionDefinition;
-begin
-    i := slv2u(w(31 downto 26));
-    j := slv2u(w(15 downto 10));
-    k := slv2u(w(4 downto 0));
-
-    insDef := getDef(i, j, k);
-    mnem := insDef.mnem;
-    
-    return mnem;
-end function;
-
-
 -- TODO: replace with reg2str
 function reg2txt(n: natural; fp: boolean) return string is
     variable res: string(1 to 3) := "r00";

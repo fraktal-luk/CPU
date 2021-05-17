@@ -177,56 +177,55 @@ constant FormatList: FormatAssignments(undef to sys_send) :=
 (
     undef => None,
 
-
-and_i => None,
-and_r => Int2R,
-or_i => None,
-or_r => Int2R,
-xor_i => None,
-xor_r => Int2R,
-
-add_i => IntImm16,
-add_h => IntImm16,
- add_r => Int2R,
-       sub_r => Int2R,
-
-shl_i => IntImm10,
-shl_r => Int2R, -- direction defined by shift value, not opcode 
-sha_i => IntImm10,
-sha_r => Int2R, --   
-
-mul => Int2R,
-mulh_s => Int2R,
-mulh_u => Int2R,
-div_u => Int2R,
-div_s => Int2R,
-
-mov_f => Float1R,
-or_f => Float2R,    -- Float operations
-
-ldi_i => IntImm16,
-ldi_r => None, -- int
-
-sti_i => IntStore16,
-sti_r => None,
-
-ldf_i => FloatLoad16,
-ldf_r => None, -- float
-
-stf_i => FloatStore16,
-stf_r => None, 
-
-lds => sysLoad, -- load sys
-sts => SysStore, -- store sys
-
-jz_i => JumpCond,
-jz_r => Int2R,
-jnz_i => JumpCond,
-jnz_r => Int2R,
-ja => JumpLong,
-jl => JumpLink,
-
-sys => NoRegs, -- system operation
+    and_i => None,
+    and_r => Int2R,
+    or_i => None,
+    or_r => Int2R,
+    xor_i => None,
+    xor_r => Int2R,
+    
+    add_i => IntImm16,
+    add_h => IntImm16,
+    add_r => Int2R,
+    sub_r => Int2R,
+    
+    shl_i => IntImm10,
+    shl_r => Int2R, -- direction defined by shift value, not opcode 
+    sha_i => IntImm10,
+    sha_r => Int2R, --   
+    
+    mul => Int2R,
+    mulh_s => Int2R,
+    mulh_u => Int2R,
+    div_u => Int2R,
+    div_s => Int2R,
+    
+    mov_f => Float1R,
+    or_f => Float2R,    -- Float operations
+    
+    ldi_i => IntImm16,
+    ldi_r => None, -- int
+    
+    sti_i => IntStore16,
+    sti_r => None,
+    
+    ldf_i => FloatLoad16,
+    ldf_r => None, -- float
+    
+    stf_i => FloatStore16,
+    stf_r => None, 
+    
+    lds => sysLoad, -- load sys
+    sts => SysStore, -- store sys
+    
+    jz_i => JumpCond,
+    jz_r => Int2R,
+    jnz_i => JumpCond,
+    jnz_r => Int2R,
+    ja => JumpLong,
+    jl => JumpLink,
+    
+    sys => NoRegs, -- system operation
 
         sys_retE => NoRegs,
         sys_retI => NoRegs,
@@ -236,7 +235,6 @@ sys => NoRegs, -- system operation
         sys_error => NoRegs,
         sys_call => NoRegs,
         sys_send => NoRegs,
-
 
     others => None
 );
@@ -507,6 +505,11 @@ function findEncoding(mnem: ProcMnemonic) return InstructionDefinition;
 
 function TMP_processStrings(cmd, a0, a1, a2, a3: string) return Word;
 
+
+        -- 
+        function decodeMnem2(w: Word) return ProcMnemonic;
+
+    function TMP_disasm(w: Word) return string;
 
 end InstructionSet;
 
@@ -945,6 +948,159 @@ begin
 end function;
 
 
+function decodeMnem2(w: Word) return ProcMnemonic is
+    variable mnem: ProcMnemonic := undef;
+    variable i, j, k: integer;
+    variable insDef: InstructionDefinition;
+begin
+    i := slv2u(w(31 downto 26));
+    j := slv2u(w(15 downto 10));
+    k := slv2u(w(4 downto 0));
+
+    insDef := getDef(i, j, k);
+    mnem := insDef.mnem;
+    
+    return mnem;
+end function;
+
+function TMP_disasm(w: Word) return string is
+    constant mnem: ProcMnemonic := decodeMnem2(w);
+    constant fmt: NEW_Format := FormatList(mnem);
+    constant fmtDesc: NEW_FormatDescription := FormatDescriptions(fmt);
+    
+    constant qa: slv5 := w(25 downto 21);
+    constant qb: slv5 := w(20 downto 16);
+    constant qc: slv5 := w(9 downto 5);
+    constant qd: slv5 := w(4 downto 0);
+    variable d, s0, s1, s2, immValue: integer := 0;
+    variable sources: IntArray(0 to 2) := (others => 0);
+    variable lastArg: boolean := false;
+    
+    variable res: string(1 to 30) := (others => ' ');
+    variable rd, r0, r1, r2: string(1 to 3);
+    variable argStrings: ArgArray := (others => (others => ' '));
+    variable destString, tmpString: string(1 to 10) := (others => ' ');
+    
+    variable ptr: integer := 0;
+    
+    -- TMP, remove
+    function reg2str(n: natural; fp: boolean) return string is
+        variable res: string(1 to 3) := "r00";
+    begin
+        assert n < 32 report "Register number too large: " & natural'image(n) severity error;
+    
+        if fp then
+            res(1) := 'f';
+        end if;
+        
+        if n < 10 then
+            res(3 to 3) := natural'image(n);
+        else
+            res(2 to 3) := natural'image(n);    
+        end if;
+        
+        return res;
+    end function;
+begin
+    
+    case fmtDesc.decoding(1) is
+        when 'a' =>
+            d := slv2u(qa);
+        when 'b' =>
+            d := slv2u(qb);
+        when 'c' =>
+            d := slv2u(qc);
+        when 'd' =>
+            d := slv2u(qd);        
+        when others =>
+    end case;
+
+    for i in 0 to 2 loop
+        case fmtDesc.decoding(3 + i) is
+            when 'a' =>
+                sources(i) := slv2u(qa);
+            when 'b' =>
+                sources(i) := slv2u(qb);
+            when 'c' =>
+                sources(i) := slv2u(qc);
+            when 'd' =>
+                sources(i) := slv2u(qd);        
+            when 'X' =>
+                sources(i) := slv2s(w(9 downto 0));
+            when 'H' =>
+                sources(i) := slv2s(w(15 downto 0));
+            when 'J' =>
+                sources(i) := slv2s(w(20 downto 0));
+            when 'L' =>
+                sources(i) := slv2s(w(25 downto 0));                                                                                    
+            when others =>
+        end case;        
+    end loop;
+    
+    -- Use fmtDesc.typeSpec to convert nums to strings
+    case fmtDesc.typeSpec(1) is
+       when 'i' =>
+           destString := padLeft(reg2str(d, false), 10);
+       when 'f' =>
+           destString := padLeft(reg2str(d, true), 10);
+       when others =>
+    end case;    
+    
+    for i in 0 to 2 loop
+        case fmtDesc.typeSpec(3 + i) is
+           when 'i' =>
+               argStrings(i) := padLeft(reg2str(sources(i), false), 10);
+           when 'f' =>
+               argStrings(i) := padLeft(reg2str(sources(i), true), 10);
+           when 'c' =>
+               argStrings(i) := padLeft(integer'image(sources(i)), 10);
+           when others =>
+        end case;        
+    end loop;
+    
+    -- Use fmtDesc.asmForm to order proper strings
+    res(1 to 10) := padLeft(ProcMnemonic'image(mnem), 10);
+    res(11) := ' ';
+    -- arg: 3
+    -- ...
+    ptr := 12;
+    for i in 0 to 3 loop
+        case fmtDesc.asmForm(1 + i) is
+            when 'd' =>
+                tmpString := destString;
+            when '0' =>
+                tmpString := argStrings(0);
+            when '1' =>
+                tmpString := argStrings(1);
+            when '2' =>
+                tmpString := argStrings(2);
+                                    
+            when others =>
+        end case;
+    
+        if i = 3 or fmtDesc.asmForm(1 + i + 1) = ' ' then
+            lastArg := true;
+        end if;
+
+        -- copy text before first space, inc ptr by the amount    
+        for j in 0 to 9 loop
+            if tmpString(j+1) = ' ' then
+                exit;
+            end if;
+            res(ptr) := tmpString(j+1);
+            ptr := ptr + 1;
+        end loop;
+        
+        if lastArg then
+            exit;
+        else
+            res(ptr to ptr + 1) := ", ";            
+            ptr := ptr + 2;
+        end if;
+    end loop;
+    
+    return res;
+end function;
 
 
 end InstructionSet;

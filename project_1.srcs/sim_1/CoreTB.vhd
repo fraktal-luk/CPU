@@ -303,17 +303,18 @@ ARCHITECTURE Behavior OF CoreTB IS
         s(1 to ln.all'length) <= ln.all;
     end procedure;
     
---    function getInstruction(signal cpuState: in CoreState; signal programMemory: in WordArray) return Instruction is
---        variable res: Instruction;
---        variable insWordVar: Word;
---        variable intOpVar: InternalOperation;
---    begin
---        insWordVar := programMemory(slv2u(cpuState.nextIP)/4);
---        intOpVar := decode(cpuState.nextIP, insWordVar);
---        res := (cpuState.nextIP, insWordVar,  --disasmWithAddress(slv2u(cpuState.nextIP), insWordVar), intOpVar);
---                                              disasmWord(insWordVar), intOpVar);
---        return res;
---    end function;
+    
+    function getInstruction(signal cpuState: in CoreState; signal programMemory: in WordArray) return Instruction is
+        variable res: Instruction;
+        variable insWordVar: Word;
+        variable intOpVar: InternalOperation;
+    begin
+        insWordVar := programMemory(slv2u(cpuState.nextIP)/4);
+        intOpVar := decode2(cpuState.nextIP, insWordVar);
+        res := (cpuState.nextIP, insWordVar,  --disasmWithAddress(slv2u(cpuState.nextIP), insWordVar), intOpVar);
+                                              work.InstructionSet.TMP_disasm(insWordVar), intOpVar);
+        return res;
+    end function;
 
     
     function getInstruction2(signal cpuState: in CoreState; signal programMemory: in WordArray) return Instruction is
@@ -664,7 +665,8 @@ BEGIN
                             -- Now doing the actual test 
                             if opFlags /= "100" and opFlags /= "001" then -- ERROR or SEND (completed)
                                 --currentInstructionVar := getInstruction(cpuState, programMemory);
-                                --currentInstruction <= currentInstructionVar;
+                                currentInstruction <= --currentInstructionVar;
+                                                        getInstruction(cpuState2, programMemory2);
                                     currentInstructionVar2 := getInstruction2(cpuState2, programMemory2);
                                     currentInstruction2 <= currentInstructionVar2;
                                -- performOp(cpuState, dataMemory, currentInstructionVar.internalOp, opFlags2, opResultVar);
