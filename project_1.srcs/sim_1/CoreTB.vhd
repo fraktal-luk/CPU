@@ -310,7 +310,7 @@ ARCHITECTURE Behavior OF CoreTB IS
         variable intOpVar: InternalOperation;
     begin
         insWordVar := programMemory(slv2u(cpuState.nextIP)/4);
-        intOpVar := decode2(cpuState.nextIP, insWordVar);
+        intOpVar := decode3(cpuState.nextIP, insWordVar);
         res := (cpuState.nextIP, insWordVar,  --disasmWithAddress(slv2u(cpuState.nextIP), insWordVar), intOpVar);
                                               work.InstructionSet.TMP_disasm(insWordVar), intOpVar);
         return res;
@@ -667,7 +667,8 @@ BEGIN
                                 --currentInstructionVar := getInstruction(cpuState, programMemory);
                                 currentInstruction <= --currentInstructionVar;
                                                         getInstruction(cpuState2, programMemory2);
-                                    currentInstructionVar2 := getInstruction2(cpuState2, programMemory2);
+                                    currentInstructionVar2 := --getInstruction2(cpuState2, programMemory2);
+                                                               getInstruction(cpuState2, programMemory2);
                                     currentInstruction2 <= currentInstructionVar2;
                                -- performOp(cpuState, dataMemory, currentInstructionVar.internalOp, opFlags2, opResultVar);
                                     performOp(cpuState2, dataMemory2, currentInstructionVar2.internalOp, opFlags, opResultVar2);

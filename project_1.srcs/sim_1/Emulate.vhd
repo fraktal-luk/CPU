@@ -225,8 +225,8 @@ type AbstractOperation is (
 );
 
 type OpTableRow is record
-    opcode: ProcOpcode;
-    opcont: ProcOpcont;
+    --opcode: ProcOpcode;
+    --opcont: ProcOpcont;
     format: FormatSpec;
     desc:   OpDescription;
     op:     AbstractOperation;
@@ -236,46 +236,46 @@ end record;
 type OpTable is array(ProcMnemonic range <>) of OpTableRow;
 
 constant OP_TABLE: OpTable(ProcMnemonic'left to ProcMnemonic'right) := (
-    and_i => (andI, none,   FMT_IMM16,  DESC_INT, logicAnd),
-    or_i  => (orI,  none,   FMT_IMM16,  DESC_INT, logicOr),
+    and_i => (FMT_IMM16,  DESC_INT, logicAnd),
+    or_i  => (FMT_IMM16,  DESC_INT, logicOr),
     
-    add_i => (addI, none,   FMT_IMM16,  DESC_INT, add),
+    add_i => (FMT_IMM16,  DESC_INT, add),
     
-    shl_i => (ext0, shlC,   FMT_SHIFT,  DESC_INT, logicShift),
+    shl_i => (FMT_SHIFT,  DESC_INT, logicShift),
     
     --shl_r, -- direction defined by shift value, not opcode
     --sha_i, sha_r
     
-    add_r => (ext0, addR,   FMT_INT_REG, DESC_INT, add),
-    sub_r => (ext0, subR,   FMT_INT_REG, DESC_INT, sub),
+    add_r => (FMT_INT_REG, DESC_INT, add),
+    sub_r => (FMT_INT_REG, DESC_INT, sub),
 
-    and_r => (ext0, andR,   FMT_INT_REG, DESC_INT, logicAnd),
-    or_r =>  (ext0, orR,    FMT_INT_REG, DESC_INT, logicOr),
+    and_r => (FMT_INT_REG, DESC_INT, logicAnd),
+    or_r =>  (FMT_INT_REG, DESC_INT, logicOr),
     
-    ja =>    (j,    none,   FMT_JUMP,         DESC_JUMP, j),
-    jl =>    (jl,   none,   FMT_JUMP_LINK,    DESC_JUMP, jl),
-    jz_i =>  (jz,    none,   FMT_JUMP_COND,    DESC_JUMP, jz),
-    jnz_i => (jnz,    none,   FMT_JUMP_COND,    DESC_JUMP, jnz),
+    ja =>    (FMT_JUMP,         DESC_JUMP, j),
+    jl =>    (FMT_JUMP_LINK,    DESC_JUMP, jl),
+    jz_i =>  (FMT_JUMP_COND,    DESC_JUMP, jz),
+    jnz_i => (FMT_JUMP_COND,    DESC_JUMP, jnz),
     
-    jz_r =>  (ext1,    jzR,   FMT_JUMP_REG,    DESC_JUMP, jz),
-    jnz_r => (ext1,    jnzR,   FMT_JUMP_REG,    DESC_JUMP, jnz),
+    jz_r =>  (FMT_JUMP_REG,    DESC_JUMP, jz),
+    jnz_r => (FMT_JUMP_REG,    DESC_JUMP, jnz),
     
-    ldi_i => (ld,       none,  FMT_INT_LOAD,    DESC_INT_LOAD, ldi),
-    ldf_i => (ldf,       none,  FMT_FP_LOAD,    DESC_FP_LOAD, ldf),
-    sti_i => (st,       none,  FMT_INT_STORE,    DESC_INT_STORE, sti),
-    stf_i => (stf,       none,  FMT_FP_STORE,    DESC_FP_STORE, stf),
+    ldi_i => (FMT_INT_LOAD,    DESC_INT_LOAD, ldi),
+    ldf_i => (FMT_FP_LOAD,    DESC_FP_LOAD, ldf),
+    sti_i => (FMT_INT_STORE,    DESC_INT_STORE, sti),
+    stf_i => (FMT_FP_STORE,    DESC_FP_STORE, stf),
     -- ....
     
-    lds  =>  (ext2,     mfc,   FMT_SYS_LOAD,    DESC_SYS_LOAD, mfc),   -- ??
-    sts  =>  (ext2,     mtc,   FMT_SYS_STORE,    DESC_SYS_STORE, mtc),  -- ??
+    lds  =>  (FMT_SYS_LOAD,    DESC_SYS_LOAD, mfc),   -- ??
+    sts  =>  (FMT_SYS_STORE,    DESC_SYS_STORE, mtc),  -- ??
     
-    mov_f => (fop,      fmov,  FMT_FP_REG,      DESC_FP,  fpMove),
-    or_f =>  (fop,      forr,  FMT_FP_REG,      DESC_FP,  fpOr),
+    mov_f => (FMT_FP_REG,      DESC_FP,  fpMove),
+    or_f =>  (FMT_FP_REG,      DESC_FP,  fpOr),
     
     
     -- NOTE: sys decoding must be implemented differently because there are no distinct mnemonics
     
-    others => (undef, undef, FMT_DEFAULT, DESC_DEFAULT, undef)
+    others => (FMT_DEFAULT, DESC_DEFAULT, undef)
 );
 
 
@@ -310,6 +310,8 @@ constant DEFAULT_INTERNAL_OP: InternalOperation := DEFAULT_INTERNAL_OPERATION;
 
 function decode2(adr: Mword; w: Word) return InternalOperation;  
 function getOpDisasm(w: Word) return string;
+
+function decode3(adr: Mword; w: Word) return InternalOperation;
 
 procedure performOp(signal state: inout CoreState; signal memory: inout ByteArray; op: in InternalOperation;
                     signal outSigs: out std_logic_vector(0 to 2);
@@ -397,6 +399,71 @@ begin
     res.hasIntDest := desc.writeInt;
     res.hasFloatDest := desc.writeFloat;
     
+    
+    return res;
+end function;
+
+
+
+function getArgSpec2(fmt: FormatSpec; desc: OpDescription; 
+                        
+                        new_fmt: NEW_Format; new_desc: NEW_FormatDescription;
+                        w: Word) return InternalOperation is
+    variable res: InternalOperation := DEFAULT_INTERNAL_OPERATION;
+    constant qa: RegName := w(25 downto 21);
+    constant qb: RegName := w(20 downto 16);
+    constant qc: RegName := w(9 downto 5);
+    constant qd: RegName := w(4 downto 0);
+    
+    variable dest: RegName := (others => '0');
+    variable sources: RegNameArray(0 to 2) := (others => (others => '0'));
+    variable imm: Word := w;
+begin
+    if new_desc.decoding(1) = 'a' then
+        dest := qa;
+    end if;
+    
+    for i in 0 to 2 loop
+        if new_desc.decoding(3 + i) = 'a' then
+            sources(i) := qa;
+        elsif new_desc.decoding(3 + i) = 'b' then
+             sources(i) := qb;
+        elsif new_desc.decoding(3 + i) = 'c' then
+             sources(i) := qc;
+        elsif new_desc.decoding(3 + i) = 'd' then
+             sources(i) := qd;
+        end if;
+    end loop;
+    
+    res.hasImm := '1';
+    if new_desc.decoding(4) = 'L' then    
+        imm(31 downto 26) := (others => imm(25));
+    elsif new_desc.decoding(4) = 'J' then    
+        imm(31 downto 21) := (others => imm(20));
+    elsif new_desc.decoding(4) = 'H' then    
+        imm(31 downto 16) := (others => imm(15));
+    elsif new_desc.decoding(4) = 'X' then    
+        imm(31 downto 10) := (others => imm(9));
+    else
+        res.hasImm := '0';
+        imm := (others => '0');
+    end if;
+    
+    res.intSources := sources;
+    res.floatSources := sources;
+    
+    res.imm := imm;
+    
+    res.intDest := dest;
+    res.floatDest := dest;
+    
+    res.hasIntDest := '0';    
+    res.hasFloatDest := '0';    
+    if new_desc.typeSpec(1) = 'i' then
+        res.hasIntDest := '1';    
+    elsif new_desc.typeSpec(1) = 'f' then
+        res.hasFloatDest := '1';
+    end if;    
     
     return res;
 end function;
@@ -502,6 +569,7 @@ end procedure;
 
 function decode2(adr: Mword; w: Word) return InternalOperation is
     variable res: InternalOperation;
+    variable res2: InternalOperation;
     variable mnem: ProcMnemonic := undef;
     variable fmt: FormatSpec := FMT_DEFAULT;
     variable desc: OpDescription := DESC_DEFAULT;
@@ -509,6 +577,8 @@ function decode2(adr: Mword; w: Word) return InternalOperation is
     variable operation, systemOp: AbstractOperation := undef;
     variable i, j, k: integer;
     variable insDef: InstructionDefinition;
+    variable new_fmt: NEW_Format;
+    variable new_desc: NEW_FormatDescription;
 begin
     i := slv2u(w(31 downto 26));
     j := slv2u(w(15 downto 10));
@@ -533,6 +603,9 @@ begin
         when others =>            
     end case;
 
+        new_fmt :=  FormatList(mnem);
+        new_desc := FormatDescriptions(new_fmt);
+
     if isSystemOp then
         operation := getSystemOperation(mnem);
         fmt := FMT_DEFAULT;
@@ -545,6 +618,9 @@ begin
     
     -- Get arg specifications
     res := getArgSpec(fmt, desc, w);
+    res2 := getArgSpec2(fmt, desc, new_fmt, new_desc, w);
+    
+    --    if res /= res2 then report "not euqal parsing"; end if;
     
     res := fillProperties(res, desc);
     
@@ -553,6 +629,71 @@ begin
     
     return res;
 end function;
+
+
+function decode3(adr: Mword; w: Word) return InternalOperation is
+    variable res: InternalOperation;
+    variable res2: InternalOperation;
+    variable mnem: ProcMnemonic := undef;
+    variable fmt: FormatSpec := FMT_DEFAULT;
+    variable desc: OpDescription := DESC_DEFAULT;
+    variable isSystemOp: boolean := false;
+    variable operation, systemOp: AbstractOperation := undef;
+    variable i, j, k: integer;
+    variable insDef: InstructionDefinition;
+    variable new_fmt: NEW_Format;
+    variable new_desc: NEW_FormatDescription;
+begin
+    i := slv2u(w(31 downto 26));
+    j := slv2u(w(15 downto 10));
+    k := slv2u(w(4 downto 0));
+
+    insDef := getDef(i, j, k);
+
+    mnem := insDef.mnem;
+    case mnem is
+        when
+            sys_retE |
+            sys_retI |
+            sys_halt |
+            sys_sync |
+            sys_replay |
+            sys_error |
+            sys_call |
+            sys_send
+            =>
+            
+            isSystemOp := true;
+        when others =>            
+    end case;
+
+        new_fmt :=  FormatList(mnem);
+        new_desc := FormatDescriptions(new_fmt);
+
+    if isSystemOp then
+        operation := getSystemOperation(mnem);
+        fmt := FMT_DEFAULT;
+        desc := DESC_SYS_OP;
+    else
+        operation := OP_TABLE(mnem).op;
+        fmt := OP_TABLE(mnem).format;
+        desc := OP_TABLE(mnem).desc;
+    end if;
+    
+    -- Get arg specifications
+    --res := getArgSpec(fmt, desc, w);
+    res := getArgSpec2(fmt, desc, new_fmt, new_desc, w);
+    
+        if res /= res2 then report "not euqal parsing"; end if;
+    
+    res := fillProperties(res, desc);
+    
+    res.operation := operation;
+    res.ip := adr;
+    
+    return res;
+end function;
+
 
 
 -- TODO: replace with reg2str
