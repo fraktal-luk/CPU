@@ -383,6 +383,7 @@ constant EmptyTable2: OpcodeTable2 := (others => (none, none, undef));
     constant OP0_INT_DEST: Dword := OP0_INT_ARITH or OP0_JUMP_LINK or OP0_INT_IMM or OP0_INT_LOAD;
     constant OP0_FLOAT_DEST: Dword := OP0_FLOAT_ARITH or OP0_FLOAT_LOAD;
 
+    constant OP0_LOAD: Dword := OP0_INT_LOAD or OP0_FLOAT_LOAD;
     constant OP0_STORE: Dword := OP0_INT_STORE or OP0_FLOAT_STORE;
 
     constant OP0_2A: Dword := OP0_STORE;

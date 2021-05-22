@@ -152,6 +152,10 @@ begin
 	
 	res.classInfo := getInstructionClassInfo(res);	
     res.classInfo.fpRename := decodedIns.classInfo.fpRename;
+    res.classInfo.branchIns := decodedIns.classInfo.branchIns;
+    res.classInfo.mainCluster := decodedIns.classInfo.mainCluster;
+    res.classInfo.secCluster := decodedIns.classInfo.secCluster;
+    res.classInfo.useLQ := decodedIns.classInfo.useLQ;
 
      if res.specificOperation.subpipe = none then                 	
         res.controlInfo.specialAction := '1'; -- TODO: move this to classInfo?
@@ -174,12 +178,12 @@ begin
 
         if true then
             --res.constantArgs.immSel := decodeImmSelNew(inputState.bits);
-            res.classInfo.branchIns := decodeBranchInsNew(inputState.bits);
+            --res.classInfo.branchIns := decodeBranchInsNew(inputState.bits);
             
-            res.classInfo.mainCluster := decodeMainClusterNew(inputState.bits);
-            res.classInfo.secCluster := decodeSecClusterNew(inputState.bits);
+           -- res.classInfo.mainCluster := decodeMainClusterNew(inputState.bits);
+           -- res.classInfo.secCluster := decodeSecClusterNew(inputState.bits);
         
-            res.classInfo.fpRename := decodeFpRenameNew(inputState.bits);        
+            --res.classInfo.fpRename := decodeFpRenameNew(inputState.bits);        
         end if;
 
     

@@ -248,7 +248,7 @@ function decodeFromWordNew(w: word) return InstructionState is
     constant qd: slv5 := w(4 downto 0);
     
     variable    hasOp1, hasOp2,
-                isBranch, hasImm26, hasImm21, hasImm16, hasImm10, hasFpDest, hasIntDest, hasNoIntDest,
+                isBranch, isStore, isLoad, hasImm26, hasImm21, hasImm16, hasImm10, hasFpDest, hasIntDest, hasNoIntDest,
                 src2a, src0a,
                 intSrc0, intSrc1, intSrc2,
                 fpSrc0, fpSrc1, fpSrc2: boolean := false;                
@@ -313,8 +313,29 @@ begin
     fpSrc2 :=      --  op0 = "010111";
              std2bool(    checkOp0(op0, OP0_FLOAT_SRC2)
                        or checkOp1(op0, "000001", op1, OP1_FLOAT_ARITH_SRC2));    
+
+
+    isStore :=  --    op0 = "010101"
+                --    or  (op0 = "000100" and op1 = "100000");      
+               std2bool(    checkOp0(op0, OP0_STORE)
+                         or checkOp1(op0, "000010", op1, OP1_INT_MEM_STORE)
+                         or checkOp1(op0, "000011", op1, OP1_FLOAT_MEM_STORE)
+                         or checkOp1(op0, "000100", op1, OP1_SYS_MEM_STORE));
+
+    isLoad :=  --    op0 = "010101"
+                --    or  (op0 = "000100" and op1 = "100000");      
+               std2bool(    checkOp0(op0, OP0_LOAD)
+                         or checkOp1(op0, "000010", op1, OP1_INT_MEM_LOAD)
+                         or checkOp1(op0, "000011", op1, OP1_FLOAT_MEM_LOAD)
+                         or checkOp1(op0, "000100", op1, OP1_SYS_MEM_LOAD));
      
     res.specificOperation := decodeOperation(op0, op1, op2);
+    
+    res.classInfo.branchIns := bool2std(isBranch);
+    
+    res.classInfo.mainCluster := bool2std(op0 /= "000111"); -- !!
+    res.classInfo.secCluster := bool2std(isStore);
+    res.classInfo.useLQ := bool2std(isLoad);
     
     res.classInfo.fpRename := bool2std(hasFpDest or fpSrc0 or fpSrc1 or fpSrc2);
     
