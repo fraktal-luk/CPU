@@ -191,6 +191,49 @@ begin
 end function;
 
 
+--    isBranch: op0 is branch or op1 is reg branch inside integer op0
+
+--    hasImm26: op0
+--    hasImm21: op0
+--    hasImm16: op0
+--    hasImm10: op0
+
+--    hasFpDest: op0 is FP or op0 is FP-mem and operation is load
+--                  or CVT int ot FP
+    
+--    hasNoIntDest:
+
+--    hasIntDest: op0 or int mem load or CVT FP to int or Int(FP, FP) like FP compare 
+    
+--    src2a: op0 - is mem (no problem for loads because then src 2 is not activated
+--    src0a: op0 - branch cond
+
+--    intSrc0: op0
+
+--     This is not set when immediate used
+--    intSrc1: op0 (for Int 1 src we can have 2 sources with r0 as the second)
+
+--    intSrc2: int store or int 3 src
+
+--    fpSrc0: op0 ?
+
+--      This should be not set when immediate used (SIMD shifts etc)
+--    fpSrc1: op0 and not (FP 1 src or CVT to Int)
+--    fpSrc2: FP store or FP 3 src
+
+
+
+function checkOp0(op0: slv6; table: Dword) return std_logic is
+begin
+    return table(slv2u(op0));
+end function;
+
+function checkOp1(op0, opRef0, op1: slv6; table: Dword) return std_logic is
+begin
+    return bool2std(op0 = opRef0) and table(slv2u(op1));
+end function;
+
+
 function decodeFromWordNew(w: word) return InstructionState is
     variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
     variable specificOperation: SpecificOp := DEFAULT_SPECIFIC_OP;
@@ -210,70 +253,66 @@ function decodeFromWordNew(w: word) return InstructionState is
                 intSrc0, intSrc1, intSrc2,
                 fpSrc0, fpSrc1, fpSrc2: boolean := false;                
 begin
-    isBranch :=     op0 = "001000"
-                 or op0 = "001001"
-                 or op0 = "001010"
-                 or op0 = "001011"
-                 or (op0 = "000000" and (op1 = "000010"));
+    isBranch := --    op0 = "001000" or op0 = "001001" or op0 = "001010"  or op0 = "001011"   or (op0 = "000000" and (op1 = "000010"));
+                std2bool(    checkOp0(op0, OP0_JUMP)
+                          or checkOp1(op0, "000000", op1, OP1_INT_ARITH_BRANCH));
+    hasImm26 :=   --  op0 = "001000";
+                 std2bool(checkOp0(op0, OP0_IMM26));
     
-    hasImm26 :=     op0 = "001000";
-    
-    hasImm21 :=     op0 = "001001"
-                 or op0 = "001010"
-                 or op0 = "001011";
-    
-    hasImm16 :=     op0(4) = '1';
+    hasImm21 :=  --   op0 = "001001"   or op0 = "001010"   or op0 = "001011";
+                 std2bool(checkOp0(op0, OP0_IMM21));
+
+    hasImm16 :=   --  op0(4) = '1';
+                 std2bool(checkOp0(op0, OP0_IMM16));
     
     -- TODO: add shift instructions 
-    hasImm10 :=     op0 = "000010"
-                 or op0 = "000011"
-                 or op0 = "000100";
+    hasImm10 :=  --   op0 = "000010"   or op0 = "000011"  or op0 = "000100";
+                 std2bool(checkOp0(op0, OP0_IMM10));
+
+    hasFpDest := --   op0 = "010110"
+               -- or  op0 = "000001";
+                std2bool(checkOp0(op0, OP0_FLOAT_DEST) or checkOp1(op0, "000011", op1, OP1_FLOAT_MEM_LOAD));
     
-    hasFpDest :=    op0 = "010110"
-                or  op0 = "000001";
-    
-    hasNoIntDest :=   op0 = "000001"
-                  or  op0 = "000011"
-                  or  op0 = "000111"
-                  or  op0 = "001000"
-                  or  op0 = "001010"
-                  or  op0 = "001011"
-                  or  op0 = "010101"
-                  or  op0 = "010110"
-                  or  op0 = "010111"
+    hasNoIntDest :=   op0 = "000001"   or  op0 = "000011"  or  op0 = "000111"  or  op0 = "001000"    or  op0 = "001010"
+                  or  op0 = "001011"   or  op0 = "010101"  or  op0 = "010110"  or  op0 = "010111"
                   or  (op0 = "000100" and op1 = "100000");
 
-    hasIntDest := not hasNoIntDest;
+    hasIntDest := --not hasNoIntDest;
+                  std2bool(
+                           checkOp0(op0, OP0_INT_DEST)
+                        or checkOp1(op0, "000010", op1, OP1_INT_MEM_LOAD)
+                        or checkOp1(op0, "000100", op1, OP1_SYS_MEM_LOAD)
+                        );
     
-    src2a :=           op0 = "010101"
-                   or  op0 = "010111"
-                   or  (op0 = "000100" and op1 = "100000");
+    src2a :=   --        op0 = "010101"  or  op0 = "010111"
+               --    or  (op0 = "000100" and op1 = "100000");
+                std2bool(checkOp0(op0, OP0_2A) or checkOp1(op0, "000100", op1, OP1_SYS_MEM_STORE));                
     
-    src0a :=          op0 = "001010"
-                  or  op0 = "001011";
+    src0a :=    --      op0 = "001010"  or  op0 = "001011";
+                  std2bool(checkOp0(op0, OP0_0A));
     
-    intSrc0 :=          op0 = "000000"
-                    or  op0 = "000010"     
-                    or  op0 = "000011"
-                    or  op0 = "001010"
-                    or  op0 = "001011"
+    intSrc0 :=   --       op0 = "000000"    or  op0 = "000010"  or  op0 = "000011"  or  op0 = "001010"    or  op0 = "001011"
+                 --   or  op0(4) = '1';
+                std2bool(checkOp0(op0, OP0_INT_SRC0));
+            
+    intSrc1 :=  --    op0 = "000000";
+                std2bool(checkOp0(op0, OP0_INT_SRC1));
+    
+    intSrc2 :=  --    op0 = "010101"
+                --    or  (op0 = "000100" and op1 = "100000");      
+               std2bool(    checkOp0(op0, OP0_INT_SRC2)
+                         or checkOp1(op0, "000010", op1, OP1_INT_MEM_STORE)
+                         or checkOp1(op0, "000100", op1, OP1_SYS_MEM_STORE));
 
-                    or  op0(4) = '1';
-    
-    intSrc1 :=             op0 = "000000";
-    
-    
-    intSrc2 :=          op0 = "010101"
-                    --or  op0 = "010111"
-                    or  (op0 = "000100" and op1 = "100000");      
-
-    fpSrc0 :=       op0 = "000001"
-                        and (op1 = "000000");
-    --fpSrc1  :=    op0 = "000001" 
-    --                   and (op1 = ... ); 
-    
-    fpSrc2 :=        op0 = "010111";
-     
+    fpSrc0 :=  --     op0 = "000001"  and (op1 = "000000");
+                std2bool(checkOp0(op0, OP0_FLOAT_ARITH));
+    fpSrc1  :=   -- op0 = "000001" 
+                 --     and (op1 = ... ); 
+                std2bool(checkOp1(op0, "000001", op1, OP1_FLOAT_ARITH_SRC1));
+                      
+    fpSrc2 :=      --  op0 = "010111";
+             std2bool(    checkOp0(op0, OP0_FLOAT_SRC2)
+                       or checkOp1(op0, "000001", op1, OP1_FLOAT_ARITH_SRC2));    
      
     res.specificOperation := decodeOperation(op0, op1, op2);
     

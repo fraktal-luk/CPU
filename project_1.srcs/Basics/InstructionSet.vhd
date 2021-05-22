@@ -340,7 +340,67 @@ constant TheTable: GeneralTable --(ProcMnemonic'left to ProcMnemonic'right)
 
 constant EmptyTable1: OpcodeTable1 := (others => (none, none, none, undef));
 constant EmptyTable2: OpcodeTable2 := (others => (none, none, undef));
+    
 
+    constant OP1_INT_ARITH_BRANCH: Dword := (2 => '1', others => '0');
+
+    constant OP1_FLOAT_ARITH_SRC1: Dword := (others => '0');
+    constant OP1_FLOAT_ARITH_SRC2: Dword := (others => '0');
+
+    constant OP1_INT_MEM_LOAD: Dword := (others => '0');
+    constant OP1_INT_MEM_STORE: Dword := (others => '0');
+    constant OP1_FLOAT_MEM_LOAD: Dword := (others => '0');
+    constant OP1_FLOAT_MEM_STORE: Dword := (others => '0');
+    constant OP1_SYS_MEM_LOAD: Dword := (0 => '1', others => '0');
+    constant OP1_SYS_MEM_STORE: Dword := (32 => '1', others => '0');
+
+
+    constant OP0_INT_MEM: Dword := (2 => '1', others => '0');
+    constant OP0_FLOAT_MEM: Dword := (3 => '1', others => '0');
+    constant OP0_SYS_MEM: Dword := (4 => '1', others => '0');
+
+    constant OP0_INT_ARITH: Dword := (0 => '1', others => '0');
+    constant OP0_FLOAT_ARITH: Dword := (1 => '1', others => '0');
+
+    constant OP0_JUMP_LONG: Dword := (8 => '1', others => '0');
+    constant OP0_JUMP_LINK: Dword := (9 => '1', others => '0');
+    constant OP0_JUMP_COND: Dword := (10 to 11 => '1', others => '0');
+
+    constant OP0_JUMP: Dword := OP0_JUMP_LONG or OP0_JUMP_LINK or OP0_JUMP_COND;
+
+    constant OP0_INT_IMM: Dword := (16 to 17 => '1', others => '0');
+
+    constant OP0_IMM10: Dword := (2 to 4 => '1', others => '0');
+    constant OP0_IMM16: Dword := (16 to 17 => '1', 20 to 23 => '1', others => '0');
+    constant OP0_IMM21: Dword := (9 to 11 => '1', others => '0');
+    constant OP0_IMM26: Dword := (8 => '1', others => '0');
+
+    constant OP0_INT_LOAD: Dword := (20 => '1', others => '0');
+    constant OP0_INT_STORE: Dword := (21 => '1', others => '0');
+    constant OP0_FLOAT_LOAD: Dword := (22 => '1', others => '0');
+    constant OP0_FLOAT_STORE: Dword := (23 => '1', others => '0');
+
+    constant OP0_INT_DEST: Dword := OP0_INT_ARITH or OP0_JUMP_LINK or OP0_INT_IMM or OP0_INT_LOAD;
+    constant OP0_FLOAT_DEST: Dword := OP0_FLOAT_ARITH or OP0_FLOAT_LOAD;
+
+    constant OP0_STORE: Dword := OP0_INT_STORE or OP0_FLOAT_STORE;
+
+    constant OP0_2A: Dword := OP0_STORE;
+    constant OP0_0A: Dword := OP0_JUMP_COND;
+
+    
+    constant OP0_INT_SRC0: Dword := OP0_INT_ARITH or OP0_INT_MEM or OP0_FLOAT_MEM or OP0_JUMP_COND or OP0_IMM16;
+    constant OP0_INT_SRC1: Dword := OP0_INT_ARITH;
+    constant OP0_INT_SRC2: Dword := OP0_INT_STORE;
+
+    constant OP0_FLOAT_SRC0: Dword := OP0_FLOAT_ARITH; --// or FP to Int
+    
+    constant OP0_FLOAT_SRC2: Dword := OP0_FLOAT_STORE;
+
+    -- fp src1 -> (op0 fpArith) and (op1 fpArith src1)  
+    -- fp src2 -> (op0 fpArith) and (op1 fpArith src1) or (op0 fp src2)
+    
+    -- int src2 -> OP0 or (intMem and op1 int store) or (sysMem and op1 sys store)
 
 constant MainTable: OpcodeTable0 := (
     0 => (intAlu, none, none, undef), -- TableIntAlu

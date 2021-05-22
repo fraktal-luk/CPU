@@ -684,7 +684,7 @@ begin
     --res := getArgSpec(fmt, desc, w);
     res := getArgSpec2(fmt, desc, new_fmt, new_desc, w);
     
-        if res /= res2 then report "not euqal parsing"; end if;
+    --    if res /= res2 then report "not euqal parsing"; end if;
     
     res := fillProperties(res, desc);
     
