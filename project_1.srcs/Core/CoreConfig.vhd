@@ -64,6 +64,8 @@ constant LQ_PTR_SIZE: natural := countOnes(LQ_PTR_MASK);
 
     constant TMP_PARAM_COMPRESS_RETURN: boolean := false;
     
+    constant TMP_PARAM_NEW_DECODE: boolean := true;
+    
 end CoreConfig;
 
 
