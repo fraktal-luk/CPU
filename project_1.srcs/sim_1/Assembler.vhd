@@ -227,7 +227,7 @@ begin
         -- Hope it's a number 
         x := TMP_str2int(s);
     else
-        x := -1;
+        x := 0;
     end if;    
     return x;
 end function;

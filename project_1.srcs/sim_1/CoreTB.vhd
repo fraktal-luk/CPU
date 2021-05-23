@@ -277,7 +277,7 @@ ARCHITECTURE Behavior OF CoreTB IS
         variable imp2, exp2: XrefArray(0 to 100);
     begin
 
-        processProgram(prog, machineCode, imp, exp);
+        processProgram2(prog, machineCode, imp, exp);
         machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
     
  

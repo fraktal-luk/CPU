@@ -150,9 +150,9 @@ constant FormatDescriptions: NEW_FormatDescriptionTable(None to IntToFloat) := (
     FloatStore16 => ("201 ", "0,bHa", "i,icf"),
     FloatStore10 => ("201 ", "0,bXa", "i,icf"),
 
-    SysLoad =>      ("d1  ", "a,0X0", "i,ic0"),
+    SysLoad =>      ("d01 ", "a,bX0", "i,ic0"),
     
-    SysStore =>     ("21  ", "0,0Xa", "0,ici"),
+    SysStore =>     ("201 ", "0,bXa", "0,ici"),
 
     Int3R =>        ("d012", "a,bcd", "i,iii"),
     Int2R =>        ("d01 ", "a,bc0", "i,ii0"),
