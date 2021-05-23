@@ -35,9 +35,12 @@ entity IssueQueue is
 		  newArr_Alt: in SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
 		  newArrOut: out SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
 		nextAccepting: in std_logic;
-		lateEventSignal: in std_logic;
-		execEventSignal: in std_logic;
-		execCausing: in InstructionState;
+		
+		--lateEventSignal: in std_logic;
+		--execEventSignal: in std_logic;
+		--execCausing: in InstructionState;
+		      events: in EventState;
+		
 		fni: in ForwardingInfo;
 		waitingFM: in ForwardingMap;
 		selectionFM: in ForwardingMap; 
@@ -91,9 +94,9 @@ begin
         fmaInputStage <= findForwardingMatchesArray(inputStage, fni);
         inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, true, false);                   
   
-        inputStageSending <= inputStageAny and queuesAccepting and not execEventSignal and not lateEventSignal;
+        inputStageSending <= inputStageAny and queuesAccepting and not events.execEvent and not events.lateEvent;
 
-        inputStageNext <= iqInputStageNext(inputStageUpdated, newArr, prevSendingOK, inputStageSending, execEventSignal, lateEventSignal);
+        inputStageNext <= iqInputStageNext(inputStageUpdated, newArr, prevSendingOK, inputStageSending, events.execEvent, events.lateEvent);
         inputStageAny <= isNonzero(extractFullMask(inputStage));
             
         INPUT_SYNCHRONOUS: process(clk)
@@ -120,7 +123,7 @@ begin
 	end process;	
 
 
-	killMask <= getKillMask(queueContent, fullMask, execCausing, execEventSignal, lateEventSignal);
+	killMask <= getKillMask(queueContent, fullMask, events.execCausing, events.execEvent, events.lateEvent);
  	fullMask <= extractFullMask(queueContent);
 	livingMask <= fullMask and not killMask;
 

@@ -14,6 +14,12 @@ use work.InstructionState.all;
 
 package PipelineGeneral is
 
+type EventState is record
+    lateEvent: std_logic;
+    execEvent: std_logic;
+    execCausing: InstructionState;
+end record;
+
 type ForwardingInfo is record
 	tags0: PhysNameArray(0 to 2);
 	tags1: PhysNameArray(0 to 2);

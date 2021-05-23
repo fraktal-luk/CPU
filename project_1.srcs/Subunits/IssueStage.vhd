@@ -33,9 +33,11 @@ entity IssueStage is
 		acceptingOut: out std_logic;
 		output: out SchedulerEntrySlot;
 		
-		execEventSignal: in std_logic;
-		lateEventSignal: in std_logic;
-		execCausing: in InstructionState;
+		--execEventSignal: in std_logic;
+		--lateEventSignal: in std_logic;
+		--execCausing: in InstructionState;
+		
+		  events: in EventState;
 		
 		fni: in ForwardingInfo;
 		regValues: in MwordArray(0 to 2)		
@@ -68,9 +70,12 @@ begin
 		sendingOut => sendingOut,
 		stageDataOut(0) => stageDataSaved,
 		
-		execEventSignal => execEventSignal,
-		lateEventSignal => lateEventSignal,
-		execCausing => execCausing
+		execEventSignal => --execEventSignal,
+		                      events.execEvent,
+		lateEventSignal => --lateEventSignal,
+		                      events.lateEvent,
+		execCausing => --execCausing
+		                  events.execCausing
 	);
 	
 	SAVE_SCH_STATE: process(clk)

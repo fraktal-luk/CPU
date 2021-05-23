@@ -96,6 +96,8 @@ architecture Behavioral of Core is
 
     signal cycleCounter: Word := (others => '0');
     
+    signal events: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE);
+    
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
 begin
 
@@ -282,6 +284,7 @@ begin
         empty => dbEmpty            
     );
 
+    events <= (lateEventSignal, execEventSignal, execCausing);
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(
@@ -489,6 +492,7 @@ begin
         
                 acceptingOut => iqAcceptingI0,
                 acceptingMore => iqAcceptingMoreI0,
+                
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedA,            
                     newArr_Alt => NEW_ARR_DUMMY,
@@ -498,11 +502,14 @@ begin
                 selectionFM => SELECTION_FN_MAP,
                 readyRegFlags => readyRegFlagsInt,
                 nextAccepting => allowIssueI0,
-                execCausing => execCausing,
-                lateEventSignal => lateEventSignal,
-                execEventSignal => execEventSignal,
+                
+                --execCausing => execCausing,
+                --lateEventSignal => lateEventSignal,
+                --execEventSignal => execEventSignal,
+                    events => events,
                 
                 anyReady => open,
+                
                 schedulerOut => slotSelI0,
                 sending => sendingSelI0,
                 sentCancelled => sentCancelledI0,
@@ -525,12 +532,15 @@ begin
                 acceptingOut => open,
                 output => slotIssueI0,
                 
-                execEventSignal => execEventSignal,
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing,
+                --execEventSignal => execEventSignal,
+                --lateEventSignal => lateEventSignal,
+                --execCausing => execCausing,
+                    events => events,
+                
                 fni => fni,
                 regValues => regValsI0   
             );
+
                 ISSUE_STAGE_I0_A: entity work.IssueStage
                 generic map(USE_IMM => true)
                 port map(
@@ -546,9 +556,11 @@ begin
                     acceptingOut => open,
                     output => slotIssueI0_A,
                     
-                    execEventSignal => execEventSignal,
-                    lateEventSignal => lateEventSignal,
-                    execCausing => execCausing,
+                    --execEventSignal => execEventSignal,
+                    --lateEventSignal => lateEventSignal,
+                    --execCausing => execCausing,
+                        events => events,
+                        
                     fni => fni,
                     regValues => regValsI0  
                 );
@@ -642,9 +654,10 @@ begin
                selectionFM => SELECTION_FN_MAP,
                readyRegFlags => readyRegFlagsInt,
                nextAccepting =>allowIssueM0,
-               execCausing => execCausing,
-               lateEventSignal => lateEventSignal,
-               execEventSignal => execEventSignal,
+               --execCausing => execCausing,
+               --lateEventSignal => lateEventSignal,
+               --execEventSignal => execEventSignal,
+                    events => events,
                empty => emptyM0,
                anyReady => open,
                schedulerOut => slotSelM0,
@@ -666,9 +679,10 @@ begin
                acceptingOut => open,
                output => slotIssueM0,
                
-               execEventSignal => execEventSignal,
-               lateEventSignal => lateEventSignal,
-               execCausing => execCausing,
+               --execEventSignal => execEventSignal,
+               --lateEventSignal => lateEventSignal,
+               --execCausing => execCausing,
+                    events => events,
                
                fni => fni,
                regValues => regValsM0   
@@ -866,9 +880,10 @@ begin
                 selectionFM => DEFAULT_FORWARDING_MAP,      
                 readyRegFlags => readyRegFlagsSV,
                 nextAccepting => allowIssueStoreDataInt,
-                execCausing => execCausing,
-                lateEventSignal => lateEventSignal,
-                execEventSignal => execEventSignal,
+                --execCausing => execCausing,
+                --lateEventSignal => lateEventSignal,
+                --execEventSignal => execEventSignal,
+                    events => events,
                 empty => emptySVI,
                 anyReady => open,
                 schedulerOut => dataToIssueIntStoreValue,
@@ -890,9 +905,10 @@ begin
                 acceptingOut => open,
                 output => dataToRegReadIntStoreValue,
                 
-                execEventSignal => execEventSignal,
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing,
+                --execEventSignal => execEventSignal,
+                --lateEventSignal => lateEventSignal,
+                --execCausing => execCausing,
+                    events => events,
                 fni => fniEmpty,
                 regValues => (others => (others => '0'))   
             );
@@ -914,9 +930,10 @@ begin
                 acceptingOut => open,
                 output => dataToExecIntStoreValue,
                 
-                execEventSignal => execEventSignal,
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing,
+                --execEventSignal => execEventSignal,
+                --lateEventSignal => lateEventSignal,
+                --execCausing => execCausing,
+                    events => events,
                 fni => fniEmpty,
                 regValues => regValsS0     
             );
@@ -944,9 +961,10 @@ begin
                 selectionFM => DEFAULT_FORWARDING_MAP,      
                 readyRegFlags => readyRegFlagsFloatSV,
                 nextAccepting => allowIssueStoreDataFP,
-                execCausing => execCausing,
-                lateEventSignal => lateEventSignal,
-                execEventSignal => execEventSignal,
+                --execCausing => execCausing,
+                --lateEventSignal => lateEventSignal,
+                --execEventSignal => execEventSignal,
+                    events => events,
                 empty => emptySVF,
                 anyReady => open,
                 schedulerOut => dataToIssueFloatStoreValue,
@@ -968,9 +986,10 @@ begin
                 acceptingOut => open,
                 output => dataToRegReadFloatStoreValue,
                 
-                execEventSignal => execEventSignal,
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing,
+                --execEventSignal => execEventSignal,
+                --lateEventSignal => lateEventSignal,
+                --execCausing => execCausing,
+                    events => events,
                 fni => fniEmpty,
                 regValues => (others => (others => '0'))   
             );        
@@ -992,9 +1011,10 @@ begin
                 acceptingOut => open,
                 output => dataToExecFloatStoreValue,
                 
-                execEventSignal => execEventSignal,
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing,
+                --execEventSignal => execEventSignal,
+                --lateEventSignal => lateEventSignal,
+                --execCausing => execCausing,
+                    events => events,
                 fni => fniEmpty,
                 regValues => regValsFS0     
             );
@@ -1037,9 +1057,10 @@ begin
                 selectionFM => SELECTION_FN_MAP_FLOAT,
                 readyRegFlags => readyRegFlagsFloat,
                 nextAccepting => allowIssueF0,
-                execCausing => execCausing,
-                lateEventSignal => lateEventSignal,
-                execEventSignal => execEventSignal,
+                --execCausing => execCausing,
+                --lateEventSignal => lateEventSignal,
+                --execEventSignal => execEventSignal,
+                    events => events,
                 empty => emptyF0,
                 anyReady => open,
                 schedulerOut => slotSelF0,
@@ -1061,9 +1082,10 @@ begin
                 acceptingOut => open,
                 output => slotIssueF0,
                 
-                execEventSignal => execEventSignal,
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing,
+                --execEventSignal => execEventSignal,
+                --lateEventSignal => lateEventSignal,
+                --execCausing => execCausing,
+                    events => events,
                 fni => fniFloat,
                 regValues => (others => (others => '0'))   
             );        
@@ -1083,9 +1105,10 @@ begin
                 acceptingOut => open,
                 output => slotRegreadF0,
                 
-                execEventSignal => execEventSignal,
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing,
+                --execEventSignal => execEventSignal,
+                --lateEventSignal => lateEventSignal,
+                --execCausing => execCausing,
+                    events => events,
                 fni => fniFloat,
                 regValues => regValsF0     
             );
