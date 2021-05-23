@@ -5,7 +5,6 @@ use IEEE.STD_LOGIC_1164.ALL;
 use work.BasicTypes.all;
 use work.Helpers.all;
 use work.ArchDefs.all;
---use work.Assembler.all;
 
 use work.Arith.all;
 use work.InstructionSet.all;
@@ -22,79 +21,6 @@ function memReadMword(memory: ByteArray; address: Mword) return Mword;
 procedure memWriteWord(signal memory: inout ByteArray; address: in Mword; data: in Word);
 procedure memWriteDword(signal memory: inout ByteArray; address: in Mword; data: in Dword);
 procedure memWriteMword(signal memory: inout ByteArray; address: in Mword; data: in Mword);
-
-
-type FormatSpec is record
-    imm: std_logic;
-    imm16: std_logic;
-    imm21: std_logic;
-    imm26: std_logic;
-    arg0inA: std_logic;
-    arg2inA: std_logic;
-    fpDestSelect: std_logic;
-    fpArgSelect: std_logic_vector(0 to 2);
-end record;
-
---                                      imm   16   20   26   0a   2a   fp  fpArgs
-constant FMT_DEFAULT:    FormatSpec := ('0', '0', '0', '0', '0', '0', '0', "000");
-
-constant FMT_JUMP:       FormatSpec := ('1', '0', '0', '1', '0', '0', '0', "000");
-constant FMT_JUMP_LINK:  FormatSpec := ('1', '0', '1', '0', '0', '0', '0', "000");
-constant FMT_JUMP_COND:  FormatSpec := ('1', '0', '1', '0', '1', '0', '0', "000");
-
-constant FMT_INT_LOAD:   FormatSpec := ('1', '1', '0', '0', '0', '0', '0', "000"); -- Equal to FMT_IMM16?
-constant FMT_INT_STORE:  FormatSpec := ('1', '1', '0', '0', '0', '1', '0', "000");
-
-constant FMT_FP_LOAD:    FormatSpec := ('1', '1', '0', '0', '0', '0', '1', "000");
-constant FMT_FP_STORE:   FormatSpec := ('1', '1', '0', '0', '0', '1', '0', "001");
-
-constant FMT_SYS_LOAD:   FormatSpec := ('1', '0', '0', '0', '0', '0', '0', "000");
-constant FMT_SYS_STORE:  FormatSpec := ('1', '0', '0', '0', '0', '1', '0', "000");
-
-constant FMT_IMM16:      FormatSpec := ('1', '1', '0', '0', '0', '0', '0', "000");
-constant FMT_IMM10:      FormatSpec := ('1', '0', '0', '0', '0', '0', '0', "000");
-
-constant FMT_INT_REG:    FormatSpec := ('0', '0', '0', '0', '0', '0', '0', "000");
-constant FMT_FP_REG:     FormatSpec := ('0', '0', '0', '0', '0', '0', '1', "111");
-
-
-constant FMT_NO_REGS:    FormatSpec := FMT_DEFAULT;
-
-constant FMT_JUMP_REG:   FormatSpec := ('0', '0', '0', '0', '0', '0', '0', "000"); -- Equal to default?
-constant FMT_SHIFT:      FormatSpec := FMT_IMM10;
-
-
--- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
--- Format specs from old HW decoder implementation
-
---    type InstructionFormat is record
---        src0a, src1i, src2a: std_logic; -- src0 from qa? src1 from imm? src2 from qa?
---        intDestSel: std_logic;
---        intSrcSel: std_logic_vector(0 to 2);
---        fpDestSel: std_logic;
---        fpSrcSel: std_logic_vector(0 to 2);
---        imm16: std_logic; -- Sizes 26, 21 are only for jumps, so not needed in back end (kept as full jump targets)
---    end record;
-    
---    constant FMT_DEFAULT: InstructionFormat := ('0', '0', '0', '0', "000",  '0', "000",  '0');
---    constant FMT_INT2   : InstructionFormat := ('0', '0', '0', '1', "110",  '0', "000",  '0');
---    constant FMT_INT3   : InstructionFormat := ('0', '0', '0', '1', "111",  '0', "000",  '0');
---    constant FMT_IMM    : InstructionFormat := ('0', '1', '0', '1', "110",  '0', "000",  '1');
---    constant FMT_SHIFT  : InstructionFormat := ('0', '1', '0', '1', "110",  '0', "000",  '0');
---    constant FMT_FP1    : InstructionFormat := ('0', '0', '0', '0', "000",  '1', "100",  '0');
---    constant FMT_FP2    : InstructionFormat := ('0', '0', '0', '0', "000",  '1', "110",  '0');
---    constant FMT_FP3    : InstructionFormat := ('0', '0', '0', '0', "000",  '1', "111",  '0');
---    constant FMT_FLOAD  : InstructionFormat := ('0', '1', '0', '0', "110",  '1', "000",  '1');
---    constant FMT_ISTORE : InstructionFormat := ('0', '1', '1', '0', "111",  '0', "000",  '1');
---    constant FMT_FSTORE : InstructionFormat := ('0', '1', '1', '0', "110",  '0', "001",  '1');
---    constant FMT_JL     : InstructionFormat := ('0', '1', '0', '1', "000",  '0', "000",  '0'); -- Jump link
---    constant FMT_JC     : InstructionFormat := ('1', '1', '0', '0', "100",  '0', "000",  '0'); -- Jump cond
---    constant FMT_SSTORE : InstructionFormat := ('0', '1', '1', '0', "011",  '0', "000",  '0'); -- mtc
-    
---    constant FMT_JA     : InstructionFormat := ('0', '1', '0', '0', "000",  '0', "000",  '0'); -- Jump long
---    constant FMT_ILOAD  : InstructionFormat := FMT_IMM;
---    constant FMT_JR     : InstructionFormat := FMT_INT2;  -- Jump reg
---    constant FMT_SLOAD  : InstructionFormat := ('0', '1', '0', '1', "010",  '0', "000",  '0'); -- mfc
 
 
 type OpDescription is record
@@ -225,9 +151,6 @@ type AbstractOperation is (
 );
 
 type OpTableRow is record
-    --opcode: ProcOpcode;
-    --opcont: ProcOpcont;
-    format: FormatSpec;
     desc:   OpDescription;
     op:     AbstractOperation;
 end record;
@@ -236,46 +159,46 @@ end record;
 type OpTable is array(ProcMnemonic range <>) of OpTableRow;
 
 constant OP_TABLE: OpTable(ProcMnemonic'left to ProcMnemonic'right) := (
-    and_i => (FMT_IMM16,  DESC_INT, logicAnd),
-    or_i  => (FMT_IMM16,  DESC_INT, logicOr),
+    and_i => (DESC_INT, logicAnd),
+    or_i  => (DESC_INT, logicOr),
     
-    add_i => (FMT_IMM16,  DESC_INT, add),
+    add_i => (DESC_INT, add),
     
-    shl_i => (FMT_SHIFT,  DESC_INT, logicShift),
+    shl_i => (DESC_INT, logicShift),
     
     --shl_r, -- direction defined by shift value, not opcode
     --sha_i, sha_r
     
-    add_r => (FMT_INT_REG, DESC_INT, add),
-    sub_r => (FMT_INT_REG, DESC_INT, sub),
+    add_r => (DESC_INT, add),
+    sub_r => (DESC_INT, sub),
 
-    and_r => (FMT_INT_REG, DESC_INT, logicAnd),
-    or_r =>  (FMT_INT_REG, DESC_INT, logicOr),
+    and_r => (DESC_INT, logicAnd),
+    or_r =>  (DESC_INT, logicOr),
     
-    ja =>    (FMT_JUMP,         DESC_JUMP, j),
-    jl =>    (FMT_JUMP_LINK,    DESC_JUMP, jl),
-    jz_i =>  (FMT_JUMP_COND,    DESC_JUMP, jz),
-    jnz_i => (FMT_JUMP_COND,    DESC_JUMP, jnz),
+    ja =>    (DESC_JUMP, j),
+    jl =>    (DESC_JUMP, jl),
+    jz_i =>  (DESC_JUMP, jz),
+    jnz_i => (DESC_JUMP, jnz),
     
-    jz_r =>  (FMT_JUMP_REG,    DESC_JUMP, jz),
-    jnz_r => (FMT_JUMP_REG,    DESC_JUMP, jnz),
+    jz_r =>  (DESC_JUMP, jz),
+    jnz_r => (DESC_JUMP, jnz),
     
-    ldi_i => (FMT_INT_LOAD,    DESC_INT_LOAD, ldi),
-    ldf_i => (FMT_FP_LOAD,    DESC_FP_LOAD, ldf),
-    sti_i => (FMT_INT_STORE,    DESC_INT_STORE, sti),
-    stf_i => (FMT_FP_STORE,    DESC_FP_STORE, stf),
+    ldi_i => (DESC_INT_LOAD, ldi),
+    ldf_i => (DESC_FP_LOAD, ldf),
+    sti_i => (DESC_INT_STORE, sti),
+    stf_i => (DESC_FP_STORE, stf),
     -- ....
     
-    lds  =>  (FMT_SYS_LOAD,    DESC_SYS_LOAD, mfc),   -- ??
-    sts  =>  (FMT_SYS_STORE,    DESC_SYS_STORE, mtc),  -- ??
+    lds  =>  (DESC_SYS_LOAD, mfc),   -- ??
+    sts  =>  (DESC_SYS_STORE, mtc),  -- ??
     
-    mov_f => (FMT_FP_REG,      DESC_FP,  fpMove),
-    or_f =>  (FMT_FP_REG,      DESC_FP,  fpOr),
+    mov_f => (DESC_FP,  fpMove),
+    or_f =>  (DESC_FP,  fpOr),
     
     
     -- NOTE: sys decoding must be implemented differently because there are no distinct mnemonics
     
-    others => (FMT_DEFAULT, DESC_DEFAULT, undef)
+    others => (DESC_DEFAULT, undef)
 );
 
 
@@ -308,15 +231,11 @@ function defaultInternalOp return InternalOperation;
 constant DEFAULT_INTERNAL_OPERATION: InternalOperation := defaultInternalOp;
 constant DEFAULT_INTERNAL_OP: InternalOperation := DEFAULT_INTERNAL_OPERATION;
 
-function decode2(adr: Mword; w: Word) return InternalOperation;  
-function getOpDisasm(w: Word) return string;
-
-function decode3(adr: Mword; w: Word) return InternalOperation;
+function decodeAbstract(adr: Mword; w: Word) return InternalOperation;
 
 procedure performOp(signal state: inout CoreState; signal memory: inout ByteArray; op: in InternalOperation;
                     signal outSigs: out std_logic_vector(0 to 2);
                     result: out OperationResult);
-
 end package;
 
 
@@ -349,66 +268,7 @@ begin
 end function;
 
 
-function getArgSpec(fmt: FormatSpec; desc: OpDescription; w: Word) return InternalOperation is
-    variable res: InternalOperation;
-    constant qa: slv5 := w(25 downto 21);
-    constant qb: slv5 := w(20 downto 16);
-    constant qc: slv5 := w(9 downto 5);
-    constant qd: slv5 := w(4 downto 0);
-    
-    variable dest: slv5 := (others => '0');
-    variable imm: Word := w;
-begin
-    
-    res.intSources := (qb, qc, (others => '0'));
-    if fmt.arg0inA = '1' then
-        res.intSources(0) := qa;
-    end if;
-
-    if fmt.arg2inA = '1' then
-        res.intSources(2) := qa;
-        res.intSources(0) := (others => '0');
-    end if;
-    
-    res.floatSources := res.intSources;
-    
-    res.hasImm := fmt.imm;
-    
-    if res.hasImm /= '1' then
-        imm := (others => '0');
-    elsif fmt.imm26 = '1' then
-        imm(31 downto 26) := (others => imm(25));
-    elsif fmt.imm21 = '1' then
-        imm(31 downto 20) := (others => imm(20));
-    elsif fmt.imm16 = '1' then
-        imm(31 downto 16) := (others => imm(15));
-    else
-        imm(31 downto 10) := (others => imm(9));
-    end if;
-    
-    res.imm := imm;
-    
-    if fmt.arg0inA = '1' or fmt.arg2inA = '1' then
-        -- dest stays 0
-    else
-        dest := qa;
-    end if;
-    
-    res.intDest := dest;
-    res.floatDest := dest;
-    res.hasIntDest := desc.writeInt;
-    res.hasFloatDest := desc.writeFloat;
-    
-    
-    return res;
-end function;
-
-
-
-function getArgSpec2(fmt: FormatSpec; desc: OpDescription; 
-                        
-                        new_fmt: NEW_Format; new_desc: NEW_FormatDescription;
-                        w: Word) return InternalOperation is
+function getArgSpec2(new_fmt: NEW_Format; new_desc: NEW_FormatDescription; w: Word) return InternalOperation is
     variable res: InternalOperation := DEFAULT_INTERNAL_OPERATION;
     constant qa: RegName := w(25 downto 21);
     constant qb: RegName := w(20 downto 16);
@@ -483,9 +343,6 @@ begin
        
     return res;
 end function;
-
-
-
 
 
 function memReadWord(memory: ByteArray; address: Mword) return Mword is
@@ -567,11 +424,10 @@ begin
 end procedure;
 
 
-function decode2(adr: Mword; w: Word) return InternalOperation is
+function decodeAbstract(adr: Mword; w: Word) return InternalOperation is
     variable res: InternalOperation;
     variable res2: InternalOperation;
     variable mnem: ProcMnemonic := undef;
-    variable fmt: FormatSpec := FMT_DEFAULT;
     variable desc: OpDescription := DESC_DEFAULT;
     variable isSystemOp: boolean := false;
     variable operation, systemOp: AbstractOperation := undef;
@@ -603,89 +459,19 @@ begin
         when others =>            
     end case;
 
-        new_fmt :=  FormatList(mnem);
-        new_desc := FormatDescriptions(new_fmt);
+    new_fmt :=  FormatList(mnem);
+    new_desc := FormatDescriptions(new_fmt); -- NOTE: description of format, not of operation like 'desc'
 
     if isSystemOp then
         operation := getSystemOperation(mnem);
-        fmt := FMT_DEFAULT;
         desc := DESC_SYS_OP;
     else
         operation := OP_TABLE(mnem).op;
-        fmt := OP_TABLE(mnem).format;
         desc := OP_TABLE(mnem).desc;
     end if;
     
     -- Get arg specifications
-    res := getArgSpec(fmt, desc, w);
-    res2 := getArgSpec2(fmt, desc, new_fmt, new_desc, w);
-    
-    --    if res /= res2 then report "not euqal parsing"; end if;
-    
-    res := fillProperties(res, desc);
-    
-    res.operation := operation;
-    res.ip := adr;
-    
-    return res;
-end function;
-
-
-function decode3(adr: Mword; w: Word) return InternalOperation is
-    variable res: InternalOperation;
-    variable res2: InternalOperation;
-    variable mnem: ProcMnemonic := undef;
-    variable fmt: FormatSpec := FMT_DEFAULT;
-    variable desc: OpDescription := DESC_DEFAULT;
-    variable isSystemOp: boolean := false;
-    variable operation, systemOp: AbstractOperation := undef;
-    variable i, j, k: integer;
-    variable insDef: InstructionDefinition;
-    variable new_fmt: NEW_Format;
-    variable new_desc: NEW_FormatDescription;
-begin
-    i := slv2u(w(31 downto 26));
-    j := slv2u(w(15 downto 10));
-    k := slv2u(w(4 downto 0));
-
-    insDef := getDef(i, j, k);
-
-    mnem := insDef.mnem;
-    case mnem is
-        when
-            sys_retE |
-            sys_retI |
-            sys_halt |
-            sys_sync |
-            sys_replay |
-            sys_error |
-            sys_call |
-            sys_send
-            =>
-            
-            isSystemOp := true;
-        when others =>            
-    end case;
-
-        new_fmt :=  FormatList(mnem);
-        new_desc := FormatDescriptions(new_fmt);
-
-    if isSystemOp then
-        operation := getSystemOperation(mnem);
-        fmt := FMT_DEFAULT;
-        desc := DESC_SYS_OP;
-    else
-        operation := OP_TABLE(mnem).op;
-        fmt := OP_TABLE(mnem).format;
-        desc := OP_TABLE(mnem).desc;
-    end if;
-    
-    -- Get arg specifications
-    --res := getArgSpec(fmt, desc, w);
-    res := getArgSpec2(fmt, desc, new_fmt, new_desc, w);
-    
-    --    if res /= res2 then report "not euqal parsing"; end if;
-    
+    res := getArgSpec2(new_fmt, new_desc, w);    
     res := fillProperties(res, desc);
     
     res.operation := operation;
@@ -712,92 +498,6 @@ begin
         res(3 to 3) := natural'image(n);
     elsif n < 32 then
         res(2 to 3) := natural'image(n);
-    end if;
-    
-    return res;
-end function;
-
-
-function getOpDisasm(w: Word) return string is
-    constant mnem: ProcMnemonic := decodeMnem2(w);
-    constant otr: OpTableRow := OP_TABLE(mnem);
-    constant qa: slv5 := w(25 downto 21);
-    constant qb: slv5 := w(20 downto 16);
-    constant qc: slv5 := w(9 downto 5);
-    constant qd: slv5 := w(4 downto 0);
-    variable d, s0, s1, s2, immValue: integer;
-    variable noDest: boolean := false;
-    
-    variable res: string(1 to 30) := (others => ' ');
-    variable rd, r0, r1, r2: string(1 to 3);
-begin
-
-    if otr.format.arg0inA = '1' or otr.format.arg2inA = '1' then
-        noDest := true;
-    else
-        d := slv2u(qa);
-    end if;
-
-    if otr.format.arg0inA = '1' then
-        s0 := slv2u(qa);
-    else
-        s0 := slv2u(qb);
-    end if;
-
-    if otr.format.arg2inA = '1' then
-        s2 := slv2u(qa);
-    end if;
-
-    -- src0 = qa
-    -- src1 = qb
-    -- src2 = qa if applicable
-    
-    if otr.format.imm = '1' then
-        if otr.format.imm26 = '1' then
-            immValue := slv2s(w(25 downto 0));
-        elsif otr.format.imm21 = '1' then
-            immValue := slv2s(w(20 downto 0));
-        elsif otr.format.imm16 = '1' then
-            immValue := slv2s(w(15 downto 0));
-        else
-            immValue := slv2s(w(9 downto 0));
-        end if;
-
-    else
-        s1 := slv2u(qc);
-    end if;
-    
-
-    rd := reg2txt(d, std2bool(otr.format.fpDestSelect));
-    r0 := reg2txt(s0, std2bool(otr.format.fpArgSelect(0)));
-    r1 := reg2txt(s1, std2bool(otr.format.fpArgSelect(1)));
-    r2 := reg2txt(s2, std2bool(otr.format.fpArgSelect(2)));
-         
-    if otr.format.imm26 = '1' then
-        -- op immValue
-        res := padLeft(ProcMnemonic'image(mnem) & " " & integer'image(immValue), 30);
-    elsif otr.format.imm21 = '1' then
-        if otr.format.arg0inA = '1' then
-            res := padLeft(ProcMnemonic'image(mnem) & " " & r0 & ", " & integer'image(immValue), 30);        
-        else
-            res := padLeft(ProcMnemonic'image(mnem) & " " & rd & ", " & integer'image(immValue), 30);
-        end if;
-    else
-        -- op d, s0, s1
-        if otr.format.imm = '1' then         
-            if otr.format.arg2inA = '1' then
-                res := padLeft(ProcMnemonic'image(mnem) & " " & r2 & ", " & r0 & ", " & integer'image(immValue), 30);            
-            else
-                res := padLeft(ProcMnemonic'image(mnem) & " " & rd & ", " & r0 & ", " & integer'image(immValue), 30);
-            end if;
-        else
-            res := padLeft(ProcMnemonic'image(mnem) & " " & rd & ", " & r0 & ", " & r1 , 30);
-        end if;
-    end if;
-    
-    -- TMP: system instructions - no args
-    if res(1 to 4) = "sys_" then
-        res := padLeft(ProcMnemonic'image(mnem), 30);
     end if;
     
     return res;
@@ -883,8 +583,7 @@ begin
             when others =>
         end case;
     end if;
-    
-    
+  
     if op.hasImm = '1' then
         target := add(op.ip, intArgs(1));
     else
@@ -900,8 +599,6 @@ begin
     end if;
     
 end procedure;
-
-
 
 
 --    alias currentState is sysRegArray(1);
@@ -971,7 +668,6 @@ begin
 end procedure;
 
 
-
 procedure performOp(signal state: inout CoreState; signal memory: inout ByteArray; op: in InternalOperation;
                     signal outSigs: out std_logic_vector(0 to 2);
                     result: out OperationResult) is
@@ -1015,9 +711,7 @@ begin
     end if;
     
     -- Mem store
-    if op.isMemStore = '1' then
-             --   report "Writing " & integer'image(slv2u(address)) & "  " & integer'image(slv2u(intArgs(2)));
-            
+    if op.isMemStore = '1' then            
         if op.operation = stf then
             memWriteMword(memory, address, fpArgs(2));
         else
