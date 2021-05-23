@@ -293,28 +293,28 @@ ARCHITECTURE Behavior OF CoreTB IS
         testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);        
     end procedure;
 
-            procedure loadProgramFromFileWithImports_T(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
-                constant prog: ProgramBuffer := readSourceFile(filename);
-                variable machineCode, machineCode2: WordArray(0 to prog'length-1);
-                variable imp, exp: XrefArray(0 to 100);
-                variable imp2, exp2: XrefArray(0 to 100);
-            begin
+--            procedure loadProgramFromFileWithImports_T(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
+--                constant prog: ProgramBuffer := readSourceFile(filename);
+--                variable machineCode, machineCode2: WordArray(0 to prog'length-1);
+--                variable imp, exp: XrefArray(0 to 100);
+--                variable imp2, exp2: XrefArray(0 to 100);
+--            begin
         
-                processProgram(prog, machineCode, imp, exp);
-                machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
+--                processProgram(prog, machineCode, imp, exp);
+--                machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
             
          
-                     processProgram2(prog, machineCode2, imp2, exp2);
-                   machineCode2 := fillXrefs(machineCode2, imp2, matchXrefs(imp2, libExports), 0, slv2u(libStart));
+--                     processProgram2(prog, machineCode2, imp2, exp2);
+--                   machineCode2 := fillXrefs(machineCode2, imp2, matchXrefs(imp2, libExports), 0, slv2u(libStart));
                
-                   --     assert(machineCode = machineCode2) report "notmahint" severity error;
+--                   --     assert(machineCode = machineCode2) report "notmahint" severity error;
             
-                --testProgram <= (others => (others => 'U'));
-                --testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+--                --testProgram <= (others => (others => 'U'));
+--                --testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
                 
-                testProgram <= (others => (others => 'U'));
-                testProgram(0 to machineCode2'length-1) <= machineCode2(0 to machineCode2'length-1);        
-            end procedure;
+--                testProgram <= (others => (others => 'U'));
+--                testProgram(0 to machineCode2'length-1) <= machineCode2(0 to machineCode2'length-1);        
+--            end procedure;
 
     procedure setProgram(signal testProgram: inout WordArray; program: WordArray; offset: Mword) is
         constant offsetInt: natural := slv2u(offset)/4; 
@@ -389,7 +389,7 @@ BEGIN
       --processProgram(readSourceFile("common_asm.txt"), machineCodeVar, imp, exp, false);
       --commonCode <= machineCodeVar;
 	           
-              processProgram(readSourceFile("common_asm.txt"), machineCodeVar2, imp, exp);
+              processProgram2(readSourceFile("common_asm.txt"), machineCodeVar2, imp, exp);
               commonCode2 <= machineCodeVar2;	           
 	           
 	  wait for 110 ns;
@@ -419,8 +419,8 @@ BEGIN
               loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), --programMemory, 
                                                                                                             programMemory2);
 
-                  loadProgramFromFileWithImports_T(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), --programMemory, 
-                                                                                                                programMemory2_T);
+--                  loadProgramFromFileWithImports_T(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), --programMemory, 
+--                                                                                                                programMemory2_T);
 
               -- Reset handler
               --testProgram(slv2u(RESET_BASE)/4) <= asm("ja -512");

@@ -59,7 +59,7 @@ function reg2str(n: natural; fp: boolean) return string;
 
 function parseInstructionString(str: string) return GroupBuffer; -- TEMP!
 function readSourceFile(name: string) return ProgramBuffer;
-procedure processProgram(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray);
+--procedure processProgram(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray);
 
     procedure processProgram2(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray);
 
@@ -503,61 +503,61 @@ begin
 end function;
 
 
-procedure processProgram(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray) is
-    variable insIndex, procIndex: integer := 0; -- Actual number of instruction
-    variable labels, exports: LabelArray(0 to p'length-1) := (others => (others => cr));
-    variable startOffsets, endOffsets: IntArray(0 to p'length-1) := (others => -1);
-    variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
-    variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext2, 0, 0, error, 0, 0));
-    variable tmpStr: string(1 to MAX_LABEL_SIZE) :=(others => ' ');
-    variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
-    variable tmpHasImport: boolean := false;
+--procedure processProgram(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray) is
+--    variable insIndex, procIndex: integer := 0; -- Actual number of instruction
+--    variable labels, exports: LabelArray(0 to p'length-1) := (others => (others => cr));
+--    variable startOffsets, endOffsets: IntArray(0 to p'length-1) := (others => -1);
+--    variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
+--    variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext2, 0, 0, error, 0, 0));
+--    variable tmpStr: string(1 to MAX_LABEL_SIZE) :=(others => ' ');
+--    variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
+--    variable tmpHasImport: boolean := false;
     
-    variable ne, ni: natural := 0;
-begin
-    for i in 0 to p'length-1 loop
-        if p(i)(0)(1) = '@' then -- Keyword
-            tmpStr(1 to  p(i)(0)'length-1) := p(i)(0)(2 to p(i)(0)'length);
-            -- TODO
-            -- when proc
-            if matches(tmpStr, "proc") then
-                -- add name to labels
-                -- add name to export
-                -- add insIndex to offsets
-                labels(insIndex)(1 to 10) := p(i)(1);
-                exports(insIndex)(2 to 11) := p(i)(1);
-                exports(insIndex)(1) := '$';
-                startOffsets(procIndex) := insIndex;
-                outExports(ne) := (new string'('$' & tmpStrip(p(i)(1))), 4*insIndex);
-                ne := ne + 1;
-            elsif matches(tmpStr, "end") then
-                -- ignore
-                -- set proc end (if such action needed and defined)
-                endOffsets(procIndex) := insIndex;
-                procIndex := procIndex + 1;
-            end if;
-        elsif p(i)(0)(1) = '$' then -- label
-           labels(insIndex)(1 to 10) := p(i)(0);            
-        elsif p(i)(0)(1) = cr then -- the line is empty
-           null;
-        else -- instruction
-           pSqueezed(insIndex) := p(i);
-           insIndex := insIndex + 1;  
-        end if;
+--    variable ne, ni: natural := 0;
+--begin
+--    for i in 0 to p'length-1 loop
+--        if p(i)(0)(1) = '@' then -- Keyword
+--            tmpStr(1 to  p(i)(0)'length-1) := p(i)(0)(2 to p(i)(0)'length);
+--            -- TODO
+--            -- when proc
+--            if matches(tmpStr, "proc") then
+--                -- add name to labels
+--                -- add name to export
+--                -- add insIndex to offsets
+--                labels(insIndex)(1 to 10) := p(i)(1);
+--                exports(insIndex)(2 to 11) := p(i)(1);
+--                exports(insIndex)(1) := '$';
+--                startOffsets(procIndex) := insIndex;
+--                outExports(ne) := (new string'('$' & tmpStrip(p(i)(1))), 4*insIndex);
+--                ne := ne + 1;
+--            elsif matches(tmpStr, "end") then
+--                -- ignore
+--                -- set proc end (if such action needed and defined)
+--                endOffsets(procIndex) := insIndex;
+--                procIndex := procIndex + 1;
+--            end if;
+--        elsif p(i)(0)(1) = '$' then -- label
+--           labels(insIndex)(1 to 10) := p(i)(0);            
+--        elsif p(i)(0)(1) = cr then -- the line is empty
+--           null;
+--        else -- instruction
+--           pSqueezed(insIndex) := p(i);
+--           insIndex := insIndex + 1;  
+--        end if;
         
-    end loop;
+--    end loop;
     
-    for i in 0 to p'length-1 loop
-        processInstruction(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true, commands(i), tmpHasImport, tmpImport);
-        if tmpHasImport then
-            commands(i) := fillOffset(commands(i), i, tmpImport, labels, EMPTY_LABEL_ARRAY);
-            imports(ni) := (new string'(tmpStrip(tmpImport)), 4*i);
-            ni := ni + 1;
-        end if;
-    end loop; 
+--    for i in 0 to p'length-1 loop
+--        processInstruction(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true, commands(i), tmpHasImport, tmpImport);
+--        if tmpHasImport then
+--            commands(i) := fillOffset(commands(i), i, tmpImport, labels, EMPTY_LABEL_ARRAY);
+--            imports(ni) := (new string'(tmpStrip(tmpImport)), 4*i);
+--            ni := ni + 1;
+--        end if;
+--    end loop; 
 
-    machineCode := commands;
-end procedure;
+--    machineCode := commands;
+--end procedure;
 
 
     
