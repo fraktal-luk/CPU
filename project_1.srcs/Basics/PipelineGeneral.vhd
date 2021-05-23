@@ -20,6 +20,13 @@ type EventState is record
     execCausing: InstructionState;
 end record;
 
+type IssueQueueSignals is record
+    sending: std_logic;
+    cancelled: std_logic;
+    ready: std_logic;
+    empty: std_logic;
+end record;
+
 type ForwardingInfo is record
 	tags0: PhysNameArray(0 to 2);
 	tags1: PhysNameArray(0 to 2);

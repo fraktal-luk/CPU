@@ -62,7 +62,9 @@ entity IssueQueue is
 		anyReady_A: out std_logic;
         sentCancelled_A: out std_logic;        
         schedulerOut_A: out SchedulerEntrySlot;
-        sending_A: out std_logic		
+        sending_A: out std_logic;
+        
+            outputSignals: out IssueQueueSignals		
 	);
 end IssueQueue;
 
@@ -182,6 +184,13 @@ begin
                     
     -- CAREFUL! If queue becomes noncollapsing, we'll need to see all full bits! 
     empty <= not fullMask(0); -- not isNonzero(fullMask);
+
+            outputSignals <= (sending => sends,
+                              cancelled => anyCancelled,
+                              ready => anyReadyLive,
+                              empty => not fullMask(0));
+
+
     
     VIEW: if VIEW_ON generate
         use work.Viewing.all;
