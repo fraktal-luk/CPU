@@ -15,27 +15,7 @@ use work.InstructionState.all;
 
 package DecodingDev is
 
--- dest: qa, none
--- src0: qb, qa, none
--- src1: qc, imm, none
--- src2: qd, qa, none
--- The above needs just 2 bits for quintet selection: (src0a, src2a)
--- Another bit will be for imm selection. Let it be always signed
--- Also must be selected the domain of args: I/F/none
--- (I|F|0)^4 -> or intSelect & fpSelect
--- > If src0 is qa, it will always be Int (branch cond)
-
-
 function decodeFromWordNew(w: word) return InstructionState;
-
-function decodeBranchInsNew(w: Word) return std_logic;
-function decodeMainClusterNew(w: Word) return std_logic;
-function decodeSecClusterNew(w: Word) return std_logic;
-function decodeFpRenameNew(w: Word) return std_logic;
-
-
-function decodeSrc2a(w: Word) return std_logic;
-function decodeSrc0a(w: Word) return std_logic;
 
 end package;
 
@@ -191,38 +171,6 @@ begin
 end function;
 
 
---    isBranch: op0 is branch or op1 is reg branch inside integer op0
-
---    hasImm26: op0
---    hasImm21: op0
---    hasImm16: op0
---    hasImm10: op0
-
---    hasFpDest: op0 is FP or op0 is FP-mem and operation is load
---                  or CVT int ot FP
-    
---    hasNoIntDest:
-
---    hasIntDest: op0 or int mem load or CVT FP to int or Int(FP, FP) like FP compare 
-    
---    src2a: op0 - is mem (no problem for loads because then src 2 is not activated
---    src0a: op0 - branch cond
-
---    intSrc0: op0
-
---     This is not set when immediate used
---    intSrc1: op0 (for Int 1 src we can have 2 sources with r0 as the second)
-
---    intSrc2: int store or int 3 src
-
---    fpSrc0: op0 ?
-
---      This should be not set when immediate used (SIMD shifts etc)
---    fpSrc1: op0 and not (FP 1 src or CVT to Int)
---    fpSrc2: FP store or FP 3 src
-
-
-
 function checkOp0(op0: slv6; table: Dword) return std_logic is
 begin
     return table(slv2u(op0));
@@ -248,83 +196,54 @@ function decodeFromWordNew(w: word) return InstructionState is
     constant qd: slv5 := w(4 downto 0);
     
     variable    hasOp1, hasOp2,
-                isBranch, isStore, isLoad, hasImm26, hasImm21, hasImm16, hasImm10, hasFpDest, hasIntDest, hasNoIntDest,
+                isBranch, isStore, isLoad, hasImm26, hasImm21, hasImm16, hasImm10, hasFpDest, hasIntDest,
                 src2a, src0a,
                 intSrc0, intSrc1, intSrc2,
                 fpSrc0, fpSrc1, fpSrc2: boolean := false;                
 begin
-    isBranch := --    op0 = "001000" or op0 = "001001" or op0 = "001010"  or op0 = "001011"   or (op0 = "000000" and (op1 = "000010"));
-                std2bool(    checkOp0(op0, OP0_JUMP)
+    isBranch := std2bool(    checkOp0(op0, OP0_JUMP)
                           or checkOp1(op0, "000000", op1, OP1_INT_ARITH_BRANCH));
-    hasImm26 :=   --  op0 = "001000";
-                 std2bool(checkOp0(op0, OP0_IMM26));
+    hasImm26 := std2bool(checkOp0(op0, OP0_IMM26));
     
-    hasImm21 :=  --   op0 = "001001"   or op0 = "001010"   or op0 = "001011";
-                 std2bool(checkOp0(op0, OP0_IMM21));
+    hasImm21 := std2bool(checkOp0(op0, OP0_IMM21));
 
-    hasImm16 :=   --  op0(4) = '1';
-                 std2bool(checkOp0(op0, OP0_IMM16));
+    hasImm16 := std2bool(checkOp0(op0, OP0_IMM16));
     
     -- TODO: add shift instructions 
-    hasImm10 :=  --   op0 = "000010"   or op0 = "000011"  or op0 = "000100";
-                 std2bool(checkOp0(op0, OP0_IMM10));
+    hasImm10 := std2bool(checkOp0(op0, OP0_IMM10));
 
-    hasFpDest := --   op0 = "010110"
-               -- or  op0 = "000001";
-                std2bool(checkOp0(op0, OP0_FLOAT_DEST) or checkOp1(op0, "000011", op1, OP1_FLOAT_MEM_LOAD));
-    
-    hasNoIntDest :=   op0 = "000001"   or  op0 = "000011"  or  op0 = "000111"  or  op0 = "001000"    or  op0 = "001010"
-                  or  op0 = "001011"   or  op0 = "010101"  or  op0 = "010110"  or  op0 = "010111"
-                  or  (op0 = "000100" and op1 = "100000");
+    hasFpDest := std2bool(checkOp0(op0, OP0_FLOAT_DEST) or checkOp1(op0, "000011", op1, OP1_FLOAT_MEM_LOAD));
 
-    hasIntDest := --not hasNoIntDest;
-                  std2bool(
+    hasIntDest := std2bool(
                            checkOp0(op0, OP0_INT_DEST)
                         or checkOp1(op0, "000010", op1, OP1_INT_MEM_LOAD)
                         or checkOp1(op0, "000100", op1, OP1_SYS_MEM_LOAD)
                         );
     
-    src2a :=   --        op0 = "010101"  or  op0 = "010111"
-               --    or  (op0 = "000100" and op1 = "100000");
-                std2bool(checkOp0(op0, OP0_2A) or checkOp1(op0, "000100", op1, OP1_SYS_MEM_STORE));                
+    src2a := std2bool(checkOp0(op0, OP0_2A) or checkOp1(op0, "000100", op1, OP1_SYS_MEM_STORE));                
     
-    src0a :=    --      op0 = "001010"  or  op0 = "001011";
-                  std2bool(checkOp0(op0, OP0_0A));
+    src0a := std2bool(checkOp0(op0, OP0_0A));
     
-    intSrc0 :=   --       op0 = "000000"    or  op0 = "000010"  or  op0 = "000011"  or  op0 = "001010"    or  op0 = "001011"
-                 --   or  op0(4) = '1';
-                std2bool(checkOp0(op0, OP0_INT_SRC0));
+    intSrc0 := std2bool(checkOp0(op0, OP0_INT_SRC0));
             
-    intSrc1 :=  --    op0 = "000000";
-                std2bool(checkOp0(op0, OP0_INT_SRC1));
+    intSrc1 := std2bool(checkOp0(op0, OP0_INT_SRC1));
     
-    intSrc2 :=  --    op0 = "010101"
-                --    or  (op0 = "000100" and op1 = "100000");      
-               std2bool(    checkOp0(op0, OP0_INT_SRC2)
+    intSrc2 := std2bool(    checkOp0(op0, OP0_INT_SRC2)
                          or checkOp1(op0, "000010", op1, OP1_INT_MEM_STORE)
                          or checkOp1(op0, "000100", op1, OP1_SYS_MEM_STORE));
 
-    fpSrc0 :=  --     op0 = "000001"  and (op1 = "000000");
-                std2bool(checkOp0(op0, OP0_FLOAT_ARITH));
-    fpSrc1  :=   -- op0 = "000001" 
-                 --     and (op1 = ... ); 
-                std2bool(checkOp1(op0, "000001", op1, OP1_FLOAT_ARITH_SRC1));
+    fpSrc0  := std2bool(checkOp0(op0, OP0_FLOAT_ARITH));
+    fpSrc1  := std2bool(checkOp1(op0, "000001", op1, OP1_FLOAT_ARITH_SRC1));
                       
-    fpSrc2 :=      --  op0 = "010111";
-             std2bool(    checkOp0(op0, OP0_FLOAT_SRC2)
+    fpSrc2 := std2bool(    checkOp0(op0, OP0_FLOAT_SRC2)
                        or checkOp1(op0, "000001", op1, OP1_FLOAT_ARITH_SRC2));    
 
-
-    isStore :=  --    op0 = "010101"
-                --    or  (op0 = "000100" and op1 = "100000");      
-               std2bool(    checkOp0(op0, OP0_STORE)
+    isStore := std2bool(    checkOp0(op0, OP0_STORE)
                          or checkOp1(op0, "000010", op1, OP1_INT_MEM_STORE)
                          or checkOp1(op0, "000011", op1, OP1_FLOAT_MEM_STORE)
                          or checkOp1(op0, "000100", op1, OP1_SYS_MEM_STORE));
 
-    isLoad :=  --    op0 = "010101"
-                --    or  (op0 = "000100" and op1 = "100000");      
-               std2bool(    checkOp0(op0, OP0_LOAD)
+    isLoad := std2bool(    checkOp0(op0, OP0_LOAD)
                          or checkOp1(op0, "000010", op1, OP1_INT_MEM_LOAD)
                          or checkOp1(op0, "000011", op1, OP1_FLOAT_MEM_LOAD)
                          or checkOp1(op0, "000100", op1, OP1_SYS_MEM_LOAD));
@@ -379,94 +298,6 @@ begin
     else
         res.constantArgs.imm(31 downto 10) := (others => w(9));
     end if;
-    
-    return res;
-end function;
-
-
-
-function decodeBranchInsNew(w: Word) return std_logic is
-    constant opcode: slv6 := w(31 downto 26);
-    constant opcont: slv6 := w(15 downto 10);
-    variable res: std_logic := '0';
-begin
-    res :=  bool2std(
-                w(31 downto 26) = "001000"
-             or  w(31 downto 26) = "001001"
-             or  w(31 downto 26) = "001010"
-             or  w(31 downto 26) = "001011"
-             or  (w(31 downto 26) = "000000" and  w(15 downto 10) = "000010" and (w(4 downto 0) = "00000" or w(4 downto 0) = "00001"))
-         );
-    
-    return res;
-end function;
-
-
-function decodeMainClusterNew(w: Word) return std_logic is
-    constant opcode: slv6 := w(31 downto 26);
-    constant opcont: slv6 := w(15 downto 10);
-    variable res: std_logic := '0';
-begin
-    res :=  bool2std(
-                w(31 downto 26) /= "000111"
-         );
-    
-    return res;
-end function;
-
-function decodeSecClusterNew(w: Word) return std_logic is
-    constant opcode: slv6 := w(31 downto 26);
-    constant opcont: slv6 := w(15 downto 10);
-    variable res: std_logic := '0';
-begin
-    res :=  bool2std(
-            w(31 downto 26) = "010101"
-         or  w(31 downto 26) = "010111"
-         or  (w(31 downto 26) = "000100" and  w(15 downto 10) = "100000")
-     );
-    return res;
-end function;
-
-function decodeFpRenameNew(w: Word) return std_logic is
-    constant opcode: slv6 := w(31 downto 26);
-    constant opcont: slv6 := w(15 downto 10);
-    variable res: std_logic := '0';
-begin
-    res :=  bool2std(
-           w(31 downto 26) = "000001"
-        or w(31 downto 26) = "010110"
-        or w(31 downto 26) = "010111"
-       -- or  (w(31 downto 26) = "000100" and  w(15 downto 10) = "100000")
-    );
-    
-    return res;
-end function;
-
-
-
-
-
-
-
-function decodeSrc2a(w: Word) return std_logic is
-    constant opcode: slv6 := w(31 downto 26);
-    constant opcont: slv6 := w(15 downto 10);
-    variable res: std_logic := '0';
-begin
-    res := bool2std(opcode = opcode2slv(st))
-        or bool2std(opcode = opcode2slv(stf))
-        or bool2std((opcode = opcode2slv(ext2)) and (opcont = opcont2slv(ext2, mtc)));
-    
-    return res;
-end function;
-
-function decodeSrc0a(w: Word) return std_logic is
-    constant opcode: slv6 := w(31 downto 26);
-    constant opcont: slv6 := w(15 downto 10);
-    variable res: std_logic := '0';
-begin
-    res := bool2std(opcode = opcode2slv(jz))
-        or bool2std(opcode = opcode2slv(jnz));
     
     return res;
 end function;

@@ -67,7 +67,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     --constant TIME_STEP: time := 1 ns; -- for 1 instruction in emulation
 	
     signal --testProgram, 
-            testProgram2: WordArray(0 to 2047);
+            testProgram2,  programMemory2_T, pmComp: WordArray(0 to 2047);
     
    -- alias programMemory is testProgram;
     alias programMemory2 is testProgram2;
@@ -270,25 +270,51 @@ ARCHITECTURE Behavior OF CoreTB IS
         programMem(startAdr to startAdr + LEN - 1) <= insSeq;    
     end procedure;
 
-    procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal --testProgram,
-                                                                                                                     testProgram2: out WordArray) is        
+    procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
 	    constant prog: ProgramBuffer := readSourceFile(filename);
         variable machineCode, machineCode2: WordArray(0 to prog'length-1);
         variable imp, exp: XrefArray(0 to 100);
+        variable imp2, exp2: XrefArray(0 to 100);
     begin
-        --processProgram(prog, machineCode, imp, exp, false);
-        --machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
 
-        processProgram(prog, machineCode2, imp, exp);
-        machineCode2 := fillXrefs(machineCode2, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
+        processProgram(prog, machineCode, imp, exp);
+        machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
     
+ 
+             processProgram2(prog, machineCode2, imp2, exp2);
+           machineCode2 := fillXrefs(machineCode2, imp2, matchXrefs(imp2, libExports), 0, slv2u(libStart));
+       
+                assert(machineCode = machineCode2) report "notmahint" severity error;
     
         --testProgram <= (others => (others => 'U'));
         --testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
         
-        testProgram2 <= (others => (others => 'U'));
-        testProgram2(0 to machineCode2'length-1) <= machineCode2(0 to machineCode2'length-1);        
+        testProgram <= (others => (others => 'U'));
+        testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);        
     end procedure;
+
+            procedure loadProgramFromFileWithImports_T(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
+                constant prog: ProgramBuffer := readSourceFile(filename);
+                variable machineCode, machineCode2: WordArray(0 to prog'length-1);
+                variable imp, exp: XrefArray(0 to 100);
+                variable imp2, exp2: XrefArray(0 to 100);
+            begin
+        
+                processProgram(prog, machineCode, imp, exp);
+                machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
+            
+         
+                     processProgram2(prog, machineCode2, imp2, exp2);
+                   machineCode2 := fillXrefs(machineCode2, imp2, matchXrefs(imp2, libExports), 0, slv2u(libStart));
+               
+                   --     assert(machineCode = machineCode2) report "notmahint" severity error;
+            
+                --testProgram <= (others => (others => 'U'));
+                --testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);
+                
+                testProgram <= (others => (others => 'U'));
+                testProgram(0 to machineCode2'length-1) <= machineCode2(0 to machineCode2'length-1);        
+            end procedure;
 
     procedure setProgram(signal testProgram: inout WordArray; program: WordArray; offset: Mword) is
         constant offsetInt: natural := slv2u(offset)/4; 
@@ -392,6 +418,9 @@ BEGIN
               announceTest(currentTest, currentSuite, testName.all, suiteName.all);    
               loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), --programMemory, 
                                                                                                             programMemory2);
+
+                  loadProgramFromFileWithImports_T(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), --programMemory, 
+                                                                                                                programMemory2_T);
 
               -- Reset handler
               --testProgram(slv2u(RESET_BASE)/4) <= asm("ja -512");
@@ -705,11 +734,13 @@ BEGIN
         end process;
         
            ch0 <= bool2std(currentInstruction2.internalOp = currentInstruction.internalOp);
-           ch1 <= bool2std(cpuState2 = cpuState);
+           ch1 <= bool2std(programMemory2(0 to 120) = programMemory2_T(0 to 120));
            ch2 <= bool2std(dataMemory2 = dataMemory);
            ch3 <= bool2std(opFlags2 = opFlags);
 
-        
+                DDRRR: for i in 0 to 2000 generate
+                    pmComp(i) <= programMemory2(i) xor programMemory2_T(i);
+                end generate;
     end block;
 
 

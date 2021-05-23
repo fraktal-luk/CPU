@@ -21,8 +21,6 @@ use work.DecodingDev.all;
 
 package LogicFront is
 
---function decodeInstruction(inputState: InstructionState) return InstructionState;
-
 function decodeInstructionNew(inputState: InstructionState) return InstructionState;
 
 function getFrontEventMulti(predictedAddress: Mword; ins: InstructionState; fetchLine: WordArray(0 to FETCH_WIDTH-1))
@@ -34,123 +32,22 @@ return InstructionState;
 	
 function prepareForBQ(ins: InstructionSlot; insVec: InstructionSlotArray) return InstructionSlotArray;
 
-
-    type TMP_decStruct is record
-        immSel: std_logic;
-        
-        branchIns: std_logic;
-        mainCluster: std_logic;
-        secCluster: std_logic;
-        fpRename: std_logic;
-    end record;
-    
-    type TMP_decStructArray is array(0 to PIPE_WIDTH-1) of TMP_decStruct;
-    
-    function TMP_getDecStructArray(insVec: InstructionSlotArray) return TMP_decStructArray;
-    function TMP_getRefStructArray(insVec: InstructionSlotArray) return TMP_decStructArray;
-  
 end LogicFront;
 
 
 
 package body LogicFront is
 
-function getInstructionClassInfo(ins: InstructionState) return InstructionClassInfo is
-	variable ci: InstructionClassInfo := DEFAULT_CLASS_INFO;
-begin 
-    ci.mainCluster := '1';
-    if ins.specificOperation.subpipe = Mem then 
-        if (ins.specificOperation.memory = opStore or ins.specificOperation.memory = opStoreSys) then
-            ci.secCluster := '1';
-        else
-            ci.useLQ := '1';
-        end if;
-    end if;
-
-    if ins.specificOperation.subpipe = Alu
-        and (ins.specificOperation.arith = opJ or ins.specificOperation.arith = opJz or ins.specificOperation.arith = opJnz) then
-        ci.branchIns := '1';
-    end if;
-    
-    if ins.specificOperation.subpipe = none then  
-        ci.mainCluster := '0';
-        ci.secCluster := '0';
-    end if;
-
-	return ci;
-end function;
-
---function decodeInstruction(inputState: InstructionState) return InstructionState is
---	variable res: InstructionState := inputState;
---    variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
---begin
---	decodedIns := decodeFromWord(inputState.bits);
-----    if TMP_PARAM_NEW_DECODE then
-----    	decodedIns := decodeFromWordNew(inputState.bits);
-----	end if;
-	
---	res.specificOperation := decodedIns.specificOperation;
---	res.constantArgs := decodedIns.constantArgs;
---	res.virtualArgSpec := decodedIns.virtualArgSpec;
-	
---	res.classInfo := getInstructionClassInfo(res);	
---    res.classInfo.fpRename := decodedIns.classInfo.fpRename;
-
---     if res.specificOperation.subpipe = none then                 	
---        res.controlInfo.specialAction := '1'; -- TODO: move this to classInfo?
---        -- CAREFUL: Those ops don't get issued, they are handled at retirement
---        res.classInfo.mainCluster := '0';
---        res.classInfo.secCluster := '0';
-        
---        if res.specificOperation.system = opUndef then
---            res.controlInfo.hasException := '1';
---        end if;        
---    end if;
-
---    --if not TMP_PARAM_NEW_DECODE then
---        res.constantArgs.immSel := decodeImmSel(inputState.bits);
---    --end if;
-    
---    res.classInfo.branchIns := decodeBranchIns(inputState.bits);
-    
---    res.classInfo.mainCluster := decodeMainCluster(inputState.bits);
---    res.classInfo.secCluster := decodeSecCluster(inputState.bits);
-
---    res.classInfo.fpRename := decodeFpRename(inputState.bits);
-
-----        if TMP_PARAM_NEW_DECODE then
-----            --res.constantArgs.immSel := decodeImmSelNew(inputState.bits);
-----            res.classInfo.branchIns := decodeBranchInsNew(inputState.bits);
-            
-----            res.classInfo.mainCluster := decodeMainClusterNew(inputState.bits);
-----            res.classInfo.secCluster := decodeSecClusterNew(inputState.bits);
-        
-----            res.classInfo.fpRename := decodeFpRenameNew(inputState.bits);        
-----        end if;
-
-    
---    res.controlInfo.specialAction := not (res.classInfo.mainCluster or res.classInfo.secCluster);
-
-
---	return res;
---end function;
-
-
-
 function decodeInstructionNew(inputState: InstructionState) return InstructionState is
 	variable res: InstructionState := inputState;
     variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
 begin
-	--decodedIns := decodeFromWord(inputState.bits);
-    if true then
-    	decodedIns := decodeFromWordNew(inputState.bits);
-	end if;
+  	decodedIns := decodeFromWordNew(inputState.bits);
 	
 	res.specificOperation := decodedIns.specificOperation;
 	res.constantArgs := decodedIns.constantArgs;
 	res.virtualArgSpec := decodedIns.virtualArgSpec;
 	
-	res.classInfo := getInstructionClassInfo(res);	
     res.classInfo.fpRename := decodedIns.classInfo.fpRename;
     res.classInfo.branchIns := decodedIns.classInfo.branchIns;
     res.classInfo.mainCluster := decodedIns.classInfo.mainCluster;
@@ -167,28 +64,8 @@ begin
             res.controlInfo.hasException := '1';
         end if;        
     end if;
-
-    --res.constantArgs.immSel := decodeImmSel(inputState.bits);
---    res.classInfo.branchIns := decodeBranchIns(inputState.bits);
-    
---    res.classInfo.mainCluster := decodeMainCluster(inputState.bits);
---    res.classInfo.secCluster := decodeSecCluster(inputState.bits);
-
---    res.classInfo.fpRename := decodeFpRename(inputState.bits);
-
-        if true then
-            --res.constantArgs.immSel := decodeImmSelNew(inputState.bits);
-            --res.classInfo.branchIns := decodeBranchInsNew(inputState.bits);
-            
-           -- res.classInfo.mainCluster := decodeMainClusterNew(inputState.bits);
-           -- res.classInfo.secCluster := decodeSecClusterNew(inputState.bits);
-        
-            --res.classInfo.fpRename := decodeFpRenameNew(inputState.bits);        
-        end if;
-
-    
+   
     res.controlInfo.specialAction := not (res.classInfo.mainCluster or res.classInfo.secCluster);
-
 
 	return res;
 end function;
@@ -432,38 +309,5 @@ begin
     
 	return res;
 end function;
-
-
-    function TMP_getDecStructArray(insVec: InstructionSlotArray) return TMP_decStructArray is
-        variable res: TMP_decStructArray;
-    begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            
---            res(i).immSel := decodeImmSel(insVec(i).ins.bits);
-            
---            res(i).branchIns := decodeBranchIns(insVec(i).ins.bits);            
---            res(i).mainCluster := decodeMainCluster(insVec(i).ins.bits);
---            res(i).secCluster := decodeSecCluster(insVec(i).ins.bits);
-            
---            res(i).fpRename := decodeFpRename(insVec(i).ins.bits);
-        end loop;
-        return res;
-    end function;
-
-    function TMP_getRefStructArray(insVec: InstructionSlotArray) return TMP_decStructArray is
-        variable res: TMP_decStructArray;
-    begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            
-            res(i).immSel := insVec(i).ins.constantArgs.immSel;
-            
-            res(i).branchIns := insVec(i).ins.classInfo.branchIns;            
-            res(i).mainCluster := insVec(i).ins.classInfo.mainCluster;
-            res(i).secCluster := insVec(i).ins.classInfo.secCluster;
-            
-            res(i).fpRename := insVec(i).ins.classInfo.fpRename;
-        end loop;
-        return res;
-    end function;
 
 end LogicFront;

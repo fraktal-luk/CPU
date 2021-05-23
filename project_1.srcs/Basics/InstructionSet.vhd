@@ -215,7 +215,7 @@ constant FormatList: FormatAssignments(undef to sys_send) :=
     stf_i => FloatStore16,
     stf_r => None, 
     
-    lds => sysLoad, -- load sys
+    lds => SysLoad, -- load sys
     sts => SysStore, -- store sys
     
     jz_i => JumpCond,
@@ -799,23 +799,23 @@ end function;
 function TMP_checkArgs(argList: ArgArray; desc: NEW_FormatDescription) return boolean is
 begin
     if desc.typeSpec(1) = 'i' then
-        if argList(0)(1) /= 'r' then return false; end if;
+        if argList(0)(1) /= 'r' and desc.decoding(1) /= '0'  then return false; end if;
     elsif desc.typeSpec(1) = 'f' then
-        if argList(0)(1) /= 'f' then return false; end if;
+        if argList(0)(1) /= 'f' and desc.decoding(1) /= '0' then return false; end if;
     else
         if argList(0)(1) /= ' ' then return false; end if;
     end if;
 
     for i in 1 to 3 loop
-        if desc.typeSpec(i + 1) = 'i' then
-            if argList(i)(1) /= 'r' then return false; end if;
-        elsif desc.typeSpec(i + 1) = 'f' then
-            if argList(i)(1) /= 'f' then return false; end if;
-        elsif desc.typeSpec(i + 1) = 'c' then
+        if desc.typeSpec(i + 2) = 'i' then
+            if argList(i)(1) /= 'r' and desc.decoding(i+2) /= '0' then  report "badr"; return false; end if;
+        elsif desc.typeSpec(i + 2) = 'f' then
+            if argList(i)(1) /= 'f' and desc.decoding(i+2) /= '0' then  report "badf"; return false; end if;
+        elsif desc.typeSpec(i + 2) = 'c' then
             -- TODO: check for correct constant?
             --if argList(i)(1) /= 'f' then return false; end if;            
         else
-            if argList(i)(1) /= ' ' then return false; end if;
+            if argList(i)(1) /= ' ' and argList(i)(1) /= cr then report "badc"; return false;  end if;
         end if;        
     end loop;
     
@@ -990,7 +990,8 @@ begin
     argList := TMP_orderArgs(a0, a1, a2, a3, desc);
     
     if not TMP_checkArgs(argList, desc) then
-        report "Wrong args!";     
+        report "Wrong args: " & desc.typeSpec;
+            report ProcMnemonic'image(mnem) & ", " & a0 & ", " & a1 & ", " & a2 & ", " & a3;      
     end if;
     
     args := TMP_getArgs(argList);
