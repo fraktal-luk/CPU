@@ -424,7 +424,10 @@ begin
                sendingM0_D0i, sendingM0_D1i,         
                sendingM0_D0f, sendingM0_D1f,
                sendingF0_D0,  sendingF0_D1: std_logic := '0';                         
-
+        
+        signal sendingFinalI0, sendingFinalI1, sendingFinalM0, sendingFinalSVI, sendingFinalSVF, sendingFinalF0: std_logic := '0';
+        signal slotFinalI0, slotFinalI1, slotFinalM0, slotFinalSVI, slotFinalSVF, slotFinalF0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+        
         ----
         signal schedDataI0, dataToQueueI0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
         signal schedDataM0, dataToQueueM0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);      
@@ -525,21 +528,6 @@ begin
                 fni => fni,
                 regValues => regValsI0   
             );
-
-                ISSUE_STAGE_I0_A: entity work.IssueStage
-                generic map(USE_IMM => true)
-                port map(
-                    clk => clk, reset => '0', en => '0',
-            
-                    prevSending => outSigsI0.sending,
-                    nextAccepting => '1',
-                    input => slotSelI0,
-                    acceptingOut => open,
-                    output => slotIssueI0_A,
-                    events => events,    
-                    fni => fni,
-                    regValues => regValsI0  
-                );
                 
             dataToAlu(0) <= (slotIssueI0.full and not outSigsI0.cancelled, executeAlu(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins, branchData));
           
@@ -558,11 +546,11 @@ begin
                 sendingOut => sendingI0_E0,
                 stageDataOut => slotI0_E0,
                 
-                    events => eventsOnlyLate
---                execEventSignal => '0',
---                lateEventSignal => lateEventSignal,
---                execCausing => DEFAULT_INSTRUCTION_STATE
+                events => eventsOnlyLate
             );      
+                
+                sendingFinalI0 <= sendingI0_E0;
+                slotFinalI0 <= slotI0_E0;
 
             branchData <= basicBranch(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins);                  
             
@@ -583,12 +571,11 @@ begin
                 acceptingOut => open,
                 sendingOut => sendingBranch,
                 stageDataOut(0) => dataFromBranch,
-                    events => eventsOnlyLate
---                execEventSignal => '0',
---                lateEventSignal => lateEventSignal,
---                execCausing => DEFAULT_INSTRUCTION_STATE                    
+                
+                events => eventsOnlyLate                  
             );
             
+            -- TODO: enable a stage of delay after this
             execEventSignal <= dataFromBranch.ins.controlInfo.newEvent and sendingBranch;
             execCausing <= clearDbCausing(dataFromBranch.ins);
             bqUpdate <= dataFromBranch;
@@ -674,10 +661,7 @@ begin
                sendingOut => sendingM0_E0,
                stageDataOut => slotM0_E0,
                     
-                    events => events
---               execEventSignal => execEventSignal,
---               lateEventSignal => lateEventSignal,
---               execCausing => execCausing
+               events => events
            );
 
 	       dataInMem0(0) <= (sendingM0_E0, slotM0_E0(0).ins);
@@ -703,10 +687,7 @@ begin
                sendingOut => sendingM0_E1,
                stageDataOut => slotM0_E1i,
                
-                   events => events
---               execEventSignal => execEventSignal,
---               lateEventSignal => lateEventSignal,
---               execCausing => execCausing                
+               events => events               
            );
 
 	       STAGE_MEM0_FLOAT: entity work.GenericStage2(Behavioral)
@@ -724,10 +705,7 @@ begin
                sendingOut => open,
                stageDataOut => slotM0_E1f,
                
-                    events => events
---               execEventSignal => execEventSignal,
---               lateEventSignal => lateEventSignal,
---               execCausing => execCausing                
+               events => events              
            );
                       
            dataOutMem0(0) <= mergePhysDests(slotM0_E1i(0), slotM0_E1f(0)); -- [dest := Int.dest | Float.dest];
@@ -762,10 +740,7 @@ begin
                sendingOut => sendingM0_E2i,
                stageDataOut => slotM0_E2i,
                
-                    events => events
---               execEventSignal => execEventSignal,
---               lateEventSignal => lateEventSignal,
---               execCausing => execCausing                
+               events => events             
            );
            
            -- Branching into FP cluster
@@ -784,10 +759,7 @@ begin
                sendingOut => sendingM0_E2f,
                stageDataOut => slotM0_E2f,
                
-                    events => events
---               execEventSignal => execEventSignal,
---               lateEventSignal => lateEventSignal,
---               execCausing => execCausing                
+               events => events              
            );
            
            -- TEMP mem interface    
@@ -1123,10 +1095,10 @@ begin
             port map(
                 clk => clk, reset => '0', en => '0',
                 
-                prevSending => sendingI0_E0,
+                prevSending => sendingFinalI0,
                 nextAccepting => '1',
                 
-                stageDataIn => slotI0_E0,
+                stageDataIn => slotFinalI0,
                 acceptingOut => open,
                 sendingOut => sendingI0_D0,
                 stageDataOut => slotI0_D0,
@@ -1225,7 +1197,7 @@ begin
             SCHED_BLOCK: process(clk)
             begin
                 if rising_edge(clk) then
-                    assert (sendingI0_E0 and sendingM0_E2i) = '0' report "Int write queue conflict!" severity error;
+                    assert (sendingFinalI0 and sendingM0_E2i) = '0' report "Int write queue conflict!" severity error;
                     memSubpipeSent <= sendingToAgu;
                     
                     fp0subpipeSelected <= outSigsF0.sending;
@@ -1243,8 +1215,8 @@ begin
             allowIssueF0 <= not lockIssueF0;
             
             -----           
-            sendingToIntWriteQueue <= sendingI0_E0 or sendingM0_E2i;
-            dataToIntWriteQueue <= slotM0_E2i when sendingM0_E2i = '1' else slotI0_E0;
+            sendingToIntWriteQueue <= sendingFinalI0 or sendingM0_E2i;
+            dataToIntWriteQueue <= slotM0_E2i when sendingM0_E2i = '1' else slotFinalI0;
             
             INT_WRITE_QUEUE: entity work.GenericStage2(Behavioral)
             generic map(
@@ -1268,7 +1240,7 @@ begin
             ); 
             
                     
-         execOutputs1(0) <= (sendingI0_E0, slotI0_E0(0).ins);
+         execOutputs1(0) <= (sendingFinalI0, slotFinalI0(0).ins);
          execOutputs1(2) <= mergePhysDests(slotM0_E2i(0), slotM0_E2f(0)); --  [dest := Int.dest | Float.dest];             
          execOutputs1(3) <= (sendingF0_E2, slotF0_E2(0).ins);
             
@@ -1480,7 +1452,7 @@ begin
             
             slotTextRegReadF0 <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotRegReadF0));
 
-            slotTextI0_E0 <= getInsStringArray(slotI0_E0);
+            slotTextI0_E0 <= getInsStringArray(slotFinalI0);
             slotTextI0_E1 <= getInsStringArray(slotI0_E1);
             slotTextI0_E2 <= getInsStringArray(slotI0_E2);
 
