@@ -15,20 +15,20 @@ use work.PipelineGeneral.all;
 
 package ForwardingNetwork is
 
-     
-constant WAITING_FN_MAP: ForwardingMap := (
-    maskRR => "110",   -- arg2 is unused   
-    maskR1 => "000",  
-    maskR0 => "000",
-    maskM1 => "101",
-    maskM2 => "010"
-);        
 
 constant ENQUEUE_FN_MAP: ForwardingMap := (
     maskRR => "000",      
     maskR1 => "111",  
     maskR0 => "111",
     maskM1 => "111",
+    maskM2 => "010"
+);
+     
+constant WAITING_FN_MAP: ForwardingMap := (
+    maskRR => "110",   -- arg2 is unused   
+    maskR1 => "000",  
+    maskR0 => "000",
+    maskM1 => "101",
     maskM2 => "010"
 );
 
@@ -39,6 +39,8 @@ constant SELECTION_FN_MAP: ForwardingMap := (
     maskM1 => "101",
     maskM2 => "000"
 );
+
+-------------
 
 constant ENQUEUE_FN_MAP_SV: ForwardingMap := (
     maskRR => "000",      

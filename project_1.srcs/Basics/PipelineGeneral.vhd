@@ -20,6 +20,8 @@ type EventState is record
     execCausing: InstructionState;
 end record;
 
+constant DEFAULT_EVENT_STATE: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE);
+
 type IssueQueueSignals is record
     sending: std_logic;
     cancelled: std_logic;

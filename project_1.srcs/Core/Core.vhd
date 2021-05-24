@@ -96,7 +96,7 @@ architecture Behavioral of Core is
 
     signal cycleCounter: Word := (others => '0');
     
-    signal events: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE);
+    signal events, eventsOnlyLate: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE);
     
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
 begin
@@ -285,6 +285,8 @@ begin
     );
 
     events <= (lateEventSignal, execEventSignal, execCausing);
+
+    eventsOnlyLate <= (lateEvent => lateEventSignal, execEvent => '0', execCausing => DEFAULT_INS_STATE);
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(
@@ -541,7 +543,7 @@ begin
                 
             dataToAlu(0) <= (slotIssueI0.full and not outSigsI0.cancelled, executeAlu(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins, branchData));
           
-            STAGE_I0_E0: entity work.GenericStage(Behavioral)
+            STAGE_I0_E0: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '0'
             )
@@ -556,9 +558,10 @@ begin
                 sendingOut => sendingI0_E0,
                 stageDataOut => slotI0_E0,
                 
-                execEventSignal => '0',
-                lateEventSignal => lateEventSignal,
-                execCausing => DEFAULT_INSTRUCTION_STATE
+                    events => eventsOnlyLate
+--                execEventSignal => '0',
+--                lateEventSignal => lateEventSignal,
+--                execCausing => DEFAULT_INSTRUCTION_STATE
             );      
 
             branchData <= basicBranch(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins);                  
@@ -566,7 +569,7 @@ begin
             dataToBranch(0) <= (slotIssueI0.full and not outSigsI0.cancelled and slotIssueI0.state.branchIns, branchData);            
             bqCompare <= (dataToBranch(0).full, slotIssueI0.ins);
             
-            STAGE_I0_E0_BRANCH: entity work.GenericStage(Behavioral)
+            STAGE_I0_E0_BRANCH: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '0'
             )
@@ -580,9 +583,10 @@ begin
                 acceptingOut => open,
                 sendingOut => sendingBranch,
                 stageDataOut(0) => dataFromBranch,
-                execEventSignal => '0',
-                lateEventSignal => lateEventSignal,
-                execCausing => DEFAULT_INSTRUCTION_STATE                    
+                    events => eventsOnlyLate
+--                execEventSignal => '0',
+--                lateEventSignal => lateEventSignal,
+--                execCausing => DEFAULT_INSTRUCTION_STATE                    
             );
             
             execEventSignal <= dataFromBranch.ins.controlInfo.newEvent and sendingBranch;
@@ -655,7 +659,7 @@ begin
            sendingToAgu <= (slotIssueM0.full and not outSigsM0.cancelled) or sendingFromDLQ;
 	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(slotIssueM0.ins, slotIssueM0.state, sendingFromDLQ, dataFromDLQ));
        
-           STAGE_AGU: entity work.GenericStage(Behavioral)
+           STAGE_AGU: entity work.GenericStage2(Behavioral)
            generic map(
                COMPARE_TAG => '1'
            )
@@ -669,10 +673,11 @@ begin
                acceptingOut => open,
                sendingOut => sendingM0_E0,
                stageDataOut => slotM0_E0,
-               
-               execEventSignal => execEventSignal,
-               lateEventSignal => lateEventSignal,
-               execCausing => execCausing
+                    
+                    events => events
+--               execEventSignal => execEventSignal,
+--               lateEventSignal => lateEventSignal,
+--               execCausing => execCausing
            );
 
 	       dataInMem0(0) <= (sendingM0_E0, slotM0_E0(0).ins);
@@ -683,7 +688,7 @@ begin
            dataInMemFloat0 <= clearIntDest(dataInMem0);
 
            -- TLB lookup, Dcache access
-	       STAGE_MEM0: entity work.GenericStage(Behavioral)
+	       STAGE_MEM0: entity work.GenericStage2(Behavioral)
            generic map(
                COMPARE_TAG => '1'
            )
@@ -698,12 +703,13 @@ begin
                sendingOut => sendingM0_E1,
                stageDataOut => slotM0_E1i,
                
-               execEventSignal => execEventSignal,
-               lateEventSignal => lateEventSignal,
-               execCausing => execCausing                
+                   events => events
+--               execEventSignal => execEventSignal,
+--               lateEventSignal => lateEventSignal,
+--               execCausing => execCausing                
            );
 
-	       STAGE_MEM0_FLOAT: entity work.GenericStage(Behavioral)
+	       STAGE_MEM0_FLOAT: entity work.GenericStage2(Behavioral)
            generic map(
                COMPARE_TAG => '1'
            )
@@ -718,9 +724,10 @@ begin
                sendingOut => open,
                stageDataOut => slotM0_E1f,
                
-               execEventSignal => execEventSignal,
-               lateEventSignal => lateEventSignal,
-               execCausing => execCausing                
+                    events => events
+--               execEventSignal => execEventSignal,
+--               lateEventSignal => lateEventSignal,
+--               execCausing => execCausing                
            );
                       
            dataOutMem0(0) <= mergePhysDests(slotM0_E1i(0), slotM0_E1f(0)); -- [dest := Int.dest | Float.dest];
@@ -740,7 +747,7 @@ begin
           dataInMemFloat1 <= clearIntDest(dataInMem1); -- with zeroed dest when load is Int??
                                                   	       
            -- Source selection and verification
-	       STAGE_MEM1: entity work.GenericStage(Behavioral)
+	       STAGE_MEM1: entity work.GenericStage2(Behavioral)
            generic map(
                COMPARE_TAG => '1'
            )
@@ -755,13 +762,14 @@ begin
                sendingOut => sendingM0_E2i,
                stageDataOut => slotM0_E2i,
                
-               execEventSignal => execEventSignal,
-               lateEventSignal => lateEventSignal,
-               execCausing => execCausing                
+                    events => events
+--               execEventSignal => execEventSignal,
+--               lateEventSignal => lateEventSignal,
+--               execCausing => execCausing                
            );
            
            -- Branching into FP cluster
-           STAGE_MEM1_FLOAT: entity work.GenericStage(Behavioral)
+           STAGE_MEM1_FLOAT: entity work.GenericStage2(Behavioral)
            generic map(
                COMPARE_TAG => '1'
            )
@@ -776,9 +784,10 @@ begin
                sendingOut => sendingM0_E2f,
                stageDataOut => slotM0_E2f,
                
-               execEventSignal => execEventSignal,
-               lateEventSignal => lateEventSignal,
-               execCausing => execCausing                
+                    events => events
+--               execEventSignal => execEventSignal,
+--               lateEventSignal => lateEventSignal,
+--               execCausing => execCausing                
            );
            
            -- TEMP mem interface    
@@ -1021,7 +1030,7 @@ begin
           
             dataToFpu0(0) <= (slotRegReadF0.full and not outSigsF0.cancelled, executeFpu(slotregReadF0.ins, slotregReadF0.state));
           
-            STAGE_F0_E0: entity work.GenericStage(Behavioral)
+            STAGE_F0_E0: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '0'
             )
@@ -1036,12 +1045,13 @@ begin
                 sendingOut => sendingF0_E0,
                 stageDataOut => slotF0_E0,
                 
-                execEventSignal => '0',
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing
+                    events => eventsOnlyLate
+--                execEventSignal => '0',
+--                lateEventSignal => lateEventSignal,
+--                execCausing => execCausing
             );     
 
-            STAGE_F0_E1: entity work.GenericStage(Behavioral)
+            STAGE_F0_E1: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '0'
             )
@@ -1055,13 +1065,14 @@ begin
                 acceptingOut => open,
                 sendingOut => sendingF0_E1,
                 stageDataOut => slotF0_E1,
-                
-                execEventSignal => '0',
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing
+                    
+                    events => eventsOnlyLate
+--                execEventSignal => '0',
+--                lateEventSignal => lateEventSignal,
+--                execCausing => execCausing
             );
 
-            STAGE_F0_E2: entity work.GenericStage(Behavioral)
+            STAGE_F0_E2: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '0'
             )
@@ -1076,9 +1087,10 @@ begin
                 sendingOut => sendingF0_E2,
                 stageDataOut => slotF0_E2,
                 
-                execEventSignal => '0',
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing
+                    events => eventsOnlyLate
+--                execEventSignal => '0',
+--                lateEventSignal => lateEventSignal,
+--                execCausing => execCausing
             );
   
         end block;
@@ -1104,7 +1116,7 @@ begin
          allowIssueStoreDataFP <= allowIssueStoreDataInt;
          
          -------------------------------------------
-            STAGE_I0_D0: entity work.GenericStage(Behavioral)
+            STAGE_I0_D0: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
             )
@@ -1119,12 +1131,13 @@ begin
                 sendingOut => sendingI0_D0,
                 stageDataOut => slotI0_D0,
                 
-                execEventSignal => '0',
-                lateEventSignal => '0',
-                execCausing => DEFAULT_INSTRUCTION_STATE
+                    events => DEFAULT_EVENT_STATE
+--                execEventSignal => '0',
+--                lateEventSignal => '0',
+--                execCausing => DEFAULT_INSTRUCTION_STATE
             );           
 
-            STAGE_M0_D0: entity work.GenericStage(Behavioral)
+            STAGE_M0_D0: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
             )
@@ -1139,12 +1152,13 @@ begin
                 sendingOut => sendingM0_D0i,
                 stageDataOut => slotM0_D0i,
                 
-                execEventSignal => '0',
-                lateEventSignal => '0',
-                execCausing => DEFAULT_INSTRUCTION_STATE
+                    events => DEFAULT_EVENT_STATE
+--                execEventSignal => '0',
+--                lateEventSignal => '0',
+--                execCausing => DEFAULT_INSTRUCTION_STATE
             );        
 
-            STAGE_M0_D0F: entity work.GenericStage(Behavioral)
+            STAGE_M0_D0F: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
             )
@@ -1159,13 +1173,14 @@ begin
                 sendingOut => sendingM0_D0f,
                 stageDataOut => slotM0_D0f,
                 
-                execEventSignal => '0',
-                lateEventSignal => '0',
-                execCausing => DEFAULT_INSTRUCTION_STATE
+                    events => DEFAULT_EVENT_STATE
+--                execEventSignal => '0',
+--                lateEventSignal => '0',
+--                execCausing => DEFAULT_INSTRUCTION_STATE
             );
             
             -- After FP_LOAD_DELAY
-            STAGE_M0_D1F: entity work.GenericStage(Behavioral)
+            STAGE_M0_D1F: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
             )
@@ -1180,12 +1195,13 @@ begin
                 sendingOut => sendingM0_D1f,
                 stageDataOut => slotM0_D1f,
                 
-                execEventSignal => '0',
-                lateEventSignal => '0',
-                execCausing => DEFAULT_INSTRUCTION_STATE
+                    events => DEFAULT_EVENT_STATE
+--                execEventSignal => '0',
+--                lateEventSignal => '0',
+--                execCausing => DEFAULT_INSTRUCTION_STATE
             );
 
-            STAGE_F0_D0: entity work.GenericStage(Behavioral)
+            STAGE_F0_D0: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
             )
@@ -1200,9 +1216,10 @@ begin
                 sendingOut => sendingF0_D0,
                 stageDataOut => slotF0_D0,
                 
-                execEventSignal => '0',
-                lateEventSignal => '0',
-                execCausing => DEFAULT_INSTRUCTION_STATE
+                    events => DEFAULT_EVENT_STATE
+--                execEventSignal => '0',
+--                lateEventSignal => '0',
+--                execCausing => DEFAULT_INSTRUCTION_STATE
             );
                 
             SCHED_BLOCK: process(clk)
@@ -1211,8 +1228,7 @@ begin
                     assert (sendingI0_E0 and sendingM0_E2i) = '0' report "Int write queue conflict!" severity error;
                     memSubpipeSent <= sendingToAgu;
                     
-                    fp0subpipeSelected <= --sendingSelF0;
-                                            outSigsF0.sending;
+                    fp0subpipeSelected <= outSigsF0.sending;
                 end if;
             end process;
             
@@ -1230,7 +1246,7 @@ begin
             sendingToIntWriteQueue <= sendingI0_E0 or sendingM0_E2i;
             dataToIntWriteQueue <= slotM0_E2i when sendingM0_E2i = '1' else slotI0_E0;
             
-            INT_WRITE_QUEUE: entity work.GenericStage(Behavioral)
+            INT_WRITE_QUEUE: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
             )
@@ -1244,10 +1260,11 @@ begin
                 acceptingOut => open,
                 sendingOut => sendingToIntRF,
                 stageDataOut => dataToIntRF,
-                
-                execEventSignal => '0',
-                lateEventSignal => '0',
-                execCausing => DEFAULT_INSTRUCTION_STATE
+                    
+                    events => DEFAULT_EVENT_STATE
+--                execEventSignal => '0',
+--                lateEventSignal => '0',
+--                execCausing => DEFAULT_INSTRUCTION_STATE
             ); 
             
                     
@@ -1266,8 +1283,8 @@ begin
          regsSelS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadIntStoreValue.ins)));
           
          -- Forwarding network
-		 fni.nextTagsM1 <= (0 => slotIssueI0.ins.physicalArgSpec.dest, 2 => slotM0_E1i(0).ins.physicalArgSpec.dest, others => (others => '0'));        
 		 fni.nextTagsM2 <= (                                           2 => slotM0_E0(0).ins.physicalArgSpec.dest,  others => (others => '0'));
+		 fni.nextTagsM1 <= (0 => slotIssueI0.ins.physicalArgSpec.dest, 2 => slotM0_E1i(0).ins.physicalArgSpec.dest, others => (others => '0'));        
          fni.tags0 <= (execOutputs1(0).ins.physicalArgSpec.dest, execOutputs1(1).ins.physicalArgSpec.dest, slotM0_E2i(0).ins.physicalArgSpec.dest);
          fni.tags1 <= (0 => slotI0_D0(0).ins.physicalArgSpec.dest, 2 => slotM0_D0i(0).ins.physicalArgSpec.dest, others => (others => '0'));
          fni.values0 <= (execOutputs1(0).ins.result, execOutputs1(1).ins.result, execOutputs1(2).ins.result);
@@ -1279,8 +1296,8 @@ begin
 
          -- NOTE: FP load path is 1 cycle longer, so different stages are involved here from those in Int datapath
          --      TODO: CHECK
+         fniFloat.nextTagsM2 <= (0 => slotF0_E0(0).ins.physicalArgSpec.dest, 2 => slotM0_E1f(0).ins.physicalArgSpec.dest, others => (others => '0'));
          fniFloat.nextTagsM1 <= (0 => slotF0_E1(0).ins.physicalArgSpec.dest, 2 => slotM0_E2f(0).ins.physicalArgSpec.dest, others => (others => '0'));
-         fniFloat.nextTagsM2 <= (0 => slotF0_E0(0).ins.physicalArgSpec.dest, 2 => slotM0_E1f(0).ins.physicalArgSpec.dest, others => (others => '0'));               
          fniFloat.tags0 <= (0 => slotF0_E2(0).ins.physicalArgSpec.dest, 2 => slotM0_D0f(0).ins.physicalArgSpec.dest, others => (others => '0'));
          fniFloat.tags1 <= (0 => slotF0_D0(0).ins.physicalArgSpec.dest, 2 => slotM0_D1f(0).ins.physicalArgSpec.dest, others => (others => '0'));
          fniFloat.values0 <= (0 => slotF0_E2(0).ins.result, 2 => slotM0_D0f(0).ins.result, others => (others => '0'));
@@ -1330,7 +1347,7 @@ begin
             sendingToFloatWriteQueue <= sendingM0_E2f or sendingF0_E2; -- TEMP, TODO!
             dataToFloatWriteQueue <= slotM0_E2f when sendingM0_E2f = '1' else slotF0_E2;
             
-            FLOAT_WRITE_QUEUE: entity work.GenericStage(Behavioral)
+            FLOAT_WRITE_QUEUE: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
             )
@@ -1344,10 +1361,11 @@ begin
                 acceptingOut => open,
                 sendingOut => sendingToFloatRF,
                 stageDataOut => dataToFloatRF,
-                
-                execEventSignal => '0',
-                lateEventSignal => '0',
-                execCausing => DEFAULT_INSTRUCTION_STATE
+                    
+                    events => DEFAULT_EVENT_STATE
+--                execEventSignal => '0',
+--                lateEventSignal => '0',
+--                execCausing => DEFAULT_INSTRUCTION_STATE
             );
 
 
