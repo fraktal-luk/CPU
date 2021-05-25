@@ -14,6 +14,19 @@ use work.InstructionState.all;
 
 package PipelineGeneral is
 
+type ExecResult is record
+    full: std_logic;
+    tag: InsTag;
+    dest: PhysName;
+    value: Mword;
+end record;
+
+constant DEFAULT_EXEC_RESULT: ExecResult := ('0', tag => (others => '0'), dest => (others => '0'), value => (others => '0'));
+
+        function makeExecResult(isl: InstructionSlot; full: std_logic) return ExecResult;
+        function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecResult;
+
+
 type EventState is record
     lateEvent: std_logic;
     execEvent: std_logic;
@@ -205,7 +218,20 @@ function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natur
 function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
 
 function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray; 
-    
+
+
+function buildForwardingNetwork(s0_M2, s0_M1, s0_R0, s0_R1,
+                                s1_M2, s1_M1, s1_R0, s1_R1,
+                                s2_M2, s2_M1, s2_R0, s2_R1
+          : ExecResult
+) return ForwardingInfo;
+
+function buildForwardingNetworkFP(s0_M2, s0_M1, s0_R0, s0_R1,
+                                s1_M2, s1_M1, s1_R0, s1_R1,
+                                s2_M2, s2_M1, s2_R0, s2_R1
+          : ExecResult
+) return ForwardingInfo;
+
 end package;
 
 
@@ -1112,5 +1138,65 @@ begin
     end loop;
     return res;
 end function; 
-     
+
+
+
+function makeExecResult(isl: InstructionSlot; full: std_logic) return ExecResult is
+    variable res: ExecResult := DEFAULT_EXEC_RESULT;
+begin
+    res.full := full;
+    res.tag := isl.ins.tags.renameIndex;
+    res.dest := isl.ins.physicalArgSpec.dest;
+    res.value := isl.ins.result;    
+    return res;
+end function;
+
+function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecResult is
+    variable res: ExecResult := DEFAULT_EXEC_RESULT;
+begin
+    res.full := full;
+    res.tag := isl.ins.tags.renameIndex;
+    res.dest := isl.ins.physicalArgSpec.dest;
+    res.value := isl.ins.result;    
+    return res;
+end function;
+
+
+function buildForwardingNetwork(s0_M2, s0_M1, s0_R0, s0_R1,
+                                s1_M2, s1_M1, s1_R0, s1_R1,
+                                s2_M2, s2_M1, s2_R0, s2_R1
+          : ExecResult
+) return ForwardingInfo is
+    variable fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
+begin
+         -- Forwarding network
+		 fni.nextTagsM2 := (                                                                                             2 => s2_M2.dest,                             others => (others => '0'));
+		 fni.nextTagsM1 := (0 => s0_M1.dest,                                                                             2 => s2_M1.dest,                             others => (others => '0'));        
+         fni.tags0 :=      (0 => s0_R0.dest,                              1 => s1_R0.dest,                               2 => s2_R0.dest,                             others => (others => '0')); 
+         fni.tags1 :=      (0 => s0_R1.dest,                                                                             2 => s2_R1.dest,                             others => (others => '0'));
+         fni.values0 :=    (0 => s0_R0.value,                             1 => s1_R0.value,                              2 => s2_R0.value,                            others => (others => '0'));
+         fni.values1 :=    (0 => s0_R1.value,                                                                            2 => s2_R1.value,                            others => (others => '0'));                 
+
+    return fni;
+end function;
+
+function buildForwardingNetworkFP(s0_M2, s0_M1, s0_R0, s0_R1,
+                                s1_M2, s1_M1, s1_R0, s1_R1,
+                                s2_M2, s2_M1, s2_R0, s2_R1
+          : ExecResult
+) return ForwardingInfo is
+    variable fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
+begin
+         -- Forwarding network
+		 fni.nextTagsM2 := (0 => s0_M2.dest,                                                                             2 => s2_M2.dest,                             others => (others => '0'));
+		 fni.nextTagsM1 := (0 => s0_M1.dest,                                                                             2 => s2_M1.dest,                             others => (others => '0'));        
+         fni.tags0 :=      (0 => s0_R0.dest,                                                                             2 => s2_R0.dest,                             others => (others => '0')); 
+         fni.tags1 :=      (0 => s0_R1.dest,                                                                             2 => s2_R1.dest,                             others => (others => '0'));
+         fni.values0 :=    (0 => s0_R0.value,                                                                            2 => s2_R0.value,                            others => (others => '0'));
+         fni.values1 :=    (0 => s0_R1.value,                                                                            2 => s2_R1.value,                            others => (others => '0'));                 
+
+    return fni;
+end function;
+
+
 end package body;
