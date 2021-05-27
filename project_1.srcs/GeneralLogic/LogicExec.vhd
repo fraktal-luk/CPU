@@ -37,7 +37,8 @@ package LogicExec is
                               tlbReady: std_logic; tlbValue: Mword;
                               memLoadReady: std_logic; memLoadValue: Mword;
                               sysLoadReady: std_logic; sysLoadValue: Mword;
-                              storeForwardSending: std_logic; storeForwardIns: InstructionState;
+                              --storeForwardSending: std_logic; storeForwardIns: InstructionState;
+                              storeForwardOutput: InstructionSlot;
                               lqSelectedOutput: InstructionSlot
                              ) return InstructionState;
                                         
@@ -353,7 +354,8 @@ package body LogicExec is
                               tlbReady: std_logic; tlbValue: Mword;	    
                               memLoadReady: std_logic; memLoadValue: Mword;
                               sysLoadReady: std_logic; sysLoadValue: Mword;
-                              storeForwardSending: std_logic; storeForwardIns: InstructionState;
+                              --storeForwardSending: std_logic; storeForwardIns: InstructionState;
+                              storeForwardOutput: InstructionSlot;
                               lqSelectedOutput: InstructionSlot                                         
                              ) return InstructionState is
         variable res: InstructionState := ins;
@@ -373,9 +375,9 @@ package body LogicExec is
             -- TLB problems...
          elsif memLoadReady = '0' then
              res.controlInfo.dataMiss := '1';
-         elsif storeForwardSending = '1' then
-             res.result := storeForwardIns.result;
-             if storeForwardIns.controlInfo.sqMiss = '1' then
+         elsif storeForwardOutput.full = '1' then
+             res.result := storeForwardOutput.ins.result;
+             if storeForwardOutput.ins.controlInfo.sqMiss = '1' then
                  res.controlInfo.sqMiss := '1';
                  res.controlInfo.specialAction := '1';
                  res.controlInfo.newEvent := '1';

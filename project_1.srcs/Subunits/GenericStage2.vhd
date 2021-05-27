@@ -24,15 +24,16 @@ entity GenericStage2 is
 		reset: in std_logic;
 		en: in std_logic;
 		
-		prevSending: in std_logic;
+		--prevSending: in std_logic;
 		nextAccepting: in std_logic;
 
-		stageDataIn: in InstructionSlotArray(0 to WIDTH-1);
+		--stageDataIn: in InstructionSlotArray(0 to WIDTH-1);
+		  input: in InstructionSlot;
 		
 		acceptingOut: out std_logic;
 		sendingOut: out std_logic;
-		stageDataOut: out InstructionSlotArray(0 to WIDTH-1);
-
+		--stageDataOut: out InstructionSlotArray(0 to WIDTH-1);
+            output: out InstructionSlot;
             events: in EventState
 
 --		execEventSignal: in std_logic;
@@ -46,8 +47,8 @@ architecture Behavioral of GenericStage2 is
 	signal before, full, kill, living, sending: std_logic := '0';
 	signal stageData, stageDataNext: InstructionSlotArray(0 to WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 begin
-	stageDataNext <= stageArrayNext(stageData, stageDataIn,
-								    living, sending, prevSending,
+	stageDataNext <= stageArrayNext(stageData, (0 => input),
+								    living, sending, input.full,
 								    kill and USE_CLEAR, KEEP_DEST);
 
 	PIPE_CLOCKED: process(clk) 
@@ -58,7 +59,7 @@ begin
 		  -- CAREFUL: This is important because signal combinations can be different from {'0', '1'} on initialisation.
 		  --          Simple assigment: full <= ((living and not sending) or prevSending); fails if we don't have a binary value.
 		  --          TODO? Can it be guaranteed that there is also a binary value form the beginning?
-		  if ((living and not sending) or prevSending) = '1' then
+		  if ((living and not sending) or input.full) = '1' then
 		      full <= '1';
 		  else
 		      full <= '0';
@@ -74,13 +75,15 @@ begin
 
 	acceptingOut <= nextAccepting or not living;	
 	sendingOut <= sending;
-	stageDataOut <= stageData;	
+	--stageDataOut <= stageData;
+	   output <= (sending, stageData(0).ins);
 end Behavioral;
 
 
 architecture Bypassed of GenericStage2 is
 begin
 	acceptingOut <= nextAccepting;		
-	sendingOut <= prevSending;
-	stageDataOut <= stageDataIn;
+	--sendingOut <= prevSending;
+	--stageDataOut <= stageDataIn;
+	   output <= input;
 end Bypassed;
