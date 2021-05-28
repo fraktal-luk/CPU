@@ -25,13 +25,13 @@ entity GenericStage2 is
 		en: in std_logic;
 		
 		--prevSending: in std_logic;
-		nextAccepting: in std_logic;
+		--nextAccepting: in std_logic;
 
 		--stageDataIn: in InstructionSlotArray(0 to WIDTH-1);
 		  input: in InstructionSlot;
 		
-		acceptingOut: out std_logic;
-		sendingOut: out std_logic;
+		--acceptingOut: out std_logic;
+		--sendingOut: out std_logic;
 		--stageDataOut: out InstructionSlotArray(0 to WIDTH-1);
             output: out InstructionSlot;
             events: in EventState
@@ -45,6 +45,7 @@ end GenericStage2;
 
 architecture Behavioral of GenericStage2 is
 	signal before, full, kill, living, sending: std_logic := '0';
+	signal nextAccepting: std_logic := '1';
 	signal stageData, stageDataNext: InstructionSlotArray(0 to WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 begin
 	stageDataNext <= stageArrayNext(stageData, (0 => input),
@@ -73,8 +74,8 @@ begin
 	before <= (not COMPARE_TAG) or compareTagBefore(events.execCausing.tags.renameIndex, stageData(0).ins.tags.renameIndex);
 	kill <= (before and events.execEvent) or events.lateEvent;
 
-	acceptingOut <= nextAccepting or not living;	
-	sendingOut <= sending;
+	--acceptingOut <= nextAccepting or not living;	
+	--sendingOut <= sending;
 	--stageDataOut <= stageData;
 	   output <= (sending, stageData(0).ins);
 end Behavioral;
@@ -82,7 +83,7 @@ end Behavioral;
 
 architecture Bypassed of GenericStage2 is
 begin
-	acceptingOut <= nextAccepting;		
+	--acceptingOut <= nextAccepting;		
 	--sendingOut <= prevSending;
 	--stageDataOut <= stageDataIn;
 	   output <= input;
