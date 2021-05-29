@@ -122,7 +122,7 @@ function TMP_restoreState(full: std_logic; ins: InstructionState; st: SchedulerS
 
 function getDispatchArgValues(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo;
 											prevSending: std_logic;
-											USE_IMM: boolean; REGS_ONLY, DELAY_ONLY: boolean)
+											USE_IMM: boolean; REGS_ONLY, DELAY_ONLY, TMP_DELAY: boolean)
 return SchedulerEntrySlot;
 
 function updateDispatchArgs(ins: InstructionState; st: SchedulerState; vals: MwordArray; regValues: MwordArray)
@@ -503,13 +503,17 @@ end function;
 
 function getDispatchArgValues(ins: InstructionState; st: SchedulerState; fni: ForwardingInfo;
 											prevSending: std_logic;
-											USE_IMM: boolean; REGS_ONLY, DELAY_ONLY: boolean)
+											USE_IMM: boolean; REGS_ONLY, DELAY_ONLY, TMP_DELAY: boolean)
 return SchedulerEntrySlot is
 	variable res: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 begin
 	res.ins := ins;
 	res.state := st;
- 
+    
+    if TMP_DELAY then
+        return res;
+    end if;
+    
     if prevSending = '0' or (st.argSpec.intDestSel = '0' and st.argSpec.floatDestSel = '0') then
         res.ins.physicalArgSpec.dest := (others => '0'); -- Don't allow false notifications of args
         res.state.argSpec.dest := (others => '0'); -- Don't allow false notifications of args
@@ -585,6 +589,7 @@ begin
     else
         res.state.args(0) := regValues(0);
     end if;
+        res.state.stored(0) := '1';
 
     if res.state.stored(1) = '1' then
         null; -- Using stored arg
@@ -593,7 +598,8 @@ begin
     else
         res.state.args(1) := regValues(1);
     end if;
-	
+	   res.state.stored(1) := '1';
+	   
 	return res;
 end function;
 

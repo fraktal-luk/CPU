@@ -389,7 +389,7 @@ begin
                slotSelI1, slotIssueI1,
                     slotRegReadI1,
                slotSelM0, slotIssueM0,
-                    slotRegReadM0,
+                    slotRegReadM0, slotPreExecM0,
                slotSel3, slotIssue3,
                slotSelF0, slotIssueF0, slotRegReadF0,
                slotSel4, slotIssue4, slotSel5, slotIssue5, slotSel6, slotIssue6: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
@@ -424,7 +424,8 @@ begin
 
         signal dataToIssueIntStoreValue, dataToRegReadIntStoreValue, dataToExecStoreValue, dataToExecIntStoreValue, dataToExecFloatStoreValue,
                dataToIssueFloatStoreValue, dataToRegReadFloatStoreValue: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
-        signal sendingToIssueStoreValue, sendingToRegReadStoreValue, sendingStoreValue, sendingToIssueFloatStoreValue: std_logic := '0';
+        signal  sendingToExecM0,
+                sendingToIssueStoreValue, sendingToRegReadStoreValue, sendingStoreValue, sendingToIssueFloatStoreValue: std_logic := '0';
         signal sentCancelledI0, sentCancelledI1, sentCancelledM0, sentCancelledM1, sentCancelledF0, sentCancelledSVI, sentCancelledSVF: std_logic := '0';
 
        signal emptyI0, emptyI1, emptyM0, emptyM1, emptySVI, emptySVF, emptyF0: std_logic := '0';  
@@ -618,7 +619,7 @@ begin
 
                         sendingToRegReadM0 <= slotIssueM0.full and not outSigsM0.cancelled;
                         RR_STAGE_MEM: entity work.IssueStage
-                        generic map(USE_IMM => false, REGS_ONLY => false, DELAY_ONLY => true)
+                        generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => true)
                         port map(
                             clk => clk, reset => '0', en => '0',
                             prevSending => sendingToRegReadM0,
@@ -631,18 +632,21 @@ begin
                         );  
                             subpipeM0_RegRead <= makeExecResult(slotRegReadM0, slotRegReadM0.full);
 
+                    
+                slotPreExecM0 <= slotRegReadM0 when TMP_PARAM_M0_DELAY else slotIssueM0;
+                sendingToExecM0 <= slotRegReadM0.full when TMP_PARAM_M0_DELAY else sendingToRegReadM0;
 
-           preIndexSQ <= slotIssueM0.ins.tags.sqPointer;
+           preIndexSQ <= slotPreExecM0.ins.tags.sqPointer;
                          --   slotRegReadM0.ins.tags.sqPointer;
-           preIndexLQ <= slotIssueM0.ins.tags.lqPointer;
+           preIndexLQ <= slotPreExecM0.ins.tags.lqPointer;
                          --   slotRegReadM0.ins.tags.lqPointer;
-                                 
+
            sendingFromDLQ <= '0';          -- TEMP!
            dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
 
-           sendingToAgu <= (slotIssueM0.full and not outSigsM0.cancelled) or sendingFromDLQ;
+           sendingToAgu <= sendingToExecM0 or sendingFromDLQ;
                            -- (slotRegReadM0.full) or sendingFromDLQ;
-	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(slotIssueM0.ins, slotIssueM0.state, sendingFromDLQ, dataFromDLQ));
+	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(slotPreExecM0.ins, slotPreExecM0.state, sendingFromDLQ, dataFromDLQ));
                            -- (sendingToAgu, calcEffectiveAddress(slotRegReadM0.ins, slotRegReadM0.state, sendingFromDLQ, dataFromDLQ));
                             
            STAGE_AGU: entity work.GenericStage2(Behavioral)

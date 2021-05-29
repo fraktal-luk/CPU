@@ -10,9 +10,9 @@ package CoreConfig is
 --function checkSynthesis return boolean;
 
 constant CLEAR_DEBUG_INFO: boolean := true;
-constant VIEW_ON: boolean := false;
+constant VIEW_ON: boolean := true;
 
-   constant DEBUG_LOG_COMMITTED: boolean := false;
+   constant DEBUG_LOG_COMMITTED: boolean := true;
 
 --constant SYNTH_CHECK: boolean := checkSynthesis;
 
@@ -66,6 +66,7 @@ constant LQ_PTR_SIZE: natural := countOnes(LQ_PTR_MASK);
     
     constant TMP_PARAM_NEW_DECODE: boolean := true;
     
+    constant TMP_PARAM_M0_DELAY: boolean := false;
 end CoreConfig;
 
 

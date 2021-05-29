@@ -19,7 +19,8 @@ use work.LogicIssue.all;
 entity IssueStage is
 	generic(USE_IMM: boolean := true;
 	        REGS_ONLY: boolean := false;
-	        DELAY_ONLY: boolean := false);
+	        DELAY_ONLY: boolean := false;
+	        TMP_DELAY: boolean := false);
 	port(
 		clk: in std_logic;
 		reset: in std_logic;
@@ -52,7 +53,7 @@ architecture Alternative of IssueStage is
 	signal argState: SchedulerState := DEFAULT_SCHEDULER_STATE;		
 begin
 	inputDataWithArgs <= getDispatchArgValues(input.ins, input.state, fni, prevSending, 
-											  USE_IMM, REGS_ONLY, DELAY_ONLY);	
+											  USE_IMM, REGS_ONLY, DELAY_ONLY, TMP_DELAY);	
 	stageDataIn <= (prevSending, inputDataWithArgs.ins);
 	
 	BASIC_LOGIC: entity work.GenericStage(Behavioral)
