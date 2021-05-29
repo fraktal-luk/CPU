@@ -385,7 +385,7 @@ begin
         
         -- Selection from IQ and state after Issue stage
         signal slotSelI0, slotIssueI0,      slotIssueI0_A,
-                    slotRegReadI0,
+                    slotRegReadI0, slotPreExecI0,
                slotSelI1, slotIssueI1,
                     slotRegReadI1,
                slotSelM0, slotIssueM0,
@@ -424,7 +424,7 @@ begin
 
         signal dataToIssueIntStoreValue, dataToRegReadIntStoreValue, dataToExecStoreValue, dataToExecIntStoreValue, dataToExecFloatStoreValue,
                dataToIssueFloatStoreValue, dataToRegReadFloatStoreValue: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
-        signal  sendingToExecM0,
+        signal  sendingToExecI0, sendingToExecM0,
                 sendingToIssueStoreValue, sendingToRegReadStoreValue, sendingStoreValue, sendingToIssueFloatStoreValue: std_logic := '0';
         signal sentCancelledI0, sentCancelledI1, sentCancelledM0, sentCancelledM1, sentCancelledF0, sentCancelledSVI, sentCancelledSVF: std_logic := '0';
 
@@ -449,12 +449,13 @@ begin
        signal sendingToIntWriteQueue, sendingToFloatWriteQueue, sendingToIntRF, sendingToFloatRF: std_logic := '0';
        signal dataToIntWriteQueue, dataToFloatWriteQueue, dataToIntRF, dataToFloatRF: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
        
-       signal sendingFromDLQ, sendingToAgu, sendingToRegReadM0: std_logic := '0';       
+       signal sendingFromDLQ, sendingToAgu, sendingToRegReadI0, sendingToRegReadM0: std_logic := '0';       
        signal dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
        
        signal outSigsI0, outSigsM0, outSigsSVI, outSigsSVF, outSigsF0: IssueQueueSignals := (others => '0');
        
-       signal subpipeI0_Sel, subpipeI0_RegRead, subpipeI0_E0,            subpipeI0_D0,              
+       signal subpipeI0_Sel, subpipeI0_RegRead, subpipeI0_E0,            subpipeI0_D0,
+                                                                                           subpipeI0_PreExec,
               subpipeM0_Sel, subpipeM0_RegRead, subpipeM0_E0, --subpipeM0_E1, subpipeM0_E2, subpipeM0_E3,         subpipeM0_D0, subpipeM0_D1,               
                                                               subpipeM0_E1i, subpipeM0_E2i, subpipeM0_E3i,         subpipeM0_D0i, subpipeM0_D1i,
                                                               subpipeM0_E1f, subpipeM0_E2f, subpipeM0_E3f,         subpipeM0_D0f, subpipeM0_D1f,
@@ -521,7 +522,28 @@ begin
             );
                 subpipeI0_Sel <= makeExecResult(slotIssueI0, slotIssueI0.full);
 
-            dataToAlu(0) <= (slotIssueI0.full and not outSigsI0.cancelled, executeAlu(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins, branchData));
+
+                        sendingToRegReadI0 <= slotIssueI0.full and not outSigsI0.cancelled;
+                        RR_STAGE_ALU: entity work.IssueStage
+                        generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => true)
+                        port map(
+                            clk => clk, reset => '0', en => '0',
+                            prevSending => sendingToRegReadI0,
+                            nextAccepting => '1',
+                            input => slotIssueI0,                
+                            output => slotRegReadI0,
+                            events => events,
+                            fni => fni,
+                            regValues => (others => (others => '0'))   
+                        );  
+                            subpipeI0_RegRead <= makeExecResult(slotRegReadI0, slotRegReadI0.full);
+
+                        slotPreExecI0 <= slotRegReadI0 when TMP_PARAM_I0_DELAY else slotIssueI0;
+                        sendingToExecI0 <= slotRegReadI0.full when TMP_PARAM_I0_DELAY else sendingToRegReadI0;
+                        subpipeI0_PreExec <= subpipeI0_RegRead when TMP_PARAM_I0_DELAY else subpipeI0_Sel;
+
+
+            dataToAlu(0) <= (sendingToExecI0, executeAlu(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins, branchData));
           
             STAGE_I0_E0: entity work.GenericStage2(Behavioral)
             generic map(
@@ -539,10 +561,10 @@ begin
                 sendingFinalI0 <= slotI0_E0(0).full;
                 slotFinalI0 <= slotI0_E0;
 
-            branchData <= basicBranch(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins);                  
+            branchData <= basicBranch(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins);                  
             
-            dataToBranch(0) <= (slotIssueI0.full and not outSigsI0.cancelled and slotIssueI0.state.branchIns, branchData);            
-            bqCompare <= (dataToBranch(0).full, slotIssueI0.ins);
+            dataToBranch(0) <= (sendingToExecI0 and slotPreExecI0.state.branchIns, branchData);            
+            bqCompare <= (dataToBranch(0).full, slotPreExecI0.ins);
             
             STAGE_I0_E0_BRANCH: entity work.GenericStage2(Behavioral)
             generic map(
@@ -1140,7 +1162,7 @@ begin
                 signal ch8, ch9, ch10, ch11, ch12, ch13, ch14, ch15: std_logic := '0';
            begin
                  -- I0 pipe
-                 s0_M1 <= subpipeI0_Sel;           
+                 s0_M1 <= subpipeI0_PreExec;           
                  s0_R0 <= subpipeI0_E0;
                  s0_R1 <= subpipeI0_D0;
 
