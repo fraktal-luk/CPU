@@ -474,8 +474,19 @@ begin
            signal dynamicInfoA: work.LogicIssue.DynamicInfoArray(0 to PIPE_WIDTH-1);
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
            
-           signal sendingBranch: std_logic := '0';         
+           signal sendingBranch: std_logic := '0';
+                use work.LogicIssue.Wakeups;
+           
+                signal wupArg0, wupArg1: work.LogicIssue.Wakeups;      
+                signal wupArg0_CMP, wupArg1_CMP: work.LogicIssue.Wakeups;
+                
+           signal ch0, ch1,ch2, ch3: std_logic := '0';      
         begin
+                    wupArg0_CMP <= work.LogicIssue.getWakeupsForArg_CMP(0, fni, fmaInt(0), ENQUEUE_FN_MAP, true, true);
+                    wupArg0 <= work.LogicIssue.getWakeupsForArg(0, fni, fmaInt(0), ENQUEUE_FN_MAP, true, true);
+                    ch0 <= bool2std(wupArg0_CMP = wupArg0);
+                    
+        
             fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);
         
             inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe));
@@ -1162,6 +1173,7 @@ begin
                 signal ch8, ch9, ch10, ch11, ch12, ch13, ch14, ch15: std_logic := '0';
            begin
                  -- I0 pipe
+                    s0_M2 <= subpipeI0_Sel when TMP_PARAM_I0_DELAY else DEFAULT_EXEC_RESULT;
                  s0_M1 <= subpipeI0_PreExec;           
                  s0_R0 <= subpipeI0_E0;
                  s0_R1 <= subpipeI0_D0;
