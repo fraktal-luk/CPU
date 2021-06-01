@@ -472,26 +472,36 @@ begin
            signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
            signal staticInfoA: work.LogicIssue.StaticInfoArray(0 to PIPE_WIDTH-1);
            signal dynamicInfoA: work.LogicIssue.DynamicInfoArray(0 to PIPE_WIDTH-1);
-           signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
+           signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedA_DYN: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
            
            signal sendingBranch: std_logic := '0';
-                use work.LogicIssue.Wakeups;
+                use work.LogicIssue.all;
            
                 signal wupArg0, wupArg1: work.LogicIssue.Wakeups;      
                 signal wupArg0_CMP, wupArg1_CMP: work.LogicIssue.Wakeups;
                 
-           signal ch0, ch1,ch2, ch3: std_logic := '0';      
+                signal wups: WakeupsArray2D(0 to PIPE_WIDTH-1, 0 to 1);
+                signal wups_T: WakeupsArray2D(0 to PIPE_WIDTH-1, 0 to 1);
+                signal wups_DYN: WakeupsArray2D(0 to PIPE_WIDTH-1, 0 to 1);
+                
+           signal ch0, ch1,ch2, ch3: std_logic := '0';
+           signal checkV, checkV_DYN: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');      
         begin
                     wupArg0_CMP <= work.LogicIssue.getWakeupsForArg_CMP(0, fni, fmaInt(0), ENQUEUE_FN_MAP, true, true);
-                    wupArg0 <= work.LogicIssue.getWakeupsForArg(0, fni, fmaInt(0), ENQUEUE_FN_MAP, true, true);
-                    ch0 <= bool2std(wupArg0_CMP = wupArg0);
-                    
+                    wupArg0 <= work.LogicIssue.getWakeups(schedInfoUpdatedA(0), 0, fmaInt(0).a0cmp1, fmaInt(0).a0cmp0, fmaInt(0).a0cmpM1, fmaInt(0).a0cmpM2);
+                    --ch0 <= bool2std(wupArg0_CMP = wupArg0);
+                    wups <= getWakeupsAllArgs(schedInfoA, fmaInt);
+                    wups_T <= getWakeupsTest(schedInfoA, schedInfoUpdatedA, fmaInt);
+                    wups_DYN <= getWakeupsTest(schedInfoA, schedInfoUpdatedA_DYN, fmaInt);
+                    checkV <= cmpWakeups(schedInfoA, wups, wups_T);
+                    checkV_DYN <= cmpWakeups(schedInfoA, wups, wups_DYN);
         
             fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);
         
             inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe));
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, true);        
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_DYN(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, true);        
+                schedInfoUpdatedA_DYN <= work.LogicIssue.updateSchedulerArray_DYN(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, true);        
               
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(

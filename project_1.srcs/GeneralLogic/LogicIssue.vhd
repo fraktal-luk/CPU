@@ -104,10 +104,6 @@ constant DEFAULT_SCHEDULER_INFO: SchedulerInfo := (
 type SchedulerInfoArray is array(natural range <>) of SchedulerInfo;
 
         type Wakeups is record
---            missing: std_logic_vector(0 to 2);
---            readyNow: std_logic_vector(0 to 2);
---            readyNext: std_logic_vector(0 to 2);
---            readyM2:    std_logic_vector(0 to 2);
             matchR1: std_logic_vector(0 to 2);
             matchR0: std_logic_vector(0 to 2);
             matchM1: std_logic_vector(0 to 2);
@@ -115,9 +111,17 @@ type SchedulerInfoArray is array(natural range <>) of SchedulerInfo;
             
             argLocsPipe: SmallNumberArray(0 to 2);
             argLocsPhase: SmallNumberArray(0 to 2);
-            wakeupVec: std_logic_vector(0 to 2);            
+            wakeupVec: std_logic_vector(0 to 2);
+            
+            match:   std_logic;
+            multiMatch: std_logic;
+            const:   std_logic; -- immediate or PR 0
+            missing: std_logic;
+                wakeup: std_logic;           
         end record;
-
+        
+        type WakeupsArray2D is array(natural range <>, natural range <>) of Wakeups;
+        
             function getWakeupsForArg(arg: natural;
                                             fni: ForwardingInfo;
                                             fm: ForwardingMatches;
@@ -129,6 +133,13 @@ type SchedulerInfoArray is array(natural range <>) of SchedulerInfo;
                                             fm: ForwardingMatches;
                                             fnm: ForwardingMap; progressLocs, dynamic: boolean)
             return Wakeups;        
+
+        function getWakeups(state: SchedulerInfo; arg: natural; cmpR1, cmpR0, cmpM1, cmpM2: std_logic_vector) return Wakeups;
+        function getWakeupsAllArgs(stateArray: SchedulerInfoArray; fma: ForwardingMatchesArray) return WakeupsArray2D;
+
+        function getWakeupsTest(stateArrayBefore, stateArrayAfter: SchedulerInfoArray; fma: ForwardingMatchesArray) return WakeupsArray2D;
+        function cmpWakeups(state: SchedulerInfoArray; a, b: WakeupsArray2D) return std_logic_vector;
+
 
 function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean) return StaticInfo; 
 function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean) return DynamicInfo;
@@ -166,6 +177,11 @@ function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vect
 
 function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; progressLocs, dynamic: boolean)
 return SchedulerInfoArray;
+
+
+    function updateSchedulerArray_DYN(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; progressLocs, dynamic: boolean)
+    return SchedulerInfoArray;
+
 
 function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo) return ForwardingMatchesArray;
 
@@ -899,6 +915,82 @@ end function;
     end function;
 
 
+    function getWakeups(state: SchedulerInfo; arg: natural; cmpR1, cmpR0, cmpM1, cmpM2: std_logic_vector) return Wakeups is
+        variable res: Wakeups;
+        variable nMatches: natural;
+    begin
+        res.matchR1 := cmpR1;
+        res.matchR0 := cmpR0;
+        res.matchM1 := cmpM1;
+        res.matchM2 := cmpM2;
+        
+        nMatches := countOnes(cmpR1) + countOnes(cmpR0) + countOnes(cmpM1) + countOnes(cmpM2);
+        
+        res.match := bool2std(nMatches /= 0);
+        res.multiMatch := bool2std(nMatches > 1);
+        
+        if isNonzero(cmpR1) = '1' then
+            res.argLocsPhase(0) := "00000001";
+            res.argLocsPipe(0) := i2slv(getFirstOnePosition(cmpR1), 8);
+        elsif isNonzero(cmpR0) = '1' then
+            res.argLocsPhase(0) := "00000000";
+            res.argLocsPipe(0) := i2slv(getFirstOnePosition(cmpR0), 8);            
+        elsif isNonzero(cmpM1) = '1' then
+            res.argLocsPhase(0) := "11111111";
+            res.argLocsPipe(0) := i2slv(getFirstOnePosition(cmpM1), 8);            
+        elsif isNonzero(cmpM2) = '1' then
+            res.argLocsPhase(0) := "11111110";
+            res.argLocsPipe(0) := i2slv(getFirstOnePosition(cmpM2), 8);            
+        else
+            res.argLocsPhase(0) := "10000000";                                                            
+        end if;
+            
+        res.const := state.static.zero(arg);
+        res.missing := state.dynamic.missing(arg);
+        
+        res.wakeupVec := cmpR1 or cmpR0 or cmpM1 or cmpM2;
+            
+            res.wakeup := res.missing and res.match;
+        return res;
+    end function;
+
+
+
+
+    function getWakeupsAllArgs(stateArray: SchedulerInfoArray; fma: ForwardingMatchesArray) return WakeupsArray2D is
+        variable res: WakeupsArray2D(0 to PIPE_WIDTH-1, 0 to 1);
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            res(i, 0) := getWakeups(stateArray(i), 0, fma(i).a0cmp1, fma(i).a0cmp0, fma(i).a0cmpM1, fma(i).a0cmpM2); 
+            res(i, 1) := getWakeups(stateArray(i), 1, fma(i).a1cmp1, fma(i).a1cmp0, fma(i).a1cmpM1, fma(i).a1cmpM2); 
+        end loop;
+        
+        return res;
+    end function;
+
+        function getWakeupsTest(stateArrayBefore, stateArrayAfter: SchedulerInfoArray; fma: ForwardingMatchesArray) return WakeupsArray2D is
+            variable res: WakeupsArray2D(0 to PIPE_WIDTH-1, 0 to 1);
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i, 0).wakeup := stateArrayBefore(i).dynamic.missing(0) and not stateArrayAfter(i).dynamic.missing(0);
+                res(i, 1).wakeup := stateArrayBefore(i).dynamic.missing(1) and not stateArrayAfter(i).dynamic.missing(1); 
+            end loop;
+            return res;
+        end function;
+
+        function cmpWakeups(state: SchedulerInfoArray; a, b: WakeupsArray2D) return std_logic_vector is
+            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0'); 
+        begin
+            for i in res'range loop
+                if state(i).dynamic.full = '1' and (a(i, 0).wakeup /= b(i, 0).wakeup or a(i, 1).wakeup /= b(i, 1).wakeup) then
+                    res(i) := '1';
+                end if; 
+            end loop;
+            return res;
+        end function;
+
+    
+
 function updateSchedulerState(state: SchedulerInfo;
                                 fni: ForwardingInfo;
                                 fm: ForwardingMatches;
@@ -956,6 +1048,73 @@ begin
 	end loop;	
 	return res;
 end function;
+
+
+
+
+    
+    function updateSchedulerState_DYN(state: SchedulerInfo;
+                                    fni: ForwardingInfo;
+                                    fm: ForwardingMatches;
+                                    fnm: ForwardingMap; progressLocs, dynamic: boolean)
+    return SchedulerInfo is
+        variable res: SchedulerInfo := state;
+        variable cmp0toM2, cmp0toM1, cmp0toR0, cmp0toR1, cmp1toM2, cmp1toM1, cmp1toR0, cmp1toR1,
+                    readyNew, readyBefore, wakeupVec0, wakeupVec1: std_logic_vector(0 to 2) := (others=>'0');
+        variable wakeupPhases0, wakeupPhases1: SmallNumberArray(0 to 2) := (others=>(others=>'0'));	
+    begin       		
+        cmp0toR0 := fm.a0cmp0 and fnm.maskR0;
+        cmp1toR0 := fm.a1cmp0 and fnm.maskR0;
+        cmp0toR1 := fm.a0cmp1 and fnm.maskR1;
+        cmp1toR1 := fm.a1cmp1 and fnm.maskR1;
+        cmp0toM1 := fm.a0cmpM1 and fnm.maskM1;
+        cmp1toM1 := fm.a1cmpM1 and fnm.maskM1;
+        cmp0toM2 := fm.a0cmpM2 and fnm.maskM2;
+        cmp1toM2 := fm.a1cmpM2 and fnm.maskM2;
+    
+        if dynamic then
+            wakeupPhases0 := getWakeupPhase(fnm, cmp0toR1, cmp0toR0, cmp0toM1, cmp0toM2, progressLocs);
+            wakeupPhases1 := getWakeupPhase(fnm, cmp1toR1, cmp1toR0, cmp1toM1, cmp1toM2, progressLocs);
+        else
+            wakeupPhases0 := getWakeupPhase(fnm, fnm.maskR1, fnm.maskR0, fnm.maskM1, fnm.maskM2, progressLocs);
+            wakeupPhases1 := getWakeupPhase(fnm, fnm.maskR1, fnm.maskR0, fnm.maskM1, fnm.maskM2, progressLocs);
+        end if;
+    
+        wakeupVec0 := getWakeupVectorDynamic(fnm, cmp0toR1, cmp0toR0, cmp0toM1, cmp0toM2, dynamic);
+        wakeupVec1 := getWakeupVectorDynamic(fnm, cmp1toR1, cmp1toR0, cmp1toM1, cmp1toM2, dynamic);
+                
+        readyBefore := not res.dynamic.missing;
+        readyNew := (isNonzero(wakeupVec0), isNonzero(wakeupVec1), '0');
+    
+        -- Update arg tracking
+        res.dynamic := updateArgLocs(   res.dynamic,
+                                        readyBefore,
+                                        wakeupPhases0,
+                                        wakeupPhases1,
+                                        wakeupVec0,
+                                        wakeupVec1,
+                                        progressLocs
+                                        );
+                                                
+        res.dynamic.missing := res.dynamic.missing and not readyNew;
+        
+        return res;
+    end function;
+    
+    function updateSchedulerArray_DYN(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; progressLocs, dynamic: boolean)
+    return SchedulerInfoArray is
+        variable res: SchedulerInfoArray(0 to schedArray'length-1);-- := insArray;
+    begin
+        for i in schedArray'range loop
+            res(i) := updateSchedulerState_DYN(schedArray(i), fni, fma(i), fnm, progressLocs, dynamic);
+        end loop;	
+        return res;
+    end function;
+
+
+
+
+
 
 function findForwardingMatches(info: SchedulerInfo; fni: ForwardingInfo) return ForwardingMatches is
     variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
