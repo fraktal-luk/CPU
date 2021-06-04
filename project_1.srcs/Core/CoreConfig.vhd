@@ -66,8 +66,8 @@ constant LQ_PTR_SIZE: natural := countOnes(LQ_PTR_MASK);
     
     constant TMP_PARAM_NEW_DECODE: boolean := true;
     
-    constant TMP_PARAM_I0_DELAY: boolean := true;
-    constant TMP_PARAM_M0_DELAY: boolean := true;
+    constant TMP_PARAM_I0_DELAY: boolean := false;
+    constant TMP_PARAM_M0_DELAY: boolean := false;
 end CoreConfig;
 
 
