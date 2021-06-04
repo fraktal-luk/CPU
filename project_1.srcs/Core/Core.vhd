@@ -444,7 +444,8 @@ begin
 
        -- Issue control 
        signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, allowIssueStoreDataFP, allowIssueStageStoreDataFP: std_logic := '0';
-       signal memSubpipeSent, fp0subpipeSelected, lockIssueI0, allowIssueI0, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady: std_logic := '0';
+       signal memSubpipeSent, fp0subpipeSelected, lockIssueI0, allowIssueI0, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady,
+                intWriteConflict: std_logic := '0';
                 
        signal sendingToIntWriteQueue, sendingToFloatWriteQueue, sendingToIntRF, sendingToFloatRF: std_logic := '0';
        signal dataToIntWriteQueue, dataToFloatWriteQueue, dataToIntRF, dataToFloatRF: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -1117,12 +1118,18 @@ begin
             );
                 subpipeF0_D0 <= makeExecResult(slotF0_D0(0), slotF0_D0(0).full); -- TODO: handle i/f
     
+    
+                intWriteConflict <= sendingFinalI0 and slotM0_E2i(0).full;
             SCHED_BLOCK: process(clk)
             begin
                 if rising_edge(clk) then
-                    assert (sendingFinalI0 and slotM0_E2i(0).full) = '0' report "Int write queue conflict!" severity error;
-                    memSubpipeSent <= sendingToAgu;
+                    assert intWriteConflict = '0' report "Int write queue conflict!" severity error;
                     
+                    if TMP_PARAM_I0_DELAY then
+                        memSubpipeSent <= sendingToRegReadM0;                    
+                    else
+                        memSubpipeSent <= sendingToAgu;
+                    end if;
                     fp0subpipeSelected <= outSigsF0.sending;
                 end if;
             end process;
