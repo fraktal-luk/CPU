@@ -98,7 +98,7 @@ architecture Behavioral of Core is
     
     signal events, eventsOnlyLate: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE);
     
-    signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
+   -- signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
 begin
 
     MONITOR: process (clk)
@@ -462,7 +462,12 @@ begin
                                                               subpipeM0_E1f, subpipeM0_E2f, subpipeM0_E3f,         subpipeM0_D0f, subpipeM0_D1f,
               subpipeF0_Sel, subpipeF0_RegRead, subpipeF0_E0, subpipeF0_E1,subpipeF0_E2, subpipeF0_D0,
               subpipe_DUMMY
-                : ExecResult := DEFAULT_EXEC_RESULT;                                                                             
+                : ExecResult := DEFAULT_EXEC_RESULT;
+                
+                signal regsSelI0_NEW: PhysNameArray(0 to 2) := (others => (others => '0'));                
+                signal slotIssueI0_NEW, slotRegReadI0_NEW: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+                signal regValsI0_NEW, regValsX_NEW, regValsY_NEW, regValsZ_NEW: MwordArray(0 to 2) := (others => (others => '0'));
+                               
     begin
         
         SUBPIPE_ALU: block
@@ -542,6 +547,21 @@ begin
                 fni => fni,
                 regValues => regValsI0   
             );
+            
+                        ISSUE_STAGE_I0_NEW: entity work.IssueStage
+                        generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
+                        port map(
+                            clk => clk, reset => '0', en => '0',      
+                            prevSending => outSigsI0.sending,
+                            nextAccepting => '1',    
+                            input => slotSelI0,               
+                            output => slotIssueI0_NEW,
+                            events => events,         
+                            fni => fni,
+                            regValues => (others => (others => '0'))
+                        );
+            
+            
                 subpipeI0_Sel <= makeExecResult(slotIssueI0, slotIssueI0.full);
 
 
@@ -556,8 +576,24 @@ begin
                             output => slotRegReadI0,
                             events => events,
                             fni => fni,
-                            regValues => (others => (others => '0'))   
-                        );  
+                            regValues => (others => (others => '0'))
+                        );
+                        
+                                RR_STAGE_ALU_NEW: entity work.IssueStage
+                                generic map(USE_IMM => true, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
+                                port map(
+                                    clk => clk, reset => '0', en => '0',
+                                    prevSending => sendingToRegReadI0,
+                                    nextAccepting => '1',
+                                    input => slotIssueI0_NEW,                
+                                    output => slotRegReadI0_NEW,
+                                    events => events,
+                                    fni => fni,
+                                    regValues => regValsI0_NEW   
+                                );
+                                 
+                                     ch0 <= bool2std(slotRegReadI0 = slotRegReadI0_NEW);  
+                
                             subpipeI0_RegRead <= makeExecResult(slotRegReadI0, slotRegReadI0.full);
 
                         slotPreExecI0 <= slotRegReadI0 when TMP_PARAM_I0_DELAY else slotIssueI0;
@@ -1170,6 +1206,7 @@ begin
 
      
          regsSelI0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotSelI0.ins)));
+             regsSelI0_NEW <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueI0.ins)));
          regsSelM0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotSelM0.ins)));        
          -- TEMP!
          regsSelS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadIntStoreValue.ins)));
@@ -1186,8 +1223,8 @@ begin
                                                              : ExecResult := DEFAULT_EXEC_RESULT;
                 signal fniInt_T, fniFloat_T: ForwardingInfo := DEFAULT_FORWARDING_INFO;
                 
-                signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0';
-                signal ch8, ch9, ch10, ch11, ch12, ch13, ch14, ch15: std_logic := '0';
+                --signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0';
+                --ignal ch8, ch9, ch10, ch11, ch12, ch13, ch14, ch15: std_logic := '0';
            begin
                  -- I0 pipe
                     s0_M2 <= subpipeI0_Sel when TMP_PARAM_I0_DELAY else DEFAULT_EXEC_RESULT;
@@ -1252,6 +1289,29 @@ begin
              readValues(6 to 8) => regValsM0,                        
              readValues(9 to 11) => regValsS0            
          );
+
+
+                 INT_REG_FILE_TMP_ALT: entity work.RegFile(Behavioral)
+                 generic map(WIDTH => 4, WRITE_WIDTH => 1)
+                 port map(
+                     clk => clk, reset => '0', en => '0',
+                         
+                     writeAllow => sendingToIntRF,
+                     writeInput => dataToIntRF,
+         
+                     readAllowVec => (others => '1'), -- TEMP!
+                     
+                     selectRead(0 to 2) => regsSelI0_NEW,
+                     selectRead(3 to 5) => (others => (others => '0')),
+                     selectRead(6 to 8) => regsSelM0,
+                     selectRead(9 to 11) => regsSelS0,
+                     
+                     readValues(0 to 2) => regValsI0_NEW,
+                     readValues(3 to 5) => regValsX_NEW,
+                     readValues(6 to 8) => regValsY_NEW,                        
+                     readValues(9 to 11) => regValsZ_NEW
+                 );
+
          
          INT_READY_TABLE: entity work.RegisterReadyTable(Behavioral)
          generic map(

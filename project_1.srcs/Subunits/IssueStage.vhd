@@ -20,7 +20,8 @@ entity IssueStage is
 	generic(USE_IMM: boolean := true;
 	        REGS_ONLY: boolean := false;
 	        DELAY_ONLY: boolean := false;
-	        TMP_DELAY: boolean := false);
+	        TMP_DELAY: boolean := false;
+	        NEW_RR: boolean := false);
 	port(
 		clk: in std_logic;
 		reset: in std_logic;
@@ -52,8 +53,11 @@ architecture Alternative of IssueStage is
 	signal stageDataSaved, stageDataIn: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
 	signal argState: SchedulerState := DEFAULT_SCHEDULER_STATE;		
 begin
-	inputDataWithArgs <= getDispatchArgValues(input.ins, input.state, fni, prevSending, 
-											  USE_IMM, REGS_ONLY, DELAY_ONLY, TMP_DELAY);	
+	inputDataWithArgs <= 
+                           getDispatchArgValues_NEW(input.ins, input.state, fni, prevSending, 
+                                                  USE_IMM, REGS_ONLY, DELAY_ONLY, TMP_DELAY, NEW_RR) when NEW_RR
+	                    else   getDispatchArgValues(input.ins, input.state, fni, prevSending,
+							     				  USE_IMM, REGS_ONLY, DELAY_ONLY, TMP_DELAY, NEW_RR);
 	stageDataIn <= (prevSending, inputDataWithArgs.ins);
 	
 	BASIC_LOGIC: entity work.GenericStage(Behavioral)
@@ -88,7 +92,8 @@ begin
 		end if;
 	end process;
 
-	dispatchDataUpdated <= updateDispatchArgs(stageDataSaved.ins, argState, fni.values0, regValues);
+	dispatchDataUpdated <=      updateDispatchArgs_NEW(stageDataSaved.ins, argState, fni.values0, regValues, TMP_DELAY) when NEW_RR
+	                       else updateDispatchArgs(stageDataSaved.ins, argState, fni.values0, regValues);
 
 	output <= (sendingOut, dispatchDataUpdated.ins, dispatchDataUpdated.state);	
 end Alternative;
