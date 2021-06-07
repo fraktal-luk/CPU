@@ -464,10 +464,11 @@ begin
               subpipe_DUMMY
                 : ExecResult := DEFAULT_EXEC_RESULT;
                 
-                signal regsSelI0_NEW: PhysNameArray(0 to 2) := (others => (others => '0'));                
-                signal slotIssueI0_NEW, slotRegReadI0_NEW: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
-                signal regValsI0_NEW, regValsX_NEW, regValsY_NEW, regValsZ_NEW: MwordArray(0 to 2) := (others => (others => '0'));
-                               
+                signal regsSelI0_NEW, regsSelM0_NEW: PhysNameArray(0 to 2) := (others => (others => '0'));                
+                signal slotIssueI0_NEW, slotRegReadI0_NEW, slotIssueM0_NEw, slotRegReadM0_NEW: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+                signal regValsI0_NEW, regValsM0_NEW, regValsX_NEW, regValsY_NEW, regValsZ_NEW: MwordArray(0 to 2) := (others => (others => '0'));
+          
+                     signal ch0, ch1,ch2, ch3: std_logic := '0';                     
     begin
         
         SUBPIPE_ALU: block
@@ -490,7 +491,6 @@ begin
                 signal wups_T: WakeupsArray2D(0 to PIPE_WIDTH-1, 0 to 1);
                 signal wups_DYN: WakeupsArray2D(0 to PIPE_WIDTH-1, 0 to 1);
                 
-           signal ch0, ch1,ch2, ch3: std_logic := '0';
            signal checkV, checkV_DYN: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');      
         begin
                     --wupArg0_CMP <= work.LogicIssue.getWakeupsForArg_CMP(0, fni, fmaInt(0), ENQUEUE_FN_MAP, true, true);
@@ -695,6 +695,20 @@ begin
                fni => fni,
                regValues => regValsM0   
            );
+           
+                   ISSUE_STAGE_MEM_ALU: entity work.IssueStage
+                   generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
+                   port map(
+                       clk => clk, reset => '0', en => '0',      
+                       prevSending => outSigsM0.sending,
+                       nextAccepting => '1',
+                       input => slotSelM0,
+                       output => slotIssueM0_NEW,
+                       events => events,
+                       fni => fni,
+                       regValues => (others => (others => '0'))   
+                   );
+                   
                 subpipeM0_Sel <= makeExecResult(slotIssueM0, slotIssueM0.full);
 
                         sendingToRegReadM0 <= slotIssueM0.full and not outSigsM0.cancelled;
@@ -709,7 +723,23 @@ begin
                             events => events,
                             fni => fni,
                             regValues => (others => (others => '0'))   
-                        );  
+                        );
+
+                            RR_STAGE_MEM_NEW: entity work.IssueStage
+                            generic map(USE_IMM => true, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
+                            port map(
+                                clk => clk, reset => '0', en => '0',
+                                prevSending => sendingToRegReadM0,
+                                nextAccepting => '1',
+                                input => slotIssueM0_NEW,                
+                                output => slotRegReadM0_NEW,
+                                events => events,
+                                fni => fni,
+                                regValues => regValsM0_NEW   
+                            );                        
+
+                                     ch1 <= bool2std(slotRegReadM0 = slotRegReadM0_NEW);  
+                         
                             subpipeM0_RegRead <= makeExecResult(slotRegReadM0, slotRegReadM0.full);
 
                     
@@ -1206,8 +1236,9 @@ begin
 
      
          regsSelI0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotSelI0.ins)));
-             regsSelI0_NEW <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueI0.ins)));
+             regsSelI0_NEW <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueI0_NEW.ins)));
          regsSelM0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotSelM0.ins)));        
+             regsSelM0_NEW <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueM0_NEW.ins)));        
          -- TEMP!
          regsSelS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadIntStoreValue.ins)));
           
@@ -1303,12 +1334,12 @@ begin
                      
                      selectRead(0 to 2) => regsSelI0_NEW,
                      selectRead(3 to 5) => (others => (others => '0')),
-                     selectRead(6 to 8) => regsSelM0,
+                     selectRead(6 to 8) => regsSelM0_NEW,
                      selectRead(9 to 11) => regsSelS0,
                      
                      readValues(0 to 2) => regValsI0_NEW,
                      readValues(3 to 5) => regValsX_NEW,
-                     readValues(6 to 8) => regValsY_NEW,                        
+                     readValues(6 to 8) => regValsM0_NEW,                        
                      readValues(9 to 11) => regValsZ_NEW
                  );
 
