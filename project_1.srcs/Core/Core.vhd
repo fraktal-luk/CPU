@@ -535,18 +535,18 @@ begin
                 outputSignals => outSigsI0
             );
                 
-            ISSUE_STAGE_I0: entity work.IssueStage
-            generic map(USE_IMM => true)
-            port map(
-                clk => clk, reset => '0', en => '0',      
-                prevSending => outSigsI0.sending,
-                nextAccepting => '1',    
-                input => slotSelI0,               
-                output => slotIssueI0,
-                events => events,         
-                fni => fni,
-                regValues => regValsI0   
-            );
+--            ISSUE_STAGE_I0: entity work.IssueStage
+--            generic map(USE_IMM => true)
+--            port map(
+--                clk => clk, reset => '0', en => '0',      
+--                prevSending => outSigsI0.sending,
+--                nextAccepting => '1',    
+--                input => slotSelI0,               
+--                output => slotIssueI0_NEW,
+--                events => events,         
+--                fni => fni,
+--                regValues => regValsI0_NEW 
+--            );
             
                         ISSUE_STAGE_I0_NEW: entity work.IssueStage
                         generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
@@ -555,7 +555,7 @@ begin
                             prevSending => outSigsI0.sending,
                             nextAccepting => '1',    
                             input => slotSelI0,               
-                            output => slotIssueI0_NEW,
+                            output => slotIssueI0,
                             events => events,         
                             fni => fni,
                             regValues => (others => (others => '0'))
@@ -566,18 +566,18 @@ begin
 
 
                         sendingToRegReadI0 <= slotIssueI0.full and not outSigsI0.cancelled;
-                        RR_STAGE_ALU: entity work.IssueStage
-                        generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => true)
-                        port map(
-                            clk => clk, reset => '0', en => '0',
-                            prevSending => sendingToRegReadI0,
-                            nextAccepting => '1',
-                            input => slotIssueI0,                
-                            output => slotRegReadI0,
-                            events => events,
-                            fni => fni,
-                            regValues => (others => (others => '0'))
-                        );
+--                        RR_STAGE_ALU: entity work.IssueStage
+--                        generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => true)
+--                        port map(
+--                            clk => clk, reset => '0', en => '0',
+--                            prevSending => sendingToRegReadI0,
+--                            nextAccepting => '1',
+--                            input => slotIssueI0_NEW,                
+--                            output => slotRegReadI0_NEW,
+--                            events => events,
+--                            fni => fni,
+--                            regValues => (others => (others => '0'))
+--                        );
                         
                                 RR_STAGE_ALU_NEW: entity work.IssueStage
                                 generic map(USE_IMM => true, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
@@ -585,11 +585,11 @@ begin
                                     clk => clk, reset => '0', en => '0',
                                     prevSending => sendingToRegReadI0,
                                     nextAccepting => '1',
-                                    input => slotIssueI0_NEW,                
-                                    output => slotRegReadI0_NEW,
+                                    input => slotIssueI0,                
+                                    output => slotRegReadI0,
                                     events => events,
                                     fni => fni,
-                                    regValues => regValsI0_NEW   
+                                    regValues => regValsI0   
                                 );
                                  
                                      ch0 <= bool2std(slotRegReadI0 = slotRegReadI0_NEW);  
@@ -683,18 +683,18 @@ begin
                outputSignals => outSigsM0
            );
     
-           ISSUE_STAGE_MEM: entity work.IssueStage
-           generic map(USE_IMM => true)
-           port map(
-               clk => clk, reset => '0', en => '0',      
-               prevSending => outSigsM0.sending,
-               nextAccepting => '1',
-               input => slotSelM0,
-               output => slotIssueM0,
-               events => events,
-               fni => fni,
-               regValues => regValsM0   
-           );
+--           ISSUE_STAGE_MEM: entity work.IssueStage
+--           generic map(USE_IMM => true)
+--           port map(
+--               clk => clk, reset => '0', en => '0',      
+--               prevSending => outSigsM0.sending,
+--               nextAccepting => '1',
+--               input => slotSelM0,
+--               output => slotIssueM0_NEW,
+--               events => events,
+--               fni => fni,
+--               regValues => regValsM0_NEW  
+--           );
            
                    ISSUE_STAGE_MEM_ALU: entity work.IssueStage
                    generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
@@ -703,7 +703,7 @@ begin
                        prevSending => outSigsM0.sending,
                        nextAccepting => '1',
                        input => slotSelM0,
-                       output => slotIssueM0_NEW,
+                       output => slotIssueM0,
                        events => events,
                        fni => fni,
                        regValues => (others => (others => '0'))   
@@ -712,18 +712,18 @@ begin
                 subpipeM0_Sel <= makeExecResult(slotIssueM0, slotIssueM0.full);
 
                         sendingToRegReadM0 <= slotIssueM0.full and not outSigsM0.cancelled;
-                        RR_STAGE_MEM: entity work.IssueStage
-                        generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => true)
-                        port map(
-                            clk => clk, reset => '0', en => '0',
-                            prevSending => sendingToRegReadM0,
-                            nextAccepting => '1',
-                            input => slotIssueM0,                
-                            output => slotRegReadM0,
-                            events => events,
-                            fni => fni,
-                            regValues => (others => (others => '0'))   
-                        );
+--                        RR_STAGE_MEM: entity work.IssueStage
+--                        generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => true)
+--                        port map(
+--                            clk => clk, reset => '0', en => '0',
+--                            prevSending => sendingToRegReadM0,
+--                            nextAccepting => '1',
+--                            input => slotIssueM0_NEW,                
+--                            output => slotRegReadM0_NEW,
+--                            events => events,
+--                            fni => fni,
+--                            regValues => (others => (others => '0'))   
+--                        );
 
                             RR_STAGE_MEM_NEW: entity work.IssueStage
                             generic map(USE_IMM => true, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
@@ -731,12 +731,12 @@ begin
                                 clk => clk, reset => '0', en => '0',
                                 prevSending => sendingToRegReadM0,
                                 nextAccepting => '1',
-                                input => slotIssueM0_NEW,                
-                                output => slotRegReadM0_NEW,
+                                input => slotIssueM0,                
+                                output => slotRegReadM0,
                                 events => events,
                                 fni => fni,
-                                regValues => regValsM0_NEW   
-                            );                        
+                                regValues => regValsM0  
+                            );
 
                                      ch1 <= bool2std(slotRegReadM0 = slotRegReadM0_NEW);  
                          
@@ -1235,9 +1235,9 @@ begin
          execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins);
 
      
-         regsSelI0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotSelI0.ins)));
+         regsSelI0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueI0.ins)));
              regsSelI0_NEW <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueI0_NEW.ins)));
-         regsSelM0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotSelM0.ins)));        
+         regsSelM0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueM0.ins)));        
              regsSelM0_NEW <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueM0_NEW.ins)));        
          -- TEMP!
          regsSelS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadIntStoreValue.ins)));
@@ -1322,26 +1322,26 @@ begin
          );
 
 
-                 INT_REG_FILE_TMP_ALT: entity work.RegFile(Behavioral)
-                 generic map(WIDTH => 4, WRITE_WIDTH => 1)
-                 port map(
-                     clk => clk, reset => '0', en => '0',
+--                 INT_REG_FILE_TMP_ALT: entity work.RegFile(Behavioral)
+--                 generic map(WIDTH => 4, WRITE_WIDTH => 1)
+--                 port map(
+--                     clk => clk, reset => '0', en => '0',
                          
-                     writeAllow => sendingToIntRF,
-                     writeInput => dataToIntRF,
+--                     writeAllow => sendingToIntRF,
+--                     writeInput => dataToIntRF,
          
-                     readAllowVec => (others => '1'), -- TEMP!
+--                     readAllowVec => (others => '1'), -- TEMP!
                      
-                     selectRead(0 to 2) => regsSelI0_NEW,
-                     selectRead(3 to 5) => (others => (others => '0')),
-                     selectRead(6 to 8) => regsSelM0_NEW,
-                     selectRead(9 to 11) => regsSelS0,
+--                     selectRead(0 to 2) => regsSelI0_NEW,
+--                     selectRead(3 to 5) => (others => (others => '0')),
+--                     selectRead(6 to 8) => regsSelM0_NEW,
+--                     selectRead(9 to 11) => regsSelS0,
                      
-                     readValues(0 to 2) => regValsI0_NEW,
-                     readValues(3 to 5) => regValsX_NEW,
-                     readValues(6 to 8) => regValsM0_NEW,                        
-                     readValues(9 to 11) => regValsZ_NEW
-                 );
+--                     readValues(0 to 2) => regValsI0_NEW,
+--                     readValues(3 to 5) => regValsX_NEW,
+--                     readValues(6 to 8) => regValsM0_NEW,                        
+--                     readValues(9 to 11) => regValsZ_NEW
+--                 );
 
          
          INT_READY_TABLE: entity work.RegisterReadyTable(Behavioral)
