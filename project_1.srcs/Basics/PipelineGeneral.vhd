@@ -454,6 +454,7 @@ begin
     return res;
 end function;
 
+-- UNUSED?
 function getNewElem(remv: std_logic_vector; newContent: InstructionSlotArray) return InstructionSlot is
     variable res: InstructionSlot := newContent(0);
     variable inputMask: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
@@ -466,6 +467,7 @@ begin
     return res;    
 end function;
 
+-- UNUSED?
 function getNewElemSch(remv: std_logic_vector; newContent: SchedulerEntrySlotArray)
 return SchedulerEntrySlot is
     variable res: SchedulerEntrySlot := newContent(0);

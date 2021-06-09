@@ -94,7 +94,7 @@ begin
         inputStage <= updateRR(inputStagePreRR, readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
 
         fmaInputStage <= findForwardingMatchesArray(inputStage, fni);
-        inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, true, false);                   
+        inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, false);                   
   
         inputStageSending <= inputStageAny and queuesAccepting and not events.execEvent and not events.lateEvent;
 
@@ -147,7 +147,6 @@ begin
 	sends <= anyReadyFull and nextAccepting;
     sends_A <= anyReadyAll and nextAccepting;
 
-    dispatchDataNew <= getSchedEntrySlot(prioSelect(queueContentUpdatedSel, readyMaskAll));
   
     selMask <= getFirstOne(readyMaskFull);
     sent <= isSent;
@@ -165,8 +164,10 @@ begin
 
     fma <= findForwardingMatchesArray(queueContent, fni);
 
-    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, waitingFM, true, false);
-    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, selectionFM, false, false);
+    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, waitingFM, false);
+    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, selectionFM, false);
+
+    dispatchDataNew <= getSchedEntrySlot(prioSelect(queueContentUpdatedSel, readyMaskAll));
 
 	acceptingForInputStage <= not fullMask(IQ_SIZE-PIPE_WIDTH);
 	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH);-- and not inputStageAny;	               

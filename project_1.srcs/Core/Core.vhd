@@ -506,7 +506,7 @@ begin
         
             inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe));
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, true);        
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true);        
             --    schedInfoUpdatedA_DYN <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, true);        
               
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -656,7 +656,7 @@ begin
 
            inputDataArray <= makeSlotArray(removeArg2(extractData(renamedDataLivingReMem)), memMaskInt);
            schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, true);        
+           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true);        
                         
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
@@ -868,11 +868,11 @@ begin
 
             inputDataArrayInt <= makeSlotArray(prepareForStoreValueIQ(extractData(renamedDataLivingReMem)), intStoreMask);
             schedInfoIntA <= work.LogicIssue.getIssueInfoArray(inputDataArrayInt, false);
-            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, ENQUEUE_FN_MAP_SV, true, true);  
+            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, ENQUEUE_FN_MAP_SV, true);  
 
             inputDataArrayFloat <= makeSlotArray(prepareForStoreValueFloatIQ(extractData(renamedDataLivingReMem), extractData(renamedDataLivingFloatRe)), floatStoreMask);
             schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(inputDataArrayFloat, false);
-            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, ENQUEUE_FN_MAP_FLOAT_SV, true, true);
+            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, ENQUEUE_FN_MAP_FLOAT_SV, true);
 
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
             fmaFloatSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoFloatA, fniFloat);
@@ -905,7 +905,7 @@ begin
             );
      
             ISSUE_STAGE_SV: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => true)
+            generic map(USE_IMM => false, REGS_ONLY => true, TMP_DELAY => true, NEW_RR => true)
             port map(
                 clk => clk, reset => '0', en => '0',
                 prevSending => outSigsSVI.sending,
@@ -921,7 +921,7 @@ begin
             sendingToRegReadI <= dataToRegReadIntStoreValue.full and not outSigsSVI.cancelled;
             
             REG_READ_STAGE_SV: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => true)
+            generic map(USE_IMM => false, REGS_ONLY => true, TMP_DELAY => false, NEW_RR => true)
             port map(
                 clk => clk, reset => '0', en => '0',
                 prevSending => sendingToRegReadI,
@@ -962,7 +962,7 @@ begin
             );
     
             ISSUE_STAGE_FLOAT_SV: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => true)
+            generic map(USE_IMM => false, REGS_ONLY => true, TMP_DELAY => true, NEW_RR => true)
             port map(
                 clk => clk, reset => '0', en => '0',
                 prevSending => outSigsSVF.sending,
@@ -978,7 +978,7 @@ begin
             sendingToRegReadF <= dataToRegReadFloatStoreValue.full and not outSigsSVF.cancelled;
     
             REG_READ_STAGE_FLOAT_SV: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => true)
+            generic map(USE_IMM => false, REGS_ONLY => true, TMP_DELAY => false, NEW_RR => true)
             port map(
                 clk => clk, reset => '0', en => '0',        
                 prevSending => sendingToRegReadF,
@@ -1006,7 +1006,7 @@ begin
 
             inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), getFpuMask(renamedDataLivingFloatRe));
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, false);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, ENQUEUE_FN_MAP_FLOAT, true, true);
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, ENQUEUE_FN_MAP_FLOAT, true);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
@@ -1033,7 +1033,7 @@ begin
             );
 
             ISSUE_STAGE_F0: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => false, DELAY_ONLY => true)
+            generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => true, NEW_RR => true)
             port map(
                 clk => clk, reset => '0', en => '0',
                 prevSending => outSigsF0.sending,
@@ -1042,13 +1042,13 @@ begin
                 acceptingOut => open,
                 output => slotIssueF0,
                 events => events,
-                fni => fniFloat,
+                fni => fniEmpty,
                 regValues => (others => (others => '0'))   
             );        
                 subpipeF0_Sel <= makeExecResult(slotIssueF0, slotIssueF0.full);
                 
             REG_READ_STAGE_F0: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => false)
+            generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
             port map(
                 clk => clk, reset => '0', en => '0',
                 prevSending => slotIssueF0.full,
