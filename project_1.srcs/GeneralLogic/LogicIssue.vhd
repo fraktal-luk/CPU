@@ -126,7 +126,10 @@ type WakeupStruct is record
     --wakeupVec: std_logic_vector(0 to 2);
     match:   std_logic;         
 end record;
-        
+
+constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0');
+
+
 type WakeupsArray2D is array(natural range <>, natural range <>) of Wakeups;
 
 function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean) return StaticInfo; 
@@ -158,6 +161,7 @@ function TMP_setUntil(selVec: std_logic_vector; nextAccepting: std_logic) return
 
 function iqContentNext(queueContent: SchedulerInfoArray; inputDataS: SchedulerInfoArray;
                          killMask, selMask: std_logic_vector;
+                         livingMaskInput: std_logic_vector;
                          sends, sent, sentUnexpected, prevSending: std_logic)
 return SchedulerInfoArray;
 
@@ -175,10 +179,10 @@ function extractFullMask(queueContent: SchedulerInfoArray) return std_logic_vect
 
 
 function prioSelect(elems: SchedulerInfoArray; selVec: std_logic_vector) return SchedulerInfo;
-function iqInputStageNext(content, newContent: SchedulerInfoArray; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray;
+function iqInputStageNext(content, newContent: SchedulerInfoArray; selMask: std_logic_vector; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray;
 function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray;
 
-function getKillMask(content: SchedulerInfoArray; fullMask: std_logic_vector; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
+function getKillMask(content: SchedulerInfoArray; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector;
 
 
@@ -597,11 +601,16 @@ end function;
 	
 function iqContentNext(queueContent: SchedulerInfoArray; inputDataS: SchedulerInfoArray;
                          killMask, selMask: std_logic_vector;
+                         livingMaskInput: std_logic_vector;
                          sends, sent, sentUnexpected, prevSending: std_logic)
 return SchedulerInfoArray is
 	constant QUEUE_SIZE: natural := queueContent'length;
-	variable res: SchedulerInfoArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO); 	
-	constant newMask: std_logic_vector(0 to PIPE_WIDTH-1) := extractFullMask(inputDataS);--inputData.fullMask;--
+	variable res: SchedulerInfoArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
+	
+	-- TODO: change newMask to use living rather than full
+	   -- !!!! this is useless because killing is ordered: positions in compacted mask are not affected, only the total numer of living elems	
+	constant newMask: std_logic_vector(0 to PIPE_WIDTH-1) := --extractFullMask(inputDataS);
+	                                                           livingMaskInput;
 	constant compMask: std_logic_vector(0 to PIPE_WIDTH-1) := compactMask(newMask);
 	variable dataNewDataS: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputDataS;
 	
@@ -659,7 +668,9 @@ begin
         for k in 0 to 3 loop -- Further beyond end requires more full inputs to be filled: !! equiv to remainingMask(-1-k), where '1' for k < 0
             fillMask(i) := fillMask(i) or (iqRemainingMaskSh(i + 3-k) and compMask(k));
         end loop;
-	      
+	    
+	    
+	    -- TODO: don't put '1' for input slots that are killed - use livingVec for input group
 		iqFullMaskNext(i) := livingMaskSh(i) or (fillMask(i) and prevSending);
 		if fullMaskSh(i) = '1' then -- From x	
 			if remainMask(i) = '1' then
@@ -684,7 +695,7 @@ end function;
 
     
 function getWakeupStruct(arg: natural; fnm: ForwardingMap; cmpR1, cmpR0, cmpM1, cmpM2: std_logic_vector) return WakeupStruct is
-    variable res: WakeupStruct;
+    variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
     variable nMatches: natural;
     variable matchR1, matchR0, matchM1, matchM2: std_logic_vector(0 to 2) := (others => '0');
 begin
@@ -721,7 +732,7 @@ function updateSchedulerState(state: SchedulerInfo;
                                 fnm: ForwardingMap; dynamic: boolean)
 return SchedulerInfo is
 	variable res: SchedulerInfo := state;
-	variable wakeups0, wakeups1: WakeupStruct;
+	variable wakeups0, wakeups1: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
 begin
     wakeups0 := getWakeupStruct(0, fnm, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2);
     wakeups1 := getWakeupStruct(1, fnm, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2);
@@ -806,20 +817,95 @@ begin
     end if;
 end function;
 
-function iqInputStageNext(content, newContent: SchedulerInfoArray; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray is
+
+    
+    function getIndex4(selVec: std_logic_vector) return std_logic_vector is
+        variable res: std_logic_vector(1 downto 0) := "11";
+    begin
+        case selVec(0 to 3) is
+            when "1---" =>
+                res := "00";
+            when "01--" =>
+                res := "01";
+            when "001-" =>
+                res := "10";                                    
+            when others =>
+                res := "11";
+        end case;
+                
+        return res;
+    end function;
+
+    function select4(elems: SchedulerInfoArray; index: std_logic_vector(1 downto 0)) return SchedulerInfo is
+    begin
+        case index is
+            when "00" =>    
+                return elems(0);
+            when "01" =>
+                return elems(1);
+            when "10" =>
+                return elems(2);
+            when others =>
+                return elems(3);
+        end case;                
+    end function;
+    
+
+    function prioSelect16(elems: SchedulerInfoArray; selVec: std_logic_vector) return SchedulerInfo is
+        variable indL0, indL1, indL2, indL3, indH: std_logic_vector(1 downto 0) := "11";
+        variable ch0, ch1, ch2, ch3: SchedulerInfo;
+        variable groupReady: std_logic_vector(0 to 3) := (others => '0');
+    begin
+        for i in 0 to 3 loop
+            groupReady(i) := isNonzero(selVec(4*i to 4*i + 3));
+        end loop;
+
+        indL0 := getIndex4(selVec(0 to 3));
+        indL1 := getIndex4(selVec(4 to 7));
+        indL2 := getIndex4(selVec(8 to 11));
+        indL3 := getIndex4(selVec(12 to 15));
+        
+        ch0 := select4(elems(0 to 3), indL0);
+        ch1 := select4(elems(4 to 7), indL1);
+        ch2 := select4(elems(8 to 11), indL2);
+        ch3 := select4(elems(12 to 15), indL3);
+
+        indH := getIndex4(groupReady);
+        
+        return select4((0 => ch0, 1 => ch1, 2=> ch2, 3 => ch3), indH);        
+    end function;
+
+
+function iqInputStageNext(content, newContent: SchedulerInfoArray; selMask: std_logic_vector; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray is
    variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content;
 begin
+      -- Handle ops leaving the "subqueue" when it's stalled
+      for i in 0 to PIPE_WIDTH-1 loop
+         if res(i).dynamic.issued = '1' then
+            res(i).dynamic.full := '0';
+         end if;
+         res(i).dynamic.issued := selMask(i);
+      end loop;
+
    if execEventSignal = '1' or lateEventSignal = '1' then
        for i in 0 to PIPE_WIDTH-1 loop
            res(i).dynamic.full := '0';
-       end loop; 	       
+           
+       end loop;
+       
    elsif prevSending = '1' then
-       res := newContent;	       
+       res := newContent;       
    elsif isSending = '1' then -- Clearing everything - sent to main queue
        for i in 0 to PIPE_WIDTH-1 loop
            res(i).dynamic.full := '0';
        end loop;    
    end if;
+   
+        if prevSending = '0' then
+            for i in res'range loop
+                res(i).dynamic.newInQueue := '0';
+            end loop;
+        end if;
    
    return res;
 end function;
@@ -829,7 +915,7 @@ function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return S
    variable rrf: std_logic_vector(0 to 2) := (others=>'0');      	   
 begin
    for i in 0 to PIPE_WIDTH-1 loop
-       rrf := rr(3*i to 3*i + 2);                                              
+       rrf := rr(3*i to 3*i + 2);                                           
        res(i).dynamic.missing := res(i).dynamic.missing and not rrf;	       
    end loop;
    
@@ -839,8 +925,7 @@ begin
    return res;
 end function;
 
-function getKillMask(content: SchedulerInfoArray; fullMask: std_logic_vector;
-                            causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
+function getKillMask(content: SchedulerInfoArray; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector is
     variable res: std_logic_vector(0 to content'length-1);
 begin
