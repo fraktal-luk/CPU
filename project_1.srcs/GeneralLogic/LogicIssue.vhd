@@ -161,7 +161,7 @@ function TMP_setUntil(selVec: std_logic_vector; nextAccepting: std_logic) return
 
 function iqContentNext(queueContent: SchedulerInfoArray; inputDataS: SchedulerInfoArray;
                          killMask, selMask: std_logic_vector;
-                         livingMaskInput: std_logic_vector;
+                         livingMaskInput, selMaskInput: std_logic_vector;
                          sends, sent, sentUnexpected, prevSending: std_logic)
 return SchedulerInfoArray;
 
@@ -187,6 +187,10 @@ return std_logic_vector;
 
 
     function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vector) return SchedulerInfo;
+
+
+        function indl16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vector) return std_logic_vector;
+        function indh16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vector) return std_logic_vector;
 
 
 end LogicIssue;
@@ -604,7 +608,7 @@ end function;
 	
 function iqContentNext(queueContent: SchedulerInfoArray; inputDataS: SchedulerInfoArray;
                          killMask, selMask: std_logic_vector;
-                         livingMaskInput: std_logic_vector;
+                         livingMaskInput, selMaskInput: std_logic_vector;
                          sends, sent, sentUnexpected, prevSending: std_logic)
 return SchedulerInfoArray is
 	constant QUEUE_SIZE: natural := queueContent'length;
@@ -631,6 +635,10 @@ return SchedulerInfoArray is
 	variable livingMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := livingMask;
 	variable fillMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');	
 begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            dataNewDataS(i).dynamic.issued := selMaskInput(i); -- To preserve 'issued' state if being issued from input stage
+        end loop;
+
 	-- Important, new instrucitons in queue must be marked!	
 	for i in 0 to PIPE_WIDTH-1 loop
 		dataNewDataS(i).dynamic.newInQueue := '1';
@@ -822,24 +830,26 @@ end function;
 
 
     
-    function getIndex4(selVec: std_logic_vector) return std_logic_vector is
+    function getIndex4(inSelVec: std_logic_vector) return std_logic_vector is
+        constant selVec: std_logic_vector(0 to 3) := inSelVec;
         variable res: std_logic_vector(1 downto 0) := "11";
     begin
-        case selVec(0 to 3) is
-            when "1---" =>
+        case selVec is
+            when "1000" | "1001" | "1010" | "1011" | "1100" | "1101" | "1110" | "1111" =>
                 res := "00";
-            when "01--" =>
+            when "0100" | "0101" | "0110" | "0111"  =>
                 res := "01";
-            when "001-" =>
+            when "0010" | "0011" =>
                 res := "10";                                    
             when others =>
                 res := "11";
         end case;
-                
+
         return res;
     end function;
 
-    function select4(elems: SchedulerInfoArray; index: std_logic_vector(1 downto 0)) return SchedulerInfo is
+    function select4(inElems: SchedulerInfoArray; index: std_logic_vector(1 downto 0)) return SchedulerInfo is
+        constant elems: SchedulerInfoArray(0 to 3) := inElems;
     begin
         case index is
             when "00" =>    
@@ -858,16 +868,18 @@ end function;
         variable elems: SchedulerInfoArray(0 to 15) := (others => DEFAULT_SCHEDULER_INFO);
         
         variable selVec: std_logic_vector(0 to 15) := (others => '0');
+        variable selVec4: std_logic_vector(0 to 3) := (others => '0');
         
         variable indL0, indL1, indL2, indL3, indH: std_logic_vector(1 downto 0) := "11";
         variable ch0, ch1, ch2, ch3: SchedulerInfo;
         variable groupReady: std_logic_vector(0 to 3) := (others => '0');
     begin
-        elems(inputElems'range) := inputElems;
-        selVec(inputElems'range) := inputSelVec;
+        elems(0 to inputElems'length-1) := inputElems;
+        selVec(0 to inputElems'length-1) := inputSelVec;
     
         for i in 0 to 3 loop
-            groupReady(i) := isNonzero(selVec(4*i to 4*i + 3));
+            selVec4 := selVec(4*i to 4*i + 3);
+            groupReady(i) := isNonzero(selVec4);
         end loop;
 
         indL0 := getIndex4(selVec(0 to 3));
@@ -884,6 +896,83 @@ end function;
         
         return select4((0 => ch0, 1 => ch1, 2=> ch2, 3 => ch3), indH);        
     end function;
+
+
+        function indl16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vector) return std_logic_vector is
+            variable elems: SchedulerInfoArray(0 to 15) := (others => DEFAULT_SCHEDULER_INFO);
+            
+            variable selVec: std_logic_vector(0 to 15) := (others => '0');
+            variable selVec4: std_logic_vector(0 to 3) := (others => '0');
+            
+            variable indL0, indL1, indL2, indL3, indH: std_logic_vector(1 downto 0) := "11";
+            variable ch0, ch1, ch2, ch3: SchedulerInfo;
+            variable groupReady: std_logic_vector(0 to 3) := (others => '0');
+        begin
+            elems(0 to inputElems'length-1) := inputElems;
+            selVec(0 to inputElems'length-1) := inputSelVec;
+        
+            for i in 0 to 3 loop
+                selVec4 := selVec(4*i to 4*i + 3);
+                groupReady(i) := isNonzero(selVec4);
+            end loop;
+    
+            indL0 := getIndex4(selVec(0 to 3));
+            indL1 := getIndex4(selVec(4 to 7));
+            indL2 := getIndex4(selVec(8 to 11));
+            indL3 := getIndex4(selVec(12 to 15));
+            
+            ch0 := select4(elems(0 to 3), indL0);
+            ch1 := select4(elems(4 to 7), indL1);
+            ch2 := select4(elems(8 to 11), indL2);
+            ch3 := select4(elems(12 to 15), indL3);
+    
+            indH := getIndex4(groupReady);
+            
+            case indH is
+                when "00" => return indL0;
+                when "01" => return indL1;
+                when "10" => return indL2;
+                when others => return indL3;
+            end case;
+            
+            --return select4((0 => ch0, 1 => ch1, 2=> ch2, 3 => ch3), indH);        
+        end function;
+
+        function indh16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vector) return std_logic_vector is
+            variable elems: SchedulerInfoArray(0 to 15) := (others => DEFAULT_SCHEDULER_INFO);
+            
+            variable selVec: std_logic_vector(0 to 15) := (others => '0');
+            variable selVec4: std_logic_vector(0 to 3) := (others => '0');
+            
+            variable indL0, indL1, indL2, indL3, indH: std_logic_vector(1 downto 0) := "11";
+            variable ch0, ch1, ch2, ch3: SchedulerInfo;
+            variable groupReady: std_logic_vector(0 to 3) := (others => '0');
+        begin
+            elems(0 to inputElems'length-1) := inputElems;
+            selVec(0 to inputElems'length-1) := inputSelVec;
+        
+            for i in 0 to 3 loop
+                selVec4 := selVec(4*i to 4*i + 3);
+                groupReady(i) := isNonzero(selVec4);
+            end loop;
+    
+            indL0 := getIndex4(selVec(0 to 3));
+            indL1 := getIndex4(selVec(4 to 7));
+            indL2 := getIndex4(selVec(8 to 11));
+            indL3 := getIndex4(selVec(12 to 15));
+            
+            ch0 := select4(elems(0 to 3), indL0);
+            ch1 := select4(elems(4 to 7), indL1);
+            ch2 := select4(elems(8 to 11), indL2);
+            ch3 := select4(elems(12 to 15), indL3);
+    
+            indH := getIndex4(groupReady);
+            
+            return indH;
+            
+            --return select4((0 => ch0, 1 => ch1, 2=> ch2, 3 => ch3), indH);        
+        end function;
+
 
 
 function iqInputStageNext(content, newContent: SchedulerInfoArray; selMask: std_logic_vector; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray is

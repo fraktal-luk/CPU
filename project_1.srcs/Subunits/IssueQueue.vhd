@@ -84,11 +84,11 @@ architecture Behavioral of IssueQueue is
         signal fullMaskExt, fullMaskExtNext, killMaskExt, killMaskExtPrev, livingMaskExt, readyMaskAllExt, readyMaskFullExt, readyMaskLiveExt,
                    cancelledMaskExt, selMaskExt, selMaskExtPrev: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others=>'0');
                    
-        signal livingMaskInput: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        signal livingMaskInput, selMaskInput: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
                
         signal queueContentExt, queueContentExtNext, queueContentUpdatedExt, queueContentUpdatedSelExt: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
                                                                                                                                                        
-	signal anyReadyAll, anyReadyFull, anyReadyLive, sends, sendingKilled, isSent, sentKilled, inputStageSending: std_logic := '0';
+	signal anyReadyAll, anyReadyFull, anyReadyLive, sends, sendsMainQueue, sendingKilled, isSent, isSentMainQueue, sentKilled, inputStageSending: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
     signal fma: ForwardingMatchesArray(0 to IQ_SIZE-1) := (others => DEFAULT_FORWARDING_MATCHES);
@@ -123,7 +123,7 @@ architecture Behavioral of IssueQueue is
             res(i).living := res(i).full and not res(i).killed;
             
             res(i).ready := not isNonzero(content(i).dynamic.missing(0 to 1)) and not content(i).dynamic.issued
-                                and bool2std(i < IQ_SIZE);
+                              ;--  and bool2std(i < IQ_SIZE);
             
             res(i).readyFull := res(i).ready and res(i).full;
             res(i).readyLiving := res(i).ready and res(i).living;
@@ -203,13 +203,16 @@ architecture Behavioral of IssueQueue is
         end loop;
         return res;
     end function;
+    
+    
+            signal indL, indH: std_logic_vector(1 downto 0) := "00";
 begin
 
     INPUT_STAGE: block
         signal fmaInputStage: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);    
         signal inputStage, inputStageNext: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);          
         signal inputStageAny, inputStageLivingAny, inputReadingAny: std_logic := '0';
-        signal selMaskInput, killMaskInput: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');        
+        signal killMaskInput: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');        
     begin
         inputStage <= updateRR(inputStagePreRR, readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
 
@@ -246,11 +249,15 @@ begin
 			killMaskPrev <= killMask;
 			sentKilled <= sendingKilled;
 			
-			isSent <= sends;			
+			isSent <= sends;
+			     isSentMainQueue <= sendsMainQueue;			
 		end if;
 	end process;	
 
     controlSigs <= getControlSignals(queueContentUpdatedSel & inputStageUpdated, events);
+
+
+            queueContentExt <= queueContent & inputStagePreRR;
 
     -- Vector signals
     killMask <= getKillMask(queueContent, events.execCausing, events.execEvent, events.lateEvent);
@@ -274,7 +281,8 @@ begin
         selMaskExt <= getSelectedVec(controlSigs);
     
 
-    
+            sendsMainQueue <= anyReadyFull and nextAccepting;
+            
             -- Scalar signals
             OLD_SIGS: if not USE_NEW_SIGS generate
                 anyReadyLive <= isNonzero(readyMaskLive);
@@ -290,12 +298,13 @@ begin
             
                 sends <= anyReadyFull and nextAccepting;
                 sendingKilled <= isNonzero(killMaskExt and selMaskExt);
-            end generate;            
+            end generate;
 
     queueContentNext <= iqContentNext(queueContentUpdated, inputStageUpdated, 
                                       killMask, selMask,
-                                      livingMaskInput,                 
-                                      sends, isSent,
+                                      livingMaskInput, selMaskInput,               
+                                      sendsMainQueue, -- this can be from whole queue because selMask points to slot if it is to be moved
+                                      isSentMainQueue,
                                       '0',
                                       inputStageSending
                                       );
@@ -314,8 +323,11 @@ begin
     end generate;
     
     NEW_ISSUE: if USE_NEW_SIGS generate
-        dispatchDataNew <= getSchedEntrySlot(prioSelect(queueContentUpdatedSelExt, readyMaskAllExt));
+        dispatchDataNew <= getSchedEntrySlot(prioSelect16(queueContentUpdatedSelExt, readyMaskFullExt));
     end generate;
+    
+            indL <= indl16(queueContentUpdatedSelExt, readyMaskAllExt);
+            indH <= indh16(queueContentUpdatedSelExt, readyMaskAllExt);
     
     
 	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH);
