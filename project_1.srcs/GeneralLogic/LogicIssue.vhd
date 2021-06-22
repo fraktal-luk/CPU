@@ -186,6 +186,9 @@ function getKillMask(content: SchedulerInfoArray; causing: InstructionState; exe
 return std_logic_vector;
 
 
+    function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vector) return SchedulerInfo;
+
+
 end LogicIssue;
 
 
@@ -851,11 +854,18 @@ end function;
     end function;
     
 
-    function prioSelect16(elems: SchedulerInfoArray; selVec: std_logic_vector) return SchedulerInfo is
+    function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vector) return SchedulerInfo is
+        variable elems: SchedulerInfoArray(0 to 15) := (others => DEFAULT_SCHEDULER_INFO);
+        
+        variable selVec: std_logic_vector(0 to 15) := (others => '0');
+        
         variable indL0, indL1, indL2, indL3, indH: std_logic_vector(1 downto 0) := "11";
         variable ch0, ch1, ch2, ch3: SchedulerInfo;
         variable groupReady: std_logic_vector(0 to 3) := (others => '0');
     begin
+        elems(inputElems'range) := inputElems;
+        selVec(inputElems'range) := inputSelVec;
+    
         for i in 0 to 3 loop
             groupReady(i) := isNonzero(selVec(4*i to 4*i + 3));
         end loop;
