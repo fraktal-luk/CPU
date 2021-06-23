@@ -265,7 +265,7 @@ begin
     renamedDataLivingReMem <= TMP_recodeMem(renamedDataLivingRe);
     renamedDataLivingMemBuff <= TMP_recodeMem(renamedDataLivingBuff);
 
-    DISPATCH_BUFFER: entity work.DispatchBuffer
+    DISPATCH_BUFFER: entity work.DispatchBuffer(Transparent)
     port map(
         clk => clk,
         
@@ -312,7 +312,8 @@ begin
    
          OLD_FLOW: if true generate
             canSendFront <= oooAccepting;
-            canSendRename <= '1';
+            canSendRename <= --'1';
+                            queuesAccepting;
             canSendBuff <= queuesAccepting;
          end generate;
          

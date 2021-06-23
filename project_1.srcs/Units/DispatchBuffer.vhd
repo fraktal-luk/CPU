@@ -127,3 +127,14 @@ begin
     accepting <= '1';--not fullMask(0); -- Don't allow more if anything needed to be buffered!
     empty <= not fullMask(0); -- CAREFUL: same as accepting but accepting refers to stage BEFORE Rename while empty is needed by flow FROM Rename
 end Behavioral;
+
+
+architecture Transparent of DispatchBuffer is
+begin
+    sending <= prevSending;
+    dataOut <= dataIn;
+    specialOut <= specialAction;
+    
+    accepting <= '1'; 
+    empty <= '1';
+end Transparent;
