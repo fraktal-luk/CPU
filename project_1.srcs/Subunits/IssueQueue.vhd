@@ -88,7 +88,8 @@ architecture Behavioral of IssueQueue is
                
         signal queueContentExt, queueContentExtNext, queueContentUpdatedExt, queueContentUpdatedSelExt: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
                                                                                                                                                        
-	signal anyReadyAll, anyReadyFull, anyReadyLive, sends, sendsMainQueue, sendingKilled, isSent, isSentMainQueue, sentKilled, inputStageSending: std_logic := '0';
+	signal anyReadyAll, anyReadyFull, anyReadyLive, sends, sendsMainQueue, sendingKilled, isSent, isSentMainQueue, sentKilled,
+	           acceptingMain, inputStageSending: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
     signal fma: ForwardingMatchesArray(0 to IQ_SIZE-1) := (others => DEFAULT_FORWARDING_MATCHES);
@@ -223,7 +224,8 @@ begin
             killMaskInput <= getKillMask(inputStage, events.execCausing, events.execEvent, events.lateEvent);
             livingMaskInput <= extractFullMask(inputStage) and not killMaskInput;
 
-        inputStageSending <= inputStageAny and queuesAccepting and not events.execEvent and not events.lateEvent;
+        inputStageSending <= --inputStageAny and queuesAccepting and not events.execEvent and not events.lateEvent;
+                             inputStageAny and acceptingMain and not events.execEvent and not events.lateEvent;
         
         XYZ_NEW: if USE_NEW_SIGS generate
             selMaskInput <= selMaskExt(IQ_SIZE to IQ_SIZE + PIPE_WIDTH - 1);
@@ -330,7 +332,10 @@ begin
             indH <= indh16(queueContentUpdatedSelExt, readyMaskAllExt);
     
     
-	acceptingOut <= not fullMask(IQ_SIZE-PIPE_WIDTH);
+	acceptingMain <= not fullMask(IQ_SIZE-PIPE_WIDTH);
+
+
+	acceptingOut <= acceptingMain;
 	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);
 
 	schedulerOut <= TMP_restoreState(sends, dispatchDataNew.ins, dispatchDataNew.state);
