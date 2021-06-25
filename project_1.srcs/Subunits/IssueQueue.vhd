@@ -88,7 +88,7 @@ architecture Behavioral of IssueQueue is
                
         signal queueContentExt, queueContentExtNext, queueContentUpdatedExt, queueContentUpdatedSelExt: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
                                                                                                                                                        
-	signal anyReadyAll, anyReadyFull, anyReadyLive, sends, sendsMainQueue, sendingKilled, isSent, isSentMainQueue, sentKilled,
+	signal anyReadyAll, anyReadyFull, anyReadyFullMain, anyReadyLive, sends, sendsMainQueue, sendingKilled, isSent, isSentMainQueue, sentKilled,
 	           acceptingMain, inputStageSending: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
@@ -207,6 +207,18 @@ architecture Behavioral of IssueQueue is
     
     
             signal indL, indH: std_logic_vector(1 downto 0) := "00";
+            
+            
+            function getSentMainQueue(content: SchedulerInfoArray) return std_logic is
+            begin
+                for i in content'range loop
+                    if (content(i).dynamic.full and content(i).dynamic.issued) = '1' then
+                        return '1';
+                    end if;
+                end loop;
+                
+                return '0';
+            end function; 
 begin
 
     INPUT_STAGE: block
@@ -252,9 +264,11 @@ begin
 			sentKilled <= sendingKilled;
 			
 			isSent <= sends;
-			     isSentMainQueue <= sendsMainQueue;			
+			--     isSentMainQueue <= sendsMainQueue;			
 		end if;
 	end process;	
+
+                isSentMainQueue <= getSentMainQueue(queueContent);
 
     controlSigs <= getControlSignals(queueContentUpdatedSel & inputStageUpdated, events);
 
@@ -283,12 +297,13 @@ begin
         selMaskExt <= getSelectedVec(controlSigs);
     
 
-            sendsMainQueue <= anyReadyFull and nextAccepting;
+            sendsMainQueue <= anyReadyFullMain and nextAccepting;
             
             -- Scalar signals
             OLD_SIGS: if not USE_NEW_SIGS generate
                 anyReadyLive <= isNonzero(readyMaskLive);
                 anyReadyFull <= isNonzero(readyMaskFull);
+                anyReadyFullMain <= isNonzero(readyMaskFull);
             
                 sends <= anyReadyFull and nextAccepting;
                 sendingKilled <= isNonzero(killMask and selMask);
@@ -297,6 +312,7 @@ begin
             NEW_SIGS: if USE_NEW_SIGS generate
                 anyReadyLive <= isNonzero(readyMaskLiveExt);
                 anyReadyFull <= isNonzero(readyMaskFullExt);
+                anyReadyFullMain <= isNonzero(readyMaskFull);
             
                 sends <= anyReadyFull and nextAccepting;
                 sendingKilled <= isNonzero(killMaskExt and selMaskExt);

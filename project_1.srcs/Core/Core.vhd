@@ -1016,7 +1016,7 @@ begin
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
                 IQ_SIZE => IQ_SIZE_F0, IS_FP => true,
-                    USE_NEW_SIGS => false
+                    USE_NEW_SIGS => true
             )
             port map(
                 clk => clk, reset => '0', en => '0',

@@ -666,8 +666,7 @@ begin
 	for i in 0 to QUEUE_SIZE-2 loop
 		livingMaskSh(i) := livingMask(i) and (livingMask(i+1) or not sent);
 		fullMaskSh(i) := fullMask(i) and (fullMask(i+1) or not sent);			
-	end loop;
-	livingMaskSh(QUEUE_SIZE-1) := livingMask(QUEUE_SIZE-1) and ('0' or not sent);
+	end loop;	livingMaskSh(QUEUE_SIZE-1) := livingMask(QUEUE_SIZE-1) and ('0' or not sent);
 	fullMaskSh(QUEUE_SIZE-1) := fullMask(QUEUE_SIZE-1) and ('0' or not sent);
 
 	-- Now assign from x or y
