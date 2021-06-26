@@ -312,8 +312,7 @@ begin
    
          OLD_FLOW: if true generate
             canSendFront <= oooAccepting;
-            canSendRename <= --'1';
-                            queuesAccepting;
+            canSendRename <= queuesAccepting;
             canSendBuff <= queuesAccepting;
          end generate;
          
@@ -463,13 +462,7 @@ begin
                                                               subpipeM0_E1f, subpipeM0_E2f, subpipeM0_E3f,         subpipeM0_D0f, subpipeM0_D1f,
               subpipeF0_Sel, subpipeF0_RegRead, subpipeF0_E0, subpipeF0_E1,subpipeF0_E2, subpipeF0_D0,
               subpipe_DUMMY
-                : ExecResult := DEFAULT_EXEC_RESULT;
-                
-                signal regsSelI0_NEW, regsSelM0_NEW: PhysNameArray(0 to 2) := (others => (others => '0'));                
-                signal slotIssueI0_NEW, slotRegReadI0_NEW, slotIssueM0_NEw, slotRegReadM0_NEW: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
-                signal regValsI0_NEW, regValsM0_NEW, regValsX_NEW, regValsY_NEW, regValsZ_NEW: MwordArray(0 to 2) := (others => (others => '0'));
-          
-                     signal ch0, ch1,ch2, ch3: std_logic := '0';                     
+                : ExecResult := DEFAULT_EXEC_RESULT;                  
     begin
         
         SUBPIPE_ALU: block
@@ -478,47 +471,22 @@ begin
            signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
            
            signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
-           signal staticInfoA: work.LogicIssue.StaticInfoArray(0 to PIPE_WIDTH-1);
-           signal dynamicInfoA: work.LogicIssue.DynamicInfoArray(0 to PIPE_WIDTH-1);
-           signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedA_DYN: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
+           signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
            
-           signal sendingBranch: std_logic := '0';
-                use work.LogicIssue.all;
-           
-                signal wupArg0, wupArg1: work.LogicIssue.Wakeups;      
-                signal wupArg0_CMP, wupArg1_CMP: work.LogicIssue.Wakeups;
-                
-                signal wups: WakeupsArray2D(0 to PIPE_WIDTH-1, 0 to 1);
-                signal wups_T: WakeupsArray2D(0 to PIPE_WIDTH-1, 0 to 1);
-                signal wups_DYN: WakeupsArray2D(0 to PIPE_WIDTH-1, 0 to 1);
-                
-           signal checkV, checkV_DYN: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');      
+           signal sendingBranch: std_logic := '0';     
         begin
-                    --wupArg0_CMP <= work.LogicIssue.getWakeupsForArg_CMP(0, fni, fmaInt(0), ENQUEUE_FN_MAP, true, true);
-                    --wupArg0 <= work.LogicIssue.getWakeups(schedInfoUpdatedA(0), 0, fmaInt(0).a0cmp1, fmaInt(0).a0cmp0, fmaInt(0).a0cmpM1, fmaInt(0).a0cmpM2);
-                    --ch0 <= bool2std(wupArg0_CMP = wupArg0);
-                    --wups <= getWakeupsAllArgs(schedInfoA, fmaInt);
-                    --wups_T <= getWakeupsTest(schedInfoA, schedInfoUpdatedA, fmaInt);
-                    --wups_DYN <= getWakeupsTest(schedInfoA, schedInfoUpdatedA_DYN, fmaInt);
-                    --checkV <= cmpWakeups(schedInfoA, wups, wups_T);
-                    --checkV_DYN <= cmpWakeups(schedInfoA, wups, wups_DYN);
-        
             fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);
         
             inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe));
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true);        
-            --    schedInfoUpdatedA_DYN <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, true);        
               
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => IQ_SIZE_I0,
-                    USE_NEW_SIGS => true
+                IQ_SIZE => IQ_SIZE_I0
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-
-                queuesAccepting => canSendBuff,
         
                 acceptingOut => iqAcceptingI0,
                 acceptingMore => iqAcceptingMoreI0,
@@ -536,71 +504,42 @@ begin
                 schedulerOut => slotSelI0,
                 outputSignals => outSigsI0
             );
-                
---            ISSUE_STAGE_I0: entity work.IssueStage
---            generic map(USE_IMM => true)
---            port map(
---                clk => clk, reset => '0', en => '0',      
---                prevSending => outSigsI0.sending,
---                nextAccepting => '1',    
---                input => slotSelI0,               
---                output => slotIssueI0_NEW,
---                events => events,         
---                fni => fni,
---                regValues => regValsI0_NEW 
---            );
             
-                        ISSUE_STAGE_I0_NEW: entity work.IssueStage
-                        generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
-                        port map(
-                            clk => clk, reset => '0', en => '0',      
-                            prevSending => outSigsI0.sending,
-                            nextAccepting => '1',    
-                            input => slotSelI0,               
-                            output => slotIssueI0,
-                            events => events,         
-                            fni => fni,
-                            regValues => (others => (others => '0'))
-                        );
-            
+                ISSUE_STAGE_I0_NEW: entity work.IssueStage
+                generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
+                port map(
+                    clk => clk, reset => '0', en => '0',      
+                    prevSending => outSigsI0.sending,
+                    nextAccepting => '1',    
+                    input => slotSelI0,               
+                    output => slotIssueI0,
+                    events => events,         
+                    fni => fni,
+                    regValues => (others => (others => '0'))
+                );
             
                 subpipeI0_Sel <= makeExecResult(slotIssueI0, slotIssueI0.full);
 
-
-                        sendingToRegReadI0 <= slotIssueI0.full and not outSigsI0.cancelled;
---                        RR_STAGE_ALU: entity work.IssueStage
---                        generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => true)
---                        port map(
---                            clk => clk, reset => '0', en => '0',
---                            prevSending => sendingToRegReadI0,
---                            nextAccepting => '1',
---                            input => slotIssueI0_NEW,                
---                            output => slotRegReadI0_NEW,
---                            events => events,
---                            fni => fni,
---                            regValues => (others => (others => '0'))
---                        );
+                sendingToRegReadI0 <= slotIssueI0.full and not outSigsI0.cancelled;
                         
-                                RR_STAGE_ALU_NEW: entity work.IssueStage
-                                generic map(USE_IMM => true, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
-                                port map(
-                                    clk => clk, reset => '0', en => '0',
-                                    prevSending => sendingToRegReadI0,
-                                    nextAccepting => '1',
-                                    input => slotIssueI0,                
-                                    output => slotRegReadI0,
-                                    events => events,
-                                    fni => fni,
-                                    regValues => regValsI0   
-                                );
-                                 
-                                     ch0 <= bool2std(slotRegReadI0 = slotRegReadI0_NEW);  
-                
-                            subpipeI0_RegRead <= makeExecResult(slotRegReadI0, slotRegReadI0.full);
+                RR_STAGE_ALU_NEW: entity work.IssueStage
+                generic map(USE_IMM => true, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
+                port map(
+                    clk => clk, reset => '0', en => '0',
+                    prevSending => sendingToRegReadI0,
+                    nextAccepting => '1',
+                    input => slotIssueI0,                
+                    output => slotRegReadI0,
+                    events => events,
+                    fni => fni,
+                    regValues => regValsI0   
+                );
+                                         
+                    subpipeI0_RegRead <= makeExecResult(slotRegReadI0, slotRegReadI0.full);
 
-                        slotPreExecI0 <= slotRegReadI0 when TMP_PARAM_I0_DELAY else slotIssueI0;
-                        sendingToExecI0 <= slotRegReadI0.full when TMP_PARAM_I0_DELAY else sendingToRegReadI0;
-                        subpipeI0_PreExec <= subpipeI0_RegRead when TMP_PARAM_I0_DELAY else subpipeI0_Sel;
+                slotPreExecI0 <= slotRegReadI0 when TMP_PARAM_I0_DELAY else slotIssueI0;
+                sendingToExecI0 <= slotRegReadI0.full when TMP_PARAM_I0_DELAY else sendingToRegReadI0;
+                subpipeI0_PreExec <= subpipeI0_RegRead when TMP_PARAM_I0_DELAY else subpipeI0_Sel;
 
 
             dataToAlu(0) <= (sendingToExecI0, executeAlu(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins, branchData));
@@ -663,13 +602,10 @@ begin
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
                IQ_SIZE => IQ_SIZE_M0,
-               ALT_INPUT => false,
-                USE_NEW_SIGS => true
+               ALT_INPUT => false
            )
            port map(
                clk => clk, reset => '0', en => '0',
-       
-               queuesAccepting => canSendBuff,
        
                acceptingOut => iqAcceptingM0,
                acceptingMore => iqAcceptingMoreM0,
@@ -685,82 +621,50 @@ begin
                schedulerOut => slotSelM0,
                outputSignals => outSigsM0
            );
-    
---           ISSUE_STAGE_MEM: entity work.IssueStage
---           generic map(USE_IMM => true)
---           port map(
---               clk => clk, reset => '0', en => '0',      
---               prevSending => outSigsM0.sending,
---               nextAccepting => '1',
---               input => slotSelM0,
---               output => slotIssueM0_NEW,
---               events => events,
---               fni => fni,
---               regValues => regValsM0_NEW  
---           );
-           
-                   ISSUE_STAGE_MEM_ALU: entity work.IssueStage
-                   generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
-                   port map(
-                       clk => clk, reset => '0', en => '0',      
-                       prevSending => outSigsM0.sending,
-                       nextAccepting => '1',
-                       input => slotSelM0,
-                       output => slotIssueM0,
-                       events => events,
-                       fni => fni,
-                       regValues => (others => (others => '0'))   
-                   );
+
+               ISSUE_STAGE_MEM_ALU: entity work.IssueStage
+               generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
+               port map(
+                   clk => clk, reset => '0', en => '0',      
+                   prevSending => outSigsM0.sending,
+                   nextAccepting => '1',
+                   input => slotSelM0,
+                   output => slotIssueM0,
+                   events => events,
+                   fni => fni,
+                   regValues => (others => (others => '0'))   
+               );
                    
                 subpipeM0_Sel <= makeExecResult(slotIssueM0, slotIssueM0.full);
 
-                        sendingToRegReadM0 <= slotIssueM0.full and not outSigsM0.cancelled;
---                        RR_STAGE_MEM: entity work.IssueStage
---                        generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => true)
---                        port map(
---                            clk => clk, reset => '0', en => '0',
---                            prevSending => sendingToRegReadM0,
---                            nextAccepting => '1',
---                            input => slotIssueM0_NEW,                
---                            output => slotRegReadM0_NEW,
---                            events => events,
---                            fni => fni,
---                            regValues => (others => (others => '0'))   
---                        );
+                sendingToRegReadM0 <= slotIssueM0.full and not outSigsM0.cancelled;
 
-                            RR_STAGE_MEM_NEW: entity work.IssueStage
-                            generic map(USE_IMM => true, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
-                            port map(
-                                clk => clk, reset => '0', en => '0',
-                                prevSending => sendingToRegReadM0,
-                                nextAccepting => '1',
-                                input => slotIssueM0,                
-                                output => slotRegReadM0,
-                                events => events,
-                                fni => fni,
-                                regValues => regValsM0  
-                            );
-
-                                     ch1 <= bool2std(slotRegReadM0 = slotRegReadM0_NEW);  
-                         
-                            subpipeM0_RegRead <= makeExecResult(slotRegReadM0, slotRegReadM0.full);
-
-                    
+                RR_STAGE_MEM_NEW: entity work.IssueStage
+                generic map(USE_IMM => true, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
+                port map(
+                    clk => clk, reset => '0', en => '0',
+                    prevSending => sendingToRegReadM0,
+                    nextAccepting => '1',
+                    input => slotIssueM0,                
+                    output => slotRegReadM0,
+                    events => events,
+                    fni => fni,
+                    regValues => regValsM0  
+                );
+             
+                subpipeM0_RegRead <= makeExecResult(slotRegReadM0, slotRegReadM0.full);
+        
                 slotPreExecM0 <= slotRegReadM0 when TMP_PARAM_M0_DELAY else slotIssueM0;
                 sendingToExecM0 <= slotRegReadM0.full when TMP_PARAM_M0_DELAY else sendingToRegReadM0;
 
            preIndexSQ <= slotPreExecM0.ins.tags.sqPointer;
-                         --   slotRegReadM0.ins.tags.sqPointer;
            preIndexLQ <= slotPreExecM0.ins.tags.lqPointer;
-                         --   slotRegReadM0.ins.tags.lqPointer;
 
            sendingFromDLQ <= '0';          -- TEMP!
            dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
 
            sendingToAgu <= sendingToExecM0 or sendingFromDLQ;
-                           -- (slotRegReadM0.full) or sendingFromDLQ;
 	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(slotPreExecM0.ins, slotPreExecM0.state, sendingFromDLQ, dataFromDLQ));
-                           -- (sendingToAgu, calcEffectiveAddress(slotRegReadM0.ins, slotRegReadM0.state, sendingFromDLQ, dataFromDLQ));
                             
            STAGE_AGU: entity work.GenericStage2(Behavioral)
            generic map(
@@ -885,13 +789,10 @@ begin
         
             IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => IQ_SIZE_INT_SV,
-                    USE_NEW_SIGS => true
+                IQ_SIZE => IQ_SIZE_INT_SV
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-
-                queuesAccepting => canSendBuff,
         
                 acceptingOut => iqAcceptingS0,
                 acceptingMore => iqAcceptingMoreS0,
@@ -943,13 +844,10 @@ begin
                       
             IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => IQ_SIZE_FLOAT_SV, -- CAREFUL: not IS_FP because doesn't have destination
-                    USE_NEW_SIGS => true
+                IQ_SIZE => IQ_SIZE_FLOAT_SV -- CAREFUL: not IS_FP because doesn't have destination
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-
-                queuesAccepting => canSendBuff,
        
                 acceptingOut => iqAcceptingSF0,
                 acceptingMore => iqAcceptingMoreSF0,
@@ -1015,13 +913,10 @@ begin
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => IQ_SIZE_F0, IS_FP => true,
-                    USE_NEW_SIGS => true
+                IQ_SIZE => IQ_SIZE_F0, IS_FP => true
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-
-                queuesAccepting => canSendBuff,
         
                 acceptingOut => iqAcceptingF0,
                 acceptingMore => iqAcceptingMoreF0,
@@ -1242,9 +1137,7 @@ begin
 
      
          regsSelI0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueI0.ins)));
-             regsSelI0_NEW <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueI0_NEW.ins)));
          regsSelM0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueM0.ins)));        
-             regsSelM0_NEW <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueM0_NEW.ins)));        
          -- TEMP!
          regsSelS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadIntStoreValue.ins)));
           
@@ -1255,16 +1148,11 @@ begin
                          
                          fs0_M2, fs0_M1, fs0_R0, fs0_R1,
                          fs1_M2, fs1_M1, fs1_R0, fs1_R1,
-                         fs2_M2, fs2_M1, fs2_R0, fs2_R1
-                         
+                         fs2_M2, fs2_M1, fs2_R0, fs2_R1                        
                                                              : ExecResult := DEFAULT_EXEC_RESULT;
-                signal fniInt_T, fniFloat_T: ForwardingInfo := DEFAULT_FORWARDING_INFO;
-                
-                --signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0';
-                --ignal ch8, ch9, ch10, ch11, ch12, ch13, ch14, ch15: std_logic := '0';
            begin
                  -- I0 pipe
-                    s0_M2 <= subpipeI0_Sel when TMP_PARAM_I0_DELAY else DEFAULT_EXEC_RESULT;
+                 s0_M2 <= subpipeI0_Sel when TMP_PARAM_I0_DELAY else DEFAULT_EXEC_RESULT;
                  s0_M1 <= subpipeI0_PreExec;           
                  s0_R0 <= subpipeI0_E0;
                  s0_R1 <= subpipeI0_D0;
@@ -1327,29 +1215,6 @@ begin
              readValues(9 to 11) => regValsS0            
          );
 
-
---                 INT_REG_FILE_TMP_ALT: entity work.RegFile(Behavioral)
---                 generic map(WIDTH => 4, WRITE_WIDTH => 1)
---                 port map(
---                     clk => clk, reset => '0', en => '0',
-                         
---                     writeAllow => sendingToIntRF,
---                     writeInput => dataToIntRF,
-         
---                     readAllowVec => (others => '1'), -- TEMP!
-                     
---                     selectRead(0 to 2) => regsSelI0_NEW,
---                     selectRead(3 to 5) => (others => (others => '0')),
---                     selectRead(6 to 8) => regsSelM0_NEW,
---                     selectRead(9 to 11) => regsSelS0,
-                     
---                     readValues(0 to 2) => regValsI0_NEW,
---                     readValues(3 to 5) => regValsX_NEW,
---                     readValues(6 to 8) => regValsM0_NEW,                        
---                     readValues(9 to 11) => regValsZ_NEW
---                 );
-
-         
          INT_READY_TABLE: entity work.RegisterReadyTable(Behavioral)
          generic map(
              WRITE_WIDTH => 1

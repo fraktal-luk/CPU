@@ -21,8 +21,7 @@ entity IssueQueue is
 	generic(
 		IQ_SIZE: natural := 8;
 		IS_FP: boolean := false;
-		ALT_INPUT: boolean := false;
-		  USE_NEW_SIGS: boolean := false
+		ALT_INPUT: boolean := false
 	);
 	port(
 		clk: in std_logic;
@@ -30,17 +29,13 @@ entity IssueQueue is
 		en: in std_logic;
 		
 		prevSendingOK: in std_logic;
-		--newArr_N: in SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
 		newArr: in SchedulerInfoArray(0 to PIPE_WIDTH-1);
 		
 		  newArr_Alt: in SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
 		  newArrOut: out SchedulerEntrySlotArray(0 to PIPE_WIDTH-1);
 		nextAccepting: in std_logic;
-		
-		--lateEventSignal: in std_logic;
-		--execEventSignal: in std_logic;
-		--execCausing: in InstructionState;
-		      events: in EventState;
+
+		events: in EventState;
 		
 		fni: in ForwardingInfo;
 		waitingFM: in ForwardingMap;
@@ -51,21 +46,9 @@ entity IssueQueue is
 		acceptingMore: out std_logic;
 		acceptingOut: out std_logic;
 		
-		queuesAccepting: in std_logic;
-		
-		--empty: out std_logic;
-		
-		--anyReady: out std_logic;
-		--sentCancelled: out std_logic;		
+		--queuesAccepting: in std_logic;	
 		schedulerOut: out SchedulerEntrySlot;
-		--sending: out std_logic;
-		
-		--anyReady_A: out std_logic;
-        --sentCancelled_A: out std_logic;        
-        --schedulerOut_A: out SchedulerEntrySlot;
-        --sending_A: out std_logic;
-        
-            outputSignals: out IssueQueueSignals		
+        outputSignals: out IssueQueueSignals		
 	);
 end IssueQueue;
 
@@ -88,7 +71,7 @@ architecture Behavioral of IssueQueue is
                
         signal queueContentExt, queueContentExtNext, queueContentUpdatedExt, queueContentUpdatedSelExt: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
                                                                                                                                                        
-	signal anyReadyAll, anyReadyFull, anyReadyFullMain, anyReadyLive, sends, sendsMainQueue, sendingKilled, isSent, isSentMainQueue, sentKilled,
+	signal anyReadyAll, anyReadyFull, anyReadyFullMain, anyReadyLive, sends, sendsMainQueue, sendsInputStage, sendingKilled, isSent, isSentMainQueue, isSentMainQueue_T, sentKilled,
 	           acceptingMain, inputStageSending: std_logic := '0';
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
@@ -204,21 +187,19 @@ architecture Behavioral of IssueQueue is
         end loop;
         return res;
     end function;
+
+    --signal indL, indH: std_logic_vector(1 downto 0) := "00";
     
-    
-            signal indL, indH: std_logic_vector(1 downto 0) := "00";
-            
-            
-            function getSentMainQueue(content: SchedulerInfoArray) return std_logic is
-            begin
-                for i in content'range loop
-                    if (content(i).dynamic.full and content(i).dynamic.issued) = '1' then
-                        return '1';
-                    end if;
-                end loop;
-                
-                return '0';
-            end function; 
+    function getSentMainQueue(content: SchedulerInfoArray) return std_logic is
+    begin
+        for i in content'range loop
+            if (content(i).dynamic.full and content(i).dynamic.issued) = '1' then
+                return '1';
+            end if;
+        end loop;
+        
+        return '0';
+    end function; 
 begin
 
     INPUT_STAGE: block
@@ -232,16 +213,13 @@ begin
         fmaInputStage <= findForwardingMatchesArray(inputStage, fni);
         inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, false);                   
             
-            -- TODO: use the fact that the have the same high tag part?
-            killMaskInput <= getKillMask(inputStage, events.execCausing, events.execEvent, events.lateEvent);
-            livingMaskInput <= extractFullMask(inputStage) and not killMaskInput;
+        -- TODO: use the fact that the have the same high tag part?
+        killMaskInput <= getKillMask(inputStage, events.execCausing, events.execEvent, events.lateEvent);
+        livingMaskInput <= extractFullMask(inputStage) and not killMaskInput;
 
-        inputStageSending <= --inputStageAny and queuesAccepting and not events.execEvent and not events.lateEvent;
-                             inputStageAny and acceptingMain and not events.execEvent and not events.lateEvent;
+        inputStageSending <= inputStageAny and acceptingMain and not events.execEvent and not events.lateEvent;
         
-        XYZ_NEW: if USE_NEW_SIGS generate
-            selMaskInput <= selMaskExt(IQ_SIZE to IQ_SIZE + PIPE_WIDTH - 1);
-        end generate;
+        selMaskInput <= selMaskExt(IQ_SIZE to IQ_SIZE + PIPE_WIDTH - 1);
         
         inputStageNext <= iqInputStageNext(inputStageUpdated, newArr, selMaskInput, prevSendingOK, inputStageSending, events.execEvent, events.lateEvent);
         inputStageAny <= isNonzero(extractFullMask(inputStage));
@@ -264,16 +242,13 @@ begin
 			sentKilled <= sendingKilled;
 			
 			isSent <= sends;
-			--     isSentMainQueue <= sendsMainQueue;			
+			isSentMainQueue_T <= sendsMainQueue or (sends and inputStageSending); -- if sending not from Main part but sends and is moved to Main, it will hold		
 		end if;
 	end process;	
 
-                isSentMainQueue <= getSentMainQueue(queueContent);
+    isSentMainQueue <= getSentMainQueue(queueContent);
 
     controlSigs <= getControlSignals(queueContentUpdatedSel & inputStageUpdated, events);
-
-
-            queueContentExt <= queueContent & inputStagePreRR;
 
     -- Vector signals
     killMask <= getKillMask(queueContent, events.execCausing, events.execEvent, events.lateEvent);
@@ -284,39 +259,27 @@ begin
     readyMaskFull <= readyMaskAll and fullMask;	
     readyMaskLive <= readyMaskAll and livingMask;
 
-        selMask <= getFirstOne(readyMaskFull);
-        
-        killMaskExt <= getKilledVec(controlSigs);
-        fullMaskExt <= getFullVec(controlSigs);
-        livingMaskExt <= getLivingVec(controlSigs);
-        
-        readyMaskAllExt <= getReadyVec(controlSigs);
-        readyMaskFullExt <= getReadyFullVec(controlSigs);
-        readyMaskLiveExt <= getReadyLiveVec(controlSigs);
-        
-        selMaskExt <= getSelectedVec(controlSigs);
+    selMask <= getFirstOne(readyMaskFull);
+    
+    killMaskExt <= getKilledVec(controlSigs);
+    fullMaskExt <= getFullVec(controlSigs);
+    livingMaskExt <= getLivingVec(controlSigs);
+    
+    readyMaskAllExt <= getReadyVec(controlSigs);
+    readyMaskFullExt <= getReadyFullVec(controlSigs);
+    readyMaskLiveExt <= getReadyLiveVec(controlSigs);
+    
+    selMaskExt <= getSelectedVec(controlSigs);
     
 
-            sendsMainQueue <= anyReadyFullMain and nextAccepting;
-            
-            -- Scalar signals
-            OLD_SIGS: if not USE_NEW_SIGS generate
-                anyReadyLive <= isNonzero(readyMaskLive);
-                anyReadyFull <= isNonzero(readyMaskFull);
-                anyReadyFullMain <= isNonzero(readyMaskFull);
-            
-                sends <= anyReadyFull and nextAccepting;
-                sendingKilled <= isNonzero(killMask and selMask);
-            end generate;
+    sendsMainQueue <= anyReadyFullMain and nextAccepting;
 
-            NEW_SIGS: if USE_NEW_SIGS generate
-                anyReadyLive <= isNonzero(readyMaskLiveExt);
-                anyReadyFull <= isNonzero(readyMaskFullExt);
-                anyReadyFullMain <= isNonzero(readyMaskFull);
-            
-                sends <= anyReadyFull and nextAccepting;
-                sendingKilled <= isNonzero(killMaskExt and selMaskExt);
-            end generate;
+    anyReadyLive <= isNonzero(readyMaskLiveExt);
+    anyReadyFull <= isNonzero(readyMaskFullExt);
+    anyReadyFullMain <= isNonzero(readyMaskFull);
+
+    sends <= anyReadyFull and nextAccepting;
+    sendingKilled <= isNonzero(killMaskExt and selMaskExt);
 
     queueContentNext <= iqContentNext(queueContentUpdated, inputStageUpdated, 
                                       killMask, selMask,
@@ -336,30 +299,19 @@ begin
         queueContentUpdatedSelExt(0 to IQ_SIZE-1) <= queueContentUpdatedSel;
         queueContentUpdatedSelExt(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1) <= inputStageUpdated;
 
-    OLD_ISSUE: if not USE_NEW_SIGS generate
-        dispatchDataNew <= getSchedEntrySlot(prioSelect(queueContentUpdatedSel, readyMaskAll));
-    end generate;
-    
-    NEW_ISSUE: if USE_NEW_SIGS generate
         dispatchDataNew <= getSchedEntrySlot(prioSelect16(queueContentUpdatedSelExt, readyMaskFullExt));
-    end generate;
-    
-            indL <= indl16(queueContentUpdatedSelExt, readyMaskAllExt);
-            indH <= indh16(queueContentUpdatedSelExt, readyMaskAllExt);
-    
-    
-	acceptingMain <= not fullMask(IQ_SIZE-PIPE_WIDTH);
 
+	acceptingMain <= not fullMask(IQ_SIZE-PIPE_WIDTH);
 
 	acceptingOut <= acceptingMain;
 	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);
 
 	schedulerOut <= TMP_restoreState(sends, dispatchDataNew.ins, dispatchDataNew.state);
 	
-        outputSignals <= (sending => sends,
-                          cancelled => sentKilled,
-                          ready => anyReadyLive,
-                          empty => not fullMask(0));
+    outputSignals <= (sending => sends,
+                      cancelled => sentKilled,
+                      ready => anyReadyLive,
+                      empty => not fullMask(0));
     
     VIEW: if VIEW_ON generate
         use work.Viewing.all;
