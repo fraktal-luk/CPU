@@ -21,15 +21,15 @@ constant ENQUEUE_FN_MAP: ForwardingMap := (
     maskR1 => "111",  
     maskR0 => "111",
     maskM1 => "111",
-    maskM2 => "010"
+    maskM2 => "110"
 );
      
 constant WAITING_FN_MAP: ForwardingMap := (
     maskRR => "110",   -- arg2 is unused   
     maskR1 => "000",  
     maskR0 => "000",
-    maskM1 => "101",
-    maskM2 => "010"
+    maskM1 => "001",
+    maskM2 => "110"
     --    maskM1 => "000",
     --    maskM2 => "110"
 );
@@ -38,8 +38,8 @@ constant SELECTION_FN_MAP: ForwardingMap := (
     maskRR => "110",   -- arg2 is unused   
     maskR1 => "000",  
     maskR0 => "000",
-    maskM1 => "101",
-    maskM2 => "000"
+    maskM1 => "001",
+    maskM2 => "100"
     --    maskM1 => "000",
     --    maskM2 => "110"
 );
