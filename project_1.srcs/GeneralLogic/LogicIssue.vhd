@@ -15,6 +15,8 @@ use work.InstructionState.all;
 
 use work.PipelineGeneral.all;
 
+use work.ForwardingNetwork.all;
+
 
 package LogicIssue is
 
@@ -128,6 +130,8 @@ type WakeupStruct is record
 end record;
 
 constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0');
+type WakeupArray2D is array(natural range <>, natural range <>) of WakeupStruct;
+
 
 
 type WakeupsArray2D is array(natural range <>, natural range <>) of Wakeups;
@@ -169,9 +173,14 @@ function extractReadyMask(entryVec: SchedulerInfoArray) return std_logic_vector;
 
 function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector;
 
-function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; dynamic: boolean)
+function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; dynamic: boolean; forwardingModes: ForwardingModeArray;
+                                TMP_NEW: boolean)
 return SchedulerInfoArray;
 
+
+        function getWakeupArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; dynamic: boolean; forwardingModes: ForwardingModeArray;
+            TMP_NEW: boolean)
+        return WakeupArray2D;
 
 function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo) return ForwardingMatchesArray;
 
@@ -736,16 +745,66 @@ begin
 end function;
 
 
+function getWakeupStructStatic(arg: natural; fnm: ForwardingMap; cmpR1, cmpR0, cmpM1, cmpM2: std_logic_vector; forwardingModes: ForwardingModeArray) return WakeupStruct is
+    variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+    variable nMatches: natural;
+    variable matchVec, matchR1, matchR0, matchM1, matchM2: std_logic_vector(0 to 2) := (others => '0');
+begin
+    matchR1 := cmpR1;
+    matchR0 := cmpR0;
+    matchM1 := cmpM1;
+    matchM2 := cmpM2;
+    
+    for p in forwardingModes'range loop
+        case forwardingModes(p).stage is
+            when -3 =>
+                --matchVec := match
+            when -2 =>
+                matchVec(p) := matchM2(p);
+            when -1 =>
+                matchVec(p) := matchM1(p);
+            when 0 =>
+                matchVec(p) := matchR0(p);
+            when 1 =>
+                matchVec(p) := matchR1(p);
+            when others =>
+                matchVec(p) := '0';
+        end case;
+    
+        if matchVec(p) = '1' then
+            res.argLocsPipe(1 downto 0) := i2slv(p, 2);
+            res.argLocsPhase(1 downto 0) := i2slv(forwardingModes(p).stage + 1, 2);
+        end if;
+    end loop;
+    
+    --    res.argLocsPipe(7) := matchVec(0);
+    --    res.argLocsPipe(6) := matchVec(1);
+    --    res.argLocsPipe(5) := matchVec(2);
+    
+    res.match := isNonzero(matchVec);
+    
+    return res;
+end function;
+
+
 function updateSchedulerState(state: SchedulerInfo;
                                 fni: ForwardingInfo;
                                 fm: ForwardingMatches;
-                                fnm: ForwardingMap; dynamic: boolean)
+                                fnm: ForwardingMap;
+                                    TMP_NEW: boolean;
+                                dynamic: boolean;
+                                forwardingModes: ForwardingModeArray)
 return SchedulerInfo is
 	variable res: SchedulerInfo := state;
 	variable wakeups0, wakeups1: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
 begin
-    wakeups0 := getWakeupStruct(0, fnm, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2);
-    wakeups1 := getWakeupStruct(1, fnm, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2);
+    if false then
+        wakeups0 := getWakeupStructStatic(0, fnm, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, forwardingModes);
+        wakeups1 := getWakeupStructStatic(1, fnm, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, forwardingModes);
+    else
+        wakeups0 := getWakeupStruct      (0, fnm, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2);
+        wakeups1 := getWakeupStruct      (1, fnm, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2);
+    end if;
 
     res.dynamic := updateArgInfo(res.dynamic, 0, wakeups0);
     res.dynamic := updateArgInfo(res.dynamic, 1, wakeups1);
@@ -753,15 +812,35 @@ begin
 	return res;
 end function;
 
-function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; dynamic: boolean)
+function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; dynamic: boolean; forwardingModes: ForwardingModeArray;
+            TMP_NEW: boolean)
 return SchedulerInfoArray is
 	variable res: SchedulerInfoArray(0 to schedArray'length-1);-- := insArray;
 begin
 	for i in schedArray'range loop
-		res(i) := updateSchedulerState(schedArray(i), fni, fma(i), fnm, dynamic);
+		res(i) := updateSchedulerState(schedArray(i), fni, fma(i), fnm, TMP_NEW, dynamic, forwardingModes);
 	end loop;	
 	return res;
 end function;
+
+
+        function getWakeupArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; dynamic: boolean; forwardingModes: ForwardingModeArray;
+            TMP_NEW: boolean)
+        return WakeupArray2D is
+            variable res: WakeupArray2D(schedArray'range, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
+        begin
+            for i in res'range loop
+                if TMP_NEW then
+                    res(i, 0) := getWakeupStructStatic(0, fnm, fma(i).a0cmp1, fma(i).a0cmp0, fma(i).a0cmpM1, fma(i).a0cmpM2, forwardingModes);
+                    res(i, 1) := getWakeupStructStatic(1, fnm, fma(i).a1cmp1, fma(i).a1cmp0, fma(i).a1cmpM1, fma(i).a1cmpM2, forwardingModes);
+                else
+                    res(i, 0) := getWakeupStruct(0, fnm, fma(i).a0cmp1, fma(i).a0cmp0, fma(i).a0cmpM1, fma(i).a0cmpM2);
+                    res(i, 1) := getWakeupStruct(1, fnm, fma(i).a1cmp1, fma(i).a1cmp0, fma(i).a1cmpM1, fma(i).a1cmpM2);
+                end if;
+            end loop;
+            
+            return res;
+        end function;
 
 
 function findForwardingMatches(info: SchedulerInfo; fni: ForwardingInfo) return ForwardingMatches is

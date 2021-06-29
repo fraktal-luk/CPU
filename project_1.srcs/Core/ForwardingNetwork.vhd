@@ -15,6 +15,30 @@ use work.PipelineGeneral.all;
 
 package ForwardingNetwork is
 
+-- To:  From:
+-- I0    I0    M0    F0
+--      -2s   -3w    -   // number means source stage of notification, s/w - select(can issue immediately)/wait(can issue next cycle)
+
+-- M0    I0    M0    F0
+--      -2s   -3w    -
+
+type ForwardingMode is record
+    stage: integer;
+    delayed: boolean; -- true - W, false - S  
+end record;
+
+type ForwardingModeArray is array (natural range <>) of ForwardingMode;
+
+constant FORWARDING_MODES_INT: ForwardingModeArray(0 to 2) := (
+    (-2, false), (-100, false), --(-3, true)
+                                (-1, false)
+);
+
+constant FORWARDING_MODES_FLOAT: ForwardingModeArray(0 to 2) := (
+    --(-3, true), (-100, false), (-3, true)
+    (-2, false), (-100, false), (0, false) 
+);
+
 
 constant ENQUEUE_FN_MAP: ForwardingMap := (
     maskRR => "000",      

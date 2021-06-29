@@ -15,13 +15,16 @@ use work.PipelineGeneral.all;
 
 use work.LogicIssue.all;
 
+use work.ForwardingNetwork.all;
 
 
 entity IssueQueue is
 	generic(
 		IQ_SIZE: natural := 8;
 		IS_FP: boolean := false;
-		ALT_INPUT: boolean := false
+		ALT_INPUT: boolean := false;
+		FORWARDING: ForwardingModeArray := (0 => (-100, false));
+		  USE_NEW: boolean := false
 	);
 	port(
 		clk: in std_logic;
@@ -76,9 +79,12 @@ architecture Behavioral of IssueQueue is
 	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
     signal fma: ForwardingMatchesArray(0 to IQ_SIZE-1) := (others => DEFAULT_FORWARDING_MATCHES);
+    signal fmaExt: ForwardingMatchesArray(0 to IQ_SIZE + PIPE_WIDTH -1) := (others => DEFAULT_FORWARDING_MATCHES);
    
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
     
+    
+        signal wa0, wa1: WakeupArray2D(0 to IQ_SIZE + PIPE_WIDTH-1, 0 to 1);
     
     type SlotControl is record
         full: std_logic;
@@ -199,19 +205,23 @@ architecture Behavioral of IssueQueue is
         end loop;
         
         return '0';
-    end function; 
+    end function;
+    
+    signal fmaInputStage: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);    
+    signal inputStage, inputStageNext: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);          
+    signal inputStageAny, inputStageLivingAny, inputReadingAny: std_logic := '0';
+    signal killMaskInput: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+    
+        signal chW: std_logic_vector(0 to IQ_SIZE + PIPE_WIDTH - 1);    
 begin
 
     INPUT_STAGE: block
-        signal fmaInputStage: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);    
-        signal inputStage, inputStageNext: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);          
-        signal inputStageAny, inputStageLivingAny, inputReadingAny: std_logic := '0';
-        signal killMaskInput: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');        
+        
     begin
         inputStage <= updateRR(inputStagePreRR, readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
 
         fmaInputStage <= findForwardingMatchesArray(inputStage, fni);
-        inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, false);                   
+        inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, false, FORWARDING, false);                   
             
         -- TODO: use the fact that the have the same high tag part?
         killMaskInput <= getKillMask(inputStage, events.execCausing, events.execEvent, events.lateEvent);
@@ -292,8 +302,38 @@ begin
 
     fma <= findForwardingMatchesArray(queueContent, fni);
 
-    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, waitingFM, false);
-    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, selectionFM, false);
+
+        queueContentExt <= queueContent & inputStage;
+        fmaExt <= fma & fmaInputStage;
+        
+        wa0 <= getWakeupArray(queueContentExt, fni, fmaExt, waitingFM, false, FORWARDING, false);
+        wa1 <= getWakeupArray(queueContentExt, fni, fmaExt, waitingFM, false, FORWARDING, true);
+        WWW: for i in 0 to IQ_SIZE + PIPE_WIDTH - 1 generate
+            signal g0, g1, f0, f1, m0, r0, r1, m1, nf: std_logic := '0';
+        begin
+                r0 <= not queueContentExt(i).dynamic.missing(0);
+                r1 <= not queueContentExt(i).dynamic.missing(1);
+                
+                f0 <= wa0(i, 0).match or wa1(i, 0).match;
+                f1 <= wa0(i, 1).match or wa1(i, 1).match;
+                    
+                m0 <= bool2std( wa0(i, 0) = wa1(i, 0));
+                m1 <= bool2std( wa0(i, 1) = wa1(i, 1));
+                
+                
+                
+                -- Ignore empty slots, ignore alredy ready slots, ignore non-matches, use full comparison if a match exists                
+                g0 <= r0 or not f0 or m0;
+                g1 <= r1 or not f1 or m1;
+                
+                nf <= not fullMaskExt(i);
+                
+            chW(i) <= nf or (g0 and g1);
+        end generate;
+        
+
+    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, waitingFM, false, FORWARDING, false);
+    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, selectionFM, false, FORWARDING, false);
 
 
         queueContentUpdatedSelExt(0 to IQ_SIZE-1) <= queueContentUpdatedSel;
