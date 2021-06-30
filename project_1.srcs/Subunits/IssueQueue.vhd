@@ -332,8 +332,8 @@ begin
         end generate;
         
 
-    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, waitingFM, false, FORWARDING, false);
-    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, selectionFM, false, FORWARDING, false);
+    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, waitingFM, false, FORWARDING, USE_NEW);
+    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, selectionFM, false, FORWARDING, USE_NEW);
 
 
         queueContentUpdatedSelExt(0 to IQ_SIZE-1) <= queueContentUpdatedSel;

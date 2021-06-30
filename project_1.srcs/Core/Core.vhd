@@ -484,7 +484,8 @@ begin
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
                 IQ_SIZE => IQ_SIZE_I0,
-                    FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2)
+                    FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
+                    USE_NEW => true
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -603,7 +604,9 @@ begin
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
                IQ_SIZE => IQ_SIZE_M0,
-               ALT_INPUT => false
+               ALT_INPUT => false,
+                   FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
+                   USE_NEW => true
            )
            port map(
                clk => clk, reset => '0', en => '0',
@@ -914,7 +917,9 @@ begin
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => IQ_SIZE_F0, IS_FP => true
+                IQ_SIZE => IQ_SIZE_F0, IS_FP => true,
+                      FORWARDING(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
+                      USE_NEW => true
             )
             port map(
                 clk => clk, reset => '0', en => '0',
