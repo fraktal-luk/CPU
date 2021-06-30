@@ -485,6 +485,7 @@ begin
             generic map(
                 IQ_SIZE => IQ_SIZE_I0,
                     FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
+                    FORWARDING_D(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                     USE_NEW => true
             )
             port map(
@@ -606,6 +607,7 @@ begin
                IQ_SIZE => IQ_SIZE_M0,
                ALT_INPUT => false,
                    FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
+                   FORWARDING_D(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                    USE_NEW => true
            )
            port map(
@@ -793,7 +795,9 @@ begin
         
             IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => IQ_SIZE_INT_SV
+                IQ_SIZE => IQ_SIZE_INT_SV,
+                        FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_INT_D(0 to 2),
+                        USE_NEW => true
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -804,7 +808,8 @@ begin
                 newArr => schedInfoUpdatedIntA,
                     newArr_Alt => NEW_ARR_DUMMY,
                 fni => fni,
-                waitingFM => WAITING_FN_MAP_SV,
+                waitingFM => --WAITING_FN_MAP_SV,
+                                DEFAULT_FORWARDING_MAP,
                 selectionFM => DEFAULT_FORWARDING_MAP,      
                 readyRegFlags => readyRegFlagsSV,
                 nextAccepting => allowIssueStoreDataInt,
@@ -848,7 +853,9 @@ begin
                       
             IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => IQ_SIZE_FLOAT_SV -- CAREFUL: not IS_FP because doesn't have destination
+                IQ_SIZE => IQ_SIZE_FLOAT_SV, -- CAREFUL: not IS_FP because doesn't have destination
+                        FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_FLOAT_D(0 to 2),
+                        USE_NEW => true
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -859,7 +866,8 @@ begin
                 newArr => schedInfoUpdatedFloatA,
                     newArr_Alt => NEW_ARR_DUMMY,                
                 fni => fniFloat,
-                waitingFM => WAITING_FN_MAP_FLOAT_SV,
+                waitingFM => --WAITING_FN_MAP_FLOAT_SV,
+                                DEFAULT_FORWARDING_MAP,
                 selectionFM => DEFAULT_FORWARDING_MAP,      
                 readyRegFlags => readyRegFlagsFloatSV,
                 nextAccepting => allowIssueStoreDataFP,
@@ -919,6 +927,7 @@ begin
             generic map(
                 IQ_SIZE => IQ_SIZE_F0, IS_FP => true,
                       FORWARDING(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
+                      FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
                       USE_NEW => true
             )
             port map(

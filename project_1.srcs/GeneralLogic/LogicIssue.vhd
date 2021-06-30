@@ -798,7 +798,7 @@ return SchedulerInfo is
 	variable res: SchedulerInfo := state;
 	variable wakeups0, wakeups1: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
 begin
-    if false then
+    if TMP_NEW then
         wakeups0 := getWakeupStructStatic(0, fnm, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, forwardingModes);
         wakeups1 := getWakeupStructStatic(1, fnm, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, forwardingModes);
     else

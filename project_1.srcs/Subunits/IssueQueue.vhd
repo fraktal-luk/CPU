@@ -23,7 +23,8 @@ entity IssueQueue is
 		IQ_SIZE: natural := 8;
 		IS_FP: boolean := false;
 		ALT_INPUT: boolean := false;
-		FORWARDING: ForwardingModeArray := (0 => (-100, false));
+		FORWARDING: ForwardingModeArray := (0 => (-100, false));  -- Can be used immediately
+		FORWARDING_D: ForwardingModeArray := (0 => (-100, false)); -- Can be used with 1 cycle delay
 		  USE_NEW: boolean := false
 	);
 	port(
@@ -63,7 +64,7 @@ architecture Behavioral of IssueQueue is
 	               selMask, selMaskPrev: std_logic_vector(0 to IQ_SIZE-1) := (others=>'0');	
 
 
-    signal inputStagePreRR, inputStageUpdated: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
+    signal inputStagePreRR, inputStageUpdated, inputStageUpdatedSel: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
     signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
 
 
@@ -221,7 +222,9 @@ begin
         inputStage <= updateRR(inputStagePreRR, readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
 
         fmaInputStage <= findForwardingMatchesArray(inputStage, fni);
-        inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, false, FORWARDING, false);                   
+        
+        inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, false, FORWARDING_D, USE_NEW);                   
+        inputStageUpdatedSel <= updateSchedulerArray(inputStage, fni, fmaInputStage, selectionFM, false, FORWARDING, USE_NEW);                   
             
         -- TODO: use the fact that the have the same high tag part?
         killMaskInput <= getKillMask(inputStage, events.execCausing, events.execEvent, events.lateEvent);
@@ -258,7 +261,7 @@ begin
 
     isSentMainQueue <= getSentMainQueue(queueContent);
 
-    controlSigs <= getControlSignals(queueContentUpdatedSel & inputStageUpdated, events);
+    controlSigs <= getControlSignals(queueContentUpdatedSel & inputStageUpdatedSel, events);
 
     -- Vector signals
     killMask <= getKillMask(queueContent, events.execCausing, events.execEvent, events.lateEvent);
@@ -332,12 +335,12 @@ begin
         end generate;
         
 
-    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, waitingFM, false, FORWARDING, USE_NEW);
+    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, waitingFM, false, FORWARDING_D, USE_NEW);
     queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, selectionFM, false, FORWARDING, USE_NEW);
 
 
         queueContentUpdatedSelExt(0 to IQ_SIZE-1) <= queueContentUpdatedSel;
-        queueContentUpdatedSelExt(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1) <= inputStageUpdated;
+        queueContentUpdatedSelExt(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1) <= inputStageUpdatedSel;
 
         dispatchDataNew <= getSchedEntrySlot(prioSelect16(queueContentUpdatedSelExt, readyMaskFullExt));
 

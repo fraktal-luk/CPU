@@ -39,6 +39,13 @@ constant FORWARDING_MODES_FLOAT: ForwardingModeArray(0 to 2) := (
     (-2, false), (-100, false), (0, false) 
 );
 
+constant FORWARDING_MODES_SV_INT_D: ForwardingModeArray(0 to 2) := (
+    (0, true), (-100, false), (0, true) 
+);
+
+constant FORWARDING_MODES_SV_FLOAT_D: ForwardingModeArray(0 to 2) := (
+    (0, true), (-100, false), (0, true) 
+);
 
 constant ENQUEUE_FN_MAP: ForwardingMap := (
     maskRR => "000",      
