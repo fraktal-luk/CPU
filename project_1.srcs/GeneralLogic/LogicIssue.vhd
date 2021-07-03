@@ -383,17 +383,19 @@ return SchedulerState is
 	variable res: SchedulerState := ss;
 begin
 	for i in 0 to 1 loop
-        case res.argLocsPhase(i)(1 downto 0) is
-            when "11" =>
+        case res.argLocsPhase(i)(2 downto 0) is
+            when "110" =>
+                res.argLocsPhase(i) := "00000111";        
+            when "111" =>
                 res.argLocsPhase(i) := "00000000";
-            when "00" =>
+            when "000" =>
                 res.argLocsPhase(i) := "00000001";				
             when others =>
                 res.argLocsPhase(i) := "00000010";
         end case;
 
-		res.argLocsPhase(i)(7 downto 2) := "000000";
-		res.argLocsPipe(i)(7 downto 2) := "000000";
+		res.argLocsPhase(i)(7 downto 3) := "00000";
+		res.argLocsPipe(i)(7 downto 3) := "00000";
 	end loop;
 
 	return res;
@@ -413,10 +415,12 @@ begin
         res.argLocsPipe(arg) := wakeups.argLocsPipe;
         res.missing(arg) := not wakeups.match;
     else -- update loc
-        case ss.argLocsPhase(arg)(1 downto 0) is
-            when "11" =>
+        case ss.argLocsPhase(arg)(2 downto 0) is
+            when "110" =>
+                res.argLocsPhase(arg) := "00000111";
+            when "111" =>
                 res.argLocsPhase(arg) := "00000000";
-            when "00" =>
+            when "000" =>
                 res.argLocsPhase(arg) := "00000001";                
             when others =>
                 res.argLocsPhase(arg) := "00000010";
@@ -713,15 +717,16 @@ begin
 end function;
 
     
-function getWakeupStruct(arg: natural; fnm: ForwardingMap; cmpR1, cmpR0, cmpM1, cmpM2: std_logic_vector) return WakeupStruct is
+function getWakeupStruct(arg: natural; fnm: ForwardingMap; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector) return WakeupStruct is
     variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
     variable nMatches: natural;
-    variable matchR1, matchR0, matchM1, matchM2: std_logic_vector(0 to 2) := (others => '0');
+    variable matchR1, matchR0, matchM1, matchM2, matchM3: std_logic_vector(0 to 2) := (others => '0');
 begin
     matchR1 := cmpR1 and fnm.maskR1;
     matchR0 := cmpR0 and fnm.maskR0;
     matchM1 := cmpM1 and fnm.maskM1;
     matchM2 := cmpM2 and fnm.maskM2;
+    matchM3 := cmpM3 and fnm.maskM3;
 
     res.match := isNonzero(matchR1 or matchR0 or matchM1 or matchM2);
     
@@ -735,8 +740,11 @@ begin
         res.argLocsPhase := "00000000";
         res.argLocsPipe := i2slv(getFirstOnePosition(cmpM1), 8);            
     elsif isNonzero(cmpM2) = '1' then
-        res.argLocsPhase := "00000011";
-        res.argLocsPipe := i2slv(getFirstOnePosition(cmpM2), 8);            
+        res.argLocsPhase := "00000111";
+        res.argLocsPipe := i2slv(getFirstOnePosition(cmpM2), 8);
+    elsif isNonzero(cmpM3) = '1' then
+        res.argLocsPhase := "00000110";
+        res.argLocsPipe := i2slv(getFirstOnePosition(cmpM2), 8); 
     else
         res.argLocsPhase := "00000010";                                                            
     end if;
@@ -745,20 +753,21 @@ begin
 end function;
 
 
-function getWakeupStructStatic(arg: natural; fnm: ForwardingMap; cmpR1, cmpR0, cmpM1, cmpM2: std_logic_vector; forwardingModes: ForwardingModeArray) return WakeupStruct is
+function getWakeupStructStatic(arg: natural; fnm: ForwardingMap; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray) return WakeupStruct is
     variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
     variable nMatches: natural;
-    variable matchVec, matchR1, matchR0, matchM1, matchM2: std_logic_vector(0 to 2) := (others => '0');
+    variable matchVec, matchR1, matchR0, matchM1, matchM2, matchM3: std_logic_vector(0 to 2) := (others => '0');
 begin
     matchR1 := cmpR1;
     matchR0 := cmpR0;
     matchM1 := cmpM1;
     matchM2 := cmpM2;
+    matchM3 := cmpM3;
     
     for p in forwardingModes'range loop
         case forwardingModes(p).stage is
             when -3 =>
-                --matchVec := match
+                matchVec(p) := matchM3(p);
             when -2 =>
                 matchVec(p) := matchM2(p);
             when -1 =>
@@ -772,14 +781,53 @@ begin
         end case;
     
         if matchVec(p) = '1' then
-            res.argLocsPipe(1 downto 0) := i2slv(p, 2);
-            res.argLocsPhase(1 downto 0) := i2slv(forwardingModes(p).stage + 1, 2);
+            res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+            res.argLocsPhase(2 downto 0) := i2slv(forwardingModes(p).stage + 1, 3);
         end if;
     end loop;
     
-    --    res.argLocsPipe(7) := matchVec(0);
-    --    res.argLocsPipe(6) := matchVec(1);
-    --    res.argLocsPipe(5) := matchVec(2);
+    res.match := isNonzero(matchVec);
+    
+    return res;
+end function;
+
+function getWakeupStructDynamic(arg: natural; fnm: ForwardingMap; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray) return WakeupStruct is
+    variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+    variable nMatches: natural;
+    variable matchVec, matchR1, matchR0, matchM1, matchM2, matchM3: std_logic_vector(0 to 2) := (others => '0');
+begin
+    matchR1 := cmpR1;
+    matchR0 := cmpR0;
+    matchM1 := cmpM1;
+    matchM2 := cmpM2;
+    matchM3 := cmpM3;
+    
+    for p in forwardingModes'range loop
+        for q in -3 to 1 loop
+            if forwardingModes(p).stage <= q then
+                case q is
+                    when -3 =>
+                        matchVec(p) := matchM3(p);
+                    when -2 =>
+                        matchVec(p) := matchM2(p);
+                    when -1 =>
+                        matchVec(p) := matchM1(p);
+                    when 0 =>
+                        matchVec(p) := matchR0(p);
+                    when 1 =>
+                        matchVec(p) := matchR1(p);
+                    when others =>
+                        matchVec(p) := '0';
+                end case;
+                
+                if matchVec(p) = '1' then
+                    res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+                    res.argLocsPhase(2 downto 0) := i2slv(q + 1, 3);
+                    exit;
+                end if;               
+            end if;
+        end loop;
+    end loop;
     
     res.match := isNonzero(matchVec);
     
@@ -799,11 +847,14 @@ return SchedulerInfo is
 	variable wakeups0, wakeups1: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
 begin
     if TMP_NEW then
-        wakeups0 := getWakeupStructStatic(0, fnm, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, forwardingModes);
-        wakeups1 := getWakeupStructStatic(1, fnm, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, forwardingModes);
+        wakeups0 := getWakeupStructStatic(0, fnm, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes);
+        wakeups1 := getWakeupStructStatic(1, fnm, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes);
     else
-        wakeups0 := getWakeupStruct      (0, fnm, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2);
-        wakeups1 := getWakeupStruct      (1, fnm, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2);
+        --wakeups0 := getWakeupStruct      (0, fnm, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2);
+        --wakeups1 := getWakeupStruct      (1, fnm, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2);
+        
+        wakeups0 := getWakeupStructDynamic(0, fnm, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes);
+        wakeups1 := getWakeupStructDynamic(1, fnm, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes);
     end if;
 
     res.dynamic := updateArgInfo(res.dynamic, 0, wakeups0);
@@ -831,11 +882,11 @@ end function;
         begin
             for i in res'range loop
                 if TMP_NEW then
-                    res(i, 0) := getWakeupStructStatic(0, fnm, fma(i).a0cmp1, fma(i).a0cmp0, fma(i).a0cmpM1, fma(i).a0cmpM2, forwardingModes);
-                    res(i, 1) := getWakeupStructStatic(1, fnm, fma(i).a1cmp1, fma(i).a1cmp0, fma(i).a1cmpM1, fma(i).a1cmpM2, forwardingModes);
+                    res(i, 0) := getWakeupStructStatic(0, fnm, fma(i).a0cmp1, fma(i).a0cmp0, fma(i).a0cmpM1, fma(i).a0cmpM2, fma(i).a0cmpM3, forwardingModes);
+                    res(i, 1) := getWakeupStructStatic(1, fnm, fma(i).a1cmp1, fma(i).a1cmp0, fma(i).a1cmpM1, fma(i).a1cmpM2, fma(i).a1cmpM3, forwardingModes);
                 else
-                    res(i, 0) := getWakeupStruct(0, fnm, fma(i).a0cmp1, fma(i).a0cmp0, fma(i).a0cmpM1, fma(i).a0cmpM2);
-                    res(i, 1) := getWakeupStruct(1, fnm, fma(i).a1cmp1, fma(i).a1cmp0, fma(i).a1cmpM1, fma(i).a1cmpM2);
+                    res(i, 0) := getWakeupStruct(0, fnm, fma(i).a0cmp1, fma(i).a0cmp0, fma(i).a0cmpM1, fma(i).a0cmpM2, fma(i).a0cmpM3);
+                    res(i, 1) := getWakeupStruct(1, fnm, fma(i).a1cmp1, fma(i).a1cmp0, fma(i).a1cmpM1, fma(i).a1cmpM2, fma(i).a1cmpM3);
                 end if;
             end loop;
             

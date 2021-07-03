@@ -31,7 +31,7 @@ type ForwardingModeArray is array (natural range <>) of ForwardingMode;
 
 constant FORWARDING_MODES_INT: ForwardingModeArray(0 to 2) := (
     (-2, false), (-100, false), --(-3, true)
-                                (-1, false)
+                                (-2, false)
 );
 
 constant FORWARDING_MODES_FLOAT: ForwardingModeArray(0 to 2) := (
@@ -52,7 +52,8 @@ constant ENQUEUE_FN_MAP: ForwardingMap := (
     maskR1 => "111",  
     maskR0 => "111",
     maskM1 => "111",
-    maskM2 => "110"
+    maskM2 => "110",
+    maskM3 => "000"
 );
      
 constant WAITING_FN_MAP: ForwardingMap := (
@@ -60,7 +61,8 @@ constant WAITING_FN_MAP: ForwardingMap := (
     maskR1 => "000",  
     maskR0 => "000",
     maskM1 => "001",
-    maskM2 => "110"
+    maskM2 => "110",
+    maskM3 => "000"
     --    maskM1 => "000",
     --    maskM2 => "110"
 );
@@ -70,7 +72,8 @@ constant SELECTION_FN_MAP: ForwardingMap := (
     maskR1 => "000",  
     maskR0 => "000",
     maskM1 => "001",
-    maskM2 => "100"
+    maskM2 => "100",
+    maskM3 => "000"
     --    maskM1 => "000",
     --    maskM2 => "110"
 );
@@ -82,7 +85,8 @@ constant ENQUEUE_FN_MAP_SV: ForwardingMap := (
     maskR1 => "111",  
     maskR0 => "111",
     maskM1 => "000",
-    maskM2 => "000"
+    maskM2 => "000",
+    maskM3 => "000"
 );
 
 constant WAITING_FN_MAP_SV: ForwardingMap := (
@@ -90,7 +94,8 @@ constant WAITING_FN_MAP_SV: ForwardingMap := (
     maskR1 => "000",  
     maskR0 => "111",
     maskM1 => "000",
-    maskM2 => "000"
+    maskM2 => "000",
+    maskM3 => "000"
 );
 
 
@@ -100,7 +105,8 @@ constant ENQUEUE_FN_MAP_FLOAT_SV: ForwardingMap := (
     maskR1 => "111",  
     maskR0 => "111",
     maskM1 => "000",
-    maskM2 => "000"
+    maskM2 => "000",
+    maskM3 => "000"
 );
 
 constant WAITING_FN_MAP_FLOAT_SV: ForwardingMap := (
@@ -108,7 +114,8 @@ constant WAITING_FN_MAP_FLOAT_SV: ForwardingMap := (
     maskR1 => "000",  
     maskR0 => "111",
     maskM1 => "000",
-    maskM2 => "000"
+    maskM2 => "000",
+    maskM3 => "000"
 );
 
 -- FP cluster        
@@ -118,7 +125,8 @@ constant ENQUEUE_FN_MAP_FLOAT: ForwardingMap := (
     maskR1 => "111",  
     maskR0 => "111",
     maskM1 => "111",
-    maskM2 => "111"
+    maskM2 => "111",
+    maskM3 => "000"
 );
 
 constant WAITING_FN_MAP_FLOAT: ForwardingMap := (
@@ -126,7 +134,8 @@ constant WAITING_FN_MAP_FLOAT: ForwardingMap := (
     maskR1 => "000",  
     maskR0 => "000",
     maskM1 => "000",
-    maskM2 => "111"
+    maskM2 => "111",
+    maskM3 => "000"
 );
 
 constant SELECTION_FN_MAP_FLOAT: ForwardingMap := (
@@ -134,7 +143,8 @@ constant SELECTION_FN_MAP_FLOAT: ForwardingMap := (
     maskR1 => "000",  
     maskR0 => "000",
     maskM1 => "000",
-    maskM2 => "000"
+    maskM2 => "000",
+    maskM3 => "000"
 );
 
 

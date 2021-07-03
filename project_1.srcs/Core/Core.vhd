@@ -98,7 +98,7 @@ architecture Behavioral of Core is
     
     signal events, eventsOnlyLate: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE);
     
-   -- signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
+    signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
 begin
 
     MONITOR: process (clk)
@@ -396,8 +396,9 @@ begin
         -- Exec stages
         signal slotI0_E0, slotI0_E1, slotI0_E2,
                slotI1_E0, slotI1_E1, slotI1_E2,
-               slotM0_E0, slotM0_E1i, slotM0_E2i, -- Here logical stages get split into Int and FP
-                          slotM0_E1f, slotM0_E2f,
+               slotM0_E0,
+               slotM0_E0i, slotM0_E1i, slotM0_E2i, -- Here logical stages get split into Int and FP
+               slotM0_E0f, slotM0_E1f, slotM0_E2f,
                slot3_E0,  slot3_E1,slot3_E2,
                slotF0_E0, slotF0_E1, slotF0_E2,
                slot4_E0, slot4_E1, slot4_E2, slot5_E0, slot5_E1, slot5_E2: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -456,10 +457,12 @@ begin
        signal outSigsI0, outSigsM0, outSigsSVI, outSigsSVF, outSigsF0: IssueQueueSignals := (others => '0');
        
        signal subpipeI0_Sel, subpipeI0_RegRead, subpipeI0_E0,            subpipeI0_D0,
-                                                                                           subpipeI0_PreExec,
+                             subpipeI0_PreExec,
               subpipeM0_Sel, subpipeM0_RegRead, subpipeM0_E0, --subpipeM0_E1, subpipeM0_E2, subpipeM0_E3,         subpipeM0_D0, subpipeM0_D1,               
-                                                              subpipeM0_E1i, subpipeM0_E2i, subpipeM0_E3i,         subpipeM0_D0i, subpipeM0_D1i,
-                                                              subpipeM0_E1f, subpipeM0_E2f, subpipeM0_E3f,         subpipeM0_D0f, subpipeM0_D1f,
+                                                subpipeM0_E0i,  subpipeM0_E1i, subpipeM0_E2i, subpipeM0_E3i,         subpipeM0_D0i, subpipeM0_D1i,
+                                                subpipeM0_E0f,  subpipeM0_E1f, subpipeM0_E2f, subpipeM0_E3f,         subpipeM0_D0f, subpipeM0_D1f,
+                             --subpipeM0_PreExec,
+                                                              
               subpipeF0_Sel, subpipeF0_RegRead, subpipeF0_E0, subpipeF0_E1,subpipeF0_E2, subpipeF0_D0,
               subpipe_DUMMY
                 : ExecResult := DEFAULT_EXEC_RESULT;                  
@@ -588,7 +591,8 @@ begin
          
             
         SUBPIPE_MEM: block
-           signal dataToAgu, dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+           signal dataToAgu, dataToAguInt, dataToAguFloat,
+                         dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
            signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);           
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
@@ -628,7 +632,7 @@ begin
                outputSignals => outSigsM0
            );
 
-               ISSUE_STAGE_MEM_ALU: entity work.IssueStage
+               ISSUE_STAGE_MEM: entity work.IssueStage
                generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
                port map(
                    clk => clk, reset => '0', en => '0',      
@@ -645,7 +649,7 @@ begin
 
                 sendingToRegReadM0 <= slotIssueM0.full and not outSigsM0.cancelled;
 
-                RR_STAGE_MEM_NEW: entity work.IssueStage
+                RR_STAGE_MEM: entity work.IssueStage
                 generic map(USE_IMM => true, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
                 port map(
                     clk => clk, reset => '0', en => '0',
@@ -684,6 +688,32 @@ begin
            );
                 subpipeM0_E0 <= makeExecResult(slotM0_E0(0), slotM0_E0(0).full);
 
+                        dataToAguInt <= clearFloatDest(dataToAgu);
+                        dataToAguFloat <= clearIntDest(dataToAgu);
+                        
+                               STAGE_AGU_INT: entity work.GenericStage2(Behavioral)
+                               generic map(
+                                   COMPARE_TAG => '1'
+                               )
+                               port map(
+                                   clk => clk, reset => reset, en => en,
+                                   input => dataToAguInt(0),
+                                   output => slotM0_E0i(0),
+                                   events => events
+                               );
+                                    subpipeM0_E0i <= makeExecResult(slotM0_E0i(0), slotM0_E0i(0).full);
+                               
+                               STAGE_AGU_FLOAT: entity work.GenericStage2(Behavioral)
+                               generic map(
+                                   COMPARE_TAG => '1'
+                               )
+                               port map(
+                                   clk => clk, reset => reset, en => en,
+                                   input => dataToAguFloat(0),
+                                   output => slotM0_E0f(0),
+                                   events => events
+                               );
+                                    subpipeM0_E0f <= makeExecResult(slotM0_E0f(0), slotM0_E0f(0).full);
 
 	       dataInMem0(0) <= (slotM0_E0(0).full, slotM0_E0(0).ins);
            sqAddressInput <= dataInMem0(0);
@@ -692,6 +722,10 @@ begin
            dataInMemInt0 <= clearFloatDest(dataInMem0);
            dataInMemFloat0 <= clearIntDest(dataInMem0);
 
+                    ch0 <= bool2std(slotM0_E0 = dataInMem0);
+                    ch1 <= bool2std(slotM0_E0i = dataInMemInt0);
+                    ch2 <= bool2std(slotM0_E0f = dataInMemFloat0);
+
            -- TLB lookup, Dcache access
 	       STAGE_MEM0: entity work.GenericStage2(Behavioral)
            generic map(
@@ -699,9 +733,9 @@ begin
            )
            port map(
                clk => clk, reset => reset, en => en,
-               input => dataInMemInt0(0),      
-               output => slotM0_E1i(0),             
-               events => events               
+               input => dataInMemInt0(0),
+               output => slotM0_E1i(0),
+               events => events     
            );
                 subpipeM0_E1i <= makeExecResult(slotM0_E1i(0), slotM0_E1i(0).full);
 
@@ -781,11 +815,11 @@ begin
 
             inputDataArrayInt <= makeSlotArray(prepareForStoreValueIQ(extractData(renamedDataLivingReMem)), intStoreMask);
             schedInfoIntA <= work.LogicIssue.getIssueInfoArray(inputDataArrayInt, false);
-            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, ENQUEUE_FN_MAP_SV, true, FORWARDING_MODES_INT, false);  
+            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, ENQUEUE_FN_MAP_SV, true, FORWARDING_MODES_SV_INT_D, false);  
 
             inputDataArrayFloat <= makeSlotArray(prepareForStoreValueFloatIQ(extractData(renamedDataLivingReMem), extractData(renamedDataLivingFloatRe)), floatStoreMask);
             schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(inputDataArrayFloat, false);
-            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, ENQUEUE_FN_MAP_FLOAT_SV, true, FORWARDING_MODES_FLOAT, false);
+            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, ENQUEUE_FN_MAP_FLOAT_SV, true, FORWARDING_MODES_SV_FLOAT_D, false);
 
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
             fmaFloatSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoFloatA, fniFloat);
@@ -1157,34 +1191,38 @@ begin
          regsSelS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadIntStoreValue.ins)));
           
          NEW_FNI_INT: block
-                signal   s0_M2, s0_M1, s0_R0, s0_R1,
-                         s1_M2, s1_M1, s1_R0, s1_R1,
-                         s2_M2, s2_M1, s2_R0, s2_R1,
+                signal   s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+                         s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
+                         s2_M3, s2_M2, s2_M1, s2_R0, s2_R1,
                          
-                         fs0_M2, fs0_M1, fs0_R0, fs0_R1,
-                         fs1_M2, fs1_M1, fs1_R0, fs1_R1,
-                         fs2_M2, fs2_M1, fs2_R0, fs2_R1                        
+                         fs0_M3, fs0_M2, fs0_M1, fs0_R0, fs0_R1,
+                         fs1_M3, fs1_M2, fs1_M1, fs1_R0, fs1_R1,
+                         fs2_M3, fs2_M2, fs2_M1, fs2_R0, fs2_R1                        
                                                              : ExecResult := DEFAULT_EXEC_RESULT;
            begin
                  -- I0 pipe
+                 s0_M3 <= DEFAULT_EXEC_RESULT;
                  s0_M2 <= subpipeI0_Sel when TMP_PARAM_I0_DELAY else DEFAULT_EXEC_RESULT;
-                 s0_M1 <= subpipeI0_PreExec;           
+                 s0_M1 <= subpipeI0_PreExec;
                  s0_R0 <= subpipeI0_E0;
                  s0_R1 <= subpipeI0_D0;
 
                  -- M0i pipe
-                 s2_M2 <= subpipeM0_E0;
+                 s2_M3 <= subpipeM0_RegRead;
+                 s2_M2 <= subpipeM0_E0i;   -- TODO: make separate Int/FP dest tags for every stage that can generate wakeup!
                  s2_M1 <= subpipeM0_E1i;
                  s2_R0 <= subpipeM0_E2i;
                  s2_R1 <= subpipeM0_D0i;
 
                  -- F0 pipe
-                 fs0_M2 <= subpipeF0_E0;             
-                 fs0_M1 <= subpipeF0_E1;             
+                 fs0_M3 <= subpipeF0_RegRead;
+                 fs0_M2 <= subpipeF0_E0;   
+                 fs0_M1 <= subpipeF0_E1;
                  fs0_R0 <= subpipeF0_E2;
                  fs0_R1 <= subpipeF0_D0;
                                          
                  -- M0f pipe
+                 fs2_M3 <= subpipeM0_E0f;
                  fs2_M2 <= subpipeM0_E1f;
                  fs2_M1 <= subpipeM0_E2f;
                  fs2_R0 <= subpipeM0_D0f;
@@ -1192,15 +1230,15 @@ begin
 
             
                  fni <= buildForwardingNetwork(
-                                                  s0_M2, s0_M1, s0_R0, s0_R1,
-                                                  s1_M2, s1_M1, s1_R0, s1_R1,
-                                                  s2_M2, s2_M1, s2_R0, s2_R1                                        
+                                                  s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+                                                  s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
+                                                  s2_M3, s2_M2, s2_M1, s2_R0, s2_R1                                        
                                                 );
             
                  fniFloat <= buildForwardingNetworkFP(
-                                                      fs0_M2, fs0_M1, fs0_R0, fs0_R1,
-                                                      fs1_M2, fs1_M1, fs1_R0, fs1_R1,
-                                                      fs2_M2, fs2_M1, fs2_R0, fs2_R1                                        
+                                                      fs0_M3, fs0_M2, fs0_M1, fs0_R0, fs0_R1,
+                                                      fs1_M3, fs1_M2, fs1_M1, fs1_R0, fs1_R1,
+                                                      fs2_M3, fs2_M2, fs2_M1, fs2_R0, fs2_R1                                        
                                                     );
               
           end block;

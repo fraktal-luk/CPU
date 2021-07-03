@@ -43,6 +43,7 @@ type IssueQueueSignals is record
 end record;
 
 type ForwardingInfo is record
+	nextTagsM3:	PhysNameArray(0 to 2);
 	nextTagsM2:	PhysNameArray(0 to 2);
 	nextTagsM1: PhysNameArray(0 to 2);
 	tags0: PhysNameArray(0 to 2);
@@ -53,12 +54,14 @@ end record;
 
 type ForwardingMatches is record
     -- src0
+    a0cmpM3: std_logic_vector(0 to 2);
     a0cmpM2: std_logic_vector(0 to 2);
     a0cmpM1: std_logic_vector(0 to 2);
     a0cmp1: std_logic_vector(0 to 2);    
 	a0cmp0: std_logic_vector(0 to 2);
     
     -- src1
+	a1cmpM3: std_logic_vector(0 to 2);
 	a1cmpM2: std_logic_vector(0 to 2);
 	a1cmpM1: std_logic_vector(0 to 2);
 	a1cmp1: std_logic_vector(0 to 2);	    
@@ -73,10 +76,12 @@ type ForwardingMap is record
     maskR0: std_logic_vector(0 to 2);
     maskM1: std_logic_vector(0 to 2);
     maskM2: std_logic_vector(0 to 2);
+    maskM3: std_logic_vector(0 to 2);
 end record;
 
 
 constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
+	nextTagsM3 => (others => (others => '0')),
 	nextTagsM2 => (others => (others => '0')),
 	nextTagsM1 => (others => (others => '0')),
     tags0 => (others => (others => '0')),
@@ -219,15 +224,15 @@ function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural)
 function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray; 
 
 
-function buildForwardingNetwork(s0_M2, s0_M1, s0_R0, s0_R1,
-                                s1_M2, s1_M1, s1_R0, s1_R1,
-                                s2_M2, s2_M1, s2_R0, s2_R1
+function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+                                s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
+                                s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
           : ExecResult
 ) return ForwardingInfo;
 
-function buildForwardingNetworkFP(s0_M2, s0_M1, s0_R0, s0_R1,
-                                s1_M2, s1_M1, s1_R0, s1_R1,
-                                s2_M2, s2_M1, s2_R0, s2_R1
+function buildForwardingNetworkFP(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+                                  s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
+                                  s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
           : ExecResult
 ) return ForwardingInfo;
 
@@ -1163,14 +1168,15 @@ begin
 end function;
 
 
-function buildForwardingNetwork(s0_M2, s0_M1, s0_R0, s0_R1,
-                                s1_M2, s1_M1, s1_R0, s1_R1,
-                                s2_M2, s2_M1, s2_R0, s2_R1
+function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+                                s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
+                                s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
           : ExecResult
 ) return ForwardingInfo is
     variable fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 begin
          -- Forwarding network
+		 fni.nextTagsM3 := (0 => s0_M3.dest,                                                                             2 => s2_M3.dest,                             others => (others => '0'));
 		 fni.nextTagsM2 := (0 => s0_M2.dest,                                                                             2 => s2_M2.dest,                             others => (others => '0'));
 		 fni.nextTagsM1 := (0 => s0_M1.dest,                                                                             2 => s2_M1.dest,                             others => (others => '0'));        
          fni.tags0 :=      (0 => s0_R0.dest,                              1 => s1_R0.dest,                               2 => s2_R0.dest,                             others => (others => '0')); 
@@ -1181,14 +1187,15 @@ begin
     return fni;
 end function;
 
-function buildForwardingNetworkFP(s0_M2, s0_M1, s0_R0, s0_R1,
-                                s1_M2, s1_M1, s1_R0, s1_R1,
-                                s2_M2, s2_M1, s2_R0, s2_R1
+function buildForwardingNetworkFP(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+                                  s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
+                                  s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
           : ExecResult
 ) return ForwardingInfo is
     variable fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 begin
          -- Forwarding network
+		 fni.nextTagsM3 := (0 => s0_M3.dest,                                                                             2 => s2_M3.dest,                             others => (others => '0'));
 		 fni.nextTagsM2 := (0 => s0_M2.dest,                                                                             2 => s2_M2.dest,                             others => (others => '0'));
 		 fni.nextTagsM1 := (0 => s0_M1.dest,                                                                             2 => s2_M1.dest,                             others => (others => '0'));        
          fni.tags0 :=      (0 => s0_R0.dest,                                                                             2 => s2_R0.dest,                             others => (others => '0')); 
