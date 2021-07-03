@@ -482,13 +482,13 @@ begin
         
             inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe));
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, FORWARDING_MODES_INT, false);        
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, FORWARDING_MODES_INT_D, false);        
               
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
                 IQ_SIZE => IQ_SIZE_I0,
                     FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-                    FORWARDING_D(0 to 2) => FORWARDING_MODES_INT(0 to 2),
+                    FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
                     USE_NEW => true
             )
             port map(
@@ -604,14 +604,14 @@ begin
 
            inputDataArray <= makeSlotArray(removeArg2(extractData(renamedDataLivingReMem)), memMaskInt);
            schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, FORWARDING_MODES_INT, false);        
+           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, FORWARDING_MODES_INT_D, false);        
                         
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
                IQ_SIZE => IQ_SIZE_M0,
                ALT_INPUT => false,
                    FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-                   FORWARDING_D(0 to 2) => FORWARDING_MODES_INT(0 to 2),
+                   FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
                    USE_NEW => true
            )
            port map(
@@ -955,13 +955,13 @@ begin
 
             inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), getFpuMask(renamedDataLivingFloatRe));
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, false);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, ENQUEUE_FN_MAP_FLOAT, true, FORWARDING_MODES_FLOAT, false);
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, ENQUEUE_FN_MAP_FLOAT, true, FORWARDING_MODES_FLOAT_D, false);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
                 IQ_SIZE => IQ_SIZE_F0, IS_FP => true,
                       FORWARDING(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
-                      FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
+                      FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT_D(0 to 2),
                       USE_NEW => true
             )
             port map(
