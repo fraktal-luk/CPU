@@ -223,8 +223,8 @@ begin
 
         fmaInputStage <= findForwardingMatchesArray(inputStage, fni);
         
-        inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, false, FORWARDING_D, USE_NEW);                   
-        inputStageUpdatedSel <= updateSchedulerArray(inputStage, fni, fmaInputStage, selectionFM, false, FORWARDING, USE_NEW);                   
+        inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, waitingFM, false, false, FORWARDING_D);--, USE_NEW);                   
+        inputStageUpdatedSel <= updateSchedulerArray(inputStage, fni, fmaInputStage, selectionFM, false, true, FORWARDING);--, USE_NEW);                   
             
         -- TODO: use the fact that the have the same high tag part?
         killMaskInput <= getKillMask(inputStage, events.execCausing, events.execEvent, events.lateEvent);
@@ -335,8 +335,8 @@ begin
         end generate;
         
 
-    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, waitingFM, false, FORWARDING_D, USE_NEW);
-    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, selectionFM, false, FORWARDING, USE_NEW);
+    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, waitingFM, false, false, FORWARDING_D);--, USE_NEW);
+    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, selectionFM, false, true, FORWARDING);--, USE_NEW);
 
 
         queueContentUpdatedSelExt(0 to IQ_SIZE-1) <= queueContentUpdatedSel;

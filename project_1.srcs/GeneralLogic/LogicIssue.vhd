@@ -127,11 +127,12 @@ end record;
 type WakeupStruct is record
     argLocsPipe: SmallNumber;
     argLocsPhase: SmallNumber;
+        argSrc: SmallNumber;
     --wakeupVec: std_logic_vector(0 to 2);
     match:   std_logic;         
 end record;
 
-constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0');
+constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", "00000010", '0');
 type WakeupArray2D is array(natural range <>, natural range <>) of WakeupStruct;
 
 
@@ -175,8 +176,11 @@ function extractReadyMask(entryVec: SchedulerInfoArray) return std_logic_vector;
 
 function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector;
 
-function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; dynamic: boolean; forwardingModes: ForwardingModeArray;
-                                TMP_NEW: boolean)
+function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap;
+                dynamic: boolean;
+                selection: boolean;
+                forwardingModes: ForwardingModeArray
+            )
 return SchedulerInfoArray;
 
 
@@ -417,7 +421,8 @@ end function;
 
 function updateArgInfo(ss: DynamicInfo;
                        arg: natural;
-                       wakeups: WakeupStruct)
+                       wakeups: WakeupStruct;
+                       selection: boolean)
 return DynamicInfo is
     variable res: DynamicInfo := ss;
     variable wakeupVec: std_logic_vector(0 to 2) := (others => '0');
@@ -428,8 +433,7 @@ begin
         res.argLocsPipe(arg) := wakeups.argLocsPipe;
         res.missing(arg) := not wakeups.match;
         
-            res.argSrc(arg) := --"00000011";
-                                "00000000";
+            res.argSrc(arg) := wakeups.argSrc;
                 
     else -- update loc
         case ss.argLocsPhase(arg)(2 downto 0) is
@@ -443,15 +447,17 @@ begin
                 res.argLocsPhase(arg) := "00000010";
         end case;
         
---        case ss.argSrc(arg)(1 downto 0) is
---            when "11" =>
---                res.argSrc(arg) := "00000000";
---            when "00" =>
---                res.argSrc(arg) := "00000001";                
---            when others =>
---                res.argSrc(arg) := "00000010";
---        end case;
-                res.argSrc(arg) := addInt(res.argSrc(arg), 1);
+            if not selection then
+                --res.argSrc(arg) := addInt(res.argSrc(arg), 1);
+                case res.argSrc(arg)(1 downto 0) is
+                    when "11" =>
+                        res.argSrc(arg) := "00000000";
+                    when "00" =>
+                        res.argSrc(arg) := "00000001";               
+                    when others =>
+                        res.argSrc(arg) := "00000010";
+                end case;                
+            end if;
     end if;
 
     return res;
@@ -832,7 +838,9 @@ begin
 end function;
 
 
-function getWakeupStructStatic(arg: natural; fnm: ForwardingMap; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray) return WakeupStruct is
+function getWakeupStructStatic(arg: natural; fnm: ForwardingMap; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray;
+                                selection: boolean
+) return WakeupStruct is
     variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
     variable nMatches: natural;
     variable matchVec, matchR1, matchR0, matchM1, matchM2, matchM3: std_logic_vector(0 to 2) := (others => '0');
@@ -862,9 +870,21 @@ begin
         if matchVec(p) = '1' then
             res.argLocsPipe(2 downto 0) := i2slv(p, 3);
             res.argLocsPhase(2 downto 0) := i2slv(forwardingModes(p).stage + 1, 3);
+                if selection then
+                    if forwardingModes(p).stage + 1 > 2 then
+                        res.argSrc(4 downto 0) := i2slv(2, 5);
+                    else
+                        res.argSrc(4 downto 0) := i2slv(forwardingModes(p).stage + 1, 5);
+                    end if;             
+                else
+                    if forwardingModes(p).stage + 2 > 2 then
+                        res.argSrc(4 downto 0) := i2slv(2, 5);
+                    else
+                        res.argSrc(4 downto 0) := i2slv(forwardingModes(p).stage + 2, 5);
+                    end if;
+                end if;
         end if;
-    end loop;
-    
+    end loop;   
     res.match := isNonzero(matchVec);
     
     return res;
@@ -902,6 +922,12 @@ begin
                 if matchVec(p) = '1' then
                     res.argLocsPipe(2 downto 0) := i2slv(p, 3);
                     res.argLocsPhase(2 downto 0) := i2slv(q + 1, 3);
+                    
+                        if q + 2 > 2 then
+                            res.argSrc(4 downto 0) := i2slv(2, 5);
+                        else
+                            res.argSrc(4 downto 0) := i2slv(q + 2, 5);
+                        end if;
                     exit;
                 end if;               
             end if;
@@ -918,37 +944,38 @@ function updateSchedulerState(state: SchedulerInfo;
                                 fni: ForwardingInfo;
                                 fm: ForwardingMatches;
                                 fnm: ForwardingMap;
-                                    TMP_NEW: boolean;
+                                --    TMP_NEW: boolean;
                                 dynamic: boolean;
+                                selection: boolean;
                                 forwardingModes: ForwardingModeArray)
 return SchedulerInfo is
 	variable res: SchedulerInfo := state;
 	variable wakeups0, wakeups1: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
 begin
-    if TMP_NEW then
-        wakeups0 := getWakeupStructStatic(0, fnm, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes);
-        wakeups1 := getWakeupStructStatic(1, fnm, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes);
+    if not dynamic then
+        wakeups0 := getWakeupStructStatic(0, fnm, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes, selection);
+        wakeups1 := getWakeupStructStatic(1, fnm, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes, selection);
     else
-        --wakeups0 := getWakeupStruct      (0, fnm, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2);
-        --wakeups1 := getWakeupStruct      (1, fnm, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2);
-        
         wakeups0 := getWakeupStructDynamic(0, fnm, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes);
         wakeups1 := getWakeupStructDynamic(1, fnm, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes);
     end if;
 
-    res.dynamic := updateArgInfo(res.dynamic, 0, wakeups0);
-    res.dynamic := updateArgInfo(res.dynamic, 1, wakeups1);
+    res.dynamic := updateArgInfo(res.dynamic, 0, wakeups0, selection);
+    res.dynamic := updateArgInfo(res.dynamic, 1, wakeups1, selection);
 
 	return res;
 end function;
 
-function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap; dynamic: boolean; forwardingModes: ForwardingModeArray;
-            TMP_NEW: boolean)
+function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; fnm: ForwardingMap;
+                dynamic: boolean;
+                selection: boolean;
+                forwardingModes: ForwardingModeArray
+            )
 return SchedulerInfoArray is
 	variable res: SchedulerInfoArray(0 to schedArray'length-1);-- := insArray;
 begin
 	for i in schedArray'range loop
-		res(i) := updateSchedulerState(schedArray(i), fni, fma(i), fnm, TMP_NEW, dynamic, forwardingModes);
+		res(i) := updateSchedulerState(schedArray(i), fni, fma(i), fnm, dynamic, selection, forwardingModes);
 	end loop;	
 	return res;
 end function;
@@ -961,8 +988,8 @@ end function;
         begin
             for i in res'range loop
                 if TMP_NEW then
-                    res(i, 0) := getWakeupStructStatic(0, fnm, fma(i).a0cmp1, fma(i).a0cmp0, fma(i).a0cmpM1, fma(i).a0cmpM2, fma(i).a0cmpM3, forwardingModes);
-                    res(i, 1) := getWakeupStructStatic(1, fnm, fma(i).a1cmp1, fma(i).a1cmp0, fma(i).a1cmpM1, fma(i).a1cmpM2, fma(i).a1cmpM3, forwardingModes);
+                    res(i, 0) := getWakeupStructStatic(0, fnm, fma(i).a0cmp1, fma(i).a0cmp0, fma(i).a0cmpM1, fma(i).a0cmpM2, fma(i).a0cmpM3, forwardingModes, false);
+                    res(i, 1) := getWakeupStructStatic(1, fnm, fma(i).a1cmp1, fma(i).a1cmp0, fma(i).a1cmpM1, fma(i).a1cmpM2, fma(i).a1cmpM3, forwardingModes, false);
                 else
                     res(i, 0) := getWakeupStruct(0, fnm, fma(i).a0cmp1, fma(i).a0cmp0, fma(i).a0cmpM1, fma(i).a0cmpM2, fma(i).a0cmpM3);
                     res(i, 1) := getWakeupStruct(1, fnm, fma(i).a1cmp1, fma(i).a1cmp0, fma(i).a1cmpM1, fma(i).a1cmpM2, fma(i).a1cmpM3);

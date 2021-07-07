@@ -482,7 +482,7 @@ begin
         
             inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe));
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, FORWARDING_MODES_INT_D, false);        
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, false, FORWARDING_MODES_INT_D);--, false);        
               
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
@@ -604,7 +604,7 @@ begin
 
            inputDataArray <= makeSlotArray(removeArg2(extractData(renamedDataLivingReMem)), memMaskInt);
            schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, FORWARDING_MODES_INT_D, false);        
+           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, false, FORWARDING_MODES_INT_D);--, false);        
                         
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
@@ -815,11 +815,11 @@ begin
 
             inputDataArrayInt <= makeSlotArray(prepareForStoreValueIQ(extractData(renamedDataLivingReMem)), intStoreMask);
             schedInfoIntA <= work.LogicIssue.getIssueInfoArray(inputDataArrayInt, false);
-            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, ENQUEUE_FN_MAP_SV, true, FORWARDING_MODES_SV_INT_D, false);  
+            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, ENQUEUE_FN_MAP_SV, true, false, FORWARDING_MODES_SV_INT_D);--, false);  
 
             inputDataArrayFloat <= makeSlotArray(prepareForStoreValueFloatIQ(extractData(renamedDataLivingReMem), extractData(renamedDataLivingFloatRe)), floatStoreMask);
             schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(inputDataArrayFloat, false);
-            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, ENQUEUE_FN_MAP_FLOAT_SV, true, FORWARDING_MODES_SV_FLOAT_D, false);
+            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, ENQUEUE_FN_MAP_FLOAT_SV, true, false, FORWARDING_MODES_SV_FLOAT_D);--, false);
 
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
             fmaFloatSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoFloatA, fniFloat);
@@ -955,7 +955,7 @@ begin
 
             inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), getFpuMask(renamedDataLivingFloatRe));
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, false);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, ENQUEUE_FN_MAP_FLOAT, true, FORWARDING_MODES_FLOAT_D, false);
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, ENQUEUE_FN_MAP_FLOAT, true, false, FORWARDING_MODES_FLOAT_D);--, false);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
