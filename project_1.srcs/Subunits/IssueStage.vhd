@@ -47,7 +47,9 @@ architecture Alternative of IssueStage is
 	signal inputDataWithArgs, inputData_TMP, dispatchDataUpdated: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 	signal sendingOut: std_logic := '0';
 	signal stageDataSaved, stageDataIn: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
-	signal argState, argStateNext: SchedulerState := DEFAULT_SCHEDULER_STATE;		
+	signal argState, argStateNext: SchedulerState := DEFAULT_SCHEDULER_STATE;
+	
+	   signal TMP_argReads0, TMP_argReads1: IntArray(0 to 2);		
 begin
     inputData_TMP <= TMP_prepareDispatchSlot(input, prevSending);
 	inputDataWithArgs <= getDispatchArgValues_NEW(inputData_TMP, fni, prevSending, USE_IMM, REGS_ONLY);-- when not TMP_DELAY 
@@ -82,9 +84,14 @@ begin
 		if rising_edge(clk) then
 		    if nextAccepting = '1' then -- CAREFUL: this is to enable stalling 
 			    argState <= argStateNext;
+			    
+			    
+			         TMP_argReads0 <= TMP_argSources(inputData_TMP);
 			end if; 
 		end if;
 	end process;
+
+                TMP_argReads1 <= TMP_showArgSources(argState, TMP_argReads0);
 
     dispatchDataUpdated.state <= updateDispatchArgs_NEW(argState, fni.values0, regValues, TMP_DELAY);
 

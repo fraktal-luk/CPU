@@ -67,6 +67,7 @@ type DynamicInfo is record
 
     argLocsPipe: SmallNumberArray(0 to 2);
     argLocsPhase: SmallNumberArray(0 to 2);
+    argSrc: SmallNumberArray(0 to 2);
 end record;
 
 
@@ -88,7 +89,8 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     readyM2 => (others => '0'),
 
     argLocsPipe => (others => (others => '0')),
-    argLocsPhase => (others => (others => '0'))
+    argLocsPhase => (others => (others => '0')),
+    argSrc => (others => (others => '0'))
 );
 
 type DynamicInfoArray is array(natural range <>) of DynamicInfo;
@@ -202,6 +204,14 @@ return std_logic_vector;
         function indh16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vector) return std_logic_vector;
 
 
+
+    function TMP_argSources(input: SchedulerEntrySlot)
+    return IntArray;
+    
+    function TMP_showArgSources(st: SchedulerState; prev: IntArray)
+    return IntArray;
+
+
 end LogicIssue;
 
 
@@ -275,7 +285,9 @@ begin
     res.readyM2  := (others => '0');
 
     res.argLocsPipe := (others => (others => '0'));
-    res.argLocsPhase:= (others => "00000010");
+    res.argLocsPhase := (others => "00000010");
+    res.argSrc := (others => --"00000010");
+                             "10000000");
     
     if HAS_IMM and isl.ins.constantArgs.immSel = '1' then
         if IMM_AS_REG then
@@ -350,6 +362,7 @@ begin
 
     res.state.argLocsPipe := info.dynamic.argLocsPipe;
     res.state.argLocsPhase:= info.dynamic.argLocsPhase;
+    res.state.argSrc := info.dynamic.argSrc;
 
     res.state.args := (others => (others => '0'));
 
@@ -414,6 +427,10 @@ begin
         res.argLocsPhase(arg) := wakeups.argLocsPhase;
         res.argLocsPipe(arg) := wakeups.argLocsPipe;
         res.missing(arg) := not wakeups.match;
+        
+            res.argSrc(arg) := --"00000011";
+                                "00000000";
+                
     else -- update loc
         case ss.argLocsPhase(arg)(2 downto 0) is
             when "110" =>
@@ -424,7 +441,17 @@ begin
                 res.argLocsPhase(arg) := "00000001";                
             when others =>
                 res.argLocsPhase(arg) := "00000010";
-        end case;     
+        end case;
+        
+--        case ss.argSrc(arg)(1 downto 0) is
+--            when "11" =>
+--                res.argSrc(arg) := "00000000";
+--            when "00" =>
+--                res.argSrc(arg) := "00000001";                
+--            when others =>
+--                res.argSrc(arg) := "00000010";
+--        end case;
+                res.argSrc(arg) := addInt(res.argSrc(arg), 1);
     end if;
 
     return res;
@@ -572,6 +599,58 @@ begin
     return res;
 end function;
 
+
+    function TMP_argSources(input: SchedulerEntrySlot)
+    return IntArray is
+        variable res: IntArray(0 to 2) := (others => -100);
+    begin
+    
+        if input.state.zero(0) = '1' then
+            res(0) := -2;
+        elsif input.state.argLocsPhase(0)(1 downto 0) = "00" then
+            res(0) := 0;
+        else --elsif res.state.argPhase(1 downto 0) := "01" then
+            res(0) := 1;
+        end if;
+    
+        if input.state.zero(1) = '1' then
+            res(1) := -2;
+        elsif input.state.argLocsPhase(1)(1 downto 0) = "00" then
+            res(1) := 0;
+        else --elsif res.state.argPhase(1 downto 0) := "01" then
+            res(1) := 1;				
+        end if;
+
+        return res;
+    end function;
+
+
+
+    function TMP_showArgSources(st: SchedulerState; prev: IntArray)
+    return IntArray is
+        variable res: IntArray(0 to 2) := (others => -100);
+    begin
+    
+        if st.stored(0) = '1' then
+            res(0) := prev(0);
+        elsif st.argLocsPhase(0)(1 downto 0) = "00" then -- Forwarding from new outputs
+            res(0) := -1;
+        else
+            res(0) := 2;
+        end if;
+        --res.stored(0) := '1';
+    
+        if st.stored(1) = '1' then
+            res(1) := prev(1);
+        elsif st.argLocsPhase(1)(1 downto 0) = "00" then -- Forwarding from new outputs
+            res(1) := -1;
+        else
+            res(1) := 2;
+        end if;
+        --res.stored(1) := '1';         
+    
+        return res;
+    end function;
 
 
 function extractReadyMask(entryVec: SchedulerInfoArray) return std_logic_vector is
