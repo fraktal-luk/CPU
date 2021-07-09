@@ -291,7 +291,7 @@ begin
     res.argLocsPipe := (others => (others => '0'));
     res.argLocsPhase := (others => "00000010");
     res.argSrc := (others => --"00000010");
-                             "10000000");
+                             "00000010");
     
     if HAS_IMM and isl.ins.constantArgs.immSel = '1' then
         if IMM_AS_REG then
@@ -535,12 +535,14 @@ begin
     if res.state.zero(0) = '1' then
         res.state.args(0) := (others => '0');
         res.state.stored(0) := '1';
-    elsif res.state.argLocsPhase(0)(1 downto 0) = "00" then
+    elsif res.state.--argLocsPhase(0)(1 downto 0) = "00" then
+                    argSrc(0)(1 downto 0) = "00" then
         res.state.args(0) := fni.values0(slv2u(res.state.argLocsPipe(0)(1 downto 0)));
         res.state.stored(0) := '1';
     else --elsif res.state.argPhase(1 downto 0) := "01" then
         res.state.args(0) := fni.values1(slv2u(res.state.argLocsPipe(0)(1 downto 0)));
-        if res.state.argLocsPhase(0)(1 downto 0) = "01" then
+        if res.state.--argLocsPhase(0)(1 downto 0) = "01" then
+                     argSrc(0)(1 downto 0) = "01" then
             res.state.stored(0) := '1';
         end if;
     end if;
@@ -556,12 +558,14 @@ begin
             res.state.args(1) := (others => '0');
         end if;
         res.state.stored(1) := '1';
-    elsif res.state.argLocsPhase(1)(1 downto 0) = "00" then
+    elsif res.state.--argLocsPhase(1)(1 downto 0) = "00" then
+                    argSrc(1)(1 downto 0) = "00" then
         res.state.args(1) := fni.values0(slv2u(res.state.argLocsPipe(1)(1 downto 0)));
         res.state.stored(1) := '1';
     else --elsif res.state.argPhase(1 downto 0) := "01" then
         res.state.args(1) := fni.values1(slv2u(res.state.argLocsPipe(1)(1 downto 0)));
-        if res.state.argLocsPhase(1)(1 downto 0) = "01" then
+        if res.state.--argLocsPhase(1)(1 downto 0) = "01" then
+                    argSrc(1)(1 downto 0) = "01" then
             res.state.stored(1) := '1';
         end if;				
     end if;
@@ -586,7 +590,8 @@ begin
 
     if res.stored(0) = '1' then
         null; -- Using stored arg
-    elsif res.argLocsPhase(0)(1 downto 0) = "00" then -- Forwarding from new outputs
+    elsif res.--argLocsPhase(0)(1 downto 0) = "00" then -- Forwarding from new outputs
+              argSrc(0)(1 downto 0) = "11" then
         res.args(0) := vals(slv2u(res.argLocsPipe(0)(1 downto 0)));
     else
         res.args(0) := regValues(0);
@@ -595,7 +600,8 @@ begin
 
     if res.stored(1) = '1' then
         null; -- Using stored arg
-    elsif res.argLocsPhase(1)(1 downto 0) = "00" then -- Forwarding from new outputs
+    elsif res.--argLocsPhase(1)(1 downto 0) = "00" then -- Forwarding from new outputs
+              argSrc(1)(1 downto 0) = "11" then
         res.args(1) := vals(slv2u(res.argLocsPipe(1)(1 downto 0)));
     else
         res.args(1) := regValues(1);
@@ -872,15 +878,15 @@ begin
             res.argLocsPhase(2 downto 0) := i2slv(forwardingModes(p).stage + 1, 3);
                 if selection then
                     if forwardingModes(p).stage + 1 > 2 then
-                        res.argSrc(4 downto 0) := i2slv(2, 5);
+                        res.argSrc(1 downto 0) := i2slv(2, 2);
                     else
-                        res.argSrc(4 downto 0) := i2slv(forwardingModes(p).stage + 1, 5);
+                        res.argSrc(1 downto 0) := i2slv(forwardingModes(p).stage + 1, 2);
                     end if;             
                 else
                     if forwardingModes(p).stage + 2 > 2 then
-                        res.argSrc(4 downto 0) := i2slv(2, 5);
+                        res.argSrc(1 downto 0) := i2slv(2, 2);
                     else
-                        res.argSrc(4 downto 0) := i2slv(forwardingModes(p).stage + 2, 5);
+                        res.argSrc(1 downto 0) := i2slv(forwardingModes(p).stage + 2, 2);
                     end if;
                 end if;
         end if;
@@ -924,9 +930,9 @@ begin
                     res.argLocsPhase(2 downto 0) := i2slv(q + 1, 3);
                     
                         if q + 2 > 2 then
-                            res.argSrc(4 downto 0) := i2slv(2, 5);
+                            res.argSrc(1 downto 0) := i2slv(2, 2);
                         else
-                            res.argSrc(4 downto 0) := i2slv(q + 2, 5);
+                            res.argSrc(1 downto 0) := i2slv(q + 2, 2);
                         end if;
                     exit;
                 end if;               
