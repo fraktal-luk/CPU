@@ -79,7 +79,7 @@ architecture Behavioral of Core is
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData, committedOut: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-    signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+    signal bqCompare, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     signal specialAction, specialActionBuffOut, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     signal bqPointer, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
@@ -669,6 +669,8 @@ begin
 
            preIndexSQ <= slotPreExecM0.ins.tags.sqPointer;
            preIndexLQ <= slotPreExecM0.ins.tags.lqPointer;
+
+                preAddressInput <= (slotPreExecM0.full, slotPreExecM0.ins);
 
            sendingFromDLQ <= '0';          -- TEMP!
            dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
@@ -1516,7 +1518,8 @@ begin
 		storeValueInput => sqValueInput, 
 		compareAddressInput => sqAddressInput,
         compareIndexInput => preIndexSQ,
-                            
+            preCompareAddressInput => preAddressInput,
+            
 		selectedDataOutput => sqSelectedOutput,
 
 		committing => robSending,
@@ -1558,6 +1561,7 @@ begin
 		storeValueInput => DEFAULT_INSTRUCTION_SLOT, 
 		compareAddressInput => lqAddressInput,
         compareIndexInput => preIndexLQ,        
+            preCompareAddressInput => preAddressInput,
              
 		selectedDataOutput => lqSelectedOutput,
 

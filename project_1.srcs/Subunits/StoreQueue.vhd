@@ -39,6 +39,7 @@ entity StoreQueue is
 		storeValueInput: in InstructionSlot;
 		compareAddressInput: in InstructionSlot;
         compareIndexInput: in SmallNumber;
+            preCompareAddressInput: InstructionSlot;
 
 		selectedDataOutput: out InstructionSlot;
 
@@ -64,7 +65,7 @@ architecture Behavioral of StoreQueue is
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
     constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;
 	
-	signal addressMatchMask, newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+	signal addressMatchMask, memOpMask, newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 	
 	signal pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pTagged, pTaggedNext, pFlush, storePtr, pSelect, pRenamed, pRenamedNext,
 	       pStartEffective, pStartEffectiveNext,
@@ -89,7 +90,8 @@ begin
         drainOutput <= getDrainOutput_T(drainEntry, drainValue);
         selectedOutput <= getDrainOutput_T(selectedEntry, selectedValue);
 
-        addressMatchMask <= getAddressMatching(queueContent, compareAddressInput.ins.result) and getAddressCompleted(queueContent) and getWhichMemOp(queueContent);
+        addressMatchMask <= getAddressMatching(queueContent, compareAddressInput.ins.result) and getAddressCompleted(queueContent);-- and getWhichMemOp(queueContent);
+        memOpMask <= getWhichMemOp(queueContent);
         
         process (clk)
         begin
@@ -111,9 +113,11 @@ begin
                 
                     -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
                 if not IS_LOAD_QUEUE then
-                    isSelected <= compareAddressInput.full and isLoadMemOp(compareAddressInput.ins) and isNonzero(olderSQ);
+                    isSelected <= compareAddressInput.full-- and isLoadMemOp(compareAddressInput.ins)
+                                                             and isNonzero(olderSQ);
                 else
-                    isSelected <= compareAddressInput.full and isStoreMemOp(compareAddressInput.ins) and isNonzero(newerLQ);
+                    isSelected <= compareAddressInput.full-- and isStoreMemOp(compareAddressInput.ins) and isNonzero(newerLQ);
+                                                           and isNonzero(newerLQ);
                 end if;
                 
                 drainEntry <= queueContent(slv2u(pDrain));
@@ -161,11 +165,11 @@ begin
 
     ADR_FORW: block
     begin
-        newerNextLQ <= cmpIndexAfter(pStartLong, pTaggedLong, compareIndexInput, QUEUE_SIZE, PTR_MASK_SN);
-        olderNextSQ <= cmpIndexBefore(pDrainLongPrev, pTaggedLong, compareIndexInput, QUEUE_SIZE, PTR_MASK_SN);
+        newerNextLQ <= cmpIndexAfter(pStartLong, pTaggedLong, compareIndexInput, QUEUE_SIZE, PTR_MASK_SN) and memOpMask when isStoreMemOp(preCompareAddressInput.ins) = '1' else (others => '0');
+        olderNextSQ <= cmpIndexBefore(pDrainLongPrev, pTaggedLong, compareIndexInput, QUEUE_SIZE, PTR_MASK_SN) and memOpMask when isLoadMemOp(preCompareAddressInput.ins) = '1' else (others => '0');
 
-        newerLQ <=     newerRegLQ and addressMatchMask when isStoreMemOp(compareAddressInput.ins) = '1' else (others => '0'); -- Only those with known address
-        olderSQ <=     olderRegSQ and addressMatchMask when isLoadMemOp(compareAddressInput.ins) = '1' else (others => '0'); -- Only those with known address
+        newerLQ <=     newerRegLQ and addressMatchMask;-- when isStoreMemOp(compareAddressInput.ins) = '1' else (others => '0'); -- Only those with known address
+        olderSQ <=     olderRegSQ and addressMatchMask;-- when isLoadMemOp(compareAddressInput.ins) = '1' else (others => '0'); -- Only those with known address
 
         WHEN_SQ: if not IS_LOAD_QUEUE generate
             -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
