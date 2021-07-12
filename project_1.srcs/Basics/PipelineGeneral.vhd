@@ -23,8 +23,8 @@ end record;
 
 constant DEFAULT_EXEC_RESULT: ExecResult := ('0', tag => (others => '0'), dest => (others => '0'), value => (others => '0'));
 
-        function makeExecResult(isl: InstructionSlot; full: std_logic) return ExecResult;
-        function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecResult;
+function makeExecResult(isl: InstructionSlot; full: std_logic) return ExecResult;
+function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecResult;
 
 
 type EventState is record
@@ -70,15 +70,6 @@ end record;
 
 type ForwardingMatchesArray is array(integer range <>) of ForwardingMatches; 
 
-type ForwardingMap is record
-    maskRR: std_logic_vector(0 to 2);
-    maskR1: std_logic_vector(0 to 2);
-    maskR0: std_logic_vector(0 to 2);
-    maskM1: std_logic_vector(0 to 2);
-    maskM2: std_logic_vector(0 to 2);
-    maskM3: std_logic_vector(0 to 2);
-end record;
-
 
 constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
 	nextTagsM3 => (others => (others => '0')),
@@ -91,10 +82,6 @@ constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
 );
 
 constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
-    others => (others => '0')
-);
-
-constant DEFAULT_FORWARDING_MAP: ForwardingMap := (
     others => (others => '0')
 );
 
@@ -846,24 +833,28 @@ begin
         res(i).virtualArgSpec.floatDestSel := '0';                
         
         res(i).virtualArgSpec.intArgSel(0) := res(i).virtualArgSpec.intArgSel(2);
+        res(i).virtualArgSpec.intArgSel(1) := '0';
         res(i).virtualArgSpec.intArgSel(2) := '0';                
         res(i).virtualArgSpec.floatArgSel(0) := '0';
         res(i).virtualArgSpec.floatArgSel(1) := '0';                                    
         res(i).virtualArgSpec.floatArgSel(2) := '0';                
         
         res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
+        res(i).virtualArgSpec.args(1) := (others => '0');
         res(i).virtualArgSpec.args(2) := (others => '0');
 
         res(i).physicalArgSpec.intDestSel := '0';
         res(i).physicalArgSpec.floatDestSel := '0';                
         
         res(i).physicalArgSpec.intArgSel(0) := res(i).physicalArgSpec.intArgSel(2);
+        res(i).physicalArgSpec.intArgSel(1) := '0';                
         res(i).physicalArgSpec.intArgSel(2) := '0';                
         res(i).physicalArgSpec.floatArgSel(0) := '0';--res(i).virtualArgSpec.floatArgSel(2);
         res(i).physicalArgSpec.floatArgSel(1) := '0';                                    
         res(i).physicalArgSpec.floatArgSel(2) := '0';                
         
         res(i).physicalArgSpec.args(0) := res(i).physicalArgSpec.args(2);
+        res(i).physicalArgSpec.args(1) := (others => '0');                                              
         res(i).physicalArgSpec.args(2) := (others => '0');                                              
     end loop;
     
@@ -886,9 +877,11 @@ begin
         res(i).virtualArgSpec.intArgSel(1) := '0';                
         res(i).virtualArgSpec.intArgSel(2) := '0';                
         res(i).virtualArgSpec.floatArgSel(0) := res(i).virtualArgSpec.floatArgSel(2);
+        res(i).virtualArgSpec.floatArgSel(1) := '0';                
         res(i).virtualArgSpec.floatArgSel(2) := '0';                
         
         res(i).virtualArgSpec.args(0) := insVecFloat(i).virtualArgSpec.args(2);
+        res(i).virtualArgSpec.args(1) := (others => '0');
         res(i).virtualArgSpec.args(2) := (others => '0');
 
 
@@ -899,9 +892,11 @@ begin
         res(i).physicalArgSpec.intArgSel(1) := '0';                
         res(i).physicalArgSpec.intArgSel(2) := '0';                
         res(i).physicalArgSpec.floatArgSel(0) := res(i).physicalArgSpec.floatArgSel(2);
+        res(i).physicalArgSpec.floatArgSel(1) := '0';                
         res(i).physicalArgSpec.floatArgSel(2) := '0';                
         
         res(i).physicalArgSpec.args(0) := insVecFloat(i).physicalArgSpec.args(2);
+        res(i).physicalArgSpec.args(1) := (others => '0');                                              
         res(i).physicalArgSpec.args(2) := (others => '0');                                              
     end loop;
     

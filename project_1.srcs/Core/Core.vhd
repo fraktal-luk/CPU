@@ -482,14 +482,13 @@ begin
         
             inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe));
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, false, FORWARDING_MODES_INT_D);--, false);        
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, FORWARDING_MODES_INT_D);
               
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
                 IQ_SIZE => IQ_SIZE_I0,
-                    FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-                    FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
-                    USE_NEW => true
+                FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
+                FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -502,8 +501,6 @@ begin
                     newArr_Alt => NEW_ARR_DUMMY,
                     newArrOut => newArrShared,
                 fni => fni,
-                waitingFM => WAITING_FN_MAP,
-                selectionFM => SELECTION_FN_MAP,
                 readyRegFlags => readyRegFlagsInt,
                 nextAccepting => allowIssueI0,
                 events => events,            
@@ -604,15 +601,14 @@ begin
 
            inputDataArray <= makeSlotArray(removeArg2(extractData(renamedDataLivingReMem)), memMaskInt);
            schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, false, FORWARDING_MODES_INT_D);--, false);        
+           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, FORWARDING_MODES_INT_D);
                         
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
                IQ_SIZE => IQ_SIZE_M0,
                ALT_INPUT => false,
-                   FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-                   FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
-                   USE_NEW => true
+               FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
+               FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
            )
            port map(
                clk => clk, reset => '0', en => '0',
@@ -623,8 +619,6 @@ begin
                newArr => schedInfoUpdatedA,
                     newArr_Alt => newArrShared,
                fni => fni,
-               waitingFM => WAITING_FN_MAP,
-               selectionFM => SELECTION_FN_MAP,
                readyRegFlags => readyRegFlagsInt,
                nextAccepting =>allowIssueM0,
                events => events,
@@ -817,11 +811,11 @@ begin
 
             inputDataArrayInt <= makeSlotArray(prepareForStoreValueIQ(extractData(renamedDataLivingReMem)), intStoreMask);
             schedInfoIntA <= work.LogicIssue.getIssueInfoArray(inputDataArrayInt, false);
-            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, ENQUEUE_FN_MAP_SV, true, false, FORWARDING_MODES_SV_INT_D);--, false);  
+            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, FORWARDING_MODES_SV_INT_D);
 
             inputDataArrayFloat <= makeSlotArray(prepareForStoreValueFloatIQ(extractData(renamedDataLivingReMem), extractData(renamedDataLivingFloatRe)), floatStoreMask);
             schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(inputDataArrayFloat, false);
-            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, ENQUEUE_FN_MAP_FLOAT_SV, true, false, FORWARDING_MODES_SV_FLOAT_D);--, false);
+            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, FORWARDING_MODES_SV_FLOAT_D);
 
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
             fmaFloatSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoFloatA, fniFloat);
@@ -832,8 +826,7 @@ begin
             IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
                 IQ_SIZE => IQ_SIZE_INT_SV,
-                        FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_INT_D(0 to 2),
-                        USE_NEW => true
+                FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_INT_D(0 to 2)
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -843,10 +836,7 @@ begin
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedIntA,
                     newArr_Alt => NEW_ARR_DUMMY,
-                fni => fni,
-                waitingFM => --WAITING_FN_MAP_SV,
-                                DEFAULT_FORWARDING_MAP,
-                selectionFM => DEFAULT_FORWARDING_MAP,      
+                fni => fni,     
                 readyRegFlags => readyRegFlagsSV,
                 nextAccepting => allowIssueStoreDataInt,
                 events => events,
@@ -890,8 +880,7 @@ begin
             IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
                 IQ_SIZE => IQ_SIZE_FLOAT_SV, -- CAREFUL: not IS_FP because doesn't have destination
-                        FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_FLOAT_D(0 to 2),
-                        USE_NEW => true
+                FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_FLOAT_D(0 to 2)
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -901,10 +890,7 @@ begin
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedFloatA,
                     newArr_Alt => NEW_ARR_DUMMY,                
-                fni => fniFloat,
-                waitingFM => --WAITING_FN_MAP_FLOAT_SV,
-                                DEFAULT_FORWARDING_MAP,
-                selectionFM => DEFAULT_FORWARDING_MAP,      
+                fni => fniFloat,      
                 readyRegFlags => readyRegFlagsFloatSV,
                 nextAccepting => allowIssueStoreDataFP,
                 events => events,
@@ -957,14 +943,13 @@ begin
 
             inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), getFpuMask(renamedDataLivingFloatRe));
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, false);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, ENQUEUE_FN_MAP_FLOAT, true, false, FORWARDING_MODES_FLOAT_D);--, false);
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, FORWARDING_MODES_FLOAT_D);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
                 IQ_SIZE => IQ_SIZE_F0, IS_FP => true,
-                      FORWARDING(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
-                      FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT_D(0 to 2),
-                      USE_NEW => true
+                FORWARDING(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
+                FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT_D(0 to 2)
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -975,8 +960,6 @@ begin
                 newArr => schedInfoUpdatedA,
                     newArr_Alt => NEW_ARR_DUMMY,                
                 fni => fniFloat,
-                waitingFM => WAITING_FN_MAP_FLOAT,
-                selectionFM => SELECTION_FN_MAP_FLOAT,
                 readyRegFlags => readyRegFlagsFloat,
                 nextAccepting => allowIssueF0,
                 events => events,
@@ -1193,57 +1176,57 @@ begin
          regsSelS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadIntStoreValue.ins)));
           
          NEW_FNI_INT: block
-                signal   s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
-                         s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
-                         s2_M3, s2_M2, s2_M1, s2_R0, s2_R1,
+            signal   s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+                     s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
+                     s2_M3, s2_M2, s2_M1, s2_R0, s2_R1,
                          
-                         fs0_M3, fs0_M2, fs0_M1, fs0_R0, fs0_R1,
-                         fs1_M3, fs1_M2, fs1_M1, fs1_R0, fs1_R1,
-                         fs2_M3, fs2_M2, fs2_M1, fs2_R0, fs2_R1                        
-                                                             : ExecResult := DEFAULT_EXEC_RESULT;
-           begin
-                 -- I0 pipe
-                 s0_M3 <= DEFAULT_EXEC_RESULT;
-                 s0_M2 <= subpipeI0_Sel when TMP_PARAM_I0_DELAY else DEFAULT_EXEC_RESULT;
-                 s0_M1 <= subpipeI0_PreExec;
-                 s0_R0 <= subpipeI0_E0;
-                 s0_R1 <= subpipeI0_D0;
+                     fs0_M3, fs0_M2, fs0_M1, fs0_R0, fs0_R1,
+                     fs1_M3, fs1_M2, fs1_M1, fs1_R0, fs1_R1,
+                     fs2_M3, fs2_M2, fs2_M1, fs2_R0, fs2_R1                        
+                     : ExecResult := DEFAULT_EXEC_RESULT;
+         begin
+             -- I0 pipe
+             s0_M3 <= DEFAULT_EXEC_RESULT;
+             s0_M2 <= subpipeI0_Sel when TMP_PARAM_I0_DELAY else DEFAULT_EXEC_RESULT;
+             s0_M1 <= subpipeI0_PreExec;
+             s0_R0 <= subpipeI0_E0;
+             s0_R1 <= subpipeI0_D0;
 
-                 -- M0i pipe
-                 s2_M3 <= subpipeM0_RegRead;
-                 s2_M2 <= subpipeM0_E0i;   -- TODO: make separate Int/FP dest tags for every stage that can generate wakeup!
-                 s2_M1 <= subpipeM0_E1i;
-                 s2_R0 <= subpipeM0_E2i;
-                 s2_R1 <= subpipeM0_D0i;
+             -- M0i pipe
+             s2_M3 <= subpipeM0_RegRead;
+             s2_M2 <= subpipeM0_E0i;   -- TODO: make separate Int/FP dest tags for every stage that can generate wakeup!
+             s2_M1 <= subpipeM0_E1i;
+             s2_R0 <= subpipeM0_E2i;
+             s2_R1 <= subpipeM0_D0i;
 
-                 -- F0 pipe
-                 fs0_M3 <= subpipeF0_RegRead;
-                 fs0_M2 <= subpipeF0_E0;   
-                 fs0_M1 <= subpipeF0_E1;
-                 fs0_R0 <= subpipeF0_E2;
-                 fs0_R1 <= subpipeF0_D0;
-                                         
-                 -- M0f pipe
-                 fs2_M3 <= subpipeM0_E0f;
-                 fs2_M2 <= subpipeM0_E1f;
-                 fs2_M1 <= subpipeM0_E2f;
-                 fs2_R0 <= subpipeM0_D0f;
-                 fs2_R1 <= subpipeM0_D1f;
+             -- F0 pipe
+             fs0_M3 <= subpipeF0_RegRead;
+             fs0_M2 <= subpipeF0_E0;   
+             fs0_M1 <= subpipeF0_E1;
+             fs0_R0 <= subpipeF0_E2;
+             fs0_R1 <= subpipeF0_D0;
+                                     
+             -- M0f pipe
+             fs2_M3 <= subpipeM0_E0f;
+             fs2_M2 <= subpipeM0_E1f;
+             fs2_M1 <= subpipeM0_E2f;
+             fs2_R0 <= subpipeM0_D0f;
+             fs2_R1 <= subpipeM0_D1f;
 
-            
-                 fni <= buildForwardingNetwork(
-                                                  s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
-                                                  s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
-                                                  s2_M3, s2_M2, s2_M1, s2_R0, s2_R1                                        
+        
+             fni <= buildForwardingNetwork(
+                                              s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+                                              s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
+                                              s2_M3, s2_M2, s2_M1, s2_R0, s2_R1                                        
+                                            );
+        
+             fniFloat <= buildForwardingNetworkFP(
+                                                  fs0_M3, fs0_M2, fs0_M1, fs0_R0, fs0_R1,
+                                                  fs1_M3, fs1_M2, fs1_M1, fs1_R0, fs1_R1,
+                                                  fs2_M3, fs2_M2, fs2_M1, fs2_R0, fs2_R1                                        
                                                 );
-            
-                 fniFloat <= buildForwardingNetworkFP(
-                                                      fs0_M3, fs0_M2, fs0_M1, fs0_R0, fs0_R1,
-                                                      fs1_M3, fs1_M2, fs1_M1, fs1_R0, fs1_R1,
-                                                      fs2_M3, fs2_M2, fs2_M1, fs2_R0, fs2_R1                                        
-                                                    );
               
-          end block;
+         end block;
               
                        
          regsSelFS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadFloatStoreValue.ins)));
