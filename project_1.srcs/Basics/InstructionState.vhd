@@ -279,6 +279,7 @@ type SchedulerState is record
     readyM2:    std_logic_vector(0 to 2);
     missing: std_logic_vector(0 to 2);
     stored:  std_logic_vector(0 to 2);
+    readNew: std_logic_vector(0 to 2);
     args: MwordArray(0 to 2);
     
     argLocsPipe: SmallNumberArray(0 to 2);
@@ -309,6 +310,7 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       readyM2 => (others => '0'),
       missing => (others=>'0'),
       stored => (others => '0'),
+      readNew => (others => '0'),
       args => (others => (others=>'0')),
       argLocsPipe => (others => (others => '0')),
       argLocsPhase => (others => (others => '0')),

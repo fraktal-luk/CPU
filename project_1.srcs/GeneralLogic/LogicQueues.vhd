@@ -146,6 +146,7 @@ function getAddressMatching(content: QueueEntryArray; adr: Mword) return std_log
     variable res: std_logic_vector(content'range);
 begin
     for i in content'range loop
+        
         res(i) := bool2std(content(i).address = adr);
     end loop;
     return res;

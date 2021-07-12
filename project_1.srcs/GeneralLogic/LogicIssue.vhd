@@ -317,6 +317,7 @@ begin
     res.state.argSpec := info.dynamic.argSpec;
     
     res.state.stored := info.dynamic.stored;
+    res.state.readNew := (others => '0');
 
     res.state.missing := info.dynamic.missing;
     
@@ -538,6 +539,8 @@ return SchedulerState is
     variable res: SchedulerState := st;
 begin
     if TMP_DELAY then
+        res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
+        res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
         return res;
     end if;
 
@@ -549,7 +552,8 @@ begin
 
     if res.stored(0) = '1' then
         null; -- Using stored arg
-    elsif res.argSrc(0)(1 downto 0) = "11" then
+    elsif --res.argSrc(0)(1 downto 0) = "11" then
+                res.readNew(0) = '1' then
         res.args(0) := vals(slv2u(res.argLocsPipe(0)(1 downto 0)));
     else
         res.args(0) := regValues(0);
@@ -558,7 +562,8 @@ begin
 
     if res.stored(1) = '1' then
         null; -- Using stored arg
-    elsif res.argSrc(1)(1 downto 0) = "11" then
+    elsif --res.argSrc(1)(1 downto 0) = "11" then
+                res.readNew(1) = '1' then
         res.args(1) := vals(slv2u(res.argLocsPipe(1)(1 downto 0)));
     else
         res.args(1) := regValues(1);
