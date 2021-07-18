@@ -79,7 +79,7 @@ architecture Behavioral of Core is
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData, committedOut: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-    signal bqCompare, bqSelected, bqUpdate, sqValueInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+    signal bqCompare, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     signal specialAction, specialActionBuffOut, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     signal bqPointer, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
@@ -95,6 +95,8 @@ architecture Behavioral of Core is
     signal dataFromSB: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal cycleCounter: Word := (others => '0');
+    
+    signal events, eventsOnlyLate: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE);
     
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
 begin
@@ -263,7 +265,7 @@ begin
     renamedDataLivingReMem <= TMP_recodeMem(renamedDataLivingRe);
     renamedDataLivingMemBuff <= TMP_recodeMem(renamedDataLivingBuff);
 
-    DISPATCH_BUFFER: entity work.DispatchBuffer
+    DISPATCH_BUFFER: entity work.DispatchBuffer(Transparent)
     port map(
         clk => clk,
         
@@ -282,6 +284,9 @@ begin
         empty => dbEmpty            
     );
 
+    events <= (lateEventSignal, execEventSignal, execCausing);
+
+    eventsOnlyLate <= (lateEvent => lateEventSignal, execEvent => '0', execCausing => DEFAULT_INS_STATE);
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(
@@ -307,7 +312,7 @@ begin
    
          OLD_FLOW: if true generate
             canSendFront <= oooAccepting;
-            canSendRename <= '1';
+            canSendRename <= queuesAccepting;
             canSendBuff <= queuesAccepting;
          end generate;
          
@@ -380,16 +385,20 @@ begin
         
         -- Selection from IQ and state after Issue stage
         signal slotSelI0, slotIssueI0,      slotIssueI0_A,
+                    slotRegReadI0, slotPreExecI0,
                slotSelI1, slotIssueI1,
+                    slotRegReadI1,
                slotSelM0, slotIssueM0,
+                    slotRegReadM0, slotPreExecM0,
                slotSel3, slotIssue3,
                slotSelF0, slotIssueF0, slotRegReadF0,
                slotSel4, slotIssue4, slotSel5, slotIssue5, slotSel6, slotIssue6: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
         -- Exec stages
         signal slotI0_E0, slotI0_E1, slotI0_E2,
                slotI1_E0, slotI1_E1, slotI1_E2,
-               slotM0_E0, slotM0_E1i, slotM0_E2i, -- Here logical stages get split into Int and FP
-                          slotM0_E1f, slotM0_E2f,
+               slotM0_E0,
+               slotM0_E0i, slotM0_E1i, slotM0_E2i, -- Here logical stages get split into Int and FP
+               slotM0_E0f, slotM0_E1f, slotM0_E2f,
                slot3_E0,  slot3_E1,slot3_E2,
                slotF0_E0, slotF0_E1, slotF0_E2,
                slot4_E0, slot4_E1, slot4_E2, slot5_E0, slot5_E1, slot5_E2: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -401,25 +410,11 @@ begin
                slot3_D0, slot3_D1,
                slotF0_D0, slotF0_D1, 
                slot4_D0, slot4_D1, slot5_D0, slot5_D1:
-                            InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+                            InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                       
         
-        signal sendingSelI0, sendingIssueI0,
-               sendingSelI1, sendingIssueI1,
-               sendingSelM0, sendingIssueM0,
-               sendingSelF0, sendingIssueF0, sendingRegReadF0: std_logic := '0';
-        signal sendingI0_E0, sendingI0_E1, sendingI0_E2,
-               sendingI1_E0, sendingI1_E1, sendingI1_E2,
-               sendingM0_E0, sendingM0_E1, sendingM0_E2i,
-                                           sendingM0_E2f,
-               sendingF0_E0, sendingF0_E1, sendingF0_E2:
-               std_logic := '0';
-                
-        signal sendingI0_D0, sendingI0_D1,
-               sendingI1_D0, sendingI1_D1,
-               sendingM0_D0i, sendingM0_D1i,         
-               sendingM0_D0f, sendingM0_D1f,
-               sendingF0_D0,  sendingF0_D1: std_logic := '0';                         
-
+        signal sendingFinalI0, sendingFinalI1, sendingFinalM0, sendingFinalSVI, sendingFinalSVF, sendingFinalF0: std_logic := '0';
+        signal slotFinalI0, slotFinalI1, slotFinalM0, slotFinalSVI, slotFinalSVF, slotFinalF0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+        
         ----
         signal schedDataI0, dataToQueueI0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
         signal schedDataM0, dataToQueueM0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);      
@@ -430,14 +425,14 @@ begin
 
         signal dataToIssueIntStoreValue, dataToRegReadIntStoreValue, dataToExecStoreValue, dataToExecIntStoreValue, dataToExecFloatStoreValue,
                dataToIssueFloatStoreValue, dataToRegReadFloatStoreValue: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
-        signal sendingToIssueStoreValue, sendingToRegReadStoreValue, sendingStoreValue, sendingToIssueFloatStoreValue: std_logic := '0';
+        signal  sendingToExecI0, sendingToExecM0,
+                sendingToIssueStoreValue, sendingToRegReadStoreValue, sendingStoreValue, sendingToIssueFloatStoreValue: std_logic := '0';
         signal sentCancelledI0, sentCancelledI1, sentCancelledM0, sentCancelledM1, sentCancelledF0, sentCancelledSVI, sentCancelledSVF: std_logic := '0';
 
        signal emptyI0, emptyI1, emptyM0, emptyM1, emptySVI, emptySVF, emptyF0: std_logic := '0';  
 
        --==============----------
-       signal intStoreMask, floatStoreMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');            
-       signal memMask, memMaskInt, memMaskFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+       signal intStoreMask, floatStoreMask, memMask, memMaskInt, memMaskFloat: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
       ----==============----------
        
        signal regsSelI0,           regsSelM0, regsSelS0, regsSelFloatA, regsSelFloatC, regsSelFS0, regsSelF0: PhysNameArray(0 to 2) := (others => (others => '0'));
@@ -445,19 +440,32 @@ begin
        signal readyRegFlagsInt, readyRegFlagsFloat, readyRegFlagsIntNext, readyRegFlagsSV, readyRegFlagsFloatNext, readyRegFlagsFloatSV:
                  std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
         
-       signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
+       signal fni, fniInt_T, fniFloat_T,  fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
        signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
 
        -- Issue control 
        signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, allowIssueStoreDataFP, allowIssueStageStoreDataFP: std_logic := '0';
-       signal memSubpipeSent, fp0subpipeSelected, lockIssueI0, allowIssueI0, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady: std_logic := '0';
+       signal memSubpipeSent, fp0subpipeSelected, lockIssueI0, allowIssueI0, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady,
+                intWriteConflict: std_logic := '0';
                 
        signal sendingToIntWriteQueue, sendingToFloatWriteQueue, sendingToIntRF, sendingToFloatRF: std_logic := '0';
        signal dataToIntWriteQueue, dataToFloatWriteQueue, dataToIntRF, dataToFloatRF: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
        
-       signal sendingFromDLQ: std_logic := '0';
-       signal sendingToAgu: std_logic := '0';       
-       signal dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;                                                                             
+       signal sendingFromDLQ, sendingToAgu, sendingToRegReadI0, sendingToRegReadM0: std_logic := '0';       
+       signal dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
+       
+       signal outSigsI0, outSigsM0, outSigsSVI, outSigsSVF, outSigsF0: IssueQueueSignals := (others => '0');
+       
+       signal subpipeI0_Sel, subpipeI0_RegRead, subpipeI0_E0,            subpipeI0_D0,
+                             subpipeI0_PreExec,
+              subpipeM0_Sel, subpipeM0_RegRead, subpipeM0_E0, --subpipeM0_E1, subpipeM0_E2, subpipeM0_E3,         subpipeM0_D0, subpipeM0_D1,               
+                                                subpipeM0_E0i,  subpipeM0_E1i, subpipeM0_E2i, subpipeM0_E3i,         subpipeM0_D0i, subpipeM0_D1i,
+                                                subpipeM0_E0f,  subpipeM0_E1f, subpipeM0_E2f, subpipeM0_E3f,         subpipeM0_D0f, subpipeM0_D1f,
+                             --subpipeM0_PreExec,
+                                                              
+              subpipeF0_Sel, subpipeF0_RegRead, subpipeF0_E0, subpipeF0_E1,subpipeF0_E2, subpipeF0_D0,
+              subpipe_DUMMY
+                : ExecResult := DEFAULT_EXEC_RESULT;                  
     begin
         
         SUBPIPE_ALU: block
@@ -466,139 +474,113 @@ begin
            signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
            
            signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
-           signal staticInfoA: work.LogicIssue.StaticInfoArray(0 to PIPE_WIDTH-1);
-           signal dynamicInfoA: work.LogicIssue.DynamicInfoArray(0 to PIPE_WIDTH-1);
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
            
-           signal sendingBranch: std_logic := '0';         
+           signal sendingBranch: std_logic := '0';     
         begin
             fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);
         
             inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe));
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, true);        
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, FORWARDING_MODES_INT_D);
               
             IQUEUE_I0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => IQ_SIZE_I0
+                IQ_SIZE => IQ_SIZE_I0,
+                FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
+                FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-
-                queuesAccepting => canSendBuff,
         
                 acceptingOut => iqAcceptingI0,
                 acceptingMore => iqAcceptingMoreI0,
+                
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedA,            
                     newArr_Alt => NEW_ARR_DUMMY,
                     newArrOut => newArrShared,
                 fni => fni,
-                waitingFM => WAITING_FN_MAP,
-                selectionFM => SELECTION_FN_MAP,
                 readyRegFlags => readyRegFlagsInt,
                 nextAccepting => allowIssueI0,
-                execCausing => execCausing,
-                lateEventSignal => lateEventSignal,
-                execEventSignal => execEventSignal,
-                
-                anyReady => open,
+                events => events,            
                 schedulerOut => slotSelI0,
-                sending => sendingSelI0,
-                sentCancelled => sentCancelledI0,
-
-                empty => emptyI0
+                outputSignals => outSigsI0
             );
-
-            ISSUE_STAGE_I0: entity work.IssueStage
-            generic map(USE_IMM => true)
-            port map(
-                clk => clk,
-                reset => '0',
-                en => '0',
-        
-                prevSending => sendingSelI0,
-                nextAccepting => '1',
-        
-                input => slotSelI0,
-                
-                acceptingOut => open,
-                output => slotIssueI0,
-                
-                execEventSignal => execEventSignal,
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing,
-                fni => fni,
-                regValues => regValsI0   
-            );
-                ISSUE_STAGE_I0_A: entity work.IssueStage
-                generic map(USE_IMM => true)
+            
+                ISSUE_STAGE_I0_NEW: entity work.IssueStage
+                generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
                 port map(
-                    clk => clk,
-                    reset => '0',
-                    en => '0',
-            
-                    prevSending => sendingSelI0,
-                    nextAccepting => '1',
-            
-                    input => slotSelI0,
-                    
-                    acceptingOut => open,
-                    output => slotIssueI0_A,
-                    
-                    execEventSignal => execEventSignal,
-                    lateEventSignal => lateEventSignal,
-                    execCausing => execCausing,
+                    clk => clk, reset => '0', en => '0',      
+                    prevSending => outSigsI0.sending,
+                    nextAccepting => '1',    
+                    input => slotSelI0,               
+                    output => slotIssueI0,
+                    events => events,         
                     fni => fni,
-                    regValues => regValsI0  
+                    regValues => (others => (others => '0'))
                 );
-                
-            dataToAlu(0) <= (slotIssueI0.full and not sentCancelledI0, executeAlu(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins, branchData));
-          
-            STAGE_I0_E0: entity work.GenericStage(Behavioral)
-            generic map(
-                COMPARE_TAG => '0'
-            )
-            port map(
-                clk => clk, reset => '0', en => '0',
-                
-                prevSending => dataToAlu(0).full,
-                nextAccepting => '1',
-                
-                stageDataIn => dataToAlu,
-                acceptingOut => open,
-                sendingOut => sendingI0_E0,
-                stageDataOut => slotI0_E0,
-                
-                execEventSignal => '0',
-                lateEventSignal => lateEventSignal,
-                execCausing => DEFAULT_INSTRUCTION_STATE
-            );      
+            
+                subpipeI0_Sel <= makeExecResult(slotIssueI0, slotIssueI0.full);
 
-            branchData <= basicBranch(slotIssueI0.ins, slotIssueI0.state, bqSelected.ins);                  
-            
-            dataToBranch(0) <= (slotIssueI0.full and not sentCancelledI0 and slotIssueI0.state.branchIns, branchData);            
-            bqCompare <= (dataToBranch(0).full, slotIssueI0.ins);
-            
-            STAGE_I0_E0_BRANCH: entity work.GenericStage(Behavioral)
+                sendingToRegReadI0 <= slotIssueI0.full and not outSigsI0.cancelled;
+                        
+                RR_STAGE_ALU_NEW: entity work.IssueStage
+                generic map(USE_IMM => true, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
+                port map(
+                    clk => clk, reset => '0', en => '0',
+                    prevSending => sendingToRegReadI0,
+                    nextAccepting => '1',
+                    input => slotIssueI0,                
+                    output => slotRegReadI0,
+                    events => events,
+                    fni => fni,
+                    regValues => regValsI0   
+                );
+                                         
+                    subpipeI0_RegRead <= makeExecResult(slotRegReadI0, slotRegReadI0.full);
+
+                slotPreExecI0 <= slotRegReadI0 when TMP_PARAM_I0_DELAY else slotIssueI0;
+                sendingToExecI0 <= slotRegReadI0.full when TMP_PARAM_I0_DELAY else sendingToRegReadI0;
+                subpipeI0_PreExec <= subpipeI0_RegRead when TMP_PARAM_I0_DELAY else subpipeI0_Sel;
+
+
+            dataToAlu(0) <= (sendingToExecI0, executeAlu(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins, branchData));
+          
+            STAGE_I0_E0: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '0'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
+                input => dataToAlu(0),
+                output => slotI0_E0(0),        
+                events => eventsOnlyLate
+            );      
+                subpipeI0_E0 <= makeExecResult(slotI0_E0(0), slotI0_E0(0).full);
+
                 
-                prevSending => dataToBranch(0).full,
-                nextAccepting => '1',
-                
-                stageDataIn(0) => dataToBranch(0),
-                acceptingOut => open,
-                sendingOut => sendingBranch,
-                stageDataOut(0) => dataFromBranch,
-                execEventSignal => '0',
-                lateEventSignal => lateEventSignal,
-                execCausing => DEFAULT_INSTRUCTION_STATE                    
-            );
+                sendingFinalI0 <= slotI0_E0(0).full;
+                slotFinalI0 <= slotI0_E0;
+
+            branchData <= basicBranch(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins);                  
             
+            dataToBranch(0) <= (sendingToExecI0 and slotPreExecI0.state.branchIns, branchData);            
+            bqCompare <= (dataToBranch(0).full, slotPreExecI0.ins);
+            
+            STAGE_I0_E0_BRANCH: entity work.GenericStage2(Behavioral)
+            generic map(
+                COMPARE_TAG => '0'
+            )
+            port map(
+                clk => clk, reset => '0', en => '0',
+                input => dataToBranch(0),
+                output => dataFromBranch,
+                events => eventsOnlyLate                  
+            );
+                sendingBranch <= dataFromBranch.full;
+            
+            -- TODO: enable a stage of delay after this
             execEventSignal <= dataFromBranch.ins.controlInfo.newEvent and sendingBranch;
             execCausing <= clearDbCausing(dataFromBranch.ins);
             bqUpdate <= dataFromBranch;
@@ -606,8 +588,8 @@ begin
          
             
         SUBPIPE_MEM: block
-           signal sendingIntLoad, sendingFloatLoad: std_logic := '0';
-           signal dataToAgu, dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+           signal dataToAgu, dataToAguInt, dataToAguFloat,
+                         dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
            signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);           
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
@@ -619,201 +601,196 @@ begin
 
            inputDataArray <= makeSlotArray(removeArg2(extractData(renamedDataLivingReMem)), memMaskInt);
            schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, ENQUEUE_FN_MAP, true, true);        
+           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, FORWARDING_MODES_INT_D);
                         
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
                IQ_SIZE => IQ_SIZE_M0,
-               ALT_INPUT => false
+               ALT_INPUT => false,
+               FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
+               FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
            )
            port map(
                clk => clk, reset => '0', en => '0',
        
-               queuesAccepting => canSendBuff,
-       
                acceptingOut => iqAcceptingM0,
                acceptingMore => iqAcceptingMoreM0,
-               sentCancelled => sentCancelledM0,               
                prevSendingOK => renamedSending,
                newArr => schedInfoUpdatedA,
                     newArr_Alt => newArrShared,
                fni => fni,
-               waitingFM => WAITING_FN_MAP,
-               selectionFM => SELECTION_FN_MAP,
                readyRegFlags => readyRegFlagsInt,
                nextAccepting =>allowIssueM0,
-               execCausing => execCausing,
-               lateEventSignal => lateEventSignal,
-               execEventSignal => execEventSignal,
-               empty => emptyM0,
-               anyReady => open,
+               events => events,
                schedulerOut => slotSelM0,
-               sending => sendingSelM0
+               outputSignals => outSigsM0
            );
-    
-           ISSUE_STAGE_MEM: entity work.IssueStage
-           generic map(USE_IMM => true)
-           port map(
-               clk => clk,
-               reset => '0',
-               en => '0',
-       
-               prevSending => sendingSelM0,
-               nextAccepting => '1',
-       
-               input => slotSelM0,
-               
-               acceptingOut => open,
-               output => slotIssueM0,
-               
-               execEventSignal => execEventSignal,
-               lateEventSignal => lateEventSignal,
-               execCausing => execCausing,
-               
-               fni => fni,
-               regValues => regValsM0   
-           );
-               
-           preIndexSQ <= slotIssueM0.ins.tags.sqPointer;
-           preIndexLQ <= slotIssueM0.ins.tags.lqPointer;
-                                 
+
+               ISSUE_STAGE_MEM: entity work.IssueStage
+               generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
+               port map(
+                   clk => clk, reset => '0', en => '0',      
+                   prevSending => outSigsM0.sending,
+                   nextAccepting => '1',
+                   input => slotSelM0,
+                   output => slotIssueM0,
+                   events => events,
+                   fni => fni,
+                   regValues => (others => (others => '0'))   
+               );
+                   
+                subpipeM0_Sel <= makeExecResult(slotIssueM0, slotIssueM0.full);
+
+                sendingToRegReadM0 <= slotIssueM0.full and not outSigsM0.cancelled;
+
+                RR_STAGE_MEM: entity work.IssueStage
+                generic map(USE_IMM => true, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
+                port map(
+                    clk => clk, reset => '0', en => '0',
+                    prevSending => sendingToRegReadM0,
+                    nextAccepting => '1',
+                    input => slotIssueM0,                
+                    output => slotRegReadM0,
+                    events => events,
+                    fni => fni,
+                    regValues => regValsM0  
+                );
+             
+                subpipeM0_RegRead <= makeExecResult(slotRegReadM0, slotRegReadM0.full);
+        
+                slotPreExecM0 <= slotRegReadM0 when TMP_PARAM_M0_DELAY else slotIssueM0;
+                sendingToExecM0 <= slotRegReadM0.full when TMP_PARAM_M0_DELAY else sendingToRegReadM0;
+
+           preIndexSQ <= slotPreExecM0.ins.tags.sqPointer;
+           preIndexLQ <= slotPreExecM0.ins.tags.lqPointer;
+
+                preAddressInput <= (slotPreExecM0.full, slotPreExecM0.ins);
+
            sendingFromDLQ <= '0';          -- TEMP!
            dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
 
-           sendingToAgu <= (slotIssueM0.full and not sentCancelledM0) or sendingFromDLQ;
-	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(slotIssueM0.ins, slotIssueM0.state, sendingFromDLQ, dataFromDLQ));
-       
-           STAGE_AGU: entity work.GenericStage(Behavioral)
+           sendingToAgu <= sendingToExecM0 or sendingFromDLQ;
+	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(slotPreExecM0.ins, slotPreExecM0.state, sendingFromDLQ, dataFromDLQ));
+                            
+           STAGE_AGU: entity work.GenericStage2(Behavioral)
            generic map(
                COMPARE_TAG => '1'
            )
            port map(
                clk => clk, reset => reset, en => en,
-       
-               prevSending => sendingToAgu,
-               nextAccepting => '1',
-               
-               stageDataIn => dataToAgu,
-               acceptingOut => open,
-               sendingOut => sendingM0_E0,
-               stageDataOut => slotM0_E0,
-               
-               execEventSignal => execEventSignal,
-               lateEventSignal => lateEventSignal,
-               execCausing => execCausing
+               input => dataToAgu(0),
+               output => slotM0_E0(0),
+               events => events
            );
+                subpipeM0_E0 <= makeExecResult(slotM0_E0(0), slotM0_E0(0).full);
 
-	       dataInMem0(0) <= (sendingM0_E0, slotM0_E0(0).ins);
+                        dataToAguInt <= clearFloatDest(dataToAgu);
+                        dataToAguFloat <= clearIntDest(dataToAgu);
+                        
+                               STAGE_AGU_INT: entity work.GenericStage2(Behavioral)
+                               generic map(
+                                   COMPARE_TAG => '1'
+                               )
+                               port map(
+                                   clk => clk, reset => reset, en => en,
+                                   input => dataToAguInt(0),
+                                   output => slotM0_E0i(0),
+                                   events => events
+                               );
+                                    subpipeM0_E0i <= makeExecResult(slotM0_E0i(0), slotM0_E0i(0).full);
+                               
+                               STAGE_AGU_FLOAT: entity work.GenericStage2(Behavioral)
+                               generic map(
+                                   COMPARE_TAG => '1'
+                               )
+                               port map(
+                                   clk => clk, reset => reset, en => en,
+                                   input => dataToAguFloat(0),
+                                   output => slotM0_E0f(0),
+                                   events => events
+                               );
+                                    subpipeM0_E0f <= makeExecResult(slotM0_E0f(0), slotM0_E0f(0).full);
+
+	       dataInMem0(0) <= (slotM0_E0(0).full, slotM0_E0(0).ins);
            sqAddressInput <= dataInMem0(0);
            lqAddressInput <= dataInMem0(0);
 
            dataInMemInt0 <= clearFloatDest(dataInMem0);
            dataInMemFloat0 <= clearIntDest(dataInMem0);
 
-           -- TLB lookup, Dcache access
-	       STAGE_MEM0: entity work.GenericStage(Behavioral)
-           generic map(
-               COMPARE_TAG => '1'
-           )
-           port map(
-               clk => clk, reset => reset, en => en,
-               
-               prevSending => sendingM0_E0,
-               nextAccepting => '1',
-               
-               stageDataIn => dataInMemInt0,
-               acceptingOut => open,
-               sendingOut => sendingM0_E1,
-               stageDataOut => slotM0_E1i,
-               
-               execEventSignal => execEventSignal,
-               lateEventSignal => lateEventSignal,
-               execCausing => execCausing                
-           );
+                    ch0 <= bool2std(slotM0_E0 = dataInMem0);
+                    ch1 <= bool2std(slotM0_E0i = dataInMemInt0);
+                    ch2 <= bool2std(slotM0_E0f = dataInMemFloat0);
 
-	       STAGE_MEM0_FLOAT: entity work.GenericStage(Behavioral)
+           -- TLB lookup, Dcache access
+	       STAGE_MEM0: entity work.GenericStage2(Behavioral)
            generic map(
                COMPARE_TAG => '1'
            )
            port map(
                clk => clk, reset => reset, en => en,
-               
-               prevSending => sendingM0_E0,
-               nextAccepting => '1',
-               
-               stageDataIn => dataInMemFloat0,
-               acceptingOut => open,
-               sendingOut => open,
-               stageDataOut => slotM0_E1f,
-               
-               execEventSignal => execEventSignal,
-               lateEventSignal => lateEventSignal,
-               execCausing => execCausing                
+               input => dataInMemInt0(0),
+               output => slotM0_E1i(0),
+               events => events     
            );
+                subpipeM0_E1i <= makeExecResult(slotM0_E1i(0), slotM0_E1i(0).full);
+
+	       STAGE_MEM0_FLOAT: entity work.GenericStage2(Behavioral)
+           generic map(
+               COMPARE_TAG => '1'
+           )
+           port map(
+               clk => clk, reset => reset, en => en,
+               input => dataInMemFloat0(0),
+               output => slotM0_E1f(0),               
+               events => events              
+           );
+                subpipeM0_E1f <= makeExecResult(slotM0_E1f(0), slotM0_E1i(0).full);
                       
            dataOutMem0(0) <= mergePhysDests(slotM0_E1i(0), slotM0_E1f(0)); -- [dest := Int.dest | Float.dest];
 
-           dataInMem1(0).full <= sendingM0_E1;
+           dataInMem1(0).full <= slotM0_E1i(0).full;
            dataInMem1(0).ins <= getLSResultData(dataOutMem0(0).ins,
                                                   '1', (others => '0'),
                                                   memLoadReady, memLoadValue,
                                                   sysRegSending, sysRegReadValue, 
-                                                  sqSelectedOutput.full, sqSelectedOutput.ins,
+                                                  sqSelectedOutput,
                                                   lqSelectedOutput);
-                                                  
-          sendingIntLoad <= sendingM0_E1 and not dataOutMem0(0).ins.physicalArgSpec.floatDestSel; -- TODO: check exact conditions 
-          sendingFloatLoad <= sendingM0_E1 and dataOutMem0(0).ins.physicalArgSpec.floatDestSel;
-                      
+           
           dataInMemInt1 <= clearFloatDest(dataInMem1); -- with zeroed dest when load is FP
           dataInMemFloat1 <= clearIntDest(dataInMem1); -- with zeroed dest when load is Int??
                                                   	       
            -- Source selection and verification
-	       STAGE_MEM1: entity work.GenericStage(Behavioral)
+	       STAGE_MEM1: entity work.GenericStage2(Behavioral)
            generic map(
                COMPARE_TAG => '1'
            )
            port map(
                clk => clk, reset => reset, en => en,
-               
-               prevSending => sendingM0_E1,
-               nextAccepting => '1',
-               
-               stageDataIn => dataInMemInt1,
-               acceptingOut => open,
-               sendingOut => sendingM0_E2i,
-               stageDataOut => slotM0_E2i,
-               
-               execEventSignal => execEventSignal,
-               lateEventSignal => lateEventSignal,
-               execCausing => execCausing                
+               input => dataInMemInt1(0),
+               output => slotM0_E2i(0),
+               events => events             
            );
+                subpipeM0_E2i <= makeExecResult(slotM0_E2i(0), slotM0_E2i(0).full);
            
            -- Branching into FP cluster
-           STAGE_MEM1_FLOAT: entity work.GenericStage(Behavioral)
+           STAGE_MEM1_FLOAT: entity work.GenericStage2(Behavioral)
            generic map(
                COMPARE_TAG => '1'
            )
            port map(
                clk => clk, reset => reset, en => en,
-               
-               prevSending => sendingM0_E1,
-               nextAccepting => '1',
-               
-               stageDataIn => dataInMemFloat1,
-               acceptingOut => open,
-               sendingOut => sendingM0_E2f,
-               stageDataOut => slotM0_E2f,
-               
-               execEventSignal => execEventSignal,
-               lateEventSignal => lateEventSignal,
-               execCausing => execCausing                
+               input => dataInMemFloat1(0),
+               output => slotM0_E2f(0),
+               events => events              
            );
-           
+                subpipeM0_E2f <= makeExecResult(slotM0_E2f(0), slotM0_E2f(0).full);
+
            -- TEMP mem interface    
 		   dread <= slotM0_E0(0).full;
            dadr <= slotM0_E0(0).ins.result;
            sysRegReadSel <= slotM0_E0(0).ins.result(4 downto 0);
-           sysRegRead <= sendingM0_E0 and isLoadSysOp(slotM0_E0(0).ins);
+           sysRegRead <= slotM0_E0(0).full and isLoadSysOp(slotM0_E0(0).ins);
            
            memLoadReady <= dvalid;              
            memLoadValue <= din;      
@@ -834,11 +811,11 @@ begin
 
             inputDataArrayInt <= makeSlotArray(prepareForStoreValueIQ(extractData(renamedDataLivingReMem)), intStoreMask);
             schedInfoIntA <= work.LogicIssue.getIssueInfoArray(inputDataArrayInt, false);
-            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, ENQUEUE_FN_MAP_SV, true, true);  
+            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, FORWARDING_MODES_SV_INT_D);
 
             inputDataArrayFloat <= makeSlotArray(prepareForStoreValueFloatIQ(extractData(renamedDataLivingReMem), extractData(renamedDataLivingFloatRe)), floatStoreMask);
             schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(inputDataArrayFloat, false);
-            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, ENQUEUE_FN_MAP_FLOAT_SV, true, true);
+            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, FORWARDING_MODES_SV_FLOAT_D);
 
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
             fmaFloatSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoFloatA, fniFloat);
@@ -848,75 +825,51 @@ begin
         
             IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => IQ_SIZE_INT_SV
+                IQ_SIZE => IQ_SIZE_INT_SV,
+                FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_INT_D(0 to 2)
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-
-                queuesAccepting => canSendBuff,
         
                 acceptingOut => iqAcceptingS0,
                 acceptingMore => iqAcceptingMoreS0,
-                sentCancelled => sentCancelledSVI,                
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedIntA,
                     newArr_Alt => NEW_ARR_DUMMY,
-                fni => fni,
-                waitingFM => WAITING_FN_MAP_SV,
-                selectionFM => DEFAULT_FORWARDING_MAP,      
+                fni => fni,     
                 readyRegFlags => readyRegFlagsSV,
                 nextAccepting => allowIssueStoreDataInt,
-                execCausing => execCausing,
-                lateEventSignal => lateEventSignal,
-                execEventSignal => execEventSignal,
-                empty => emptySVI,
-                anyReady => open,
+                events => events,
                 schedulerOut => dataToIssueIntStoreValue,
-                sending => sendingToIssueStoreValue
+                outputSignals => outSigsSVI
             );
      
             ISSUE_STAGE_SV: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => true)
+            generic map(USE_IMM => false, REGS_ONLY => true, TMP_DELAY => true, NEW_RR => true)
             port map(
-                clk => clk,
-                reset => '0',
-                en => '0',
-        
-                prevSending => sendingToIssueStoreValue,
+                clk => clk, reset => '0', en => '0',
+                prevSending => outSigsSVI.sending,
                 nextAccepting => '1',
-        
-                input => dataToIssueIntStoreValue,
-                
+                input => dataToIssueIntStoreValue,           
                 acceptingOut => open,
                 output => dataToRegReadIntStoreValue,
-                
-                execEventSignal => execEventSignal,
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing,
+                events => events,
                 fni => fniEmpty,
                 regValues => (others => (others => '0'))   
             );
             
-            sendingToRegReadI <= dataToRegReadIntStoreValue.full and not sentCancelledSVI;
+            sendingToRegReadI <= dataToRegReadIntStoreValue.full and not outSigsSVI.cancelled;
             
             REG_READ_STAGE_SV: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => true)
+            generic map(USE_IMM => false, REGS_ONLY => true, TMP_DELAY => false, NEW_RR => true)
             port map(
-                clk => clk,
-                reset => '0',
-                en => '0',
-        
+                clk => clk, reset => '0', en => '0',
                 prevSending => sendingToRegReadI,
                 nextAccepting => '1',
-        
-                input => dataToRegReadIntStoreValue,
-                
+                input => dataToRegReadIntStoreValue,          
                 acceptingOut => open,
                 output => dataToExecIntStoreValue,
-                
-                execEventSignal => execEventSignal,
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing,
+                events => events,
                 fni => fniEmpty,
                 regValues => regValsS0     
             );
@@ -926,75 +879,51 @@ begin
                       
             IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => IQ_SIZE_FLOAT_SV -- CAREFUL: not IS_FP because doesn't have destination
+                IQ_SIZE => IQ_SIZE_FLOAT_SV, -- CAREFUL: not IS_FP because doesn't have destination
+                FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_FLOAT_D(0 to 2)
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-
-                queuesAccepting => canSendBuff,
        
                 acceptingOut => iqAcceptingSF0,
                 acceptingMore => iqAcceptingMoreSF0,
-                sentCancelled => sentCancelledSVF,                
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedFloatA,
                     newArr_Alt => NEW_ARR_DUMMY,                
-                fni => fniFloat,
-                waitingFM => WAITING_FN_MAP_FLOAT_SV,
-                selectionFM => DEFAULT_FORWARDING_MAP,      
+                fni => fniFloat,      
                 readyRegFlags => readyRegFlagsFloatSV,
                 nextAccepting => allowIssueStoreDataFP,
-                execCausing => execCausing,
-                lateEventSignal => lateEventSignal,
-                execEventSignal => execEventSignal,
-                empty => emptySVF,
-                anyReady => open,
-                schedulerOut => dataToIssueFloatStoreValue,
-                sending => sendingToIssueFloatStoreValue
+                events => events,
+                schedulerOut => dataToIssueFloatStoreValue,              
+                outputSignals => outSigsSVF
             );
     
             ISSUE_STAGE_FLOAT_SV: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => true)
+            generic map(USE_IMM => false, REGS_ONLY => true, TMP_DELAY => true, NEW_RR => true)
             port map(
-                clk => clk,
-                reset => '0',
-                en => '0',
-        
-                prevSending => sendingToIssueFloatStoreValue,
-                nextAccepting => allowIssueStageStoreDataFP,
-        
+                clk => clk, reset => '0', en => '0',
+                prevSending => outSigsSVF.sending,
+                nextAccepting => allowIssueStageStoreDataFP,    
                 input => dataToIssueFloatStoreValue,
-                
                 acceptingOut => open,
                 output => dataToRegReadFloatStoreValue,
-                
-                execEventSignal => execEventSignal,
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing,
+                events => events,
                 fni => fniEmpty,
                 regValues => (others => (others => '0'))   
             );        
 
-            sendingToRegReadF <= dataToRegReadFloatStoreValue.full and not sentCancelledSVF;
+            sendingToRegReadF <= dataToRegReadFloatStoreValue.full and not outSigsSVF.cancelled;
     
             REG_READ_STAGE_FLOAT_SV: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => true)
+            generic map(USE_IMM => false, REGS_ONLY => true, TMP_DELAY => false, NEW_RR => true)
             port map(
-                clk => clk,
-                reset => '0',
-                en => '0',
-        
+                clk => clk, reset => '0', en => '0',        
                 prevSending => sendingToRegReadF,
                 nextAccepting => '1',
-        
-                input => dataToRegReadFloatStoreValue,
-                
+                input => dataToRegReadFloatStoreValue,       
                 acceptingOut => open,
                 output => dataToExecFloatStoreValue,
-                
-                execEventSignal => execEventSignal,
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing,
+                events => events,
                 fni => fniEmpty,
                 regValues => regValsFS0     
             );
@@ -1014,147 +943,100 @@ begin
 
             inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), getFpuMask(renamedDataLivingFloatRe));
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, false);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, ENQUEUE_FN_MAP_FLOAT, true, true);
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, FORWARDING_MODES_FLOAT_D);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
-                IQ_SIZE => IQ_SIZE_F0,
-                IS_FP => true
+                IQ_SIZE => IQ_SIZE_F0, IS_FP => true,
+                FORWARDING(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
+                FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT_D(0 to 2)
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-
-                queuesAccepting => canSendBuff,
         
                 acceptingOut => iqAcceptingF0,
                 acceptingMore => iqAcceptingMoreF0,
-                sentCancelled => sentCancelledF0,                
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedA,
                     newArr_Alt => NEW_ARR_DUMMY,                
                 fni => fniFloat,
-                waitingFM => WAITING_FN_MAP_FLOAT,
-                selectionFM => SELECTION_FN_MAP_FLOAT,
                 readyRegFlags => readyRegFlagsFloat,
                 nextAccepting => allowIssueF0,
-                execCausing => execCausing,
-                lateEventSignal => lateEventSignal,
-                execEventSignal => execEventSignal,
-                empty => emptyF0,
-                anyReady => open,
-                schedulerOut => slotSelF0,
-                sending => sendingSelF0
+                events => events,
+                schedulerOut => slotSelF0,              
+                outputSignals => outSigsF0
             );
 
             ISSUE_STAGE_F0: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => false, DELAY_ONLY => true)
+            generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => true, NEW_RR => true)
             port map(
-                clk => clk,
-                reset => '0',
-                en => '0',
-        
-                prevSending => sendingSelF0,
+                clk => clk, reset => '0', en => '0',
+                prevSending => outSigsF0.sending,
                 nextAccepting => '1',
-
                 input => slotSelF0,
-                
                 acceptingOut => open,
                 output => slotIssueF0,
-                
-                execEventSignal => execEventSignal,
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing,
-                fni => fniFloat,
+                events => events,
+                fni => fniEmpty,
                 regValues => (others => (others => '0'))   
             );        
-    
+                subpipeF0_Sel <= makeExecResult(slotIssueF0, slotIssueF0.full);
+                
             REG_READ_STAGE_F0: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => false)
+            generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
             port map(
-                clk => clk,
-                reset => '0',
-                en => '0',
-        
+                clk => clk, reset => '0', en => '0',
                 prevSending => slotIssueF0.full,
                 nextAccepting => '1',
-        
                 input => slotIssueF0,
-                
                 acceptingOut => open,
-                output => slotRegreadF0,
-                
-                execEventSignal => execEventSignal,
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing,
+                output => slotRegReadF0,        
+                events => events,
                 fni => fniFloat,
                 regValues => regValsF0     
             );
+                subpipeF0_RegRead <= makeExecResult(slotRegReadF0, slotRegReadF0.full);
           
-            dataToFpu0(0) <= (slotRegReadF0.full and not sentCancelledF0, executeFpu(slotregReadF0.ins, slotregReadF0.state));
+            dataToFpu0(0) <= (slotRegReadF0.full and not outSigsF0.cancelled, executeFpu(slotregReadF0.ins, slotregReadF0.state));
           
-            STAGE_F0_E0: entity work.GenericStage(Behavioral)
+            STAGE_F0_E0: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '0'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                
-                prevSending => dataToFpu0(0).full,
-                nextAccepting => '1',
-                
-                stageDataIn => dataToFpu0,
-                acceptingOut => open,
-                sendingOut => sendingF0_E0,
-                stageDataOut => slotF0_E0,
-                
-                execEventSignal => '0',
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing
+                input => dataToFpu0(0),
+                output => slotF0_E0(0),
+                events => eventsOnlyLate
             );     
+                subpipeF0_E0 <= makeExecResult(slotF0_E0(0), slotF0_E0(0).full);
 
-            STAGE_F0_E1: entity work.GenericStage(Behavioral)
+            STAGE_F0_E1: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '0'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                
-                prevSending => sendingF0_E0,
-                nextAccepting => '1',
-                
-                stageDataIn => slotF0_E0,
-                acceptingOut => open,
-                sendingOut => sendingF0_E1,
-                stageDataOut => slotF0_E1,
-                
-                execEventSignal => '0',
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing
+                input => slotF0_E0(0),
+                output => slotF0_E1(0),  
+                events => eventsOnlyLate
             );
+                subpipeF0_E1 <= makeExecResult(slotF0_E1(0), slotF0_E1(0).full);
 
-            STAGE_F0_E2: entity work.GenericStage(Behavioral)
+            STAGE_F0_E2: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '0'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                
-                prevSending => sendingF0_E1,
-                nextAccepting => '1',
-                
-                stageDataIn => slotF0_E1,
-                acceptingOut => open,
-                sendingOut => sendingF0_E2,
-                stageDataOut => slotF0_E2,
-                
-                execEventSignal => '0',
-                lateEventSignal => lateEventSignal,
-                execCausing => execCausing
+                input => slotF0_E1(0),
+                output => slotF0_E2(0),
+                events => eventsOnlyLate
             );
+                subpipeF0_E2 <= makeExecResult(slotF0_E2(0), slotF0_E2(0).full);
   
         end block;
-        
-           
+         
          sqValueInput <= -- CAREFUL: This implies that integer StoreData op value is lost when Int and FP are issued simultaneously. This must be prevented by scheduler!
                         (dataToExecStoreValue.full, setInstructionResult(dataToExecStoreValue.ins, dataToExecStoreValue.state.args(0)));
          
@@ -1165,8 +1047,8 @@ begin
          process (clk)
          begin
             if rising_edge(clk) then
-                issuedStoreDataInt <= sendingToIssueStoreValue;
-                issuedStoreDataFP <= sendingToIssueFloatStoreValue;
+                issuedStoreDataInt <= outSigsSVI.sending;
+                issuedStoreDataFP <= outSigsSVF.sending;
             end if;
          end process;
          
@@ -1176,114 +1058,80 @@ begin
          allowIssueStoreDataFP <= allowIssueStoreDataInt;
          
          -------------------------------------------
-            STAGE_I0_D0: entity work.GenericStage(Behavioral)
+            STAGE_I0_D0: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                
-                prevSending => sendingI0_E0,
-                nextAccepting => '1',
-                
-                stageDataIn => slotI0_E0,
-                acceptingOut => open,
-                sendingOut => sendingI0_D0,
-                stageDataOut => slotI0_D0,
-                
-                execEventSignal => '0',
-                lateEventSignal => '0',
-                execCausing => DEFAULT_INSTRUCTION_STATE
-            );           
-
-            STAGE_M0_D0: entity work.GenericStage(Behavioral)
-            generic map(
-                COMPARE_TAG => '1'
-            )
-            port map(
-                clk => clk, reset => '0', en => '0',
-                
-                prevSending => sendingM0_E2i,
-                nextAccepting => '1',
-                
-                stageDataIn => slotM0_E2i,
-                acceptingOut => open,
-                sendingOut => sendingM0_D0i,
-                stageDataOut => slotM0_D0i,
-                
-                execEventSignal => '0',
-                lateEventSignal => '0',
-                execCausing => DEFAULT_INSTRUCTION_STATE
-            );        
-
-            STAGE_M0_D0F: entity work.GenericStage(Behavioral)
-            generic map(
-                COMPARE_TAG => '1'
-            )
-            port map(
-                clk => clk, reset => '0', en => '0',
-                
-                prevSending => sendingM0_E2f,
-                nextAccepting => '1',
-                
-                stageDataIn => slotM0_E2f,
-                acceptingOut => open,
-                sendingOut => sendingM0_D0f,
-                stageDataOut => slotM0_D0f,
-                
-                execEventSignal => '0',
-                lateEventSignal => '0',
-                execCausing => DEFAULT_INSTRUCTION_STATE
+                input => slotFinalI0(0),
+                output => slotI0_D0(0),
+                events => DEFAULT_EVENT_STATE
             );
+                subpipeI0_D0 <= makeExecResult(slotI0_D0(0), slotI0_D0(0).full);
+
+            STAGE_M0_D0: entity work.GenericStage2(Behavioral)
+            generic map(
+                COMPARE_TAG => '1'
+            )
+            port map(
+                clk => clk, reset => '0', en => '0',
+                input => slotM0_E2i(0),
+                output => slotM0_D0i(0),
+                events => DEFAULT_EVENT_STATE
+            );        
+                subpipeM0_D0i <= makeExecResult(slotM0_D0i(0), slotM0_D0i(0).full); -- TODO: handle i/f
+
+            STAGE_M0_D0F: entity work.GenericStage2(Behavioral)
+            generic map(
+                COMPARE_TAG => '1'
+            )
+            port map(
+                clk => clk, reset => '0', en => '0',
+                input => slotM0_E2f(0),
+                output => slotM0_D0f(0),
+                events => DEFAULT_EVENT_STATE
+            );
+                subpipeM0_D0f <= makeExecResult(slotM0_D0f(0), slotM0_D0f(0).full); -- TODO: handle i/f
             
             -- After FP_LOAD_DELAY
-            STAGE_M0_D1F: entity work.GenericStage(Behavioral)
+            STAGE_M0_D1F: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                
-                prevSending => sendingM0_D0f,
-                nextAccepting => '1',
-                
-                stageDataIn => slotM0_D0f,
-                acceptingOut => open,
-                sendingOut => sendingM0_D1f,
-                stageDataOut => slotM0_D1f,
-                
-                execEventSignal => '0',
-                lateEventSignal => '0',
-                execCausing => DEFAULT_INSTRUCTION_STATE
+                input => slotM0_D0f(0),
+                output => slotM0_D1f(0),
+                events => DEFAULT_EVENT_STATE
             );
+                subpipeM0_D1f <= makeExecResult(slotM0_D1f(0), slotM0_D1f(0).full); -- TODO: handle i/f
 
-            STAGE_F0_D0: entity work.GenericStage(Behavioral)
+            STAGE_F0_D0: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                
-                prevSending => sendingF0_E2,
-                nextAccepting => '1',
-                
-                stageDataIn => slotF0_E2,
-                acceptingOut => open,
-                sendingOut => sendingF0_D0,
-                stageDataOut => slotF0_D0,
-                
-                execEventSignal => '0',
-                lateEventSignal => '0',
-                execCausing => DEFAULT_INSTRUCTION_STATE
+                input => slotF0_E2(0),
+                output => slotF0_D0(0),
+                events => DEFAULT_EVENT_STATE
             );
-                
+                subpipeF0_D0 <= makeExecResult(slotF0_D0(0), slotF0_D0(0).full); -- TODO: handle i/f
+    
+    
+                intWriteConflict <= sendingFinalI0 and slotM0_E2i(0).full;
             SCHED_BLOCK: process(clk)
             begin
                 if rising_edge(clk) then
-                    assert (sendingI0_E0 and sendingM0_E2i) = '0' report "Int write queue conflict!" severity error;
-                    memSubpipeSent <= sendingToAgu;
+                    assert intWriteConflict = '0' report "Int write queue conflict!" severity error;
                     
-                    fp0subpipeSelected <= sendingSelF0;
+                    if TMP_PARAM_I0_DELAY then
+                        memSubpipeSent <= sendingToRegReadM0;                    
+                    else
+                        memSubpipeSent <= sendingToAgu;
+                    end if;
+                    fp0subpipeSelected <= outSigsF0.sending;
                 end if;
             end process;
             
@@ -1298,65 +1146,91 @@ begin
             allowIssueF0 <= not lockIssueF0;
             
             -----           
-            sendingToIntWriteQueue <= sendingI0_E0 or sendingM0_E2i;
-            dataToIntWriteQueue <= slotM0_E2i when sendingM0_E2i = '1' else slotI0_E0;
+            sendingToIntWriteQueue <= sendingFinalI0 or slotM0_E2i(0).full;
+            dataToIntWriteQueue <= slotM0_E2i when slotM0_E2i(0).full = '1' else slotFinalI0;
             
-            INT_WRITE_QUEUE: entity work.GenericStage(Behavioral)
+            INT_WRITE_QUEUE: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                
-                prevSending => sendingToIntWriteQueue,
-                nextAccepting => '1',
-                
-                stageDataIn => dataToIntWriteQueue,
-                acceptingOut => open,
-                sendingOut => sendingToIntRF,
-                stageDataOut => dataToIntRF,
-                
-                execEventSignal => '0',
-                lateEventSignal => '0',
-                execCausing => DEFAULT_INSTRUCTION_STATE
+                input => dataToIntWriteQueue(0),
+                output => dataToIntRF(0),  
+                events => DEFAULT_EVENT_STATE
             ); 
-            
+                sendingToIntRF <= dataToIntRF(0).full;
                     
-         execOutputs1(0) <= (sendingI0_E0, slotI0_E0(0).ins);
+         execOutputs1(0) <= (sendingFinalI0, slotFinalI0(0).ins);
          execOutputs1(2) <= mergePhysDests(slotM0_E2i(0), slotM0_E2f(0)); --  [dest := Int.dest | Float.dest];             
-         execOutputs1(3) <= (sendingF0_E2, slotF0_E2(0).ins);
+         execOutputs1(3) <= (slotF0_E2(0).full, slotF0_E2(0).ins);
             
          -- TODO: include mem hit in 'full' flag! Should merge some info from Float path??
          
          execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins);
 
      
-         regsSelI0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotSelI0.ins)));
-         regsSelM0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotSelM0.ins)));        
+         regsSelI0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueI0.ins)));
+         regsSelM0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueM0.ins)));        
          -- TEMP!
          regsSelS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadIntStoreValue.ins)));
           
-         -- Forwarding network
-		 fni.nextTagsM1 <= (0 => slotIssueI0.ins.physicalArgSpec.dest, 2 => slotM0_E1i(0).ins.physicalArgSpec.dest, others => (others => '0'));        
-		 fni.nextTagsM2 <= (                                           2 => slotM0_E0(0).ins.physicalArgSpec.dest,  others => (others => '0'));
-         fni.tags0 <= (execOutputs1(0).ins.physicalArgSpec.dest, execOutputs1(1).ins.physicalArgSpec.dest, slotM0_E2i(0).ins.physicalArgSpec.dest);
-         fni.tags1 <= (0 => slotI0_D0(0).ins.physicalArgSpec.dest, 2 => slotM0_D0i(0).ins.physicalArgSpec.dest, others => (others => '0'));
-         fni.values0 <= (execOutputs1(0).ins.result, execOutputs1(1).ins.result, execOutputs1(2).ins.result);
-         fni.values1 <= (0 => slotI0_D0(0).ins.result, 2 => slotM0_D0i(0).ins.result, others => (others => '0'));                 
-                
+         NEW_FNI_INT: block
+            signal   s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+                     s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
+                     s2_M3, s2_M2, s2_M1, s2_R0, s2_R1,
+                         
+                     fs0_M3, fs0_M2, fs0_M1, fs0_R0, fs0_R1,
+                     fs1_M3, fs1_M2, fs1_M1, fs1_R0, fs1_R1,
+                     fs2_M3, fs2_M2, fs2_M1, fs2_R0, fs2_R1                        
+                     : ExecResult := DEFAULT_EXEC_RESULT;
+         begin
+             -- I0 pipe
+             s0_M3 <= DEFAULT_EXEC_RESULT;
+             s0_M2 <= subpipeI0_Sel when TMP_PARAM_I0_DELAY else DEFAULT_EXEC_RESULT;
+             s0_M1 <= subpipeI0_PreExec;
+             s0_R0 <= subpipeI0_E0;
+             s0_R1 <= subpipeI0_D0;
+
+             -- M0i pipe
+             s2_M3 <= subpipeM0_RegRead;
+             s2_M2 <= subpipeM0_E0i;   -- TODO: make separate Int/FP dest tags for every stage that can generate wakeup!
+             s2_M1 <= subpipeM0_E1i;
+             s2_R0 <= subpipeM0_E2i;
+             s2_R1 <= subpipeM0_D0i;
+
+             -- F0 pipe
+             fs0_M3 <= subpipeF0_RegRead;
+             fs0_M2 <= subpipeF0_E0;   
+             fs0_M1 <= subpipeF0_E1;
+             fs0_R0 <= subpipeF0_E2;
+             fs0_R1 <= subpipeF0_D0;
+                                     
+             -- M0f pipe
+             fs2_M3 <= subpipeM0_E0f;
+             fs2_M2 <= subpipeM0_E1f;
+             fs2_M1 <= subpipeM0_E2f;
+             fs2_R0 <= subpipeM0_D0f;
+             fs2_R1 <= subpipeM0_D1f;
+
+        
+             fni <= buildForwardingNetwork(
+                                              s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+                                              s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
+                                              s2_M3, s2_M2, s2_M1, s2_R0, s2_R1                                        
+                                            );
+        
+             fniFloat <= buildForwardingNetworkFP(
+                                                  fs0_M3, fs0_M2, fs0_M1, fs0_R0, fs0_R1,
+                                                  fs1_M3, fs1_M2, fs1_M1, fs1_R0, fs1_R1,
+                                                  fs2_M3, fs2_M2, fs2_M1, fs2_R0, fs2_R1                                        
+                                                );
+              
+         end block;
+              
                        
          regsSelFS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadFloatStoreValue.ins)));
          regsSelF0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueF0.ins)));
-
-         -- NOTE: FP load path is 1 cycle longer, so different stages are involved here from those in Int datapath
-         --      TODO: CHECK
-         fniFloat.nextTagsM1 <= (0 => slotF0_E1(0).ins.physicalArgSpec.dest, 2 => slotM0_E2f(0).ins.physicalArgSpec.dest, others => (others => '0'));
-         fniFloat.nextTagsM2 <= (0 => slotF0_E0(0).ins.physicalArgSpec.dest, 2 => slotM0_E1f(0).ins.physicalArgSpec.dest, others => (others => '0'));               
-         fniFloat.tags0 <= (0 => slotF0_E2(0).ins.physicalArgSpec.dest, 2 => slotM0_D0f(0).ins.physicalArgSpec.dest, others => (others => '0'));
-         fniFloat.tags1 <= (0 => slotF0_D0(0).ins.physicalArgSpec.dest, 2 => slotM0_D1f(0).ins.physicalArgSpec.dest, others => (others => '0'));
-         fniFloat.values0 <= (0 => slotF0_E2(0).ins.result, 2 => slotM0_D0f(0).ins.result, others => (others => '0'));
-         fniFloat.values1 <= (0 => slotF0_D0(0).ins.result, 2 => slotM0_D1f(0).ins.result, others => (others => '0'));
-                
 
 		 INT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(WIDTH => 4, WRITE_WIDTH => 1)
@@ -1378,7 +1252,7 @@ begin
              readValues(6 to 8) => regValsM0,                        
              readValues(9 to 11) => regValsS0            
          );
-         
+
          INT_READY_TABLE: entity work.RegisterReadyTable(Behavioral)
          generic map(
              WRITE_WIDTH => 1
@@ -1397,30 +1271,20 @@ begin
              readyRegFlagsNext => readyRegFlagsIntNext
          );
 
-
-            sendingToFloatWriteQueue <= sendingM0_E2f or sendingF0_E2; -- TEMP, TODO!
-            dataToFloatWriteQueue <= slotM0_E2f when sendingM0_E2f = '1' else slotF0_E2;
+            sendingToFloatWriteQueue <= slotM0_E2f(0).full or slotF0_E2(0).full; -- TEMP, TODO!
+            dataToFloatWriteQueue <= slotM0_E2f when slotM0_E2f(0).full = '1' else slotF0_E2;
             
-            FLOAT_WRITE_QUEUE: entity work.GenericStage(Behavioral)
+            FLOAT_WRITE_QUEUE: entity work.GenericStage2(Behavioral)
             generic map(
                 COMPARE_TAG => '1'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                
-                prevSending => sendingToFloatWriteQueue,
-                nextAccepting => '1',
-                
-                stageDataIn => dataToFloatWriteQueue,
-                acceptingOut => open,
-                sendingOut => sendingToFloatRF,
-                stageDataOut => dataToFloatRF,
-                
-                execEventSignal => '0',
-                lateEventSignal => '0',
-                execCausing => DEFAULT_INSTRUCTION_STATE
+                input => dataToFloatWriteQueue(0),
+                output => dataToFloatRF(0),  
+                events => DEFAULT_EVENT_STATE
             );
-
+                sendingToFloatRF <= dataToFloatRF(0).full;
 
 		 FLOAT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(IS_FP => true, WIDTH => 4, WRITE_WIDTH => 1)
@@ -1533,7 +1397,7 @@ begin
             
             slotTextRegReadF0 <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotRegReadF0));
 
-            slotTextI0_E0 <= getInsStringArray(slotI0_E0);
+            slotTextI0_E0 <= getInsStringArray(slotFinalI0);
             slotTextI0_E1 <= getInsStringArray(slotI0_E1);
             slotTextI0_E2 <= getInsStringArray(slotI0_E2);
 
@@ -1555,11 +1419,11 @@ begin
                     
                     -- Issue & complete monitoring
                     -- sendingSel* - from IQ;  sendingIssue* - form Issue stage
-                    monitorI0 <= updateSubpipeMonitor(monitorI0, emptyI0, cycleCounter, sendingSelI0, sendingI0_D0);
-                    monitorM0 <= updateSubpipeMonitor(monitorM0, emptyM0, cycleCounter, sendingSelM0, sendingM0_D0i or sendingM0_D0f);
-                    monitorSVI <= updateSubpipeMonitor(monitorSVI, emptySVI, cycleCounter, sendingToIssueStoreValue, '0');
-                    monitorSVF <= updateSubpipeMonitor(monitorSVF, emptySVF, cycleCounter, sendingToIssueFloatStoreValue, '0');
-                    monitorF0 <= updateSubpipeMonitor(monitorF0, emptyF0, cycleCounter, sendingSelF0, sendingF0_D0); 
+                    monitorI0 <= updateSubpipeMonitor(monitorI0, outSigsI0.empty, cycleCounter, outSigsI0.sending, slotI0_D0(0).full);
+                    monitorM0 <= updateSubpipeMonitor(monitorM0, outSigsM0.empty, cycleCounter, outSigsM0.sending, slotM0_D0i(0).full or slotM0_D0f(0).full);
+                    monitorSVI <= updateSubpipeMonitor(monitorSVI, outSigsSVI.empty, cycleCounter, outSigsSVI.sending, '0');
+                    monitorSVF <= updateSubpipeMonitor(monitorSVF, outSigsSVF.empty, cycleCounter, outSigsSVF.sending, '0');
+                    monitorF0 <= updateSubpipeMonitor(monitorF0, outSigsF0.empty, cycleCounter, outSigsF0.sending, slotF0_D0(0).full); 
                     
                 end if;
             end process;                                     
@@ -1637,7 +1501,8 @@ begin
 		storeValueInput => sqValueInput, 
 		compareAddressInput => sqAddressInput,
         compareIndexInput => preIndexSQ,
-                            
+            preCompareAddressInput => preAddressInput,
+            
 		selectedDataOutput => sqSelectedOutput,
 
 		committing => robSending,
@@ -1679,6 +1544,7 @@ begin
 		storeValueInput => DEFAULT_INSTRUCTION_SLOT, 
 		compareAddressInput => lqAddressInput,
         compareIndexInput => preIndexLQ,        
+            preCompareAddressInput => preAddressInput,
              
 		selectedDataOutput => lqSelectedOutput,
 

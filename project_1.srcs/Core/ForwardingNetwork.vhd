@@ -15,90 +15,45 @@ use work.PipelineGeneral.all;
 
 package ForwardingNetwork is
 
-     
-constant WAITING_FN_MAP: ForwardingMap := (
-    maskRR => "110",   -- arg2 is unused   
-    maskR1 => "000",  
-    maskR0 => "000",
-    maskM1 => "101",
-    maskM2 => "010"
-);        
+-- To:  From:
+-- I0    I0    M0    F0
+--      -2s   -3w    -   // number means source stage of notification, s/w - select(can issue immediately)/wait(can issue next cycle)
 
-constant ENQUEUE_FN_MAP: ForwardingMap := (
-    maskRR => "000",      
-    maskR1 => "111",  
-    maskR0 => "111",
-    maskM1 => "111",
-    maskM2 => "010"
+-- M0    I0    M0    F0
+--      -2s   -3w    -
+
+type ForwardingMode is record
+    stage: integer;
+    delayed: boolean; -- true - W, false - S  
+end record;
+
+type ForwardingModeArray is array (natural range <>) of ForwardingMode;
+
+constant FORWARDING_MODES_INT: ForwardingModeArray(0 to 2) := (
+    (-2, false), (-100, false), (-200, false)
 );
 
-constant SELECTION_FN_MAP: ForwardingMap := (
-    maskRR => "110",   -- arg2 is unused   
-    maskR1 => "000",  
-    maskR0 => "000",
-    maskM1 => "101",
-    maskM2 => "000"
-);
-
-constant ENQUEUE_FN_MAP_SV: ForwardingMap := (
-    maskRR => "000",      
-    maskR1 => "111",  
-    maskR0 => "111",
-    maskM1 => "000",
-    maskM2 => "000"
-);
-
-constant WAITING_FN_MAP_SV: ForwardingMap := (
-    maskRR => "100",
-    maskR1 => "000",  
-    maskR0 => "111",
-    maskM1 => "000",
-    maskM2 => "000"
+constant FORWARDING_MODES_INT_D: ForwardingModeArray(0 to 2) := (
+    (-2, false), (-100, false), (-3, false)
 );
 
 
--- FP store data
-constant ENQUEUE_FN_MAP_FLOAT_SV: ForwardingMap := (
-    maskRR => "000",      
-    maskR1 => "111",  
-    maskR0 => "111",
-    maskM1 => "000",
-    maskM2 => "000"
+constant FORWARDING_MODES_FLOAT: ForwardingModeArray(0 to 2) := (
+    (-200, false), (-100, false), (-100, false) 
 );
 
-constant WAITING_FN_MAP_FLOAT_SV: ForwardingMap := (
-    maskRR => "100",   -- arg2 is unused   
-    maskR1 => "000",  
-    maskR0 => "111",
-    maskM1 => "000",
-    maskM2 => "000"
+constant FORWARDING_MODES_FLOAT_D: ForwardingModeArray(0 to 2) := (
+    (-3, false), (-100, false), (-1, false) 
 );
 
--- FP cluster
-constant WAITING_FN_MAP_FLOAT: ForwardingMap := (
-    maskRR => "111",   
-    maskR1 => "000",  
-    maskR0 => "000",
-    maskM1 => "000",
-    maskM2 => "111"
-);        
 
-constant ENQUEUE_FN_MAP_FLOAT: ForwardingMap := (
-    maskRR => "000",      
-    maskR1 => "111",  
-    maskR0 => "111",
-    maskM1 => "111",
-    maskM2 => "111"
+constant FORWARDING_MODES_SV_INT_D: ForwardingModeArray(0 to 2) := (
+    (0, true), (-100, false), (0, true) 
 );
 
-constant SELECTION_FN_MAP_FLOAT: ForwardingMap := (
-    maskRR => "111",
-    maskR1 => "000",  
-    maskR0 => "000",
-    maskM1 => "000",
-    maskM2 => "000"
+constant FORWARDING_MODES_SV_FLOAT_D: ForwardingModeArray(0 to 2) := (
+    (0, true), (-100, false), (0, true) 
 );
-
 
 end ForwardingNetwork;
 

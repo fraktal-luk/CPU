@@ -14,55 +14,74 @@ use work.InstructionState.all;
 
 package PipelineGeneral is
 
+type ExecResult is record
+    full: std_logic;
+    tag: InsTag;
+    dest: PhysName;
+    value: Mword;
+end record;
+
+constant DEFAULT_EXEC_RESULT: ExecResult := ('0', tag => (others => '0'), dest => (others => '0'), value => (others => '0'));
+
+function makeExecResult(isl: InstructionSlot; full: std_logic) return ExecResult;
+function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecResult;
+
+
+type EventState is record
+    lateEvent: std_logic;
+    execEvent: std_logic;
+    execCausing: InstructionState;
+end record;
+
+constant DEFAULT_EVENT_STATE: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE);
+
+type IssueQueueSignals is record
+    sending: std_logic;
+    cancelled: std_logic;
+    ready: std_logic;
+    empty: std_logic;
+end record;
+
 type ForwardingInfo is record
+	nextTagsM3:	PhysNameArray(0 to 2);
+	nextTagsM2:	PhysNameArray(0 to 2);
+	nextTagsM1: PhysNameArray(0 to 2);
 	tags0: PhysNameArray(0 to 2);
 	tags1: PhysNameArray(0 to 2);
 	values0: MwordArray(0 to 2);
 	values1: MwordArray(0 to 2);	
-	nextTagsM1: PhysNameArray(0 to 2);
-	nextTagsM2:	PhysNameArray(0 to 2);
 end record;
 
 type ForwardingMatches is record
     -- src0
-	a0cmp0: std_logic_vector(0 to 2);
-    a0cmp1: std_logic_vector(0 to 2);    
-    a0cmpM1: std_logic_vector(0 to 2);
+    a0cmpM3: std_logic_vector(0 to 2);
     a0cmpM2: std_logic_vector(0 to 2);
+    a0cmpM1: std_logic_vector(0 to 2);
+    a0cmp1: std_logic_vector(0 to 2);    
+	a0cmp0: std_logic_vector(0 to 2);
     
     -- src1
-	a1cmp0: std_logic_vector(0 to 2);
-	a1cmp1: std_logic_vector(0 to 2);	
-	a1cmpM1: std_logic_vector(0 to 2);
+	a1cmpM3: std_logic_vector(0 to 2);
 	a1cmpM2: std_logic_vector(0 to 2);
+	a1cmpM1: std_logic_vector(0 to 2);
+	a1cmp1: std_logic_vector(0 to 2);	    
+	a1cmp0: std_logic_vector(0 to 2);
 end record;
 
 type ForwardingMatchesArray is array(integer range <>) of ForwardingMatches; 
 
-type ForwardingMap is record
-    maskRR: std_logic_vector(0 to 2);
-    maskR1: std_logic_vector(0 to 2);
-    maskR0: std_logic_vector(0 to 2);
-    maskM1: std_logic_vector(0 to 2);
-    maskM2: std_logic_vector(0 to 2);
-end record;
-
 
 constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
+	nextTagsM3 => (others => (others => '0')),
+	nextTagsM2 => (others => (others => '0')),
+	nextTagsM1 => (others => (others => '0')),
     tags0 => (others => (others => '0')),
     tags1 => (others => (others => '0')),
     values0 => (others => (others => '0')),
-    values1 => (others => (others => '0')),
-		
-	nextTagsM1 => (others => (others => '0')),
-	nextTagsM2 => (others => (others => '0'))
+    values1 => (others => (others => '0'))
 );
 
 constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
-    others => (others => '0')
-);
-
-constant DEFAULT_FORWARDING_MAP: ForwardingMap := (
     others => (others => '0')
 );
 
@@ -190,7 +209,20 @@ function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natur
 function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
 
 function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray; 
-    
+
+
+function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+                                s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
+                                s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
+          : ExecResult
+) return ForwardingInfo;
+
+function buildForwardingNetworkFP(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+                                  s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
+                                  s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
+          : ExecResult
+) return ForwardingInfo;
+
 end package;
 
 
@@ -413,6 +445,7 @@ begin
     return res;
 end function;
 
+-- UNUSED?
 function getNewElem(remv: std_logic_vector; newContent: InstructionSlotArray) return InstructionSlot is
     variable res: InstructionSlot := newContent(0);
     variable inputMask: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
@@ -425,6 +458,7 @@ begin
     return res;    
 end function;
 
+-- UNUSED?
 function getNewElemSch(remv: std_logic_vector; newContent: SchedulerEntrySlotArray)
 return SchedulerEntrySlot is
     variable res: SchedulerEntrySlot := newContent(0);
@@ -799,24 +833,28 @@ begin
         res(i).virtualArgSpec.floatDestSel := '0';                
         
         res(i).virtualArgSpec.intArgSel(0) := res(i).virtualArgSpec.intArgSel(2);
+        res(i).virtualArgSpec.intArgSel(1) := '0';
         res(i).virtualArgSpec.intArgSel(2) := '0';                
         res(i).virtualArgSpec.floatArgSel(0) := '0';
         res(i).virtualArgSpec.floatArgSel(1) := '0';                                    
         res(i).virtualArgSpec.floatArgSel(2) := '0';                
         
         res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
+        res(i).virtualArgSpec.args(1) := (others => '0');
         res(i).virtualArgSpec.args(2) := (others => '0');
 
         res(i).physicalArgSpec.intDestSel := '0';
         res(i).physicalArgSpec.floatDestSel := '0';                
         
         res(i).physicalArgSpec.intArgSel(0) := res(i).physicalArgSpec.intArgSel(2);
+        res(i).physicalArgSpec.intArgSel(1) := '0';                
         res(i).physicalArgSpec.intArgSel(2) := '0';                
         res(i).physicalArgSpec.floatArgSel(0) := '0';--res(i).virtualArgSpec.floatArgSel(2);
         res(i).physicalArgSpec.floatArgSel(1) := '0';                                    
         res(i).physicalArgSpec.floatArgSel(2) := '0';                
         
         res(i).physicalArgSpec.args(0) := res(i).physicalArgSpec.args(2);
+        res(i).physicalArgSpec.args(1) := (others => '0');                                              
         res(i).physicalArgSpec.args(2) := (others => '0');                                              
     end loop;
     
@@ -839,9 +877,11 @@ begin
         res(i).virtualArgSpec.intArgSel(1) := '0';                
         res(i).virtualArgSpec.intArgSel(2) := '0';                
         res(i).virtualArgSpec.floatArgSel(0) := res(i).virtualArgSpec.floatArgSel(2);
+        res(i).virtualArgSpec.floatArgSel(1) := '0';                
         res(i).virtualArgSpec.floatArgSel(2) := '0';                
         
         res(i).virtualArgSpec.args(0) := insVecFloat(i).virtualArgSpec.args(2);
+        res(i).virtualArgSpec.args(1) := (others => '0');
         res(i).virtualArgSpec.args(2) := (others => '0');
 
 
@@ -852,9 +892,11 @@ begin
         res(i).physicalArgSpec.intArgSel(1) := '0';                
         res(i).physicalArgSpec.intArgSel(2) := '0';                
         res(i).physicalArgSpec.floatArgSel(0) := res(i).physicalArgSpec.floatArgSel(2);
+        res(i).physicalArgSpec.floatArgSel(1) := '0';                
         res(i).physicalArgSpec.floatArgSel(2) := '0';                
         
         res(i).physicalArgSpec.args(0) := insVecFloat(i).physicalArgSpec.args(2);
+        res(i).physicalArgSpec.args(1) := (others => '0');                                              
         res(i).physicalArgSpec.args(2) := (others => '0');                                              
     end loop;
     
@@ -1097,5 +1139,67 @@ begin
     end loop;
     return res;
 end function; 
-     
+
+
+
+function makeExecResult(isl: InstructionSlot; full: std_logic) return ExecResult is
+    variable res: ExecResult := DEFAULT_EXEC_RESULT;
+begin
+    res.full := full;
+    res.tag := isl.ins.tags.renameIndex;
+    res.dest := isl.ins.physicalArgSpec.dest;
+    res.value := isl.ins.result;    
+    return res;
+end function;
+
+function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecResult is
+    variable res: ExecResult := DEFAULT_EXEC_RESULT;
+begin
+    res.full := full;
+    res.tag := isl.ins.tags.renameIndex;
+    res.dest := isl.ins.physicalArgSpec.dest;
+    res.value := isl.ins.result;    
+    return res;
+end function;
+
+
+function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+                                s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
+                                s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
+          : ExecResult
+) return ForwardingInfo is
+    variable fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
+begin
+         -- Forwarding network
+		 fni.nextTagsM3 := (0 => s0_M3.dest,                                                                             2 => s2_M3.dest,                             others => (others => '0'));
+		 fni.nextTagsM2 := (0 => s0_M2.dest,                                                                             2 => s2_M2.dest,                             others => (others => '0'));
+		 fni.nextTagsM1 := (0 => s0_M1.dest,                                                                             2 => s2_M1.dest,                             others => (others => '0'));        
+         fni.tags0 :=      (0 => s0_R0.dest,                              1 => s1_R0.dest,                               2 => s2_R0.dest,                             others => (others => '0')); 
+         fni.tags1 :=      (0 => s0_R1.dest,                                                                             2 => s2_R1.dest,                             others => (others => '0'));
+         fni.values0 :=    (0 => s0_R0.value,                             1 => s1_R0.value,                              2 => s2_R0.value,                            others => (others => '0'));
+         fni.values1 :=    (0 => s0_R1.value,                                                                            2 => s2_R1.value,                            others => (others => '0'));                 
+
+    return fni;
+end function;
+
+function buildForwardingNetworkFP(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+                                  s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
+                                  s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
+          : ExecResult
+) return ForwardingInfo is
+    variable fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
+begin
+         -- Forwarding network
+		 fni.nextTagsM3 := (0 => s0_M3.dest,                                                                             2 => s2_M3.dest,                             others => (others => '0'));
+		 fni.nextTagsM2 := (0 => s0_M2.dest,                                                                             2 => s2_M2.dest,                             others => (others => '0'));
+		 fni.nextTagsM1 := (0 => s0_M1.dest,                                                                             2 => s2_M1.dest,                             others => (others => '0'));        
+         fni.tags0 :=      (0 => s0_R0.dest,                                                                             2 => s2_R0.dest,                             others => (others => '0')); 
+         fni.tags1 :=      (0 => s0_R1.dest,                                                                             2 => s2_R1.dest,                             others => (others => '0'));
+         fni.values0 :=    (0 => s0_R0.value,                                                                            2 => s2_R0.value,                            others => (others => '0'));
+         fni.values1 :=    (0 => s0_R1.value,                                                                            2 => s2_R1.value,                            others => (others => '0'));                 
+
+    return fni;
+end function;
+
+
 end package body;

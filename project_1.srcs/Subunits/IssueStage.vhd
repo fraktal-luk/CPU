@@ -19,7 +19,9 @@ use work.LogicIssue.all;
 entity IssueStage is
 	generic(USE_IMM: boolean := true;
 	        REGS_ONLY: boolean := false;
-	        DELAY_ONLY: boolean := false);
+	        DELAY_ONLY: boolean := false;
+	        TMP_DELAY: boolean := false;
+	        NEW_RR: boolean := false);
 	port(
 		clk: in std_logic;
 		reset: in std_logic;
@@ -32,10 +34,8 @@ entity IssueStage is
 		
 		acceptingOut: out std_logic;
 		output: out SchedulerEntrySlot;
-		
-		execEventSignal: in std_logic;
-		lateEventSignal: in std_logic;
-		execCausing: in InstructionState;
+
+		events: in EventState;
 		
 		fni: in ForwardingInfo;
 		regValues: in MwordArray(0 to 2)		
@@ -44,15 +44,21 @@ end IssueStage;
 
 
 architecture Alternative of IssueStage is
-	signal inputDataWithArgs, dispatchDataUpdated: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+	signal inputDataWithArgs, inputData_TMP, dispatchDataUpdated: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 	signal sendingOut: std_logic := '0';
 	signal stageDataSaved, stageDataIn: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
-	signal argState: SchedulerState := DEFAULT_SCHEDULER_STATE;		
-begin
-	inputDataWithArgs <= getDispatchArgValues(input.ins, input.state, fni, prevSending, 
-											  USE_IMM, REGS_ONLY, DELAY_ONLY);	
-	stageDataIn <= (prevSending, inputDataWithArgs.ins);
+	signal argState, argStateNext: SchedulerState := DEFAULT_SCHEDULER_STATE;
 	
+	--   signal TMP_argReads0, TMP_argReads1: IntArray(0 to 2);		
+begin
+    inputData_TMP <= TMP_prepareDispatchSlot(input, prevSending);
+	inputDataWithArgs <= getDispatchArgValues(inputData_TMP, fni, prevSending, USE_IMM, REGS_ONLY);-- when not TMP_DELAY 
+
+    argStateNext <= inputData_TMP.state when TMP_DELAY
+               else inputDataWithArgs.state; 
+    
+	stageDataIn <= (prevSending, inputData_TMP.ins);
+
 	BASIC_LOGIC: entity work.GenericStage(Behavioral)
 	generic map(
 		COMPARE_TAG => '1'
@@ -68,23 +74,23 @@ begin
 		sendingOut => sendingOut,
 		stageDataOut(0) => stageDataSaved,
 		
-		execEventSignal => execEventSignal,
-		lateEventSignal => lateEventSignal,
-		execCausing => execCausing
+		execEventSignal => events.execEvent,
+		lateEventSignal => events.lateEvent,
+		execCausing => events.execCausing
 	);
 	
 	SAVE_SCH_STATE: process(clk)
 	begin
 		if rising_edge(clk) then
 		    if nextAccepting = '1' then -- CAREFUL: this is to enable stalling 
-			    argState <= inputDataWithArgs.state;
+			    argState <= argStateNext;
 			end if; 
 		end if;
 	end process;
 
-	dispatchDataUpdated <= updateDispatchArgs(stageDataSaved.ins, argState, fni.values0, regValues);
+    dispatchDataUpdated.state <= updateDispatchArgs(argState, fni.values0, regValues, TMP_DELAY, REGS_ONLY);
 
-	output <= (sendingOut, dispatchDataUpdated.ins, dispatchDataUpdated.state);	
+	output <= (sendingOut, stageDataSaved.ins, dispatchDataUpdated.state);	
 end Alternative;
 
 
