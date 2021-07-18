@@ -41,8 +41,15 @@ procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber;
 procedure updateAddress(signal content: inout QueueEntryArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);
 procedure updateValue(signal content: inout QueueEntryArray; isl: InstructionSlot);
 
+constant CMP_ADDRESS_LENGTH: natural := 32;
+
 function getAddressCompleted(content: QueueEntryArray) return std_logic_vector;
 function getAddressMatching(content: QueueEntryArray; adr: Mword) return std_logic_vector;
+
+
+    function addressLowMatching(a, b: Mword) return std_logic;
+    function addressHighMatching(a, b: Mword) return std_logic;
+
 function getWhichMemOp(content: QueueEntryArray) return std_logic_vector;
 function getDrainOutput_T(elem: QueueEntry; value: Mword) return InstructionState;
 
@@ -142,12 +149,25 @@ begin
     return res;
 end function;
 
+
+    function addressLowMatching(a, b: Mword) return std_logic is
+    begin
+        return bool2std(a(CMP_ADDRESS_LENGTH-1 downto 0) = b(CMP_ADDRESS_LENGTH-1 downto 0));
+    end function;
+
+    function addressHighMatching(a, b: Mword) return std_logic is
+    begin
+        return bool2std(a(31 downto CMP_ADDRESS_LENGTH) = b(31 downto CMP_ADDRESS_LENGTH));
+    end function;
+
+
 function getAddressMatching(content: QueueEntryArray; adr: Mword) return std_logic_vector is
     variable res: std_logic_vector(content'range);
 begin
     for i in content'range loop
         
-        res(i) := bool2std(content(i).address = adr);
+        res(i) := --bool2std(content(i).address = adr);
+                    addressLowMatching(content(i).address, adr);
     end loop;
     return res;
 end function;

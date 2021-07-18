@@ -85,7 +85,8 @@ architecture Behavioral of StoreQueue is
 begin
     NEW_DEV: block
          signal queueContent: QueueEntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_QUEUE_ENTRY);
-         signal selectedEntry, drainEntry: QueueEntry;     
+         signal selectedEntry, drainEntry: QueueEntry;
+         signal selectionAddress: MWord := (others => '0');   
     begin
         drainOutput <= getDrainOutput_T(drainEntry, drainValue);
         selectedOutput <= getDrainOutput_T(selectedEntry, selectedValue);
@@ -108,6 +109,7 @@ begin
                     updateValue(queueContent, storeValueInput);
                 end if;                               
                 
+                selectionAddress <= compareAddressInput.ins.target;
                 selectedEntry <= queueContent(slv2u(pSelect));
                 selectedValue <= storeValues(slv2u(pSelect));
                 

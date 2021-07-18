@@ -239,7 +239,7 @@ package body LogicExec is
 		if ins.specificOperation.arith = opAdd or ins.specificOperation.arith = opSub then
 			carry := resultExt(MWORD_SIZE); -- CAREFUL, with subtraction carry is different, keep in mind
 			result := resultExt(MWORD_SIZE-1 downto 0);					
-		else		
+		else
 			case ins.specificOperation.arith is
 				when opAnd =>
 					result := arg0 and arg1;				
@@ -381,6 +381,13 @@ package body LogicExec is
                  res.controlInfo.sqMiss := '1';
                  res.controlInfo.specialAction := '1';
                  res.controlInfo.newEvent := '1';
+             end if;
+             
+             if work.LogicQueues.addressHighMatching(ins.result, storeForwardOutput.ins.target) = '0' then
+                -- TMP
+                res.controlInfo.sqMiss := '1';
+                res.controlInfo.specialAction := '1';
+                res.controlInfo.newEvent := '1';
              end if;
          else
             res.result := memLoadValue;
