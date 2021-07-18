@@ -19,7 +19,7 @@ package InstructionSet is
 -- 
 
 
-type Opcode0 is (none, jumpLong, jumpLink, jumpZ, jumpNZ, intAlu, floatOp, intMem, floatMem, 
+type Opcode0 is (none, jumpLong, jumpLink, jumpZ, jumpNZ, intAlu, floatOp, intMem, floatMem, intAluImm,
                     addI, addH, 
                     
                     intLoadW16, intStoreW16,
@@ -32,6 +32,9 @@ type Opcode1 is (none,
                  -- intAlu
                  intLogic, intArith, jumpReg,
                  
+                 -- intAluImm
+                 intShiftLogical, intShiftArith, intRotate,
+                 
                  -- floatOp
                  floatMove,
                  
@@ -43,7 +46,6 @@ type Opcode1 is (none,
                  
                  -- sysMem
                  sysLoad, sysStore,
-
                  
                  -- sysControl                 
                  sysUndef,
@@ -192,7 +194,9 @@ constant FormatList: FormatAssignments(undef to sys_send) :=
     shl_i => IntImm10,
     shl_r => Int2R, -- direction defined by shift value, not opcode 
     sha_i => IntImm10,
-    sha_r => Int2R, --   
+    sha_r => Int2R, --
+    rot_i => intImm10,
+    rot_r => int2R,
     
     mul => Int2R,
     mulh_s => Int2R,
@@ -261,6 +265,9 @@ type Operation is (none,
                     
                     
                     intAdd, intSub,
+                    
+                    intShiftLogical, intShiftArith, intRotate,
+                    
                     
                     floatMove,
                     
@@ -360,6 +367,7 @@ constant EmptyTable2: OpcodeTable2 := (others => (none, none, undef));
     constant OP0_SYS_MEM: Dword := (4 => '1', others => '0');
 
     constant OP0_INT_ARITH: Dword := (0 => '1', others => '0');
+    constant OP0_INT_ARITH_IMM: Dword := (5 => '1', others => '0');
     constant OP0_FLOAT_ARITH: Dword := (1 => '1', others => '0');
 
     constant OP0_JUMP_LONG: Dword := (8 => '1', others => '0');
@@ -370,7 +378,7 @@ constant EmptyTable2: OpcodeTable2 := (others => (none, none, undef));
 
     constant OP0_INT_IMM: Dword := (16 to 17 => '1', others => '0');
 
-    constant OP0_IMM10: Dword := (2 to 4 => '1', others => '0');
+    constant OP0_IMM10: Dword := (2 to 5 => '1', others => '0');
     constant OP0_IMM16: Dword := (16 to 17 => '1', 20 to 23 => '1', others => '0');
     constant OP0_IMM21: Dword := (9 to 11 => '1', others => '0');
     constant OP0_IMM26: Dword := (8 => '1', others => '0');
@@ -380,7 +388,7 @@ constant EmptyTable2: OpcodeTable2 := (others => (none, none, undef));
     constant OP0_FLOAT_LOAD: Dword := (22 => '1', others => '0');
     constant OP0_FLOAT_STORE: Dword := (23 => '1', others => '0');
 
-    constant OP0_INT_DEST: Dword := OP0_INT_ARITH or OP0_JUMP_LINK or OP0_INT_IMM or OP0_INT_LOAD;
+    constant OP0_INT_DEST: Dword := OP0_INT_ARITH or OP0_INT_ARITH_IMM or OP0_JUMP_LINK or OP0_INT_IMM or OP0_INT_LOAD;
     constant OP0_FLOAT_DEST: Dword := OP0_FLOAT_ARITH or OP0_FLOAT_LOAD;
 
     constant OP0_LOAD: Dword := OP0_INT_LOAD or OP0_FLOAT_LOAD;
@@ -390,7 +398,7 @@ constant EmptyTable2: OpcodeTable2 := (others => (none, none, undef));
     constant OP0_0A: Dword := OP0_JUMP_COND;
 
     
-    constant OP0_INT_SRC0: Dword := OP0_INT_ARITH or OP0_INT_MEM or OP0_FLOAT_MEM or OP0_JUMP_COND or OP0_IMM16;
+    constant OP0_INT_SRC0: Dword := OP0_INT_ARITH or OP0_INT_ARITH_IMM or OP0_INT_MEM or OP0_FLOAT_MEM or OP0_JUMP_COND or OP0_IMM16;
     constant OP0_INT_SRC1: Dword := OP0_INT_ARITH;
     constant OP0_INT_SRC2: Dword := OP0_INT_STORE;
 
@@ -411,6 +419,8 @@ constant MainTable: OpcodeTable0 := (
     3 => (floatMem, none, none, undef), -- TableFloatMem
     
     4 => (sysMem, none, none, undef),  -- TableSysMem
+    
+    5 => (intAluImm, none, none, undef), -- TableIntAluImm
     
     7 => (sysControl, none, none, undef),
     
@@ -436,6 +446,15 @@ constant TableIntAlu: OpcodeTable1 := (
     0 => (intLogic, none, intRR, undef),
     1 => (intArith, none, intRR, undef),
     2 => (jumpReg, none, intRR, undef),
+    
+    others => (none, none, none, undef)
+);
+
+
+constant TableIntAluImm: OpcodeTable1 := (
+    0 => (intShiftLogical, intShiftLogical, intImm10, shl_i),
+    1 => (intShiftArith, intShiftArith, intImm10, sha_i),
+    2 => (intRotate, intRotate, intImm10, rot_i),
     
     others => (none, none, none, undef)
 );
@@ -520,6 +539,7 @@ constant TableFloatMove: OpcodeTable2 := (
 
 constant Tables1: TableArray0 := (
     intAlu => TableIntAlu,
+    intAluImm => TableIntAluImm,
     floatOp => TableFloatOp,
     intMem => TableIntMem,
     floatMem => TableFloatMem,

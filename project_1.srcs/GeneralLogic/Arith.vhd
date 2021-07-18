@@ -42,11 +42,11 @@ begin
         leftOut := MWORD_SIZE-1 + sh; 
         rightOut := 0;
     else -- dir left?
-        leftIn := MWORD_SIZE-1 + sh;
+        leftIn := MWORD_SIZE-1 - sh;
         rightIn := 0;
         
         leftOut := MWORD_SIZE-1;
-        rightOut := -sh;
+        rightOut := sh;
     end if;
     
     res(leftOut downto rightOut) := a(leftIn downto rightIn);    
@@ -71,11 +71,11 @@ begin
         leftOut := MWORD_SIZE-1 + sh; 
         rightOut := 0;
     else -- dir left?
-        leftIn := MWORD_SIZE-1 + sh;
+        leftIn := MWORD_SIZE-1 - sh;
         rightIn := 0;
         
         leftOut := MWORD_SIZE-1;
-        rightOut := -sh;
+        rightOut := sh;
     end if;
     
     res(leftOut downto rightOut) := a(leftIn downto rightIn);    
@@ -100,11 +100,11 @@ begin
         leftOut := MWORD_SIZE-1 + sh; 
         rightOut := 0;
     else -- dir left?
-        leftIn := MWORD_SIZE-1 + sh;
+        leftIn := MWORD_SIZE-1 - sh;
         rightIn := 0;
         
         leftOut := MWORD_SIZE-1;
-        rightOut := -sh;
+        rightOut := sh;
     end if;
     
     res(leftOut downto rightOut) := a(leftIn downto rightIn);    
@@ -130,11 +130,11 @@ begin
         leftOut := MWORD_SIZE-1 + sh; 
         rightOut := 0;
     else -- dir left?
-        leftIn := MWORD_SIZE-1 + sh;
+        leftIn := MWORD_SIZE-1 - sh;
         rightIn := 0;
         
         leftOut := MWORD_SIZE-1;
-        rightOut := -sh;
+        rightOut := sh;
     end if;
     
     res(leftOut downto rightOut) := a(leftIn downto rightIn);    
