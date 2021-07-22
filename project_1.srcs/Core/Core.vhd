@@ -465,7 +465,9 @@ begin
                                                               
               subpipeF0_Sel, subpipeF0_RegRead, subpipeF0_E0, subpipeF0_E1,subpipeF0_E2, subpipeF0_D0,
               subpipe_DUMMY
-                : ExecResult := DEFAULT_EXEC_RESULT;                  
+                : ExecResult := DEFAULT_EXEC_RESULT;
+                
+       signal unfoldedAluOp: work.LogicExec.AluControl := work.LogicExec.DEFAULT_ALU_CONTROL;         
     begin
         
         SUBPIPE_ALU: block
@@ -537,7 +539,14 @@ begin
                     fni => fni,
                     regValues => regValsI0   
                 );
-                                         
+                    
+                    ALU_OP_UNFOLD: process (clk)
+                    begin
+                        if rising_edge(clk) then
+                            unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.ins.specificOperation.arith);
+                        end if;
+                    end process;
+                              
                     subpipeI0_RegRead <= makeExecResult(slotRegReadI0, slotRegReadI0.full);
 
                 slotPreExecI0 <= slotRegReadI0 when TMP_PARAM_I0_DELAY else slotIssueI0;
@@ -545,7 +554,7 @@ begin
                 subpipeI0_PreExec <= subpipeI0_RegRead when TMP_PARAM_I0_DELAY else subpipeI0_Sel;
 
 
-            dataToAlu(0) <= (sendingToExecI0, executeAlu(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins, branchData));
+            dataToAlu(0) <= (sendingToExecI0, executeAlu(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins, branchData, unfoldedAluOp));
           
             STAGE_I0_E0: entity work.GenericStage2(Behavioral)
             generic map(

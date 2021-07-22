@@ -18,6 +18,19 @@ use work.Arith.all;
 
 package LogicExec is
 
+    type AluControl is record
+        adder: std_logic;
+        sub: std_logic;
+        bitop: std_logic_vector(3 downto 0);
+        shifter: std_logic;
+        shiftType: std_logic_vector(1 downto 0);
+        jump: std_logic; 
+    end record;
+
+    constant DEFAULT_ALU_CONTROL: AluControl := ('0', '0', "0000", '0', "00", '0');
+
+    function getAluControl(op: ArithOp) return AluControl;
+
 	-- DUMMY: This performs some simple operation to obtain a result
 	function passArg0(ins: InstructionState) return InstructionState;
 	function passArg1(ins: InstructionState) return InstructionState;
@@ -26,7 +39,7 @@ package LogicExec is
 
 	function basicBranch(ins: InstructionState; st: SchedulerState; queueData: InstructionState) return InstructionState;
 
-	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState; branchIns: InstructionState) return InstructionState;
+	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState; branchIns: InstructionState; ac: AluControl) return InstructionState;
 
 	function executeFpu(ins: InstructionState; st: SchedulerState) return InstructionState;
 
@@ -42,7 +55,8 @@ package LogicExec is
                               lqSelectedOutput: InstructionSlot
                              ) return InstructionState;
                                         
-    function getStoreDataOp(ss: SchedulerEntrySlot) return SchedulerEntrySlot;                                            
+    function getStoreDataOp(ss: SchedulerEntrySlot) return SchedulerEntrySlot;
+                                               
 end LogicExec;
 
 
@@ -160,7 +174,7 @@ package body LogicExec is
 		return res;
 	end function;
 	
-	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState; branchIns: InstructionState)
+	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState; branchIns: InstructionState; ac: AluControl)
 	return InstructionState is
 		variable res: InstructionState := ins;
 		variable result, linkAdr: Mword := (others => '0');
@@ -173,12 +187,14 @@ package body LogicExec is
 		variable shNum, shTemp: SmallNumber := (others => '0');
 		variable tempBits: std_logic_vector(95 downto 0) := (others => '0'); -- TEMP! for 32b only
 	    variable shiftedBytes: std_logic_vector(39 downto 0) := (others => '0');
+	    variable shiftInput, rotated, shiftOutput: Dword := (others => '0');
 	begin
 		arg0 := st.args(0);
 		arg1 := st.args(1);
 		arg2 := st.args(2);
 
-		if ins.specificOperation.arith = opSub then
+		if --ins.specificOperation.arith = opSub then
+		   ac.sub = '1' then
 			argAddSub := not arg1;
 			carryIn := '1';
 		else
@@ -187,7 +203,8 @@ package body LogicExec is
 		end if;
 	
 		shTemp(5 downto 0) := arg1(5 downto 0);
-		if ins.specificOperation.arith = opShl then
+		if --ins.specificOperation.arith = opShl then
+		      ac.shiftType = "00" then
 			shNum := subSN(shNum, shTemp);
 		else
 			shNum := shTemp;
@@ -196,13 +213,23 @@ package body LogicExec is
 		shH := slv2s(shNum(5 downto 3));
 		shL := slv2u(shNum(2 downto 0));
 	
-		if ins.specificOperation.arith = opSha then
+		if --ins.specificOperation.arith = opSha then
+		      ac.shiftType = "01" then
 			tempBits(95 downto 64) := (others => arg0(MWORD_SIZE-1));	
 		end if;
 		tempBits(63 downto 32) := arg0;
 	
 		shiftedBytes := tempBits(71 + 8*shH downto 32 + 8*shH);	
 	
+	       shiftInput(31 downto 0) := arg0;
+	       rotated := rotate64(shiftInput, arg1(5 downto 0));
+	       shiftOutput := rotated; -- TEMP: works for 32b and 5-bit shift amount
+--	       if arg1(9) = '0' then
+--	           shiftOutput := clearRight64(rotated, arg1(5 downto 0));
+--	       else
+--	           shiftOutput := rotated; -- TEMP!
+--	       end if;
+	       
 		-- Shifting: divide into byte part and intra-byte part
 		--	shift left by 8*H + L
 		-- must be universal: the H part also negative
@@ -217,7 +244,7 @@ package body LogicExec is
 		-- Most negative byte count is -4, giving -4*8 + 0 = -32
 		-- Most positive byte count is 3, giving 3*8 + 7 = 31
 		
-		resultExt := addExt(arg0, argAddSub, carryIn);	
+		resultExt := addExtNew(arg0, argAddSub, carryIn);	
 		linkAdr := queueData.result;
 
 		if (	(ins.specificOperation.arith = opAdd
@@ -236,31 +263,52 @@ package body LogicExec is
 	    res.controlInfo.newEvent := '0';
 	    res.controlInfo.hasException := '0';
 			
-		if ins.specificOperation.arith = opAdd or ins.specificOperation.arith = opSub then
+		if --ins.specificOperation.arith = opAdd or ins.specificOperation.arith = opSub then
+		      ac.adder = '1' then
 			carry := resultExt(MWORD_SIZE); -- CAREFUL, with subtraction carry is different, keep in mind
 			result := resultExt(MWORD_SIZE-1 downto 0);					
 		else
-			case ins.specificOperation.arith is
-				when opAnd =>
-					result := arg0 and arg1;				
-				when opOr =>
-					result := arg0 or arg1;
-				when opJ | opJz | opJnz => 
+		      if ac.jump = '1' then
 					result := linkAdr;
+              
+                  res.controlInfo.newEvent := branchIns.controlInfo.newEvent;
+                  res.controlInfo.frontBranch := branchIns.controlInfo.frontBranch;
+                  res.controlInfo.confirmedBranch := branchIns.controlInfo.confirmedBranch;		      
+		      elsif ac.shifter = '1' then
+		          result := --shiftedBytes(31 + shL downto shL);
+		                      shiftOutput(31 downto 0);
+		      else
+		          case ac.bitop is
+		              when "0000" =>
+					      result := arg0 and arg1;		                  
+		              when "0001" =>
+		                  result := arg0 or arg1;
+		              when others =>
+		                  result := arg0 xor arg1;
+		          end case;
+		      end if; 
+		
+--			case ins.specificOperation.arith is
+--				when opAnd =>
+--					result := arg0 and arg1;				
+--				when opOr =>
+--					result := arg0 or arg1;
+--				when opJ | opJz | opJnz => 
+--					result := linkAdr;
 					
-					res.controlInfo.newEvent := branchIns.controlInfo.newEvent;
-                    res.controlInfo.frontBranch := branchIns.controlInfo.frontBranch;
-                    res.controlInfo.confirmedBranch := branchIns.controlInfo.confirmedBranch;
+--					res.controlInfo.newEvent := branchIns.controlInfo.newEvent;
+--                    res.controlInfo.frontBranch := branchIns.controlInfo.frontBranch;
+--                    res.controlInfo.confirmedBranch := branchIns.controlInfo.confirmedBranch;
 
-				when others => 
-					result := shiftedBytes(31 + shL downto shL);
-			end case;
+--				when others => 
+--					result := shiftedBytes(31 + shL downto shL);
+--			end case;
 		end if;
 
 		if ov = '1' then
 			res.controlInfo.newEvent := '1';
 			res.controlInfo.hasException := '1';
-		end if;      		
+		end if;
 		res.result := result;
 
 		if CLEAR_DEBUG_INFO then
@@ -285,6 +333,40 @@ package body LogicExec is
 		return res;
 	end function;
 
+
+        function getAluControl(op: ArithOp) return AluControl is
+            variable ac: AluControl := ('0', '0', "0000", '0', "00", '0'); 
+        begin
+            case op is
+                when opAdd =>
+                    ac.adder := '1';
+                when opSub =>
+                    ac.adder := '1';
+                    ac.sub := '1';
+                when opAnd =>
+                    
+                when opOr => 
+                    ac.bitop := "0001";
+                when opXor =>
+                    ac.bitop := "0010";
+                when opShl =>
+                    ac.shifter := '1';
+                when opSha =>
+                    ac.shifter := '1';
+                    ac.shiftType := "01";
+                when opRot => 
+                    ac.shifter := '1';
+                    ac.shiftType := "10";
+                when opJz | opJnz | opJ | opJl =>
+                    ac.jump := '1';
+                
+                -- opMul, opMulshs, opMulhu, opDiv
+                when others =>
+                    
+            end case;
+            
+            return ac;
+        end function;
 
 	
 	function executeFpu(ins: InstructionState; st: SchedulerState) return InstructionState is
