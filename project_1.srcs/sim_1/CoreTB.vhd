@@ -385,9 +385,9 @@ BEGIN
       end loop;
         
       if EMULATION and LOG_EMULATION_TRACE and CORE_SIMULATION then -- TODO: scenario where emulation happens along with Core sim?
-          compareTraceFiles("emulation_trace.txt", "CoreDB_committed.txt", match);
-          report "Traces match: " & boolean'image(match);
-          assert match report "Traces are divergent!" severity error;
+          --compareTraceFiles("emulation_trace.txt", "CoreDB_committed.txt", match);
+          --report "Traces match: " & boolean'image(match);
+          --assert match report "Traces are divergent!" severity error;
       end if;
       
       report "All suites done!";        

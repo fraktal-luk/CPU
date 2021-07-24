@@ -478,7 +478,9 @@ begin
            signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
            
-           signal sendingBranch: std_logic := '0';     
+           signal sendingBranch: std_logic := '0';
+           
+                signal TMP_word0, TMP_word1: Word := (others => '0');   
         begin
             fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);
         
@@ -553,6 +555,9 @@ begin
                 sendingToExecI0 <= slotRegReadI0.full when TMP_PARAM_I0_DELAY else sendingToRegReadI0;
                 subpipeI0_PreExec <= subpipeI0_RegRead when TMP_PARAM_I0_DELAY else subpipeI0_Sel;
 
+
+                    TMP_word0 <= work.Arith.addExtNew(slotPreExecI0.state.args(0), slotPreExecI0.state.args(1), '0');
+                    TMP_word1 <= work.Arith.addExtNew(slotPreExecI0.state.args(0), slotPreExecI0.state.args(1), '1');
 
             dataToAlu(0) <= (sendingToExecI0, executeAlu(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins, branchData, unfoldedAluOp));
           

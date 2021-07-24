@@ -219,16 +219,52 @@ end function;
 -- Accepts carry input and returns 1-bit longer result for carry output 
 function addExtNew(a, b: Word; carryIn: std_logic) return Word is
 	variable res: Word := (others => '0');
-	variable ra, rb, rc: std_logic_vector(a'length+1 downto 0) := (others => '0');	
+	--variable ra, rb, rc: std_logic_vector(a'length+1 downto 0) := (others => '0');
+	variable aT, bT, rT, hi1, hi0, mid1, mid0, low: Mword := (others => '0');
+    variable cLow, cMid0, cMid1: std_logic := '0';
 begin
-    ra(a'length downto 1) := a;
-    rb(a'length downto 1) := b;
+    aT(12 downto 1) := a(11 downto 0); -- insert 1b higher to enable carry input
+    bT(12 downto 1) := b(11 downto 0);
+    aT(0) := carryIn;
+    bT(0) := carryIn;
+    rT := add(aT, bT);
+    low(11 downto 0) := rT(12 downto 1); -- shift back 1b down
+    cLow := rT(13); -- rT(13) is result(12)!
+    
+    aT := (others => '0');
+    bT := (others => '0');
+    aT(21 downto 12) := a(21 downto 12);
+    bT(21 downto 12) := b(21 downto 12);
+    mid0 := add(aT, bT); -- 21:12 result, 22 carry out
+    cMid0 := mid0(22);
+    aT(11) := '1';
+    bT(11) := '1';
+    mid1 := add(aT, bT); -- 21:12 result, 22 carry out
+    cMid1 := mid1(22);
+    
+    aT := (others => '0');
+    bT := (others => '0');
+    aT(31 downto 22) := a(31 downto 22);
+    bT(31 downto 22) := b(31 downto 22);
+    hi0 := add(aT, bT); -- 31:22 result
+    aT(21) := '1';
+    bT(21) := '1';
+    hi1 := add(aT, bT); -- 31:22 result
+  
+    res(11 downto 0) := low(11 downto 0);
+    
+    if cLow = '1' then
+        res(21 downto 12) := mid1(21 downto 12);
+    else
+        res(21 downto 12) := mid0(21 downto 12);
+    end if;
 
-    ra(0) := carryIn;
-    rb(0) := carryIn;
-
-	rc := add(ra, rb);
-	res := rc(a'length+1 downto 1);
+    if ((cLow and cMid1) or cMid0) = '1' then
+        res(31 downto 22) := hi1(31 downto 22);
+    else
+        res(31 downto 22) := hi0(31 downto 22);
+    end if;
+    
 	return res;
 end function;
 

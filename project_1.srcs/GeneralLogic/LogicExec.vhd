@@ -244,7 +244,7 @@ package body LogicExec is
 		-- Most negative byte count is -4, giving -4*8 + 0 = -32
 		-- Most positive byte count is 3, giving 3*8 + 7 = 31
 		
-		resultExt := addExtNew(arg0, argAddSub, carryIn);	
+		resultExt(31 downto 0) := addExtNew(arg0, argAddSub, carryIn);	
 		linkAdr := queueData.result;
 
 		if (	(ins.specificOperation.arith = opAdd
