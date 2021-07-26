@@ -303,7 +303,8 @@ begin
         queueContentUpdatedSelExt(0 to IQ_SIZE-1) <= queueContentUpdatedSel;
         queueContentUpdatedSelExt(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1) <= inputStageUpdatedSel;
 
-    dispatchDataNew <= getSchedEntrySlot(prioSelect16(queueContentUpdatedSelExt, readyMaskFullExt));
+    dispatchDataNew <= getSchedEntrySlot(prioSelect16(queueContentUpdatedSelExt, --readyMaskFullExt));
+                                                                                 readyMaskAllExt));
 
 	acceptingMain <= not fullMask(IQ_SIZE-PIPE_WIDTH);
 

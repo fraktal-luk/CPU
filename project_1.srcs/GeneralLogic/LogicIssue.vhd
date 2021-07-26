@@ -215,7 +215,8 @@ begin
     
         if IMM_AS_REG then    
             if CLEAR_DEBUG_INFO then
-                res.immValue(PhysName'length-1 downto 0) := (others => '0');
+                res.immValue--(PhysName'length-1 downto 0) := (others => '0');
+                            (PhysName'length-2 downto 0) := (others => '0');
             end if;
         end if;
     end if;
@@ -256,6 +257,7 @@ begin
     if HAS_IMM and isl.ins.constantArgs.immSel = '1' then
         if IMM_AS_REG then
             res.argSpec.args(1) := isl.ins.constantArgs.imm(PhysName'length-1 downto 0);
+                res.argSpec.args(1)(7) := '0';
         end if;
     end if;
                  
@@ -457,7 +459,8 @@ begin
     if not res.full = '1' then
         res.ins.physicalArgSpec.intDestSel := '0';
         res.ins.physicalArgSpec.floatDestSel := '0';
-        res.ins.physicalArgSpec.dest := (others => '0');
+        res.ins.physicalArgSpec.dest := --(others => '0');
+                                        (others => '1');
     end if;
     
     -- Clear unused fields       
@@ -475,8 +478,10 @@ function TMP_prepareDispatchSlot(input: SchedulerEntrySlot; prevSending: std_log
     variable res: SchedulerEntrySlot := input;
 begin
     if prevSending = '0' or (input.state.argSpec.intDestSel = '0' and input.state.argSpec.floatDestSel = '0') then
-        res.ins.physicalArgSpec.dest := (others => '0'); -- Don't allow false notifications of args
-        res.state.argSpec.dest := (others => '0'); -- Don't allow false notifications of args
+        res.ins.physicalArgSpec.dest := --(others => '0'); -- Don't allow false notifications of args
+                                        (others => '1');
+        res.state.argSpec.dest := --(others => '0'); -- Don't allow false notifications of args
+                                  (others => '1');
     end if;
     
     return res;
@@ -509,7 +514,8 @@ begin
                 res.state.args(1)(31 downto 16) := (others => res.state.immValue(15));
                 res.state.args(1)(15 downto 0) := res.state.immValue;
                 if IMM_AS_REG then
-                    res.state.args(1)(PhysName'length-1 downto 0) := res.state.argSpec.args(1);
+                    res.state.args(1)--(PhysName'length-1 downto 0) := res.state.argSpec.args(1);
+                                     (PhysName'length-2 downto 0) := res.state.argSpec.args(1)(6 downto 0);
                 end if;                                                               
             else
                 res.state.args(1) := (others => '0');
@@ -577,7 +583,8 @@ function extractReadyMask(entryVec: SchedulerInfoArray) return std_logic_vector 
     variable res: std_logic_vector(entryVec'range);
 begin	
     for i in res'range loop
-        res(i) := not isNonzero(entryVec(i).dynamic.missing(0 to 1))      and not entryVec(i).dynamic.issued;
+        res(i) := not isNonzero(entryVec(i).dynamic.missing(0 to 1))
+                                                                    ;--  and not entryVec(i).dynamic.issued;
     end loop;
     return res;
 end function;
@@ -708,6 +715,9 @@ begin
 	for i in 0 to res'right loop
 	   res(i) := iqDataNextS(i);	
 	   res(i).dynamic.full := iqFullMaskNext(i);
+	   if iqFullMaskNext(i) /= '1' or res(i).dynamic.issued = '1' then
+	       res(i).dynamic.missing(0 to 1) := "11";
+	   end if;	   
 	   res(i).dynamic.stored := (others => '0');
 	end loop;
 
@@ -1020,6 +1030,13 @@ begin
             end loop;
         end if;
    
+   for i in 0 to PIPE_WIDTH-1 loop
+       if res(i).dynamic.full /= '1' or res(i).dynamic.issued = '1' then
+           res(i).dynamic.missing(0 to 1) := "11";
+       end if;
+       
+   end loop;
+   
    return res;
 end function;
 
@@ -1029,12 +1046,16 @@ function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return S
 begin
    for i in 0 to PIPE_WIDTH-1 loop
        rrf := rr(3*i to 3*i + 2);                                           
-       res(i).dynamic.missing := res(i).dynamic.missing and not rrf;	       
-   end loop;
+       res(i).dynamic.missing := res(i).dynamic.missing and not rrf;       
+
+       if res(i).dynamic.full /= '1' or res(i).dynamic.issued = '1' then
+           res(i).dynamic.missing(0 to 1) := "11";
+       end if;
+   end loop;	
    
    for i in 1 to PIPE_WIDTH-1 loop
        res(i).dynamic.renameIndex := clearTagLow(res(0).dynamic.renameIndex) or i2slv(i, TAG_SIZE);
-   end loop;         
+   end loop;
    return res;
 end function;
 

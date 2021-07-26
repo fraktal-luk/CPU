@@ -41,7 +41,8 @@ procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber;
 procedure updateAddress(signal content: inout QueueEntryArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);
 procedure updateValue(signal content: inout QueueEntryArray; isl: InstructionSlot);
 
-constant CMP_ADDRESS_LENGTH: natural := 32;
+constant CMP_ADDRESS_LENGTH: natural := --32;
+                                        12;    
 
 function getAddressCompleted(content: QueueEntryArray) return std_logic_vector;
 function getAddressMatching(content: QueueEntryArray; adr: Mword) return std_logic_vector;

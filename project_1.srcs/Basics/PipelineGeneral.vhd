@@ -595,7 +595,8 @@ begin
                    res(i).ins.physicalArgSpec.intDestSel := '0';
                    res(i).ins.virtualArgSpec.floatDestSel := '0';
                 end if;		    
-			    res(i).ins.physicalArgSpec.dest := (others => '0');
+			    res(i).ins.physicalArgSpec.dest := --(others => '0');
+			                                       (others => '1');
 			end if;
 			res(i).ins.controlInfo.newEvent := '0';
 		end loop;
