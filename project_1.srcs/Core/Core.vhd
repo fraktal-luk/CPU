@@ -79,7 +79,8 @@ architecture Behavioral of Core is
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData, committedOut: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-    signal bqCompare, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+    signal bqCompare, bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput:
+                InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     signal specialAction, specialActionBuffOut, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     signal bqPointer, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
@@ -577,10 +578,11 @@ begin
                 sendingFinalI0 <= slotI0_E0(0).full;
                 slotFinalI0 <= slotI0_E0;
 
-            branchData <= basicBranch(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins);                  
+            branchData <= basicBranch(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins, unfoldedAluOp);                  
             
             dataToBranch(0) <= (sendingToExecI0 and slotPreExecI0.state.branchIns, branchData);            
             bqCompare <= (dataToBranch(0).full, slotPreExecI0.ins);
+                bqCompareEarly <= (sendingToRegReadI0 and slotIssueI0.state.branchIns, slotIssueI0.ins);
             
             STAGE_I0_E0_BRANCH: entity work.GenericStage2(Behavioral)
             generic map(
@@ -1475,6 +1477,7 @@ begin
 
 		storeValueInput => bqUpdate,
 		compareAddressInput => bqCompare,
+            compareAddressQuickInput => bqCompareEarly,
 
 		selectedDataOutput => bqSelected,
 

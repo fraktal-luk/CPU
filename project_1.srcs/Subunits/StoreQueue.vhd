@@ -71,7 +71,7 @@ architecture Behavioral of StoreQueue is
 	       pStartEffective, pStartEffectiveNext,
            pStartLong, pStartLongNext, pDrainLong, pDrainLongNext, pDrainLongPrev, pTaggedLong, pTaggedLongNext, pFlushLong, pRenamedLong, pRenamedLongNext,
 	       pStartLongEffective, pStartLongEffectiveNext,
-	       nFull, nFullNext, nIn, nOut, nCommitted, nCommittedEffective, nInRe, recoveryCounter: SmallNumber := (others => '0');
+	       nFull, nFullNext, nIn, nOut, nCommitted, nCommittedEffective, nInRe, recoveryCounter, TMP_count: SmallNumber := (others => '0');
 
     signal storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
      
@@ -175,14 +175,15 @@ begin
 
         WHEN_SQ: if not IS_LOAD_QUEUE generate
             -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
-           pSelect <=   findNewestMatchIndex(olderSQ,  pDrainPrev, pTagged, QUEUE_PTR_SIZE);
+           pSelect <=   findNewestMatchIndex(olderSQ,  pDrainPrev, pTagged, nFull, QUEUE_PTR_SIZE);
+                TMP_count <= sub(pTaggedLong, pDrainLongPrev);
         end generate;
             
         process (clk)
             begin
                 if rising_edge(clk) then
                     newerRegLQ <= newerNextLQ;
-                    olderRegSQ <= olderNextSQ;                                            
+                    olderRegSQ <= olderNextSQ;                             
                 end if;      
          end process;              
     end block;

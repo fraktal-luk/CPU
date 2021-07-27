@@ -24,10 +24,11 @@ package LogicExec is
         bitop: std_logic_vector(3 downto 0);
         shifter: std_logic;
         shiftType: std_logic_vector(1 downto 0);
-        jump: std_logic; 
+        jump: std_logic;
+        jumpType: std_logic_vector(1 downto 0); -- [ab] -> a=0 conditional, a=1 unconditional, b=0 when zero, b=1 when nonzero
     end record;
 
-    constant DEFAULT_ALU_CONTROL: AluControl := ('0', '0', "0000", '0', "00", '0');
+    constant DEFAULT_ALU_CONTROL: AluControl := ('0', '0', "0000", '0', "00", '0', "00");
 
     function getAluControl(op: ArithOp) return AluControl;
 
@@ -37,7 +38,7 @@ package LogicExec is
 	function execLogicOr(ins: InstructionState) return InstructionState;
 	function execLogicXor(ins: InstructionState) return InstructionState;
 
-	function basicBranch(ins: InstructionState; st: SchedulerState; queueData: InstructionState) return InstructionState;
+	function basicBranch(ins: InstructionState; st: SchedulerState; queueData: InstructionState; ac: AluControl) return InstructionState;
 
 	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState; branchIns: InstructionState; ac: AluControl) return InstructionState;
 
@@ -88,10 +89,12 @@ package body LogicExec is
 	end function;	
 
 
-	function resolveBranchCondition(ss: SchedulerState; op: ArithOp) return std_logic is
+	function resolveBranchCondition(ss: SchedulerState; op: ArithOp; ac: AluControl) return std_logic is
 		variable isZero: std_logic;
 	begin
 		isZero := not isNonzero(ss.args(0));
+			
+		    return ac.jumpType(1) or (ac.jumpType(0) xor isZero); 
 			
 		if op = opJ then
 			return '1';
@@ -105,7 +108,7 @@ package body LogicExec is
 		
 	end function;
 
-	function basicBranch(ins: InstructionState; st: SchedulerState; queueData: InstructionState) return InstructionState is
+	function basicBranch(ins: InstructionState; st: SchedulerState; queueData: InstructionState; ac: AluControl) return InstructionState is
 		variable res: InstructionState := ins;
 		variable branchTaken, targetMatch: std_logic := '0';
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
@@ -118,7 +121,7 @@ package body LogicExec is
 		-- j not taken : if not taken ok, if taken goto dest
 
         targetMatch := bool2std(queueData.target = st.args(1));
-		branchTaken := resolveBranchCondition(st, ins.specificOperation.arith);
+		branchTaken := resolveBranchCondition(st, ins.specificOperation.arith, ac);
 
 		if queueData.controlInfo.frontBranch = '1' and branchTaken = '0' then						
 			res.controlInfo.newEvent := '1';
@@ -335,7 +338,7 @@ package body LogicExec is
 
 
         function getAluControl(op: ArithOp) return AluControl is
-            variable ac: AluControl := ('0', '0', "0000", '0', "00", '0'); 
+            variable ac: AluControl := DEFAULT_ALU_CONTROL; 
         begin
             case op is
                 when opAdd =>
@@ -357,9 +360,15 @@ package body LogicExec is
                 when opRot => 
                     ac.shifter := '1';
                     ac.shiftType := "10";
-                when opJz | opJnz | opJ | opJl =>
+                when opJz =>
                     ac.jump := '1';
-                
+                    ac.jumpType := "00";
+                when opJnz =>
+                    ac.jump := '1';
+                    ac.jumpType := "01";
+                when opJ | opJl =>
+                    ac.jump := '1';
+                    ac.jumpType := "10";
                 -- opMul, opMulshs, opMulhu, opDiv
                 when others =>
                     

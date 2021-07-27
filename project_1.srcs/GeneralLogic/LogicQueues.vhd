@@ -56,7 +56,7 @@ function getDrainOutput_T(elem: QueueEntry; value: Mword) return InstructionStat
 
 function cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
 function cmpIndexAfter(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
-function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
+function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, pEnd, nFull: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
 function getNumCommittedEffective(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber; 
 function getNumCommitted(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber;
 
@@ -252,7 +252,7 @@ begin
     return res;
 end function;
 
-function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural)
+function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, pEnd, nFull: SmallNumber; constant QUEUE_PTR_SIZE: natural)
 return SmallNumber is
     constant LEN: integer := olderSQ'length;      
     variable tmpVec1: std_logic_vector(0 to LEN-1) := (others => '0');
@@ -263,7 +263,8 @@ return SmallNumber is
 begin
     -- Shift by pStart
     nShift := slv2u(pStart);
-    count := slv2u(subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE));
+    count := --slv2u(subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE));
+             slv2u(nFull);
     
     tmpVecExt := olderSQ & olderSQ;
     
