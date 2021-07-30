@@ -148,6 +148,25 @@ package body LogicExec is
 			res.controlInfo.confirmedBranch := '1';			
 		end if;
 
+
+                if branchTaken = '0' then
+                    trueTarget := queueData.result;
+                elsif st.immediate = '1' then
+                    trueTarget := queueData.target;
+                else
+                    trueTarget := st.args(1);
+                end if;
+                
+                if      (queueData.controlInfo.frontBranch xor branchTaken) = '1'
+                    or  (queueData.controlInfo.frontBranch and branchTaken and not st.immediate and not targetMatch) = '1'
+                then
+                    res.controlInfo.newEvent := '1';
+                else
+                    res.controlInfo.newEvent := '0';
+                end if;
+
+                res.controlInfo.confirmedBranch := branchTaken;
+
 		res.target := trueTarget;
 		-- Return address
 		res.result := queueData.result;
