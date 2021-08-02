@@ -105,7 +105,7 @@ architecture Behavioral of IssueQueue is
             res(i).killed := killByTag(compareTagBefore(events.execCausing.tags.renameIndex, content(i).dynamic.renameIndex), events.execEvent, events.lateEvent);
             res(i).living := res(i).full and not res(i).killed;
             
-            res(i).ready := not isNonzero(content(i).dynamic.missing(0 to 1)) and not content(i).dynamic.issued;
+            res(i).ready := not isNonzero(content(i).dynamic.missing(0 to 1));-- and not content(i).dynamic.issued;
             
             res(i).readyFull := res(i).ready and res(i).full;
             res(i).readyLiving := res(i).ready and res(i).living;

@@ -1186,10 +1186,10 @@ begin
          execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins);
 
      
-         regsSelI0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueI0.ins)));
-         regsSelM0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueM0.ins)));        
+         regsSelI0 <= work.LogicRenaming.getPhysicalArgs(slotIssueI0);
+         regsSelM0 <= work.LogicRenaming.getPhysicalArgs(slotIssueM0);        
          -- TEMP!
-         regsSelS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadIntStoreValue.ins)));
+         regsSelS0 <= work.LogicRenaming.getPhysicalArgs(dataToRegReadIntStoreValue);
           
          NEW_FNI_INT: block
             signal   s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
@@ -1245,8 +1245,8 @@ begin
          end block;
               
                        
-         regsSelFS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadFloatStoreValue.ins)));
-         regsSelF0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueF0.ins)));
+         regsSelFS0 <= work.LogicRenaming.getPhysicalArgs(dataToRegReadFloatStoreValue);
+         regsSelF0 <= work.LogicRenaming.getPhysicalArgs(slotIssueF0);
 
 		 INT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(WIDTH => 4, WRITE_WIDTH => 1)

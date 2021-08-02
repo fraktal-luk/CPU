@@ -52,9 +52,9 @@ architecture Alternative of IssueStage is
 	--   signal TMP_argReads0, TMP_argReads1: IntArray(0 to 2);		
 begin
     inputData_TMP <= TMP_prepareDispatchSlot(input, prevSending);
-	inputDataWithArgs <= getDispatchArgValues(inputData_TMP, fni, prevSending, USE_IMM, REGS_ONLY);-- when not TMP_DELAY 
+	inputDataWithArgs <= getDispatchArgValues(inputData_TMP, fni, prevSending, USE_IMM, REGS_ONLY, TMP_DELAY);-- when not TMP_DELAY 
 
-    argStateNext <= inputData_TMP.state when TMP_DELAY
+    argStateNext <= inputData_TMP.state when false-- TMP_DELAY
                else inputDataWithArgs.state; 
     
 	stageDataIn <= (prevSending, inputData_TMP.ins);

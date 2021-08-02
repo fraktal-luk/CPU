@@ -41,6 +41,9 @@ procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber;
 procedure updateAddress(signal content: inout QueueEntryArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);
 procedure updateValue(signal content: inout QueueEntryArray; isl: InstructionSlot);
 
+    procedure updateAddressArr(signal content: inout MwordArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);
+
+
 constant CMP_ADDRESS_LENGTH: natural := --32;
                                         12;    
 
@@ -130,6 +133,29 @@ begin
         content(ind).address <= isl.ins.result;
     end if;        
 end procedure;
+
+    procedure updateAddressArr(signal content: inout MwordArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean) is
+        constant LEN: natural := content'length;
+        constant PTR_MASK_SN: SmallNumber := i2slv(LEN-1, SMALL_NUMBER_SIZE);
+        constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);        
+        variable indV: SmallNumber;
+        variable ind: natural;
+        variable allow: std_logic;
+    begin
+        if not IS_LOAD_QUEUE then
+            indV := isl.ins.tags.sqPointer and PTR_MASK_SN;
+            allow := isStoreOp(isl.ins);           
+        else
+            indV := isl.ins.tags.lqPointer and PTR_MASK_SN;
+            allow := isLoadOp(isl.ins);
+        end if;
+        
+        ind := slv2u(indV);
+        
+        if allow = '1' then
+            content(ind) <= isl.ins.result;
+        end if;        
+    end procedure;
 
 procedure updateValue(signal content: inout QueueEntryArray; isl: InstructionSlot) is
     constant LEN: natural := content'length;

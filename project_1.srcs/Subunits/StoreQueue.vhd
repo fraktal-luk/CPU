@@ -67,19 +67,19 @@ architecture Behavioral of StoreQueue is
 	
 	signal addressMatchMask, memOpMask, newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 	
-	signal pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pTagged, pTaggedNext, pFlush, storePtr, pSelect, pRenamed, pRenamedNext,
+	signal pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pTagged, pTaggedNext, pFlush, storePtr, pSelect, pSelectShifting, pRenamed, pRenamedNext,
 	       pStartEffective, pStartEffectiveNext,
            pStartLong, pStartLongNext, pDrainLong, pDrainLongNext, pDrainLongPrev, pTaggedLong, pTaggedLongNext, pFlushLong, pRenamedLong, pRenamedLongNext,
 	       pStartLongEffective, pStartLongEffectiveNext,
 	       nFull, nFullNext, nIn, nOut, nCommitted, nCommittedEffective, nInRe, recoveryCounter, TMP_count: SmallNumber := (others => '0');
 
-    signal storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
+    signal addresses, storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
      
     signal isFull, isAlmostFull, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDraining, isDrainingPrev, isSelected: std_logic := '0';
     signal memEmpty: std_logic := '1'; -- CAREFUL! Starts with '1'
 
     signal drainOutput, selectedOutput: InstructionState := DEFAULT_INS_STATE;
-    signal drainValue, selectedValue: Mword := (others => '0');
+    signal drainValue, selectedValue, drainAddress, selectedAddress: Mword := (others => '0');
 
     signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
 begin
@@ -109,9 +109,10 @@ begin
                     updateValue(queueContent, storeValueInput);
                 end if;                               
                 
-                selectionAddress <= compareAddressInput.ins.target;
+                --selectionAddress <= compareAddressInput.ins.target;
                 selectedEntry <= queueContent(slv2u(pSelect));
                 selectedValue <= storeValues(slv2u(pSelect));
+                selectedAddress <= addresses(slv2u(pSelect));
                 
                     -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
                 if not IS_LOAD_QUEUE then
@@ -124,6 +125,7 @@ begin
                 
                 drainEntry <= queueContent(slv2u(pDrain));
                 drainValue <= storeValues(slv2u(pDrain));
+                drainAddress <= addresses(slv2u(pDrain));
             end if;
         end process;
     end block;
@@ -176,7 +178,7 @@ begin
         WHEN_SQ: if not IS_LOAD_QUEUE generate
             -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
            pSelect <=   findNewestMatchIndex(olderSQ,  pDrainPrev, pTagged, nFull, QUEUE_PTR_SIZE);
-                TMP_count <= sub(pTaggedLong, pDrainLongPrev);
+           --     TMP_count <= sub(pTaggedLong, pDrainLongPrev);
         end generate;
             
         process (clk)
@@ -213,6 +215,10 @@ begin
             isDrainingPrev <= isDraining;		    
 		    allowDrain <= not (nowCancelled or (not drainEqual and drainEffectiveEqual));
 
+                if compareAddressInput.full = '1' then
+                    updateAddressArr(addresses, compareAddressInput, IS_LOAD_QUEUE);
+                end if;
+            
             if storeValueInput.full = '1' then
                 storeValues(slv2u(storePtr)) <= storeValueInput.ins.result;
             end if;

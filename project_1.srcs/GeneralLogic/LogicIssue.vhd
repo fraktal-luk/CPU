@@ -137,7 +137,7 @@ function TMP_prepareDispatchSlot(input: SchedulerEntrySlot; prevSending: std_log
 function getDispatchArgValues(input: SchedulerEntrySlot;
                                     fni: ForwardingInfo;
                                     prevSending: std_logic;
-                                    USE_IMM: boolean; REGS_ONLY: boolean)
+                                    USE_IMM: boolean; REGS_ONLY: boolean; TMP_DELAY: boolean)
 return SchedulerEntrySlot;
 
 function updateDispatchArgs(st: SchedulerState; vals: MwordArray; regValues: MwordArray; TMP_DELAY: boolean; REGS_ONLY: boolean) return SchedulerState;
@@ -491,10 +491,36 @@ end function;
 function getDispatchArgValues(input: SchedulerEntrySlot;
                                     fni: ForwardingInfo;
                                     prevSending: std_logic;
-                                    USE_IMM: boolean; REGS_ONLY: boolean)
+                                    USE_IMM: boolean; REGS_ONLY: boolean; TMP_DELAY: boolean)
 return SchedulerEntrySlot is
     variable res: SchedulerEntrySlot := input;
 begin
+    if TMP_DELAY then
+        if IMM_AS_REG then
+            res.state.immValue(PhysName'length-2 downto 0) := res.state.argSpec.args(1)(6 downto 0);
+        end if;
+    
+        if res.state.--zero(0) = '1' then
+                     argSrc(0)(1) /= '1' then
+            res.state.argSpec.args(0) := (others => '0');
+        end if;
+
+        if res.state.--zero(1) = '1' then
+                     argSrc(1)(1) /= '1' or res.state.zero(1) = '1' then
+            res.state.argSpec.args(1) := (others => '0');
+        end if;
+
+        -- for arg(1):
+        -- 11 - read result at E0 input (ignore stored arg)
+        -- 00 - get result now          (use stored arg)
+        -- 01 - get result now          (use store arg)
+        -- 10 - (read reg when z=0)     (clear stored arg)
+        --        or get imm now when z=1 (use stored arg)
+        --  > arg must be set if [0-] OR z=1
+        --  > clear arg if: [1-] AND z=0 
+        return res;
+    end if;
+
     if not REGS_ONLY then
         if res.state.zero(0) = '1' then
             res.state.args(0) := (others => '0');
@@ -502,21 +528,19 @@ begin
         elsif res.state.argSrc(0)(1 downto 0) = "00" then
             res.state.args(0) := fni.values0(slv2u(res.state.argLocsPipe(0)(1 downto 0)));
             res.state.stored(0) := '1';
-        else --elsif res.state.argSrc(1 downto 0) := "01" then
+        elsif res.state.argSrc(0)(1 downto 0) = "01" then
             res.state.args(0) := fni.values1(slv2u(res.state.argLocsPipe(0)(1 downto 0)));
-            if res.state.argSrc(0)(1 downto 0) = "01" then
+            if res.state.argSrc(0)(1 downto 0) = "01" then -- becomes redundant
                 res.state.stored(0) := '1';
             end if;
+        else
+            res.state.args(0) := (others => '0');           
         end if;
     
         if res.state.zero(1) = '1' then
             if USE_IMM then
                 res.state.args(1)(31 downto 16) := (others => res.state.immValue(15));
                 res.state.args(1)(15 downto 0) := res.state.immValue;
-                if IMM_AS_REG then
-                    res.state.args(1)--(PhysName'length-1 downto 0) := res.state.argSpec.args(1);
-                                     (PhysName'length-2 downto 0) := res.state.argSpec.args(1)(6 downto 0);
-                end if;                                                               
             else
                 res.state.args(1) := (others => '0');
             end if;
@@ -524,11 +548,13 @@ begin
         elsif res.state.argSrc(1)(1 downto 0) = "00" then
             res.state.args(1) := fni.values0(slv2u(res.state.argLocsPipe(1)(1 downto 0)));
             res.state.stored(1) := '1';
-        else --elsif res.state.argSrc(1)(1 downto 0) := "01" then
+        elsif res.state.argSrc(1)(1 downto 0) = "01" then
             res.state.args(1) := fni.values1(slv2u(res.state.argLocsPipe(1)(1 downto 0)));
-            if res.state.argSrc(1)(1 downto 0) = "01" then
+            if res.state.argSrc(1)(1 downto 0) = "01" then -- TODO: Becomes redundant
                 res.state.stored(1) := '1';
-            end if;				
+            end if;
+        else
+            res.state.args(1) := (others => '0');
         end if;    
     else
         res.state.stored := (others => '0');
@@ -556,24 +582,35 @@ begin
         return res;
     end if;
 
-    if res.stored(0) = '1' then
-        null; -- Using stored arg
-    elsif --res.argSrc(0)(1 downto 0) = "11" then
-                res.readNew(0) = '1' then
+--    if res.stored(0) = '1' then
+--        null; -- Using stored arg
+--    elsif res.readNew(0) = '1' then
+--        res.args(0) := vals(slv2u(res.argLocsPipe(0)(1 downto 0)));
+--    else
+--        res.args(0) := regValues(0);
+--    end if;
+    if res.readNew(0) = '1' then
         res.args(0) := vals(slv2u(res.argLocsPipe(0)(1 downto 0)));
     else
-        res.args(0) := regValues(0);
+        res.args(0) := res.args(0) or regValues(0);
     end if;
+    
     res.stored(0) := '1';
 
-    if res.stored(1) = '1' then
-        null; -- Using stored arg
-    elsif --res.argSrc(1)(1 downto 0) = "11" then
-                res.readNew(1) = '1' then
+--    if res.stored(1) = '1' then
+--        null; -- Using stored arg
+--    elsif res.readNew(1) = '1' then
+--        res.args(1) := vals(slv2u(res.argLocsPipe(1)(1 downto 0)));
+--    else
+--        res.args(1) := regValues(1);
+--    end if;
+    
+    if res.readNew(1) = '1' then
         res.args(1) := vals(slv2u(res.argLocsPipe(1)(1 downto 0)));
     else
-        res.args(1) := regValues(1);
+        res.args(1) := res.args(1) or regValues(1);
     end if;
+
     res.stored(1) := '1';         
 
     return res;
@@ -1045,13 +1082,14 @@ function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return S
    variable rrf: std_logic_vector(0 to 2) := (others=>'0');      	   
 begin
    for i in 0 to PIPE_WIDTH-1 loop
-       rrf := rr(3*i to 3*i + 2);                                           
-       res(i).dynamic.missing := res(i).dynamic.missing and not rrf;       
-
+       rrf := rr(3*i to 3*i + 2);
+--        if newContent(i).dynamic.newInQueue = '1' then   
+              res(i).dynamic.missing := res(i).dynamic.missing and not rrf;
+--        end if;
        if res(i).dynamic.full /= '1' or res(i).dynamic.issued = '1' then
            res(i).dynamic.missing(0 to 1) := "11";
        end if;
-   end loop;	
+   end loop;
    
    for i in 1 to PIPE_WIDTH-1 loop
        res(i).dynamic.renameIndex := clearTagLow(res(0).dynamic.renameIndex) or i2slv(i, TAG_SIZE);

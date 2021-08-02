@@ -233,36 +233,36 @@ begin
     
     aT := (others => '0');
     bT := (others => '0');
-    aT(21 downto 12) := a(21 downto 12);
-    bT(21 downto 12) := b(21 downto 12);
+    aT(19 downto 12) := a(19 downto 12);
+    bT(19 downto 12) := b(19 downto 12);
     mid0 := add(aT, bT); -- 21:12 result, 22 carry out
-    cMid0 := mid0(22);
+    cMid0 := mid0(20);
     aT(11) := '1';
     bT(11) := '1';
     mid1 := add(aT, bT); -- 21:12 result, 22 carry out
-    cMid1 := mid1(22);
+    cMid1 := mid1(20);
     
     aT := (others => '0');
     bT := (others => '0');
-    aT(31 downto 22) := a(31 downto 22);
-    bT(31 downto 22) := b(31 downto 22);
+    aT(31 downto 20) := a(31 downto 20);
+    bT(31 downto 20) := b(31 downto 20);
     hi0 := add(aT, bT); -- 31:22 result
-    aT(21) := '1';
-    bT(21) := '1';
+    aT(19) := '1';
+    bT(19) := '1';
     hi1 := add(aT, bT); -- 31:22 result
   
     res(11 downto 0) := low(11 downto 0);
     
     if cLow = '1' then
-        res(21 downto 12) := mid1(21 downto 12);
+        res(19 downto 12) := mid1(19 downto 12);
     else
-        res(21 downto 12) := mid0(21 downto 12);
+        res(19 downto 12) := mid0(19 downto 12);
     end if;
 
     if ((cLow and cMid1) or cMid0) = '1' then
-        res(31 downto 22) := hi1(31 downto 22);
+        res(31 downto 20) := hi1(31 downto 20);
     else
-        res(31 downto 22) := hi0(31 downto 22);
+        res(31 downto 20) := hi0(31 downto 20);
     end if;
     
 	return res;
