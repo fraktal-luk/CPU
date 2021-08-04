@@ -65,9 +65,10 @@ architecture Behavioral of StoreQueue is
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
     constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;
 	
-	signal addressMatchMask, memOpMask, newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+	signal addressMatchMask, memOpMask, newerLQ, olderSQ, newerRegLQ, olderRegSQ, newerNextLQ, olderNextSQ,
+	           olderNextSQ_T, olderRegSQ_T, olderSQ_T, memOpMask_T, addressMatchMask_T: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 	
-	signal pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pTagged, pTaggedNext, pFlush, storePtr, pSelect, pSelectShifting, pRenamed, pRenamedNext,
+	signal pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pTagged, pTaggedNext, pFlush, storePtr, adrPtr, pSelect, pSelect_T, pSelectShifting, pRenamed, pRenamedNext,
 	       pStartEffective, pStartEffectiveNext,
            pStartLong, pStartLongNext, pDrainLong, pDrainLongNext, pDrainLongPrev, pTaggedLong, pTaggedLongNext, pFlushLong, pRenamedLong, pRenamedLongNext,
 	       pStartLongEffective, pStartLongEffectiveNext,
@@ -158,7 +159,7 @@ begin
             return res;
         end function;
         
-        signal olderNextSQ_T, olderRegSQ_T, olderSQ_T, memOpMask_T, addressMatchMask_T: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+        --signal : std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
     begin
         addressMatchMask_T <= getAddressMatching(cmpAddresses, compareAddressInput.ins.result) and cmpAddressCompleted;
         
@@ -166,6 +167,8 @@ begin
                                                                          when isLoadMemOp(preCompareAddressInput.ins) = '1' else (others => '0');
 
         olderSQ_T <=     olderRegSQ_T and addressMatchMask_T;-- when isLoadMemOp(compareAddressInput.ins) = '1' else (others => '0'); -- Only those with known address
+
+           pSelect_T <=  addTruncZ( findNewestMatchIndex(olderSQ_T, (others => '0'), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE);
     
         process (clk)
         begin
@@ -183,8 +186,8 @@ begin
          signal selectedEntry, drainEntry: QueueEntry;
          signal selectionAddress: MWord := (others => '0');   
     begin
-        drainOutput <= getDrainOutput_T(drainEntry, drainValue);
-        selectedOutput <= getDrainOutput_T(selectedEntry, selectedValue);
+        drainOutput <= getDrainOutput_T(drainEntry, drainAddress, drainValue);
+        selectedOutput <= getDrainOutput_T(selectedEntry, selectedAddress, selectedValue);
 
         addressMatchMask <= getAddressMatching(queueContent, compareAddressInput.ins.result) and getAddressCompleted(queueContent);-- and getWhichMemOp(queueContent);
         memOpMask <= getWhichMemOp(queueContent);
@@ -212,7 +215,8 @@ begin
                     -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
                 if not IS_LOAD_QUEUE then
                     isSelected <= compareAddressInput.full-- and isLoadMemOp(compareAddressInput.ins)
-                                                             and isNonzero(olderSQ);
+                                                             and isNonzero(--olderSQ);
+                                                                            olderSQ_T);
                 else
                     isSelected <= compareAddressInput.full-- and isStoreMemOp(compareAddressInput.ins) and isNonzero(newerLQ);
                                                            and isNonzero(newerLQ);
@@ -259,6 +263,8 @@ begin
     pFlushLong <= execCausing.tags.lqPointer when IS_LOAD_QUEUE
              else execCausing.tags.sqPointer;
 
+    adrPtr <= compareAddressInput.ins.tags.sqPointer and PTR_MASK_SN;
+
     storePtr <= storeValueInput.ins.tags.sqPointer and PTR_MASK_SN;
     drainReq <= not drainEqual;
 
@@ -273,7 +279,8 @@ begin
 
         WHEN_SQ: if not IS_LOAD_QUEUE generate
             -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
-           pSelect <=   findNewestMatchIndex(olderSQ,  pDrainPrev, pTagged, nFull, QUEUE_PTR_SIZE);
+           pSelect <=   --findNewestMatchIndex(olderSQ,  pDrainPrev, nFull, QUEUE_PTR_SIZE);
+                        pSelect_T;
            --     TMP_count <= sub(pTaggedLong, pDrainLongPrev);
         end generate;
             
@@ -312,7 +319,8 @@ begin
 		    allowDrain <= not (nowCancelled or (not drainEqual and drainEffectiveEqual));
 
                 if compareAddressInput.full = '1' then
-                    updateAddressArr(addresses, compareAddressInput, IS_LOAD_QUEUE);
+                    --updateAddressArr(addresses, compareAddressInput, IS_LOAD_QUEUE);
+                    addresses(slv2u(adrPtr)) <= compareAddressInput.ins.result;
                 end if;
             
             if storeValueInput.full = '1' then

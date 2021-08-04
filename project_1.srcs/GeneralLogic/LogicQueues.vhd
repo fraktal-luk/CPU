@@ -56,10 +56,11 @@ function getAddressMatching(content: QueueEntryArray; adr: Mword) return std_log
 
 function getWhichMemOp(content: QueueEntryArray) return std_logic_vector;
 function getDrainOutput_T(elem: QueueEntry; value: Mword) return InstructionState;
+    function getDrainOutput_T(elem: QueueEntry; adr, value: Mword) return InstructionState;
 
 function cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
 function cmpIndexAfter(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
-function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, pEnd, nFull: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
+function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, nFull: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
 function getNumCommittedEffective(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber; 
 function getNumCommitted(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber;
 
@@ -236,6 +237,24 @@ begin
     return res;
 end function;
 
+    function getDrainOutput_T(elem: QueueEntry; adr, value: Mword) return InstructionState is
+        variable res: InstructionState := DEFAULT_INS_STATE;
+    begin
+        if elem.isSysOp = '1' then
+            res.specificOperation := sop(None, opStoreSys);
+        else
+            res.specificOperation := sop(None, opStore);                        
+        end if;
+        
+        res.controlInfo.newEvent := elem.hasEvent;
+        res.controlInfo.firstBr := elem.first;
+        res.controlInfo.sqMiss := not elem.completedV;   
+        res.target := --elem.address;
+                        adr;
+        res.result := value;    
+        return res;
+    end function;
+
 function cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber)
 return std_logic_vector is
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
@@ -289,7 +308,7 @@ begin
     return res;
 end function;
 
-function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, pEnd, nFull: SmallNumber; constant QUEUE_PTR_SIZE: natural)
+function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, nFull: SmallNumber; constant QUEUE_PTR_SIZE: natural)
 return SmallNumber is
     constant LEN: integer := olderSQ'length;      
     variable tmpVec1: std_logic_vector(0 to LEN-1) := (others => '0');

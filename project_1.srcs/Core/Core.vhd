@@ -1344,8 +1344,13 @@ begin
          READY_REG_FLAGS: process(clk)
          begin
             if rising_edge(clk) then
-                readyRegFlagsInt <= readyRegFlagsIntNext;
-                readyRegFlagsFloat <= readyRegFlagsFloatNext;
+                if renamedSending = '1' then
+                    readyRegFlagsInt <= readyRegFlagsIntNext;
+                    readyRegFlagsFloat <= readyRegFlagsFloatNext;
+                else
+                    readyRegFlagsInt <= readyRegFlagsIntNext;
+                    readyRegFlagsFloat <= readyRegFlagsFloatNext;                    
+                end if;
             end if;
          end process;
          
