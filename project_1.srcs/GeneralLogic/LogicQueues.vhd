@@ -49,7 +49,7 @@ constant CMP_ADDRESS_LENGTH: natural := --32;
 
 function getAddressCompleted(content: QueueEntryArray) return std_logic_vector;
 function getAddressMatching(content: QueueEntryArray; adr: Mword) return std_logic_vector;
-
+    function getAddressMatching(content: MwordArray; adr: Mword) return std_logic_vector;
 
     function addressLowMatching(a, b: Mword) return std_logic;
     function addressHighMatching(a, b: Mword) return std_logic;
@@ -198,6 +198,17 @@ begin
     end loop;
     return res;
 end function;
+
+    function getAddressMatching(content: MwordArray; adr: Mword) return std_logic_vector is
+        variable res: std_logic_vector(content'range);
+    begin
+        for i in content'range loop
+            
+            res(i) := --bool2std(content(i).address = adr);
+                        addressLowMatching(content(i), adr);
+        end loop;
+        return res;
+    end function;
 
 function getWhichMemOp(content: QueueEntryArray) return std_logic_vector is
     variable res: std_logic_vector(content'range);
