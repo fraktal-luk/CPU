@@ -204,7 +204,8 @@ package body LogicExec is
 		variable argAddSub: Mword := (others => '0');
 		variable carryIn: std_logic := '0';
 		variable resultExt: std_logic_vector(MWORD_SIZE downto 0) := (others => '0');
-		variable ov, carry: std_logic := '0';
+		variable resultExt0, resultExt1: Word := (others => '0');
+		variable ov, carry, cl, cm0, cm1: std_logic := '0';
 		variable shH, shL: integer := 0;
 		variable shNum, shTemp: SmallNumber := (others => '0');
 		variable tempBits: std_logic_vector(95 downto 0) := (others => '0'); -- TEMP! for 32b only
@@ -285,10 +286,19 @@ package body LogicExec is
 	    res.controlInfo.newEvent := '0';
 	    res.controlInfo.hasException := '0';
 			
-		if --ins.specificOperation.arith = opAdd or ins.specificOperation.arith = opSub then
-		      ac.adder = '1' then
-			carry := resultExt(MWORD_SIZE); -- CAREFUL, with subtraction carry is different, keep in mind
-			result := resultExt(MWORD_SIZE-1 downto 0);					
+			
+			addExtNewP(arg0, argAddSub, carryIn, resultExt0, resultExt1, cl, cm0, cm1);
+
+        if (ac.adder and ((cl and cm1) or cm0)) = '1' then
+            result(31 downto 20) := resultExt1(31 downto 20);
+            result(19 downto 0) := resultExt0(19 downto 0);
+        elsif ac.adder = '1' then
+            result := resultExt0;      
+
+--		if --ins.specificOperation.arith = opAdd or ins.specificOperation.arith = opSub then
+--		      ac.adder = '1' then
+--			carry := resultExt(MWORD_SIZE); -- CAREFUL, with subtraction carry is different, keep in mind
+--			result := resultExt(MWORD_SIZE-1 downto 0);					
 		else
 		      if ac.jump = '1' then
 					result := linkAdr;

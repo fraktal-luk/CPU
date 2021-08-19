@@ -26,6 +26,7 @@ function clearRight64(a: Dword; b: slv6) return Dword;
 function fillLeft64(a: Dword; b: slv6; val: std_logic) return Dword;
 
 function addExtNew(a, b: Word; carryIn: std_logic) return Word;
+procedure addExtNewP(a, b: Word; carryIn: std_logic; res0, res1: out Word; cl, cm0, cm1: out std_logic);
 
 end Arith;
 
@@ -267,5 +268,65 @@ begin
     
 	return res;
 end function;
+
+procedure addExtNewP(a, b: Word; carryIn: std_logic; res0, res1: out Word; cl, cm0, cm1: out std_logic) is
+	variable res: Word := (others => '0');
+	--variable ra, rb, rc: std_logic_vector(a'length+1 downto 0) := (others => '0');
+	variable aT, bT, rT, hi1, hi0, mid1, mid0, low: Mword := (others => '0');
+    variable cLow, cMid0, cMid1: std_logic := '0';
+begin
+    aT(12 downto 1) := a(11 downto 0); -- insert 1b higher to enable carry input
+    bT(12 downto 1) := b(11 downto 0);
+    aT(0) := carryIn;
+    bT(0) := carryIn;
+    rT := add(aT, bT);
+    low(11 downto 0) := rT(12 downto 1); -- shift back 1b down
+    cLow := rT(13); -- rT(13) is result(12)!
+    
+    aT := (others => '0');
+    bT := (others => '0');
+    aT(19 downto 12) := a(19 downto 12);
+    bT(19 downto 12) := b(19 downto 12);
+    mid0 := add(aT, bT); -- 21:12 result, 22 carry out
+    cMid0 := mid0(20);
+    aT(11) := '1';
+    bT(11) := '1';
+    mid1 := add(aT, bT); -- 21:12 result, 22 carry out
+    cMid1 := mid1(20);
+    
+    aT := (others => '0');
+    bT := (others => '0');
+    aT(31 downto 20) := a(31 downto 20);
+    bT(31 downto 20) := b(31 downto 20);
+    hi0 := add(aT, bT); -- 31:22 result
+    aT(19) := '1';
+    bT(19) := '1';
+    hi1 := add(aT, bT); -- 31:22 result
+  
+    res(11 downto 0) := low(11 downto 0);
+    
+    if cLow = '1' then
+        res(19 downto 12) := mid1(19 downto 12);
+    else
+        res(19 downto 12) := mid0(19 downto 12);
+    end if;
+
+    if ((cLow and cMid1) or cMid0) = '1' then
+        res(31 downto 20) := hi1(31 downto 20);
+    else
+        res(31 downto 20) := hi0(31 downto 20);
+    end if;
+    
+    cl := cLow;
+    cm0 := cMid0;
+    cm1 := cMid1;
+    
+    res0 := res;
+    res1 := res;
+
+    res0(31 downto 20) := hi0(31 downto 20);
+    res1(31 downto 20) := hi1(31 downto 20);
+    
+end procedure;
 
 end Arith;

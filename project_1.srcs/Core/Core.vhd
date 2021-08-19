@@ -1341,15 +1341,19 @@ begin
              readyRegFlagsNext => readyRegFlagsFloatNext
          );
                
+               
+                        readyRegFlagsInt <= readyRegFlagsIntNext;
+                        readyRegFlagsFloat <= readyRegFlagsFloatNext;
+               
          READY_REG_FLAGS: process(clk)
          begin
             if rising_edge(clk) then
                 if renamedSending = '1' then
-                    readyRegFlagsInt <= readyRegFlagsIntNext;
-                    readyRegFlagsFloat <= readyRegFlagsFloatNext;
+                    --readyRegFlagsInt <= readyRegFlagsIntNext;
+                    --readyRegFlagsFloat <= readyRegFlagsFloatNext;
                 else
-                    readyRegFlagsInt <= readyRegFlagsIntNext;
-                    readyRegFlagsFloat <= readyRegFlagsFloatNext;                    
+                    --readyRegFlagsInt <= (others => '0');
+                    --readyRegFlagsFloat <= (others => '0');                    
                 end if;
             end if;
          end process;

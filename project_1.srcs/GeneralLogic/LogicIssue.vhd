@@ -169,6 +169,8 @@ function extractFullMask(queueContent: SchedulerInfoArray) return std_logic_vect
 function prioSelect(elems: SchedulerInfoArray; selVec: std_logic_vector) return SchedulerInfo;
 function iqInputStageNext(content, newContent: SchedulerInfoArray; selMask: std_logic_vector; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray;
 function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray;
+    function updateRR_T(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray;
+
 
 function getKillMask(content: SchedulerInfoArray; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector;
@@ -1068,6 +1070,10 @@ begin
         end if;
    
    for i in 0 to PIPE_WIDTH-1 loop
+            if res(i).dynamic.full /= '1' and (res(i).dynamic.argSpec.intDestSel or res(i).dynamic.argSpec.floatDestSel) /= '1' then
+                res(i).dynamic.argSpec.dest := (others => '1');
+            end if;
+
        if res(i).dynamic.full /= '1' or res(i).dynamic.issued = '1' then
            res(i).dynamic.missing(0 to 1) := "11";
        end if;
@@ -1087,7 +1093,7 @@ begin
               res(i).dynamic.missing := res(i).dynamic.missing and not rrf;
 --        end if;
        if res(i).dynamic.full /= '1' or res(i).dynamic.issued = '1' then
-           res(i).dynamic.missing(0 to 1) := "11";
+           --res(i).dynamic.missing(0 to 1) := "11";
        end if;
    end loop;
    
@@ -1096,6 +1102,26 @@ begin
    end loop;
    return res;
 end function;
+
+    function updateRR_T(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray is
+       variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := newContent;
+       variable rrf: std_logic_vector(0 to 2) := (others=>'0');      	   
+    begin
+       for i in 0 to PIPE_WIDTH-1 loop
+           rrf := rr(3*i to 3*i + 2);
+    --        if newContent(i).dynamic.newInQueue = '1' then   
+                  res(i).dynamic.missing := res(i).dynamic.missing and not rrf;
+    --        end if;
+           if res(i).dynamic.full /= '1' or res(i).dynamic.issued = '1' then
+               --res(i).dynamic.missing(0 to 1) := "11";
+           end if;
+       end loop;
+       
+       for i in 1 to PIPE_WIDTH-1 loop
+           res(i).dynamic.renameIndex := clearTagLow(res(0).dynamic.renameIndex) or i2slv(i, TAG_SIZE);
+       end loop;
+       return res;
+    end function;
 
 function getKillMask(content: SchedulerInfoArray; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector is

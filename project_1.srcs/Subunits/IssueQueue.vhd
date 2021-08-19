@@ -198,17 +198,23 @@ architecture Behavioral of IssueQueue is
     end function;
     
     signal fmaInputStage: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);    
-    signal inputStage, inputStageNext: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);          
+    signal inputStage, inputStage_T, inputStageNext: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);          
     signal inputStageAny, inputStageLivingAny, inputReadingAny: std_logic := '0';
-    signal killMaskInput: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+    signal killMaskInput, TST_rm0, TST_rm1: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     
+        signal rrfStored: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 begin
 
     INPUT_STAGE: block
         
     begin
-        inputStage <= updateRR(inputStagePreRR, readyRegFlags); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
-
+        inputStage <= updateRR(inputStagePreRR, rrfStored); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
+            inputStage_T <= updateRR_T(inputStagePreRR, rrfStored);
+            
+            ch0 <= bool2std(extractReadyMask(inputStage_T) = extractReadyMask(inputStage));
+            TST_rm0 <= extractReadyMask(inputStage);
+            TST_rm1 <= extractReadyMask(inputStage_T);
+            
         fmaInputStage <= findForwardingMatchesArray(inputStage, fni);
         
         inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, false, false, FORWARDING_D);
@@ -226,9 +232,20 @@ begin
         inputStageAny <= isNonzero(extractFullMask(inputStage));
 
         INPUT_SYNCHRONOUS: process(clk)
+            variable rm: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
         begin
             if rising_edge(clk) then
+                rm := (newArr(0).dynamic.full, newArr(0).dynamic.full, newArr(0).dynamic.full,
+                       newArr(1).dynamic.full, newArr(1).dynamic.full, newArr(1).dynamic.full,
+                       newArr(2).dynamic.full, newArr(2).dynamic.full, newArr(2).dynamic.full,
+                       newArr(3).dynamic.full, newArr(3).dynamic.full, newArr(3).dynamic.full
+                       );
                 inputStagePreRR <= inputStageNext;
+                if prevSendingOK = '1' then
+                    rrfStored <= readyRegFlags and rm;
+                else
+                    rrfStored <= (others => '0');
+                end if;
             end if;
         end process;
     end block;
