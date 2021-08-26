@@ -63,13 +63,14 @@ architecture Behavioral of Core is
     signal pcDataSig, frontCausing, execCausing, lateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
 
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
-           frontEventSignal, bqAccepting, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ, dbEmpty,
-           canSendFront, canSendRename, canSendBuff,
+           frontEventSignal, bqAccepting, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ,-- dbEmpty,
+           canSendFront, canSendRename,-- canSendBuff,
            execEventSignal, lateEventSignal, lateEventSetPC: std_logic := '0';
     
-    signal robSending, robAccepting, renamedSending, commitAccepting, oooAccepting, lsbrAccepting, lsbrAcceptingMore, renamedSendingBuff,
+    signal robSending, robAccepting, renamedSending, commitAccepting,-- oooAccepting,
+            lsbrAccepting, lsbrAcceptingMore, renamedSendingBuff,
             issueQueuesAccepting, issueQueuesAcceptingMore, renameSendingBr, stopRename,
-            queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0, dispatchAccepting,
+            queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,-- dispatchAccepting,
             robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
             sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, committedSending: std_logic := '0';
 
@@ -246,7 +247,7 @@ begin
     --          Because stalling at Rename is illegal, sending to Rename has to depend on free slots 
     --          after accounting for current group at Rename that will use some resources!  
 
-    oooAccepting <= queuesAcceptingMore and renameAccepting;
+    --oooAccepting <= queuesAcceptingMore and renameAccepting;
     lsbrAccepting <= robAccepting and acceptingSQ and acceptingLQ;
     lsbrAcceptingMore <= robAcceptingMore and not almostFullSQ and not almostFullLQ;
     
@@ -266,24 +267,21 @@ begin
     renamedDataLivingReMem <= TMP_recodeMem(renamedDataLivingRe);
     renamedDataLivingMemBuff <= TMP_recodeMem(renamedDataLivingBuff);
 
-    DISPATCH_BUFFER: entity work.DispatchBuffer(Transparent)
-    port map(
-        clk => clk,
-        
-        specialAction => specialAction,
-        nextAccepting => canSendBuff,
-                                 
-        accepting => dispatchAccepting,
-        prevSending => renamedSending,
-        dataIn => renamedDataLivingRe,            
-        sending => renamedSendingBuff,
-        dataOut => dispatchBufferDataInt,
-        specialOut => specialActionBuffOut,
-        
-        execEventSignal => execEventSignal,
-        lateEventSignal => lateEventSignal,        
-        empty => dbEmpty            
-    );
+
+        renamedSendingBuff <= renamedSending;
+        dispatchBufferDataInt <= renamedDataLivingRe;
+        specialActionBuffOut <= specialAction;
+
+         OLD_FLOW: if true generate
+            canSendFront <= renameAccepting and queuesAcceptingMore;
+            canSendRename <= --queuesAccepting;
+                                '1';
+         end generate;
+         
+          NEW_FLOW: if false generate
+             canSendFront <= renameAccepting and not stopRename;
+             canSendRename <= queuesAccepting;
+          end generate;
 
     events <= (lateEventSignal, execEventSignal, execCausing);
 
@@ -309,19 +307,7 @@ begin
 		sendingOut => robSending, 
 		outputData => dataOutROB,
 		outputSpecial => specialOutROB		
-	);
-   
-         OLD_FLOW: if true generate
-            canSendFront <= oooAccepting;
-            canSendRename <= queuesAccepting;
-            canSendBuff <= queuesAccepting;
-         end generate;
-         
-          NEW_FLOW: if false generate
-             canSendFront <= renameAccepting and not stopRename;
-             canSendRename <= dispatchAccepting;
-             canSendBuff <= not stopRename;
-          end generate;         
+	);       
          
     STOP_RENAME: process (clk)
     begin
