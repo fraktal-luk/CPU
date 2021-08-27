@@ -147,7 +147,7 @@ function TMP_setUntil(selVec: std_logic_vector; nextAccepting: std_logic) return
 function iqContentNext(queueContent: SchedulerInfoArray; inputDataS: SchedulerInfoArray;
                          killMask, selMask: std_logic_vector;
                          livingMaskInput, selMaskInput: std_logic_vector;
-                         sends, sent, sentUnexpected, prevSending: std_logic)
+                         sends, sent, sendsInputStage, sentInputStage, sentUnexpected, prevSending: std_logic)
 return SchedulerInfoArray;
 
 function extractReadyMask(entryVec: SchedulerInfoArray) return std_logic_vector;
@@ -167,7 +167,7 @@ function extractFullMask(queueContent: SchedulerInfoArray) return std_logic_vect
 
 
 function prioSelect(elems: SchedulerInfoArray; selVec: std_logic_vector) return SchedulerInfo;
-function iqInputStageNext(content, newContent: SchedulerInfoArray; selMask: std_logic_vector; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray;
+function iqInputStageNext(content, newContent: SchedulerInfoArray; selMask: std_logic_vector; prevSending, isSending, sendsInputStage, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray;
 function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray;
     function updateRR_T(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray;
 
@@ -667,7 +667,7 @@ end function;
 function iqContentNext(queueContent: SchedulerInfoArray; inputDataS: SchedulerInfoArray;
                          killMask, selMask: std_logic_vector;
                          livingMaskInput, selMaskInput: std_logic_vector;
-                         sends, sent, sentUnexpected, prevSending: std_logic)
+                         sends, sent, sendsInputStage, sentInputStage, sentUnexpected, prevSending: std_logic)
 return SchedulerInfoArray is
 	constant QUEUE_SIZE: natural := queueContent'length;
 	variable res: SchedulerInfoArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
@@ -693,7 +693,11 @@ return SchedulerInfoArray is
 	variable fillMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');	
 begin
         for i in 0 to PIPE_WIDTH-1 loop
-            dataNewDataS(i).dynamic.issued := selMaskInput(i); -- To preserve 'issued' state if being issued from input stage
+            if dataNewDataS(i).dynamic.issued = '1' then
+                dataNewDataS(i).dynamic.full := '0';
+            end if;
+            dataNewDataS(i).dynamic.issued := --dataNewDataS(i).dynamic.issued or 
+                                                (selMaskInput(i) and sendsInputStage); -- To preserve 'issued' state if being issued from input stage
         end loop;
 
 	-- Important, new instrucitons in queue must be marked!	
@@ -713,7 +717,7 @@ begin
         if issuedMask(i) = '1' and sentUnexpected = '1' then
         --    xVecS(i).state.issued := '0';
         end if;  
-    end loop;	
+    end loop;
 	
 	xVecS(QUEUE_SIZE) := xVecS(QUEUE_SIZE-1);
 	for i in 0 to QUEUE_SIZE + PIPE_WIDTH - 1 loop
@@ -723,7 +727,8 @@ begin
 	for i in 0 to QUEUE_SIZE-2 loop
 		livingMaskSh(i) := livingMask(i) and (livingMask(i+1) or not sent);
 		fullMaskSh(i) := fullMask(i) and (fullMask(i+1) or not sent);			
-	end loop;	livingMaskSh(QUEUE_SIZE-1) := livingMask(QUEUE_SIZE-1) and ('0' or not sent);
+	end loop;	
+	livingMaskSh(QUEUE_SIZE-1) := livingMask(QUEUE_SIZE-1) and ('0' or not sent);
 	fullMaskSh(QUEUE_SIZE-1) := fullMask(QUEUE_SIZE-1) and ('0' or not sent);
 
 	-- Now assign from x or y
@@ -1038,7 +1043,7 @@ begin
 end function;
 
 
-function iqInputStageNext(content, newContent: SchedulerInfoArray; selMask: std_logic_vector; prevSending, isSending, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray is
+function iqInputStageNext(content, newContent: SchedulerInfoArray; selMask: std_logic_vector; prevSending, isSending, sendsInputStage, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray is
    variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content;
 begin
       -- Handle ops leaving the "subqueue" when it's stalled
@@ -1046,7 +1051,7 @@ begin
          if res(i).dynamic.issued = '1' then
             res(i).dynamic.full := '0';
          end if;
-         res(i).dynamic.issued := selMask(i);
+         res(i).dynamic.issued := (selMask(i) and sendsInputStage);
       end loop;
 
    if execEventSignal = '1' or lateEventSignal = '1' then
@@ -1056,7 +1061,7 @@ begin
        end loop;
        
    elsif prevSending = '1' then
-       res := newContent;       
+       res := newContent;
    elsif isSending = '1' then -- Clearing everything - sent to main queue
        for i in 0 to PIPE_WIDTH-1 loop
            res(i).dynamic.full := '0';

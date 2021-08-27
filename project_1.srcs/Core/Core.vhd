@@ -272,13 +272,13 @@ begin
         dispatchBufferDataInt <= renamedDataLivingRe;
         specialActionBuffOut <= specialAction;
 
-         OLD_FLOW: if true generate
+         OLD_FLOW: if false generate
             canSendFront <= renameAccepting and queuesAcceptingMore;
             canSendRename <= --queuesAccepting;
                                 '1';
          end generate;
          
-          NEW_FLOW: if false generate
+          NEW_FLOW: if true generate
              canSendFront <= renameAccepting and not stopRename;
              canSendRename <= queuesAccepting;
           end generate;

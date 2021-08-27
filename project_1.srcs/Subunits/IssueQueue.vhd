@@ -228,7 +228,7 @@ begin
         
         selMaskInput <= selMaskExt(IQ_SIZE to IQ_SIZE + PIPE_WIDTH - 1);
         
-        inputStageNext <= iqInputStageNext(inputStageUpdated, newArr, selMaskInput, prevSendingOK, inputStageSending, events.execEvent, events.lateEvent);
+        inputStageNext <= iqInputStageNext(inputStageUpdated, newArr, selMaskInput, prevSendingOK, inputStageSending, sendsInputStage, events.execEvent, events.lateEvent);
         inputStageAny <= isNonzero(extractFullMask(inputStage));
 
         INPUT_SYNCHRONOUS: process(clk)
@@ -291,6 +291,7 @@ begin
     
 
     sendsMainQueue <= anyReadyFullMain and nextAccepting;
+        sendsInputStage <= anyReadyFull and not anyReadyFullMain and nextAccepting;
 
     anyReadyLive <= isNonzero(readyMaskLiveExt);
     anyReadyFull <= isNonzero(readyMaskFullExt);
@@ -299,11 +300,13 @@ begin
     sends <= anyReadyFull and nextAccepting;
     sendingKilled <= isNonzero(killMaskExt and selMaskExt);
 
-    queueContentNext <= iqContentNext(queueContentUpdated, inputStageUpdated, 
+    queueContentNext <= iqContentNext(queueContentUpdated, inputStageUpdated,
                                       killMask, selMask,
-                                      livingMaskInput, selMaskInput,               
+                                      livingMaskInput, selMaskInput,    
                                       sendsMainQueue, -- this can be from whole queue because selMask points to slot if it is to be moved
                                       isSentMainQueue,
+                                        sendsInputStage,
+                                        '0',
                                       '0',
                                       inputStageSending
                                       );
