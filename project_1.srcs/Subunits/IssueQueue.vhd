@@ -228,7 +228,7 @@ begin
         
         selMaskInput <= selMaskExt(IQ_SIZE to IQ_SIZE + PIPE_WIDTH - 1);
         
-        inputStageNext <= iqInputStageNext(inputStageUpdated, newArr, selMaskInput, prevSendingOK, inputStageSending, sendsInputStage, events.execEvent, events.lateEvent);
+        inputStageNext <= iqInputStageNext(inputStageUpdated, newArr, selMaskInput, livingMaskInput, prevSendingOK, inputStageSending, sendsInputStage, events.execEvent, events.lateEvent);
         inputStageAny <= isNonzero(extractFullMask(inputStage));
 
         INPUT_SYNCHRONOUS: process(clk)

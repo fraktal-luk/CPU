@@ -167,7 +167,7 @@ function extractFullMask(queueContent: SchedulerInfoArray) return std_logic_vect
 
 
 function prioSelect(elems: SchedulerInfoArray; selVec: std_logic_vector) return SchedulerInfo;
-function iqInputStageNext(content, newContent: SchedulerInfoArray; selMask: std_logic_vector; prevSending, isSending, sendsInputStage, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray;
+function iqInputStageNext(content, newContent: SchedulerInfoArray; selMask, livingMask: std_logic_vector; prevSending, isSending, sendsInputStage, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray;
 function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray;
     function updateRR_T(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray;
 
@@ -1043,24 +1043,26 @@ begin
 end function;
 
 
-function iqInputStageNext(content, newContent: SchedulerInfoArray; selMask: std_logic_vector; prevSending, isSending, sendsInputStage, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray is
+function iqInputStageNext(content, newContent: SchedulerInfoArray; selMask, livingMask: std_logic_vector; prevSending, isSending, sendsInputStage, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray is
    variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content;
 begin
       -- Handle ops leaving the "subqueue" when it's stalled
       for i in 0 to PIPE_WIDTH-1 loop
+         res(i).dynamic.full := livingMask(i);
+
          if res(i).dynamic.issued = '1' then
             res(i).dynamic.full := '0';
          end if;
-         res(i).dynamic.issued := (selMask(i) and sendsInputStage);
+         res(i).dynamic.issued := (selMask(i) and sendsInputStage);   
       end loop;
 
-   if execEventSignal = '1' or lateEventSignal = '1' then
-       for i in 0 to PIPE_WIDTH-1 loop
-           res(i).dynamic.full := '0';
+--   if execEventSignal = '1' or lateEventSignal = '1' then
+--       for i in 0 to PIPE_WIDTH-1 loop
+--           res(i).dynamic.full := '0';
            
-       end loop;
+--       end loop;
        
-   elsif prevSending = '1' then
+   if prevSending = '1' then
        res := newContent;
    elsif isSending = '1' then -- Clearing everything - sent to main queue
        for i in 0 to PIPE_WIDTH-1 loop
