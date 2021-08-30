@@ -60,12 +60,12 @@ end Core;
 
 
 architecture Behavioral of Core is
-    signal pcDataSig, frontCausing, execCausing, lateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
+    signal pcDataSig, frontCausing, execCausing, execCausingDelayed, lateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
 
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
            frontEventSignal, bqAccepting, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ,-- dbEmpty,
            canSendFront, canSendRename,-- canSendBuff,
-           execEventSignal, lateEventSignal, lateEventSetPC: std_logic := '0';
+           execEventSignal, execEventSignalDelayed, lateEventSignal, lateEventSetPC: std_logic := '0';
     
     signal robSending, robAccepting, renamedSending, commitAccepting,-- oooAccepting,
             lsbrAccepting, lsbrAcceptingMore, renamedSendingBuff,
@@ -280,7 +280,8 @@ begin
          
           NEW_FLOW: if true generate
              canSendFront <= renameAccepting and not stopRename;
-             canSendRename <= queuesAccepting;
+             canSendRename <= --queuesAccepting;
+                                not stopRename;
           end generate;
 
     events <= (lateEventSignal, execEventSignal, execCausing);
@@ -586,6 +587,14 @@ begin
             execEventSignal <= dataFromBranch.ins.controlInfo.newEvent and sendingBranch;
             execCausing <= clearDbCausing(dataFromBranch.ins);
             bqUpdate <= dataFromBranch;
+            
+            DELAYED_EXEC_EVENT: process (clk)
+            begin
+                if rising_edge(clk) then
+                    execEventSignalDelayed <= execEventSignal;
+                    execCausingDelayed <= execCausing;
+                end if;
+            end process;
         end block;
          
             
@@ -1480,9 +1489,10 @@ begin
 		robData => dataOutROB,
 
 		lateEventSignal => lateEventSignal,
-		execEventSignal => execEventSignal,
-		execCausing => execCausing,
-		
+		execEventSignal => --execEventSignal,
+		                      execEventSignalDelayed,
+		execCausing => --execCausing,
+		                      execCausingDelayed,
 		nextAccepting => commitAccepting,		
 		sendingSQOut => open,
 		dataOutV => bqData,
@@ -1521,8 +1531,10 @@ begin
 		robData => dataOutROB,
 
 		lateEventSignal => lateEventSignal,
-		execEventSignal => execEventSignal,
-		execCausing => execCausing,
+		execEventSignal => --execEventSignal,
+                              execEventSignalDelayed,
+        execCausing => --execCausing,
+                              execCausingDelayed,
 		
 		nextAccepting => commitAccepting,
 
@@ -1564,8 +1576,10 @@ begin
 		robData => dataOutROB,
 
 		lateEventSignal => lateEventSignal,
-		execEventSignal => execEventSignal,
-		execCausing => execCausing,
+		execEventSignal => --execEventSignal,
+                              execEventSignalDelayed,
+        execCausing => --execCausing,
+                              execCausingDelayed,
 		
 		nextAccepting => commitAccepting,
 		
