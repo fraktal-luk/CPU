@@ -28,6 +28,7 @@ port(
         TMP_spMaskedDataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     
     renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+        renamedDataLiving_T: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     renamedDataLivingFloat: out InstructionSlotArray(0 to PIPE_WIDTH-1);    
     renamedSending: out std_logic;
     
@@ -59,7 +60,7 @@ end UnitRegManager;
 
 
 architecture Behavioral of UnitRegManager is
-    signal stageDataRenameIn, stageDataRenameInFloat, renamedDataLivingPre, renamedDataLivingFloatPre,
+    signal stageDataRenameIn, stageDataRenameIn_T, stageDataRenameInFloat, renamedDataLivingPre, renamedDataLivingPre_T, renamedDataLivingFloatPre,
                stageDataToCommit, stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, robSendingDelayed, sendingCommitInt,
                renamedSendingSig, sendingCommitFloat, renameLockState, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed: std_logic := '0';
@@ -294,7 +295,46 @@ architecture Behavioral of UnitRegManager is
             
         return res;
     end function;
-    
+
+    function classifyForDispatch(insVec: InstructionSlotArray) return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            if insVec(i).ins.specificOperation.subpipe = ALU then
+                res(i).ins.classInfo.useAlu := '1';
+            elsif insVec(i).ins.specificOperation.subpipe = FP then
+                res(i).ins.classInfo.useFP := '1';
+            elsif insVec(i).ins.specificOperation.subpipe = Mem then
+                res(i).ins.classInfo.useMem := '1';
+			    if (insVec(i).ins.specificOperation.memory = opLoad or insVec(i).ins.specificOperation.memory = opLoadSys) then 
+                    res(i).ins.classInfo.useLQ := '1';
+                elsif (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys) then
+                    res(i).ins.classInfo.useSQ := '1';
+                    if res(i).ins.classInfo.fpRename = '1' then
+                        res(i).ins.classInfo.storeFP := '1';
+                    else
+                        res(i).ins.classInfo.storeInt := '1';
+                    end if;
+                end if;
+            
+            end if;
+        
+            if insVec(i).full /= '1' then
+                res(i).ins.classInfo.mainCluster := '0';
+                res(i).ins.classInfo.secCluster := '0';
+                res(i).ins.classInfo.fpRename := '0';
+                res(i).ins.classInfo.branchIns := '0';
+                res(i).ins.classInfo.useLQ := '0';
+                res(i).ins.classInfo.useSQ := '0';
+                res(i).ins.classInfo.storeInt := '0';
+                res(i).ins.classInfo.storeFP := '0';
+                res(i).ins.classInfo.useAlu := '0';
+                res(i).ins.classInfo.useMem := '0';
+            end if;
+        end loop;
+        
+        return res;
+    end function;    
 begin
     eventSig <= execEventSignal or lateEventSignal;
 
@@ -318,7 +358,33 @@ begin
     -- TODO: ^ or assign dests above, not in renameGroupBase, to keep Int and FP path separate, and merge them ony when going to ROB - it could be good for layout
             
     assignedDests <= getPhysicalDests(renamedBase);
-                                                                                 
+
+               stageDataRenameIn_T <= classifyForDispatch(TMP_recodeMem(stageDataRenameIn));
+                    
+            SUBUNIT_RENAME_INT_T: entity work.GenericStage(Behavioral)--Renaming)
+            generic map(
+                USE_CLEAR => '0',
+                WIDTH => PIPE_WIDTH,
+                    KEEP_DEST => '1'
+            )
+            port map(
+                clk => clk, reset => '0', en => '0',
+                
+                prevSending => frontLastSending,    
+                stageDataIn => stageDataRenameIn_T,
+                
+                acceptingOut => open,
+                
+                nextAccepting => nextAccepting,
+                sendingOut => open,--renamedSendingSig,
+                stageDataOut => renamedDataLivingPre_T,
+                
+                execEventSignal => '0',
+                lateEventSignal => eventSig, -- because Exec is always older than Rename     
+                execCausing => DEFAULT_INSTRUCTION_STATE
+            );
+    
+                                                                                     
     SUBUNIT_RENAME_INT: entity work.GenericStage(Behavioral)--Renaming)
     generic map(
         USE_CLEAR => '0',
@@ -329,7 +395,7 @@ begin
         clk => clk, reset => '0', en => '0',
         
         prevSending => frontLastSending,    
-        stageDataIn => stageDataRenameIn,
+        stageDataIn => stageDataRenameIn_T,
         
         acceptingOut => open,
         
@@ -365,7 +431,15 @@ begin
         execCausing => DEFAULT_INSTRUCTION_STATE
     );
     
-    renamedDataLiving <= restoreRenameIndex(renamedDataLivingPre);
+    renamedDataLiving <=  --classifyForDispatch(
+                                restoreRenameIndex(renamedDataLivingPre)
+                          --)
+                          ;
+                          
+                renamedDataLiving_T <= -- classifyForDispatch(
+                                                      restoreRenameIndex(renamedDataLivingPre_T)
+                                        --        )
+                                                ;
     renamedDataLivingFloat <= restoreRenameIndex(renamedDataLivingFloatPre);
     
     renameGroupCtrNext <=   commitGroupCtr when lateEventSignal = '1'

@@ -68,21 +68,24 @@ architecture Behavioral of Core is
            execEventSignal, execEventSignalDelayed, lateEventSignal, lateEventSetPC: std_logic := '0';
     
     signal robSending, robAccepting, renamedSending, commitAccepting,-- oooAccepting,
-            lsbrAccepting, lsbrAcceptingMore, renamedSendingBuff,
+            lsbrAccepting, lsbrAcceptingMore,-- renamedSendingBuff,
             issueQueuesAccepting, issueQueuesAcceptingMore, renameSendingBr, stopRename,
             queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,-- dispatchAccepting,
             robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
             sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, committedSending: std_logic := '0';
 
     signal frontDataLastLiving, TMP_frontDataSpMasked,
-            renamedDataLivingFloatPre, renamedDataMerged, renamedDataLivingMem, renamedDataLivingRe, renamedDataLivingFloatRe,
-            renamedDataLivingReMem, renamedDataLivingMemBuff, renamedDataLivingBuff, dispatchBufferDataInt,
+            renamedDataLivingFloatPre,-- renamedDataMerged,
+            renamedDataLivingMem, renamedDataLivingRe, renamedDataLivingRe_T, renamedDataLivingFloatRe,
+            renamedDataLivingReMem,-- renamedDataLivingMemBuff,-- renamedDataLivingBuff, 
+            --dispatchBufferDataInt,
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData, committedOut: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal bqCompare, bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput:
                 InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-    signal specialAction, specialActionBuffOut, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+    signal specialAction,-- specialActionBuffOut,
+            specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     signal bqPointer, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
            
@@ -217,6 +220,7 @@ begin
         nextAccepting => canSendRename,
         
         renamedDataLiving => renamedDataLivingRe,
+            renamedDataLiving_T => open,--renamedDataLivingRe_T,
         renamedDataLivingFloat => renamedDataLivingFloatPre,        
         renamedSending => renamedSending,
 
@@ -243,11 +247,9 @@ begin
         lateEventSignal => lateEventSignal
     );
 
-    -- CAREFUL: this must block renaming of a group if there will be no place for it in IQs the next cycle;
-    --          Because stalling at Rename is illegal, sending to Rename has to depend on free slots 
-    --          after accounting for current group at Rename that will use some resources!  
+    renamedDataLivingFloatRe <= mergeFP(renamedDataLivingRe, renamedDataLivingFloatPre);
 
-    --oooAccepting <= queuesAcceptingMore and renameAccepting;
+
     lsbrAccepting <= robAccepting and acceptingSQ and acceptingLQ;
     lsbrAcceptingMore <= robAcceptingMore and not almostFullSQ and not almostFullLQ;
     
@@ -257,20 +259,7 @@ begin
     queuesAccepting <= lsbrAccepting and issueQueuesAccepting;
     queuesAcceptingMore <= lsbrAcceptingMore and issueQueuesAcceptingMore;
 
-    -- From Rename we send to OOO if it accepts and DB is empty. If DB is not empty, we have to drain it first!
-    renamedDataLivingBuff <= dispatchBufferDataInt;
-
-    renamedDataLivingFloatRe <= mergeFP(renamedDataLivingRe, renamedDataLivingFloatPre);
-
-    renamedDataMerged <= renamedDataLivingBuff;
-    
     renamedDataLivingReMem <= TMP_recodeMem(renamedDataLivingRe);
-    renamedDataLivingMemBuff <= TMP_recodeMem(renamedDataLivingBuff);
-
-
-        renamedSendingBuff <= renamedSending;
-        dispatchBufferDataInt <= renamedDataLivingRe;
-        specialActionBuffOut <= specialAction;
 
          OLD_FLOW: if false generate
             canSendFront <= renameAccepting and queuesAcceptingMore;
@@ -297,9 +286,9 @@ begin
 		execEndSigs1 => execOutputs1,
 		execEndSigs2 => execOutputs2,
 		
-		inputSpecial => specialActionBuffOut,		
-		inputData => renamedDataMerged,
-		prevSending => renamedSendingBuff,
+		inputSpecial => specialAction,		
+		inputData => renamedDataLivingRe,
+		prevSending => renamedSending,
 		
 		acceptingOut => robAccepting,
 		acceptingMore => robAcceptingMore,
@@ -337,9 +326,9 @@ begin
         execEv  <= (execEventSignal,  execCausing);
         lateEv  <= (lateEventSignal,  lateCausing);
 
-        renamedMergedText <= getInsStringArray(renamedDataMerged);
+        renamedMergedText <= getInsStringArray(renamedDataLivingRe);
         
-        renamedText <= getInsStringArray(renamedDataMerged, physDisasm);
+        renamedText <= getInsStringArray(renamedDataLivingRe, physDisasm);
         committedText <= getInsStringArray(committedOut, physDisasm);
         lastEffectiveText <= getInsString(lastEffectiveOut, physDisasm);
         
@@ -456,8 +445,39 @@ begin
                 : ExecResult := DEFAULT_EXEC_RESULT;
                 
        signal unfoldedAluOp: work.LogicExec.AluControl := work.LogicExec.DEFAULT_ALU_CONTROL;         
+            
+            
+            signal aluMask0, aluMask1, memMask0, memMask1, fpMask0, fpMask1, intStoreMask0, intStoreMask1, fpStoreMask0, fpStoreMask1, 
+                           branchMask0, branchMask1,     sqMask0, sqMask1, lqMask0, lqMask1: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     begin
-        
+            aluMask0 <= getAluMask(renamedDataLivingRe);
+            aluMask1 <= getAluMask1(renamedDataLivingRe);
+            memMask0 <=  getMemMask(renamedDataLivingRe);
+            memMask1 <= getMemMask1(renamedDataLivingRe);
+            fpMask0 <= getFpuMask(renamedDataLivingFloatRe);
+            fpMask1 <= getFpMask1(renamedDataLivingRe);
+            
+            intStoreMask0 <= getStoreMask(renamedDataLivingReMem) and not getFloatStoreMask(renamedDataLivingReMem, renamedDataLivingFloatRe);            
+            intStoreMask1 <= getIntStoreMask1((renamedDataLivingRe));            
+
+            fpStoreMask0 <= getFloatStoreMask(renamedDataLivingReMem, renamedDataLivingFloatRe);            
+            fpStoreMask1 <= getFloatStoreMask1((renamedDataLivingRe));            
+                 
+
+            sqMask0 <= getStoreMask(renamedDataLivingReMem);
+            sqMask1 <= getStoreMask1((renamedDataLivingRe));
+               
+            lqMask0 <= getLoadMask(renamedDataLivingReMem);
+            lqMask1 <= getLoadMask1((renamedDataLivingRe));
+               
+            branchMask0 <= getBranchMask(renamedDataLivingRe);
+            branchMask1 <= getBranchMask1((renamedDataLivingRe));
+  
+                    ch0 <= bool2std(aluMask1 = aluMask0 and memMask1 = memMask0 and fpMask1 = fpMask0) or not renamedSending;
+                    ch1 <= bool2std(branchMask1 = branchMask0 and lqMask1 = lqMask0 and sqMask1 = sqMask0) or not renamedSending;
+                    ch2 <= bool2std(intStoreMask1 = intStoreMask0 and fpStoreMask1 = fpStoreMask0) or not renamedSending;
+         
+         
         SUBPIPE_ALU: block
            signal dataToAlu, dataToBranch: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);           
            signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -472,7 +492,8 @@ begin
         begin
             fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);
         
-            inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe));
+            inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), --getAluMask(renamedDataLivingRe));
+                                                                                                aluMask1);
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, FORWARDING_MODES_INT_D);
               
@@ -610,7 +631,8 @@ begin
         begin        
            memMaskInt <= getMemMask(renamedDataLivingRe);
 
-           inputDataArray <= makeSlotArray(removeArg2(extractData(renamedDataLivingReMem)), memMaskInt);
+           inputDataArray <= makeSlotArray(removeArg2(extractData(renamedDataLivingReMem)), --memMaskInt);
+                                                                                            memMask1);
            schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, FORWARDING_MODES_INT_D);
                         
@@ -729,9 +751,9 @@ begin
            dataInMemInt0 <= clearFloatDest(dataInMem0);
            dataInMemFloat0 <= clearIntDest(dataInMem0);
 
-                    ch0 <= bool2std(slotM0_E0 = dataInMem0);
-                    ch1 <= bool2std(slotM0_E0i = dataInMemInt0);
-                    ch2 <= bool2std(slotM0_E0f = dataInMemFloat0);
+                  --  ch0 <= bool2std(slotM0_E0 = dataInMem0);
+                 --   ch1 <= bool2std(slotM0_E0i = dataInMemInt0);
+                 --   ch2 <= bool2std(slotM0_E0f = dataInMemFloat0);
 
            -- TLB lookup, Dcache access
 	       STAGE_MEM0: entity work.GenericStage2(Behavioral)
@@ -831,8 +853,10 @@ begin
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
             fmaFloatSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoFloatA, fniFloat);
             
-            intStoreMask <= getStoreMask(renamedDataLivingReMem) and not floatStoreMask;
-            floatStoreMask <= getFloatStoreMask(renamedDataLivingReMem, renamedDataLivingFloatRe);
+            intStoreMask <= --getStoreMask(renamedDataLivingReMem) and not floatStoreMask;
+                            intStoreMask1;
+            floatStoreMask <= --getFloatStoreMask(renamedDataLivingReMem, renamedDataLivingFloatRe);
+                                fpStoreMask1;
         
             IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
@@ -952,7 +976,8 @@ begin
         begin
             fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat);
 
-            inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), getFpuMask(renamedDataLivingFloatRe));
+            inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), --getFpuMask(renamedDataLivingFloatRe));
+                                                                                                    fpMask1);
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, false);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, FORWARDING_MODES_FLOAT_D);
 
@@ -1451,9 +1476,12 @@ begin
          end generate;      
     end block; -- TEMP_EXEC
 
-    renamedDataToBQ <= setFullMask(renamedDataLivingBuff, getBranchMask(renamedDataLivingBuff));
-    renamedDataToSQ <= setFullMask(renamedDataLivingMemBuff, getStoreMask(renamedDataLivingMemBuff));
-    renamedDataToLQ <= setFullMask(renamedDataLivingMemBuff, getLoadMask(renamedDataLivingMemBuff));
+    renamedDataToBQ <= setFullMask(renamedDataLivingRe, --getBranchMask(renamedDataLivingRe));
+                                                          getBranchMask1(renamedDataLivingRe));
+    renamedDataToSQ <= setFullMask(renamedDataLivingReMem, --getStoreMask(renamedDataLivingReMem));
+                                                            getStoreMask1(renamedDataLivingRe));
+    renamedDataToLQ <= setFullMask(renamedDataLivingReMem, --getLoadMask(renamedDataLivingReMem));
+                                                            getLoadMask1(renamedDataLivingRe));
 
     BRANCH_QUEUE: entity work.BranchQueue
 	generic map(
@@ -1469,7 +1497,7 @@ begin
 		
 		acceptingBr => bqAccepting,
 		
-		prevSending => renamedSendingBuff,
+		prevSending => renamedSending,
 	    prevSendingBr => bpSending,
 	    
 	    prevSendingRe => renameSendingBr,
@@ -1513,7 +1541,7 @@ begin
 		almostFull => almostFullSQ,
 				
 	    prevSendingRe => frontLastSending,
-		prevSending => renamedSendingBuff,
+		prevSending => renamedSending,
 		
 		dataInRe => TMP_frontDataSpMasked,
 		dataIn => renamedDataToSQ,
@@ -1558,7 +1586,7 @@ begin
 		almostFull => almostFullLQ,
 
 	    prevSendingRe => frontLastSending,				
-		prevSending => renamedSendingBuff,
+		prevSending => renamedSending,
 		
 		dataInRe => TMP_frontDataSpMasked,
 		dataIn => renamedDataToLQ,

@@ -127,6 +127,12 @@ type InstructionClassInfo is record
 	fpRename: std_logic; -- true if instruction is routed to FP renamer (NOTE, CHECK: Int renamer is used for all ops, even those that don't go to any IQ)
 	branchIns: std_logic;
 	useLQ: std_logic;
+	useSQ: std_logic;
+	storeInt: std_logic;
+	storeFP: std_logic;
+	useAlu: std_logic;
+	useMem: std_logic;
+	useFP: std_logic;
 end record;
 
 
@@ -198,7 +204,13 @@ constant DEFAULT_CLASS_INFO: InstructionClassInfo := (
     secCluster => '0',
     fpRename => '0',
     branchIns => '0',
-    useLQ => '0'									
+    useLQ => '0',
+	useSQ => '0',
+    storeInt => '0',
+    storeFP => '0',
+    useAlu => '0',
+    useMem => '0',
+    useFP => '0'
 );
 
 
