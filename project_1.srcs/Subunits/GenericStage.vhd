@@ -17,6 +17,7 @@ entity GenericStage is
 		USE_CLEAR: std_logic := '1';
 		COMPARE_TAG: std_logic := '0';
 		KEEP_DEST: std_logic := '0';
+		KILL_SENDING: std_logic := '1';
 		WIDTH: natural := 1
 	);
 	port(
@@ -65,7 +66,8 @@ begin
 	end process;
 
     living <= full and not kill;
-    sending <= living and nextAccepting;
+    sending <= living and nextAccepting when KILL_SENDING = '1'
+        else   full and nextAccepting;
 
 	before <= (not COMPARE_TAG) or compareTagBefore(execCausing.tags.renameIndex, stageData(0).ins.tags.renameIndex);
 	kill <= (before and execEventSignal) or lateEventSignal;

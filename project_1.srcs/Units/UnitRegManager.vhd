@@ -22,13 +22,13 @@ port(
     clk: in std_logic;
     
     renameAccepting: out std_logic;
-    frontLastSending: in std_logic;
+    frontLastSendingIn: in std_logic;
     frontDataLastLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1);
         
         TMP_spMaskedDataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     
     renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
-        renamedDataLiving_T: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+    --    renamedDataLiving_T: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     renamedDataLivingFloat: out InstructionSlotArray(0 to PIPE_WIDTH-1);    
     renamedSending: out std_logic;
     
@@ -62,8 +62,8 @@ end UnitRegManager;
 architecture Behavioral of UnitRegManager is
     signal stageDataRenameIn, stageDataRenameIn_T, stageDataRenameInFloat, renamedDataLivingPre, renamedDataLivingPre_T, renamedDataLivingFloatPre,
                stageDataToCommit, stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal eventSig, robSendingDelayed, sendingCommitInt,
-               renamedSendingSig, sendingCommitFloat, renameLockState, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed: std_logic := '0';
+    signal eventSig, robSendingDelayed, sendingCommitInt, frontLastSending, renamedSendingSig, sendingCommitFloat,
+               renameLockState, renameLockStateNext, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed, renameLockEndDelayedNext: std_logic := '0';
  
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG; -- This is rewinded on events
     signal renameCtr, renameCtrNext: Word := (others => '0');
@@ -336,6 +336,8 @@ architecture Behavioral of UnitRegManager is
         return res;
     end function;    
 begin
+        frontLastSending <= frontLastSendingIn and not eventSig;
+
     eventSig <= execEventSignal or lateEventSignal;
 
     depVec <= findDeps(frontDataLastLiving);
@@ -361,28 +363,28 @@ begin
 
                stageDataRenameIn_T <= classifyForDispatch(TMP_recodeMem(stageDataRenameIn));
                     
-            SUBUNIT_RENAME_INT_T: entity work.GenericStage(Behavioral)--Renaming)
-            generic map(
-                USE_CLEAR => '0',
-                WIDTH => PIPE_WIDTH,
-                    KEEP_DEST => '1'
-            )
-            port map(
-                clk => clk, reset => '0', en => '0',
+--            SUBUNIT_RENAME_INT_T: entity work.GenericStage(Behavioral)--Renaming)
+--            generic map(
+--                USE_CLEAR => '0',
+--                WIDTH => PIPE_WIDTH,
+--                    KEEP_DEST => '1'
+--            )
+--            port map(
+--                clk => clk, reset => '0', en => '0',
                 
-                prevSending => frontLastSending,    
-                stageDataIn => stageDataRenameIn_T,
+--                prevSending => frontLastSending,    
+--                stageDataIn => stageDataRenameIn_T,
                 
-                acceptingOut => open,
+--                acceptingOut => open,
                 
-                nextAccepting => nextAccepting,
-                sendingOut => open,--renamedSendingSig,
-                stageDataOut => renamedDataLivingPre_T,
+--                nextAccepting => nextAccepting,
+--                sendingOut => open,--renamedSendingSig,
+--                stageDataOut => renamedDataLivingPre_T,
                 
-                execEventSignal => '0',
-                lateEventSignal => eventSig, -- because Exec is always older than Rename     
-                execCausing => DEFAULT_INSTRUCTION_STATE
-            );
+--                execEventSignal => '0',
+--                lateEventSignal => eventSig, -- because Exec is always older than Rename     
+--                execCausing => DEFAULT_INSTRUCTION_STATE
+--            );
     
                                                                                      
     SUBUNIT_RENAME_INT: entity work.GenericStage(Behavioral)--Renaming)
@@ -436,10 +438,10 @@ begin
                           --)
                           ;
                           
-                renamedDataLiving_T <= -- classifyForDispatch(
-                                                      restoreRenameIndex(renamedDataLivingPre_T)
-                                        --        )
-                                                ;
+--                renamedDataLiving_T <= -- classifyForDispatch(
+--                                                      restoreRenameIndex(renamedDataLivingPre_T)
+--                                        --        )
+--                                                ;
     renamedDataLivingFloat <= restoreRenameIndex(renamedDataLivingFloatPre);
     
     renameGroupCtrNext <=   commitGroupCtr when lateEventSignal = '1'
@@ -458,7 +460,13 @@ begin
         --                         But remember that rewinding GPR map needs a cycle, and before it happens,
         --                         renaming can't be done! So this delay may be caused by this problem.
     
-    renameLockEndDelayed <= renameLockState and renameLockReleaseDelayed;
+    --renameLockEndDelayed <= renameLockState and renameLockReleaseDelayed;
+        
+        renameLockStateNext <= '1' when eventSig = '1'
+                        else   '0' when renameLockReleaseDelayed = '1'
+                        else   renameLockState;
+        
+            renameLockEndDelayedNext <= renameLockStateNext and renameLockRelease;
         
     COMMON_SYNCHRONOUS: process(clk)     
     begin
@@ -480,7 +488,8 @@ begin
             stageDataToCommitDelayed <= stageDataToCommit;
             robSendingDelayed <= sendingFromROB;
             
-            renameLockReleaseDelayed <= renameLockRelease;                 
+            renameLockReleaseDelayed <= renameLockRelease;
+                renameLockEndDelayed <= renameLockEndDelayedNext;                
         end if;    
     end process;
     
@@ -516,7 +525,7 @@ begin
         rewind => renameLockEndDelayed,
         causingInstruction => DEFAULT_INSTRUCTION_STATE,
         
-        sendingToReserve => frontLastSending,
+        sendingToReserve => frontLastSendingIn,
         stageDataToReserve => frontDataLastLiving,
         newPhysDestsOrig => newIntDests,    -- MAPPING (from FREE LIST)
         
@@ -534,7 +543,7 @@ begin
         rewind => renameLockEndDelayed,
         causingInstruction => DEFAULT_INSTRUCTION_STATE,
         
-        sendingToReserve => frontLastSending,
+        sendingToReserve => frontLastSendingIn,
         stageDataToReserve => frontDataLastLiving,
         newPhysDestsOrig => newFloatDests,
         
@@ -557,8 +566,8 @@ begin
         lateEventSignal => lateEventSignal,
         causingPointer => execCausing.tags.intPointer,
         
-        sendingToReserve => frontLastSending, 
-        takeAllow => frontLastSending,
+        sendingToReserve => frontLastSendingIn, 
+        takeAllow => frontLastSendingIn,
         stageDataToReserve => frontDataLastLiving,
         
         newPhysDests => newIntDests,
@@ -582,8 +591,8 @@ begin
         lateEventSignal => lateEventSignal,        
         causingPointer => execCausing.tags.floatPointer,
         
-        sendingToReserve => frontLastSending, 
-        takeAllow => frontLastSending,	-- FROM SEQ
+        sendingToReserve => frontLastSendingIn, 
+        takeAllow => frontLastSendingIn,	-- FROM SEQ
         stageDataToReserve => frontDataLastLiving,
         
         newPhysDests => newFloatDests,			-- TO SEQ

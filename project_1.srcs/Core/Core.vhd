@@ -212,7 +212,7 @@ begin
     port map(
         clk => clk,
         renameAccepting => renameAccepting,
-        frontLastSending => frontLastSending,
+        frontLastSendingIn => frontLastSending,
         frontDataLastLiving => frontDataLastLiving,
         
         TMP_spMaskedDataOut => TMP_frontDataSpMasked,
@@ -220,7 +220,7 @@ begin
         nextAccepting => canSendRename,
         
         renamedDataLiving => renamedDataLivingRe,
-            renamedDataLiving_T => open,--renamedDataLivingRe_T,
+        --    renamedDataLiving_T => open,--renamedDataLivingRe_T,
         renamedDataLivingFloat => renamedDataLivingFloatPre,        
         renamedSending => renamedSending,
 
