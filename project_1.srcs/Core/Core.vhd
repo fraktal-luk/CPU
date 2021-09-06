@@ -586,7 +586,7 @@ begin
                 sendingFinalI0 <= slotI0_E0(0).full;
                 slotFinalI0 <= slotI0_E0;
 
-            branchData <= basicBranch(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins, unfoldedAluOp);                  
+            branchData <= basicBranch(sendingToExecI0 and slotPreExecI0.state.branchIns, slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins, unfoldedAluOp);                  
             
             dataToBranch(0) <= (sendingToExecI0 and slotPreExecI0.state.branchIns, branchData);            
             bqCompare <= (dataToBranch(0).full, slotPreExecI0.ins);

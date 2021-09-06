@@ -38,7 +38,7 @@ package LogicExec is
 	function execLogicOr(ins: InstructionState) return InstructionState;
 	function execLogicXor(ins: InstructionState) return InstructionState;
 
-	function basicBranch(ins: InstructionState; st: SchedulerState; queueData: InstructionState; ac: AluControl) return InstructionState;
+	function basicBranch(sending: std_logic; ins: InstructionState; st: SchedulerState; queueData: InstructionState; ac: AluControl) return InstructionState;
 
 	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState; branchIns: InstructionState; ac: AluControl) return InstructionState;
 
@@ -108,7 +108,7 @@ package body LogicExec is
 		
 	end function;
 
-	function basicBranch(ins: InstructionState; st: SchedulerState; queueData: InstructionState; ac: AluControl) return InstructionState is
+	function basicBranch(sending: std_logic; ins: InstructionState; st: SchedulerState; queueData: InstructionState; ac: AluControl) return InstructionState is
 		variable res: InstructionState := ins;
 		variable branchTaken, targetMatch: std_logic := '0';
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
@@ -160,7 +160,8 @@ package body LogicExec is
                 if      (queueData.controlInfo.frontBranch xor branchTaken) = '1'
                     or  (queueData.controlInfo.frontBranch and branchTaken and not st.immediate and not targetMatch) = '1'
                 then
-                    res.controlInfo.newEvent := '1';
+                    res.controlInfo.newEvent := --'1';
+                                                sending;
                 else
                     res.controlInfo.newEvent := '0';
                 end if;

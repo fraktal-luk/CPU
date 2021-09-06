@@ -52,7 +52,7 @@ architecture Behavioral of RegisterMapper is
     signal selectNewest: RegNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal writeCommit: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-	signal readNewest, readNewest_T: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+	signal readNewest, readNewest_T, readStableSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 	signal readStable: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     
     signal newSelectedA, stableSelectedA: RegMaskArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -79,11 +79,14 @@ begin
 	-- Read
 	READ_NEWEST: for i in 0 to 3*PIPE_WIDTH-1 generate
 		readNewest(i) <= newestMap(slv2u(selectNewest(i)));-- when not IS_FP
-		          --else   readNewest_T(i);
+		                 --  readNewest_T(i);
+		          
+		   readStableSources(i) <= stableMap(slv2u(selectNewest(i)));
 	end generate;
 
 	READ_STABLE: for i in 0 to PIPE_WIDTH-1 generate
 		readStable(i) <= stableMap(slv2u(selectCommit(i)));
+		
 	end generate;
 	
 	-- Write	
@@ -204,13 +207,15 @@ begin
 --                                         newestSelMap,
 --                                         slv2u(selectNewest(i)));
                                          
-                              readRegMap3(rs0(slv2u(selectNewest(i))),
-                                          rs1(slv2u(selectNewest(i))),
-                                          rs2(slv2u(selectNewest(i))),
-                                          rs3(slv2u(selectNewest(i))),
-                                          stableMap(slv2u(selectNewest(i))),
-                                          newestSelMap2b(slv2u(selectNewest(i))),
-                                          slv2u(selectNewest(i)));
+--                              readRegMap3(rs0(slv2u(selectNewest(i))),
+--                                          rs1(slv2u(selectNewest(i))),
+--                                          rs2(slv2u(selectNewest(i))),
+--                                          rs3(slv2u(selectNewest(i))),
+--                                          stableMap(slv2u(selectNewest(i))),
+--                                          newestSelMap2b(slv2u(selectNewest(i))),
+--                                          slv2u(selectNewest(i)));
+                                     stableMap(slv2u(selectNewest(i))) when newestSelMap2b(slv2u(selectNewest(i)))(2) = '1'
+                                else newestMap(slv2u(selectNewest(i)));
         end generate;
 
         WRITE_NEWEST: for i in 0 to PIPE_WIDTH-1 generate
@@ -230,6 +235,8 @@ begin
                         if reserve(i) = '1' then
                             newestMap_T(i)(slv2u(selectReserve(i))) <= newPhysDestsOrig(i);
                             newestSelMap(i)(slv2u(selectReserve(i))) <= '0';
+                            
+                                newestSelMap2b(slv2u(selectReserve(i))) <= (others => '0');
                             
                             if i = 0 then
                                 rs0(slv2u(selectReserve(i))) <= newPhysDestsOrig(i);
@@ -251,15 +258,15 @@ begin
                     end loop;
                     
                     for i in 0 to 31 loop
-                        if rsm(3)(i) = '1' then
-                            newestSelMap2b(i) <= "011";
-                        elsif rsm(2)(i) = '1' then
-                            newestSelMap2b(i) <= "010";
-                        elsif rsm(1)(i) = '1' then
-                            newestSelMap2b(i) <= "001";                        
-                        else
-                            newestSelMap2b(i) <= "000";
-                        end if;
+--                        if rsm(3)(i) = '1' then
+--                            newestSelMap2b(i) <= "011";
+--                        elsif rsm(2)(i) = '1' then
+--                            newestSelMap2b(i) <= "010";
+--                        elsif rsm(1)(i) = '1' then
+--                            newestSelMap2b(i) <= "001";                        
+--                        else
+--                            newestSelMap2b(i) <= "000";
+--                        end if;
                     end loop;
                 end if;
             end if;
