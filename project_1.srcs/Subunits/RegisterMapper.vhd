@@ -52,7 +52,7 @@ architecture Behavioral of RegisterMapper is
     signal selectNewest: RegNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal writeCommit: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-	signal readNewest: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+	signal readNewest, readNewest_T, readStableSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 	signal readStable: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     
     signal newSelectedA, stableSelectedA: RegMaskArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -78,11 +78,15 @@ begin
 
 	-- Read
 	READ_NEWEST: for i in 0 to 3*PIPE_WIDTH-1 generate
-		readNewest(i) <= newestMap(slv2u(selectNewest(i)));
+		readNewest(i) <= newestMap(slv2u(selectNewest(i)));-- when not IS_FP
+		                 --  readNewest_T(i);
+		          
+		   readStableSources(i) <= stableMap(slv2u(selectNewest(i)));
 	end generate;
 
 	READ_STABLE: for i in 0 to PIPE_WIDTH-1 generate
 		readStable(i) <= stableMap(slv2u(selectCommit(i)));
+		
 	end generate;
 	
 	-- Write	
@@ -114,10 +118,162 @@ begin
              ignoredMaskReserve, ignoredMaskCommit,
              igVselReserve, igVselCommit, kiVselReserve, kiVselCommit,
             vselReserve, vselCommit, pselReserve, pselCommit: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-    
+        
+        subtype RegSubmap is PhysNameArray(0 to 31);-- := (others => (others => '0'));
+        type RegMap is array(0 to PIPE_WIDTH-1) of RegSubmap;
+        
+        type RegSelectMap is array(0 to PIPE_WIDTH-1) of std_logic_vector(0 to 31);
+        type RegSelectMap2b is array(0 to 31) of std_logic_vector(2 downto 0);
+
+            signal rs0, rs1, rs2, rs3: RegSubmap := (others => (others => '0'));
+ 
+            attribute ram_style: string;
+            attribute ram_style of rs0, rs1, rs2, rs3: signal is "distributed";
+                    
+        signal newestMap_T, stableMap_T: RegMap := (others => (others => (others => '0')));
+        signal newestSelMap, stableSelMap: RegSelectMap := (others => (others => '0'));
+        
+        signal newestSelMap2b: RegSelectMap2b := (others => (others => '0'));
+        
+        function readRegMap(nm0, nm1,nm2, nm3: RegSubmap; stableMapOld: PhysNameArray; selMap: RegSelectMap; ind: natural) return PhysName is
+            variable reg: SmallNumber := stableMapOld(ind);
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                if selMap(i)(ind) = '1' then
+                    if i = 0 then
+                        reg := nm0(ind);                    
+                    elsif i = 1 then
+                        reg := nm1(ind);                    
+                    elsif i = 2 then
+                        reg := nm2(ind);                    
+                    else
+                        reg := nm3(ind);
+                    end if;
+                end if;
+            end loop;
+            
+            return reg;
+        end function;
+        
+        function readRegMap2(nm0, nm1,nm2, nm3: PhysName; stableMapOld: PhysName; selMap: RegSelectMap; ind: natural) return PhysName is
+            variable reg: SmallNumber := stableMapOld;
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                if selMap(i)(ind) = '1' then
+                    if i = 0 then
+                        reg := nm0;                    
+                    elsif i = 1 then
+                        reg := nm1;                    
+                    elsif i = 2 then
+                        reg := nm2;                    
+                    else
+                        reg := nm3;
+                    end if;
+                end if;
+            end loop;
+            
+            return reg;
+        end function;
+        
+        function readRegMap3(nm0, nm1,nm2, nm3: PhysName; stableMapOld: PhysName; sel: std_logic_vector; ind: natural) return PhysName is
+            variable reg: SmallNumber := stableMapOld;
+        begin
+            --if sel(2) = '1' then
+            --    reg := stableMapOld;
+            --else
+                case sel(1 downto 0) is
+                    when "11" => reg := nm3;
+                    when "10" => reg := nm2;
+                    when "01" => reg := nm1;
+                    when others => reg := nm0;
+                end case;
+            --end if;
+            
+            return reg;
+        end function;
     begin
         --   reserve_T <= whichTakeReg_T(stageDataToReserve, IS_FP);
-    
+	   
+	    
+	    READ_NEWEST: for i in 0 to 3*PIPE_WIDTH-1 generate
+            --readNewest(i) <= readRegMap(newestMap_T, stableMap_T, stableMap, newestSelMap, slv2u(selectNewest(i)));
+            --readNewest(i) <= readRegMap(rs0, rs1, rs2, rs3, stableMap, newestSelMap, slv2u(selectNewest(i)));
+            readNewest_T(i) <= 
+--                             readRegMap2(rs0(slv2u(selectNewest(i))),
+--                                         rs1(slv2u(selectNewest(i))),
+--                                         rs2(slv2u(selectNewest(i))),
+--                                         rs3(slv2u(selectNewest(i))),
+--                                         stableMap(slv2u(selectNewest(i))),
+--                                         newestSelMap,
+--                                         slv2u(selectNewest(i)));
+                                         
+--                              readRegMap3(rs0(slv2u(selectNewest(i))),
+--                                          rs1(slv2u(selectNewest(i))),
+--                                          rs2(slv2u(selectNewest(i))),
+--                                          rs3(slv2u(selectNewest(i))),
+--                                          stableMap(slv2u(selectNewest(i))),
+--                                          newestSelMap2b(slv2u(selectNewest(i))),
+--                                          slv2u(selectNewest(i)));
+                                     stableMap(slv2u(selectNewest(i))) when newestSelMap2b(slv2u(selectNewest(i)))(2) = '1'
+                                else newestMap(slv2u(selectNewest(i)));
+        end generate;
+
+        WRITE_NEWEST: for i in 0 to PIPE_WIDTH-1 generate
+                
+        end generate;
+        
+        
+        process (clk)
+            variable rsm: RegSelectMap := (others => (others => '0'));
+        begin
+            if rising_edge(clk) then
+                if rewind = '1' then
+                    newestSelMap <= (others => (others => '0'));
+                    newestSelMap2b <= (others => "100");
+                elsif sendingToReserve = '1' then
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        if reserve(i) = '1' then
+                            newestMap_T(i)(slv2u(selectReserve(i))) <= newPhysDestsOrig(i);
+                            newestSelMap(i)(slv2u(selectReserve(i))) <= '0';
+                            
+                                newestSelMap2b(slv2u(selectReserve(i))) <= (others => '0');
+                            
+                            if i = 0 then
+                                rs0(slv2u(selectReserve(i))) <= newPhysDestsOrig(i);
+                            elsif i = 1 then
+                                rs1(slv2u(selectReserve(i))) <= newPhysDestsOrig(i);
+                            elsif i = 2 then
+                                rs2(slv2u(selectReserve(i))) <= newPhysDestsOrig(i);
+                            else
+                                rs3(slv2u(selectReserve(i))) <= newPhysDestsOrig(i);
+                            end if;
+                        end if;
+                    end loop;
+                    
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        if reserve(i) = '1' then
+                            newestSelMap(i)(slv2u(selectReserve(i))) <= '1';
+                            rsm(i)(slv2u(selectReserve(i))) := '1';
+                        end if;
+                    end loop;
+                    
+                    for i in 0 to 31 loop
+--                        if rsm(3)(i) = '1' then
+--                            newestSelMap2b(i) <= "011";
+--                        elsif rsm(2)(i) = '1' then
+--                            newestSelMap2b(i) <= "010";
+--                        elsif rsm(1)(i) = '1' then
+--                            newestSelMap2b(i) <= "001";                        
+--                        else
+--                            newestSelMap2b(i) <= "000";
+--                        end if;
+                    end loop;
+                end if;
+            end if;
+        end process;
+        
+        
+        
             vselReserve <= getVirtualIntDestSels(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
             pselReserve <= getPhysicalIntDestSels(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
             fullMaskReserve <= extractFullMask(stageDataToReserve) when sendingToReserve = '1' else (others => '0');

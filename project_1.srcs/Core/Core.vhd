@@ -60,27 +60,32 @@ end Core;
 
 
 architecture Behavioral of Core is
-    signal pcDataSig, frontCausing, execCausing, lateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
+    signal pcDataSig, frontCausing, execCausing, execCausingDelayed, lateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
 
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
-           frontEventSignal, bqAccepting, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ, dbEmpty,
-           canSendFront, canSendRename, canSendBuff,
-           execEventSignal, lateEventSignal, lateEventSetPC: std_logic := '0';
+           frontEventSignal, bqAccepting, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ,-- dbEmpty,
+           canSendFront, canSendRename,-- canSendBuff,
+           execEventSignal, execEventSignalDelayed, lateEventSignal, lateEventSetPC: std_logic := '0';
     
-    signal robSending, robAccepting, renamedSending, commitAccepting, oooAccepting, lsbrAccepting, lsbrAcceptingMore, renamedSendingBuff,
+    signal robSending, robAccepting, renamedSending, commitAccepting,-- oooAccepting,
+            lsbrAccepting, lsbrAcceptingMore,-- renamedSendingBuff,
             issueQueuesAccepting, issueQueuesAcceptingMore, renameSendingBr, stopRename,
-            queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0, dispatchAccepting,
+            queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,-- dispatchAccepting,
             robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
             sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, committedSending: std_logic := '0';
 
     signal frontDataLastLiving, TMP_frontDataSpMasked,
-            renamedDataLivingFloatPre, renamedDataMerged, renamedDataLivingMem, renamedDataLivingRe, renamedDataLivingFloatRe,
-            renamedDataLivingReMem, renamedDataLivingMemBuff, renamedDataLivingBuff, dispatchBufferDataInt,
+            renamedDataLivingFloatPre,-- renamedDataMerged,
+            renamedDataLivingMem, renamedDataLivingRe, renamedDataLivingRe_T, renamedDataLivingFloatRe,
+            renamedDataLivingReMem,-- renamedDataLivingMemBuff,-- renamedDataLivingBuff, 
+            --dispatchBufferDataInt,
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData, committedOut: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-    signal bqCompare, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-    signal specialAction, specialActionBuffOut, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+    signal bqCompare, bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqAddressInput, sqSelectedOutput, lqAddressInput, lqSelectedOutput:
+                InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+    signal specialAction,-- specialActionBuffOut,
+            specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     signal bqPointer, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
            
@@ -207,7 +212,7 @@ begin
     port map(
         clk => clk,
         renameAccepting => renameAccepting,
-        frontLastSending => frontLastSending,
+        frontLastSendingIn => frontLastSending,
         frontDataLastLiving => frontDataLastLiving,
         
         TMP_spMaskedDataOut => TMP_frontDataSpMasked,
@@ -215,6 +220,7 @@ begin
         nextAccepting => canSendRename,
         
         renamedDataLiving => renamedDataLivingRe,
+        --    renamedDataLiving_T => open,--renamedDataLivingRe_T,
         renamedDataLivingFloat => renamedDataLivingFloatPre,        
         renamedSending => renamedSending,
 
@@ -241,11 +247,9 @@ begin
         lateEventSignal => lateEventSignal
     );
 
-    -- CAREFUL: this must block renaming of a group if there will be no place for it in IQs the next cycle;
-    --          Because stalling at Rename is illegal, sending to Rename has to depend on free slots 
-    --          after accounting for current group at Rename that will use some resources!  
+    renamedDataLivingFloatRe <= mergeFP(renamedDataLivingRe, renamedDataLivingFloatPre);
 
-    oooAccepting <= queuesAcceptingMore and renameAccepting;
+
     lsbrAccepting <= robAccepting and acceptingSQ and acceptingLQ;
     lsbrAcceptingMore <= robAcceptingMore and not almostFullSQ and not almostFullLQ;
     
@@ -255,34 +259,19 @@ begin
     queuesAccepting <= lsbrAccepting and issueQueuesAccepting;
     queuesAcceptingMore <= lsbrAcceptingMore and issueQueuesAcceptingMore;
 
-    -- From Rename we send to OOO if it accepts and DB is empty. If DB is not empty, we have to drain it first!
-    renamedDataLivingBuff <= dispatchBufferDataInt;
-
-    renamedDataLivingFloatRe <= mergeFP(renamedDataLivingRe, renamedDataLivingFloatPre);
-
-    renamedDataMerged <= renamedDataLivingBuff;
-    
     renamedDataLivingReMem <= TMP_recodeMem(renamedDataLivingRe);
-    renamedDataLivingMemBuff <= TMP_recodeMem(renamedDataLivingBuff);
 
-    DISPATCH_BUFFER: entity work.DispatchBuffer(Transparent)
-    port map(
-        clk => clk,
-        
-        specialAction => specialAction,
-        nextAccepting => canSendBuff,
-                                 
-        accepting => dispatchAccepting,
-        prevSending => renamedSending,
-        dataIn => renamedDataLivingRe,            
-        sending => renamedSendingBuff,
-        dataOut => dispatchBufferDataInt,
-        specialOut => specialActionBuffOut,
-        
-        execEventSignal => execEventSignal,
-        lateEventSignal => lateEventSignal,        
-        empty => dbEmpty            
-    );
+         OLD_FLOW: if false generate
+            canSendFront <= renameAccepting and queuesAcceptingMore;
+            canSendRename <= --queuesAccepting;
+                                '1';
+         end generate;
+         
+          NEW_FLOW: if true generate
+             canSendFront <= renameAccepting and not stopRename;
+             canSendRename <= --queuesAccepting;
+                                not stopRename;
+          end generate;
 
     events <= (lateEventSignal, execEventSignal, execCausing);
 
@@ -297,9 +286,9 @@ begin
 		execEndSigs1 => execOutputs1,
 		execEndSigs2 => execOutputs2,
 		
-		inputSpecial => specialActionBuffOut,		
-		inputData => renamedDataMerged,
-		prevSending => renamedSendingBuff,
+		inputSpecial => specialAction,		
+		inputData => renamedDataLivingRe,
+		prevSending => renamedSending,
 		
 		acceptingOut => robAccepting,
 		acceptingMore => robAcceptingMore,
@@ -308,19 +297,7 @@ begin
 		sendingOut => robSending, 
 		outputData => dataOutROB,
 		outputSpecial => specialOutROB		
-	);
-   
-         OLD_FLOW: if true generate
-            canSendFront <= oooAccepting;
-            canSendRename <= queuesAccepting;
-            canSendBuff <= queuesAccepting;
-         end generate;
-         
-          NEW_FLOW: if false generate
-             canSendFront <= renameAccepting and not stopRename;
-             canSendRename <= dispatchAccepting;
-             canSendBuff <= not stopRename;
-          end generate;         
+	);       
          
     STOP_RENAME: process (clk)
     begin
@@ -349,9 +326,9 @@ begin
         execEv  <= (execEventSignal,  execCausing);
         lateEv  <= (lateEventSignal,  lateCausing);
 
-        renamedMergedText <= getInsStringArray(renamedDataMerged);
+        renamedMergedText <= getInsStringArray(renamedDataLivingRe);
         
-        renamedText <= getInsStringArray(renamedDataMerged, physDisasm);
+        renamedText <= getInsStringArray(renamedDataLivingRe, physDisasm);
         committedText <= getInsStringArray(committedOut, physDisasm);
         lastEffectiveText <= getInsString(lastEffectiveOut, physDisasm);
         
@@ -465,9 +442,42 @@ begin
                                                               
               subpipeF0_Sel, subpipeF0_RegRead, subpipeF0_E0, subpipeF0_E1,subpipeF0_E2, subpipeF0_D0,
               subpipe_DUMMY
-                : ExecResult := DEFAULT_EXEC_RESULT;                  
+                : ExecResult := DEFAULT_EXEC_RESULT;
+                
+       signal unfoldedAluOp: work.LogicExec.AluControl := work.LogicExec.DEFAULT_ALU_CONTROL;         
+            
+            
+            signal aluMask0, aluMask1, memMask0, memMask1, fpMask0, fpMask1, intStoreMask0, intStoreMask1, fpStoreMask0, fpStoreMask1, 
+                           branchMask0, branchMask1,     sqMask0, sqMask1, lqMask0, lqMask1: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     begin
-        
+            aluMask0 <= getAluMask(renamedDataLivingRe);
+            aluMask1 <= getAluMask1(renamedDataLivingRe);
+            memMask0 <=  getMemMask(renamedDataLivingRe);
+            memMask1 <= getMemMask1(renamedDataLivingRe);
+            fpMask0 <= getFpuMask(renamedDataLivingFloatRe);
+            fpMask1 <= getFpMask1(renamedDataLivingRe);
+            
+            intStoreMask0 <= getStoreMask(renamedDataLivingReMem) and not getFloatStoreMask(renamedDataLivingReMem, renamedDataLivingFloatRe);            
+            intStoreMask1 <= getIntStoreMask1((renamedDataLivingRe));            
+
+            fpStoreMask0 <= getFloatStoreMask(renamedDataLivingReMem, renamedDataLivingFloatRe);            
+            fpStoreMask1 <= getFloatStoreMask1((renamedDataLivingRe));            
+                 
+
+            sqMask0 <= getStoreMask(renamedDataLivingReMem);
+            sqMask1 <= getStoreMask1((renamedDataLivingRe));
+               
+            lqMask0 <= getLoadMask(renamedDataLivingReMem);
+            lqMask1 <= getLoadMask1((renamedDataLivingRe));
+               
+            branchMask0 <= getBranchMask(renamedDataLivingRe);
+            branchMask1 <= getBranchMask1((renamedDataLivingRe));
+  
+                    ch0 <= bool2std(aluMask1 = aluMask0 and memMask1 = memMask0 and fpMask1 = fpMask0) or not renamedSending;
+                    ch1 <= bool2std(branchMask1 = branchMask0 and lqMask1 = lqMask0 and sqMask1 = sqMask0) or not renamedSending;
+                    ch2 <= bool2std(intStoreMask1 = intStoreMask0 and fpStoreMask1 = fpStoreMask0) or not renamedSending;
+         
+         
         SUBPIPE_ALU: block
            signal dataToAlu, dataToBranch: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);           
            signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -476,11 +486,14 @@ begin
            signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
            
-           signal sendingBranch: std_logic := '0';     
+           signal sendingBranch: std_logic := '0';
+           
+                signal TMP_word0, TMP_word1: Word := (others => '0');   
         begin
             fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);
         
-            inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), getAluMask(renamedDataLivingRe));
+            inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), --getAluMask(renamedDataLivingRe));
+                                                                                                aluMask1);
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, FORWARDING_MODES_INT_D);
               
@@ -537,7 +550,14 @@ begin
                     fni => fni,
                     regValues => regValsI0   
                 );
-                                         
+                    
+                    ALU_OP_UNFOLD: process (clk)
+                    begin
+                        if rising_edge(clk) then
+                            unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.ins.specificOperation.arith);
+                        end if;
+                    end process;
+                              
                     subpipeI0_RegRead <= makeExecResult(slotRegReadI0, slotRegReadI0.full);
 
                 slotPreExecI0 <= slotRegReadI0 when TMP_PARAM_I0_DELAY else slotIssueI0;
@@ -545,7 +565,10 @@ begin
                 subpipeI0_PreExec <= subpipeI0_RegRead when TMP_PARAM_I0_DELAY else subpipeI0_Sel;
 
 
-            dataToAlu(0) <= (sendingToExecI0, executeAlu(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins, branchData));
+                    TMP_word0 <= work.Arith.addExtNew(slotPreExecI0.state.args(0), slotPreExecI0.state.args(1), '0');
+                    TMP_word1 <= work.Arith.addExtNew(slotPreExecI0.state.args(0), slotPreExecI0.state.args(1), '1');
+
+            dataToAlu(0) <= (sendingToExecI0, executeAlu(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins, branchData, unfoldedAluOp));
           
             STAGE_I0_E0: entity work.GenericStage2(Behavioral)
             generic map(
@@ -563,10 +586,11 @@ begin
                 sendingFinalI0 <= slotI0_E0(0).full;
                 slotFinalI0 <= slotI0_E0;
 
-            branchData <= basicBranch(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins);                  
+            branchData <= basicBranch(sendingToExecI0 and slotPreExecI0.state.branchIns, slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins, unfoldedAluOp);                  
             
             dataToBranch(0) <= (sendingToExecI0 and slotPreExecI0.state.branchIns, branchData);            
             bqCompare <= (dataToBranch(0).full, slotPreExecI0.ins);
+                bqCompareEarly <= (sendingToRegReadI0 and slotIssueI0.state.branchIns, slotIssueI0.ins);
             
             STAGE_I0_E0_BRANCH: entity work.GenericStage2(Behavioral)
             generic map(
@@ -584,6 +608,14 @@ begin
             execEventSignal <= dataFromBranch.ins.controlInfo.newEvent and sendingBranch;
             execCausing <= clearDbCausing(dataFromBranch.ins);
             bqUpdate <= dataFromBranch;
+            
+            DELAYED_EXEC_EVENT: process (clk)
+            begin
+                if rising_edge(clk) then
+                    execEventSignalDelayed <= execEventSignal;
+                    execCausingDelayed <= execCausing;
+                end if;
+            end process;
         end block;
          
             
@@ -599,7 +631,8 @@ begin
         begin        
            memMaskInt <= getMemMask(renamedDataLivingRe);
 
-           inputDataArray <= makeSlotArray(removeArg2(extractData(renamedDataLivingReMem)), memMaskInt);
+           inputDataArray <= makeSlotArray(removeArg2(extractData(renamedDataLivingReMem)), --memMaskInt);
+                                                                                            memMask1);
            schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, true);
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, FORWARDING_MODES_INT_D);
                         
@@ -718,9 +751,9 @@ begin
            dataInMemInt0 <= clearFloatDest(dataInMem0);
            dataInMemFloat0 <= clearIntDest(dataInMem0);
 
-                    ch0 <= bool2std(slotM0_E0 = dataInMem0);
-                    ch1 <= bool2std(slotM0_E0i = dataInMemInt0);
-                    ch2 <= bool2std(slotM0_E0f = dataInMemFloat0);
+                  --  ch0 <= bool2std(slotM0_E0 = dataInMem0);
+                 --   ch1 <= bool2std(slotM0_E0i = dataInMemInt0);
+                 --   ch2 <= bool2std(slotM0_E0f = dataInMemFloat0);
 
            -- TLB lookup, Dcache access
 	       STAGE_MEM0: entity work.GenericStage2(Behavioral)
@@ -820,8 +853,10 @@ begin
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
             fmaFloatSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoFloatA, fniFloat);
             
-            intStoreMask <= getStoreMask(renamedDataLivingReMem) and not floatStoreMask;
-            floatStoreMask <= getFloatStoreMask(renamedDataLivingReMem, renamedDataLivingFloatRe);
+            intStoreMask <= --getStoreMask(renamedDataLivingReMem) and not floatStoreMask;
+                            intStoreMask1;
+            floatStoreMask <= --getFloatStoreMask(renamedDataLivingReMem, renamedDataLivingFloatRe);
+                                fpStoreMask1;
         
             IQUEUE_SV: entity work.IssueQueue(Behavioral)--UnitIQ
             generic map(
@@ -941,7 +976,8 @@ begin
         begin
             fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat);
 
-            inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), getFpuMask(renamedDataLivingFloatRe));
+            inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), --getFpuMask(renamedDataLivingFloatRe));
+                                                                                                    fpMask1);
             schedInfoA <= work.LogicIssue.getIssueInfoArray(inputDataArray, false);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, FORWARDING_MODES_FLOAT_D);
 
@@ -1170,10 +1206,10 @@ begin
          execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins);
 
      
-         regsSelI0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueI0.ins)));
-         regsSelM0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueM0.ins)));        
+         regsSelI0 <= work.LogicRenaming.getPhysicalArgs(slotIssueI0);
+         regsSelM0 <= work.LogicRenaming.getPhysicalArgs(slotIssueM0);        
          -- TEMP!
-         regsSelS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadIntStoreValue.ins)));
+         regsSelS0 <= work.LogicRenaming.getPhysicalArgs(dataToRegReadIntStoreValue);
           
          NEW_FNI_INT: block
             signal   s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
@@ -1229,8 +1265,8 @@ begin
          end block;
               
                        
-         regsSelFS0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', dataToRegReadFloatStoreValue.ins)));
-         regsSelF0 <= work.LogicRenaming.getPhysicalArgs((0 => ('1', slotIssueF0.ins)));
+         regsSelFS0 <= work.LogicRenaming.getPhysicalArgs(dataToRegReadFloatStoreValue);
+         regsSelF0 <= work.LogicRenaming.getPhysicalArgs(slotIssueF0);
 
 		 INT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(WIDTH => 4, WRITE_WIDTH => 1)
@@ -1325,11 +1361,20 @@ begin
              readyRegFlagsNext => readyRegFlagsFloatNext
          );
                
+               
+                        readyRegFlagsInt <= readyRegFlagsIntNext;
+                        readyRegFlagsFloat <= readyRegFlagsFloatNext;
+               
          READY_REG_FLAGS: process(clk)
          begin
             if rising_edge(clk) then
-                readyRegFlagsInt <= readyRegFlagsIntNext;
-                readyRegFlagsFloat <= readyRegFlagsFloatNext;
+                if renamedSending = '1' then
+                    --readyRegFlagsInt <= readyRegFlagsIntNext;
+                    --readyRegFlagsFloat <= readyRegFlagsFloatNext;
+                else
+                    --readyRegFlagsInt <= (others => '0');
+                    --readyRegFlagsFloat <= (others => '0');                    
+                end if;
             end if;
          end process;
          
@@ -1431,9 +1476,12 @@ begin
          end generate;      
     end block; -- TEMP_EXEC
 
-    renamedDataToBQ <= setFullMask(renamedDataLivingBuff, getBranchMask(renamedDataLivingBuff));
-    renamedDataToSQ <= setFullMask(renamedDataLivingMemBuff, getStoreMask(renamedDataLivingMemBuff));
-    renamedDataToLQ <= setFullMask(renamedDataLivingMemBuff, getLoadMask(renamedDataLivingMemBuff));
+    renamedDataToBQ <= setFullMask(renamedDataLivingRe, --getBranchMask(renamedDataLivingRe));
+                                                          getBranchMask1(renamedDataLivingRe));
+    renamedDataToSQ <= setFullMask(renamedDataLivingReMem, --getStoreMask(renamedDataLivingReMem));
+                                                            getStoreMask1(renamedDataLivingRe));
+    renamedDataToLQ <= setFullMask(renamedDataLivingReMem, --getLoadMask(renamedDataLivingReMem));
+                                                            getLoadMask1(renamedDataLivingRe));
 
     BRANCH_QUEUE: entity work.BranchQueue
 	generic map(
@@ -1449,7 +1497,7 @@ begin
 		
 		acceptingBr => bqAccepting,
 		
-		prevSending => renamedSendingBuff,
+		prevSending => renamedSending,
 	    prevSendingBr => bpSending,
 	    
 	    prevSendingRe => renameSendingBr,
@@ -1461,6 +1509,7 @@ begin
 
 		storeValueInput => bqUpdate,
 		compareAddressInput => bqCompare,
+            compareAddressQuickInput => bqCompareEarly,
 
 		selectedDataOutput => bqSelected,
 
@@ -1468,9 +1517,10 @@ begin
 		robData => dataOutROB,
 
 		lateEventSignal => lateEventSignal,
-		execEventSignal => execEventSignal,
-		execCausing => execCausing,
-		
+		execEventSignal => --execEventSignal,
+		                      execEventSignalDelayed,
+		execCausing => --execCausing,
+		                      execCausingDelayed,
 		nextAccepting => commitAccepting,		
 		sendingSQOut => open,
 		dataOutV => bqData,
@@ -1491,7 +1541,7 @@ begin
 		almostFull => almostFullSQ,
 				
 	    prevSendingRe => frontLastSending,
-		prevSending => renamedSendingBuff,
+		prevSending => renamedSending,
 		
 		dataInRe => TMP_frontDataSpMasked,
 		dataIn => renamedDataToSQ,
@@ -1509,8 +1559,10 @@ begin
 		robData => dataOutROB,
 
 		lateEventSignal => lateEventSignal,
-		execEventSignal => execEventSignal,
-		execCausing => execCausing,
+		execEventSignal => --execEventSignal,
+                              execEventSignalDelayed,
+        execCausing => --execCausing,
+                              execCausingDelayed,
 		
 		nextAccepting => commitAccepting,
 
@@ -1534,7 +1586,7 @@ begin
 		almostFull => almostFullLQ,
 
 	    prevSendingRe => frontLastSending,				
-		prevSending => renamedSendingBuff,
+		prevSending => renamedSending,
 		
 		dataInRe => TMP_frontDataSpMasked,
 		dataIn => renamedDataToLQ,
@@ -1552,8 +1604,10 @@ begin
 		robData => dataOutROB,
 
 		lateEventSignal => lateEventSignal,
-		execEventSignal => execEventSignal,
-		execCausing => execCausing,
+		execEventSignal => --execEventSignal,
+                              execEventSignalDelayed,
+        execCausing => --execCausing,
+                              execCausingDelayed,
 		
 		nextAccepting => commitAccepting,
 		

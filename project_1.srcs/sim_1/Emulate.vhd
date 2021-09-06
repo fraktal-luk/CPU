@@ -113,6 +113,7 @@ type AbstractOperation is (
     logicShift,
     
     arithShift,
+    rotate,
     
     add,
     sub,

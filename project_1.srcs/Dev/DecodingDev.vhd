@@ -35,6 +35,7 @@ function decodeOperation(op0, op1: slv6; op2: slv5) return SpecificOp is
 begin
 
     isAluOp :=        op0 = "000000"
+                or  op0 = "000101"     
                 or  op0 = "001000"     
                 or  op0 = "001001"
                 or  op0 = "001010"
@@ -98,6 +99,18 @@ begin
                 isUndef := true;
             end if;
          else
+            isUndef := true;
+        end if;
+
+    elsif op0 = "000101" then
+        
+        if op1 = "000000" then
+            aluOp := opShl;
+        elsif op1 = "000001" then
+            aluOp := opSha;
+        elsif op1 = "000010" then
+            aluOp := opRot;
+        else
             isUndef := true;
         end if;
         

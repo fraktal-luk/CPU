@@ -41,21 +41,26 @@ procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber;
 procedure updateAddress(signal content: inout QueueEntryArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);
 procedure updateValue(signal content: inout QueueEntryArray; isl: InstructionSlot);
 
-constant CMP_ADDRESS_LENGTH: natural := 32;
+    procedure updateAddressArr(signal content: inout MwordArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);
+
+
+constant CMP_ADDRESS_LENGTH: natural := --32;
+                                        12;    
 
 function getAddressCompleted(content: QueueEntryArray) return std_logic_vector;
 function getAddressMatching(content: QueueEntryArray; adr: Mword) return std_logic_vector;
-
+    function getAddressMatching(content: MwordArray; adr: Mword) return std_logic_vector;
 
     function addressLowMatching(a, b: Mword) return std_logic;
     function addressHighMatching(a, b: Mword) return std_logic;
 
 function getWhichMemOp(content: QueueEntryArray) return std_logic_vector;
 function getDrainOutput_T(elem: QueueEntry; value: Mword) return InstructionState;
+    function getDrainOutput_T(elem: QueueEntry; adr, value: Mword) return InstructionState;
 
 function cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
 function cmpIndexAfter(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
-function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
+function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, nFull: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
 function getNumCommittedEffective(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber; 
 function getNumCommitted(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber;
 
@@ -130,6 +135,29 @@ begin
     end if;        
 end procedure;
 
+    procedure updateAddressArr(signal content: inout MwordArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean) is
+        constant LEN: natural := content'length;
+        constant PTR_MASK_SN: SmallNumber := i2slv(LEN-1, SMALL_NUMBER_SIZE);
+        constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);        
+        variable indV: SmallNumber;
+        variable ind: natural;
+        variable allow: std_logic;
+    begin
+        if not IS_LOAD_QUEUE then
+            indV := isl.ins.tags.sqPointer and PTR_MASK_SN;
+            allow := isStoreOp(isl.ins);           
+        else
+            indV := isl.ins.tags.lqPointer and PTR_MASK_SN;
+            allow := isLoadOp(isl.ins);
+        end if;
+        
+        ind := slv2u(indV);
+        
+        if allow = '1' then
+            content(ind) <= isl.ins.result;
+        end if;        
+    end procedure;
+
 procedure updateValue(signal content: inout QueueEntryArray; isl: InstructionSlot) is
     constant LEN: natural := content'length;
     constant PTR_MASK_SN: SmallNumber := i2slv(LEN-1, SMALL_NUMBER_SIZE);
@@ -172,6 +200,17 @@ begin
     return res;
 end function;
 
+    function getAddressMatching(content: MwordArray; adr: Mword) return std_logic_vector is
+        variable res: std_logic_vector(content'range);
+    begin
+        for i in content'range loop
+            
+            res(i) := --bool2std(content(i).address = adr);
+                        addressLowMatching(content(i), adr);
+        end loop;
+        return res;
+    end function;
+
 function getWhichMemOp(content: QueueEntryArray) return std_logic_vector is
     variable res: std_logic_vector(content'range);
 begin
@@ -197,6 +236,24 @@ begin
     res.result := value;    
     return res;
 end function;
+
+    function getDrainOutput_T(elem: QueueEntry; adr, value: Mword) return InstructionState is
+        variable res: InstructionState := DEFAULT_INS_STATE;
+    begin
+        if elem.isSysOp = '1' then
+            res.specificOperation := sop(None, opStoreSys);
+        else
+            res.specificOperation := sop(None, opStore);                        
+        end if;
+        
+        res.controlInfo.newEvent := elem.hasEvent;
+        res.controlInfo.firstBr := elem.first;
+        res.controlInfo.sqMiss := not elem.completedV;   
+        res.target := --elem.address;
+                        adr;
+        res.result := value;    
+        return res;
+    end function;
 
 function cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber)
 return std_logic_vector is
@@ -251,7 +308,7 @@ begin
     return res;
 end function;
 
-function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural)
+function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, nFull: SmallNumber; constant QUEUE_PTR_SIZE: natural)
 return SmallNumber is
     constant LEN: integer := olderSQ'length;      
     variable tmpVec1: std_logic_vector(0 to LEN-1) := (others => '0');
@@ -262,7 +319,8 @@ return SmallNumber is
 begin
     -- Shift by pStart
     nShift := slv2u(pStart);
-    count := slv2u(subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE));
+    count := --slv2u(subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE));
+             slv2u(nFull);
     
     tmpVecExt := olderSQ & olderSQ;
     

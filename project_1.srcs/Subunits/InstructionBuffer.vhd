@@ -79,7 +79,7 @@ begin
     
     isAccepting <= bool2std(pStart /= pEnd) or memEmpty;
     
-    isSending <= dataOutFull and nextAccepting and not execEventSignal;
+    isSending <= dataOutFull and nextAccepting  ;-- and not execEventSignal;
     
     nFullGroups <=  getNumFull(pStartLong, pEndLong, QUEUE_PTR_SIZE+1);
        

@@ -170,6 +170,17 @@ function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getMemMask(insVec: InstructionSlotArray) return std_logic_vector;
 
+
+        function getBranchMask1(insVec: InstructionSlotArray) return std_logic_vector;
+        function getLoadMask1(insVec: InstructionSlotArray) return std_logic_vector;
+        function getStoreMask1(insVec: InstructionSlotArray) return std_logic_vector;
+        function getIntStoreMask1(insVec: InstructionSlotArray) return std_logic_vector;       
+        function getFloatStoreMask1(insVec: InstructionSlotArray) return std_logic_vector;
+        function getAluMask1(insVec: InstructionSlotArray) return std_logic_vector;
+        function getFpMask1(insVec: InstructionSlotArray) return std_logic_vector;
+        function getMemMask1(insVec: InstructionSlotArray) return std_logic_vector;
+
+
 function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
@@ -595,7 +606,8 @@ begin
                    res(i).ins.physicalArgSpec.intDestSel := '0';
                    res(i).ins.virtualArgSpec.floatDestSel := '0';
                 end if;		    
-			    res(i).ins.physicalArgSpec.dest := (others => '0');
+			    res(i).ins.physicalArgSpec.dest := --(others => '0');
+			                                       (others => '1');
 			end if;
 			res(i).ins.controlInfo.newEvent := '0';
 		end loop;
@@ -797,6 +809,93 @@ function getMemMask(insVec: InstructionSlotArray) return std_logic_vector is
 begin
 	return getSubpipeMask(insVec, Mem);
 end function;
+
+
+        
+        function getBranchMask1(insVec: InstructionSlotArray) return std_logic_vector is
+            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i) := insVec(i).ins.classInfo.branchIns;
+            end loop;	
+            return res;
+        end function;
+        
+        function getLoadMask1(insVec: InstructionSlotArray) return std_logic_vector is
+            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i) := insVec(i).ins.classInfo.useLQ;
+            end loop;
+            
+            return res;
+        end function;
+        
+        function getStoreMask1(insVec: InstructionSlotArray) return std_logic_vector is
+            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i) := insVec(i).ins.classInfo.useSQ;
+            end loop;
+            
+            return res;
+        end function;
+
+
+        function getIntStoreMask1(insVec: InstructionSlotArray) return std_logic_vector is
+            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i) := insVec(i).ins.classInfo.storeInt;
+            end loop;
+            
+            return res;
+        end function;
+        
+        function getFloatStoreMask1(insVec: InstructionSlotArray) return std_logic_vector is
+            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i) := insVec(i).ins.classInfo.storeFP;
+            end loop;
+            
+            return res;
+        end function;
+        
+        
+        function getAluMask1(insVec: InstructionSlotArray) return std_logic_vector is
+            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i) := insVec(i).ins.classInfo.useAlu;
+            end loop;
+            
+            return res;
+        end function;
+        
+        function getFpMask1(insVec: InstructionSlotArray) return std_logic_vector is
+            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i) := insVec(i).ins.classInfo.useFP;
+            end loop;
+            
+            return res;
+        end function;
+        
+        function getMemMask1(insVec: InstructionSlotArray) return std_logic_vector is
+            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i) := insVec(i).ins.classInfo.useMem;
+            end loop;
+            
+            return res;
+        end function;
+
+
+
+
 
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray is

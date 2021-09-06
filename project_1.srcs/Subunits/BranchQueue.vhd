@@ -41,6 +41,7 @@ entity BranchQueue is
 
 		storeValueInput: in InstructionSlot;
 		compareAddressInput: in InstructionSlot;
+    		compareAddressQuickInput: in InstructionSlot;
 
 		selectedDataOutput: out InstructionSlot;
 
@@ -68,11 +69,11 @@ architecture Behavioral of BranchQueue is
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
     constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;
 
-	signal selectedDataSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
+	signal selectedDataSlot, selectedDataSlot_Q: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
 
 	signal pStart, pStartNext, pEnd, pEndNext, pStartLong, pStartLongNext, pEndLong, pEndLongNext, pTagged,
 	       pRenamed, pRenamedNext, pTaggedNext, pTaggedLong, pTaggedLongNext, pRenamedLong, pRenamedLongNext,
-	       pSelect, pCausing, pSelectLong, pCausingLong: SmallNumber := (others => '0');
+	       pSelect, pSelect_Quick, pCausing, pSelectLong, pSelectLong_Quick, pCausingLong: SmallNumber := (others => '0');
     signal isFull, isAlmostFull, isSending: std_logic := '0';
     
     signal recoveryCounter: SmallNumber := (others => '0');    
@@ -107,13 +108,13 @@ begin
 	   signal targetOutput: Mword := (others => '0');
 
        signal earlyInfoMem: EarlyInfoArray(0 to BQ_SIZE-1) := (others => DEFAULT_EARLY_INFO);
-       signal earlyInput, earlySelected, earlyOutput, earlySelected_T, earlyOutput_T: EarlyInfo := DEFAULT_EARLY_INFO;
+       signal earlyInput, earlySelected, earlyOutput, earlySelected_T, earlySelected_T_Q, earlyOutput_T: EarlyInfo := DEFAULT_EARLY_INFO;
         
        signal lateInfoMem: LateInfoArray(0 to BQ_SIZE-1) := (others => DEFAULT_LATE_INFO);
-       signal lateInput, lateSelected, lateOutput, lateSelected_T, lateOutput_T: LateInfo := DEFAULT_LATE_INFO;
+       signal lateInput, lateSelected, lateOutput, lateSelected_T, lateSelected_T_Q, lateOutput_T: LateInfo := DEFAULT_LATE_INFO;
        
-       signal earlySerialInput, earlySerialOutput, earlySerialSelected:  std_logic_vector(EARLY_INFO_SIZE-1 downto 0) := (others => '0');
-       signal lateSerialInput, lateSerialOutput, lateSerialSelected:  std_logic_vector(LATE_INFO_SIZE-1 downto 0) := (others => '0');
+       signal earlySerialInput, earlySerialOutput, earlySerialSelected, earlySerialSelected_Q:  std_logic_vector(EARLY_INFO_SIZE-1 downto 0) := (others => '0');
+       signal lateSerialInput, lateSerialOutput, lateSerialSelected, lateSerialSelected_Q:  std_logic_vector(LATE_INFO_SIZE-1 downto 0) := (others => '0');
        signal earlySerialMem: EarlyInfoSerialArray := (others => (others => '0'));
        signal lateSerialMem: LateInfoSerialArray := (others => (others => '0'));
        
@@ -132,17 +133,27 @@ begin
     
        earlySelected_T <= deserializeEarlyInfo(earlySerialSelected);
        lateSelected_T <= deserializeLateInfo(lateSerialSelected);
+
+                earlySelected_T_Q <= deserializeEarlyInfo(earlySerialSelected_Q);
+                lateSelected_T_Q <= deserializeLateInfo(lateSerialSelected_Q);
       
-       selectedDataSlot <= getMatchedSlot(pSelect, compareAddressInput, earlySelected_T, lateSelected_T);
- 
+       --selectedDataSlot <= getMatchedSlot(pSelect, compareAddressInput, earlySelected_T, lateSelected_T);
+                selectedDataSlot_Q <= getMatchedSlot(pSelect_Quick, compareAddressQuickInput, earlySelected_T_Q, lateSelected_T_Q);
+
        earlySelected <= earlyInfoMem(slv2u(pSelect));
        lateSelected <= lateInfoMem(slv2u(pSelect));
 
        earlySerialSelected <= earlySerialMem(slv2u(pSelect));
        lateSerialSelected <= lateSerialMem(slv2u(pSelect));
 
-       pSelect <= compareAddressInput.ins.tags.bqPointer and PTR_MASK_SN;
-       pSelectLong <= compareAddressInput.ins.tags.bqPointer;
+                earlySerialSelected_Q <= earlySerialMem(slv2u(pSelect_Quick));
+                lateSerialSelected_Q <= lateSerialMem(slv2u(pSelect_Quick));
+
+       --pSelect <= compareAddressInput.ins.tags.bqPointer and PTR_MASK_SN;
+       --pSelectLong <= compareAddressInput.ins.tags.bqPointer;
+
+           pSelect_Quick <= compareAddressQuickInput.ins.tags.bqPointer and PTR_MASK_SN;
+           pSelectLong_Quick <= compareAddressQuickInput.ins.tags.bqPointer;
 
        committingBr <= committing and robData(0).ins.controlInfo.firstBr and not taggedEmpty;
    
@@ -177,7 +188,12 @@ begin
        
 	   SYNCH: process (clk)
 	   begin
-	       if rising_edge(clk) then	           
+	       if rising_edge(clk) then
+	               pSelect <= pSelect_Quick;
+	               pSelectLong <= pSelectLong_Quick;
+	                  
+	               selectedDataSlot <= selectedDataSlot_Q;
+	                  
 	           pCausing <= pSelect;
 	           pCausingLong <= pSelectLong;
           
