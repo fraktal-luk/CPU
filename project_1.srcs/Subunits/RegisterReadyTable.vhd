@@ -24,7 +24,7 @@ entity RegisterReadyTable is
 		en: in std_logic;
 
 		sendingToReserve: in std_logic;
-		stageDataToReserve: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+		--stageDataToReserve: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 
 		newPhysDests: in PhysNameArray(0 to PIPE_WIDTH-1);
 	
