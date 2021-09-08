@@ -394,7 +394,6 @@ begin
 
 	COMMITTED_VIEW: if VIEW_ON generate
 	   use work.Viewing.all;	        
-        -- CAREFUL, TODO: include replaced intPointer and floatPointer in this view 
        signal committedText: GenericStageView;
        signal lastEffectiveText, lateCausingText: InsStringArray(0 to 0);
     begin

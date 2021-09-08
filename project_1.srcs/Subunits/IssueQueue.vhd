@@ -208,7 +208,7 @@ begin
     INPUT_STAGE: block
         
     begin
-        inputStage <= updateRR(inputStagePreRR, rrfStored); -- TODO: restoreRenameIndex also in Nonshift architecture when it's used!
+        inputStage <= updateRR(inputStagePreRR, rrfStored);
             inputStage_T <= updateRR_T(inputStagePreRR, rrfStored);
             
             ch0 <= bool2std(extractReadyMask(inputStage_T) = extractReadyMask(inputStage));
@@ -220,7 +220,6 @@ begin
         inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, false, false, FORWARDING_D);
         inputStageUpdatedSel <= updateSchedulerArray(inputStage, fni, fmaInputStage, false, true, FORWARDING);
             
-        -- TODO: use the fact that the have the same high tag part?
         killMaskInput <= getKillMask(inputStage, events.execCausing, events.execEvent, events.lateEvent);
         livingMaskInput <= extractFullMask(inputStage) and not killMaskInput;
 

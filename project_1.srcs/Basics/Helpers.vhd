@@ -6,12 +6,10 @@
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 
-use work.BasicTypes.all;
 
 
 package Helpers is
 
--- TODO: make it independent of BasicTypes!
 
 
 end Helpers;

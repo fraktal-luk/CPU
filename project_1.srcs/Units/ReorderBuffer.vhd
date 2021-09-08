@@ -208,20 +208,6 @@ begin
 	   subtype RobSlotText is string(1 to 80);
 	   type RobSlotArray is array(integer range <>) of RobSlotText;
 	   
---	   function createRobView(content: ReorderBufferArray) return StageTextArray is
---	       variable res: StageTextArray(0 to ROB_SIZE-1);
---	   begin
---	       for i in 0 to ROB_SIZE-1 loop
---	           if content(i).full = '1' then
---	               res(i) := getInsStringArray(content(i).ops);    
---	           end if;
---	       end loop;
-	       
---	       -- TODO: special actions!
-	       
---	       return res;
---	   end function;
-	   
 	   signal robText: InsStringArray(0 to ROB_SIZE-1) := (others => (others => ' '));
 	begin	   
 	    --robView <= createRobView(content);

@@ -552,9 +552,9 @@ begin
             res.state.stored(1) := '1';
         elsif res.state.argSrc(1)(1 downto 0) = "01" then
             res.state.args(1) := fni.values1(slv2u(res.state.argLocsPipe(1)(1 downto 0)));
-            if res.state.argSrc(1)(1 downto 0) = "01" then -- TODO: Becomes redundant
+            --if res.state.argSrc(1)(1 downto 0) = "01" then -- Redundant
                 res.state.stored(1) := '1';
-            end if;
+            --end if;
         else
             res.state.args(1) := (others => '0');
         end if;    
@@ -672,8 +672,6 @@ return SchedulerInfoArray is
 	constant QUEUE_SIZE: natural := queueContent'length;
 	variable res: SchedulerInfoArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
 	
-	-- TODO: change newMask to use living rather than full
-	   -- !!!! this is useless because killing is ordered: positions in compacted mask are not affected, only the total numer of living elems	
 	constant newMask: std_logic_vector(0 to PIPE_WIDTH-1) := livingMaskInput;
 	constant compMask: std_logic_vector(0 to PIPE_WIDTH-1) := compactMask(newMask);
 	variable dataNewDataS: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputDataS;
@@ -742,7 +740,6 @@ begin
         end loop;
 	    
 	    
-	    -- TODO: don't put '1' for input slots that are killed - use livingVec for input group
 		iqFullMaskNext(i) := livingMaskSh(i) or (fillMask(i) and prevSending);
 		if fullMaskSh(i) = '1' then -- From x	
 			if remainMask(i) = '1' then

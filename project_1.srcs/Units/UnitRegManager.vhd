@@ -259,7 +259,6 @@ architecture Behavioral of UnitRegManager is
         end loop;
         
         -- Overwrite sources depending on destinations of this group
-        -- TODO: arg name comparisons are shared with int registers! Reuse the same comparators
         for i in 0 to PIPE_WIDTH-1 loop
             for k in 0 to 2 loop -- For each of 3 possible source arguments
                 for j in PIPE_WIDTH-1 downto 0 loop
@@ -278,7 +277,6 @@ architecture Behavioral of UnitRegManager is
 
         end loop;
 
-        -- TODO: move this somewhere else?
         for i in res'range loop
             if res(i).ins.classInfo.fpRename = '0' then
                 res(i).full := '0';

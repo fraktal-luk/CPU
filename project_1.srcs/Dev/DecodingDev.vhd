@@ -222,7 +222,6 @@ begin
 
     hasImm16 := std2bool(checkOp0(op0, OP0_IMM16));
     
-    -- TODO: add shift instructions 
     hasImm10 := std2bool(checkOp0(op0, OP0_IMM10));
 
     hasFpDest := std2bool(checkOp0(op0, OP0_FLOAT_DEST) or checkOp1(op0, "000011", op1, OP1_FLOAT_MEM_LOAD));
