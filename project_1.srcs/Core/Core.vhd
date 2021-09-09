@@ -110,6 +110,9 @@ begin
     intSignal <= int0 or int1;
     intType <= (int0, int1);
 
+    events <= (lateEventSignal, execEventSignal, execCausing);
+    eventsOnlyLate <= (lateEvent => lateEventSignal, execEvent => '0', execCausing => DEFAULT_INS_STATE);
+
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
 	generic map(DEBUG_FILE_PREFIX => DEBUG_FILE_PREFIX)
     port map (
@@ -240,7 +243,24 @@ begin
         lateEventSignal => lateEventSignal
     );
 
-    renamedDataLivingFloatRe <= mergeFP(renamedDataLivingRe, renamedDataLivingFloatPre);
+    STOP_RENAME: process (clk)
+    begin
+        if rising_edge(clk) then
+            if queuesAcceptingMore = '0' then
+                stopRename <= '1';
+            elsif queuesAcceptingMore = '1' then
+                stopRename <= '0';
+            end if;
+        end if;
+    end process;
+
+    canSendFront <= renameAccepting and not stopRename;
+    canSendRename <= not stopRename;  --  Could also be : queuesAccepting;
+
+    renamedDataToBQ <= setFullMask(renamedDataLivingRe, getBranchMask1(renamedDataLivingRe));
+    renamedDataToSQ <= setFullMask(renamedDataLivingReMem, getStoreMask1(renamedDataLivingRe));
+    renamedDataToLQ <= setFullMask(renamedDataLivingReMem, getLoadMask1(renamedDataLivingRe));
+    
 
     lsbrAccepting <= robAccepting and acceptingSQ and acceptingLQ;
     lsbrAcceptingMore <= robAcceptingMore and not almostFullSQ and not almostFullLQ;
@@ -251,14 +271,9 @@ begin
     queuesAccepting <= lsbrAccepting and issueQueuesAccepting;
     queuesAcceptingMore <= lsbrAcceptingMore and issueQueuesAcceptingMore;
 
+    renamedDataLivingFloatRe <= mergeFP(renamedDataLivingRe, renamedDataLivingFloatPre);
     renamedDataLivingReMem <= TMP_recodeMem(renamedDataLivingRe);
- 
-        canSendFront <= renameAccepting and not stopRename;
-        canSendRename <= not stopRename;  --  Could also be : queuesAccepting;
-
-    events <= (lateEventSignal, execEventSignal, execCausing);
-
-    eventsOnlyLate <= (lateEvent => lateEventSignal, execEvent => '0', execCausing => DEFAULT_INS_STATE);
+   
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(
@@ -280,19 +295,7 @@ begin
 		sendingOut => robSending, 
 		outputData => dataOutROB,
 		outputSpecial => specialOutROB		
-	);       
-         
-    STOP_RENAME: process (clk)
-    begin
-        if rising_edge(clk) then
-            if queuesAcceptingMore = '0' then
-                stopRename <= '1';
-            elsif queuesAcceptingMore = '1' then
-                stopRename <= '0';
-            end if;
-        end if;
-    end process;
-    
+	);     
 
     MAIN_VIEW: if VIEW_ON generate
         use work.Viewing.all;
@@ -343,7 +346,7 @@ begin
         
         -- Selection from IQ and state after Issue stage
         signal      slotSelI0, slotIssueI0, slotRegReadI0,
-                                            slotPreExecI0,
+                     --                       slotPreExecI0,
                     slotSelI1, slotIssueI1, slotRegReadI1,
                     slotSelM0, slotIssueM0, slotRegReadM0,
                                             slotPreExecM0,               
@@ -351,11 +354,15 @@ begin
                
                     slotSel4, slotIssue4, slotSel5, slotIssue5, slotSel6, slotIssue6: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
-        signal dataToIssueIntStoreValue, dataToRegReadIntStoreValue, dataToExecStoreValue, dataToExecIntStoreValue, dataToExecFloatStoreValue,
-               dataToIssueFloatStoreValue, dataToRegReadFloatStoreValue: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+        signal      slotSelIntSV, slotIssueIntSV, slotRegReadIntSV,
+                    slotSelFloatSV, slotIssueFloatSV, slotRegReadFloatSV,
+                    dataToExecStoreValue,
+               dataToIssueIntStoreValue --dataToExecIntStoreValue, dataToExecFloatStoreValue,
+               --dataToIssueFloatStoreValue, dataToRegReadFloatStoreValue
+               : SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
         -- Exec and later delay stages
-        signal      slotI0_E0, slotI0_E1, slotI0_E2, slotI0_D0, slotI0_D1,           
+        signal      slotI0_E0, slotI0_E1, slotI0_E2, slotI0_D0, slotI0_D1,
                     slotI1_E0, slotI1_E1, slotI1_E2, slotI1_D0, slotI1_D1,
                     slotM0_E0,
                     slotM0_E0i, slotM0_E1i, slotM0_E2i, slotM0_D0i, slotM0_D1i, -- Here logical stages get split into Int and FP
@@ -377,8 +384,8 @@ begin
        signal readyRegFlagsInt, readyRegFlagsFloat, readyRegFlagsIntNext, readyRegFlagsSV, readyRegFlagsFloatNext, readyRegFlagsFloatSV: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
        -- Issue control 
-       signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, allowIssueStoreDataFP, allowIssueStageStoreDataFP: std_logic := '0';
-       signal memSubpipeSent, fp0subpipeSelected, lockIssueI0, allowIssueI0, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady, intWriteConflict: std_logic := '0';
+       signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, allowIssueStoreDataFP, allowIssueStageStoreDataFP,
+              memSubpipeSent, fp0subpipeSelected, lockIssueI0, allowIssueI0, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady, intWriteConflict: std_logic := '0';
   
        signal sendingFromDLQ, sendingToAgu, sendingToRegReadI0, sendingToRegReadM0: std_logic := '0';       
        signal dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
@@ -485,11 +492,11 @@ begin
                               
                     subpipeI0_RegRead <= makeExecResult(slotRegReadI0, slotRegReadI0.full);
 
-                slotPreExecI0 <= slotRegReadI0;
+                --slotPreExecI0 <= slotRegReadI0;
                 --sendingToExecI0 <= slotRegReadI0.full;
                 subpipeI0_PreExec <= subpipeI0_RegRead;
 
-            dataToAlu(0) <= (slotRegReadI0.full, executeAlu(slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins, branchData, unfoldedAluOp));
+            dataToAlu(0) <= (slotRegReadI0.full, executeAlu(slotRegReadI0.ins, slotRegReadI0.state, bqSelected.ins, branchData, unfoldedAluOp));
           
             STAGE_I0_E0: entity work.GenericStage2(Behavioral)
             generic map(
@@ -503,10 +510,10 @@ begin
             );      
                 subpipeI0_E0 <= makeExecResult(slotI0_E0(0), slotI0_E0(0).full);
 
-            branchData <= basicBranch(slotRegReadI0.full and slotPreExecI0.state.branchIns, slotPreExecI0.ins, slotPreExecI0.state, bqSelected.ins, unfoldedAluOp);                  
+            branchData <= basicBranch(slotRegReadI0.full and slotRegReadI0.state.branchIns, slotRegReadI0.ins, slotRegReadI0.state, bqSelected.ins, unfoldedAluOp);                  
             
-            dataToBranch(0) <= (slotRegReadI0.full and slotPreExecI0.state.branchIns, branchData);            
-            bqCompare <= (dataToBranch(0).full, slotPreExecI0.ins);
+            dataToBranch(0) <= (slotRegReadI0.full and slotRegReadI0.state.branchIns, branchData);            
+            bqCompare <= (dataToBranch(0).full, slotRegReadI0.ins);
                 bqCompareEarly <= (sendingToRegReadI0 and slotIssueI0.state.branchIns, slotIssueI0.ins);
             
             STAGE_I0_E0_BRANCH: entity work.GenericStage2(Behavioral)
@@ -618,7 +625,8 @@ begin
                             
            STAGE_AGU: entity work.GenericStage2(Behavioral)
            generic map(
-               COMPARE_TAG => '1'
+               COMPARE_TAG => --'1'
+                                '0'
            )
            port map(
                clk => clk, reset => reset, en => en,
@@ -645,7 +653,8 @@ begin
            
            STAGE_AGU_FLOAT: entity work.GenericStage2(Behavioral)
            generic map(
-               COMPARE_TAG => '1'
+               COMPARE_TAG => --'1'
+                                '0'
            )
            port map(
                clk => clk, reset => reset, en => en,
@@ -665,7 +674,8 @@ begin
            -- TLB lookup, Dcache access
 	       STAGE_MEM0: entity work.GenericStage2(Behavioral)
            generic map(
-               COMPARE_TAG => '1'
+               COMPARE_TAG => --'1'
+                                '0'
            )
            port map(
                clk => clk, reset => reset, en => en,
@@ -677,7 +687,8 @@ begin
 
 	       STAGE_MEM0_FLOAT: entity work.GenericStage2(Behavioral)
            generic map(
-               COMPARE_TAG => '1'
+               COMPARE_TAG => --'1'
+                                '0'
            )
            port map(
                clk => clk, reset => reset, en => en,
@@ -703,7 +714,8 @@ begin
            -- Source selection and verification
 	       STAGE_MEM1: entity work.GenericStage2(Behavioral)
            generic map(
-               COMPARE_TAG => '1'
+               COMPARE_TAG => --'1'
+                                '0'
            )
            port map(
                clk => clk, reset => reset, en => en,
@@ -716,7 +728,8 @@ begin
            -- Branching into FP cluster
            STAGE_MEM1_FLOAT: entity work.GenericStage2(Behavioral)
            generic map(
-               COMPARE_TAG => '1'
+               COMPARE_TAG => --'1'
+                                '0'
            )
            port map(
                clk => clk, reset => reset, en => en,
@@ -777,7 +790,7 @@ begin
                 readyRegFlags => readyRegFlagsSV,
                 nextAccepting => allowIssueStoreDataInt,
                 events => events,
-                schedulerOut => dataToIssueIntStoreValue,
+                schedulerOut => slotSelIntSV,
                 outputSignals => outSigsSVI
             );
      
@@ -787,15 +800,15 @@ begin
                 clk => clk, reset => '0', en => '0',
                 prevSending => outSigsSVI.sending,
                 nextAccepting => '1',
-                input => dataToIssueIntStoreValue,           
+                input => slotSelIntSV,           
                 acceptingOut => open,
-                output => dataToRegReadIntStoreValue,
+                output => slotIssueIntSV,
                 events => events,
                 fni => fniEmpty,
                 regValues => (others => (others => '0'))   
             );
             
-            sendingToRegReadI <= dataToRegReadIntStoreValue.full and not outSigsSVI.cancelled;
+            sendingToRegReadI <= slotIssueIntSV.full and not outSigsSVI.cancelled;
             
             REG_READ_STAGE_SV: entity work.IssueStage
             generic map(USE_IMM => false, REGS_ONLY => true, TMP_DELAY => false, NEW_RR => true)
@@ -803,9 +816,9 @@ begin
                 clk => clk, reset => '0', en => '0',
                 prevSending => sendingToRegReadI,
                 nextAccepting => '1',
-                input => dataToRegReadIntStoreValue,          
+                input => slotIssueIntSV,          
                 acceptingOut => open,
-                output => dataToExecIntStoreValue,
+                output => slotRegReadIntSV,
                 events => events,
                 fni => fniEmpty,
                 regValues => regValsS0     
@@ -831,7 +844,7 @@ begin
                 readyRegFlags => readyRegFlagsFloatSV,
                 nextAccepting => allowIssueStoreDataFP,
                 events => events,
-                schedulerOut => dataToIssueFloatStoreValue,              
+                schedulerOut => slotSelFloatSV,              
                 outputSignals => outSigsSVF
             );
     
@@ -841,15 +854,15 @@ begin
                 clk => clk, reset => '0', en => '0',
                 prevSending => outSigsSVF.sending,
                 nextAccepting => allowIssueStageStoreDataFP,    
-                input => dataToIssueFloatStoreValue,
+                input => slotSelFloatSV,
                 acceptingOut => open,
-                output => dataToRegReadFloatStoreValue,
+                output => slotIssueFloatSV,
                 events => events,
                 fni => fniEmpty,
                 regValues => (others => (others => '0'))   
             );        
 
-            sendingToRegReadF <= dataToRegReadFloatStoreValue.full and not outSigsSVF.cancelled;
+            sendingToRegReadF <= slotIssueFloatSV.full and not outSigsSVF.cancelled;
     
             REG_READ_STAGE_FLOAT_SV: entity work.IssueStage
             generic map(USE_IMM => false, REGS_ONLY => true, TMP_DELAY => false, NEW_RR => true)
@@ -857,16 +870,16 @@ begin
                 clk => clk, reset => '0', en => '0',        
                 prevSending => sendingToRegReadF,
                 nextAccepting => '1',
-                input => dataToRegReadFloatStoreValue,       
+                input => slotIssueFloatSV,       
                 acceptingOut => open,
-                output => dataToExecFloatStoreValue,
+                output => slotRegReadFloatSV,
                 events => events,
                 fni => fniEmpty,
                 regValues => regValsFS0     
             );
     
-            dataToExecStoreValue <= getStoreDataOp(dataToExecFloatStoreValue) when dataToExecFloatStoreValue.full = '1'
-                            else    getStoreDataOp(dataToExecIntStoreValue);
+            dataToExecStoreValue <= getStoreDataOp(slotRegReadFloatSV) when slotRegReadFloatSV.full = '1'
+                            else    getStoreDataOp(slotRegReadIntSV);
         end block;
 
         
@@ -997,7 +1010,7 @@ begin
          -------------------------------------------
             STAGE_I0_D0: entity work.GenericStage2(Behavioral)
             generic map(
-                COMPARE_TAG => '1'
+                COMPARE_TAG => '0'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -1009,7 +1022,7 @@ begin
 
             STAGE_M0_D0: entity work.GenericStage2(Behavioral)
             generic map(
-                COMPARE_TAG => '1'
+                COMPARE_TAG => '0'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -1021,7 +1034,7 @@ begin
 
             STAGE_M0_D0F: entity work.GenericStage2(Behavioral)
             generic map(
-                COMPARE_TAG => '1'
+                COMPARE_TAG => '0'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -1063,12 +1076,8 @@ begin
             begin
                 if rising_edge(clk) then
                     assert intWriteConflict = '0' report "Int write queue conflict!" severity error;
-                    
-                    if TMP_PARAM_I0_DELAY then
-                        memSubpipeSent <= sendingToRegReadM0;                    
-                    else
-                        memSubpipeSent <= sendingToAgu;
-                    end if;
+
+                    memSubpipeSent <= sendingToRegReadM0;
                     fp0subpipeSelected <= outSigsF0.sending;
                 end if;
             end process;
@@ -1103,9 +1112,9 @@ begin
          regsSelI0 <= work.LogicRenaming.getPhysicalArgs(slotIssueI0);
          regsSelM0 <= work.LogicRenaming.getPhysicalArgs(slotIssueM0);        
          -- TEMP!
-         regsSelS0 <= work.LogicRenaming.getPhysicalArgs(dataToRegReadIntStoreValue);
-                       
-         regsSelFS0 <= work.LogicRenaming.getPhysicalArgs(dataToRegReadFloatStoreValue);
+         regsSelS0 <= work.LogicRenaming.getPhysicalArgs(slotIssueIntSV);              
+         regsSelFS0 <= work.LogicRenaming.getPhysicalArgs(slotIssueFloatSV);
+         
          regsSelF0 <= work.LogicRenaming.getPhysicalArgs(slotIssueF0);
 
 
@@ -1113,7 +1122,7 @@ begin
             
             INT_WRITE_QUEUE: entity work.GenericStage2(Behavioral)
             generic map(
-                COMPARE_TAG => '1'
+                COMPARE_TAG => '0'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -1163,7 +1172,7 @@ begin
             
             FLOAT_WRITE_QUEUE: entity work.GenericStage2(Behavioral)
             generic map(
-                COMPARE_TAG => '1'
+                COMPARE_TAG => '0'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -1282,8 +1291,8 @@ begin
          
             issueTextI0 <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotIssueI0));
             issueTextM0 <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotIssueM0));
-            issueTextSVI <= getInsStringArray(SchedulerEntrySlotArray'(0 => dataToRegReadIntStoreValue));
-            issueTextSVF <= getInsStringArray(SchedulerEntrySlotArray'(0 => dataToRegReadFloatStoreValue));
+            issueTextSVI <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotIssueIntSV));
+            issueTextSVF <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotIssueFloatSV));
             issueTextF0 <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotIssueF0));
 
             
@@ -1318,9 +1327,6 @@ begin
          end generate;      
     end block; -- TEMP_EXEC
 
-    renamedDataToBQ <= setFullMask(renamedDataLivingRe, getBranchMask1(renamedDataLivingRe));
-    renamedDataToSQ <= setFullMask(renamedDataLivingReMem, getStoreMask1(renamedDataLivingRe));
-    renamedDataToLQ <= setFullMask(renamedDataLivingReMem, getLoadMask1(renamedDataLivingRe));
 
     BRANCH_QUEUE: entity work.BranchQueue
 	generic map(
