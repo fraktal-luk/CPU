@@ -125,6 +125,7 @@ function getIssueDynamicInfoArray(insVec: InstructionSlotArray; stA: StaticInfoA
 
 function getIssueInfoArray(insVec: InstructionSlotArray; constant HAS_IMM: boolean) return SchedulerInfoArray;
 
+function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean) return SchedulerInfoArray;
 
 function getSchedEntrySlot(info: SchedulerInfo) return SchedulerEntrySlot;
 function getSchedEntrySlotArray(infoA: SchedulerInfoArray) return SchedulerEntrySlotArray;
@@ -291,6 +292,21 @@ begin
         res(i).static := getIssueStaticInfo(insVec(i), HAS_IMM);
         res(i).dynamic := getIssueDynamicInfo(insVec(i), res(i).static, HAS_IMM);
     end loop;
+    return res;
+end function;
+
+function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean) return SchedulerInfoArray is
+    variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1);
+    variable slot: InstructionSlot := DEFAULT_INS_SLOT;
+begin
+    for i in res'range loop
+        slot := insVec(i);
+        slot.full := mask(i);
+        res(i).static := getIssueStaticInfo(slot, USE_IMM);
+        res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM);
+    end loop;
+    return res;
+    
     return res;
 end function;
 

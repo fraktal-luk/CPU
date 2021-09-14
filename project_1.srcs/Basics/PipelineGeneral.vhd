@@ -14,6 +14,10 @@ use work.InstructionState.all;
 
 package PipelineGeneral is
 
+
+type PhysicalSubpipe is (ALU, Mem, FP, StoreDataInt, StoreDataFloat);
+
+
 type ExecResult is record
     full: std_logic;
     tag: InsTag;
@@ -185,10 +189,13 @@ function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray
 function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
 
-function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray;
-function prepareForStoreValueFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray;
+function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray;
+function prepareForStoreValueFloatIQ(--insVecInt,
+                                     insVecFloat: InstructionSlotArray) return InstructionSlotArray;
 
 function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
+
+function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray;
 
 
 function clearRawInfo(ins: InstructionState) return InstructionState;      -- ip, bits; this is raw program data 
@@ -920,83 +927,40 @@ end function;
 
 
 
-function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray is
-    variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
+function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
 begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        --res(i).operation := (General, unknown);
-    
-        res(i).constantArgs.immSel := '0';
-        
-        res(i).virtualArgSpec.intDestSel := '0';
-        res(i).virtualArgSpec.floatDestSel := '0';                
-        
-        res(i).virtualArgSpec.intArgSel(0) := res(i).virtualArgSpec.intArgSel(2);
-        res(i).virtualArgSpec.intArgSel(1) := '0';
-        res(i).virtualArgSpec.intArgSel(2) := '0';                
-        res(i).virtualArgSpec.floatArgSel(0) := '0';
-        res(i).virtualArgSpec.floatArgSel(1) := '0';                                    
-        res(i).virtualArgSpec.floatArgSel(2) := '0';                
-        
-        res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
-        res(i).virtualArgSpec.args(1) := (others => '0');
-        res(i).virtualArgSpec.args(2) := (others => '0');
+    for i in 0 to PIPE_WIDTH-1 loop    
+        res(i).ins.constantArgs.immSel := '0';
 
-        res(i).physicalArgSpec.intDestSel := '0';
-        res(i).physicalArgSpec.floatDestSel := '0';                
+        res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+        res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;               
         
-        res(i).physicalArgSpec.intArgSel(0) := res(i).physicalArgSpec.intArgSel(2);
-        res(i).physicalArgSpec.intArgSel(1) := '0';                
-        res(i).physicalArgSpec.intArgSel(2) := '0';                
-        res(i).physicalArgSpec.floatArgSel(0) := '0';--res(i).virtualArgSpec.floatArgSel(2);
-        res(i).physicalArgSpec.floatArgSel(1) := '0';                                    
-        res(i).physicalArgSpec.floatArgSel(2) := '0';                
-        
-        res(i).physicalArgSpec.args(0) := res(i).physicalArgSpec.args(2);
-        res(i).physicalArgSpec.args(1) := (others => '0');                                              
-        res(i).physicalArgSpec.args(2) := (others => '0');                                              
+        res(i).ins.virtualArgSpec.intArgSel(0) := insVec(i).ins.virtualArgSpec.intArgSel(2);
+        res(i).ins.virtualArgSpec.args(0) := insVec(i).ins.virtualArgSpec.args(2);
+
+        res(i).ins.physicalArgSpec.intArgSel(0) := insVec(i).ins.physicalArgSpec.intArgSel(2);
+        res(i).ins.physicalArgSpec.args(0) := insVec(i).ins.physicalArgSpec.args(2);                                             
     end loop;
     
     return res;
 end function;
 
 
-function prepareForStoreValueFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray is
-    variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVecInt;
+function prepareForStoreValueFloatIQ(insVecFloat: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVecFloat;
 begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        --res(i).operation := (General, unknown);            
-    
-        res(i).constantArgs.immSel := '0';
+    for i in 0 to PIPE_WIDTH-1 loop    
+        res(i).ins.constantArgs.immSel := '0';
         
-        res(i).virtualArgSpec.intDestSel := '0';
-        res(i).virtualArgSpec.floatDestSel := '0';                
-        
-        res(i).virtualArgSpec.intArgSel(0) := '0';
-        res(i).virtualArgSpec.intArgSel(1) := '0';                
-        res(i).virtualArgSpec.intArgSel(2) := '0';                
-        res(i).virtualArgSpec.floatArgSel(0) := res(i).virtualArgSpec.floatArgSel(2);
-        res(i).virtualArgSpec.floatArgSel(1) := '0';                
-        res(i).virtualArgSpec.floatArgSel(2) := '0';                
-        
-        res(i).virtualArgSpec.args(0) := insVecFloat(i).virtualArgSpec.args(2);
-        res(i).virtualArgSpec.args(1) := (others => '0');
-        res(i).virtualArgSpec.args(2) := (others => '0');
-
-
-        res(i).physicalArgSpec.intDestSel := '0';
-        res(i).physicalArgSpec.floatDestSel := '0';                
-        
-        res(i).physicalArgSpec.intArgSel(0) := '0';
-        res(i).physicalArgSpec.intArgSel(1) := '0';                
-        res(i).physicalArgSpec.intArgSel(2) := '0';                
-        res(i).physicalArgSpec.floatArgSel(0) := res(i).physicalArgSpec.floatArgSel(2);
-        res(i).physicalArgSpec.floatArgSel(1) := '0';                
-        res(i).physicalArgSpec.floatArgSel(2) := '0';                
-        
-        res(i).physicalArgSpec.args(0) := insVecFloat(i).physicalArgSpec.args(2);
-        res(i).physicalArgSpec.args(1) := (others => '0');                                              
-        res(i).physicalArgSpec.args(2) := (others => '0');                                              
+        res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+        res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;
+              
+        res(i).ins.virtualArgSpec.floatArgSel(0) := insVecFloat(i).ins.virtualArgSpec.floatArgSel(2);
+        res(i).ins.virtualArgSpec.args(0) := insVecFloat(i).ins.virtualArgSpec.args(2);
+               
+        res(i).ins.physicalArgSpec.floatArgSel(0) := insVecFloat(i).ins.physicalArgSpec.floatArgSel(2);
+        res(i).ins.physicalArgSpec.args(0) := insVecFloat(i).ins.physicalArgSpec.args(2);                                            
     end loop;
     
     return res;
@@ -1016,6 +980,21 @@ begin
     
     return res;
 end function;
+
+function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i).ins.virtualArgSpec.intArgSel(2) := '0';
+        res(i).ins.virtualArgSpec.args(2) := (others => '0');
+        
+        res(i).ins.physicalArgSpec.intArgSel(2) := '0';
+        res(i).ins.physicalArgSpec.args(2) := (others => '0');                                                
+    end loop;
+    
+    return res;
+end function;
+
 
 function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(insArr'range) := insArr;
