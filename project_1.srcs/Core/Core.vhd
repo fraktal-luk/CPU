@@ -417,12 +417,12 @@ begin
            signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
            signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
            
-           signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
+           --signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO); 
         begin
             fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);
         
-            inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), aluMask);
+            --inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), aluMask);
             schedInfoA <= --work.LogicIssue.getIssueInfoArray(inputDataArray, true);
                           work.LogicIssue.getIssueInfoArray(TMP_recodeALU(renamedDataLivingRe), aluMask, true);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, FORWARDING_MODES_INT_D);
@@ -539,12 +539,12 @@ begin
            signal dataToAgu, dataToAguInt, dataToAguFloat, dataOutMem0,
                          dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-           signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);           
+           --signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);           
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
            
            signal memLoadValue: Mword := (others => '0');                                                            
         begin
-           inputDataArray <= TMP_removeArg2(makeSlotArray(extractData(renamedDataLivingReMem), memMask));
+           --inputDataArray <= TMP_removeArg2(makeSlotArray(extractData(renamedDataLivingReMem), memMask));
            schedInfoA <= --work.LogicIssue.getIssueInfoArray(inputDataArray, true);
                          work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true);
            
@@ -747,18 +747,18 @@ begin
             signal fmaIntSV, fmaFloatSV: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
             signal sendingToRegReadI, sendingToRegReadF: std_logic := '0';
 
-            signal inputDataArrayInt, inputDataArrayFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);            
+            --signal inputDataArrayInt, inputDataArrayFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);            
             signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoFloatA, schedInfoUpdatedFloatA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
         begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
 
-            inputDataArrayInt <= makeSlotArray((extractData(prepareForStoreValueIQ(renamedDataLivingReMem))), intStoreMask);
+            --inputDataArrayInt <= makeSlotArray((extractData(prepareForStoreValueIQ(renamedDataLivingReMem))), intStoreMask);
             schedInfoIntA <= --work.LogicIssue.getIssueInfoArray(inputDataArrayInt, false);
                              work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingReMem), intStoreMask, false);
             schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, FORWARDING_MODES_SV_INT_D);
 
-            inputDataArrayFloat <= makeSlotArray((--extractData(renamedDataLivingReMem),
-                                                                             extractData(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem))), fpStoreMask);
+            --inputDataArrayFloat <= makeSlotArray((--extractData(renamedDataLivingReMem),
+            --                                                                 extractData(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem))), fpStoreMask);
             schedInfoFloatA <= --work.LogicIssue.getIssueInfoArray(inputDataArrayFloat, false);
                                 work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem), fpStoreMask, false);
             schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, FORWARDING_MODES_SV_FLOAT_D);
@@ -879,12 +879,12 @@ begin
         SUBPIPE_FP0: block
             signal dataToFpu0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
             signal fmaF0: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);          
-            signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);            
+            --signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);            
             signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
         begin
             fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat);
 
-            inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), fpMask);
+            --inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), fpMask);
             schedInfoA <= --work.LogicIssue.getIssueInfoArray(inputDataArray, false);
                           work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingFloatRe), fpMask, false);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, FORWARDING_MODES_FLOAT_D);

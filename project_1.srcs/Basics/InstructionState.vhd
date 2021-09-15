@@ -295,7 +295,7 @@ type SchedulerState is record
     args: MwordArray(0 to 2);
     
     argLocsPipe: SmallNumberArray(0 to 2);
-    argLocsPhase: SmallNumberArray(0 to 2);	
+    --argLocsPhase: SmallNumberArray(0 to 2);	
     argSrc: SmallNumberArray(0 to 2);	
 end record;
 
@@ -325,7 +325,7 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       readNew => (others => '0'),
       args => (others => (others=>'0')),
       argLocsPipe => (others => (others => '0')),
-      argLocsPhase => (others => (others => '0')),
+      --argLocsPhase => (others => (others => '0')),
       argSrc => (others => (others => '0'))
       );
 

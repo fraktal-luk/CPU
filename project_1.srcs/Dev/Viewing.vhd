@@ -520,18 +520,18 @@ begin
         
         end case;        
     
-        case sl.state.argLocsPhase(i)(1 downto 0) is
-            when "11" => 
-                phase := "-1";
-            when "00" =>
-                phase := " 0";
-            when "01" =>
-                phase := " 1";
-            when "10" => 
-                phase := " 2";
-            when others =>
+--        case sl.state.argLocsPhase(i)(1 downto 0) is
+--            when "11" => 
+--                phase := "-1";
+--            when "00" =>
+--                phase := " 0";
+--            when "01" =>
+--                phase := " 1";
+--            when "10" => 
+--                phase := " 2";
+--            when others =>
             
-        end case;
+--        end case;
         
         return sub & ":" & phase; 
     end if;

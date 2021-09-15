@@ -20,6 +20,8 @@ use work.ForwardingNetwork.all;
 
 package LogicIssue is
 
+constant PHYS_NAME_NONE: PhysName := (others => '1');
+
 type StaticInfo is record
     operation: SpecificOp;
     
@@ -66,7 +68,7 @@ type DynamicInfo is record
     readyM2:    std_logic_vector(0 to 2);
 
     argLocsPipe: SmallNumberArray(0 to 2);
-    argLocsPhase: SmallNumberArray(0 to 2);
+    --argLocsPhase: SmallNumberArray(0 to 2);
     argSrc: SmallNumberArray(0 to 2);
 end record;
 
@@ -89,7 +91,7 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     readyM2 => (others => '0'),
 
     argLocsPipe => (others => (others => '0')),
-    argLocsPhase => (others => (others => '0')),
+    --argLocsPhase => (others => (others => '0')),
     argSrc => (others => (others => '0'))
 );
 
@@ -170,15 +172,11 @@ function extractFullMask(queueContent: SchedulerInfoArray) return std_logic_vect
 function prioSelect(elems: SchedulerInfoArray; selVec: std_logic_vector) return SchedulerInfo;
 function iqInputStageNext(content, newContent: SchedulerInfoArray; selMask, livingMask: std_logic_vector; prevSending, isSending, sendsInputStage, execEventSignal, lateEventSignal: std_logic) return SchedulerInfoArray;
 function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray;
-    function updateRR_T(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray;
-
 
 function getKillMask(content: SchedulerInfoArray; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector;
 
-
 function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vector) return SchedulerInfo;
-
 
 end LogicIssue;
 
@@ -218,8 +216,7 @@ begin
     
         if IMM_AS_REG then    
             if CLEAR_DEBUG_INFO then
-                res.immValue--(PhysName'length-1 downto 0) := (others => '0');
-                            (PhysName'length-2 downto 0) := (others => '0');
+                res.immValue(PhysName'length-2 downto 0) := (others => '0');
             end if;
         end if;
     end if;
@@ -244,9 +241,7 @@ begin
     res.argSpec := isl.ins.physicalArgSpec;
     
     res.staticPtr := (others => '0'); -- points to entry with static info
-    
     res.stored := (others => '0');
-
     res.missing := (isl.ins.physicalArgSpec.intArgSel and not stInfo.zero)
                                        or (isl.ins.physicalArgSpec.floatArgSel);                                   
     res.readyNow := (others => '0');
@@ -254,7 +249,7 @@ begin
     res.readyM2  := (others => '0');
 
     res.argLocsPipe := (others => (others => '0'));
-    res.argLocsPhase := (others => "00000010");
+    --res.argLocsPhase := (others => "00000010");
     res.argSrc := (others => "00000010");
     
     if HAS_IMM and isl.ins.constantArgs.immSel = '1' then
@@ -346,7 +341,7 @@ begin
     res.state.readyM2  := info.dynamic.readyM2;
 
     res.state.argLocsPipe := info.dynamic.argLocsPipe;
-    res.state.argLocsPhase:= info.dynamic.argLocsPhase;
+    --res.state.argLocsPhase:= info.dynamic.argLocsPhase;
     res.state.argSrc := info.dynamic.argSrc;
 
     res.state.args := (others => (others => '0'));
@@ -381,18 +376,18 @@ return SchedulerState is
 	variable res: SchedulerState := ss;
 begin
 	for i in 0 to 1 loop
-        case res.argLocsPhase(i)(2 downto 0) is
-            when "110" =>
-                res.argLocsPhase(i) := "00000111";        
-            when "111" =>
-                res.argLocsPhase(i) := "00000000";
-            when "000" =>
-                res.argLocsPhase(i) := "00000001";				
-            when others =>
-                res.argLocsPhase(i) := "00000010";
-        end case;
+--        case res.argLocsPhase(i)(2 downto 0) is
+--            when "110" =>
+--                res.argLocsPhase(i) := "00000111";        
+--            when "111" =>
+--                res.argLocsPhase(i) := "00000000";
+--            when "000" =>
+--                res.argLocsPhase(i) := "00000001";				
+--            when others =>
+--                res.argLocsPhase(i) := "00000010";
+--        end case;
 
-		res.argLocsPhase(i)(7 downto 3) := "00000";
+		--res.argLocsPhase(i)(7 downto 3) := "00000";
 		res.argLocsPipe(i)(7 downto 3) := "00000";
 	end loop;
 
@@ -400,32 +395,29 @@ begin
 end function;
 
 
-function updateArgInfo(ss: DynamicInfo;
-                       arg: natural;
-                       wakeups: WakeupStruct;
-                       selection: boolean)
+function updateArgInfo(ss: DynamicInfo; arg: natural; wakeups: WakeupStruct; selection: boolean)
 return DynamicInfo is
     variable res: DynamicInfo := ss;
     variable wakeupVec: std_logic_vector(0 to 2) := (others => '0');
     variable wakeupPhases: SmallNumberArray(0 to 2) := (others => (others => '0'));  
 begin
     if ss.missing(arg) = '1' then
-        res.argLocsPhase(arg) := wakeups.argLocsPhase;
+        --res.argLocsPhase(arg) := wakeups.argLocsPhase;
         res.argLocsPipe(arg) := wakeups.argLocsPipe;
         res.missing(arg) := not wakeups.match;
         
         res.argSrc(arg) := wakeups.argSrc;        
     else -- update loc
-        case ss.argLocsPhase(arg)(2 downto 0) is
-            when "110" =>
-                res.argLocsPhase(arg) := "00000111";
-            when "111" =>
-                res.argLocsPhase(arg) := "00000000";
-            when "000" =>
-                res.argLocsPhase(arg) := "00000001";
-            when others =>
-                res.argLocsPhase(arg) := "00000010";
-        end case;
+--        case ss.argLocsPhase(arg)(2 downto 0) is
+--            when "110" =>
+--                res.argLocsPhase(arg) := "00000111";
+--            when "111" =>
+--                res.argLocsPhase(arg) := "00000000";
+--            when "000" =>
+--                res.argLocsPhase(arg) := "00000001";
+--            when others =>
+--                res.argLocsPhase(arg) := "00000010";
+--        end case;
         
         if not selection then
             case res.argSrc(arg)(1 downto 0) is
@@ -477,8 +469,7 @@ begin
     if not res.full = '1' then
         res.ins.physicalArgSpec.intDestSel := '0';
         res.ins.physicalArgSpec.floatDestSel := '0';
-        res.ins.physicalArgSpec.dest := --(others => '0');
-                                        (others => '1');
+        res.ins.physicalArgSpec.dest := PHYS_NAME_NONE;
     end if;
     
     -- Clear unused fields       
@@ -496,10 +487,8 @@ function TMP_prepareDispatchSlot(input: SchedulerEntrySlot; prevSending: std_log
     variable res: SchedulerEntrySlot := input;
 begin
     if prevSending = '0' or (input.state.argSpec.intDestSel = '0' and input.state.argSpec.floatDestSel = '0') then
-        res.ins.physicalArgSpec.dest := --(others => '0'); -- Don't allow false notifications of args
-                                        (others => '1');
-        res.state.argSpec.dest := --(others => '0'); -- Don't allow false notifications of args
-                                  (others => '1');
+        res.ins.physicalArgSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
+        res.state.argSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
     end if;
     
     return res;
@@ -518,13 +507,11 @@ begin
             res.state.immValue(PhysName'length-2 downto 0) := res.state.argSpec.args(1)(6 downto 0);
         end if;
     
-        if res.state.--zero(0) = '1' then
-                     argSrc(0)(1) /= '1' then
+        if res.state.argSrc(0)(1) /= '1' then
             res.state.argSpec.args(0) := (others => '0');
         end if;
 
-        if res.state.--zero(1) = '1' then
-                     argSrc(1)(1) /= '1' or res.state.zero(1) = '1' then
+        if res.state.argSrc(1)(1) /= '1' or res.state.zero(1) = '1' then
             res.state.argSpec.args(1) := (others => '0');
         end if;
 
@@ -568,9 +555,7 @@ begin
             res.state.stored(1) := '1';
         elsif res.state.argSrc(1)(1 downto 0) = "01" then
             res.state.args(1) := fni.values1(slv2u(res.state.argLocsPipe(1)(1 downto 0)));
-            --if res.state.argSrc(1)(1 downto 0) = "01" then -- Redundant
-                res.state.stored(1) := '1';
-            --end if;
+            res.state.stored(1) := '1';
         else
             res.state.args(1) := (others => '0');
         end if;    
@@ -578,7 +563,7 @@ begin
         res.state.stored := (others => '0');
     end if;
 
-    res.state := updateIssueArgLocs(res.state);
+    --res.state := updateIssueArgLocs(res.state);
     
     return res;
 end function;
@@ -600,13 +585,6 @@ begin
         return res;
     end if;
 
---    if res.stored(0) = '1' then
---        null; -- Using stored arg
---    elsif res.readNew(0) = '1' then
---        res.args(0) := vals(slv2u(res.argLocsPipe(0)(1 downto 0)));
---    else
---        res.args(0) := regValues(0);
---    end if;
     if res.readNew(0) = '1' then
         res.args(0) := vals(slv2u(res.argLocsPipe(0)(1 downto 0)));
     else
@@ -615,14 +593,6 @@ begin
     
     res.stored(0) := '1';
 
---    if res.stored(1) = '1' then
---        null; -- Using stored arg
---    elsif res.readNew(1) = '1' then
---        res.args(1) := vals(slv2u(res.argLocsPipe(1)(1 downto 0)));
---    else
---        res.args(1) := regValues(1);
---    end if;
-    
     if res.readNew(1) = '1' then
         res.args(1) := vals(slv2u(res.argLocsPipe(1)(1 downto 0)));
     else
@@ -638,8 +608,7 @@ function extractReadyMask(entryVec: SchedulerInfoArray) return std_logic_vector 
     variable res: std_logic_vector(entryVec'range);
 begin	
     for i in res'range loop
-        res(i) := not isNonzero(entryVec(i).dynamic.missing(0 to 1))
-                                                                    ;--  and not entryVec(i).dynamic.issued;
+        res(i) := not isNonzero(entryVec(i).dynamic.missing(0 to 1));
     end loop;
     return res;
 end function;
@@ -710,8 +679,7 @@ begin
             if dataNewDataS(i).dynamic.issued = '1' then
                 dataNewDataS(i).dynamic.full := '0';
             end if;
-            dataNewDataS(i).dynamic.issued := --dataNewDataS(i).dynamic.issued or 
-                                                (selMaskInput(i) and sendsInputStage); -- To preserve 'issued' state if being issued from input stage
+            dataNewDataS(i).dynamic.issued := selMaskInput(i) and sendsInputStage; -- To preserve 'issued' state if being issued from input stage
         end loop;
 
 	-- Important, new instrucitons in queue must be marked!	
@@ -754,8 +722,7 @@ begin
         for k in 0 to 3 loop -- Further beyond end requires more full inputs to be filled: !! equiv to remainingMask(-1-k), where '1' for k < 0
             fillMask(i) := fillMask(i) or (iqRemainingMaskSh(i + 3-k) and compMask(k));
         end loop;
-	    
-	    
+   
 		iqFullMaskNext(i) := livingMaskSh(i) or (fillMask(i) and prevSending);
 		if fullMaskSh(i) = '1' then -- From x	
 			if remainMask(i) = '1' then
@@ -782,50 +749,43 @@ begin
 end function;
 
 
-function getWakeupStructStatic(arg: natural; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray; selection: boolean
-) return WakeupStruct is
+function getWakeupStructStatic(arg: natural; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray; selection: boolean)
+return WakeupStruct is
     variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
-    variable nMatches: natural;
-    variable matchVec, matchR1, matchR0, matchM1, matchM2, matchM3: std_logic_vector(0 to 2) := (others => '0');
+    variable matchVec: std_logic_vector(0 to 2) := (others => '0');
 begin
-    matchR1 := cmpR1;
-    matchR0 := cmpR0;
-    matchM1 := cmpM1;
-    matchM2 := cmpM2;
-    matchM3 := cmpM3;
-    
     for p in forwardingModes'range loop
         case forwardingModes(p).stage is
             when -3 =>
-                matchVec(p) := matchM3(p);
+                matchVec(p) := cmpM3(p);
             when -2 =>
-                matchVec(p) := matchM2(p);
+                matchVec(p) := cmpM2(p);
             when -1 =>
-                matchVec(p) := matchM1(p);
+                matchVec(p) := cmpM1(p);
             when 0 =>
-                matchVec(p) := matchR0(p);
+                matchVec(p) := cmpR0(p);
             when 1 =>
-                matchVec(p) := matchR1(p);
+                matchVec(p) := cmpR1(p);
             when others =>
                 matchVec(p) := '0';
         end case;
-    
+
         if matchVec(p) = '1' then
             res.argLocsPipe(2 downto 0) := i2slv(p, 3);
             res.argLocsPhase(2 downto 0) := i2slv(forwardingModes(p).stage + 1, 3);
-                if selection then
-                    if forwardingModes(p).stage + 1 > 2 then
-                        res.argSrc(1 downto 0) := i2slv(2, 2);
-                    else
-                        res.argSrc(1 downto 0) := i2slv(forwardingModes(p).stage + 1, 2);
-                    end if;             
+            if selection then
+                if forwardingModes(p).stage + 1 > 2 then
+                    res.argSrc(1 downto 0) := i2slv(2, 2);
                 else
-                    if forwardingModes(p).stage + 2 > 2 then
-                        res.argSrc(1 downto 0) := i2slv(2, 2);
-                    else
-                        res.argSrc(1 downto 0) := i2slv(forwardingModes(p).stage + 2, 2);
-                    end if;
+                    res.argSrc(1 downto 0) := i2slv(forwardingModes(p).stage + 1, 2);
+                end if;             
+            else
+                if forwardingModes(p).stage + 2 > 2 then
+                    res.argSrc(1 downto 0) := i2slv(2, 2);
+                else
+                    res.argSrc(1 downto 0) := i2slv(forwardingModes(p).stage + 2, 2);
                 end if;
+            end if;
         end if;
     end loop;   
     res.match := isNonzero(matchVec);
@@ -835,42 +795,36 @@ end function;
 
 function getWakeupStructDynamic(arg: natural; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray) return WakeupStruct is
     variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
-    variable nMatches: natural;
-    variable matchVec, matchR1, matchR0, matchM1, matchM2, matchM3: std_logic_vector(0 to 2) := (others => '0');
+    variable matchVec: std_logic_vector(0 to 2) := (others => '0');
 begin
-    matchR1 := cmpR1;
-    matchR0 := cmpR0;
-    matchM1 := cmpM1;
-    matchM2 := cmpM2;
-    matchM3 := cmpM3;
     
     for p in forwardingModes'range loop
         for q in -3 to 1 loop
             if forwardingModes(p).stage <= q then
                 case q is
                     when -3 =>
-                        matchVec(p) := matchM3(p);
+                        matchVec(p) := cmpM3(p);
                     when -2 =>
-                        matchVec(p) := matchM2(p);
+                        matchVec(p) := cmpM2(p);
                     when -1 =>
-                        matchVec(p) := matchM1(p);
+                        matchVec(p) := cmpM1(p);
                     when 0 =>
-                        matchVec(p) := matchR0(p);
+                        matchVec(p) := cmpR0(p);
                     when 1 =>
-                        matchVec(p) := matchR1(p);
+                        matchVec(p) := cmpR1(p);
                     when others =>
                         matchVec(p) := '0';
                 end case;
                 
                 if matchVec(p) = '1' then
                     res.argLocsPipe(2 downto 0) := i2slv(p, 3);
-                    res.argLocsPhase(2 downto 0) := i2slv(q + 1, 3);
+                    --res.argLocsPhase(2 downto 0) := i2slv(q + 1, 3);
                     
-                        if q + 2 > 2 then
-                            res.argSrc(1 downto 0) := i2slv(2, 2);
-                        else
-                            res.argSrc(1 downto 0) := i2slv(q + 2, 2);
-                        end if;
+                    if q + 2 > 2 then
+                        res.argSrc(1 downto 0) := i2slv(2, 2);
+                    else
+                        res.argSrc(1 downto 0) := i2slv(q + 2, 2);
+                    end if;
                     exit;
                 end if;               
             end if;
@@ -908,10 +862,7 @@ begin
 end function;
 
 function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
-                dynamic: boolean;
-                selection: boolean;
-                forwardingModes: ForwardingModeArray
-            )
+                dynamic: boolean; selection: boolean; forwardingModes: ForwardingModeArray)
 return SchedulerInfoArray is
 	variable res: SchedulerInfoArray(0 to schedArray'length-1);
 begin
@@ -1068,12 +1019,6 @@ begin
          end if;
          res(i).dynamic.issued := (selMask(i) and sendsInputStage);   
       end loop;
-
---   if execEventSignal = '1' or lateEventSignal = '1' then
---       for i in 0 to PIPE_WIDTH-1 loop
---           res(i).dynamic.full := '0';
-           
---       end loop;
        
    if prevSending = '1' then
        res := newContent;
@@ -1083,16 +1028,16 @@ begin
        end loop;    
    end if;
    
-        if prevSending = '0' then
-            for i in res'range loop
-                res(i).dynamic.newInQueue := '0';
-            end loop;
-        end if;
+    if prevSending = '0' then
+        for i in res'range loop
+            res(i).dynamic.newInQueue := '0';
+        end loop;
+    end if;
    
    for i in 0 to PIPE_WIDTH-1 loop
-            if res(i).dynamic.full /= '1' and (res(i).dynamic.argSpec.intDestSel or res(i).dynamic.argSpec.floatDestSel) /= '1' then
-                res(i).dynamic.argSpec.dest := (others => '1');
-            end if;
+        if res(i).dynamic.full /= '1' and (res(i).dynamic.argSpec.intDestSel or res(i).dynamic.argSpec.floatDestSel) /= '1' then
+            res(i).dynamic.argSpec.dest := (others => '1');
+        end if;
 
        if res(i).dynamic.full /= '1' or res(i).dynamic.issued = '1' then
            res(i).dynamic.missing(0 to 1) := "11";
@@ -1123,33 +1068,12 @@ begin
    return res;
 end function;
 
-    function updateRR_T(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray is
-       variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := newContent;
-       variable rrf: std_logic_vector(0 to 2) := (others=>'0');      	   
-    begin
-       for i in 0 to PIPE_WIDTH-1 loop
-           rrf := rr(3*i to 3*i + 2);
-    --        if newContent(i).dynamic.newInQueue = '1' then   
-                  res(i).dynamic.missing := res(i).dynamic.missing and not rrf;
-    --        end if;
-           if res(i).dynamic.full /= '1' or res(i).dynamic.issued = '1' then
-               --res(i).dynamic.missing(0 to 1) := "11";
-           end if;
-       end loop;
-       
-       for i in 1 to PIPE_WIDTH-1 loop
-           res(i).dynamic.renameIndex := clearTagLow(res(0).dynamic.renameIndex) or i2slv(i, TAG_SIZE);
-       end loop;
-       return res;
-    end function;
-
 function getKillMask(content: SchedulerInfoArray; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector is
     variable res: std_logic_vector(0 to content'length-1);
 begin
     for i in 0 to content'length-1 loop
-        res(i) := killByTag(compareTagBefore(causing.tags.renameIndex, content(i).dynamic.renameIndex),
-                                    execEventSig, lateEventSig);
+        res(i) := killByTag(compareTagBefore(causing.tags.renameIndex, content(i).dynamic.renameIndex), execEventSig, lateEventSig);
     end loop;
     return res;
 end function;
