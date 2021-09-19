@@ -52,6 +52,7 @@ type StaticInfoArray is array(natural range <>) of StaticInfo;
 
 type DynamicInfo is record
     full: std_logic;
+    active: std_logic;
 
     issued: std_logic;
     newInQueue: std_logic;
@@ -75,6 +76,7 @@ end record;
 
 constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     full => '0',
+    active => '0',
 
     issued => '0',
     newInQueue => '0',
@@ -233,7 +235,7 @@ function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant 
     variable res: DynamicInfo;
 begin
     res.full := isl.full;
-
+        res.active := res.full;
     res.issued := '0';
     res.newInQueue := '1';
     
@@ -608,7 +610,8 @@ function extractReadyMask(entryVec: SchedulerInfoArray) return std_logic_vector 
     variable res: std_logic_vector(entryVec'range);
 begin	
     for i in res'range loop
-        res(i) := not isNonzero(entryVec(i).dynamic.missing(0 to 1));
+        res(i) := not isNonzero(entryVec(i).dynamic.missing(0 to 1))
+                                        and entryVec(i).dynamic.active;
     end loop;
     return res;
 end function;
@@ -675,18 +678,13 @@ return SchedulerInfoArray is
 	variable livingMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := livingMask;
 	variable fillMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');	
 begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            if dataNewDataS(i).dynamic.issued = '1' then
-                dataNewDataS(i).dynamic.full := '0';
-            end if;
-            dataNewDataS(i).dynamic.issued := selMaskInput(i) and sendsInputStage; -- To preserve 'issued' state if being issued from input stage
-        end loop;
+    for i in 0 to PIPE_WIDTH-1 loop
+        if dataNewDataS(i).dynamic.issued = '1' then
+            dataNewDataS(i).dynamic.full := '0';
+        end if;
+        dataNewDataS(i).dynamic.issued := selMaskInput(i) and sendsInputStage; -- To preserve 'issued' state if being issued from input stage
+    end loop;
 
-	-- Important, new instrucitons in queue must be marked!	
-	for i in 0 to PIPE_WIDTH-1 loop
-		dataNewDataS(i).dynamic.newInQueue := '1';
-	end loop;
-  
 	xVecS := queueContent & dataNewDataS;
 	
 	-- What is being issued now is marked
@@ -702,14 +700,11 @@ begin
     end loop;
 	
 	xVecS(QUEUE_SIZE) := xVecS(QUEUE_SIZE-1);
-	for i in 0 to QUEUE_SIZE + PIPE_WIDTH - 1 loop
-		xVecS(i).dynamic.newInQueue := '0';
-	end loop;
 
 	for i in 0 to QUEUE_SIZE-2 loop
 		livingMaskSh(i) := livingMask(i) and (livingMask(i+1) or not sent);
 		fullMaskSh(i) := fullMask(i) and (fullMask(i+1) or not sent);			
-	end loop;	
+	end loop;
 	livingMaskSh(QUEUE_SIZE-1) := livingMask(QUEUE_SIZE-1) and ('0' or not sent);
 	fullMaskSh(QUEUE_SIZE-1) := fullMask(QUEUE_SIZE-1) and ('0' or not sent);
 
@@ -743,6 +738,7 @@ begin
 	       res(i).dynamic.missing(0 to 1) := "11";
 	   end if;	   
 	   res(i).dynamic.stored := (others => '0');
+	   res(i).dynamic.active := res(i).dynamic.full and not res(i).dynamic.issued;
 	end loop;
 
 	return res;
@@ -1017,7 +1013,8 @@ begin
          if res(i).dynamic.issued = '1' then
             res(i).dynamic.full := '0';
          end if;
-         res(i).dynamic.issued := (selMask(i) and sendsInputStage);   
+         res(i).dynamic.issued := (selMask(i) and sendsInputStage);
+         res(i).dynamic.active := res(i).dynamic.full and not res(i).dynamic.issued;  
       end loop;
        
    if prevSending = '1' then
@@ -1025,14 +1022,15 @@ begin
    elsif isSending = '1' then -- Clearing everything - sent to main queue
        for i in 0 to PIPE_WIDTH-1 loop
            res(i).dynamic.full := '0';
+           res(i).dynamic.active := '0';
        end loop;    
    end if;
    
-    if prevSending = '0' then
-        for i in res'range loop
-            res(i).dynamic.newInQueue := '0';
-        end loop;
-    end if;
+--    if prevSending = '0' then
+--        for i in res'range loop
+--            res(i).dynamic.newInQueue := '0';
+--        end loop;
+--    end if;
    
    for i in 0 to PIPE_WIDTH-1 loop
         if res(i).dynamic.full /= '1' and (res(i).dynamic.argSpec.intDestSel or res(i).dynamic.argSpec.floatDestSel) /= '1' then

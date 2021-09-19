@@ -105,9 +105,9 @@ architecture Behavioral of IssueQueue is
             res(i).killed := killByTag(compareTagBefore(events.execCausing.tags.renameIndex, content(i).dynamic.renameIndex), events.execEvent, events.lateEvent);
             res(i).living := res(i).full and not res(i).killed;
             
-            res(i).ready := not isNonzero(content(i).dynamic.missing(0 to 1));-- and not content(i).dynamic.issued;
+            res(i).ready := not isNonzero(content(i).dynamic.missing(0 to 1)) and content(i).dynamic.active;
             
-            res(i).readyFull := res(i).ready and res(i).full;
+            res(i).readyFull := res(i).ready;-- and res(i).full;
             res(i).readyLiving := res(i).ready and res(i).living;
 
             readyFullVec(i) := res(i).readyFull;
@@ -243,15 +243,23 @@ begin
     controlSigs <= getControlSignals(queueContentUpdatedSel & inputStageUpdatedSel, events);               
 
     -- Vector signals
-        killMask <= getKillMask(queueContent, events.execCausing, events.execEvent, events.lateEvent);
-        fullMask <= extractFullMask(queueContent);
-        livingMask <= fullMask and not killMask;
+        killMask <= --getKillMask(queueContent, events.execCausing, events.execEvent, events.lateEvent);
+                    killMaskExt(0 to IQ_SIZE-1);
+        fullMask <= --extractFullMask(queueContent);
+                    fullMaskExt(0 to IQ_SIZE-1);
+        livingMask <= --fullMask and not killMask;
+                     livingMaskExt(0 to IQ_SIZE-1);
+        readyMaskAll <= --extractReadyMask(queueContentUpdatedSel); -- USED for selection
+                        readyMaskAllExt(0 to IQ_SIZE-1);
+        readyMaskFull <= --readyMaskAll and fullMask;
+                         readyMaskFullExt(0 to IQ_SIZE-1);
+
+                            	
+        readyMaskLive <= --readyMaskAll and livingMask;
+                        readyMaskLiveExt(0 to IQ_SIZE-1);
     
-        readyMaskAll <= extractReadyMask(queueContentUpdatedSel); -- USED for selection
-        readyMaskFull <= readyMaskAll and fullMask;	
-        readyMaskLive <= readyMaskAll and livingMask;
-    
-        selMask <= getFirstOne(readyMaskFull);
+        selMask <= --getFirstOne(readyMaskFull);
+                    selMaskExt(0 to IQ_SIZE-1);
         
         killMaskExt <= getKilledVec(controlSigs);
         fullMaskExt <= getFullVec(controlSigs);
