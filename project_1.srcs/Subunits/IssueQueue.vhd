@@ -64,18 +64,25 @@ architecture Behavioral of IssueQueue is
 
 
         signal fullMaskExt, fullMaskExtNext, killMaskExt, killMaskExtPrev, livingMaskExt, readyMaskAllExt, readyMaskFullExt, readyMaskLiveExt,
-                   cancelledMaskExt, selMaskExt, selMaskExtPrev: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others=>'0');
+                   cancelledMaskExt, selMaskExt, selMaskExtPrev,
+                   fullMaskExt_T, killMaskExt_T, readyMaskAllExt_T, selMaskExt_T
+                   
+                   : std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others=>'0');
                    
         signal livingMaskInput, selMaskInput: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
                
         signal queueContentExt, queueContentExtNext, queueContentUpdatedExt, queueContentUpdatedSelExt: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
+
+        signal queueContentExt_T, queueContentExtRR_T, queueContentExtNext_T,   qc0, qc1, qc2, qc3, queueContentUpdatedExt_T, queueContentUpdatedSelExt_T
+        : SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
+
                                                                                                                                                        
 	signal anyReadyAll, anyReadyFull, anyReadyFullMain, anyReadyLive, sends, sendsMainQueue, sendsInputStage, sendingKilled, isSent, isSentMainQueue, isSentMainQueue_T, sentKilled,
 	           acceptingMain, inputStageSending: std_logic := '0';
-	signal dispatchDataNew: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+	signal dispatchDataNew, dispatchDataNew_T: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
     signal fma: ForwardingMatchesArray(0 to IQ_SIZE-1) := (others => DEFAULT_FORWARDING_MATCHES);
-    signal fmaExt: ForwardingMatchesArray(0 to IQ_SIZE + PIPE_WIDTH -1) := (others => DEFAULT_FORWARDING_MATCHES);
+    signal fmaExt, fmaExt_T: ForwardingMatchesArray(0 to IQ_SIZE + PIPE_WIDTH -1) := (others => DEFAULT_FORWARDING_MATCHES);
    
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
     
@@ -92,7 +99,7 @@ architecture Behavioral of IssueQueue is
     
     type SlotControlArray is array(natural range <>) of SlotControl;
     
-    signal controlSigs, controlSigsPrev: SlotControlArray(0 to QUEUE_SIZE_EXT-1);
+    signal controlSigs, controlSigsPrev, controlSigs_T: SlotControlArray(0 to QUEUE_SIZE_EXT-1);
     
     function getControlSignals(content: SchedulerInfoArray; events: EventState) return SlotControlArray is
         variable res: SlotControlArray(content'range);
@@ -197,6 +204,15 @@ architecture Behavioral of IssueQueue is
         return '0';
     end function;
     
+    function updateRegStatus(content: SchedulerInfoArray; rrf: std_logic_vector) return SchedulerInfoArray is
+        variable res: SchedulerInfoArray(content'range) := content;
+        variable earlyStage: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1);
+    begin
+        earlyStage := updateRR(earlyStage, rrf);
+        res(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1) := earlyStage;
+        return res;
+    end function;
+    
     signal fmaInputStage: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);    
     signal inputStage, inputStage_T, inputStageNext: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);          
     signal inputStageAny, inputStageLivingAny, inputReadingAny: std_logic := '0';
@@ -206,6 +222,8 @@ architecture Behavioral of IssueQueue is
 begin
     fma <= findForwardingMatchesArray(queueContent, fni);
     fmaInputStage <= findForwardingMatchesArray(inputStage, fni);    
+
+        fmaExt_T <= findForwardingMatchesArray(queueContentExt_T, fni);
 
         INPUT_SYNCHRONOUS: process(clk)
             variable rm: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
@@ -228,6 +246,7 @@ begin
 	begin
 		if rising_edge(clk) then		
     		queueContent <= queueContentNext;
+        		queueContentExt_T <= queueContentExtNext_T;
             inputStagePreRR <= inputStageNext;
 			
 			selMaskPrev <= selMask;
@@ -241,47 +260,40 @@ begin
 
 
     controlSigs <= getControlSignals(queueContentUpdatedSel & inputStageUpdatedSel, events);               
+    controlSigs_T <= getControlSignals(queueContentUpdatedSelExt_T, events);               
 
     -- Vector signals
-        killMask <= --getKillMask(queueContent, events.execCausing, events.execEvent, events.lateEvent);
-                    killMaskExt(0 to IQ_SIZE-1);
-        fullMask <= --extractFullMask(queueContent);
-                    fullMaskExt(0 to IQ_SIZE-1);
-        livingMask <= --fullMask and not killMask;
-                     livingMaskExt(0 to IQ_SIZE-1);
-        readyMaskAll <= --extractReadyMask(queueContentUpdatedSel); -- USED for selection
-                        readyMaskAllExt(0 to IQ_SIZE-1);
-        readyMaskFull <= --readyMaskAll and fullMask;
-                         readyMaskFullExt(0 to IQ_SIZE-1);
-
-                            	
-        readyMaskLive <= --readyMaskAll and livingMask;
-                        readyMaskLiveExt(0 to IQ_SIZE-1);
-    
-        selMask <= --getFirstOne(readyMaskFull);
-                    selMaskExt(0 to IQ_SIZE-1);
+        killMask <= killMaskExt(0 to IQ_SIZE-1);
+        fullMask <= fullMaskExt(0 to IQ_SIZE-1);
+        livingMask <= livingMaskExt(0 to IQ_SIZE-1);
+        readyMaskAll <= readyMaskAllExt(0 to IQ_SIZE-1);
+        readyMaskFull <= readyMaskFullExt(0 to IQ_SIZE-1);                   	
+        readyMaskLive <= readyMaskLiveExt(0 to IQ_SIZE-1);
+        selMask <= selMaskExt(0 to IQ_SIZE-1);
         
         killMaskExt <= getKilledVec(controlSigs);
+            killMaskExt_T <= getKilledVec(controlSigs_T);
         fullMaskExt <= getFullVec(controlSigs);
+            fullMaskExt_T <= getFullVec(controlSigs_T);
         livingMaskExt <= getLivingVec(controlSigs);
         
         readyMaskAllExt <= getReadyVec(controlSigs);
+            readyMaskAllExt_T <= getReadyVec(controlSigs_T);
         readyMaskFullExt <= getReadyFullVec(controlSigs);
         readyMaskLiveExt <= getReadyLiveVec(controlSigs);
         
         selMaskExt <= getSelectedVec(controlSigs);
-    
-    
+            selMaskExt_T <= getSelectedVec(controlSigs_T);
+   
         killMaskInput <= getKillMask(inputStage, events.execCausing, events.execEvent, events.lateEvent);
         livingMaskInput <= extractFullMask(inputStage) and not killMaskInput;
         selMaskInput <= selMaskExt(IQ_SIZE to IQ_SIZE + PIPE_WIDTH - 1);
     
     -- Scalar signals
         sendsMainQueue <= anyReadyFullMain and nextAccepting;
-            sendsInputStage <= anyReadyFull and not anyReadyFullMain and nextAccepting; -- to Issue
+        sendsInputStage <= anyReadyFull and not anyReadyFullMain and nextAccepting; -- to Issue
     
-            inputStageSending <= inputStageAny and acceptingMain and not events.execEvent and not events.lateEvent; -- to main queue
-
+        inputStageSending <= inputStageAny and acceptingMain and not events.execEvent and not events.lateEvent; -- to main queue
     
         isSentMainQueue <= getSentMainQueue(queueContent);
     
@@ -293,7 +305,6 @@ begin
         sendingKilled <= isNonzero(killMaskExt and selMaskExt);
 
         inputStageAny <= isNonzero(extractFullMask(inputStage));
-
 
     -- Content manipulation
     queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, false, false, FORWARDING_D);
@@ -309,7 +320,18 @@ begin
                                       '0',
                                       inputStageSending
                                       );
+        
+        
+        queueContentExtRR_T <= updateRegStatus(queueContentExt_T, rrfStored);
+        queueContentUpdatedExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, false, FORWARDING_D);
+        queueContentUpdatedSelExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, true, FORWARDING);       
+        queueContentExtNext_T <= iqNext_T(queueContentUpdatedExt_T, newArr, prevSendingOK, sends, killMaskExt_T, selMaskExt_T  , 0);
 
+                qc0 <= iqNext_T(queueContentExt_T, newArr, prevSendingOK, sends, killMaskExt_T, selMaskExt_T  , 1);
+                qc1 <= iqNext_T(queueContentExt_T, newArr, prevSendingOK, sends, killMaskExt_T, selMaskExt_T  , 2);
+                qc2 <= iqNext_T(queueContentExt_T, newArr, prevSendingOK, sends, killMaskExt_T, selMaskExt_T  , 3);
+                qc3 <= iqNext_T(queueContentExt_T, newArr, prevSendingOK, sends, killMaskExt_T, selMaskExt_T  , 4);
+        
     inputStage <= updateRR(inputStagePreRR, rrfStored);
         
     inputStageUpdated <= updateSchedulerArray(inputStage, fni, fmaInputStage, false, false, FORWARDING_D);
@@ -321,15 +343,14 @@ begin
     queueContentExt <= queueContent & inputStage;
     fmaExt <= fma & fmaInputStage;
 
-
-        queueContentUpdatedSelExt(0 to IQ_SIZE-1) <= queueContentUpdatedSel;
-        queueContentUpdatedSelExt(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1) <= inputStageUpdatedSel;
-
+    queueContentUpdatedSelExt(0 to IQ_SIZE-1) <= queueContentUpdatedSel;
+    queueContentUpdatedSelExt(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1) <= inputStageUpdatedSel;
 
     -- Output signals
-
     dispatchDataNew <= getSchedEntrySlot(prioSelect16(queueContentUpdatedSelExt, readyMaskAllExt));
-
+        dispatchDataNew_T <= getSchedEntrySlot(prioSelect16(queueContentUpdatedSelExt_T, readyMaskAllExt_T));
+        ch0 <= bool2std(dispatchDataNew = dispatchDataNew_T);
+        
 	acceptingMain <= not fullMask(IQ_SIZE-PIPE_WIDTH);
 
 	acceptingOut <= acceptingMain;
