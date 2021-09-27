@@ -797,7 +797,8 @@ end function;
     return SchedulerInfoArray is
         constant LEN: natural := queueContent'length;
         constant MAIN_LEN: natural := queueContent'length - PIPE_WIDTH;
-        variable res: SchedulerInfoArray(queueContent'range) := queueContent; 
+        variable res: SchedulerInfoArray(queueContent'range) := queueContent;
+        variable shifted1, shifted2: SchedulerInfoArray(0 to MAIN_LEN-1) := (others => DEFAULT_SCHEDULER_INFO);
         variable fullMask, fullMaskNew: std_logic_vector(queueContent'range) := extractFullMask(queueContent);
         variable fullMaskIn: std_logic_vector(0 to PIPE_WIDTH-1) := extractFullMask(inputData);
         variable fullMaskEarly: std_logic_vector(0 to PIPE_WIDTH-1) := fullMask(MAIN_LEN to LEN-1);
@@ -835,13 +836,25 @@ end function;
         
               
         -- Shift (compact) content!
-
+        shifted1(0 to MAIN_LEN-2) := res(1 to MAIN_LEN-1); 
+        shifted2(0 to MAIN_LEN-3) := res(2 to MAIN_LEN-1); 
+        
         if e1 = e2 and e1 >= 0 and e1 < MAIN_LEN-2 then
-            res(e1 to MAIN_LEN-3) := res(e1 + 2 to MAIN_LEN-1);
-            res(MAIN_LEN-2 to MAIN_LEN-1) := (others => DEFAULT_SCHEDULER_INFO); -- TMP
+            --res(e1 to MAIN_LEN-3) := res(e1 + 2 to MAIN_LEN-1);
+            for i in 0 to MAIN_LEN-1 loop
+                if i >= e1 then
+                    res(i) := shifted2(i);
+                end if;
+            end loop;
+            --res(MAIN_LEN-2 to MAIN_LEN-1) := (others => DEFAULT_SCHEDULER_INFO); -- TMP
         elsif e1 >= 0 and e1 < MAIN_LEN-1 then
-            res(e1 to MAIN_LEN-2) := res(e1 + 1 to MAIN_LEN-1);
-            res(MAIN_LEN-1 to MAIN_LEN-1) := (others => DEFAULT_SCHEDULER_INFO); -- TMP
+            --res(e1 to MAIN_LEN-2) := res(e1 + 1 to MAIN_LEN-1);
+            for i in 0 to MAIN_LEN-1 loop
+                if i >= e1 then
+                    res(i) := shifted1(i);
+                end if;
+            end loop;
+            --res(MAIN_LEN-1 to MAIN_LEN-1) := (others => DEFAULT_SCHEDULER_INFO); -- TMP
         end if;
 
                 if TEST_MODE = 2 then

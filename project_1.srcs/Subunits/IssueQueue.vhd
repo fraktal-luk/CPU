@@ -63,7 +63,7 @@ architecture Behavioral of IssueQueue is
     signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
 
 
-        signal fullMaskExt, fullMaskExtNext, killMaskExt, killMaskExtPrev, livingMaskExt, readyMaskAllExt, readyMaskFullExt, readyMaskLiveExt,
+        signal fullMaskExt, fullMaskExtNext, killMaskExt, killMaskExtPrev, livingMaskExt, readyMaskAllExt, readyMaskFullExt, readyMaskLiveExt, readyMaskLiveExt_T,
                    cancelledMaskExt, selMaskExt, selMaskExtPrev,
                    fullMaskExt_T, killMaskExt_T, readyMaskAllExt_T, selMaskExt_T
                    
@@ -77,7 +77,8 @@ architecture Behavioral of IssueQueue is
         : SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
 
                                                                                                                                                        
-	signal anyReadyAll, anyReadyFull, anyReadyFullMain, anyReadyLive, sends, sendsMainQueue, sendsInputStage, sendingKilled, isSent, isSentMainQueue, isSentMainQueue_T, sentKilled,
+	signal anyReadyAll, anyReadyFull, anyReadyFull_T, anyReadyFullMain, anyReadyLive, anyReadyLive_T, sends, sends_T, sendsMainQueue, sendsInputStage, sendingKilled, sendingKilled_T
+	               , isSent, isSentMainQueue, isSentMainQueue_T, sentKilled, sentKilled_T,
 	           acceptingMain, inputStageSending: std_logic := '0';
 	signal dispatchDataNew, dispatchDataNew_T: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
@@ -245,9 +246,9 @@ begin
 	QUEUE_SYNCHRONOUS: process(clk) 	
 	begin
 		if rising_edge(clk) then		
-    		queueContent <= queueContentNext;
+    		--queueContent <= queueContentNext;
         		queueContentExt_T <= queueContentExtNext_T;
-            inputStagePreRR <= inputStageNext;
+            --inputStagePreRR <= inputStageNext;
 			
 			selMaskPrev <= selMask;
 			killMaskPrev <= killMask;
@@ -281,6 +282,7 @@ begin
             readyMaskAllExt_T <= getReadyVec(controlSigs_T);
         readyMaskFullExt <= getReadyFullVec(controlSigs);
         readyMaskLiveExt <= getReadyLiveVec(controlSigs);
+            readyMaskLiveExt_T <= getReadyLiveVec(controlSigs_T);
         
         selMaskExt <= getSelectedVec(controlSigs);
             selMaskExt_T <= getSelectedVec(controlSigs_T);
@@ -298,12 +300,17 @@ begin
         isSentMainQueue <= getSentMainQueue(queueContent);
     
         anyReadyLive <= isNonzero(readyMaskLiveExt);
+            anyReadyLive_T <= isNonzero(readyMaskLiveExt_T);
         anyReadyFull <= isNonzero(readyMaskFullExt);
+            anyReadyFull_T <= isNonzero(readyMaskAllExt_T);            
         anyReadyFullMain <= isNonzero(readyMaskFull);
     
         sends <= anyReadyFull and nextAccepting;
         sendingKilled <= isNonzero(killMaskExt and selMaskExt);
 
+            sends_T <= anyReadyFull_T and nextAccepting;
+            sendingKilled_T <= isNonzero(killMaskExt_T and selMaskExt_T);
+        
         inputStageAny <= isNonzero(extractFullMask(inputStage));
 
     -- Content manipulation
@@ -325,7 +332,7 @@ begin
         queueContentExtRR_T <= updateRegStatus(queueContentExt_T, rrfStored);
         queueContentUpdatedExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, false, FORWARDING_D);
         queueContentUpdatedSelExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, true, FORWARDING);       
-        queueContentExtNext_T <= iqNext_T(queueContentUpdatedExt_T, newArr, prevSendingOK, sends, killMaskExt_T, selMaskExt_T  , 0);
+        queueContentExtNext_T <= iqNext_T(queueContentUpdatedExt_T, newArr, prevSendingOK, sends_T, killMaskExt_T, selMaskExt_T  , 0);
 
                 qc0 <= iqNext_T(queueContentExt_T, newArr, prevSendingOK, sends, killMaskExt_T, selMaskExt_T  , 1);
                 qc1 <= iqNext_T(queueContentExt_T, newArr, prevSendingOK, sends, killMaskExt_T, selMaskExt_T  , 2);
@@ -353,15 +360,25 @@ begin
         
 	acceptingMain <= not fullMask(IQ_SIZE-PIPE_WIDTH);
 
-	acceptingOut <= acceptingMain;
-	acceptingMore <= not fullMask(IQ_SIZE-2*PIPE_WIDTH);
+	acceptingOut <= --acceptingMain;
+	                --  not inputStageAny;
+	                not isNonzero(fullMaskExt_T(4 to 7));
+	                 
+	acceptingMore <= --not fullMask(IQ_SIZE-2*PIPE_WIDTH);
+	                  --acceptingMain; 
+	                  not isNonzero(fullMaskExt_T(0 to 7));
 
-	schedulerOut <= TMP_restoreState(sends, dispatchDataNew.ins, dispatchDataNew.state);
+	schedulerOut <= TMP_restoreState(--sends, --dispatchDataNew.ins, dispatchDataNew.state);
+	                                 sends_T, dispatchDataNew_T.ins, dispatchDataNew_T.state);
 	
-    outputSignals <= (sending => sends,
-                      cancelled => sentKilled,
-                      ready => anyReadyLive,
-                      empty => not fullMask(0));
+    outputSignals <= --(sending => sends,
+                     -- cancelled => sentKilled,
+                     -- ready => anyReadyLive,
+                     -- empty => not fullMask(0));            
+                      (sending => sends_T,
+                        cancelled => sentKilled_T,
+                        ready => anyReadyLive_T,
+                        empty => not isNonzero(fullMaskExt_T));
     
     VIEW: if VIEW_ON generate
         use work.Viewing.all;
