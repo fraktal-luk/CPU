@@ -17,6 +17,7 @@ function findAvailable(mask: std_logic_vector) return integer;           -- find
 function findCompletelyAvailable(mask: std_logic_vector) return integer; -- finds first empty [even:odd] pair
 
 function findInsertion(pA, cA: integer; fullMask, inputMask: std_logic_vector) return integer;
+function findInsertionSimplified(pA, cA: integer; fullMask, inputMask: std_logic_vector) return integer;
 
 end Helpers;
 
@@ -116,5 +117,20 @@ begin
     return -1;
 end function;
 
+function findInsertionSimplified(pA, cA: integer; fullMask, inputMask: std_logic_vector) return integer is
+    constant oddPa: boolean := (pA mod 2) /= 0;
+begin
+    if inputMask(0) = '1' then
+        return cA;
+    elsif inputMask(1) = '1' then
+        return cA;
+    elsif inputMask(2) = '1' then
+        return cA-2;
+    else
+        return cA-2;
+    end if;
+    
+    return -1;
+end function;
 
 end package body;

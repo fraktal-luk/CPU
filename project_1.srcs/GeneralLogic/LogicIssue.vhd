@@ -149,26 +149,27 @@ function updateDispatchArgs(st: SchedulerState; vals: MwordArray; regValues: Mwo
 
 function TMP_setUntil(selVec: std_logic_vector; nextAccepting: std_logic) return std_logic_vector;
 
-function iqContentNext(queueContent: SchedulerInfoArray; inputDataS: SchedulerInfoArray;
-                         killMask, selMask: std_logic_vector;
-                         livingMaskInput, selMaskInput: std_logic_vector;
-                         sends, sent, sendsInputStage, sentInputStage, sentUnexpected, prevSending: std_logic)
-return SchedulerInfoArray;
+--function iqContentNext(queueContent: SchedulerInfoArray; inputDataS: SchedulerInfoArray;
+--                         killMask, selMask: std_logic_vector;
+--                         livingMaskInput, selMaskInput: std_logic_vector;
+--                         sends, sent, sendsInputStage, sentInputStage, sentUnexpected, prevSending: std_logic)
+--return SchedulerInfoArray;
 
     function iqNext_T(queueContent: SchedulerInfoArray;
                       inputData: SchedulerInfoArray;
                       
                       prevSending, sends: std_logic;
                       killMask, selMask: std_logic_vector;
-                      TEST_MODE: natural
-
-                             --; inputDataS: SchedulerInfoArray;
-                             --killMask, selMask: std_logic_vector;
-                             --livingMaskInput, selMaskInput: std_logic_vector;
-                             --sends, sent, sendsInputStage, sentInputStage, sentUnexpected, prevSending: std_logic
-                             )
+                      TEST_MODE: natural)
     return SchedulerInfoArray;
 
+    function iqNext_N(queueContent: SchedulerInfoArray;
+                      inputData: SchedulerInfoArray;
+                      
+                      prevSending, sends: std_logic;
+                      killMask, selMask: std_logic_vector;
+                      TEST_MODE: natural)
+    return SchedulerInfoArray;
 
 function extractReadyMask(entryVec: SchedulerInfoArray) return std_logic_vector;
 
@@ -667,97 +668,97 @@ begin
     return res;    
 end function;
 	
-function iqContentNext(queueContent: SchedulerInfoArray; inputDataS: SchedulerInfoArray;
-                         killMask, selMask: std_logic_vector;
-                         livingMaskInput, selMaskInput: std_logic_vector;
-                         sends, sent, sendsInputStage, sentInputStage, sentUnexpected, prevSending: std_logic)
-return SchedulerInfoArray is
-	constant QUEUE_SIZE: natural := queueContent'length;
-	variable res: SchedulerInfoArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
+--function iqContentNext(queueContent: SchedulerInfoArray; inputDataS: SchedulerInfoArray;
+--                         killMask, selMask: std_logic_vector;
+--                         livingMaskInput, selMaskInput: std_logic_vector;
+--                         sends, sent, sendsInputStage, sentInputStage, sentUnexpected, prevSending: std_logic)
+--return SchedulerInfoArray is
+--	constant QUEUE_SIZE: natural := queueContent'length;
+--	variable res: SchedulerInfoArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
 	
-	constant newMask: std_logic_vector(0 to PIPE_WIDTH-1) := livingMaskInput;
-	constant compMask: std_logic_vector(0 to PIPE_WIDTH-1) := compactMask(newMask);
-	variable dataNewDataS: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputDataS;
+--	constant newMask: std_logic_vector(0 to PIPE_WIDTH-1) := livingMaskInput;
+--	constant compMask: std_logic_vector(0 to PIPE_WIDTH-1) := compactMask(newMask);
+--	variable dataNewDataS: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputDataS;
 	
-	variable iqDataNextS: SchedulerInfoArray(0 to QUEUE_SIZE - 1) := (others => DEFAULT_SCHEDULER_INFO);
-	variable iqFullMaskNext: std_logic_vector(0 to QUEUE_SIZE - 1) :=	(others => '0');
-    variable iqRemainingMaskSh: std_logic_vector(0 to QUEUE_SIZE + 4 - 1) := (others => '0');
+--	variable iqDataNextS: SchedulerInfoArray(0 to QUEUE_SIZE - 1) := (others => DEFAULT_SCHEDULER_INFO);
+--	variable iqFullMaskNext: std_logic_vector(0 to QUEUE_SIZE - 1) :=	(others => '0');
+--    variable iqRemainingMaskSh: std_logic_vector(0 to QUEUE_SIZE + 4 - 1) := (others => '0');
 
-	variable xVecS: SchedulerInfoArray(0 to QUEUE_SIZE + PIPE_WIDTH - 1);
-	constant fullMask: std_logic_vector(0 to QUEUE_SIZE-1) := extractFullMask(queueContent);
-	constant issuedMask: std_logic_vector(0 to QUEUE_SIZE-1) := TMP_getIssuedMask(queueContent);
-	constant remainMask: std_logic_vector(0 to QUEUE_SIZE-1) := TMP_setUntil(issuedMask, '1');
+--	variable xVecS: SchedulerInfoArray(0 to QUEUE_SIZE + PIPE_WIDTH - 1);
+--	constant fullMask: std_logic_vector(0 to QUEUE_SIZE-1) := extractFullMask(queueContent);
+--	constant issuedMask: std_logic_vector(0 to QUEUE_SIZE-1) := TMP_getIssuedMask(queueContent);
+--	constant remainMask: std_logic_vector(0 to QUEUE_SIZE-1) := TMP_setUntil(issuedMask, '1');
 	
-	variable fullMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := fullMask;
-	constant livingMask: std_logic_vector(0 to QUEUE_SIZE-1) := fullMask and not killMask;	
-	variable livingMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := livingMask;
-	variable fillMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');	
-begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        if dataNewDataS(i).dynamic.issued = '1' then
-            dataNewDataS(i).dynamic.full := '0';
-        end if;
-        dataNewDataS(i).dynamic.issued := selMaskInput(i) and sendsInputStage; -- To preserve 'issued' state if being issued from input stage
-    end loop;
+--	variable fullMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := fullMask;
+--	constant livingMask: std_logic_vector(0 to QUEUE_SIZE-1) := fullMask and not killMask;	
+--	variable livingMaskSh: std_logic_vector(0 to QUEUE_SIZE-1) := livingMask;
+--	variable fillMask: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');	
+--begin
+--    for i in 0 to PIPE_WIDTH-1 loop
+--        if dataNewDataS(i).dynamic.issued = '1' then
+--            dataNewDataS(i).dynamic.full := '0';
+--        end if;
+--        dataNewDataS(i).dynamic.issued := selMaskInput(i) and sendsInputStage; -- To preserve 'issued' state if being issued from input stage
+--    end loop;
 
-	xVecS := queueContent & dataNewDataS;
+--	xVecS := queueContent & dataNewDataS;
 	
-	-- What is being issued now is marked
-    for i in 0 to QUEUE_SIZE-1 loop
-        if selMask(i) = '1' and sends = '1' then
-            xVecS(i).dynamic.issued := '1';
-        end if;
+--	-- What is being issued now is marked
+--    for i in 0 to QUEUE_SIZE-1 loop
+--        if selMask(i) = '1' and sends = '1' then
+--            xVecS(i).dynamic.issued := '1';
+--        end if;
         
-        -- Retraction into IQ when sending turns out disallowed
-        if issuedMask(i) = '1' and sentUnexpected = '1' then
-        --    xVecS(i).state.issued := '0';
-        end if;  
-    end loop;
+--        -- Retraction into IQ when sending turns out disallowed
+--        if issuedMask(i) = '1' and sentUnexpected = '1' then
+--        --    xVecS(i).state.issued := '0';
+--        end if;  
+--    end loop;
 	
-	xVecS(QUEUE_SIZE) := xVecS(QUEUE_SIZE-1);
+--	xVecS(QUEUE_SIZE) := xVecS(QUEUE_SIZE-1);
 
-	for i in 0 to QUEUE_SIZE-2 loop
-		livingMaskSh(i) := livingMask(i) and (livingMask(i+1) or not sent);
-		fullMaskSh(i) := fullMask(i) and (fullMask(i+1) or not sent);			
-	end loop;
-	livingMaskSh(QUEUE_SIZE-1) := livingMask(QUEUE_SIZE-1) and ('0' or not sent);
-	fullMaskSh(QUEUE_SIZE-1) := fullMask(QUEUE_SIZE-1) and ('0' or not sent);
+--	for i in 0 to QUEUE_SIZE-2 loop
+--		livingMaskSh(i) := livingMask(i) and (livingMask(i+1) or not sent);
+--		fullMaskSh(i) := fullMask(i) and (fullMask(i+1) or not sent);			
+--	end loop;
+--	livingMaskSh(QUEUE_SIZE-1) := livingMask(QUEUE_SIZE-1) and ('0' or not sent);
+--	fullMaskSh(QUEUE_SIZE-1) := fullMask(QUEUE_SIZE-1) and ('0' or not sent);
 
-	-- Now assign from x or y
-	iqRemainingMaskSh(0 to 3) := (others => '1');
-	iqRemainingMaskSh(4 to QUEUE_SIZE + 4 - 1) := fullMaskSh;
-	iqDataNextS := queueContent;
-	for i in 0 to QUEUE_SIZE-1 loop		    
-        fillMask(i) := '0';
-        for k in 0 to 3 loop -- Further beyond end requires more full inputs to be filled: !! equiv to remainingMask(-1-k), where '1' for k < 0
-            fillMask(i) := fillMask(i) or (iqRemainingMaskSh(i + 3-k) and compMask(k));
-        end loop;
+--	-- Now assign from x or y
+--	iqRemainingMaskSh(0 to 3) := (others => '1');
+--	iqRemainingMaskSh(4 to QUEUE_SIZE + 4 - 1) := fullMaskSh;
+--	iqDataNextS := queueContent;
+--	for i in 0 to QUEUE_SIZE-1 loop		    
+--        fillMask(i) := '0';
+--        for k in 0 to 3 loop -- Further beyond end requires more full inputs to be filled: !! equiv to remainingMask(-1-k), where '1' for k < 0
+--            fillMask(i) := fillMask(i) or (iqRemainingMaskSh(i + 3-k) and compMask(k));
+--        end loop;
    
-		iqFullMaskNext(i) := livingMaskSh(i) or (fillMask(i) and prevSending);
-		if fullMaskSh(i) = '1' then -- From x	
-			if remainMask(i) = '1' then
-				iqDataNextS(i) := xVecS(i);
-			else
-				iqDataNextS(i) := xVecS(i + 1);
-			end if;
-		else -- From y
-			iqDataNextS(i) := getNewElemSch_N(iqRemainingMaskSh(i+1 to i+3), dataNewDataS);
-		end if;
-	end loop;
+--		iqFullMaskNext(i) := livingMaskSh(i) or (fillMask(i) and prevSending);
+--		if fullMaskSh(i) = '1' then -- From x	
+--			if remainMask(i) = '1' then
+--				iqDataNextS(i) := xVecS(i);
+--			else
+--				iqDataNextS(i) := xVecS(i + 1);
+--			end if;
+--		else -- From y
+--			iqDataNextS(i) := getNewElemSch_N(iqRemainingMaskSh(i+1 to i+3), dataNewDataS);
+--		end if;
+--	end loop;
 
-	-- Fill output array
-	for i in 0 to res'right loop
-	   res(i) := iqDataNextS(i);	
-	   res(i).dynamic.full := iqFullMaskNext(i);
-	   if iqFullMaskNext(i) /= '1' or res(i).dynamic.issued = '1' then
-	       res(i).dynamic.missing(0 to 1) := "11";
-	   end if;	   
-	   res(i).dynamic.stored := (others => '0');
-	   res(i).dynamic.active := res(i).dynamic.full and not res(i).dynamic.issued;
-	end loop;
+--	-- Fill output array
+--	for i in 0 to res'right loop
+--	   res(i) := iqDataNextS(i);	
+--	   res(i).dynamic.full := iqFullMaskNext(i);
+--	   if iqFullMaskNext(i) /= '1' or res(i).dynamic.issued = '1' then
+--	       res(i).dynamic.missing(0 to 1) := "11";
+--	   end if;	   
+--	   res(i).dynamic.stored := (others => '0');
+--	   res(i).dynamic.active := res(i).dynamic.full and not res(i).dynamic.issued;
+--	end loop;
 
-	return res;
-end function;
+--	return res;
+--end function;
 
 
 function moveEarlyStage(content: SchedulerInfoArray; insA, insD: integer) return SchedulerInfoArray is
@@ -785,14 +786,10 @@ begin
 end function;
 
     function iqNext_T(queueContent: SchedulerInfoArray;
-                      inputData: SchedulerInfoArray;
-                      
+                      inputData: SchedulerInfoArray;               
                       prevSending, sends: std_logic;
                       killMask, selMask: std_logic_vector;
                       TEST_MODE: natural
-                             --killMask, selMask: std_logic_vector;
-                             --livingMaskInput, selMaskInput: std_logic_vector;
-                             --sends, sent, sendsInputStage, sentInputStage, sentUnexpected, prevSending: std_logic
                              )
     return SchedulerInfoArray is
         constant LEN: natural := queueContent'length;
@@ -834,27 +831,22 @@ end function;
         pAv := findAvailable(fullMask(0 to MAIN_LEN-1));
         cAv := findCompletelyAvailable(fullMask(0 to MAIN_LEN-1));
         
-              
         -- Shift (compact) content!
         shifted1(0 to MAIN_LEN-2) := res(1 to MAIN_LEN-1); 
         shifted2(0 to MAIN_LEN-3) := res(2 to MAIN_LEN-1); 
         
         if e1 = e2 and e1 >= 0 and e1 < MAIN_LEN-2 then
-            --res(e1 to MAIN_LEN-3) := res(e1 + 2 to MAIN_LEN-1);
             for i in 0 to MAIN_LEN-1 loop
                 if i >= e1 then
                     res(i) := shifted2(i);
                 end if;
             end loop;
-            --res(MAIN_LEN-2 to MAIN_LEN-1) := (others => DEFAULT_SCHEDULER_INFO); -- TMP
         elsif e1 >= 0 and e1 < MAIN_LEN-1 then
-            --res(e1 to MAIN_LEN-2) := res(e1 + 1 to MAIN_LEN-1);
             for i in 0 to MAIN_LEN-1 loop
                 if i >= e1 then
                     res(i) := shifted1(i);
                 end if;
             end loop;
-            --res(MAIN_LEN-1 to MAIN_LEN-1) := (others => DEFAULT_SCHEDULER_INFO); -- TMP
         end if;
 
                 if TEST_MODE = 2 then
@@ -866,8 +858,7 @@ end function;
                 pAv := findAvailable(fullMaskNew(0 to MAIN_LEN-1));
                 cAv := findCompletelyAvailable(fullMaskNew(0 to MAIN_LEN-1));                
                 
-            if --e1 = -1 or e2 = -1 or
-             pAv = -1 or cAv = -1 then
+            if pAv = -1 or cAv = -1 then
                return res; 
             end if;
 
@@ -883,18 +874,17 @@ end function;
         if insA <= MAIN_LEN - PIPE_WIDTH then -- 
             res := moveEarlyStage(res, insA, insD);
         end if;
-        
-                
-                                if TEST_MODE = 3 then
-                                    res(pAv).dynamic.full := 'Z';
-                                    res(cAv).dynamic.active := 'U';
-                                
-                                        if insA >= 0 then
-                                            res(insA).dynamic.issued := 'Z';
-                                            res(insD).dynamic.newInQueue := 'U';
-                                        end if;
-                                    return res;
-                                end if;
+                        
+            if TEST_MODE = 3 then
+                res(pAv).dynamic.full := 'Z';
+                res(cAv).dynamic.active := 'U';
+            
+                    if insA >= 0 then
+                        res(insA).dynamic.issued := 'Z';
+                        res(insD).dynamic.newInQueue := 'U';
+                    end if;
+                return res;
+            end if;
         
         if prevSending = '1' then
             res(MAIN_LEN to LEN-1) := inputData;
@@ -988,6 +978,96 @@ end function;
         return res;
     end function;
 
+
+
+    function iqNext_N(queueContent: SchedulerInfoArray;
+                      inputData: SchedulerInfoArray;               
+                      prevSending, sends: std_logic;
+                      killMask, selMask: std_logic_vector;
+                      TEST_MODE: natural
+                             )
+    return SchedulerInfoArray is
+        constant LEN: natural := queueContent'length;
+        constant MAIN_LEN: natural := queueContent'length - PIPE_WIDTH;
+        variable res: SchedulerInfoArray(queueContent'range) := queueContent;
+        variable shifted1, shifted2: SchedulerInfoArray(0 to MAIN_LEN-1) := (others => DEFAULT_SCHEDULER_INFO);
+        variable fullMask, fullMaskNew: std_logic_vector(queueContent'range) := extractFullMask(queueContent);
+        variable fullMaskIn: std_logic_vector(0 to PIPE_WIDTH-1) := extractFullMask(inputData);
+        variable fullMaskEarly: std_logic_vector(0 to PIPE_WIDTH-1) := fullMask(MAIN_LEN to LEN-1);
+        variable e1, e2, pAv, cAv: integer := -1;
+        variable insA, insD: integer := -1;
+    begin
+            for i in 0 to LEN-1 loop
+                if queueContent(i).dynamic.issued = '1' then       
+                    res(i).dynamic.full := '0';
+                end if;
+                
+                if (selMask(i) and sends) = '1' then
+                    res(i).dynamic.issued := '1';
+                    res(i).dynamic.active := '0';
+                end if;
+                
+                if killMask(i) = '1' then
+                    res(i).dynamic.full := '0';
+                    res(i).dynamic.active := '0';
+                 end if;
+            end loop;
+    
+            fullMask := extractFullMask(res);
+
+        -- Scan full mask for first empty and first available slot
+        -- First available is first after last full
+        e1 := find1free(fullMask(0 to MAIN_LEN-1));
+        e2 := find2free(fullMask(0 to MAIN_LEN-1));
+        pAv := findAvailable(fullMask(0 to MAIN_LEN-1));
+        cAv := findCompletelyAvailable(fullMask(0 to MAIN_LEN-1));
+        
+        -- Shift (compact) content!
+        shifted1(0 to MAIN_LEN-2) := res(1 to MAIN_LEN-1); 
+        shifted2(0 to MAIN_LEN-3) := res(2 to MAIN_LEN-1); 
+        
+        if e1 = e2 and e1 >= 0 and e1 < MAIN_LEN-2 then
+            for i in 0 to MAIN_LEN-1 loop
+                if i >= e1 then
+                    res(i) := shifted2(i);
+                end if;
+            end loop;
+        elsif e1 >= 0 and e1 < MAIN_LEN-1 then
+            for i in 0 to MAIN_LEN-1 loop
+                if i >= e1 then
+                    res(i) := shifted1(i);
+                end if;
+            end loop;
+        end if;
+
+                -- Find av slots in updated mask
+                fullMaskNew := extractFullMask(res);
+                pAv := findAvailable(fullMaskNew(0 to MAIN_LEN-1));
+                cAv := findCompletelyAvailable(fullMaskNew(0 to MAIN_LEN-1));                
+                
+            if pAv = -1 or cAv = -1 then
+               return res; 
+            end if;
+
+        -- Find insertion point: index where earlyStage(0) will go (even if it's empty so won't be written)
+        insA := findInsertion(pAv, cAv, fullMaskNew(0 to MAIN_LEN-1), fullMaskEarly);
+
+        if fullMask(MAIN_LEN+1 to MAIN_LEN+2) = "00" then
+            insD := insA + 1; -- compress 1001 -> 11
+        else
+            insD := insA + 3;
+        end if;
+        
+        if insA <= MAIN_LEN - PIPE_WIDTH then -- 
+            res := moveEarlyStage(res, insA, insD);
+        end if;
+       
+        if prevSending = '1' then
+            res(MAIN_LEN to LEN-1) := inputData;
+        end if;
+        
+        return res;
+    end function;
 
 
 function getWakeupStructStatic(arg: natural; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray; selection: boolean)
