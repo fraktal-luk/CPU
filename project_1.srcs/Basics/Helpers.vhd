@@ -119,18 +119,22 @@ end function;
 
 function findInsertionSimplified(pA, cA: integer; fullMask, inputMask: std_logic_vector) return integer is
     constant oddPa: boolean := (pA mod 2) /= 0;
+    variable res: integer := 0;
 begin
     if inputMask(0) = '1' then
-        return cA;
+        res := cA;
     elsif inputMask(1) = '1' then
-        return cA;
+        res := cA;
     elsif inputMask(2) = '1' then
-        return cA-2;
+        res := cA-2;
     else
-        return cA-2;
+        res := cA-2;
+        if res < 0 then
+            res := 0;
+        end if;
     end if;
     
-    return -1;
+    return res;
 end function;
 
 end package body;

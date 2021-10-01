@@ -171,6 +171,14 @@ function TMP_setUntil(selVec: std_logic_vector; nextAccepting: std_logic) return
                       TEST_MODE: natural)
     return SchedulerInfoArray;
 
+    function iqNext_N2(queueContent: SchedulerInfoArray;
+                      inputData: SchedulerInfoArray;
+                      
+                      prevSending, sends: std_logic;
+                      killMask, selMask: std_logic_vector;
+                      TEST_MODE: natural)
+    return SchedulerInfoArray;
+
 function extractReadyMask(entryVec: SchedulerInfoArray) return std_logic_vector;
 
 function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector;
@@ -1050,7 +1058,8 @@ end function;
             end if;
 
         -- Find insertion point: index where earlyStage(0) will go (even if it's empty so won't be written)
-        insA := findInsertion(pAv, cAv, fullMaskNew(0 to MAIN_LEN-1), fullMaskEarly);
+        insA := findInsertionSimplified
+                                        (pAv, cAv, fullMaskNew(0 to MAIN_LEN-1), fullMaskEarly);
 
         if fullMask(MAIN_LEN+1 to MAIN_LEN+2) = "00" then
             insD := insA + 1; -- compress 1001 -> 11
@@ -1061,7 +1070,10 @@ end function;
         if insA <= MAIN_LEN - PIPE_WIDTH then -- 
             res := moveEarlyStage(res, insA, insD);
         end if;
-       
+            
+            --res(insA).dynamic.issued := 'Z';
+            --res(insD).dynamic.active := 'U';
+            
         if prevSending = '1' then
             res(MAIN_LEN to LEN-1) := inputData;
         end if;
@@ -1070,6 +1082,205 @@ end function;
     end function;
 
 
+
+    function iqNext_N2(queueContent: SchedulerInfoArray;
+                      inputData: SchedulerInfoArray;               
+                      prevSending, sends: std_logic;
+                      killMask, selMask: std_logic_vector;
+                      TEST_MODE: natural
+                             )
+    return SchedulerInfoArray is
+        constant LEN: natural := queueContent'length;
+        constant MAIN_LEN: natural := queueContent'length - PIPE_WIDTH;
+        variable res: SchedulerInfoArray(queueContent'range) := queueContent;
+        variable shifted1, shifted2: SchedulerInfoArray(0 to MAIN_LEN-1) := (others => DEFAULT_SCHEDULER_INFO);
+        variable fullMask, fullMaskNew: std_logic_vector(queueContent'range) := extractFullMask(queueContent);
+        variable fullMaskIn: std_logic_vector(0 to PIPE_WIDTH-1) := extractFullMask(inputData);
+        variable fullMaskEarly: std_logic_vector(0 to PIPE_WIDTH-1) := fullMask(MAIN_LEN to LEN-1);
+        variable e1, e2, pAv, cAv: integer := -1;
+        variable insA, insD: integer := -1;
+        variable caVec: std_logic_vector(0 to MAIN_LEN-1) := (others => '0');
+        variable lastFound: boolean := false;
+        variable iPrev2, iPrev1, iCurrent, iNext: integer := 0;
+        variable mPrev2, mPrev1, mCurrent, mNext: std_logic := '0';
+    begin
+            for i in 0 to LEN-1 loop
+                if queueContent(i).dynamic.issued = '1' then       
+                    res(i).dynamic.full := '0';
+                end if;
+                
+                if (selMask(i) and sends) = '1' then
+                    res(i).dynamic.issued := '1';
+                    res(i).dynamic.active := '0';
+                end if;
+                
+                if killMask(i) = '1' then
+                    res(i).dynamic.full := '0';
+                    res(i).dynamic.active := '0';
+                 end if;
+            end loop;
+    
+            fullMask := extractFullMask(res);
+
+        -- Scan full mask for first empty and first available slot
+        -- First available is first after last full
+        e1 := find1free(fullMask(0 to MAIN_LEN-1));
+        e2 := find2free(fullMask(0 to MAIN_LEN-1));
+        pAv := findAvailable(fullMask(0 to MAIN_LEN-1));
+        cAv := findCompletelyAvailable(fullMask(0 to MAIN_LEN-1));
+        
+        -- Shift (compact) content!
+        shifted1(0 to MAIN_LEN-2) := res(1 to MAIN_LEN-1); 
+        shifted2(0 to MAIN_LEN-3) := res(2 to MAIN_LEN-1); 
+        
+        if e1 = e2 and e1 >= 0 and e1 < MAIN_LEN-2 then
+            for i in 0 to MAIN_LEN-1 loop
+                if i >= e1 then
+                    res(i) := shifted2(i);
+                end if;
+            end loop;
+        elsif e1 >= 0 and e1 < MAIN_LEN-1 then
+            for i in 0 to MAIN_LEN-1 loop
+                if i >= e1 then
+                    res(i) := shifted1(i);
+                end if;
+            end loop;
+        end if;
+        
+        
+            if isNonzero(fullMaskNew(MAIN_LEN-4 to MAIN_LEN-1)) = '1' then
+                return res;
+            end if; 
+        
+                -- Find av slots in updated mask
+                fullMaskNew := extractFullMask(res);
+                pAv := findAvailable(fullMaskNew(0 to MAIN_LEN-1));
+                cAv := findCompletelyAvailable(fullMaskNew(0 to MAIN_LEN-1));
+                
+                -- Set CA pairs
+                for i in MAIN_LEN/2-1 downto 0 loop
+                    if (fullMaskNew(2*i) or fullMaskNew(2*i + 1)) /= '1' then
+                        caVec(2*i) := '1';
+                    end if;
+                end loop;
+                -- Exclude those before last content
+                for i in MAIN_LEN/2-1 downto 0 loop
+                    if lastFound then
+                        caVec(2*i) := '0';                    
+                    elsif caVec(2*i) /= '1' then
+                        lastFound := true;
+                    end if;
+                end loop;
+                
+                -- Set prev, at, after
+                for i in 0 to MAIN_LEN/2-1 loop
+                    iPrev2 := 2*i - 4;
+                    iPrev1 := 2*i - 2;
+                    iCurrent := 2*i;
+                    iNext := 2*i + 2;
+                    
+                    if iPrev2 < 0 then
+                        mPrev2 := '0';
+                    else
+                        mPrev2 := caVec(iPrev2);
+                    end if;
+                    
+                    if iPrev1 < 0 then
+                        mPrev1 := '0';
+                    else
+                        mPrev1 := caVec(iPrev1);
+                    end if;
+                    
+                    mCurrent := caVec(iCurrent);
+                    
+                    if iNext >= MAIN_LEN then
+                        mNext := '1';
+                    else
+                        mNext := caVec(iNext);
+                    end if;
+                    
+                    if std_logic_vector'(mPrev2 & mPrev1 & mCurrent & mNext) = "0001" then -- [-2]
+                        null;
+                        
+                    elsif std_logic_vector'(mPrev2 & mPrev1 & mCurrent & mNext) = "0011" then -- [0]
+                        if isNonzero(fullMaskEarly(0 to 1)) = '1' then
+                            res(iCurrent) := res(MAIN_LEN);
+                        else
+                            res(iCurrent) := res(MAIN_LEN + 2);
+                        end if;
+                        
+                        if isNonzero(fullMaskEarly(1 to 2)) = '1' then
+                            res(iCurrent + 1) := res(MAIN_LEN + 1);
+                        else
+                            res(iCurrent + 1) := res(MAIN_LEN + 3);
+                        end if;
+                        
+                    elsif std_logic_vector'(mPrev2 & mPrev1 & mCurrent & mNext) = "0111" then -- [2]
+                        if isNonzero(fullMaskEarly(0 to 1)) = '1' then
+                            res(iCurrent) := res(MAIN_LEN + 2);
+                        end if;
+                        
+                        if fullMaskEarly(1) = '1' or (fullMaskEarly(0) or fullMaskEarly(2)) = '1' then
+                            res(iCurrent + 1) := res(MAIN_LEN + 3);
+                        end if;
+                    end if;
+                    
+                    -- 0000  ?? ??   00xx -> cd --     0: {a if x1xx | 1xxx, else c}
+                    -- 0001  ad --   01xx -> ab cd     1: {d if x00x, else b}
+                    -- 0010  cd --   100x -> ad --     2: {c if x1xx | 1xxx, else -}
+                    -- 0011  cd --   11xx -> ab cd     3: {d if x1xx | 1x1x, else -}
+                    -- 0100  ab cd*  1x1x -> ab cd
+                    -- 0101  ab cd
+                    -- 0110  ab cd
+                    -- 0111  ab cd
+                    -- 1000  ad*-- 
+                    -- 1001  ad --
+                    -- 1010  ab cd
+                    -- 1011  ab cd
+                    -- 1100  ab --
+                    -- 1101  ab cd
+                    -- 1110  ab cd
+                    -- 1111  ab cd             
+                end loop;
+                
+                res(MAIN_LEN to LEN-1) := (others => DEFAULT_SCHEDULER_INFO);
+                
+                
+                if prevSending = '1' then
+                    res(MAIN_LEN to LEN-1) := inputData;
+                end if;
+                
+                return res;
+                
+            if pAv = -1 or cAv = -1 then
+               return res; 
+            end if;
+
+        -- Find insertion point: index where earlyStage(0) will go (even if it's empty so won't be written)
+        insA := findInsertionSimplified
+                                        (pAv, cAv, fullMaskNew(0 to MAIN_LEN-1), fullMaskEarly);
+
+        if fullMask(MAIN_LEN+1 to MAIN_LEN+2) = "00" then
+            insD := insA + 1; -- compress 1001 -> 11
+        else
+            insD := insA + 3;
+        end if;
+        
+        if insA <= MAIN_LEN - PIPE_WIDTH then -- 
+            res := moveEarlyStage(res, insA, insD);
+        end if;
+            
+            --res(insA).dynamic.issued := 'Z';
+            --res(insD).dynamic.active := 'U';
+            
+        if prevSending = '1' then
+            res(MAIN_LEN to LEN-1) := inputData;
+        end if;
+        
+        return res;
+    end function;
+    
+    
 function getWakeupStructStatic(arg: natural; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray; selection: boolean)
 return WakeupStruct is
     variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;

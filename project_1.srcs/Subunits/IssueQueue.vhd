@@ -272,14 +272,16 @@ begin
     queueContentUpdatedExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, false, FORWARDING_D);
     queueContentUpdatedSelExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, true, FORWARDING);       
     
-    queueContentExtNext_T <= iqNext_T(queueContentUpdatedExt_T, newArr, prevSendingOK, sends_T, killMaskExt_T, selMaskExt_T  , 0);
+    queueContentExtNext_T <= iqNext_N2(queueContentUpdatedExt_T, newArr, prevSendingOK, sends_T, killMaskExt_T, selMaskExt_T  , 0);
     queueContentExtNext_N <= iqNext_N(queueContentUpdatedExt_T, newArr, prevSendingOK, sends_T, killMaskExt_T, selMaskExt_T  , 0);
 
         ch1 <= bool2std(queueContentExtNext_N = queueContentExtNext_T);
+            ch2 <= bool2std(countOnes(extractFullMask(queueContentExtNext_T)) = countOnes(extractFullMask(queueContentExtNext_N)));
 
             qc0 <= iqNext_T(queueContentExt_T, newArr, prevSendingOK, sends, killMaskExt_T, selMaskExt_T  , 1);
             qc1 <= iqNext_T(queueContentExt_T, newArr, prevSendingOK, sends, killMaskExt_T, selMaskExt_T  , 2);
             qc2 <= iqNext_T(queueContentExt_T, newArr, prevSendingOK, sends, killMaskExt_T, selMaskExt_T  , 3);
+            
             qc3 <= iqNext_T(queueContentExt_T, newArr, prevSendingOK, sends, killMaskExt_T, selMaskExt_T  , 4);
 
     -- Output signals
