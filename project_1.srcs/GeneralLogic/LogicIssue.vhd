@@ -1094,7 +1094,7 @@ end function;
         constant MAIN_LEN: natural := queueContent'length - PIPE_WIDTH;
         variable res: SchedulerInfoArray(queueContent'range) := queueContent;
         variable shifted1, shifted2: SchedulerInfoArray(0 to MAIN_LEN-1) := (others => DEFAULT_SCHEDULER_INFO);
-        variable fullMask, fullMaskNew: std_logic_vector(queueContent'range) := extractFullMask(queueContent);
+        variable fullMask, activeMask, fullMaskBeforeKill, fullMaskNew, fullMaskCompressed, fullMaskSh1, fullMaskSh2: std_logic_vector(queueContent'range) := extractFullMask(queueContent);
         variable fullMaskIn: std_logic_vector(0 to PIPE_WIDTH-1) := extractFullMask(inputData);
         variable fullMaskEarly: std_logic_vector(0 to PIPE_WIDTH-1) := fullMask(MAIN_LEN to LEN-1);
         variable e1, e2, pAv, cAv: integer := -1;
@@ -1104,6 +1104,9 @@ end function;
         variable iPrev2, iPrev1, iCurrent, iNext: integer := 0;
         variable mPrev2, mPrev1, mCurrent, mNext: std_logic := '0';
     begin
+    
+        fullMaskBeforeKill := fullMask;
+        
             for i in 0 to LEN-1 loop
                 if queueContent(i).dynamic.issued = '1' then       
                     res(i).dynamic.full := '0';
@@ -1113,7 +1116,11 @@ end function;
                     res(i).dynamic.issued := '1';
                     res(i).dynamic.active := '0';
                 end if;
-                
+            end loop;    
+
+            --fullMaskBeforeKill := extractFullMask(res);
+
+            for i in 0 to LEN-1 loop
                 if killMask(i) = '1' then
                     res(i).dynamic.full := '0';
                     res(i).dynamic.active := '0';
@@ -1124,36 +1131,42 @@ end function;
 
         -- Scan full mask for first empty and first available slot
         -- First available is first after last full
-        e1 := find1free(fullMask(0 to MAIN_LEN-1));
-        e2 := find2free(fullMask(0 to MAIN_LEN-1));
-        pAv := findAvailable(fullMask(0 to MAIN_LEN-1));
-        cAv := findCompletelyAvailable(fullMask(0 to MAIN_LEN-1));
+        e1 := find1free(fullMaskBeforeKill(0 to MAIN_LEN-1));
+        e2 := find2free(fullMaskBeforeKill(0 to MAIN_LEN-1));
+        --pAv := findAvailable(fullMask(0 to MAIN_LEN-1));
+        --cAv := findCompletelyAvailable(fullMask(0 to MAIN_LEN-1));
         
         -- Shift (compact) content!
         shifted1(0 to MAIN_LEN-2) := res(1 to MAIN_LEN-1); 
         shifted2(0 to MAIN_LEN-3) := res(2 to MAIN_LEN-1); 
+
+        fullMaskSh1(0 to MAIN_LEN-2) := fullMaskBeforeKill(1 to MAIN_LEN-1); 
+        fullMaskSh2(0 to MAIN_LEN-3) := fullMaskBeforeKill(2 to MAIN_LEN-1);
         
         if e1 = e2 and e1 >= 0 and e1 < MAIN_LEN-2 then
             for i in 0 to MAIN_LEN-1 loop
                 if i >= e1 then
                     res(i) := shifted2(i);
+                    fullMaskCompressed(i) := fullMaskSh2(i);
                 end if;
             end loop;
         elsif e1 >= 0 and e1 < MAIN_LEN-1 then
             for i in 0 to MAIN_LEN-1 loop
                 if i >= e1 then
                     res(i) := shifted1(i);
+                    fullMaskCompressed(i) := fullMaskSh1(i);
                 end if;
             end loop;
         end if;
         
         
-            if isNonzero(fullMaskNew(MAIN_LEN-4 to MAIN_LEN-1)) = '1' then
+            if isNonzero(fullMaskBeforeKill(MAIN_LEN-4 to MAIN_LEN-1)) = '1' then
                 return res;
-            end if; 
+            end if;
         
                 -- Find av slots in updated mask
-                fullMaskNew := extractFullMask(res);
+                fullMaskNew := --extractFullMask(res);
+                               fullMaskCompressed;
                 pAv := findAvailable(fullMaskNew(0 to MAIN_LEN-1));
                 cAv := findCompletelyAvailable(fullMaskNew(0 to MAIN_LEN-1));
                 
