@@ -24,6 +24,7 @@ entity IssueQueue is
 		IS_FP: boolean := false;
 		ALT_INPUT: boolean := false;
 		FORWARDING: ForwardingModeArray := (0 => (-100, false));  -- Can be used immediately
+		FORWARDING1: ForwardingModeArray := (0 => (-100, false));
 		FORWARDING_D: ForwardingModeArray := (0 => (-100, false)) -- Can be used with 1 cycle delay
 	);
 	port(
@@ -269,9 +270,9 @@ begin
 
     -- Content manipulation
     queueContentExtRR_T <= updateRegStatus(queueContentExt_T, rrfStored);
-    queueContentUpdatedExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, false, FORWARDING_D);
-    queueContentUpdatedSelExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, true, FORWARDING);       
-    
+    queueContentUpdatedExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, false, FORWARDING_D, FORWARDING_D);
+    queueContentUpdatedSelExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, true, FORWARDING, FORWARDING1);
+
     queueContentExtNext_T <= iqNext_N2(queueContentUpdatedExt_T, newArr, prevSendingOK, sends_T, killMaskExt_T, selMaskExt_T  , 0);
     queueContentExtNext_N <= iqNext_N(queueContentUpdatedExt_T, newArr, prevSendingOK, sends_T, killMaskExt_T, selMaskExt_T  , 0);
 

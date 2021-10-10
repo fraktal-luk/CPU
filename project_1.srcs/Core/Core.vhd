@@ -425,12 +425,13 @@ begin
             --inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), aluMask);
             schedInfoA <= --work.LogicIssue.getIssueInfoArray(inputDataArray, true);
                           work.LogicIssue.getIssueInfoArray(TMP_recodeALU(renamedDataLivingRe), aluMask, true);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, FORWARDING_MODES_INT_D);
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, FORWARDING_MODES_INT_D, FORWARDING_MODES_INT_D);
               
             IQUEUE_I0: entity work.IssueQueue(Behavioral)
             generic map(
                 IQ_SIZE => IQ_SIZE_I0,
                 FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
+                FORWARDING1(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
             )
             port map(
@@ -548,7 +549,7 @@ begin
            schedInfoA <= --work.LogicIssue.getIssueInfoArray(inputDataArray, true);
                          work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true);
            
-           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, FORWARDING_MODES_INT_D);
+           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, FORWARDING_MODES_INT_D, FORWARDING_MODES_NONE);
                         
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
@@ -755,13 +756,13 @@ begin
             --inputDataArrayInt <= makeSlotArray((extractData(prepareForStoreValueIQ(renamedDataLivingReMem))), intStoreMask);
             schedInfoIntA <= --work.LogicIssue.getIssueInfoArray(inputDataArrayInt, false);
                              work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingReMem), intStoreMask, false);
-            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, FORWARDING_MODES_SV_INT_D);
+            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, FORWARDING_MODES_SV_INT_D, FORWARDING_MODES_SV_INT_D);
 
             --inputDataArrayFloat <= makeSlotArray((--extractData(renamedDataLivingReMem),
             --                                                                 extractData(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem))), fpStoreMask);
             schedInfoFloatA <= --work.LogicIssue.getIssueInfoArray(inputDataArrayFloat, false);
                                 work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem), fpStoreMask, false);
-            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, FORWARDING_MODES_SV_FLOAT_D);
+            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, FORWARDING_MODES_SV_FLOAT_D, FORWARDING_MODES_SV_FLOAT_D);
 
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
             fmaFloatSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoFloatA, fniFloat);
@@ -887,12 +888,13 @@ begin
             --inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), fpMask);
             schedInfoA <= --work.LogicIssue.getIssueInfoArray(inputDataArray, false);
                           work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingFloatRe), fpMask, false);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, FORWARDING_MODES_FLOAT_D);
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, FORWARDING_MODES_FLOAT_D, FORWARDING_MODES_FLOAT_D);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)
             generic map(
                 IQ_SIZE => IQ_SIZE_F0, IS_FP => true,
                 FORWARDING(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
+                FORWARDING1(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT_D(0 to 2)
             )
             port map(

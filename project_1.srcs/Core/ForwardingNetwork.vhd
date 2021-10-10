@@ -29,6 +29,10 @@ end record;
 
 type ForwardingModeArray is array (natural range <>) of ForwardingMode;
 
+constant FORWARDING_MODES_NONE: ForwardingModeArray(0 to 2) := (
+    (-100, false), (-100, false), (-200, false)
+);
+
 constant FORWARDING_MODES_INT: ForwardingModeArray(0 to 2) := (
     (-2, false), (-100, false), (-200, false)
 );

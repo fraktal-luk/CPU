@@ -186,7 +186,7 @@ function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vect
 function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;-- fnm: ForwardingMap;
                 dynamic: boolean;
                 selection: boolean;
-                forwardingModes: ForwardingModeArray
+                forwardingModes0, forwardingModes1: ForwardingModeArray
             )
 return SchedulerInfoArray;
 
@@ -1387,17 +1387,17 @@ function updateSchedulerState(state: SchedulerInfo;
                                 fm: ForwardingMatches;
                                 dynamic: boolean;
                                 selection: boolean;
-                                forwardingModes: ForwardingModeArray)
+                                forwardingModes0, forwardingModes1: ForwardingModeArray)
 return SchedulerInfo is
 	variable res: SchedulerInfo := state;
 	variable wakeups0, wakeups1: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
 begin
     if not dynamic then
-        wakeups0 := getWakeupStructStatic(0, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes, selection);
-        wakeups1 := getWakeupStructStatic(1, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes, selection);
+        wakeups0 := getWakeupStructStatic(0, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes0, selection);
+        wakeups1 := getWakeupStructStatic(1, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes1, selection);
     else
-        wakeups0 := getWakeupStructDynamic(0, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes);
-        wakeups1 := getWakeupStructDynamic(1, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes);
+        wakeups0 := getWakeupStructDynamic(0, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes0);
+        wakeups1 := getWakeupStructDynamic(1, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes1);
     end if;
 
     res.dynamic := updateArgInfo(res.dynamic, 0, wakeups0, selection);
@@ -1407,12 +1407,12 @@ begin
 end function;
 
 function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
-                dynamic: boolean; selection: boolean; forwardingModes: ForwardingModeArray)
+                dynamic: boolean; selection: boolean; forwardingModes0, forwardingModes1: ForwardingModeArray)
 return SchedulerInfoArray is
 	variable res: SchedulerInfoArray(0 to schedArray'length-1);
 begin
 	for i in schedArray'range loop
-		res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, forwardingModes);
+		res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, forwardingModes0, forwardingModes1);
 	end loop;	
 	return res;
 end function;
