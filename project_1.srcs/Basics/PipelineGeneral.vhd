@@ -1073,6 +1073,8 @@ function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray
 begin
     for i in res'range loop
         res(i).ins.specificOperation.memory := MemOp'val(slv2u(res(i).ins.specificOperation.bits));
+        
+        --    res(i).ins.constantArgs.immSel := '1';
     end loop;
 
     return res;

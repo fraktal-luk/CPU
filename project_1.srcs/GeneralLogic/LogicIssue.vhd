@@ -186,6 +186,7 @@ function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vect
 function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;-- fnm: ForwardingMap;
                 dynamic: boolean;
                 selection: boolean;
+                dontMatch1: boolean;
                 forwardingModes0, forwardingModes1: ForwardingModeArray
             )
 return SchedulerInfoArray;
@@ -1387,6 +1388,7 @@ function updateSchedulerState(state: SchedulerInfo;
                                 fm: ForwardingMatches;
                                 dynamic: boolean;
                                 selection: boolean;
+                                dontMatch1: boolean;
                                 forwardingModes0, forwardingModes1: ForwardingModeArray)
 return SchedulerInfo is
 	variable res: SchedulerInfo := state;
@@ -1401,18 +1403,23 @@ begin
     end if;
 
     res.dynamic := updateArgInfo(res.dynamic, 0, wakeups0, selection);
-    res.dynamic := updateArgInfo(res.dynamic, 1, wakeups1, selection);
+    
+    if dontMatch1 then
+        res.dynamic.missing(1) := '0';
+    else
+        res.dynamic := updateArgInfo(res.dynamic, 1, wakeups1, selection);
+    end if;
 
 	return res;
 end function;
 
 function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
-                dynamic: boolean; selection: boolean; forwardingModes0, forwardingModes1: ForwardingModeArray)
+                dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0, forwardingModes1: ForwardingModeArray)
 return SchedulerInfoArray is
 	variable res: SchedulerInfoArray(0 to schedArray'length-1);
 begin
 	for i in schedArray'range loop
-		res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, forwardingModes0, forwardingModes1);
+		res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, dontMatch1, forwardingModes0, forwardingModes1);
 	end loop;	
 	return res;
 end function;

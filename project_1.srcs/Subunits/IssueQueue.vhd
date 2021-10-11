@@ -23,6 +23,7 @@ entity IssueQueue is
 		IQ_SIZE: natural := 8;
 		IS_FP: boolean := false;
 		ALT_INPUT: boolean := false;
+		DONT_MATCH1: boolean := false;
 		FORWARDING: ForwardingModeArray := (0 => (-100, false));  -- Can be used immediately
 		FORWARDING1: ForwardingModeArray := (0 => (-100, false));
 		FORWARDING_D: ForwardingModeArray := (0 => (-100, false)) -- Can be used with 1 cycle delay
@@ -270,8 +271,8 @@ begin
 
     -- Content manipulation
     queueContentExtRR_T <= updateRegStatus(queueContentExt_T, rrfStored);
-    queueContentUpdatedExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, false, FORWARDING_D, FORWARDING_D);
-    queueContentUpdatedSelExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, true, FORWARDING, FORWARDING1);
+    queueContentUpdatedExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, false, DONT_MATCH1, FORWARDING_D, FORWARDING_D);
+    queueContentUpdatedSelExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, true, DONT_MATCH1, FORWARDING, FORWARDING1);
 
     queueContentExtNext_T <= iqNext_N2(queueContentUpdatedExt_T, newArr, prevSendingOK, sends_T, killMaskExt_T, selMaskExt_T  , 0);
     queueContentExtNext_N <= iqNext_N(queueContentUpdatedExt_T, newArr, prevSendingOK, sends_T, killMaskExt_T, selMaskExt_T  , 0);
