@@ -535,11 +535,11 @@ begin
         end if;
     
         if res.state.argSrc(0)(1) /= '1' then
-            res.state.argSpec.args(0) := (others => '0');
+           -- res.state.argSpec.args(0) := (others => '0');
         end if;
 
         if res.state.argSrc(1)(1) /= '1' or res.state.zero(1) = '1' then
-            res.state.argSpec.args(1) := (others => '0');
+           -- res.state.argSpec.args(1) := (others => '0');
         end if;
 
         -- for arg(1):
@@ -603,6 +603,15 @@ begin
     if TMP_DELAY then
         res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
         res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
+
+            if res.argSrc(0)(1) /= '1' then
+                res.argSpec.args(0) := (others => '0');
+            end if;
+    
+            if res.argSrc(1)(1) /= '1' or res.zero(1) = '1' then
+                res.argSpec.args(1) := (others => '0');
+            end if;
+        
         return res;
     end if;
 
