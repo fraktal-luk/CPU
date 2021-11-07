@@ -65,7 +65,7 @@ architecture Behavioral of IssueQueue is
     signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
 
 
-        signal fullMaskExt, fullMaskExtNext, killMaskExt, killMaskExtPrev, livingMaskExt, readyMaskAllExt, readyMaskFullExt, readyMaskLiveExt, readyMaskLiveExt_T,
+        signal fullMaskExt, fullMaskExtNext, killMaskExt, trialMask, trialMaskUpdated, killMaskExtPrev, livingMaskExt, readyMaskAllExt, readyMaskFullExt, readyMaskLiveExt, readyMaskLiveExt_T,
                    cancelledMaskExt, selMaskExt, selMaskExtPrev,
                    fullMaskExt_T, killMaskExt_T, readyMaskAllExt_T, selMaskExt_T
                    
@@ -93,6 +93,8 @@ architecture Behavioral of IssueQueue is
         full: std_logic;
         issued: std_logic;
         killed: std_logic;
+        trial: std_logic;
+        trialUpdated: std_logic;
         living: std_logic;
         ready: std_logic;
         readyFull: std_logic;
@@ -112,7 +114,13 @@ architecture Behavioral of IssueQueue is
         for i in res'range loop        
             res(i).full := content(i).dynamic.full;
             res(i).issued := content(i).dynamic.issued;
-            res(i).killed := killByTag(compareTagBefore(events.execCausing.tags.renameIndex, content(i).dynamic.renameIndex), events.execEvent, events.lateEvent);
+            
+            res(i).trial := killByTag(compareTagBefore(events.preExecCausing.tags.renameIndex, content(i).dynamic.renameIndex), '1', '0');
+            res(i).trialUpdated := content(i).dynamic.trial;
+            
+            res(i).killed := --killByTag(compareTagBefore(events.execCausing.tags.renameIndex, content(i).dynamic.renameIndex), events.execEvent, events.lateEvent);
+                                (res(i).trialUpdated and events.execEvent) or events.lateEvent;
+
             res(i).living := res(i).full and not res(i).killed;
             
             res(i).ready := not isNonzero(content(i).dynamic.missing(0 to 1)) and content(i).dynamic.active;
@@ -156,6 +164,24 @@ architecture Behavioral of IssueQueue is
     begin
         for i in res'range loop
             res(i) := arr(i).killed;
+        end loop;
+        return res;
+    end function;
+
+    function getTrialVec(arr: SlotControlArray) return std_logic_vector is
+        variable res: std_logic_vector(arr'range) := (others => '0');
+    begin
+        for i in res'range loop
+            res(i) := arr(i).trial;
+        end loop;
+        return res;
+    end function;
+
+    function getTrialUpdatedVec(arr: SlotControlArray) return std_logic_vector is
+        variable res: std_logic_vector(arr'range) := (others => '0');
+    begin
+        for i in res'range loop
+            res(i) := arr(i).trialUpdated;
         end loop;
         return res;
     end function;
@@ -258,6 +284,7 @@ begin
 
     -- Vector signals
     killMaskExt_T <= getKilledVec(controlSigs_T);
+    trialMask <= getTrialVec(controlSigs_T);
     fullMaskExt_T <= getFullVec(controlSigs_T);
     readyMaskAllExt_T <= getReadyVec(controlSigs_T);
     readyMaskLiveExt_T <= getReadyLiveVec(controlSigs_T);        
@@ -269,12 +296,14 @@ begin
     sends_T <= anyReadyFull_T and nextAccepting;
     sendingKilled_T <= isNonzero(killMaskExt_T and selMaskExt_T);
 
+        trialMaskUpdated <= getTrialUpdatedVec(controlSigs_T);
+
     -- Content manipulation
     queueContentExtRR_T <= updateRegStatus(queueContentExt_T, rrfStored);
     queueContentUpdatedExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, false, DONT_MATCH1, FORWARDING_D, FORWARDING_D);
     queueContentUpdatedSelExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, true, DONT_MATCH1, FORWARDING, FORWARDING1);
 
-    queueContentExtNext_T <= iqNext_N2(queueContentUpdatedExt_T, newArr, prevSendingOK, sends_T, killMaskExt_T, selMaskExt_T  , 0);
+    queueContentExtNext_T <= iqNext_N2(queueContentUpdatedExt_T, newArr, prevSendingOK, sends_T, killMaskExt_T, trialMask, selMaskExt_T  , 0);
     queueContentExtNext_N <= iqNext_N(queueContentUpdatedExt_T, newArr, prevSendingOK, sends_T, killMaskExt_T, selMaskExt_T  , 0);
 
         ch1 <= bool2std(queueContentExtNext_N = queueContentExtNext_T);

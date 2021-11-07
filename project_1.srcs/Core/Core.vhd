@@ -59,7 +59,7 @@ end Core;
 
 
 architecture Behavioral of Core is
-    signal pcDataSig, frontCausing, execCausing, execCausingDelayed, lateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
+    signal pcDataSig, frontCausing, execCausing, preExecCausing, execCausingDelayed, lateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
 
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
            frontEventSignal, bqAccepting, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ,-- dbEmpty,
@@ -95,7 +95,7 @@ architecture Behavioral of Core is
 
     signal cycleCounter: Word := (others => '0');
     
-    signal events, eventsOnlyLate: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE);
+    signal events, eventsOnlyLate: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE);
     
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
 begin
@@ -110,8 +110,8 @@ begin
     intSignal <= int0 or int1;
     intType <= (int0, int1);
 
-    events <= (lateEventSignal, execEventSignal, execCausing);
-    eventsOnlyLate <= (lateEvent => lateEventSignal, execEvent => '0', execCausing => DEFAULT_INS_STATE);
+    events <= (lateEventSignal, execEventSignal, execCausing, preExecCausing);
+    eventsOnlyLate <= (lateEvent => lateEventSignal, execEvent => '0', execCausing => DEFAULT_INS_STATE, preExecCausing => DEFAULT_INS_STATE);
 
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
 	generic map(DEBUG_FILE_PREFIX => DEBUG_FILE_PREFIX)
@@ -524,6 +524,7 @@ begin
             
             execEventSignal <= dataFromBranch.ins.controlInfo.newEvent and dataFromBranch.full; -- TODO: remove 'full' here because is factored into 'newEvent'?
             execCausing <= clearDbCausing(dataFromBranch.ins);
+            preExecCausing <= clearDbCausing(dataToBranch(0).ins);
             bqUpdate <= dataFromBranch; -- TODO: possibly redundant cause execCausing can carry the data
             
             DELAYED_EXEC_EVENT: process (clk)
@@ -798,7 +799,7 @@ begin
                 input => slotSelIntSV,           
                 acceptingOut => open,
                 output => slotIssueIntSV,
-                events => events,
+                events => eventsOnlyLate,
                 fni => fniEmpty,
                 regValues => (others => (others => '0'))   
             );
@@ -814,7 +815,7 @@ begin
                 input => slotIssueIntSV,          
                 acceptingOut => open,
                 output => slotRegReadIntSV,
-                events => events,
+                events => eventsOnlyLate,
                 fni => fniEmpty,
                 regValues => regValsS0     
             );
@@ -852,7 +853,7 @@ begin
                 input => slotSelFloatSV,
                 acceptingOut => open,
                 output => slotIssueFloatSV,
-                events => events,
+                events => eventsOnlyLate,
                 fni => fniEmpty,
                 regValues => (others => (others => '0'))   
             );        
@@ -868,7 +869,7 @@ begin
                 input => slotIssueFloatSV,       
                 acceptingOut => open,
                 output => slotRegReadFloatSV,
-                events => events,
+                events => eventsOnlyLate,
                 fni => fniEmpty,
                 regValues => regValsFS0     
             );

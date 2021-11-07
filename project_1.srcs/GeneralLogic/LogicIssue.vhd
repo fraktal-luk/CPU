@@ -55,6 +55,7 @@ type DynamicInfo is record
     active: std_logic;
 
     issued: std_logic;
+    trial: std_logic;
     newInQueue: std_logic;
 
     renameIndex: InsTag;
@@ -79,6 +80,7 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     active => '0',
 
     issued => '0',
+    trial => '0',
     newInQueue => '0',
 
     renameIndex => (others => '0'),
@@ -175,7 +177,7 @@ function TMP_setUntil(selVec: std_logic_vector; nextAccepting: std_logic) return
                       inputData: SchedulerInfoArray;
                       
                       prevSending, sends: std_logic;
-                      killMask, selMask: std_logic_vector;
+                      killMask, trialMask, selMask: std_logic_vector;
                       TEST_MODE: natural)
     return SchedulerInfoArray;
 
@@ -262,6 +264,7 @@ begin
     res.full := isl.full;
         res.active := res.full;
     res.issued := '0';
+        res.trial := '0';
     res.newInQueue := '1';
     
     res.renameIndex := isl.ins.tags.renameIndex;
@@ -1096,7 +1099,7 @@ end function;
     function iqNext_N2(queueContent: SchedulerInfoArray;
                       inputData: SchedulerInfoArray;               
                       prevSending, sends: std_logic;
-                      killMask, selMask: std_logic_vector;
+                      killMask, trialMask, selMask: std_logic_vector;
                       TEST_MODE: natural
                              )
     return SchedulerInfoArray is
@@ -1135,6 +1138,10 @@ end function;
                     res(i).dynamic.full := '0';
                     res(i).dynamic.active := '0';
                  end if;
+                 
+                 if trialMask(i) = '1' then
+                     res(i).dynamic.trial := '1';
+                 end if;
             end loop;
     
             fullMask := extractFullMask(res);
@@ -1153,21 +1160,30 @@ end function;
         fullMaskSh1(0 to MAIN_LEN-2) := fullMaskBeforeKill(1 to MAIN_LEN-1); 
         fullMaskSh2(0 to MAIN_LEN-3) := fullMaskBeforeKill(2 to MAIN_LEN-1);
         
-        if e1 = e2 and e1 >= 0 and e1 < MAIN_LEN-2 then
-            for i in 0 to MAIN_LEN-1 loop
-                if i >= e1 then
-                    res(i) := shifted2(i);
-                    fullMaskCompressed(i) := fullMaskSh2(i);
+--        if e1 = e2 and e1 >= 0 and e1 < MAIN_LEN-2 then
+--            for i in 0 to MAIN_LEN-1 loop
+--                if i >= e1 then
+--                    res(i) := shifted2(i);
+--                    fullMaskCompressed(i) := fullMaskSh2(i);
+--                end if;
+--            end loop;
+--        elsif e1 >= 0 and e1 < MAIN_LEN-1 then
+--            for i in 0 to MAIN_LEN-1 loop
+--                if i >= e1 then
+--                    res(i) := shifted1(i);
+--                    fullMaskCompressed(i) := fullMaskSh1(i);
+--                end if;
+--            end loop;
+--        end if;
+               
+                if e2 >= 0 and e2 < MAIN_LEN-2 then
+                    for i in 0 to MAIN_LEN-1 loop
+                        if i >= e2 then
+                            res(i) := shifted2(i);
+                            fullMaskCompressed(i) := fullMaskSh2(i);
+                        end if;
+                    end loop;
                 end if;
-            end loop;
-        elsif e1 >= 0 and e1 < MAIN_LEN-1 then
-            for i in 0 to MAIN_LEN-1 loop
-                if i >= e1 then
-                    res(i) := shifted1(i);
-                    fullMaskCompressed(i) := fullMaskSh1(i);
-                end if;
-            end loop;
-        end if;
         
         
             if isNonzero(fullMaskBeforeKill(MAIN_LEN-4 to MAIN_LEN-1)) = '1' then

@@ -35,9 +35,10 @@ type EventState is record
     lateEvent: std_logic;
     execEvent: std_logic;
     execCausing: InstructionState;
+    preExecCausing: InstructionState;
 end record;
 
-constant DEFAULT_EVENT_STATE: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE);
+constant DEFAULT_EVENT_STATE: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE);
 
 type IssueQueueSignals is record
     sending: std_logic;
