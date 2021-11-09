@@ -230,6 +230,9 @@ function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural)
 function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray; 
 
 
+function setPhysSources(insVec: InstructionSlotArray; newPhysSources: PhysNameArray; newestSelector, depVec: std_logic_vector) return InstructionSlotArray;
+
+
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
                                 s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
                                 s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
@@ -1242,6 +1245,23 @@ begin
     res.value := isl.ins.result;    
     return res;
 end function;
+
+
+    function setPhysSources(insVec: InstructionSlotArray;
+                            newPhysSources: PhysNameArray;
+                            newestSelector, depVec: std_logic_vector)
+    return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+    begin      
+        -- Assign src registers
+        for i in 0 to PIPE_WIDTH-1 loop                    
+            res(i).ins.physicalArgSpec.args(0) := newPhysSources(3*i+0);
+            res(i).ins.physicalArgSpec.args(1) := newPhysSources(3*i+1);
+            res(i).ins.physicalArgSpec.args(2) := newPhysSources(3*i+2);                 
+        end loop;
+
+        return res;
+    end function;
 
 
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,

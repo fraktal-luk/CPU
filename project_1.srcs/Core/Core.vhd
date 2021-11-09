@@ -73,12 +73,14 @@ architecture Behavioral of Core is
             sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, committedSending: std_logic := '0';
 
     signal frontDataLastLiving, TMP_frontDataSpMasked,
+            renamedDataLivingIntOut, renamedDataLivingFloatOut,
+            
             renamedDataLivingFloatPre,
             renamedDataLivingMem, renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingFloatRe, renamedDataLivingFloatReMem,
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData, committedOut: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-        signal groupDependencyFlags: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+        signal groupDependencyFlags, groupSrcOverridesInt, groupSrcOverridesFloat: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
     signal bqCompare, bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
            specialAction, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -87,6 +89,7 @@ architecture Behavioral of Core is
            
     signal commitGroupCtr: InsTag := (others => '0');
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+        signal finalIntSources, finalFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal intType: std_logic_vector(0 to 1) := (others => '0');
     signal sysRegReadValue: Mword := (others => '0');
@@ -218,10 +221,12 @@ begin
         
         nextAccepting => canSendRename,
         
+        groupSrcOverridesInt => groupSrcOverridesInt,
+        groupSrcOverridesFloat => groupSrcOverridesFloat,
         groupSrcDeps => groupDependencyFlags,
 
-        renamedDataLiving => renamedDataLivingRe,
-        renamedDataLivingFloat => renamedDataLivingFloatPre,        
+        renamedDataLiving => renamedDataLivingIntOut,--renamedDataLivingRe,
+        renamedDataLivingFloat => renamedDataLivingFloatOut,--renamedDataLivingFloatPre,        
         renamedSending => renamedSending,
 
         renamingBr => renameSendingBr,
@@ -236,6 +241,9 @@ begin
         newPhysDestsOut => newIntDests,
         newFloatDestsOut => newFloatDests,
             
+            finalIntSourcesOut => finalIntSources,
+            finalFloatSourcesOut => finalFloatSources,
+
         specialActionOut => specialAction,
             
         commitGroupCtr => commitGroupCtr,
@@ -257,6 +265,11 @@ begin
             end if;
         end if;
     end process;
+
+
+        renamedDataLivingRe <= renamedDataLivingIntOut;
+        renamedDataLivingFloatPre <= renamedDataLivingFloatOut;
+
 
     canSendFront <= renameAccepting and not stopRename;
     canSendRename <= not stopRename;  --  Could also be : queuesAccepting;

@@ -27,7 +27,8 @@ port(
         
         TMP_spMaskedDataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     
-        groupSrcOverrides: out std_logic_vector(0 to 3*PIPE_WIDTH-1);
+        groupSrcOverridesInt: out std_logic_vector(0 to 3*PIPE_WIDTH-1);
+        groupSrcOverridesFloat: out std_logic_vector(0 to 3*PIPE_WIDTH-1);
         groupSrcDeps: out std_logic_vector(0 to 3*PIPE_WIDTH-1);
     
     renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
@@ -45,6 +46,9 @@ port(
     
     newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
+
+        finalIntSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
+        finalFloatSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
     
     specialActionOut: out InstructionSlot;
     
@@ -73,7 +77,7 @@ architecture Behavioral of UnitRegManager is
 
     signal newIntDests, newFloatDests, assignedDests, physStableInt, physStableFloat: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal newIntDestPointer, newFloatDestPointer: SmallNumber := (others => '0');
-    signal newIntSources, newIntSourcesAlt, newFloatSources, newFloatSourcesAlt,
+    signal newIntSources, newIntSourcesAlt, newFloatSources, newFloatSourcesAlt,    newIntSourcesFinal, newFloatSourcesFinal,
             storedSourcesInt, storedSourcesIntAlt, storedSourcesFloat, storedSourcesFloatAlt: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
     signal newSourceSelectorInt, newSourceSelectorFloat, storedSourceSelectorInt, storedSourceSelectorFloat: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
     
@@ -442,6 +446,7 @@ architecture Behavioral of UnitRegManager is
         
         return res;
     end function;
+ 
 begin
         frontLastSending <= frontLastSendingIn and not eventSig;
 
@@ -595,7 +600,17 @@ begin
         end if;
     end process;
 
-    groupSrcDeps <= groupDepsSig;
+        CHOOSE_FINAL_SRC: for i in 0 to 3*PIPE_WIDTH-1 generate
+            newIntSourcesFinal(i) <= storedSourcesInt(i) when storedSourceSelectorInt(i) = '1' else storedSourcesIntAlt(i); 
+            newFloatSourcesFinal(i) <= storedSourcesFloat(i) when storedSourceSelectorFloat(i) = '1' else storedSourcesFloatAlt(i); 
+        end generate;
+
+        finalIntSourcesOut <= newIntSourcesFinal;
+        finalFloatSourcesOut <= newFloatSourcesFinal;
+
+        groupSrcDeps <= groupDepsSig;
+        groupSrcOverridesInt <= newSourceSelectorInt;
+        groupSrcOverridesFloat <= newSourceSelectorFloat;
 
     stageDataToCommit <= setDestFlags(robDataLiving);
     
@@ -634,9 +649,11 @@ begin
         newPhysDestsOrig => newIntDests,    -- MAPPING (from FREE LIST)
         
         sendingToCommit => robSendingDelayed,   
-        stageDataToCommit => stageDataToCommitDelayed,        
+        stageDataToCommit => stageDataToCommitDelayed,
+        
         newPhysSources => newIntSources,
         newPhysSourcesAlt => newIntSourcesAlt,
+        newPhysSourceSelector => newSourceSelectorInt,
         prevStablePhysDests => physStableInt  -- FOR MAPPING (to FREE LIST)
     );
     
@@ -657,6 +674,7 @@ begin
         
         newPhysSources => newFloatSources,
         newPhysSourcesAlt => newFloatSourcesAlt,
+        newPhysSourceSelector => newSourceSelectorFloat,
         prevStablePhysDests => physStableFloat
     );
 

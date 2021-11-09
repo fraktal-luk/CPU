@@ -47,7 +47,7 @@ end RegisterMapper;
 architecture Behavioral of RegisterMapper is
 	constant WIDTH: natural := PIPE_WIDTH;
 	
-	signal newestMap, stableMap, newestMapNext, stableMapNext: PhysNameArray(0 to 31) := initMap(IS_FP);
+	signal newestMap, newestMap_NoRewind, stableMap, newestMapNext, newestMapNext_NoRewind, stableMapNext: PhysNameArray(0 to 31) := initMap(IS_FP);
     
     signal reserve, commit, psels: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     signal selectReserve, selectCommit: RegNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -56,6 +56,8 @@ architecture Behavioral of RegisterMapper is
     signal writeCommit: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 	signal readNewest, readNewest_T, readStableSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 	signal readStable: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+    
+    	signal readUseNewest: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
     
     signal newSelectedA, stableSelectedA: RegMaskArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     
@@ -66,6 +68,9 @@ begin
 
     newestMapNext <= getNextMap(newestMap, stableMap, newPhysDestsOrig, reserve, newSelectedA, sendingToReserve, rewind);
     stableMapNext <= getNextMap(stableMap, stableMap, writeCommit, "1111", stableSelectedA, sendingToCommit, '0');
+
+        newestMapNext_NoRewind <= getNextMap(newestMap_NoRewind, stableMap, newPhysDestsOrig, reserve, newSelectedA, sendingToReserve, '0');
+
 
     psels <= getPhysicalFloatDestSels(stageDataToCommit) when IS_FP else getPhysicalIntDestSels(stageDataToCommit);
 
@@ -91,7 +96,6 @@ begin
 		
 	end generate;
 	
-	newPhysSourceSelector <= (others => '0'); -- TMP!
 	
 	-- Write	
 	SYNCHRONOUS: process(clk)
@@ -99,6 +103,8 @@ begin
 	   if rising_edge(clk) then
           if sendingToReserve = '1' or rewind = '1' then
               newestMap <= newestMapNext;
+
+                  newestMap_NoRewind <= newestMapNext_NoRewind;
           end if;
 
           if sendingToCommit = '1' then
@@ -109,10 +115,13 @@ begin
 	end process;
 
 	newPhysSources <= readNewest;
-
+        newPhysSourcesAlt <= readStableSources;
+        newPhysSourceSelector <= readUseNewest;
 
     TMP_VIEW: block
         signal tagReserve, tagCommit: InsTag := (others => '0');
+
+            signal useNewest: std_logic_vector(0 to 31) := (others => '0');
 
         signal --reserve, commit, psels,
     
@@ -218,8 +227,10 @@ begin
 --                                          stableMap(slv2u(selectNewest(i))),
 --                                          newestSelMap2b(slv2u(selectNewest(i))),
 --                                          slv2u(selectNewest(i)));
-                                     stableMap(slv2u(selectNewest(i))) when newestSelMap2b(slv2u(selectNewest(i)))(2) = '1'
-                                else newestMap(slv2u(selectNewest(i)));
+                                     newestMap_NoRewind(slv2u(selectNewest(i))) when useNewest(slv2u(selectNewest(i))) = '1' -- newestSelMap2b(slv2u(selectNewest(i)))(2) = '1'
+                                else stableMap(slv2u(selectNewest(i)));
+                                
+            readUseNewest(i) <= useNewest(slv2u(selectNewest(i)));
         end generate;
 
         WRITE_NEWEST: for i in 0 to PIPE_WIDTH-1 generate
@@ -234,9 +245,13 @@ begin
                 if rewind = '1' then
                     newestSelMap <= (others => (others => '0'));
                     newestSelMap2b <= (others => "100");
+                    
+                    useNewest <= (others => '0');
                 elsif sendingToReserve = '1' then
                     for i in 0 to PIPE_WIDTH-1 loop
                         if reserve(i) = '1' then
+                                useNewest(slv2u(selectReserve(i))) <= '1';
+                        
                             newestMap_T(i)(slv2u(selectReserve(i))) <= newPhysDestsOrig(i);
                             newestSelMap(i)(slv2u(selectReserve(i))) <= '0';
                             
