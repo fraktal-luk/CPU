@@ -78,6 +78,8 @@ architecture Behavioral of Core is
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData, committedOut: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
+        signal groupDependencyFlags: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+
     signal bqCompare, bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
            specialAction, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
@@ -216,6 +218,8 @@ begin
         
         nextAccepting => canSendRename,
         
+        groupSrcDeps => groupDependencyFlags,
+
         renamedDataLiving => renamedDataLivingRe,
         renamedDataLivingFloat => renamedDataLivingFloatPre,        
         renamedSending => renamedSending,
@@ -379,7 +383,7 @@ begin
 
        signal regsSelI0,           regsSelM0, regsSelS0, regsSelFloatA, regsSelFloatC, regsSelFS0, regsSelF0: PhysNameArray(0 to 2) := (others => (others => '0'));
        signal regValsI0, regValsB, regValsM0, regValsS0, regValsE, regValsFloatA, regValsFloatB, regValsFloatC, regValsFS0, regValsF0: MwordArray(0 to 2) := (others => (others => '0'));
-       signal readyRegFlagsInt, readyRegFlagsFloat, readyRegFlagsIntNext, readyRegFlagsSV, readyRegFlagsFloatNext, readyRegFlagsFloatSV: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+       signal readyRegFlagsInt, readyRegFlagsFloat, readyRegFlagsInt_T, readyRegFlagsFloat_T, readyRegFlagsIntNext, readyRegFlagsSV, readyRegFlagsFloatNext, readyRegFlagsFloatSV: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
        -- Issue control 
        signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, allowIssueStoreDataFP, allowIssueStageStoreDataFP,
@@ -1215,9 +1219,19 @@ begin
              writingData(0) => dataToFloatRF(0).ins,
              readyRegFlagsNext => readyRegFlagsFloatNext
          );
-            
+     
+         SRC_LATE_OVERRIDE: if TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
+              readyRegFlagsInt <= readyRegFlagsIntNext and not groupDependencyFlags;
+              readyRegFlagsFloat <= readyRegFlagsFloatNext and not groupDependencyFlags;
+         end generate;
+
+         SRC_EARLY_OVERRIDE: if not TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
               readyRegFlagsInt <= readyRegFlagsIntNext;
               readyRegFlagsFloat <= readyRegFlagsFloatNext;
+         end generate;
+         
+              readyRegFlagsInt_T <= readyRegFlagsIntNext     and not groupDependencyFlags;
+              readyRegFlagsFloat_T <= readyRegFlagsFloatNext and not groupDependencyFlags;
                
          READY_REG_FLAGS: process(clk)
          begin
@@ -1225,9 +1239,11 @@ begin
                 if renamedSending = '1' then
                     --readyRegFlagsInt <= readyRegFlagsIntNext;
                     --readyRegFlagsFloat <= readyRegFlagsFloatNext;
+                            ch0 <= bool2std(readyRegFlagsInt_T = readyRegFlagsInt);
                 else
                     --readyRegFlagsInt <= (others => '0');
-                    --readyRegFlagsFloat <= (others => '0');                    
+                    --readyRegFlagsFloat <= (others => '0');  
+                            ch0 <= '1';                  
                 end if;
             end if;
          end process;

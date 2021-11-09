@@ -36,6 +36,8 @@ entity RegisterMapper is
 		stageDataToCommit: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		
 		newPhysSources: out PhysNameArray(0 to 3*PIPE_WIDTH-1);		
+		newPhysSourcesAlt: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
+		newPhysSourceSelector: out std_logic_vector(0 to 3*PIPE_WIDTH-1);		
 		prevStablePhysDests: out PhysNameArray(0 to PIPE_WIDTH-1)
 	);
 end RegisterMapper;
@@ -88,6 +90,8 @@ begin
 		readStable(i) <= stableMap(slv2u(selectCommit(i)));
 		
 	end generate;
+	
+	newPhysSourceSelector <= (others => '0'); -- TMP!
 	
 	-- Write	
 	SYNCHRONOUS: process(clk)

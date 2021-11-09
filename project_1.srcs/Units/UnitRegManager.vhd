@@ -27,6 +27,9 @@ port(
         
         TMP_spMaskedDataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     
+        groupSrcOverrides: out std_logic_vector(0 to 3*PIPE_WIDTH-1);
+        groupSrcDeps: out std_logic_vector(0 to 3*PIPE_WIDTH-1);
+    
     renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     --    renamedDataLiving_T: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     renamedDataLivingFloat: out InstructionSlotArray(0 to PIPE_WIDTH-1);    
@@ -70,7 +73,9 @@ architecture Behavioral of UnitRegManager is
 
     signal newIntDests, newFloatDests, assignedDests, physStableInt, physStableFloat: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal newIntDestPointer, newFloatDestPointer: SmallNumber := (others => '0');
-    signal newIntSources, newFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+    signal newIntSources, newIntSourcesAlt, newFloatSources, newFloatSourcesAlt,
+            storedSourcesInt, storedSourcesIntAlt, storedSourcesFloat, storedSourcesFloatAlt: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+    signal newSourceSelectorInt, newSourceSelectorFloat, storedSourceSelectorInt, storedSourceSelectorFloat: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
     
     signal renamedBase, stageDataToCommitDelayed: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     
@@ -79,8 +84,10 @@ architecture Behavioral of UnitRegManager is
     type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
     
     constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
-    signal depVec: DependencyVec := DEFAULT_DEP_VEC;
+    signal depVec, depVecPrev: DependencyVec := DEFAULT_DEP_VEC;
     
+    signal groupDepsSig: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+
     signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
        
     function renameGroupBase(   insVec: InstructionSlotArray;
@@ -220,29 +227,29 @@ architecture Behavioral of UnitRegManager is
             res(i).ins.physicalArgSpec.args(1) := newPhysSources(3*i+1);
             res(i).ins.physicalArgSpec.args(2) := newPhysSources(3*i+2);      
         end loop;  
-        
-        -- Overwrite sources depending on destinations of this group
-        for i in 0 to PIPE_WIDTH-1 loop
-           for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
-                    
-                    if depVec(i)(k)(j) = '1'   
-                        and res(i).ins.virtualArgSpec.intArgSel(k) = res(j).ins.virtualArgSpec.intDestSel -- intSel match
-                    then
-                        res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
-                        exit;             
-                    end if;
-                end loop;
-            end loop;
 
-        end loop;        
-          
+        if not TMP_PARAM_LATE_SRC_DEP_OVERRIDE then       
+            -- Overwrite sources depending on destinations of this group
+            for i in 0 to PIPE_WIDTH-1 loop
+               for k in 0 to 2 loop -- For each of 3 possible source arguments
+                    for j in PIPE_WIDTH-1 downto 0 loop
+                        if j >= i then
+                            next;
+                        end if;
+                        
+                        if depVec(i)(k)(j) = '1'   
+                            and res(i).ins.virtualArgSpec.intArgSel(k) = res(j).ins.virtualArgSpec.intDestSel -- intSel match
+                        then
+                            res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
+                            exit;             
+                        end if;
+                    end loop;
+                end loop;
+            end loop;        
+        end if;
+        
         return res;
     end function;
-    
  
     function renameGroupFloat(insVec: InstructionSlotArray;
                               newFloatSources: PhysNameArray;
@@ -258,25 +265,27 @@ architecture Behavioral of UnitRegManager is
             res(i).ins.physicalArgSpec.args(2) := newFloatSources(3*i+2);           
         end loop;
         
-        -- Overwrite sources depending on destinations of this group
-        for i in 0 to PIPE_WIDTH-1 loop
-            for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
-                    
-                    if depVec(i)(k)(j) = '1'
-                        and res(i).ins.virtualArgSpec.floatArgSel(k) = res(j).ins.virtualArgSpec.floatDestSel -- intSel match
-                    then
-                        res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
-                        exit;                   
-                    end if;
+        if not TMP_PARAM_LATE_SRC_DEP_OVERRIDE then
+            -- Overwrite sources depending on destinations of this group
+            for i in 0 to PIPE_WIDTH-1 loop
+                for k in 0 to 2 loop -- For each of 3 possible source arguments
+                    for j in PIPE_WIDTH-1 downto 0 loop
+                        if j >= i then
+                            next;
+                        end if;
+                        
+                        if depVec(i)(k)(j) = '1'
+                            and res(i).ins.virtualArgSpec.floatArgSel(k) = res(j).ins.virtualArgSpec.floatDestSel -- intSel match
+                        then
+                            res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
+                            exit;                   
+                        end if;
+                    end loop;
                 end loop;
-            end loop;                     
+            end loop;
+        end if;
 
-        end loop;
-
+        
         for i in res'range loop
             if res(i).ins.classInfo.fpRename = '0' then
                 res(i).full := '0';
@@ -293,6 +302,53 @@ architecture Behavioral of UnitRegManager is
             
         return res;
     end function;
+
+ 
+    function getRealDepsInt(insVec: InstructionSlotArray; depVec: DependencyVec) return std_logic_vector is
+        variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            for k in 0 to 2 loop -- For each of 3 possible source arguments
+                for j in PIPE_WIDTH-1 downto 0 loop
+                    if j >= i then
+                        next;
+                    end if;
+                    
+                    if depVec(i)(k)(j) = '1'
+                        and insVec(i).ins.virtualArgSpec.intArgSel(k) = '1' and insVec(j).ins.virtualArgSpec.intDestSel = '1' -- intSel match
+                    then
+                        res(3*i + k) := '1';
+                        exit;                   
+                    end if;
+                end loop;
+            end loop;                     
+    
+        end loop;        
+        return res;
+    end function;
+
+    function getRealDepsFloat(insVec: InstructionSlotArray; depVec: DependencyVec) return std_logic_vector is
+        variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            for k in 0 to 2 loop -- For each of 3 possible source arguments
+                for j in PIPE_WIDTH-1 downto 0 loop
+                    if j >= i then
+                        next;
+                    end if;
+                    
+                    if depVec(i)(k)(j) = '1'
+                        and insVec(i).ins.virtualArgSpec.floatArgSel(k) = '1' and insVec(j).ins.virtualArgSpec.floatDestSel = '1' -- intSel match
+                    then
+                        res(3*i + k) := '1';
+                        exit;                   
+                    end if;
+                end loop;
+            end loop;                     
+    
+        end loop;        
+        return res;
+    end function;    
 
     function classifyForDispatch(insVec: InstructionSlotArray) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
@@ -332,7 +388,60 @@ architecture Behavioral of UnitRegManager is
         end loop;
         
         return res;
-    end function;    
+    end function;
+
+
+    function replaceSourcesInt(insVec: InstructionSlotArray; depVec: DependencyVec) return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+    begin
+        if TMP_PARAM_LATE_SRC_DEP_OVERRIDE then
+            -- Overwrite sources depending on destinations of this group
+            for i in 0 to PIPE_WIDTH-1 loop
+                for k in 0 to 2 loop -- For each of 3 possible source arguments
+                    for j in PIPE_WIDTH-1 downto 0 loop
+                        if j >= i then
+                            next;
+                        end if;
+                        
+                        if depVec(i)(k)(j) = '1'
+                            and res(i).ins.virtualArgSpec.intArgSel(k) = res(j).ins.virtualArgSpec.intDestSel -- intSel match
+                        then
+                            res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
+                            exit;                   
+                        end if;
+                    end loop;
+                end loop;
+            end loop;
+        end if;
+        
+        return res;
+    end function;
+    
+    function replaceSourcesFloat(insVec: InstructionSlotArray; depVec: DependencyVec) return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+    begin
+        if TMP_PARAM_LATE_SRC_DEP_OVERRIDE then        
+            -- Overwrite sources depending on destinations of this group
+            for i in 0 to PIPE_WIDTH-1 loop
+                for k in 0 to 2 loop -- For each of 3 possible source arguments
+                    for j in PIPE_WIDTH-1 downto 0 loop
+                        if j >= i then
+                            next;
+                        end if;
+                        
+                        if depVec(i)(k)(j) = '1'
+                            and res(i).ins.virtualArgSpec.floatArgSel(k) = res(j).ins.virtualArgSpec.floatDestSel -- intSel match
+                        then
+                            res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
+                            exit;                   
+                        end if;
+                    end loop;
+                end loop;
+            end loop;
+        end if;
+        
+        return res;
+    end function;
 begin
         frontLastSending <= frontLastSendingIn and not eventSig;
 
@@ -357,33 +466,9 @@ begin
     stageDataRenameInFloat <=   renameGroupFloat(   renamedBase, newFloatSources, depVec); -- like above
     -- TODO: ^ or assign dests above, not in renameGroupBase, to keep Int and FP path separate, and merge them ony when going to ROB - it could be good for layout
             
-    assignedDests <= getPhysicalDests(renamedBase);
+    --assignedDests <= getPhysicalDests(renamedBase);
 
-               stageDataRenameIn_T <= classifyForDispatch(TMP_recodeMem(stageDataRenameIn));
-                    
---            SUBUNIT_RENAME_INT_T: entity work.GenericStage(Behavioral)--Renaming)
---            generic map(
---                USE_CLEAR => '0',
---                WIDTH => PIPE_WIDTH,
---                    KEEP_DEST => '1'
---            )
---            port map(
---                clk => clk, reset => '0', en => '0',
-                
---                prevSending => frontLastSending,    
---                stageDataIn => stageDataRenameIn_T,
-                
---                acceptingOut => open,
-                
---                nextAccepting => nextAccepting,
---                sendingOut => open,--renamedSendingSig,
---                stageDataOut => renamedDataLivingPre_T,
-                
---                execEventSignal => '0',
---                lateEventSignal => eventSig, -- because Exec is always older than Rename     
---                execCausing => DEFAULT_INSTRUCTION_STATE
---            );
-    
+    stageDataRenameIn_T <= classifyForDispatch(TMP_recodeMem(stageDataRenameIn));
                                                                                      
     SUBUNIT_RENAME_INT: entity work.GenericStage(Behavioral)--Renaming)
     generic map(
@@ -431,16 +516,8 @@ begin
         execCausing => DEFAULT_INSTRUCTION_STATE
     );
     
-    renamedDataLiving <=  --classifyForDispatch(
-                                restoreRenameIndex(renamedDataLivingPre)
-                          --)
-                          ;
-                          
---                renamedDataLiving_T <= -- classifyForDispatch(
---                                                      restoreRenameIndex(renamedDataLivingPre_T)
---                                        --        )
---                                                ;
-    renamedDataLivingFloat <= restoreRenameIndex(renamedDataLivingFloatPre);
+    renamedDataLiving <=      replaceSourcesInt( restoreRenameIndex(renamedDataLivingPre), depVecPrev);
+    renamedDataLivingFloat <= replaceSourcesFloat( restoreRenameIndex(renamedDataLivingFloatPre), depVecPrev);
     
     renameGroupCtrNext <=   commitGroupCtr when lateEventSignal = '1'
                        else clearTagLow(execCausing.tags.renameIndex) when execEventSignal = '1'
@@ -466,7 +543,8 @@ begin
         
             renameLockEndDelayedNext <= renameLockStateNext and renameLockRelease;
         
-    COMMON_SYNCHRONOUS: process(clk)     
+    COMMON_SYNCHRONOUS: process(clk)
+        variable groupDepsVar: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');    
     begin
         if rising_edge(clk) then                
             if frontLastSending = '1' then
@@ -487,10 +565,38 @@ begin
             robSendingDelayed <= sendingFromROB;
             
             renameLockReleaseDelayed <= renameLockRelease;
-                renameLockEndDelayed <= renameLockEndDelayedNext;                
-        end if;    
-    end process;
+                renameLockEndDelayed <= renameLockEndDelayedNext;
+            
+            if frontLastSending = '1' then
+                depVecPrev <= depVec;
+                
+                storedSourcesInt <= newIntSources;
+                storedSourcesIntAlt <= newIntSourcesAlt;
+                storedSourcesFloat <= newFloatSources;
+                storedSourcesFloatAlt <= newFloatSourcesAlt;
+                
+                storedSourceSelectorInt <= newSourceSelectorInt;
+                storedSourceSelectorFloat <= newSourceSelectorFloat;
+                
+    --            for i in 0 to PIPE_WIDTH-1 loop
+    --                for j in 0 to 2 loop
+    --                    groupDepsVar(3*i + j) := '0';
+    --                    for k in 0 to PIPE_WIDTH-1 loop
+    --                        groupDepsVar(3*i + j) := groupDepsVar(3*i + j) or depVec(i)(j)(k);
+    --                    end loop;
+                        
+    --                    groupDepsVar(3*i + j) := groupDepsVar(3*i + j) and 
+    --                end loop;
+    --            end loop;
+                    groupDepsVar := getRealDepsInt(frontDataLastLiving, depVec) or getRealDepsFloat(frontDataLastLiving, depVec);
     
+                groupDepsSig <= groupDepsVar;
+            end if;
+        end if;
+    end process;
+
+    groupSrcDeps <= groupDepsSig;
+
     stageDataToCommit <= setDestFlags(robDataLiving);
     
     SUBUNIT_COMMIT_INT: entity work.GenericStage(Behavioral)
@@ -529,7 +635,8 @@ begin
         
         sendingToCommit => robSendingDelayed,   
         stageDataToCommit => stageDataToCommitDelayed,        
-        newPhysSources => newIntSources,    -- TO SEQ
+        newPhysSources => newIntSources,
+        newPhysSourcesAlt => newIntSourcesAlt,
         prevStablePhysDests => physStableInt  -- FOR MAPPING (to FREE LIST)
     );
     
@@ -548,7 +655,8 @@ begin
         sendingToCommit => robSendingDelayed,
         stageDataToCommit => stageDataToCommitDelayed,
         
-        newPhysSources => newFloatSources,        
+        newPhysSources => newFloatSources,
+        newPhysSourcesAlt => newFloatSourcesAlt,
         prevStablePhysDests => physStableFloat
     );
 

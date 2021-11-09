@@ -67,6 +67,10 @@ constant LQ_PTR_SIZE: natural := countOnes(LQ_PTR_MASK);
     
     constant TMP_PARAM_I0_DELAY: boolean := true;
     constant TMP_PARAM_M0_DELAY: boolean := true;
+    
+    constant TMP_PARAM_LATE_SRC_DEP_OVERRIDE: boolean := true;
+    constant TMP_PARAM_LATE_SRC_STABLE_OVERRIDE: boolean := false;
+
 end CoreConfig;
 
 
