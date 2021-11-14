@@ -89,7 +89,7 @@ architecture Behavioral of Core is
            
     signal commitGroupCtr: InsTag := (others => '0');
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-        signal finalIntSources, finalFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+        signal checkedIntSources, checkedFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal intType: std_logic_vector(0 to 1) := (others => '0');
     signal sysRegReadValue: Mword := (others => '0');
@@ -241,8 +241,8 @@ begin
         newPhysDestsOut => newIntDests,
         newFloatDestsOut => newFloatDests,
             
-            finalIntSourcesOut => finalIntSources,
-            finalFloatSourcesOut => finalFloatSources,
+            checkedIntSourcesOut => checkedIntSources,
+            checkedFloatSourcesOut => checkedFloatSources,
 
         specialActionOut => specialAction,
             

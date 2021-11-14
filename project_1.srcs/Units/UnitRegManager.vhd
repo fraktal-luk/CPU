@@ -47,8 +47,13 @@ port(
     newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
 
-        finalIntSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
-        finalFloatSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
+        checkedIntSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
+        checkedFloatSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
+
+--        nonStableIntSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
+--        nonStableFloatSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
+--        stableIntSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
+--        stableFloatSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
     
     specialActionOut: out InstructionSlot;
     
@@ -67,8 +72,10 @@ end UnitRegManager;
 
 
 architecture Behavioral of UnitRegManager is
-    signal stageDataRenameIn, stageDataRenameIn_T, stageDataRenameInFloat, renamedDataLivingPre, renamedDataLivingPre_T, renamedDataLivingFloatPre,
-               stageDataToCommit, stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal stageDataRenameIn, stageDataRenameIn_T, stageDataRenameInFloat, renamedDataLivingIntSig, renamedDataLivingFloatSig, renamedDataLivingPre, renamedDataLivingPre_T, renamedDataLivingFloatPre,
+               stageDataToCommit, stageDataCommitInt, stageDataCommitFloat,
+               T_renamedDataLivingInt, T_renamedDataLivingFloat
+               : InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, robSendingDelayed, sendingCommitInt, frontLastSending, renamedSendingSig, sendingCommitFloat,
                renameLockState, renameLockStateNext, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed, renameLockEndDelayedNext: std_logic := '0';
  
@@ -89,6 +96,13 @@ architecture Behavioral of UnitRegManager is
     
     constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
     signal depVec, depVecPrev: DependencyVec := DEFAULT_DEP_VEC;
+    
+    type RenameInfo is record
+    
+        dummy: std_logic;
+    end record;
+    
+    
     
     signal groupDepsSig: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
@@ -521,8 +535,20 @@ begin
         execCausing => DEFAULT_INSTRUCTION_STATE
     );
     
-    renamedDataLiving <=      replaceSourcesInt( restoreRenameIndex(renamedDataLivingPre), depVecPrev);
-    renamedDataLivingFloat <= replaceSourcesFloat( restoreRenameIndex(renamedDataLivingFloatPre), depVecPrev);
+    
+                T_renamedDataLivingInt <= replaceSourcesInt( restoreRenameIndex(
+                                                                             setPhysSources(renamedDataLivingPre, newIntSourcesFinal, "0", "0")
+                                                                            ), depVecPrev);
+                                                            
+                T_renamedDataLivingFloat <= replaceSourcesFloat( restoreRenameIndex(
+                                                                            setPhysSources(renamedDataLivingFloatPre, newFloatSourcesFinal, "0", "0")
+                                                                            ), depVecPrev);
+
+        renamedDataLivingIntSig <=      replaceSourcesInt( restoreRenameIndex(renamedDataLivingPre), depVecPrev);
+        renamedDataLivingFloatSig <= replaceSourcesFloat( restoreRenameIndex(renamedDataLivingFloatPre), depVecPrev);
+    
+        renamedDataLiving <= renamedDataLivingIntSig;
+        renamedDataLivingFloat <= renamedDataLivingFloatSig;
     
     renameGroupCtrNext <=   commitGroupCtr when lateEventSignal = '1'
                        else clearTagLow(execCausing.tags.renameIndex) when execEventSignal = '1'
@@ -605,8 +631,11 @@ begin
             newFloatSourcesFinal(i) <= storedSourcesFloat(i) when storedSourceSelectorFloat(i) = '1' else storedSourcesFloatAlt(i); 
         end generate;
 
-        finalIntSourcesOut <= newIntSourcesFinal;
-        finalFloatSourcesOut <= newFloatSourcesFinal;
+        checkedIntSourcesOut <= getPhysicalArgs(renamedDataLivingIntSig);
+        checkedFloatSourcesOut <= getPhysicalArgs(renamedDataLivingFloatSig);
+
+        --finalIntSourcesOut <= newIntSourcesFinal;
+        --finalFloatSourcesOut <= newFloatSourcesFinal;
 
         groupSrcDeps <= groupDepsSig;
         groupSrcOverridesInt <= newSourceSelectorInt;

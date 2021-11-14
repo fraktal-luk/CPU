@@ -1252,7 +1252,7 @@ end function;
                             newestSelector, depVec: std_logic_vector)
     return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-    begin      
+    begin
         -- Assign src registers
         for i in 0 to PIPE_WIDTH-1 loop                    
             res(i).ins.physicalArgSpec.args(0) := newPhysSources(3*i+0);
