@@ -31,6 +31,10 @@ port(
         groupSrcOverridesFloat: out std_logic_vector(0 to 3*PIPE_WIDTH-1);
         groupSrcDeps: out std_logic_vector(0 to 3*PIPE_WIDTH-1);
     
+    
+        renamedArgs: out RenameInfoArray(0 to PIPE_WIDTH-1);
+        renamedArgsFloat: out RenameInfoArray(0 to PIPE_WIDTH-1);
+    
     renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     --    renamedDataLiving_T: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     renamedDataLivingFloat: out InstructionSlotArray(0 to PIPE_WIDTH-1);    
@@ -89,25 +93,38 @@ architecture Behavioral of UnitRegManager is
     signal newSourceSelectorInt, newSourceSelectorFloat, storedSourceSelectorInt, storedSourceSelectorFloat: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
     
     signal renamedBase, stageDataToCommitDelayed: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    
-    
-    type DependencySpec is array(0 to 2) of std_logic_vector(0 to PIPE_WIDTH-1); 
-    type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
-    
-    constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
+
     signal depVec, depVecPrev: DependencyVec := DEFAULT_DEP_VEC;
-    
-    type RenameInfo is record
-    
-        dummy: std_logic;
-    end record;
-    
-    
-    
+
+
     signal groupDepsSig: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
     signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-       
+
+
+
+
+
+    function assignDests(       insVec: InstructionSlotArray;
+                                newIntDests: PhysNameArray)
+    return PhysNameArray is
+        variable res: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+        variable reserveSelSig, takeVecInt, takeVecFloat, stores, loads: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
+        variable nToTake: integer := 0;
+        variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
+        variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
+       	variable found: boolean := false;
+    begin
+        -- Assign dest registers
+        for i in 0 to PIPE_WIDTH-1 loop
+            if insVec(i).ins.virtualArgSpec.intDestSel = '1' then
+                res(i) := newIntDests(countOnes(takeVecInt)); -- how many used before
+            end if;
+            takeVecInt(i) := insVec(i).ins.virtualArgSpec.intDestSel;   
+        end loop;
+        return res;       
+    end function;    
+               
     function renameGroupBase(   insVec: InstructionSlotArray;
                                 newIntDests: PhysNameArray;
                                 newFloatDests: PhysNameArray;                                
@@ -345,6 +362,52 @@ architecture Behavioral of UnitRegManager is
         return res;
     end function;
 
+    function getRealDepVecInt(insVec: InstructionSlotArray; depVec: DependencyVec) return DependencyVec is
+        variable res: DependencyVec := depVec;
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            for k in 0 to 2 loop -- For each of 3 possible source arguments
+                for j in PIPE_WIDTH-1 downto 0 loop
+                    if j >= i then
+                        next;
+                    end if;
+                    
+                    if depVec(i)(k)(j) = '1'
+                        and insVec(i).ins.virtualArgSpec.intArgSel(k) = '1' and insVec(j).ins.virtualArgSpec.intDestSel = '1' -- intSel match
+                    then
+                        res(i)(k)(j) := '1';
+                        exit;                   
+                    end if;
+                end loop;
+            end loop;                     
+    
+        end loop;        
+        return res;
+    end function;
+
+    function getRealDepVecFloat(insVec: InstructionSlotArray; depVec: DependencyVec) return DependencyVec is
+        variable res: DependencyVec := depVec;
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            for k in 0 to 2 loop -- For each of 3 possible source arguments
+                for j in PIPE_WIDTH-1 downto 0 loop
+                    if j >= i then
+                        next;
+                    end if;
+                    
+                    if depVec(i)(k)(j) = '1'
+                        and insVec(i).ins.virtualArgSpec.floatArgSel(k) = '1' and insVec(j).ins.virtualArgSpec.floatDestSel = '1'
+                    then
+                        res(i)(k)(j) := '1';
+                        exit;                   
+                    end if;
+                end loop;
+            end loop;                     
+    
+        end loop;        
+        return res;
+    end function;
+
     function getRealDepsFloat(insVec: InstructionSlotArray; depVec: DependencyVec) return std_logic_vector is
         variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
     begin
@@ -460,9 +523,75 @@ architecture Behavioral of UnitRegManager is
         
         return res;
     end function;
- 
+    
+
+    function getRenameInfo(insVec: InstructionSlotArray; newPhysDests, newPhysSources, newPhysSourcesStable: PhysNameArray; newSourceSelector: std_logic_vector; constant IS_FP: boolean := false)
+    return RenameInfoArray is
+        variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+        variable dests: PhysNameArray(0 to PIPE_WIDTH-1) := assignDests(insVec, newPhysDests);
+        variable depVec: DependencyVec;
+    begin
+        depVec := findDeps(insVec);
+        if IS_FP then
+            depVec := getRealDepVecFloat(insVec, depVec);
+        else
+            depVec := getRealDepVecInt(insVec, depVec);
+        end if;
+        
+        for i in 0 to PIPE_WIDTH-1 loop
+            if IS_FP then        
+                res(i).destSel := insVec(i).ins.virtualArgSpec.floatDestSel;
+            else    
+                res(i).destSel := insVec(i).ins.virtualArgSpec.intDestSel;
+            end if;
+            
+            res(i).virtualDest := insVec(i).ins.virtualArgSpec.dest(4 downto 0);
+            res(i).physicalDest := dests(i);
+
+            if IS_FP then
+                res(i).sourceSel := insVec(i).ins.virtualArgSpec.floatArgSel;
+            else
+                res(i).sourceSel := insVec(i).ins.virtualArgSpec.intArgSel;
+            end if;
+                
+            for j in 0 to 2 loop
+                res(i).sourceConst(j) :=   (insVec(i).ins.virtualArgSpec.intArgSel(j) and not isNonzero(insVec(i).ins.virtualArgSpec.args(j)(4 downto 0))) -- int r0
+                                        or (not insVec(i).ins.virtualArgSpec.intArgSel(j) and not insVec(i).ins.virtualArgSpec.floatArgSel(j))             -- not used
+                                        or (bool2std(j = 1) and insVec(i).ins.constantArgs.immSel);                                                        -- imm
+
+                res(i).virtualSources(j) := insVec(i).ins.virtualArgSpec.args(j)(4 downto 0);
+                
+                res(i).physicalSources(j) := newPhysSources(3*i + j);
+                res(i).physicalSourcesStable(j) := newPhysSourcesStable(3*i + j);
+            end loop;
+
+            res(i).deps := depVec(i); 
+            
+            for j in 0 to 2 loop
+                res(i).sourcesNew(j) := isNonzero(res(i).deps(j));
+                for k in PIPE_WIDTH-1 downto 0 loop
+                    if res(i).deps(j)(k) = '1' then
+                        res(i).physicalSourcesNew(j) := dests(k);
+                        exit;
+                    end if;
+                end loop;
+            end loop;    
+            
+            res(i).sourcesStable := newSourceSelector(3*i to 3*i + 2);            
+            res(i).sourcesReady := (others => '0');
+        end loop;
+        return res;
+    end function;
+
+    
+    signal inputRenameInfoInt, inputRenameInfoFloat, storedRenameInfoInt, storedRenameInfoFloat, outputRenameInfoInt, outputRenameInfoFloat: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 begin
-        frontLastSending <= frontLastSendingIn and not eventSig;
+       inputRenameInfoInt <= getRenameInfo(frontDataLastLiving, newIntDests, newIntSources, newIntSourcesAlt, newSourceSelectorInt);
+       inputRenameInfoFloat <= getRenameInfo(frontDataLastLiving, newFloatDests, newFloatSources, newFloatSourcesAlt, newSourceSelectorFloat);
+
+
+
+    frontLastSending <= frontLastSendingIn and not eventSig;
 
     eventSig <= execEventSignal or lateEventSignal;
 
@@ -598,7 +727,10 @@ begin
             renameLockReleaseDelayed <= renameLockRelease;
                 renameLockEndDelayed <= renameLockEndDelayedNext;
             
-            if frontLastSending = '1' then
+            if frontLastSending = '1' then             
+                storedRenameInfoInt <= inputRenameInfoInt;
+                storedRenameInfoFloat <= inputRenameInfoFloat;
+            
                 depVecPrev <= depVec;
                 
                 storedSourcesInt <= newIntSources;
@@ -625,6 +757,14 @@ begin
             end if;
         end if;
     end process;
+
+        outputRenameInfoInt <= storedRenameInfoInt;
+        outputRenameInfoFloat <= storedRenameInfoFloat;
+        
+        renamedArgs <= outputRenameInfoInt;
+        renamedArgsFloat <= outputRenameInfoFloat;
+
+
 
         CHOOSE_FINAL_SRC: for i in 0 to 3*PIPE_WIDTH-1 generate
             newIntSourcesFinal(i) <= storedSourcesInt(i) when storedSourceSelectorInt(i) = '1' else storedSourcesIntAlt(i); 

@@ -91,6 +91,47 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
 );
 
 
+    type DependencySpec is array(0 to 2) of std_logic_vector(0 to PIPE_WIDTH-1); 
+    type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
+    
+    constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
+    
+
+    type RenameInfo is record
+        destSel: std_logic;
+        virtualDest: RegName;
+        physicalDest: PhysName;
+        sourceSel: std_logic_vector(0 to 2);
+        sourceConst: std_logic_vector(0 to 2); 
+        virtualSources: RegNameArray(0 to 2);
+        physicalSources: PhysNameArray(0 to 2);
+        physicalSourcesStable: PhysNameArray(0 to 2);
+        physicalSourcesNew: PhysNameArray(0 to 2); -- sources in case of of group dependency        
+        deps: DependencySpec;
+        sourcesStable: std_logic_vector(0 to 2); -- true if source is from stable map - always ready
+        sourcesNew: std_logic_vector(0 to 2);   -- true if group dependency
+        sourcesReady: std_logic_vector(0 to 2); -- ready as read from ReadyTable based on NewestMap 
+    end record;
+
+    type RenameInfoArray is array(natural range <>) of RenameInfo;
+
+    constant DEFAULT_RENAME_INFO: RenameInfo := (
+        destSel => '0',
+        virtualDest => (others => '0'),
+        physicalDest => (others => '0'),
+        sourceSel => (others => '0'),
+        sourceConst => (others => '0'),
+        virtualSources => (others => (others => '0')),
+        physicalSources => (others => (others => '0')),
+        physicalSourcesStable => (others => (others => '0')),
+        physicalSourcesNew => (others => (others => '0')),
+        deps => (others => (others => '0')),
+        sourcesStable => (others => '0'),
+        sourcesNew => (others => '0'),
+        sourcesReady => (others => '0')        
+    );
+
+
 function adjustStage(content: InstructionSlotArray) return InstructionSlotArray;
 
 function compactMask(vec: std_logic_vector) return std_logic_vector; -- WARNING: only for 4 elements
@@ -194,9 +235,12 @@ function prepareForStoreValueIQ(insVec: InstructionSlotArray) return Instruction
 function prepareForStoreValueFloatIQ(--insVecInt,
                                      insVecFloat: InstructionSlotArray) return InstructionSlotArray;
 
-function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
+--function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
 
 function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray;
+
+function removeArg2(ria: RenameInfoArray) return RenameInfoArray;
+function useStoreArg2(ria: RenameInfoArray) return RenameInfoArray;
 
 
 function clearRawInfo(ins: InstructionState) return InstructionState;      -- ip, bits; this is raw program data 
@@ -971,19 +1015,19 @@ begin
 end function;
 
 
-function removeArg2(insVec: InstructionStateArray) return InstructionStateArray is
-    variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
-begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        res(i).virtualArgSpec.intArgSel(2) := '0';
-        res(i).virtualArgSpec.args(2) := (others => '0');
+--function removeArg2(insVec: InstructionStateArray) return InstructionStateArray is
+--    variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
+--begin
+--    for i in 0 to PIPE_WIDTH-1 loop
+--        res(i).virtualArgSpec.intArgSel(2) := '0';
+--        res(i).virtualArgSpec.args(2) := (others => '0');
         
-        res(i).physicalArgSpec.intArgSel(2) := '0';
-        res(i).physicalArgSpec.args(2) := (others => '0');                                                
-    end loop;
+--        res(i).physicalArgSpec.intArgSel(2) := '0';
+--        res(i).physicalArgSpec.args(2) := (others => '0');                                                
+--    end loop;
     
-    return res;
-end function;
+--    return res;
+--end function;
 
 function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
@@ -998,6 +1042,68 @@ begin
     
     return res;
 end function;
+
+
+function removeArg2(ria: RenameInfoArray) return RenameInfoArray is
+    variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := ria;
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i).sourceSel(2) := '0';
+        res(i).sourceConst(2) := '1'; 
+        res(i).virtualSources(2) := (others => '0');
+        res(i).physicalSources(2) := (others => '0');
+        res(i).physicalSourcesStable(2) := (others => '0');
+        res(i).physicalSourcesNew(2) := (others => '0'); -- sources in case of of group dependency        
+        res(i).deps(2) := (others => '0');
+        res(i).sourcesStable(2) := '1'; -- true if source is from stable map - always ready
+        res(i).sourcesNew(2) := '0';   -- true if group dependency
+        res(i).sourcesReady(2) := '0'; -- ready as read from ReadyTable based on NewestMap 
+    end loop;
+    
+    return res;
+end function;
+
+function useStoreArg2(ria: RenameInfoArray) return RenameInfoArray is
+    variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := ria;
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i).sourceSel(0) := res(i).sourceSel(2);
+        res(i).sourceConst(0) := res(i).sourceConst(2); 
+        res(i).virtualSources(0) := res(i).virtualSources(2);
+        res(i).physicalSources(0) := res(i).physicalSources(2);
+        res(i).physicalSourcesStable(0) := res(i).physicalSourcesStable(2);
+        res(i).physicalSourcesNew(0) := res(i).physicalSourcesNew(2); -- sources in case of of group dependency        
+        res(i).deps(0) := res(i).deps(2);
+        res(i).sourcesStable(0) := res(i).sourcesStable(2); -- true if source is from stable map - always ready
+        res(i).sourcesNew(0) := res(i).sourcesNew(2);   -- true if group dependency
+        res(i).sourcesReady(0) := res(i).sourcesReady(2); -- ready as read from ReadyTable based on NewestMap
+
+        res(i).sourceSel(1) := '0';
+        res(i).sourceConst(1) := '1'; 
+        res(i).virtualSources(1) := (others => '0');
+        res(i).physicalSources(1) := (others => '0');
+        res(i).physicalSourcesStable(1) := (others => '0');
+        res(i).physicalSourcesNew(1) := (others => '0'); -- sources in case of of group dependency        
+        res(i).deps(1) := (others => '0');
+        res(i).sourcesStable(1) := '1'; -- true if source is from stable map - always ready
+        res(i).sourcesNew(1) := '0';   -- true if group dependency
+        res(i).sourcesReady(1) := '0'; -- ready as read from ReadyTable based on NewestMap
+        
+        res(i).sourceSel(2) := '0';
+        res(i).sourceConst(2) := '1'; 
+        res(i).virtualSources(2) := (others => '0');
+        res(i).physicalSources(2) := (others => '0');
+        res(i).physicalSourcesStable(2) := (others => '0');
+        res(i).physicalSourcesNew(2) := (others => '0'); -- sources in case of of group dependency        
+        res(i).deps(2) := (others => '0');
+        res(i).sourcesStable(2) := '1'; -- true if source is from stable map - always ready
+        res(i).sourcesNew(2) := '0';   -- true if group dependency
+        res(i).sourcesReady(2) := '0'; -- ready as read from ReadyTable based on NewestMap        
+    end loop;
+    
+    return res;
+end function;
+
 
 
 function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray is

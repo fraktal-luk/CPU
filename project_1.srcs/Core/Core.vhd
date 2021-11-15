@@ -80,6 +80,8 @@ architecture Behavioral of Core is
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData, committedOut: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
+        signal renamedArgsInt, renamedArgsFloat: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+
         signal groupDependencyFlags, groupSrcOverridesInt, groupSrcOverridesFloat: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
     signal bqCompare, bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
@@ -226,7 +228,11 @@ begin
         groupSrcDeps => groupDependencyFlags,
 
         renamedDataLiving => renamedDataLivingIntOut,--renamedDataLivingRe,
-        renamedDataLivingFloat => renamedDataLivingFloatOut,--renamedDataLivingFloatPre,        
+        renamedDataLivingFloat => renamedDataLivingFloatOut,--renamedDataLivingFloatPre,
+        
+        renamedArgs => renamedArgsInt,
+        renamedArgsFloat => renamedArgsFloat,
+
         renamedSending => renamedSending,
 
         renamingBr => renameSendingBr,
@@ -441,7 +447,7 @@ begin
         
             --inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), aluMask);
             schedInfoA <= --work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-                          work.LogicIssue.getIssueInfoArray(TMP_recodeALU(renamedDataLivingRe), aluMask, true);
+                          work.LogicIssue.getIssueInfoArray(TMP_recodeALU(renamedDataLivingRe), aluMask, true, removeArg2(renamedArgsInt));
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, false, FORWARDING_MODES_INT_D, FORWARDING_MODES_INT_D);
               
             IQUEUE_I0: entity work.IssueQueue(Behavioral)
@@ -565,7 +571,7 @@ begin
         begin
            --inputDataArray <= TMP_removeArg2(makeSlotArray(extractData(renamedDataLivingReMem), memMask));
            schedInfoA <= --work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-                         work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true);
+                         work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true, removeArg2(renamedArgsInt));
            
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D, FORWARDING_MODES_NONE);
                         
@@ -774,13 +780,13 @@ begin
 
             --inputDataArrayInt <= makeSlotArray((extractData(prepareForStoreValueIQ(renamedDataLivingReMem))), intStoreMask);
             schedInfoIntA <= --work.LogicIssue.getIssueInfoArray(inputDataArrayInt, false);
-                             work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingReMem), intStoreMask, false);
+                             work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingReMem), intStoreMask, false, useStoreArg2(renamedArgsInt));
             schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, true, FORWARDING_MODES_SV_INT_D, FORWARDING_MODES_SV_INT_D);
 
             --inputDataArrayFloat <= makeSlotArray((--extractData(renamedDataLivingReMem),
             --                                                                 extractData(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem))), fpStoreMask);
             schedInfoFloatA <= --work.LogicIssue.getIssueInfoArray(inputDataArrayFloat, false);
-                                work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem), fpStoreMask, false);
+                                work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem), fpStoreMask, false, useStoreArg2(renamedArgsFloat));
             schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, true, FORWARDING_MODES_SV_FLOAT_D, FORWARDING_MODES_SV_FLOAT_D);
 
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
@@ -906,7 +912,7 @@ begin
 
             --inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), fpMask);
             schedInfoA <= --work.LogicIssue.getIssueInfoArray(inputDataArray, false);
-                          work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingFloatRe), fpMask, false);
+                          work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingFloatRe), fpMask, false, renamedArgsFloat);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, false, FORWARDING_MODES_FLOAT_D, FORWARDING_MODES_FLOAT_D);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)

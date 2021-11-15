@@ -123,15 +123,15 @@ end record;
 constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", "00000010", '0');
 type WakeupArray2D is array(natural range <>, natural range <>) of WakeupStruct;
 
-function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean) return StaticInfo; 
-function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean) return DynamicInfo;
+function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo; 
+function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo;
 
-function getIssueStaticInfoArray(insVec: InstructionSlotArray; constant HAS_IMM: boolean) return StaticInfoArray;
-function getIssueDynamicInfoArray(insVec: InstructionSlotArray; stA: StaticInfoArray; constant HAS_IMM: boolean) return DynamicInfoArray;
+--function getIssueStaticInfoArray(insVec: InstructionSlotArray; constant HAS_IMM: boolean; ria: RenameInfoArray) return StaticInfoArray;
+--function getIssueDynamicInfoArray(insVec: InstructionSlotArray; stA: StaticInfoArray; constant HAS_IMM: boolean; ria: RenameInfoArray) return DynamicInfoArray;
 
-function getIssueInfoArray(insVec: InstructionSlotArray; constant HAS_IMM: boolean) return SchedulerInfoArray;
+--function getIssueInfoArray(insVec: InstructionSlotArray; constant HAS_IMM: boolean; ria: RenameInfoArray) return SchedulerInfoArray;
 
-function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean) return SchedulerInfoArray;
+function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray) return SchedulerInfoArray;
 
 function getSchedEntrySlot(info: SchedulerInfo) return SchedulerEntrySlot;
 function getSchedEntrySlotArray(infoA: SchedulerInfoArray) return SchedulerEntrySlotArray;
@@ -222,7 +222,7 @@ begin
     return res;
 end function;
 
-function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean) return StaticInfo is
+function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo is
     variable res: StaticInfo;
 begin
     res.operation := isl.ins.specificOperation;
@@ -250,6 +250,8 @@ begin
         end if;
     end if;
     
+            res.zero := ri.sourceConst;
+    
     if not HAS_IMM then
         res.immediate := '0';            
     end if;        
@@ -258,7 +260,7 @@ begin
 end function; 
 
 
-function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean) return DynamicInfo is
+function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo is
     variable res: DynamicInfo;
 begin
     res.full := isl.full;
@@ -268,12 +270,14 @@ begin
     res.newInQueue := '1';
     
     res.renameIndex := isl.ins.tags.renameIndex;
-    res.argSpec := isl.ins.physicalArgSpec;
-    
     res.staticPtr := (others => '0'); -- points to entry with static info
+
+    res.argSpec := isl.ins.physicalArgSpec;
+        
     res.stored := (others => '0');
-    res.missing := (isl.ins.physicalArgSpec.intArgSel and not stInfo.zero)
-                                       or (isl.ins.physicalArgSpec.floatArgSel);                                   
+    res.missing := --(isl.ins.physicalArgSpec.intArgSel and not stInfo.zero)
+                   --                    or (isl.ins.physicalArgSpec.floatArgSel);
+                     not stInfo.zero;                               
     res.readyNow := (others => '0');
     res.readyNext := (others => '0');
     res.readyM2  := (others => '0');
@@ -292,43 +296,43 @@ begin
     return res;
 end function; 
 
-function getIssueStaticInfoArray(insVec: InstructionSlotArray; constant HAS_IMM: boolean) return StaticInfoArray is
-    variable res: StaticInfoArray(insVec'range);
-begin
-    for i in res'range loop
-        res(i) := getIssueStaticInfo(insVec(i), HAS_IMM);
-    end loop;
-    return res;
-end function;
+--function getIssueStaticInfoArray(insVec: InstructionSlotArray; constant HAS_IMM: boolean) return StaticInfoArray is
+--    variable res: StaticInfoArray(insVec'range);
+--begin
+--    for i in res'range loop
+--        res(i) := getIssueStaticInfo(insVec(i), HAS_IMM);
+--    end loop;
+--    return res;
+--end function;
 
-function getIssueDynamicInfoArray(insVec: InstructionSlotArray; stA: StaticInfoArray; constant HAS_IMM: boolean) return DynamicInfoArray is
-    variable res: DynamicInfoArray(insVec'range);
-begin
-    for i in res'range loop
-        res(i) := getIssueDynamicInfo(insVec(i), stA(i), HAS_IMM);
-    end loop;
-    return res;
-end function;
+--function getIssueDynamicInfoArray(insVec: InstructionSlotArray; stA: StaticInfoArray; constant HAS_IMM: boolean) return DynamicInfoArray is
+--    variable res: DynamicInfoArray(insVec'range);
+--begin
+--    for i in res'range loop
+--        res(i) := getIssueDynamicInfo(insVec(i), stA(i), HAS_IMM);
+--    end loop;
+--    return res;
+--end function;
 
-function getIssueInfoArray(insVec: InstructionSlotArray; constant HAS_IMM: boolean) return SchedulerInfoArray is
-    variable res: SchedulerInfoArray(insVec'range);
-begin
-    for i in res'range loop
-        res(i).static := getIssueStaticInfo(insVec(i), HAS_IMM);
-        res(i).dynamic := getIssueDynamicInfo(insVec(i), res(i).static, HAS_IMM);
-    end loop;
-    return res;
-end function;
+--function getIssueInfoArray(insVec: InstructionSlotArray; constant HAS_IMM: boolean; ria: RenameInfoArray) return SchedulerInfoArray is
+--    variable res: SchedulerInfoArray(insVec'range);
+--begin
+--    for i in res'range loop
+--        res(i).static := getIssueStaticInfo(insVec(i), HAS_IMM, ria(i));
+--        res(i).dynamic := getIssueDynamicInfo(insVec(i), res(i).static, HAS_IMM, ria(i));
+--    end loop;
+--    return res;
+--end function;
 
-function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean) return SchedulerInfoArray is
+function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray) return SchedulerInfoArray is
     variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1);
     variable slot: InstructionSlot := DEFAULT_INS_SLOT;
 begin
     for i in res'range loop
         slot := insVec(i);
         slot.full := mask(i);
-        res(i).static := getIssueStaticInfo(slot, USE_IMM);
-        res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM);
+        res(i).static := getIssueStaticInfo(slot, USE_IMM, ria(i));
+        res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, ria(i));
     end loop;
     return res;
     
