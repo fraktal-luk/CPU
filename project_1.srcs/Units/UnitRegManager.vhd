@@ -27,8 +27,8 @@ port(
         
         TMP_spMaskedDataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     
-        groupSrcOverridesInt: out std_logic_vector(0 to 3*PIPE_WIDTH-1);
-        groupSrcOverridesFloat: out std_logic_vector(0 to 3*PIPE_WIDTH-1);
+        --groupSrcOverridesInt: out std_logic_vector(0 to 3*PIPE_WIDTH-1);
+        --groupSrcOverridesFloat: out std_logic_vector(0 to 3*PIPE_WIDTH-1);
         groupSrcDeps: out std_logic_vector(0 to 3*PIPE_WIDTH-1);
     
     
@@ -36,7 +36,6 @@ port(
         renamedArgsFloat: out RenameInfoArray(0 to PIPE_WIDTH-1);
     
     renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
-    --    renamedDataLiving_T: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     renamedDataLivingFloat: out InstructionSlotArray(0 to PIPE_WIDTH-1);    
     renamedSending: out std_logic;
     
@@ -51,13 +50,8 @@ port(
     newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
 
-        checkedIntSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
-        checkedFloatSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
-
---        nonStableIntSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
---        nonStableFloatSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
---        stableIntSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
---        stableFloatSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
+    --    checkedIntSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
+    --    checkedFloatSourcesOut: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
     
     specialActionOut: out InstructionSlot;
     
@@ -86,24 +80,19 @@ architecture Behavioral of UnitRegManager is
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG; -- This is rewinded on events
     signal renameCtr, renameCtrNext: Word := (others => '0');
 
-    signal newIntDests, newFloatDests, assignedDests, physStableInt, physStableFloat: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+    signal newIntDests, newFloatDests, physStableInt, physStableFloat: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal newIntDestPointer, newFloatDestPointer: SmallNumber := (others => '0');
-    signal newIntSources, newIntSourcesAlt, newFloatSources, newFloatSourcesAlt,    newIntSourcesFinal, newFloatSourcesFinal,
-            storedSourcesInt, storedSourcesIntAlt, storedSourcesFloat, storedSourcesFloatAlt: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
-    signal newSourceSelectorInt, newSourceSelectorFloat, storedSourceSelectorInt, storedSourceSelectorFloat: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
+    signal newIntSources, newIntSourcesAlt, newFloatSources, newFloatSourcesAlt: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+    signal newSourceSelectorInt, newSourceSelectorFloat --, storedSourceSelectorInt, storedSourceSelectorFloat
+                    : std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
     
     signal renamedBase, stageDataToCommitDelayed: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal depVec, depVecPrev: DependencyVec := DEFAULT_DEP_VEC;
 
-
     signal groupDepsSig: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
     signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-
-
-
-
 
     function assignDests(       insVec: InstructionSlotArray;
                                 newIntDests: PhysNameArray)
@@ -589,8 +578,6 @@ begin
        inputRenameInfoInt <= getRenameInfo(frontDataLastLiving, newIntDests, newIntSources, newIntSourcesAlt, newSourceSelectorInt);
        inputRenameInfoFloat <= getRenameInfo(frontDataLastLiving, newFloatDests, newFloatSources, newFloatSourcesAlt, newSourceSelectorFloat);
 
-
-
     frontLastSending <= frontLastSendingIn and not eventSig;
 
     eventSig <= execEventSignal or lateEventSignal;
@@ -613,8 +600,6 @@ begin
     stageDataRenameIn <=        renameGroupInt(     renamedBase, newIntSources, depVec); 
     stageDataRenameInFloat <=   renameGroupFloat(   renamedBase, newFloatSources, depVec); -- like above
     -- TODO: ^ or assign dests above, not in renameGroupBase, to keep Int and FP path separate, and merge them ony when going to ROB - it could be good for layout
-            
-    --assignedDests <= getPhysicalDests(renamedBase);
 
     stageDataRenameIn_T <= classifyForDispatch(TMP_recodeMem(stageDataRenameIn));
                                                                                      
@@ -663,15 +648,6 @@ begin
         lateEventSignal => eventSig, -- because Exec is always older than Rename     
         execCausing => DEFAULT_INSTRUCTION_STATE
     );
-    
-    
-                T_renamedDataLivingInt <= replaceSourcesInt( restoreRenameIndex(
-                                                                             setPhysSources(renamedDataLivingPre, newIntSourcesFinal, "0", "0")
-                                                                            ), depVecPrev);
-                                                            
-                T_renamedDataLivingFloat <= replaceSourcesFloat( restoreRenameIndex(
-                                                                            setPhysSources(renamedDataLivingFloatPre, newFloatSourcesFinal, "0", "0")
-                                                                            ), depVecPrev);
 
         renamedDataLivingIntSig <=      replaceSourcesInt( restoreRenameIndex(renamedDataLivingPre), depVecPrev);
         renamedDataLivingFloatSig <= replaceSourcesFloat( restoreRenameIndex(renamedDataLivingFloatPre), depVecPrev);
@@ -694,8 +670,6 @@ begin
         --                         Should compare to commitCtrNext instead?
         --                         But remember that rewinding GPR map needs a cycle, and before it happens,
         --                         renaming can't be done! So this delay may be caused by this problem.
-    
-    --renameLockEndDelayed <= renameLockState and renameLockReleaseDelayed;
         
         renameLockStateNext <= '1' when eventSig = '1'
                         else   '0' when renameLockReleaseDelayed = '1'
@@ -704,7 +678,7 @@ begin
             renameLockEndDelayedNext <= renameLockStateNext and renameLockRelease;
         
     COMMON_SYNCHRONOUS: process(clk)
-        variable groupDepsVar: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');    
+        --variable groupDepsVar: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');    
     begin
         if rising_edge(clk) then                
             if frontLastSending = '1' then
@@ -733,27 +707,9 @@ begin
             
                 depVecPrev <= depVec;
                 
-                storedSourcesInt <= newIntSources;
-                storedSourcesIntAlt <= newIntSourcesAlt;
-                storedSourcesFloat <= newFloatSources;
-                storedSourcesFloatAlt <= newFloatSourcesAlt;
-                
-                storedSourceSelectorInt <= newSourceSelectorInt;
-                storedSourceSelectorFloat <= newSourceSelectorFloat;
-                
-    --            for i in 0 to PIPE_WIDTH-1 loop
-    --                for j in 0 to 2 loop
-    --                    groupDepsVar(3*i + j) := '0';
-    --                    for k in 0 to PIPE_WIDTH-1 loop
-    --                        groupDepsVar(3*i + j) := groupDepsVar(3*i + j) or depVec(i)(j)(k);
-    --                    end loop;
-                        
-    --                    groupDepsVar(3*i + j) := groupDepsVar(3*i + j) and 
-    --                end loop;
-    --            end loop;
-                    groupDepsVar := getRealDepsInt(frontDataLastLiving, depVec) or getRealDepsFloat(frontDataLastLiving, depVec);
+                groupDepsSig <= getRealDepsInt(frontDataLastLiving, depVec) or getRealDepsFloat(frontDataLastLiving, depVec);
     
-                groupDepsSig <= groupDepsVar;
+                --groupDepsSig <= groupDepsVar;
             end if;
         end if;
     end process;
@@ -764,22 +720,7 @@ begin
         renamedArgs <= outputRenameInfoInt;
         renamedArgsFloat <= outputRenameInfoFloat;
 
-
-
-        CHOOSE_FINAL_SRC: for i in 0 to 3*PIPE_WIDTH-1 generate
-            newIntSourcesFinal(i) <= storedSourcesInt(i) when storedSourceSelectorInt(i) = '1' else storedSourcesIntAlt(i); 
-            newFloatSourcesFinal(i) <= storedSourcesFloat(i) when storedSourceSelectorFloat(i) = '1' else storedSourcesFloatAlt(i); 
-        end generate;
-
-        checkedIntSourcesOut <= getPhysicalArgs(renamedDataLivingIntSig);
-        checkedFloatSourcesOut <= getPhysicalArgs(renamedDataLivingFloatSig);
-
-        --finalIntSourcesOut <= newIntSourcesFinal;
-        --finalFloatSourcesOut <= newFloatSourcesFinal;
-
         groupSrcDeps <= groupDepsSig;
-        groupSrcOverridesInt <= newSourceSelectorInt;
-        groupSrcOverridesFloat <= newSourceSelectorFloat;
 
     stageDataToCommit <= setDestFlags(robDataLiving);
     

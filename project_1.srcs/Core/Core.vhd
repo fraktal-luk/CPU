@@ -73,8 +73,7 @@ architecture Behavioral of Core is
             sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, committedSending: std_logic := '0';
 
     signal frontDataLastLiving, TMP_frontDataSpMasked,
-            renamedDataLivingIntOut, renamedDataLivingFloatOut,
-            
+            renamedDataLivingIntOut, renamedDataLivingFloatOut,          
             renamedDataLivingFloatPre,
             renamedDataLivingMem, renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingFloatRe, renamedDataLivingFloatReMem,
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData, committedOut: 
@@ -82,7 +81,7 @@ architecture Behavioral of Core is
 
         signal renamedArgsInt, renamedArgsFloat: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 
-        signal groupDependencyFlags, groupSrcOverridesInt, groupSrcOverridesFloat: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+        signal groupDependencyFlags: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
     signal bqCompare, bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
            specialAction, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -91,7 +90,6 @@ architecture Behavioral of Core is
            
     signal commitGroupCtr: InsTag := (others => '0');
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-        signal checkedIntSources, checkedFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal intType: std_logic_vector(0 to 1) := (others => '0');
     signal sysRegReadValue: Mword := (others => '0');
@@ -222,9 +220,7 @@ begin
         TMP_spMaskedDataOut => TMP_frontDataSpMasked,
         
         nextAccepting => canSendRename,
-        
-        groupSrcOverridesInt => groupSrcOverridesInt,
-        groupSrcOverridesFloat => groupSrcOverridesFloat,
+
         groupSrcDeps => groupDependencyFlags,
 
         renamedDataLiving => renamedDataLivingIntOut,--renamedDataLivingRe,
@@ -246,9 +242,6 @@ begin
         
         newPhysDestsOut => newIntDests,
         newFloatDestsOut => newFloatDests,
-            
-            checkedIntSourcesOut => checkedIntSources,
-            checkedFloatSourcesOut => checkedFloatSources,
 
         specialActionOut => specialAction,
             
@@ -272,10 +265,8 @@ begin
         end if;
     end process;
 
-
-        renamedDataLivingRe <= renamedDataLivingIntOut;
-        renamedDataLivingFloatPre <= renamedDataLivingFloatOut;
-
+    renamedDataLivingRe <= renamedDataLivingIntOut;
+    renamedDataLivingFloatPre <= renamedDataLivingFloatOut;
 
     canSendFront <= renameAccepting and not stopRename;
     canSendRename <= not stopRename;  --  Could also be : queuesAccepting;
@@ -438,16 +429,11 @@ begin
         SUBPIPE_ALU: block
            signal dataToAlu, dataToBranch: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);           
            signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-           signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;
-           
-           --signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
+           signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;           
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO); 
         begin
-            fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);
-        
-            --inputDataArray <= makeSlotArray(extractData(TMP_recodeALU(renamedDataLivingRe)), aluMask);
-            schedInfoA <= --work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-                          work.LogicIssue.getIssueInfoArray(TMP_recodeALU(renamedDataLivingRe), aluMask, true, removeArg2(renamedArgsInt));
+            fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);        
+            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeALU(renamedDataLivingRe), aluMask, true, removeArg2(renamedArgsInt));
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, false, FORWARDING_MODES_INT_D, FORWARDING_MODES_INT_D);
               
             IQUEUE_I0: entity work.IssueQueue(Behavioral)
@@ -564,14 +550,11 @@ begin
            signal dataToAgu, dataToAguInt, dataToAguFloat, dataOutMem0,
                          dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-           --signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);           
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
            
            signal memLoadValue: Mword := (others => '0');                                                            
         begin
-           --inputDataArray <= TMP_removeArg2(makeSlotArray(extractData(renamedDataLivingReMem), memMask));
-           schedInfoA <= --work.LogicIssue.getIssueInfoArray(inputDataArray, true);
-                         work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true, removeArg2(renamedArgsInt));
+           schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true, removeArg2(renamedArgsInt));
            
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D, FORWARDING_MODES_NONE);
                         
@@ -769,24 +752,15 @@ begin
         readyRegFlagsSV <= (readyRegFlagsInt(2), '0', '0', readyRegFlagsInt(5), '0', '0', readyRegFlagsInt(8), '0', '0', readyRegFlagsInt(11), '0', '0');
 
         SUBPIPES_STORE_VALUE: block
-            --signal dataToStoreValueIQ, dataToStoreValueFloatIQ: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);             
             signal fmaIntSV, fmaFloatSV: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
             signal sendingToRegReadI, sendingToRegReadF: std_logic := '0';
-
-            --signal inputDataArrayInt, inputDataArrayFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);            
             signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoFloatA, schedInfoUpdatedFloatA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
         begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
-
-            --inputDataArrayInt <= makeSlotArray((extractData(prepareForStoreValueIQ(renamedDataLivingReMem))), intStoreMask);
-            schedInfoIntA <= --work.LogicIssue.getIssueInfoArray(inputDataArrayInt, false);
-                             work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingReMem), intStoreMask, false, useStoreArg2(renamedArgsInt));
+            schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingReMem), intStoreMask, false, useStoreArg2(renamedArgsInt));
             schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, true, FORWARDING_MODES_SV_INT_D, FORWARDING_MODES_SV_INT_D);
 
-            --inputDataArrayFloat <= makeSlotArray((--extractData(renamedDataLivingReMem),
-            --                                                                 extractData(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem))), fpStoreMask);
-            schedInfoFloatA <= --work.LogicIssue.getIssueInfoArray(inputDataArrayFloat, false);
-                                work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem), fpStoreMask, false, useStoreArg2(renamedArgsFloat));
+            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem), fpStoreMask, false, useStoreArg2(renamedArgsFloat));
             schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, true, FORWARDING_MODES_SV_FLOAT_D, FORWARDING_MODES_SV_FLOAT_D);
 
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
@@ -905,14 +879,11 @@ begin
         SUBPIPE_FP0: block
             signal dataToFpu0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
             signal fmaF0: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);          
-            --signal inputDataArray: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);            
             signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
         begin
             fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat);
 
-            --inputDataArray <= makeSlotArray(extractData(TMP_recodeFP(renamedDataLivingFloatRe)), fpMask);
-            schedInfoA <= --work.LogicIssue.getIssueInfoArray(inputDataArray, false);
-                          work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingFloatRe), fpMask, false, renamedArgsFloat);
+            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingFloatRe), fpMask, false, renamedArgsFloat);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, false, FORWARDING_MODES_FLOAT_D, FORWARDING_MODES_FLOAT_D);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)
@@ -1256,12 +1227,8 @@ begin
          begin
             if rising_edge(clk) then
                 if renamedSending = '1' then
-                    --readyRegFlagsInt <= readyRegFlagsIntNext;
-                    --readyRegFlagsFloat <= readyRegFlagsFloatNext;
                             ch0 <= bool2std(readyRegFlagsInt_T = readyRegFlagsInt);
-                else
-                    --readyRegFlagsInt <= (others => '0');
-                    --readyRegFlagsFloat <= (others => '0');  
+                else 
                             ch0 <= '1';                  
                 end if;
             end if;
