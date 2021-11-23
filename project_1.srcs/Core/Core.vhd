@@ -416,6 +416,19 @@ begin
         signal aluMask, memMask, fpMask, intStoreMask, fpStoreMask, branchMask, sqMask, lqMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
         signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
+        
+                signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';
+                
+                function ch_args(st: work.LogicIssue.SchedulerInfoArray) return std_logic is
+                begin
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        if st(i).dynamic.argSpec /= st(i).dynamic_T.argSpec then
+                            return '0';
+                        end if;
+                    end loop;
+                    return '1';
+                end function;
+                
     begin
         aluMask <= getAluMask1(renamedDataLivingRe);
         memMask <= getMemMask1(renamedDataLivingRe);
@@ -430,11 +443,13 @@ begin
            signal dataToAlu, dataToBranch: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);           
            signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
            signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;           
-           signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO); 
+           signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
         begin
             fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);        
-            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeALU(renamedDataLivingRe), aluMask, true, removeArg2(renamedArgsInt));
+            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeALU(renamedDataLivingRe)), aluMask, true, removeArg2(renamedArgsInt));
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, false, FORWARDING_MODES_INT_D, FORWARDING_MODES_INT_D);
+              
+                ch_a <= ch_args(schedInfoA);
               
             IQUEUE_I0: entity work.IssueQueue(Behavioral)
             generic map(
@@ -557,6 +572,9 @@ begin
            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true, removeArg2(renamedArgsInt));
            
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D, FORWARDING_MODES_NONE);
+                        
+                                        ch_m <= ch_args(schedInfoA);
+
                         
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
@@ -760,6 +778,10 @@ begin
             schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingReMem), intStoreMask, false, useStoreArg2(renamedArgsInt));
             schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, true, FORWARDING_MODES_SV_INT_D, FORWARDING_MODES_SV_INT_D);
 
+                                    ch_si <= ch_args(schedInfoIntA);
+                                    ch_sf <= ch_args(schedInfoFloatA);
+
+
             schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem), fpStoreMask, false, useStoreArg2(renamedArgsFloat));
             schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, true, FORWARDING_MODES_SV_FLOAT_D, FORWARDING_MODES_SV_FLOAT_D);
 
@@ -883,8 +905,11 @@ begin
         begin
             fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat);
 
-            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingFloatRe), fpMask, false, renamedArgsFloat);
+            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingFloatRe), fpMask, false, renamedArgsFloat, true);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, false, FORWARDING_MODES_FLOAT_D, FORWARDING_MODES_FLOAT_D);
+
+                ch_f <= ch_args(schedInfoA);
+
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)
             generic map(
@@ -1213,7 +1238,8 @@ begin
          SRC_LATE_OVERRIDE: if TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
                     readyRegFlagsInt <= updateArgStates(renamedDataLivingRe, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext);
               --readyRegFlagsInt <= readyRegFlagsIntNext and not groupDependencyFlags;
-              readyRegFlagsFloat <= readyRegFlagsFloatNext and not groupDependencyFlags;
+              readyRegFlagsFloat <= --readyRegFlagsFloatNext and not groupDependencyFlags;
+                                        updateArgStatesFloat(renamedDataLivingFloatPre, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext);
          end generate;
 
          SRC_EARLY_OVERRIDE: if not TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
@@ -1222,7 +1248,7 @@ begin
          end generate;
          
               --readyRegFlagsInt_T <= readyRegFlagsIntNext     and not groupDependencyFlags;
-              readyRegFlagsFloat_T <= readyRegFlagsFloatNext and not groupDependencyFlags;
+              --readyRegFlagsFloat_T <= readyRegFlagsFloatNext and not groupDependencyFlags;
                
          READY_REG_FLAGS: process(clk)
          begin

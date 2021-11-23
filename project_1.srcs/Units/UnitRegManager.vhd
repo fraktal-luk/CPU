@@ -262,7 +262,7 @@ architecture Behavioral of UnitRegManager is
                         end if;
                         
                         if depVec(i)(k)(j) = '1'   
-                            and res(i).ins.virtualArgSpec.intArgSel(k) = '1' and res(j).ins.virtualArgSpec.intDestSel = '1' -- intSel match
+                            and res(i).ins.virtualArgSpec.intArgSel(k) = '1' and res(j).ins.virtualArgSpec.intDestSel = '1' and isNonzero(res(j).ins.virtualArgSpec.dest) = '1' -- intSel match
                         then
                             res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
                             exit;             
@@ -464,6 +464,7 @@ architecture Behavioral of UnitRegManager is
     function replaceSourcesInt(insVec: InstructionSlotArray; depVec: DependencyVec) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
     begin
+        --    return res;
         if TMP_PARAM_LATE_SRC_DEP_OVERRIDE then
             -- Overwrite sources depending on destinations of this group
             for i in 0 to PIPE_WIDTH-1 loop
@@ -490,6 +491,8 @@ architecture Behavioral of UnitRegManager is
     function replaceSourcesFloat(insVec: InstructionSlotArray; depVec: DependencyVec) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
     begin
+         --   return res;
+    
         if TMP_PARAM_LATE_SRC_DEP_OVERRIDE then        
             -- Overwrite sources depending on destinations of this group
             for i in 0 to PIPE_WIDTH-1 loop

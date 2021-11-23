@@ -101,11 +101,13 @@ type DynamicInfoArray is array(natural range <>) of DynamicInfo;
 
 type SchedulerInfo is record
     dynamic: DynamicInfo;
+            dynamic_T: DynamicInfo;
     static: StaticInfo;
 end record;
 
 constant DEFAULT_SCHEDULER_INFO: SchedulerInfo := (
     DEFAULT_DYNAMIC_INFO,
+        DEFAULT_DYNAMIC_INFO,
     DEFAULT_STATIC_INFO
 );
 
@@ -124,7 +126,7 @@ type WakeupArray2D is array(natural range <>, natural range <>) of WakeupStruct;
 function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo; 
 function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo;
 
-function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray) return SchedulerInfoArray;
+function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray; constant USE_OLD: boolean := false) return SchedulerInfoArray;
 
 function getSchedEntrySlot(info: SchedulerInfo) return SchedulerEntrySlot;
 
@@ -260,7 +262,50 @@ begin
 end function; 
 
 
-function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray) return SchedulerInfoArray is
+    function getIssueDynamicInfo2(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo is
+        variable res: DynamicInfo;
+    begin
+        res.full := isl.full;
+            res.active := res.full;
+        res.issued := '0';
+            res.trial := '0';
+        res.newInQueue := '1';
+        
+        res.renameIndex := isl.ins.tags.renameIndex;
+        res.staticPtr := (others => '0'); -- points to entry with static info
+    
+        res.argSpec := isl.ins.physicalArgSpec;
+        
+        for i in 0 to 2 loop
+            if ri.sourcesNew(i) = '1' then
+                res.argSpec.args(i) := ri.physicalSourcesNew(i);
+            elsif ri.sourcesStable(i) = '1' then
+                res.argSpec.args(i) := ri.physicalSourcesStable(i);
+            else
+                res.argSpec.args(i) := ri.physicalSources(i);
+            end if;
+        end loop;
+
+        res.stored := (others => '0');
+        res.missing := not stInfo.zero;                               
+        res.readyNow := (others => '0');
+        res.readyNext := (others => '0');
+        res.readyM2  := (others => '0');
+    
+        res.argLocsPipe := (others => (others => '0'));
+        res.argSrc := (others => "00000010");
+        
+        if HAS_IMM and isl.ins.constantArgs.immSel = '1' then
+            if IMM_AS_REG then
+                res.argSpec.args(1) := isl.ins.constantArgs.imm(PhysName'length-1 downto 0);
+                    res.argSpec.args(1)(7) := '0';
+            end if;
+        end if;
+                     
+        return res;
+    end function; 
+
+function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray; constant USE_OLD: boolean := false) return SchedulerInfoArray is
     variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1);
     variable slot: InstructionSlot := DEFAULT_INS_SLOT;
 begin
@@ -268,7 +313,12 @@ begin
         slot := insVec(i);
         slot.full := mask(i);
         res(i).static := getIssueStaticInfo(slot, USE_IMM, ria(i));
-        res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, ria(i));
+        if USE_OLD then
+            res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, ria(i));
+        else
+            res(i).dynamic := getIssueDynamicInfo2(slot, res(i).static, USE_IMM, ria(i));
+        end if;
+           --     assert res(i).dynamic = res(i).dynamic_T;
     end loop;
     return res;
     
