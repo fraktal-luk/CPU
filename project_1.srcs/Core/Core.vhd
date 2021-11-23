@@ -1211,7 +1211,8 @@ begin
          );
      
          SRC_LATE_OVERRIDE: if TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
-              readyRegFlagsInt <= readyRegFlagsIntNext and not groupDependencyFlags;
+                    readyRegFlagsInt <= updateArgStates(renamedDataLivingRe, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext);
+              --readyRegFlagsInt <= readyRegFlagsIntNext and not groupDependencyFlags;
               readyRegFlagsFloat <= readyRegFlagsFloatNext and not groupDependencyFlags;
          end generate;
 
@@ -1220,7 +1221,7 @@ begin
               readyRegFlagsFloat <= readyRegFlagsFloatNext;
          end generate;
          
-              readyRegFlagsInt_T <= readyRegFlagsIntNext     and not groupDependencyFlags;
+              --readyRegFlagsInt_T <= readyRegFlagsIntNext     and not groupDependencyFlags;
               readyRegFlagsFloat_T <= readyRegFlagsFloatNext and not groupDependencyFlags;
                
          READY_REG_FLAGS: process(clk)

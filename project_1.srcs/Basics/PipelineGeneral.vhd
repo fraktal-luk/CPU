@@ -242,6 +242,8 @@ function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArra
 function removeArg2(ria: RenameInfoArray) return RenameInfoArray;
 function useStoreArg2(ria: RenameInfoArray) return RenameInfoArray;
 
+function updateArgStates(insVec: InstructionSlotArray; riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_logic_vector) return std_logic_vector;
+
 
 function clearRawInfo(ins: InstructionState) return InstructionState;      -- ip, bits; this is raw program data 
 function clearFollowInfo(ins: InstructionState) return InstructionState;  -- result, target; they are about what follows
@@ -1103,6 +1105,17 @@ begin
     
     return res;
 end function;
+
+
+function updateArgStates(insVec: InstructionSlotArray; riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_logic_vector) return std_logic_vector is
+    variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(3*i to 3*i + 2) := ((riaInt(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaInt(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
+    end loop;
+    return res;
+end function;
+
 
 
 

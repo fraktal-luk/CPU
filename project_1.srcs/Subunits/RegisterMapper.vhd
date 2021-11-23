@@ -116,7 +116,7 @@ begin
 
 	newPhysSources <= readNewest;
         newPhysSourcesAlt <= readStableSources;
-        newPhysSourceSelector <= readUseNewest;
+        newPhysSourceSelector <= not readUseNewest;
 
     TMP_VIEW: block
         signal tagReserve, tagCommit: InsTag := (others => '0');

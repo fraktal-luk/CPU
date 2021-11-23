@@ -262,7 +262,7 @@ architecture Behavioral of UnitRegManager is
                         end if;
                         
                         if depVec(i)(k)(j) = '1'   
-                            and res(i).ins.virtualArgSpec.intArgSel(k) = res(j).ins.virtualArgSpec.intDestSel -- intSel match
+                            and res(i).ins.virtualArgSpec.intArgSel(k) = '1' and res(j).ins.virtualArgSpec.intDestSel = '1' -- intSel match
                         then
                             res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
                             exit;             
@@ -299,7 +299,7 @@ architecture Behavioral of UnitRegManager is
                         end if;
                         
                         if depVec(i)(k)(j) = '1'
-                            and res(i).ins.virtualArgSpec.floatArgSel(k) = res(j).ins.virtualArgSpec.floatDestSel -- intSel match
+                            and res(i).ins.virtualArgSpec.floatArgSel(k) = '1' and res(j).ins.virtualArgSpec.floatDestSel = '1' -- intSel match
                         then
                             res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
                             exit;                   
@@ -352,7 +352,7 @@ architecture Behavioral of UnitRegManager is
     end function;
 
     function getRealDepVecInt(insVec: InstructionSlotArray; depVec: DependencyVec) return DependencyVec is
-        variable res: DependencyVec := depVec;
+        variable res: DependencyVec := (others => (others => (others => '0')));
     begin
         for i in 0 to PIPE_WIDTH-1 loop
             for k in 0 to 2 loop -- For each of 3 possible source arguments
@@ -365,7 +365,7 @@ architecture Behavioral of UnitRegManager is
                         and insVec(i).ins.virtualArgSpec.intArgSel(k) = '1' and insVec(j).ins.virtualArgSpec.intDestSel = '1' -- intSel match
                     then
                         res(i)(k)(j) := '1';
-                        exit;                   
+                        exit;                        
                     end if;
                 end loop;
             end loop;                     
@@ -375,7 +375,7 @@ architecture Behavioral of UnitRegManager is
     end function;
 
     function getRealDepVecFloat(insVec: InstructionSlotArray; depVec: DependencyVec) return DependencyVec is
-        variable res: DependencyVec := depVec;
+        variable res: DependencyVec := (others => (others => (others => '0')));
     begin
         for i in 0 to PIPE_WIDTH-1 loop
             for k in 0 to 2 loop -- For each of 3 possible source arguments
