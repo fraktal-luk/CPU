@@ -73,15 +73,15 @@ architecture Behavioral of Core is
             sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, committedSending: std_logic := '0';
 
     signal frontDataLastLiving, TMP_frontDataSpMasked,
-            renamedDataLivingIntOut, renamedDataLivingFloatOut,          
+            renamedDataLivingIntOut, renamedDataLivingIntOut_C, renamedDataLivingFloatOut,          
             renamedDataLivingFloatPre,
-            renamedDataLivingMem, renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingFloatRe, renamedDataLivingFloatReMem,
+            renamedDataLivingMem, renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingRe_C, renamedDataLivingFloatRe, renamedDataLivingFloatReMem,
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData, committedOut: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
         signal renamedArgsInt, renamedArgsFloat: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 
-        signal groupDependencyFlags: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+        signal groupDependencyFlags, groupDepsInt, groupDepsFloat: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
     signal bqCompare, bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
            specialAction, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -222,8 +222,11 @@ begin
         nextAccepting => canSendRename,
 
         groupSrcDeps => groupDependencyFlags,
+            groupSrcDepsInt => groupDepsInt,
+            groupSrcDepsFloat => groupDepsFloat,
 
         renamedDataLiving => renamedDataLivingIntOut,--renamedDataLivingRe,
+            renamedDataLiving_C => renamedDataLivingIntOut_C,--renamedDataLivingRe,
         renamedDataLivingFloat => renamedDataLivingFloatOut,--renamedDataLivingFloatPre,
         
         renamedArgs => renamedArgsInt,
@@ -266,6 +269,7 @@ begin
     end process;
 
     renamedDataLivingRe <= renamedDataLivingIntOut;
+        renamedDataLivingRe_C <= renamedDataLivingIntOut_C;
     renamedDataLivingFloatPre <= renamedDataLivingFloatOut;
 
     canSendFront <= renameAccepting and not stopRename;
@@ -393,7 +397,7 @@ begin
 
        signal regsSelI0,           regsSelM0, regsSelS0, regsSelFloatA, regsSelFloatC, regsSelFS0, regsSelF0: PhysNameArray(0 to 2) := (others => (others => '0'));
        signal regValsI0, regValsB, regValsM0, regValsS0, regValsE, regValsFloatA, regValsFloatB, regValsFloatC, regValsFS0, regValsF0: MwordArray(0 to 2) := (others => (others => '0'));
-       signal readyRegFlagsInt, readyRegFlagsFloat, readyRegFlagsInt_T, readyRegFlagsFloat_T, readyRegFlagsIntNext, readyRegFlagsSV, readyRegFlagsFloatNext, readyRegFlagsFloatSV: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+       signal readyRegFlagsInt, readyRegFlagsInt_C, readyRegFlagsFloat, readyRegFlagsInt_T, readyRegFlagsFloat_T, readyRegFlagsIntNext, readyRegFlagsIntNext_C, readyRegFlagsSV, readyRegFlagsFloatNext, readyRegFlagsFloatSV: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
        -- Issue control 
        signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, allowIssueStoreDataFP, allowIssueStageStoreDataFP,
@@ -782,7 +786,7 @@ begin
                                     ch_sf <= ch_args(schedInfoFloatA);
 
 
-            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem), fpStoreMask, false, useStoreArg2(renamedArgsFloat));
+            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem), fpStoreMask, false, useStoreArg2(renamedArgsFloat), true);
             schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, true, FORWARDING_MODES_SV_FLOAT_D, FORWARDING_MODES_SV_FLOAT_D);
 
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
@@ -1179,11 +1183,29 @@ begin
              sendingToReserve => frontLastSending,                 
              newPhysDests => newIntDests,
              stageDataReserved => renamedDataLivingRe,
-                 
+                
+             
              writingMask(0) => dataToIntRF(0).full,
              writingData(0) => dataToIntRF(0).ins,
              readyRegFlagsNext => readyRegFlagsIntNext
          );
+
+                 INT_READY_TABLE_C: entity work.RegisterReadyTable(Behavioral)
+                 generic map(
+                     WRITE_WIDTH => 1
+                 )
+                 port map(
+                     clk => clk, reset => '0', en => '0', 
+                     
+                     sendingToReserve => frontLastSending,                 
+                     newPhysDests => newIntDests,
+                     stageDataReserved => renamedDataLivingRe_C,
+                        
+                     
+                     writingMask(0) => dataToIntRF(0).full,
+                     writingData(0) => dataToIntRF(0).ins,
+                     readyRegFlagsNext => readyRegFlagsIntNext_C
+                 );
 
             dataToFloatWriteQueue <= slotM0_E2f when slotM0_E2f(0).full = '1' else slotF0_E2;
             
@@ -1235,16 +1257,17 @@ begin
              readyRegFlagsNext => readyRegFlagsFloatNext
          );
      
-         SRC_LATE_OVERRIDE: if TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
-                    readyRegFlagsInt <= updateArgStates(renamedDataLivingRe, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext);
-              --readyRegFlagsInt <= readyRegFlagsIntNext and not groupDependencyFlags;
-              readyRegFlagsFloat <= --readyRegFlagsFloatNext and not groupDependencyFlags;
-                                        updateArgStatesFloat(renamedDataLivingFloatPre, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext);
+         SRC_LATE_OVERRIDE: if true or TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
+              readyRegFlagsInt_T <= updateArgStates(renamedDataLivingRe, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext);
+                        readyRegFlagsInt_C <= updateArgStates(renamedDataLivingRe_C, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext_C);
+              readyRegFlagsFloat_T <= updateArgStatesFloat(renamedDataLivingFloatPre, renamedArgsInt, renamedArgsFloat, readyRegFlagsFloatNext);
          end generate;
 
-         SRC_EARLY_OVERRIDE: if not TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
-              readyRegFlagsInt <= readyRegFlagsIntNext;
-              readyRegFlagsFloat <= readyRegFlagsFloatNext;
+         SRC_EARLY_OVERRIDE: if true and not TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
+              readyRegFlagsInt <= readyRegFlagsIntNext and not --groupDependencyFlags;
+                                                                groupDepsInt;
+              readyRegFlagsFloat <= readyRegFlagsFloatNext and not --groupDependencyFlags;
+                                                                groupDepsFloat;
          end generate;
          
               --readyRegFlagsInt_T <= readyRegFlagsIntNext     and not groupDependencyFlags;
@@ -1255,8 +1278,10 @@ begin
             if rising_edge(clk) then
                 if renamedSending = '1' then
                             ch0 <= bool2std(readyRegFlagsInt_T = readyRegFlagsInt);
+                            ch1 <= bool2std(readyRegFlagsFloat_T = readyRegFlagsFloat);
                 else 
                             ch0 <= '1';                  
+                            ch1 <= '1';                  
                 end if;
             end if;
          end process;

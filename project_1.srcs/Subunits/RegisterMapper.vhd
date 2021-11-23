@@ -36,6 +36,7 @@ entity RegisterMapper is
 		stageDataToCommit: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		
 		newPhysSources: out PhysNameArray(0 to 3*PIPE_WIDTH-1);		
+		newPhysSources_NR: out PhysNameArray(0 to 3*PIPE_WIDTH-1);		
 		newPhysSourcesAlt: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
 		newPhysSourceSelector: out std_logic_vector(0 to 3*PIPE_WIDTH-1);		
 		prevStablePhysDests: out PhysNameArray(0 to PIPE_WIDTH-1)
@@ -54,7 +55,7 @@ architecture Behavioral of RegisterMapper is
     signal selectNewest: RegNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal writeCommit: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-	signal readNewest, readNewest_T, readStableSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+	signal readNewest, readNewest_NR, readNewest_T, readStableSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 	signal readStable: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     
     	signal readUseNewest: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
@@ -86,6 +87,7 @@ begin
 	-- Read
 	READ_NEWEST: for i in 0 to 3*PIPE_WIDTH-1 generate
 		readNewest(i) <= newestMap(slv2u(selectNewest(i)));-- when not IS_FP
+		readNewest_NR(i) <= newestMap_NoRewind(slv2u(selectNewest(i)));-- when not IS_FP
 		                 --  readNewest_T(i);
 		          
 		   readStableSources(i) <= stableMap(slv2u(selectNewest(i)));
@@ -115,6 +117,7 @@ begin
 	end process;
 
 	newPhysSources <= readNewest;
+	newPhysSources_NR <= readNewest_NR;
         newPhysSourcesAlt <= readStableSources;
         newPhysSourceSelector <= not readUseNewest;
 
