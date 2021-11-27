@@ -469,7 +469,8 @@ architecture Behavioral of UnitRegManager is
     function replaceSourcesInt(insVec: InstructionSlotArray; depVec: DependencyVec) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
     begin
-        --    return res;
+            return res;
+
         if TMP_PARAM_LATE_SRC_DEP_OVERRIDE then
             -- Overwrite sources depending on destinations of this group
             for i in 0 to PIPE_WIDTH-1 loop
@@ -496,7 +497,7 @@ architecture Behavioral of UnitRegManager is
     function replaceSourcesFloat(insVec: InstructionSlotArray; depVec: DependencyVec) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
     begin
-         --   return res;
+            return res;
     
         if TMP_PARAM_LATE_SRC_DEP_OVERRIDE then        
             -- Overwrite sources depending on destinations of this group
@@ -606,7 +607,7 @@ begin
                                     );
 
     stageDataRenameIn <=        renameGroupInt(     renamedBase, newIntSources, depVec); 
-        stageDataRenameIn_C <=        renameGroupInt(     renamedBase, newIntSources_NR, depVec); 
+    --    stageDataRenameIn_C <=        renameGroupInt(     renamedBase, newIntSources_NR, depVec); 
     stageDataRenameInFloat <=   renameGroupFloat(   renamedBase, newFloatSources, depVec); -- like above
     -- TODO: ^ or assign dests above, not in renameGroupBase, to keep Int and FP path separate, and merge them ony when going to ROB - it could be good for layout
 

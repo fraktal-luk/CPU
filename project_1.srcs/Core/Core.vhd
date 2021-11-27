@@ -1263,21 +1263,21 @@ begin
               readyRegFlagsFloat_T <= updateArgStatesFloat(renamedDataLivingFloatPre, renamedArgsInt, renamedArgsFloat, readyRegFlagsFloatNext);
          end generate;
 
-         SRC_EARLY_OVERRIDE: if true and not TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
-              readyRegFlagsInt <= readyRegFlagsIntNext and not --groupDependencyFlags;
-                                                                groupDepsInt;
+         SRC_EARLY_OVERRIDE: if false and not TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
+              readyRegFlagsInt <= readyRegFlagsIntNext and not groupDepsInt;
+                                  --readyRegFlagsInt_C;
               readyRegFlagsFloat <= readyRegFlagsFloatNext and not --groupDependencyFlags;
                                                                 groupDepsFloat;
          end generate;
          
-              --readyRegFlagsInt_T <= readyRegFlagsIntNext     and not groupDependencyFlags;
-              --readyRegFlagsFloat_T <= readyRegFlagsFloatNext and not groupDependencyFlags;
+              readyRegFlagsInt <= readyRegFlagsIntNext    ;-- and not groupDependencyFlags;
+              readyRegFlagsFloat <= readyRegFlagsFloatNext;-- and not groupDependencyFlags;
                
          READY_REG_FLAGS: process(clk)
          begin
             if rising_edge(clk) then
                 if renamedSending = '1' then
-                            ch0 <= bool2std(readyRegFlagsInt_T = readyRegFlagsInt);
+                            ch0 <= bool2std(readyRegFlagsInt_C = readyRegFlagsInt);
                             ch1 <= bool2std(readyRegFlagsFloat_T = readyRegFlagsFloat);
                 else 
                             ch0 <= '1';                  

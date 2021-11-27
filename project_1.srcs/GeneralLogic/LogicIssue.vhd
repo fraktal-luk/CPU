@@ -126,7 +126,7 @@ type WakeupArray2D is array(natural range <>, natural range <>) of WakeupStruct;
 function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo; 
 function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo;
 
-function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray; constant USE_OLD: boolean := false) return SchedulerInfoArray;
+function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray; constant USE_OLD: boolean := true) return SchedulerInfoArray;
 
 function getSchedEntrySlot(info: SchedulerInfo) return SchedulerEntrySlot;
 
@@ -305,7 +305,7 @@ end function;
         return res;
     end function; 
 
-function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray; constant USE_OLD: boolean := false) return SchedulerInfoArray is
+function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray; constant USE_OLD: boolean := true) return SchedulerInfoArray is
     variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1);
     variable slot: InstructionSlot := DEFAULT_INS_SLOT;
 begin
