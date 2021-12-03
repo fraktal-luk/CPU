@@ -97,27 +97,7 @@ architecture Behavioral of UnitRegManager is
 
     signal groupDepsSig, groupDepsIntSig, groupDepsFloatSig: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
-    signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-
-    function assignDests(       insVec: InstructionSlotArray;
-                                newIntDests: PhysNameArray)
-    return PhysNameArray is
-        variable res: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-        variable reserveSelSig, takeVecInt, takeVecFloat, stores, loads: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
-        variable nToTake: integer := 0;
-        variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
-        variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
-       	variable found: boolean := false;
-    begin
-        -- Assign dest registers
-        for i in 0 to PIPE_WIDTH-1 loop
-            if insVec(i).ins.virtualArgSpec.intDestSel = '1' then
-                res(i) := newIntDests(countOnes(takeVecInt)); -- how many used before
-            end if;
-            takeVecInt(i) := insVec(i).ins.virtualArgSpec.intDestSel;   
-        end loop;
-        return res;       
-    end function;    
+    signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;    
                
     function renameGroupBase(   insVec: InstructionSlotArray;
                                 newIntDests: PhysNameArray;
