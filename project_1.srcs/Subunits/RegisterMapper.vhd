@@ -119,6 +119,7 @@ begin
 	end process;
 
 	newPhysSources <= readNewest;
+	                  -- readNewest_T;
 	newPhysSources_NR <= readNewest_NR;
         newPhysSourcesAlt <= readStableSources;
         newPhysSourceSelector <= not readUseNewest;
@@ -233,7 +234,7 @@ begin
             readUseNewest(i) <= useNewest(slv2u(selectNewest(i)));
         end generate;
 
-            compressedDests <= assignDests(stageDataToReserve, newPhysDestsOrig); -- TODO: different for FP!
+            compressedDests <= assignDests(stageDataToReserve, newPhysDestsOrig, IS_FP); -- TODO: different for FP!
 
 
                 mappingTablePtrNext <=    0 when mappingTablePtr = N_MAPPINGS-1 else     mappingTablePtr + 1;

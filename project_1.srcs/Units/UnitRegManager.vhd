@@ -506,7 +506,7 @@ architecture Behavioral of UnitRegManager is
     function getRenameInfo(insVec: InstructionSlotArray; newPhysDests, newPhysSources, newPhysSourcesStable: PhysNameArray; newSourceSelector: std_logic_vector; constant IS_FP: boolean := false)
     return RenameInfoArray is
         variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
-        variable dests: PhysNameArray(0 to PIPE_WIDTH-1) := assignDests(insVec, newPhysDests);
+        variable dests: PhysNameArray(0 to PIPE_WIDTH-1) := assignDests(insVec, newPhysDests, IS_FP);
         variable depVec: DependencyVec;
     begin
         depVec := findDeps(insVec);
