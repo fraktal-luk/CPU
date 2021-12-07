@@ -56,7 +56,7 @@ architecture Behavioral of RegisterMapper is
 
     signal writeCommit: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 	signal readNewest, readNewest_NR, readNewest_T, readNewest_T2, readStableSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
-	signal readStable: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+	signal readStable, readStable_T, readStable_T2: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     
     	signal readUseNewest: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
     
@@ -64,7 +64,7 @@ architecture Behavioral of RegisterMapper is
     
     signal ch0, ch1: std_logic := '0';    
 begin
-            ch0 <= bool2std(readNewest_T = readNewest);
+            ch0 <= bool2std(readStable_T2 = readStable);
             ch1 <= bool2std(readNewest_T2 = readNewest_T);
 
     newSelectedA <= getSelectedA(selectReserve, reserve, IS_FP);
@@ -115,7 +115,8 @@ begin
           if sendingToCommit = '1' then
               stableMap <= stableMapNext;
           end if;			
-	      prevStablePhysDests <= readStable;
+	      prevStablePhysDests <= --readStable;
+	                               readStable_T2;
 	   end if;
 	end process;
 
@@ -225,6 +226,25 @@ begin
             return reg;
         end function;
     begin
+
+
+	    READ_STABLE: for i in 0 to PIPE_WIDTH-1 generate
+	       signal rowNum: natural := 0;
+	       signal colNum: natural := 0;
+	       signal index: natural := 0;
+	           signal iv: std_logic_vector(2 downto 0) := "000";
+	    begin
+                   index <= slv2u(stableSelMap2b(slv2u(selectCommit(i))));
+	    
+                 readStable_T2(i) <= 
+                                       mapMemS0(slv2u(selectCommit(i))) --rowNum)
+                                                       when index = 0
+                              else     mapMemS1(slv2u(selectCommit(i))) --rowNum) 
+                                                       when index = 1
+                              else     mapMemS2(slv2u(selectCommit(i))) --rowNum) 
+                                                       when index = 2
+                              else     mapMemS3(slv2u(selectCommit(i))); --rowNum);	    
+	    end generate;
 
 	    READ_NEWEST: for i in 0 to 3*PIPE_WIDTH-1 generate
 	       signal rowNum: natural := 0;
