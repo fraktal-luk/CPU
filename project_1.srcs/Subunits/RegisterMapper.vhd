@@ -55,7 +55,7 @@ architecture Behavioral of RegisterMapper is
     signal selectNewest: RegNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal writeCommit: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-	signal readNewest, readNewest_NR, readNewest_T, readStableSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+	signal readNewest, readNewest_NR, readNewest_T, readNewest_T2, readStableSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 	signal readStable: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     
     	signal readUseNewest: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
@@ -65,6 +65,7 @@ architecture Behavioral of RegisterMapper is
     signal ch0, ch1: std_logic := '0';    
 begin
             ch0 <= bool2std(readNewest_T = readNewest);
+            ch1 <= bool2std(readNewest_T2 = readNewest_T);
 
     newSelectedA <= getSelectedA(selectReserve, reserve, IS_FP);
     stableSelectedA <= getSelectedA(selectCommit, commit, IS_FP);
@@ -118,8 +119,10 @@ begin
 	   end if;
 	end process;
 
-	newPhysSources <= readNewest;
+	newPhysSources <= readNewest when IS_FP else
 	                  -- readNewest_T;
+	                  readNewest_T2;
+	                  
 	newPhysSources_NR <= readNewest_NR;
         newPhysSourcesAlt <= readStableSources;
         newPhysSourceSelector <= not readUseNewest;
@@ -143,13 +146,17 @@ begin
         type RegSelectMap is array(0 to PIPE_WIDTH-1) of std_logic_vector(0 to 31);
         type RegSelectMap2b is array(0 to 31) of std_logic_vector(2 downto 0);
 
-            constant N_MAPPINGS: natural := 8 + 24;
+            constant N_MAPPINGS: natural := 8 + 8 + 16;
     
             subtype PhysNameRow is PhysNameArray(0 to 3);
             type PhysNameTable is array(0 to N_MAPPINGS-1) of PhysNameRow;
 
             signal mappingTable, mappingTableStable: PhysNameTable := (others => (others => (others => '0')));
             signal mappingTablePtr, mappingTableStablePtr, mappingTablePtrNext, mappingTableStablePtrNext: natural range 0 to N_MAPPINGS-1 := 0;
+
+                signal mapMem0, mapMem1, mapMem2, mapMem3: PhysNameArray(0 to N_MAPPINGS-1) := (others => (others => '0'));
+                signal mapMemS0: PhysNameArray(0 to N_MAPPINGS-1) := initMap(IS_FP);
+                signal mapMemS1, mapMemS2, mapMemS3: PhysNameArray(0 to N_MAPPINGS-1) := (others => (others => '0'));
 
             signal rowMap, rowMapStable: PhysNameArray(0 to 31) := (others => (others => '0'));
 
@@ -222,14 +229,49 @@ begin
 	    READ_NEWEST: for i in 0 to 3*PIPE_WIDTH-1 generate
 	       signal rowNum: natural := 0;
 	       signal colNum: natural := 0;
+	       signal index: natural := 0;
+	           signal iv: std_logic_vector(2 downto 0) := "000";
 	    begin
+	                   iv(1 downto 0) <= newestSelMap2b(slv2u(selectNewest(i)))(1 downto 0);
+	                   iv(2) <= useNewest(slv2u(selectNewest(i)));
+	                   
 	               rowNum <= slv2u(rowMap(slv2u(selectNewest(i))));
                    colNum <= slv2u(newestSelMap2b(slv2u(selectNewest(i))));
+	               index <= slv2u(iv);
 	    
             readNewest_T(i) <= --      newestMap_NoRewind(slv2u(selectNewest(i))) when useNewest(slv2u(selectNewest(i))) = '1' -- newestSelMap2b(slv2u(selectNewest(i)))(2) = '1'
                                -- else stableMap(slv2u(selectNewest(i)));
                                mappingTable(rowNum)(colNum) when useNewest(slv2u(selectNewest(i))) = '1'
                           else stableMap(slv2u(selectNewest(i)));
+                     
+--                 readNewest_T2(i) <= --stableMap(slv2u(selectNewest(i))) when useNewest(slv2u(selectNewest(i))) = '0'
+--                            --else     
+--                                     mapMem0(slv2u(selectNewest(i))) --rowNum)
+--                                                     when colNum = 0
+--                            else     mapMem1(slv2u(selectNewest(i))) --rowNum) 
+--                                                     when colNum = 1
+--                            else     mapMem2(slv2u(selectNewest(i))) --rowNum) 
+--                                                     when colNum = 2
+--                            else     mapMem3(slv2u(selectNewest(i))); --rowNum);
+
+                 readNewest_T2(i) <= --stableMap(slv2u(selectNewest(i))) when useNewest(slv2u(selectNewest(i))) = '0'
+                            --else     
+                                     mapMem0(slv2u(selectNewest(i))) --rowNum)
+                                                     when index = 4
+                            else     mapMem1(slv2u(selectNewest(i))) --rowNum) 
+                                                     when index = 5
+                            else     mapMem2(slv2u(selectNewest(i))) --rowNum) 
+                                                     when index = 6
+                            else     mapMem3(slv2u(selectNewest(i))) --rowNum);
+                                                     when index = 7
+                            else     mapMemS0(slv2u(selectNewest(i))) --rowNum)
+                                                     when index = 0
+                            else     mapMemS1(slv2u(selectNewest(i))) --rowNum) 
+                                                     when index = 1
+                            else     mapMemS2(slv2u(selectNewest(i))) --rowNum) 
+                                                     when index = 2
+                            else     mapMemS3(slv2u(selectNewest(i))); --rowNum);
+                                                                                                                          
                                 
             readUseNewest(i) <= useNewest(slv2u(selectNewest(i)));
         end generate;
@@ -247,14 +289,14 @@ begin
                 if sendingToCommit = '1' then  
                     for i in 0 to 31 loop
                         if slv2u(rowMap(i)) = mappingTableStablePtrNext then
-                            useNewest(i) <= '0';
+                          --  useNewest(i) <= '0';
                         end if; 
                     end loop;
                 end if;
             
                 if rewind = '1' then
                     newestSelMap2b <= stableSelMap2b;
-                    rowMap <= rowMapStable;
+                    --rowMap <= rowMapStable;
                     mappingTablePtr <= mappingTableStablePtrNext;
                     
                     useNewest <= (others => '0');
@@ -278,24 +320,64 @@ begin
                             rowMap(slv2u(selectReserve(i))) <= i2slv(mappingTablePtrNext, SMALL_NUMBER_SIZE);
                         end if;
                     end loop;
-
+                        
+                        if reserve(0) = '1' then
+                            mapMem0(slv2u(selectReserve(0))) --mappingTablePtrNext)
+                                                         <= compressedDests(0);
+                        end if;
+                        
+                        if reserve(1) = '1' then
+                            mapMem1(slv2u(selectReserve(1))) --mappingTablePtrNext) 
+                                                         <= compressedDests(1);
+                        end if;
+                        
+                        if reserve(2) = '1' then                          
+                            mapMem2(slv2u(selectReserve(2))) --mappingTablePtrNext) 
+                                                         <= compressedDests(2);
+                        end if;
+                        
+                        if reserve(3) = '1' then
+                            mapMem3(slv2u(selectReserve(3))) --mappingTablePtrNext) 
+                                                         <= compressedDests(3);
+                        end if;
                 end if;
                 
                 if sendingToCommit = '1' then
                     if isNonzero(commit) = '1' then
                         mappingTableStablePtr <= mappingTableStablePtrNext;
                     end if;
-                end if;
-            
-                for i in 0 to PIPE_WIDTH-1 loop
-                    if commit(i) = '1' then
-                        stableSelMap2b(slv2u(selectCommit(i))) <= i2slv(i, 3);                            
-                        
-                        mappingTableStable(mappingTableStablePtrNext)(i) <= writeCommit(i);
-                        rowMapStable(slv2u(selectCommit(i))) <= i2slv(mappingTableStablePtrNext, SMALL_NUMBER_SIZE);
-                    end if;
-                end loop;                
                 
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        if commit(i) = '1' then
+                            stableSelMap2b(slv2u(selectCommit(i))) <= i2slv(i, 3);                            
+                            
+                            mappingTableStable(mappingTableStablePtrNext)(i) <= writeCommit(i);
+                            rowMapStable(slv2u(selectCommit(i))) <= i2slv(mappingTableStablePtrNext, SMALL_NUMBER_SIZE);
+                        end if;
+                    end loop;
+                    
+                    
+                    if commit(0) = '1' then
+                        mapMemS0(slv2u(selectCommit(0))) --mappingTablePtrNext)
+                                                     <= writeCommit(0);
+                    end if;
+                    
+                    if commit(1) = '1' then                                 
+                        mapMemS1(slv2u(selectCommit(1))) --mappingTablePtrNext) 
+                                                     <= writeCommit(1);
+                    end if;
+                    
+                    if commit(2) = '1' then
+                        mapMemS2(slv2u(selectCommit(2))) --mappingTablePtrNext) 
+                                                     <= writeCommit(2);
+                    end if;
+                    
+                    if commit(3) = '1' then
+                        mapMemS3(slv2u(selectCommit(3))) --mappingTablePtrNext) 
+                                                     <= writeCommit(3);
+                    end if;               
+                end if;
+
             end if;
         end process;
         
