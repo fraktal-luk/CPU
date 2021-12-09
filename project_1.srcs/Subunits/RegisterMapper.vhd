@@ -56,7 +56,7 @@ architecture Behavioral of RegisterMapper is
 
     signal writeCommit: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 	signal readNewest, readNewest_NR, readNewest_T, readNewest_T2, readStableSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
-	signal readStable, readStable_T, readStable_T2: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+	signal readStable, readStable_T, readStable_T2, prevDests, prevDests_T, prevDests_T2: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     
     	signal readUseNewest: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
     
@@ -114,14 +114,18 @@ begin
 
           if sendingToCommit = '1' then
               stableMap <= stableMapNext;
-          end if;			
-	      prevStablePhysDests <= --readStable;
-	                               readStable_T2;
+          end if;
+          
+          prevDests <= readStable;
+          prevDests_T2 <= readStable_T2;
+
 	   end if;
 	end process;
 
-	newPhysSources <= readNewest when IS_FP else
-	                  -- readNewest_T;
+	prevStablePhysDests <= --readStable when IS_FP else 
+	                       readStable_T2;
+
+	newPhysSources <= --readNewest when IS_FP else
 	                  readNewest_T2;
 	                  
 	newPhysSources_NR <= readNewest_NR;
@@ -155,9 +159,9 @@ begin
             signal mappingTable, mappingTableStable: PhysNameTable := (others => (others => (others => '0')));
             signal mappingTablePtr, mappingTableStablePtr, mappingTablePtrNext, mappingTableStablePtrNext: natural range 0 to N_MAPPINGS-1 := 0;
 
-                signal mapMem0, mapMem1, mapMem2, mapMem3: PhysNameArray(0 to N_MAPPINGS-1) := (others => (others => '0'));
+                signal mapMem0, mapMem1, mapMem2, mapMem3, mapMemS1, mapMemS2, mapMemS3: PhysNameArray(0 to N_MAPPINGS-1) := (others => (others => '0'));
                 signal mapMemS0: PhysNameArray(0 to N_MAPPINGS-1) := initMap(IS_FP);
-                signal mapMemS1, mapMemS2, mapMemS3: PhysNameArray(0 to N_MAPPINGS-1) := (others => (others => '0'));
+                --signal mapMemS1, mapMemS2, mapMemS3: PhysNameArray(0 to N_MAPPINGS-1) := (others => (others => '0'));
 
             signal rowMap, rowMapStable: PhysNameArray(0 to 31) := (others => (others => '0'));
 
@@ -227,25 +231,6 @@ begin
         end function;
     begin
 
-
-	    READ_STABLE: for i in 0 to PIPE_WIDTH-1 generate
-	       signal rowNum: natural := 0;
-	       signal colNum: natural := 0;
-	       signal index: natural := 0;
-	           signal iv: std_logic_vector(2 downto 0) := "000";
-	    begin
-                   index <= slv2u(stableSelMap2b(slv2u(selectCommit(i))));
-	    
-                 readStable_T2(i) <= 
-                                       mapMemS0(slv2u(selectCommit(i))) --rowNum)
-                                                       when index = 0
-                              else     mapMemS1(slv2u(selectCommit(i))) --rowNum) 
-                                                       when index = 1
-                              else     mapMemS2(slv2u(selectCommit(i))) --rowNum) 
-                                                       when index = 2
-                              else     mapMemS3(slv2u(selectCommit(i))); --rowNum);	    
-	    end generate;
-
 	    READ_NEWEST: for i in 0 to 3*PIPE_WIDTH-1 generate
 	       signal rowNum: natural := 0;
 	       signal colNum: natural := 0;
@@ -295,6 +280,24 @@ begin
                                 
             readUseNewest(i) <= useNewest(slv2u(selectNewest(i)));
         end generate;
+
+	    READ_STABLE: for i in 0 to PIPE_WIDTH-1 generate
+	       signal rowNum: natural := 0;
+	       signal colNum: natural := 0;
+	       signal index: natural := 0;
+	           signal iv: std_logic_vector(2 downto 0) := "000";
+	    begin
+                   index <= slv2u(stableSelMap2b(slv2u(selectCommit(i))));
+	    
+                 readStable_T2(i) <= 
+                                       mapMemS0(slv2u(selectCommit(i))) --rowNum)
+                                                       when index = 0
+                              else     mapMemS1(slv2u(selectCommit(i))) --rowNum) 
+                                                       when index = 1
+                              else     mapMemS2(slv2u(selectCommit(i))) --rowNum) 
+                                                       when index = 2
+                              else     mapMemS3(slv2u(selectCommit(i))); --rowNum);	    
+	    end generate;
 
             compressedDests <= assignDests(stageDataToReserve, newPhysDestsOrig, IS_FP); -- TODO: different for FP!
 
