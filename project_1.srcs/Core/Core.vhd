@@ -73,15 +73,13 @@ architecture Behavioral of Core is
             sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, committedSending: std_logic := '0';
 
     signal frontDataLastLiving, TMP_frontDataSpMasked,
-            renamedDataLivingIntOut, renamedDataLivingIntOut_C, renamedDataLivingFloatOut,          
+            renamedDataLivingIntOut, renamedDataLivingFloatOut,          
             renamedDataLivingFloatPre,
-            renamedDataLivingMem, renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingRe_C, renamedDataLivingFloatRe, renamedDataLivingFloatReMem,
+            renamedDataLivingMem, renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingFloatRe, renamedDataLivingFloatReMem,
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData, committedOut: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
         signal renamedArgsInt, renamedArgsFloat: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
-
-        signal groupDependencyFlags, groupDepsInt, groupDepsFloat: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
     signal bqCompare, bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
            specialAction, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -221,15 +219,10 @@ begin
         
         nextAccepting => canSendRename,
 
-        groupSrcDeps => groupDependencyFlags,
-            groupSrcDepsInt => groupDepsInt,
-            groupSrcDepsFloat => groupDepsFloat,
-
-        renamedDataLiving => renamedDataLivingIntOut,--renamedDataLivingRe,
-            renamedDataLiving_C => renamedDataLivingIntOut_C,--renamedDataLivingRe,
-        renamedDataLivingFloat => renamedDataLivingFloatOut,--renamedDataLivingFloatPre,
+        renamedDataLiving => renamedDataLivingIntOut,
+        renamedDataLivingFloat => renamedDataLivingFloatOut,
         
-        renamedArgs => renamedArgsInt,
+        renamedArgsInt => renamedArgsInt,
         renamedArgsFloat => renamedArgsFloat,
 
         renamedSending => renamedSending,
@@ -269,7 +262,6 @@ begin
     end process;
 
     renamedDataLivingRe <= renamedDataLivingIntOut;
-        renamedDataLivingRe_C <= renamedDataLivingIntOut_C;
     renamedDataLivingFloatPre <= renamedDataLivingFloatOut;
 
     canSendFront <= renameAccepting and not stopRename;
@@ -423,16 +415,6 @@ begin
         
                 signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';
                 
-                function ch_args(st: work.LogicIssue.SchedulerInfoArray) return std_logic is
-                begin
-                    for i in 0 to PIPE_WIDTH-1 loop
-                        if st(i).dynamic.argSpec /= st(i).dynamic_T.argSpec then
-                            return '0';
-                        end if;
-                    end loop;
-                    return '1';
-                end function;
-                
     begin
         aluMask <= getAluMask1(renamedDataLivingRe);
         memMask <= getMemMask1(renamedDataLivingRe);
@@ -452,8 +434,6 @@ begin
             fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);        
             schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeALU(renamedDataLivingRe)), aluMask, true, removeArg2(renamedArgsInt));
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, false, FORWARDING_MODES_INT_D, FORWARDING_MODES_INT_D);
-              
-                ch_a <= ch_args(schedInfoA);
               
             IQUEUE_I0: entity work.IssueQueue(Behavioral)
             generic map(
@@ -573,12 +553,8 @@ begin
            
            signal memLoadValue: Mword := (others => '0');                                                            
         begin
-           schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true, removeArg2(renamedArgsInt));
-           
+           schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true, removeArg2(renamedArgsInt));         
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D, FORWARDING_MODES_NONE);
-                        
-                                        ch_m <= ch_args(schedInfoA);
-
                         
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
@@ -768,7 +744,7 @@ begin
            
            memLoadReady <= dvalid;              
            memLoadValue <= din;      
-        end block;   
+        end block;
 
         ------------------------
         readyRegFlagsSV <= (readyRegFlagsInt(2), '0', '0', readyRegFlagsInt(5), '0', '0', readyRegFlagsInt(8), '0', '0', readyRegFlagsInt(11), '0', '0');
@@ -781,10 +757,6 @@ begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
             schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingReMem), intStoreMask, false, useStoreArg2(renamedArgsInt));
             schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, true, FORWARDING_MODES_SV_INT_D, FORWARDING_MODES_SV_INT_D);
-
-                                    ch_si <= ch_args(schedInfoIntA);
-                                    ch_sf <= ch_args(schedInfoFloatA);
-
 
             schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem), fpStoreMask, false, useStoreArg2(renamedArgsFloat), true);
             schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, true, FORWARDING_MODES_SV_FLOAT_D, FORWARDING_MODES_SV_FLOAT_D);
@@ -911,9 +883,6 @@ begin
 
             schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingFloatRe), fpMask, false, renamedArgsFloat, true);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, false, FORWARDING_MODES_FLOAT_D, FORWARDING_MODES_FLOAT_D);
-
-                ch_f <= ch_args(schedInfoA);
-
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)
             generic map(
@@ -1190,23 +1159,6 @@ begin
              readyRegFlagsNext => readyRegFlagsIntNext
          );
 
-                 INT_READY_TABLE_C: entity work.RegisterReadyTable(Behavioral)
-                 generic map(
-                     WRITE_WIDTH => 1
-                 )
-                 port map(
-                     clk => clk, reset => '0', en => '0', 
-                     
-                     sendingToReserve => frontLastSending,                 
-                     newPhysDests => newIntDests,
-                     stageDataReserved => renamedDataLivingRe_C,
-                        
-                     
-                     writingMask(0) => dataToIntRF(0).full,
-                     writingData(0) => dataToIntRF(0).ins,
-                     readyRegFlagsNext => readyRegFlagsIntNext_C
-                 );
-
             dataToFloatWriteQueue <= slotM0_E2f when slotM0_E2f(0).full = '1' else slotF0_E2;
             
             FLOAT_WRITE_QUEUE: entity work.GenericStage2(Behavioral)
@@ -1259,15 +1211,8 @@ begin
      
          SRC_LATE_OVERRIDE: if true or TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
               readyRegFlagsInt_T <= updateArgStates(renamedDataLivingRe, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext);
-                        readyRegFlagsInt_C <= updateArgStates(renamedDataLivingRe_C, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext_C);
+               --         readyRegFlagsInt_C <= updateArgStates(renamedDataLivingRe_C, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext_C);
               readyRegFlagsFloat_T <= updateArgStatesFloat(renamedDataLivingFloatPre, renamedArgsInt, renamedArgsFloat, readyRegFlagsFloatNext);
-         end generate;
-
-         SRC_EARLY_OVERRIDE: if false and not TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
-              readyRegFlagsInt <= readyRegFlagsIntNext and not groupDepsInt;
-                                  --readyRegFlagsInt_C;
-              readyRegFlagsFloat <= readyRegFlagsFloatNext and not --groupDependencyFlags;
-                                                                groupDepsFloat;
          end generate;
          
               readyRegFlagsInt <= readyRegFlagsIntNext    ;-- and not groupDependencyFlags;

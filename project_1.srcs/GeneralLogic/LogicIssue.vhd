@@ -101,13 +101,13 @@ type DynamicInfoArray is array(natural range <>) of DynamicInfo;
 
 type SchedulerInfo is record
     dynamic: DynamicInfo;
-            dynamic_T: DynamicInfo;
+    --        dynamic_T: DynamicInfo;
     static: StaticInfo;
 end record;
 
 constant DEFAULT_SCHEDULER_INFO: SchedulerInfo := (
     DEFAULT_DYNAMIC_INFO,
-        DEFAULT_DYNAMIC_INFO,
+    --    DEFAULT_DYNAMIC_INFO,
     DEFAULT_STATIC_INFO
 );
 
@@ -171,9 +171,6 @@ return SchedulerInfoArray;
 function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo) return ForwardingMatchesArray;
 
 function extractFullMask(queueContent: SchedulerInfoArray) return std_logic_vector;
-
-
---function prioSelect(elems: SchedulerInfoArray; selVec: std_logic_vector) return SchedulerInfo;
 
 function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray;
 
