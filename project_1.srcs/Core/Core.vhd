@@ -84,7 +84,7 @@ architecture Behavioral of Core is
     signal bqCompare, bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
            specialAction, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
-    signal bqPointer, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
+    signal bqPointer, bqPointerSeq, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
            
     signal commitGroupCtr: InsTag := (others => '0');
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -232,6 +232,7 @@ begin
         bqPointer => bqPointer,
         sqPointer => sqPointer,
         lqPointer => lqPointer,
+            bqPointerSeq => bqPointerSeq,
 
         robDataLiving => dataOutROB,
         sendingFromROB => robSending,
@@ -1344,8 +1345,11 @@ begin
 	    
 	    prevSendingRe => renameSendingBr,
 	    
+	           renamedPtr => bqPointerSeq,
+	       
 	    bqPtrOut => bqPointer,
 	    
+	           dataInRe => TMP_frontDataSpMasked,
 		dataIn => renamedDataToBQ,
 		dataInBr => bpData,
 

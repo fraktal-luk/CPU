@@ -160,6 +160,7 @@ type InstructionTags is record
     bqPointer: SmallNumber;
     sqPointer: SmallNumber;
     lqPointer: SmallNumber;
+        bqPointerSeq: SmallNumber;
     commitCtr: Word;
 end record;
 
@@ -235,6 +236,7 @@ constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
     bqPointer => (others => '0'),
     sqPointer => (others => '0'),
     lqPointer => (others => '0'),
+        bqPointerSeq => (others => '0'),
     commitCtr => (others => '0')
 );
 
@@ -278,6 +280,7 @@ type SchedulerState is record
     bqPointer: SmallNumber;
     sqPointer: SmallNumber;
     lqPointer: SmallNumber;        
+        bqPointerSeq: SmallNumber;        
         
     operation: SpecificOp;
     argSpec: InstructionArgSpec;
@@ -309,6 +312,7 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       bqPointer => (others => '0'),
       sqPointer => (others => '0'),
       lqPointer => (others => '0'),                    
+          bqPointerSeq => (others => '0'),                    
             
       operation => DEFAULT_SPECIFIC_OP,
       argSpec => DEFAULT_ARG_SPEC,          

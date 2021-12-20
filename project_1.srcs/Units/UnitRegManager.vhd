@@ -42,7 +42,8 @@ port(
     bqPointer: in SmallNumber;
     sqPointer: in SmallNumber;
     lqPointer: in SmallNumber;
-    
+        bqPointerSeq: in SmallNumber;
+
     newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     
@@ -145,11 +146,12 @@ architecture Behavioral of UnitRegManager is
                                 bqPointer: SmallNumber;
                                 sqPointer: SmallNumber;
                                 lqPointer: SmallNumber;
+                                    bqPointerSeq: SmallNumber;
                                 renameCtr: Word;                               
                                 dbtrap: std_logic)
      return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-        variable reserveSelSig, takeVecInt, takeVecFloat, stores, loads: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
+        variable reserveSelSig, takeVecInt, takeVecFloat, stores, loads, branches: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
         variable nToTake: integer := 0;
         variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
         variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
@@ -157,6 +159,8 @@ architecture Behavioral of UnitRegManager is
     begin
         stores := getStoreMask(TMP_recodeMem(insVec));
         loads := getLoadMask(TMP_recodeMem(insVec));
+        branches := getBranchMask(insVec);
+        
         -- Assign dest registers
         for i in 0 to PIPE_WIDTH-1 loop
             if res(i).ins.virtualArgSpec.floatDestSel = '1' then
@@ -184,6 +188,7 @@ architecture Behavioral of UnitRegManager is
             res(i).ins.tags.bqPointer := bqPointer;     
             res(i).ins.tags.sqPointer := addIntTrunc(sqPointer, countOnes(stores(0 to i-1)), SQ_PTR_SIZE + 1);
             res(i).ins.tags.lqPointer := addIntTrunc(lqPointer, countOnes(loads(0 to i-1)), LQ_PTR_SIZE + 1);
+            res(i).ins.tags.bqPointerSeq := addIntTrunc(bqPointerSeq, countOnes(branches(0 to i-1)), BQ_PTR_SIZE + 2 + 1); -- CAREFUL, TODO: define BQ_SEQ_PTR_SIZE
         end loop;
 
         -- If found special instruction or exception, kill next ones
@@ -487,6 +492,7 @@ begin
                                     bqPointer,
                                     sqPointer,
                                     lqPointer,
+                                        bqPointerSeq,
                                     renameCtr,
                                     '0' --dbtrapOn
                                     );

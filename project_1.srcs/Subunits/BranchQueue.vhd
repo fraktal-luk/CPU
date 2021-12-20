@@ -33,11 +33,14 @@ entity BranchQueue is
 		prevSendingBr: in std_logic;
 		
 		prevSendingRe: in std_logic;
-		
+
+		      dataInRe: in InstructionSlotArray(0 to PIPE_WIDTH-1);		
 		dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		dataInBr: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 
-            bqPtrOut: out SmallNumber;
+            renamedPtr: out SmallNumber;
+
+        bqPtrOut: out SmallNumber;
 
 		storeValueInput: in InstructionSlot;
 		compareAddressInput: in InstructionSlot;
@@ -76,8 +79,82 @@ architecture Behavioral of BranchQueue is
 	       pSelect, pSelect_Quick, pCausing, pSelectLong, pSelectLong_Quick, pCausingLong: SmallNumber := (others => '0');
     signal isFull, isAlmostFull, isSending: std_logic := '0';
     
-    signal recoveryCounter: SmallNumber := (others => '0');    
+    signal recoveryCounter: SmallNumber := (others => '0');
+    
+    
+
+     function getNumCommittedEffectiveBr(robData: InstructionSlotArray) return SmallNumber is
+        variable res: SmallNumber := (others => '0');
+        variable k: integer := 0;
+        variable found: boolean := false;
+     begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            if robData(i).full = '1' and hasSyncEvent(robData(i).ins) = '1' then
+                exit;
+            end if;
+            
+                if robData(i).full = '1' and robData(i).ins.classInfo.branchIns = '1' then
+                    k := k + 1;
+                end if;
+         
+        end loop;
+        return i2slv(k, SMALL_NUMBER_SIZE);
+     end function;
+     
+     function getNumCommittedBr(robData: InstructionSlotArray) return SmallNumber is
+        variable res: SmallNumber := (others => '0');
+        variable k: integer := 0;
+        variable found: boolean := false;
+     begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            -- A redirected branch cuts a group in SQ, so it must stop there
+            if robData(i).ins.controlInfo.newEvent = '1' and hasSyncEvent(robData(i).ins) = '0' then
+                exit;
+            end if;
+        
+            -- Not only full, because exceptions clear following 'full' bits
+                if robData(i).ins.classInfo.branchIns = '1' then
+                    k := k + 1;
+                end if;
+        end loop;
+        return i2slv(k, SMALL_NUMBER_SIZE);
+     end function;
+
 begin
+
+     SEQ_PTR: block
+        signal nInRe, nOut, nCommitted, nCommittedEffective: SmallNumber := (others => '0');
+        
+        signal pRenamedSeqLong, pRenamedSeqLongNext, pStartSeqLong, pStartSeqLongNext, pFlushSeqLong: SmallNumber := (others => '0');    
+     begin
+            nCommitted <= getNumCommittedBr(robData);
+            nCommittedEffective <= getNumCommittedEffectiveBr(robData);
+
+	    nInRe <= i2slv(countOnes(getBranchMask((dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
+        nOut <= nCommitted when committing = '1' else (others => '0');
+     
+            --  CAREFUL! 2 more bits than main pointers because 4 slots in ach row; depends on pipe width (TODO: make automatic) 
+            pStartSeqLongNext <= addTruncZ(pStartSeqLong, nCommitted, QUEUE_PTR_SIZE + 2 + 1) when committing = '1' else pStartSeqLong;   
+        
+            pRenamedSeqLongNext <= pStartSeqLong when lateEventSignal = '1'
+                        else       pFlushSeqLong when execEventSignal = '1'
+                        else       addIntTrunc(pRenamedSeqLong, slv2u(nInRe), QUEUE_PTR_SIZE + 2 +1) when prevSendingRe = '1' -- CAREFUL: ptr size here also
+                        else       pRenamedSeqLong;
+        
+            pFlushSeqLong <= --(others => '0'); -- TMP!
+                             execCausing.tags.bqPointerSeq;
+        
+        process (clk)
+        begin
+            if rising_edge(clk) then
+                pStartSeqLong <= pStartSeqLongNext;
+                pRenamedSeqLong <= pRenamedSeqLongNext;
+            end if;
+        end process;
+        
+            renamedPtr <= pRenamedSeqLong;
+    end block;
+
 
 	SYNCH: process (clk)
 	begin

@@ -29,6 +29,7 @@ type StaticInfo is record
     bqPointer: SmallNumber;
     sqPointer: SmallNumber;
     lqPointer: SmallNumber;        
+        bqPointerSeq: SmallNumber;
     
     immediate: std_logic;    
     immValue: Hword;
@@ -42,6 +43,7 @@ constant DEFAULT_STATIC_INFO: StaticInfo := (
     bqPointer => (others => '0'),
     sqPointer => (others => '0'),
     lqPointer => (others => '0'),  
+        bqPointerSeq => (others => '0'),  
     
     immediate => '0',
     immValue => (others => '0'),
@@ -203,6 +205,7 @@ begin
     res.bqPointer := isl.ins.tags.bqPointer;
     res.sqPointer := isl.ins.tags.sqPointer;
     res.lqPointer := isl.ins.tags.lqPointer;        
+        res.bqPointerSeq := isl.ins.tags.bqPointerSeq;        
     
     res.immediate := isl.ins.constantArgs.immSel and bool2std(HAS_IMM);    
     res.immValue := isl.ins.constantArgs.imm(15 downto 0);
@@ -334,6 +337,7 @@ begin
     res.state.bqPointer := info.static.bqPointer;
     res.state.sqPointer := info.static.sqPointer;
     res.state.lqPointer := info.static.lqPointer;        
+        res.state.bqPointerSeq := info.static.bqPointerSeq;        
     
     res.state.immediate := info.static.immediate;    
     res.state.immValue := info.static.immValue;
@@ -423,6 +427,7 @@ begin
     res.ins.tags.bqPointer := st.bqPointer;
     res.ins.tags.sqPointer := st.sqPointer;
     res.ins.tags.lqPointer := st.lqPointer;
+        res.ins.tags.bqPointerSeq := st.bqPointerSeq;
 
     res.ins.specificOperation := st.operation;
 
