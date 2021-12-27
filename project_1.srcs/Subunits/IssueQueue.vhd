@@ -70,212 +70,14 @@ architecture Behavioral of IssueQueue is
     signal selectedSlot: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
     
     signal issuedTag, issuedTag1, issuedTag2: InsTag := (others => '0');
-    
-        signal staticContent: StaticInfoArray(0 to STATIC_ARRAY_SIZE-1) := (others => DEFAULT_STATIC_INFO); 
-        signal staticContentFull: std_logic_vector(0 to STATIC_ARRAY_SIZE-1) := (others => '0');
-        signal staticContentIndices: IntArray(0 to STATIC_ARRAY_SIZE-1) := (others => 0);
-        signal staticRenameIndices: InsTagArray(0 to STATIC_ARRAY_SIZE-1) := (others => (others => '0'));
-        
-        signal newStaticSlots: IntArray(0 to PIPE_WIDTH-1) := (0, 1, 2, 3);
-        
-        signal issuedStaticPtr, lastLivingStaticPtr: SmallNumber := (others => '0');
-        signal issuedVirtualPtr, lastLivingVirtualPtr, maxVirtualPtr: natural := 0;
-        
-        signal S_tagArray, S_tagArrayNext: InsTagArray(0 to STATIC_ARRAY_SIZE-1) := (others => (others => '0'));
-        signal S_fullMask, S_fullMaskNext, S_killMask: std_logic_vector(0 to STATIC_ARRAY_SIZE-1) := (others => '0');
-        
+
+       
         signal S_firstFree, S_firstFreePrev, S_issued, S_issued1, S_issued2, S_issued3: natural := 0;
-        signal S_firstDynamic, S_lastDynamic: natural := 0;
-        signal S_firstTag, S_lastTag, S_selectedTag: InsTag := (others => '0');
+        signal S_selectedTag: InsTag := (others => '0');        
+        signal S_selectedStatic, S_selectedStaticRestored: StaticInfo := DEFAULT_STATIC_INFO;
         
-        signal S_selectedStatic: StaticInfo := DEFAULT_STATIC_INFO;
-        
-        type StaticMaskArray is array(0 to STATIC_ARRAY_SIZE-1) of std_logic_vector(0 to PIPE_WIDTH-1);
-        
-        signal staticMasks, staticMasksNext: StaticMaskArray := (others => (others => '0'));
-      
-        attribute ram_style: string;
-        
-                type StaticInfoArray2D is array(integer range<>, integer range<>) of StaticInfo;
-                signal S_staticContent: StaticInfoArray2D(0 to STATIC_ARRAY_SIZE-1, 0 to PIPE_WIDTH-1) := (others => (others => DEFAULT_STATIC_INFO)); 
+  
 
-                signal S_lqPtr, S_sqPtr, S_bqPtr, S_immHigh: WordArray(0 to STATIC_ARRAY_SIZE-1) := (others => (others => '0'));
-                
-                signal S_lqWord, S_sqWord, S_bqWord, S_immHighWord: Word := (others => '0');
-
-        --attribute ram_style of S_staticContent: signal is "distributed";
-
-        
-        function S_clearStaticMaskRow(staticMasks: StaticMaskArray; ind, sub: natural) return StaticMaskArray is
-            variable res: StaticMaskArray := staticMasks;
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                if i > sub then
-                    res(ind)(i) := '0';
-                end if;
-            end loop;
-            
-            return res;
-        end function;
-        
-        function S_updateTagArray(arr: InsTagArray; ind: natural; newTag: InsTag) return InsTagArray is
-            variable res: InsTagArray(arr'range) := arr;
-        begin
-            res(ind) := newTag;
-            return res;
-        end function;
- 
-        function S_updateFullMask(mask: std_logic_vector; prevSending: std_logic; indSet: natural; staticMasks: StaticMaskArray;
-                                     events: EventState;   S_killMask: std_logic_vector) return std_logic_vector is
-            variable res: std_logic_vector(mask'range) := mask;
-        begin
-            for i in 0 to STATIC_ARRAY_SIZE-1 loop
-                if isNonzero(staticMasks(i)) = '0' then
-                    res(i) := '0';
-                end if;
-            end loop;
-        
-        
-            if prevSending = '1' then
-                res(indSet) := '1';
-            end if;
-            
-            
-            if events.lateEvent = '1' then
-                res := (others => '0');
-            elsif events.execEvent = '1' then
-                res := res and not S_killMask;
-            end if;
-            
-            return res;
-        end function;       
-
-        function S_updateStaticMasks(staticMasks: StaticMaskArray;
-                                     events: EventState; prevSending, isSent2: std_logic; S_issued2, S_firstFree: natural; issuedTag2: InsTag; S_killMask: std_logic_vector;
-                                        newArr: SchedulerInfoArray) return StaticMaskArray is
-            variable res: StaticMaskArray := staticMasks;
-            constant tagLow: std_logic_vector(LOG2_PIPE_WIDTH-1 downto 0) := issuedTag2(LOG2_PIPE_WIDTH-1 downto 0); 
-        begin
-            if isSent2 = '1' then
-                res(S_issued2)(slv2u(tagLow)) := '0';
-            end if;
-        
-            if events.lateEvent = '1' then
-                res := (others => (others => '0'));
-            elsif events.execEvent = '1' then
-                res := S_clearStaticMaskRow(res, S_issued2, slv2u(tagLow));
-            elsif prevSending = '1' then
-                res(S_firstFree) := extractFullMask(newArr);
-            end if;
-            
-            return res;
-        end function;
-        
-        
-        function S_findTag(arr: InsTagArray; tag: InsTag) return natural is
-        begin
-            for i in 0 to arr'length-1 loop
-                if arr(i) = tag then
-                    return i;
-                end if;
-            end loop;
-            
-            return 0;
-        end function;
-        
-        function S_getKillMask(S_tagMask: InsTagArray; events: EventState) return std_logic_vector is
-            variable res: std_logic_vector(0 to STATIC_ARRAY_SIZE-1) := (others => '0');
-        begin
-            for i in res'range loop
-                res(i) := compareTagBefore(events.execCausing.tags.renameIndex, S_tagMask(i));
-            end loop;
-            return res;
-        end function;
-        
-        
-        
-        function findFirstFull(fullMask: std_logic_vector) return natural is
-        begin
-            for i in fullMask'range loop
-                if fullMask(i) = '1' then
-                   return i;
-                end if;
-            end loop;
-            
-            return 0;
-        end function;
-
-        function findLastFull(fullMask: std_logic_vector) return natural is
-        begin
-            for i in fullMask'reverse_range loop
-                if fullMask(i) = '1' then
-                   return i;
-                end if;
-            end loop;
-            
-            return 0;
-        end function;
-                
-        function findFreeStaticSlots(fullMask: std_logic_vector) return IntArray is
-            variable res: IntArray(0 to PIPE_WIDTH-1) := (others => 0);
-            variable j: natural := 0; 
-        begin
-            for i in fullMask'range loop
-                if fullMask(i) /= '1' then
-                    res(j) := i;
-                    if j = 3 then
-                        exit;
-                    else
-                        j := j + 1;
-                    end if;                    
-                end if;
-            end loop;
-            
-            return res;
-        end function;
-        
-        function updateFullStaticSlots(fullMask: std_logic_vector; newSlots: IntArray; newMask: std_logic_vector) return std_logic_vector is
-            variable res: std_logic_vector(fullMask'range) := fullMask;
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                if newMask(i) = '1' then
-                    res(newSlots(i)) := '1';
-                end if;
-            end loop;
-            
-            return res;
-        end function;
-
-        function updateStaticContent(content: StaticInfoArray; newSlots: IntArray; newMask: std_logic_vector; newData: SchedulerInfoArray) return StaticInfoArray is
-            variable res: StaticInfoArray(content'range) := content;
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                if newMask(i) = '1' then
-                    res(newSlots(i)) := newData(i).static;
-                end if;
-            end loop;
-            
-            return res;
-        end function;        
-
-        function updateStaticIndices(content: IntArray; newSlots: IntArray; newMask: std_logic_vector; newData: SchedulerInfoArray;
-                                      issue: std_logic; issueIndex: natural; maxIndex: natural) return IntArray is
-            variable res: IntArray(content'range) := content;
-            variable highest: natural := maxIndex;
-        begin
-            --for
-            
-            
-        
-            for i in 0 to PIPE_WIDTH-1 loop
-                if newMask(i) = '1' then
-                    res(newSlots(i)) := highest;
-                    highest := highest + 1;
-                end if;
-            end loop;
-            
-            return res;
-        end function;
                                   
 	signal anyReadyFull_T, anyReadyFullMain, anyReadyLive_T, sends, sends_T, sendingKilled_T, isSent, isSent2, sentKilled, sentKilled_T: std_logic := '0';
 	signal dispatchDataNew, dispatchDataNew_T, dispatchDataNew_T2: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
@@ -303,6 +105,7 @@ architecture Behavioral of IssueQueue is
     
     signal controlSigs, controlSigsPrev, controlSigs_T: SlotControlArray(0 to QUEUE_SIZE_EXT-1);
     
+    -- TODO: universal function for all vector sizes
     function compareIndBefore(tagA, tagB: SmallNumber; PTR_SIZE: natural) return std_logic is
         variable tC: SmallNumber := (others => '0');
     begin
@@ -446,15 +249,11 @@ architecture Behavioral of IssueQueue is
         return res;
     end function;
     
-    function updateRegStatus(content: SchedulerInfoArray; rrf: std_logic_vector; firstFree: natural) return SchedulerInfoArray is
+    function updateRegStatus(content: SchedulerInfoArray; rrf: std_logic_vector) return SchedulerInfoArray is
         variable res: SchedulerInfoArray(content'range) := content;
         variable earlyStage: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1);
     begin
         earlyStage := updateRR(earlyStage, rrf);
-        
-        for i in 0 to PIPE_WIDTH-1 loop
-        --    earlyStage(i).dynamic.staticPtr := i2slv(firstFree, SMALL_NUMBER_SIZE);
-        end loop;
         
         res(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1) := earlyStage;
         return res;
@@ -470,43 +269,23 @@ architecture Behavioral of IssueQueue is
         end loop;
         return res;
     end function;
+
     
-    function mergeWithStatic(si: SchedulerInfo; st: StaticInfo; tag: InsTag; lqWord, sqWord, bqWord, immHighWord: Word) return SchedulerInfo is
-        variable res: SchedulerInfo := si;
-        constant subInd: natural := slv2u(si.dynamic.renameIndex(LOG2_PIPE_WIDTH-1 downto 0));
-        constant wordInd: natural := 8*subInd; 
-    begin
-        res.static := st;
-            res.static.bqPointerSeq := si.static.bqPointerSeq;
-        res.dynamic.renameIndex(TAG_SIZE-1 downto LOG2_PIPE_WIDTH) := tag(TAG_SIZE-1 downto LOG2_PIPE_WIDTH);
-        
-            --res.static.sqPointer := sqWord(wordInd+7 downto wordInd);
-            --res.static.lqPointer := lqWord(wordInd+7 downto wordInd);
-            --res.static.bqPointer := bqWord(wordInd+7 downto wordInd);
-            --res.static.immValue(15 downto 8) := immHighWord(wordInd+7 downto wordInd);
-        return res;
-    end function;
-    
-    function mergeWithStatic2(si: SchedulerInfo; st: StaticInfo; tag: InsTag; lqWord, sqWord, bqWord, immHighWord: Word) return SchedulerInfo is
+    function mergeWithStatic(si: SchedulerInfo; st: StaticInfo; tag: InsTag) return SchedulerInfo is
         variable res: SchedulerInfo := si;
         constant subIndV: std_logic_vector(1 downto 0) := si.dynamic.renameIndex(1 downto 0);
         constant subInd: natural := slv2u(subIndV);
         constant wordInd: natural := 8*(3-subInd); 
     begin
         res.static := st;
-            res.static.bqPointerSeq := si.static.bqPointerSeq;
+        res.static.bqPointerSeq := si.static.bqPointerSeq;
         res.dynamic.renameIndex(TAG_SIZE-1 downto LOG2_PIPE_WIDTH) := tag(TAG_SIZE-1 downto LOG2_PIPE_WIDTH);
-        
-            res.static.sqPointer := sqWord(wordInd+7 downto wordInd);
-            res.static.lqPointer := lqWord(wordInd+7 downto wordInd);
-            res.static.bqPointer := bqWord(wordInd+7 downto wordInd);
-            res.static.immValue(15 downto 8) := immHighWord(wordInd+7 downto wordInd);
+
         return res;
     end function;
-begin
-        newArr_T <= assignStaticPtr(newArr, S_firstFree);
 
-            ch0 <= bool2std(trialMask = trialMask_T);
+begin
+    newArr_T <= assignStaticPtr(newArr, S_firstFree);
 
     fmaExt_T <= findForwardingMatchesArray(queueContentExt_T, fni);
 
@@ -526,19 +305,6 @@ begin
             end if;
         end if;
     end process;
-  
-        S_firstTag <= queueContentExt_T(S_firstDynamic).dynamic.renameIndex;
-        S_lastTag  <= queueContentExt_T(S_lastDynamic).dynamic.renameIndex;
-        S_tagArrayNext <= S_updateTagArray(S_tagArray, S_firstFree, newArr(0).dynamic.renameIndex);
-        S_fullMaskNext <= S_updateFullMask(S_fullMask, prevSendingOK, S_firstFree, staticMasks, events, S_killMask);
-
-        S_firstFree <= findFreeStaticSlots(S_fullMask)(0);
-
-        S_firstDynamic <= findFirstFull(fullMaskExt_T);
-        S_lastDynamic <= findLastFull(fullMaskExt_T);
-
-
-            S_killMask <= S_getKillMask(S_tagArray, events);
 
 	QUEUE_SYNCHRONOUS: process(clk)
 	begin
@@ -548,68 +314,13 @@ begin
 			sentKilled_T <= sendingKilled_T;			
 			isSent <= sends_T;
 			isSent2 <= isSent;
-			
-			
-			S_firstFreePrev <= S_firstFree;
-			     --if isSent2 = '1' then
-			        -- staticMasks(S_issued2)() <= '0';
-			         
-			     --end if;
-			 
-			 staticMasks <= staticMasksNext;
-			     
-			     if events.lateEvent = '1' then
-			         staticContentFull <= (others => '0');
-			         
-			         
-			         --  staticMasks <= (others => (others => '0'));
-			     elsif events.execEvent = '1' then
-			         
-			          -- static masks cleared based on comparison with causing renameIndex
-			          
-			         -- staticMasks <= S_clearStaticMaskRow(staticMasks, S_issued2, events.execCausing.tags.renameIndex);
-			           
-			     elsif prevSendingOK = '1' then
-			         staticContentFull <= updateFullStaticSlots(staticContentFull, newStaticSlots, extractFullMask(newArr));
-			         staticContent <= updateStaticContent(staticContent, newStaticSlots, extractFullMask(newArr), newArr);
-			         staticContentIndices <= updateStaticIndices(staticContentIndices, newStaticSlots, extractFullMask(newArr), newArr,
-			                                                     '0', 0, 0);
-			                                                     
-			         --   staticMasks(S_firstFree) <= extractFullMask(newArr);
-			         S_staticContent(S_firstFree, 0) <= newArr(0).static;
-			         S_staticContent(S_firstFree, 1) <= newArr(1).static;
-			         S_staticContent(S_firstFree, 2) <= newArr(2).static;
-			         S_staticContent(S_firstFree, 3) <= newArr(3).static;
-			         
-			             S_lqPtr(S_firstFree) <= newArr(0).static.lqPointer & newArr(1).static.lqPointer & newArr(2).static.lqPointer & newArr(3).static.lqPointer;
-			             S_sqPtr(S_firstFree) <= newArr(0).static.sqPointer & newArr(1).static.sqPointer & newArr(2).static.sqPointer & newArr(3).static.sqPointer;
-			             S_bqPtr(S_firstFree) <= newArr(0).static.bqPointer & newArr(1).static.bqPointer & newArr(2).static.bqPointer & newArr(3).static.bqPointer;
-			             S_immHigh(S_firstFree) <= newArr(0).static.immValue(15 downto 8) & newArr(1).static.immValue(15 downto 8)
-			                                   & newArr(2).static.immValue(15 downto 8) & newArr(3).static.immValue(15 downto 8);
-			     end if;
 
-			     -- 
-			     
-			     --if isSent = '1' or prevSendingOK = '1' then
-			     
-			         S_tagArray <= S_tagArrayNext;
-			         S_fullMask <= S_fullMaskNext;
-			     --end if;
-			     S_issued1 <= S_issued;
-			     S_issued2 <= S_issued1;
-			     S_issued3 <= S_issued2;
-			     
-			     issuedTag1 <= issuedTag;
-			     issuedTag2 <= issuedTag1;
 		end if;
 	end process;
 
-        staticMasksNext <= S_updateStaticMasks(staticMasks, events, prevSendingOK, isSent2, S_issued2, S_firstFree, issuedTag2, S_killMask, newArr);
 
-        S_issued <= slv2u(selectedSlot.dynamic.staticPtr);
-        issuedTag <= selectedSlot.dynamic.renameIndex;
-
-            newStaticSlots <= findFreeStaticSlots(staticContentFull);
+	        
+    issuedTag <= selectedSlot.dynamic.renameIndex;
 
     controlSigs_T <= getControlSignals(queueContentUpdatedSelExt_T, events);               
 
@@ -629,29 +340,18 @@ begin
     sendingKilled_T <= isNonzero(killMaskExt_T and selMaskExt_T);
 
     -- Content manipulation
-    queueContentExtRR_T <= updateRegStatus(queueContentExt_T, rrfStored, S_firstFreePrev);
+    queueContentExtRR_T <= updateRegStatus(queueContentExt_T, rrfStored);
     queueContentUpdatedExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, false, DONT_MATCH1, FORWARDING_D, FORWARDING_D);
     queueContentUpdatedSelExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, true, DONT_MATCH1, FORWARDING, FORWARDING1);
 
     queueContentExtNext_T <= iqNext_N2(queueContentUpdatedExt_T, newArr_T, prevSendingOK, sends_T, killMaskExt_T, trialMask, selMaskExt_T, 0);
     queueContentExtNext_N <= iqNext_N(queueContentUpdatedExt_T, newArr_T, prevSendingOK, sends_T, killMaskExt_T, selMaskExt_T, 0);
 
-        selectedSlot <= prioSelect16(queueContentUpdatedSelExt_T, readyMaskAllExt_T);
-        
-        S_selectedStatic <= S_staticContent(slv2u(selectedSlot.dynamic.staticPtr), slv2u(selectedSlot.dynamic.renameIndex(1 downto 0)));
-        S_selectedTag <= S_tagArray(slv2u(selectedSlot.dynamic.staticPtr));
-        
-        S_lqWord <= S_lqPtr(slv2u(selectedSlot.dynamic.staticPtr));
-        S_sqWord <= S_sqPtr(slv2u(selectedSlot.dynamic.staticPtr));
-        S_bqWord <= S_bqPtr(slv2u(selectedSlot.dynamic.staticPtr));
-        S_immHighWord <= S_immHigh(slv2u(selectedSlot.dynamic.staticPtr));
-        
+    selectedSlot <= prioSelect16(queueContentUpdatedSelExt_T, readyMaskAllExt_T);
+
     -- Output signals
     dispatchDataNew_T <= getSchedEntrySlot(selectedSlot);
-        dispatchDataNew_T2 <= getSchedEntrySlot(mergeWithStatic2(selectedSlot, S_selectedStatic, S_selectedTag, S_lqWord, S_sqWord, S_bqWord, S_immHighWord));
-
-        ch1 <= bool2std(mergeWithStatic(selectedSlot, S_selectedStatic, S_selectedTag, S_lqWord, S_sqWord, S_bqWord, S_immHighWord) = 
-                        mergeWithStatic2(selectedSlot, S_selectedStatic, S_selectedTag, S_lqWord, S_sqWord, S_bqWord, S_immHighWord));
+        dispatchDataNew_T2 <= getSchedEntrySlot(mergeWithStatic(selectedSlot, S_selectedStaticRestored, S_selectedTag));
 
 	acceptingOut <= not isNonzero(fullMaskExt_T(4 to 7));               
 	acceptingMore <= not isNonzero(fullMaskExt_T(0 to 7));
@@ -662,5 +362,186 @@ begin
                         cancelled => sentKilled_T,
                         ready => anyReadyLive_T,
                         empty => not isNonzero(fullMaskExt_T));
+
+
+    
+    STATIC_PART_CONTROL: block
+    
+            signal S_tagArray, S_tagArrayNext: InsTagArray(0 to STATIC_ARRAY_SIZE-1) := (others => (others => '0'));
+            signal S_fullMask, S_fullMaskNext, S_killMask: std_logic_vector(0 to STATIC_ARRAY_SIZE-1) := (others => '0');
+    
+            type StaticMaskArray is array(0 to STATIC_ARRAY_SIZE-1) of std_logic_vector(0 to PIPE_WIDTH-1);
+    
+            signal staticMasks, staticMasksNext: StaticMaskArray := (others => (others => '0'));
+    
+            type StaticInfoArray2D is array(integer range<>, integer range<>) of StaticInfo;
+            signal S_staticContent: StaticInfoArray2D(0 to STATIC_ARRAY_SIZE-1, 0 to PIPE_WIDTH-1) := (others => (others => DEFAULT_STATIC_INFO)); 
+
+            signal S_lqPtr, S_sqPtr, S_bqPtr, S_immHigh: WordArray(0 to STATIC_ARRAY_SIZE-1) := (others => (others => '0'));
+            
+            signal S_lqWord, S_sqWord, S_bqWord, S_immHighWord: Word := (others => '0');
+
+       
+        function S_updateTagArray(arr: InsTagArray; ind: natural; newTag: InsTag) return InsTagArray is
+            variable res: InsTagArray(arr'range) := arr;
+        begin
+            res(ind) := newTag;
+            return res;
+        end function;
+ 
+        function S_updateFullMask(mask: std_logic_vector; prevSending: std_logic; indSet: natural; staticMasks: StaticMaskArray;
+                                     events: EventState;   S_killMask: std_logic_vector) return std_logic_vector is
+            variable res: std_logic_vector(mask'range) := mask;
+        begin
+            for i in 0 to STATIC_ARRAY_SIZE-1 loop
+                if isNonzero(staticMasks(i)) = '0' then
+                    res(i) := '0';
+                end if;
+            end loop;
+        
+        
+            if prevSending = '1' then
+                res(indSet) := '1';
+            end if;
+            
+            
+            if events.lateEvent = '1' then
+                res := (others => '0');
+            elsif events.execEvent = '1' then
+                res := res and not S_killMask;
+            end if;
+            
+            return res;
+        end function;       
+
+        function S_clearStaticMaskRow(staticMasks: StaticMaskArray; ind, sub: natural) return StaticMaskArray is
+            variable res: StaticMaskArray := staticMasks;
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                if i > sub then
+                    res(ind)(i) := '0';
+                end if;
+            end loop;
+            
+            return res;
+        end function;
+
+        function S_updateStaticMasks(staticMasks: StaticMaskArray;
+                                     events: EventState; prevSending, isSent2: std_logic; S_issued2, S_firstFree: natural; issuedTag2: InsTag; S_killMask: std_logic_vector;
+                                        newArr: SchedulerInfoArray) return StaticMaskArray is
+            variable res: StaticMaskArray := staticMasks;
+            constant tagLow: std_logic_vector(LOG2_PIPE_WIDTH-1 downto 0) := issuedTag2(LOG2_PIPE_WIDTH-1 downto 0); 
+        begin
+            if isSent2 = '1' then
+                res(S_issued2)(slv2u(tagLow)) := '0';
+            end if;
+        
+            if events.lateEvent = '1' then
+                res := (others => (others => '0'));
+            elsif events.execEvent = '1' then
+                res := S_clearStaticMaskRow(res, S_issued2, slv2u(tagLow));
+            elsif prevSending = '1' then
+                res(S_firstFree) := extractFullMask(newArr);
+            end if;
+            
+            return res;
+        end function;
+        
+        function S_getKillMask(S_tagMask: InsTagArray; events: EventState) return std_logic_vector is
+            variable res: std_logic_vector(0 to STATIC_ARRAY_SIZE-1) := (others => '0');
+        begin
+            for i in res'range loop
+                res(i) := compareTagBefore(events.execCausing.tags.renameIndex, S_tagMask(i));
+            end loop;
+            return res;
+        end function;
+
+        function findFreeStaticSlots(fullMask: std_logic_vector) return IntArray is
+            variable res: IntArray(0 to PIPE_WIDTH-1) := (others => 0);
+            variable j: natural := 0; 
+        begin
+            for i in fullMask'range loop
+                if fullMask(i) /= '1' then
+                    res(j) := i;
+                    if j = 3 then
+                        exit;
+                    else
+                        j := j + 1;
+                    end if;                    
+                end if;
+            end loop;
+            
+            return res;
+        end function;
+
+        function restoreStatic(si: SchedulerInfo; st: StaticInfo; tag: InsTag; lqWord, sqWord, bqWord, immHighWord: Word) return StaticInfo is
+            variable res: StaticInfo := st;
+            constant subIndV: std_logic_vector(1 downto 0) := si.dynamic.renameIndex(1 downto 0);
+            constant subInd: natural := slv2u(subIndV);
+            constant wordInd: natural := 8*(3-subInd); 
+        begin
+            res.bqPointerSeq := si.static.bqPointerSeq;
+        
+            res.sqPointer := sqWord(wordInd+7 downto wordInd);
+            res.lqPointer := lqWord(wordInd+7 downto wordInd);
+            res.bqPointer := bqWord(wordInd+7 downto wordInd);
+            res.immValue(15 downto 8) := immHighWord(wordInd+7 downto wordInd);
+            return res;
+        end function;                   
+    begin
+        S_tagArrayNext <= S_updateTagArray(S_tagArray, S_firstFree, newArr(0).dynamic.renameIndex);
+        S_fullMaskNext <= S_updateFullMask(S_fullMask, prevSendingOK, S_firstFree, staticMasks, events, S_killMask);
+
+        S_firstFree <= findFreeStaticSlots(S_fullMask)(0);
+
+        S_killMask <= S_getKillMask(S_tagArray, events);
+        
+        staticMasksNext <= S_updateStaticMasks(staticMasks, events, prevSendingOK, isSent2, S_issued2, S_firstFree, issuedTag2, S_killMask, newArr);
+
+        S_issued <= slv2u(selectedSlot.dynamic.staticPtr);
+        
+        S_selectedStatic <= S_staticContent(slv2u(selectedSlot.dynamic.staticPtr), slv2u(selectedSlot.dynamic.renameIndex(1 downto 0)));
+        S_selectedTag <= S_tagArray(slv2u(selectedSlot.dynamic.staticPtr));
+        
+        S_lqWord <= S_lqPtr(slv2u(selectedSlot.dynamic.staticPtr));
+        S_sqWord <= S_sqPtr(slv2u(selectedSlot.dynamic.staticPtr));
+        S_bqWord <= S_bqPtr(slv2u(selectedSlot.dynamic.staticPtr));
+        S_immHighWord <= S_immHigh(slv2u(selectedSlot.dynamic.staticPtr));
+        
+        
+	    STATIC_QUEUE_SYNCHRONOUS: process(clk)
+        begin
+           if rising_edge(clk) then
+               staticMasks <= staticMasksNext;
+    
+               if prevSendingOK = '1' then
+                   S_staticContent(S_firstFree, 0) <= newArr(0).static;
+                   S_staticContent(S_firstFree, 1) <= newArr(1).static;
+                   S_staticContent(S_firstFree, 2) <= newArr(2).static;
+                   S_staticContent(S_firstFree, 3) <= newArr(3).static;
+                   
+                       S_lqPtr(S_firstFree) <= newArr(0).static.lqPointer & newArr(1).static.lqPointer & newArr(2).static.lqPointer & newArr(3).static.lqPointer;
+                       S_sqPtr(S_firstFree) <= newArr(0).static.sqPointer & newArr(1).static.sqPointer & newArr(2).static.sqPointer & newArr(3).static.sqPointer;
+                       S_bqPtr(S_firstFree) <= newArr(0).static.bqPointer & newArr(1).static.bqPointer & newArr(2).static.bqPointer & newArr(3).static.bqPointer;
+                       S_immHigh(S_firstFree) <= newArr(0).static.immValue(15 downto 8) & newArr(1).static.immValue(15 downto 8)
+                                             & newArr(2).static.immValue(15 downto 8) & newArr(3).static.immValue(15 downto 8);
+               end if;
+    
+               S_firstFreePrev <= S_firstFree;
+                            
+               S_tagArray <= S_tagArrayNext;
+               S_fullMask <= S_fullMaskNext;
+    
+               S_issued1 <= S_issued;
+               S_issued2 <= S_issued1;
+               S_issued3 <= S_issued2;
+               
+               issuedTag1 <= issuedTag;
+               issuedTag2 <= issuedTag1;    
+           end if;
+        end process;
+
+        S_selectedStaticRestored <= restoreStatic(selectedSlot, S_selectedStatic, S_selectedTag, S_lqWord, S_sqWord, S_bqWord, S_immHighWord);
+    end block;
 
 end Behavioral;
