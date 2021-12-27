@@ -319,8 +319,10 @@ architecture Behavioral of IssueQueue is
             res(i).issued := content(i).dynamic.issued;
             
             res(i).trial := killByTag(compareTagBefore(events.preExecCausing.tags.renameIndex, content(i).dynamic.renameIndex), '1', '0');
-                res(i).trial_T := killByTag(compareIndBefore(events.preExecCausing.tags.bqPointerSeq, content(i).static.bqPointerSeq, 6) , '1', '0'); -- TODO: temp value of PTR_SIZE!
-                    res(i).trial := res(i).trial_T;
+               res(i).trial_T := killByTag(compareIndBefore(events.preExecCausing.tags.bqPointerSeq, content(i).static.bqPointerSeq, 6) , '1', '0'); -- TODO: temp value of PTR_SIZE!
+            if false then -- Use bqPointerSeq to flush IQ
+               res(i).trial := res(i).trial_T;
+            end if;
                 
             res(i).trialUpdated := content(i).dynamic.trial;
             
@@ -645,7 +647,7 @@ begin
         S_immHighWord <= S_immHigh(slv2u(selectedSlot.dynamic.staticPtr));
         
     -- Output signals
-    dispatchDataNew_T <= getSchedEntrySlot(mergeWithStatic2(selectedSlot, S_selectedStatic, S_selectedTag, S_lqWord, S_sqWord, S_bqWord, S_immHighWord));
+    dispatchDataNew_T <= getSchedEntrySlot(selectedSlot);
         dispatchDataNew_T2 <= getSchedEntrySlot(mergeWithStatic2(selectedSlot, S_selectedStatic, S_selectedTag, S_lqWord, S_sqWord, S_bqWord, S_immHighWord));
 
         ch1 <= bool2std(mergeWithStatic(selectedSlot, S_selectedStatic, S_selectedTag, S_lqWord, S_sqWord, S_bqWord, S_immHighWord) = 
