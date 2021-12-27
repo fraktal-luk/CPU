@@ -58,6 +58,8 @@ architecture Behavioral of IssueQueue is
     constant QUEUE_SIZE_EXT: natural := IQ_SIZE + PIPE_WIDTH;
     constant STATIC_ARRAY_SIZE: natural := 8;
 
+    signal newArr_T: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
+    
     signal fullMaskExt, fullMaskExtNext, killMaskExt, trialMask, trialMask_T, livingMaskExt, readyMaskAllExt, readyMaskFullExt, readyMaskLiveExt, readyMaskLiveExt_T,
            cancelledMaskExt, selMaskExt, selMaskExtPrev, fullMaskExt_T, killMaskExt_T, readyMaskAllExt_T, selMaskExt_T: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others=>'0');
                
@@ -84,12 +86,25 @@ architecture Behavioral of IssueQueue is
         
         signal S_firstFree, S_firstFreePrev, S_issued, S_issued1, S_issued2, S_issued3: natural := 0;
         signal S_firstDynamic, S_lastDynamic: natural := 0;
-        signal S_firstTag, S_lastTag: InsTag := (others => '0');
-
+        signal S_firstTag, S_lastTag, S_selectedTag: InsTag := (others => '0');
+        
+        signal S_selectedStatic: StaticInfo := DEFAULT_STATIC_INFO;
+        
         type StaticMaskArray is array(0 to STATIC_ARRAY_SIZE-1) of std_logic_vector(0 to PIPE_WIDTH-1);
         
         signal staticMasks, staticMasksNext: StaticMaskArray := (others => (others => '0'));
+      
+        attribute ram_style: string;
         
+                type StaticInfoArray2D is array(integer range<>, integer range<>) of StaticInfo;
+                signal S_staticContent: StaticInfoArray2D(0 to STATIC_ARRAY_SIZE-1, 0 to PIPE_WIDTH-1) := (others => (others => DEFAULT_STATIC_INFO)); 
+
+                signal S_lqPtr, S_sqPtr, S_bqPtr, S_immHigh: WordArray(0 to STATIC_ARRAY_SIZE-1) := (others => (others => '0'));
+                
+                signal S_lqWord, S_sqWord, S_bqWord, S_immHighWord: Word := (others => '0');
+
+        --attribute ram_style of S_staticContent: signal is "distributed";
+
         
         function S_clearStaticMaskRow(staticMasks: StaticMaskArray; ind, sub: natural) return StaticMaskArray is
             variable res: StaticMaskArray := staticMasks;
@@ -263,7 +278,7 @@ architecture Behavioral of IssueQueue is
         end function;
                                   
 	signal anyReadyFull_T, anyReadyFullMain, anyReadyLive_T, sends, sends_T, sendingKilled_T, isSent, isSent2, sentKilled, sentKilled_T: std_logic := '0';
-	signal dispatchDataNew, dispatchDataNew_T: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+	signal dispatchDataNew, dispatchDataNew_T, dispatchDataNew_T2: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
     signal fmaExt_T: ForwardingMatchesArray(0 to IQ_SIZE + PIPE_WIDTH -1) := (others => DEFAULT_FORWARDING_MATCHES);
    
@@ -436,7 +451,7 @@ architecture Behavioral of IssueQueue is
         earlyStage := updateRR(earlyStage, rrf);
         
         for i in 0 to PIPE_WIDTH-1 loop
-            earlyStage(i).dynamic.staticPtr := i2slv(firstFree, SMALL_NUMBER_SIZE);
+        --    earlyStage(i).dynamic.staticPtr := i2slv(firstFree, SMALL_NUMBER_SIZE);
         end loop;
         
         res(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1) := earlyStage;
@@ -444,7 +459,50 @@ architecture Behavioral of IssueQueue is
     end function;
 
     signal rrfStored: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+    
+    function assignStaticPtr(arr: SchedulerInfoArray; p: natural) return SchedulerInfoArray is
+        variable res: SchedulerInfoArray(arr'range) := arr;
+    begin
+        for i in res'range loop
+            res(i).dynamic.staticPtr := i2slv(p, SMALL_NUMBER_SIZE);
+        end loop;
+        return res;
+    end function;
+    
+    function mergeWithStatic(si: SchedulerInfo; st: StaticInfo; tag: InsTag; lqWord, sqWord, bqWord, immHighWord: Word) return SchedulerInfo is
+        variable res: SchedulerInfo := si;
+        constant subInd: natural := slv2u(si.dynamic.renameIndex(LOG2_PIPE_WIDTH-1 downto 0));
+        constant wordInd: natural := 8*subInd; 
+    begin
+        res.static := st;
+            res.static.bqPointerSeq := si.static.bqPointerSeq;
+        res.dynamic.renameIndex(TAG_SIZE-1 downto LOG2_PIPE_WIDTH) := tag(TAG_SIZE-1 downto LOG2_PIPE_WIDTH);
+        
+            --res.static.sqPointer := sqWord(wordInd+7 downto wordInd);
+            --res.static.lqPointer := lqWord(wordInd+7 downto wordInd);
+            --res.static.bqPointer := bqWord(wordInd+7 downto wordInd);
+            --res.static.immValue(15 downto 8) := immHighWord(wordInd+7 downto wordInd);
+        return res;
+    end function;
+    
+    function mergeWithStatic2(si: SchedulerInfo; st: StaticInfo; tag: InsTag; lqWord, sqWord, bqWord, immHighWord: Word) return SchedulerInfo is
+        variable res: SchedulerInfo := si;
+        constant subIndV: std_logic_vector(1 downto 0) := si.dynamic.renameIndex(1 downto 0);
+        constant subInd: natural := slv2u(subIndV);
+        constant wordInd: natural := 8*(3-subInd); 
+    begin
+        res.static := st;
+            res.static.bqPointerSeq := si.static.bqPointerSeq;
+        res.dynamic.renameIndex(TAG_SIZE-1 downto LOG2_PIPE_WIDTH) := tag(TAG_SIZE-1 downto LOG2_PIPE_WIDTH);
+        
+            res.static.sqPointer := sqWord(wordInd+7 downto wordInd);
+            res.static.lqPointer := lqWord(wordInd+7 downto wordInd);
+            res.static.bqPointer := bqWord(wordInd+7 downto wordInd);
+            res.static.immValue(15 downto 8) := immHighWord(wordInd+7 downto wordInd);
+        return res;
+    end function;
 begin
+        newArr_T <= assignStaticPtr(newArr, S_firstFree);
 
             ch0 <= bool2std(trialMask = trialMask_T);
 
@@ -516,8 +574,18 @@ begin
 			                                                     '0', 0, 0);
 			                                                     
 			         --   staticMasks(S_firstFree) <= extractFullMask(newArr);
+			         S_staticContent(S_firstFree, 0) <= newArr(0).static;
+			         S_staticContent(S_firstFree, 1) <= newArr(1).static;
+			         S_staticContent(S_firstFree, 2) <= newArr(2).static;
+			         S_staticContent(S_firstFree, 3) <= newArr(3).static;
+			         
+			             S_lqPtr(S_firstFree) <= newArr(0).static.lqPointer & newArr(1).static.lqPointer & newArr(2).static.lqPointer & newArr(3).static.lqPointer;
+			             S_sqPtr(S_firstFree) <= newArr(0).static.sqPointer & newArr(1).static.sqPointer & newArr(2).static.sqPointer & newArr(3).static.sqPointer;
+			             S_bqPtr(S_firstFree) <= newArr(0).static.bqPointer & newArr(1).static.bqPointer & newArr(2).static.bqPointer & newArr(3).static.bqPointer;
+			             S_immHigh(S_firstFree) <= newArr(0).static.immValue(15 downto 8) & newArr(1).static.immValue(15 downto 8)
+			                                   & newArr(2).static.immValue(15 downto 8) & newArr(3).static.immValue(15 downto 8);
 			     end if;
-			     
+
 			     -- 
 			     
 			     --if isSent = '1' or prevSendingOK = '1' then
@@ -563,12 +631,25 @@ begin
     queueContentUpdatedExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, false, DONT_MATCH1, FORWARDING_D, FORWARDING_D);
     queueContentUpdatedSelExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, true, DONT_MATCH1, FORWARDING, FORWARDING1);
 
-    queueContentExtNext_T <= iqNext_N2(queueContentUpdatedExt_T, newArr, prevSendingOK, sends_T, killMaskExt_T, trialMask, selMaskExt_T, 0);
-    queueContentExtNext_N <= iqNext_N(queueContentUpdatedExt_T, newArr, prevSendingOK, sends_T, killMaskExt_T, selMaskExt_T, 0);
+    queueContentExtNext_T <= iqNext_N2(queueContentUpdatedExt_T, newArr_T, prevSendingOK, sends_T, killMaskExt_T, trialMask, selMaskExt_T, 0);
+    queueContentExtNext_N <= iqNext_N(queueContentUpdatedExt_T, newArr_T, prevSendingOK, sends_T, killMaskExt_T, selMaskExt_T, 0);
 
         selectedSlot <= prioSelect16(queueContentUpdatedSelExt_T, readyMaskAllExt_T);
+        
+        S_selectedStatic <= S_staticContent(slv2u(selectedSlot.dynamic.staticPtr), slv2u(selectedSlot.dynamic.renameIndex(1 downto 0)));
+        S_selectedTag <= S_tagArray(slv2u(selectedSlot.dynamic.staticPtr));
+        
+        S_lqWord <= S_lqPtr(slv2u(selectedSlot.dynamic.staticPtr));
+        S_sqWord <= S_sqPtr(slv2u(selectedSlot.dynamic.staticPtr));
+        S_bqWord <= S_bqPtr(slv2u(selectedSlot.dynamic.staticPtr));
+        S_immHighWord <= S_immHigh(slv2u(selectedSlot.dynamic.staticPtr));
+        
     -- Output signals
-    dispatchDataNew_T <= getSchedEntrySlot(selectedSlot);
+    dispatchDataNew_T <= getSchedEntrySlot(mergeWithStatic2(selectedSlot, S_selectedStatic, S_selectedTag, S_lqWord, S_sqWord, S_bqWord, S_immHighWord));
+        dispatchDataNew_T2 <= getSchedEntrySlot(mergeWithStatic2(selectedSlot, S_selectedStatic, S_selectedTag, S_lqWord, S_sqWord, S_bqWord, S_immHighWord));
+
+        ch1 <= bool2std(mergeWithStatic(selectedSlot, S_selectedStatic, S_selectedTag, S_lqWord, S_sqWord, S_bqWord, S_immHighWord) = 
+                        mergeWithStatic2(selectedSlot, S_selectedStatic, S_selectedTag, S_lqWord, S_sqWord, S_bqWord, S_immHighWord));
 
 	acceptingOut <= not isNonzero(fullMaskExt_T(4 to 7));               
 	acceptingMore <= not isNonzero(fullMaskExt_T(0 to 7));
