@@ -160,7 +160,7 @@ function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) retur
 
 function makeSlotArray(ia: InstructionStateArray; fm: std_logic_vector) return InstructionSlotArray;
 
-function killByTag(before, ei, int: std_logic) return std_logic;
+function compareIndBefore(tagA, tagB: SmallNumber; PTR_SIZE: natural) return std_logic;
 
 -- UNUSED?
 function getKillMask(content: InstructionStateArray; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
@@ -624,19 +624,20 @@ begin
 	return res;
 end function;
 
-function killByTag(before, ei, int: std_logic) return std_logic is
+function compareIndBefore(tagA, tagB: SmallNumber; PTR_SIZE: natural) return std_logic is
+    variable tC: SmallNumber := (others => '0');
 begin
-    return (before and ei) or int;
-end function;
+    tC := sub(tagA, tagB);
+    return tC(PTR_SIZE-1);
+end function; 
 
-function getKillMask(content: InstructionStateArray;-- fullMask: std_logic_vector;
-							causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
+function getKillMask(content: InstructionStateArray; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector is
 	variable res: std_logic_vector(0 to content'length-1);
 begin
 	for i in 0 to content'length-1 loop
-		res(i) := killByTag(compareTagBefore(causing.tags.renameIndex, content(i).tags.renameIndex),
-									execEventSig, lateEventSig);-- and fullMask(i);
+		res(i) := (compareTagBefore(causing.tags.renameIndex, content(i).tags.renameIndex) and execEventSig)
+		   or lateEventSig;
 	end loop;
 	return res;
 end function;

@@ -59,207 +59,30 @@ architecture Behavioral of IssueQueue is
     constant STATIC_ARRAY_SIZE: natural := 8;
 
     signal newArr_T: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
-    
-    signal fullMaskExt, fullMaskExtNext, killMaskExt, trialMask, trialMask_T, livingMaskExt, readyMaskAllExt, readyMaskFullExt, readyMaskLiveExt, readyMaskLiveExt_T,
-           cancelledMaskExt, selMaskExt, selMaskExtPrev, fullMaskExt_T, killMaskExt_T, readyMaskAllExt_T, selMaskExt_T: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others=>'0');
-               
-    signal queueContentExt, queueContentExtNext, queueContentUpdatedExt, queueContentUpdatedSelExt,
-           queueContentExt_T, queueContentExtRR_T, queueContentExtNext_T, queueContentExtNext_N, queueContentUpdatedExt_T, queueContentUpdatedSelExt_T
-        : SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
+              
+    signal queueContentExt_T: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
+    signal fullMaskExt_T: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
+
+	signal anyReadyFull_T, anyReadyLive_T, sends_T, sendingKilled_T, isSent, isSent2, sentKilled_T, isEmpty: std_logic := '0';
     
     signal selectedSlot: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
-    
-    signal issuedTag, issuedTag1, issuedTag2: InsTag := (others => '0');
+	signal dispatchDataNew_T: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
-       
-        signal S_firstFree, S_firstFreePrev, S_issued, S_issued1, S_issued2, S_issued3: natural := 0;
-        signal S_selectedTag: InsTag := (others => '0');        
-        signal S_selectedStatic, S_selectedStaticRestored: StaticInfo := DEFAULT_STATIC_INFO;
-        
-  
-
+    signal S_firstFree: natural := 0;       
+    signal S_selectedStatic, S_selectedStaticRestored: StaticInfo := DEFAULT_STATIC_INFO;
                                   
-	signal anyReadyFull_T, anyReadyFullMain, anyReadyLive_T, sends, sends_T, sendingKilled_T, isSent, isSent2, sentKilled, sentKilled_T: std_logic := '0';
-	signal dispatchDataNew, dispatchDataNew_T, dispatchDataNew_T2: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+        signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
 
-    signal fmaExt_T: ForwardingMatchesArray(0 to IQ_SIZE + PIPE_WIDTH -1) := (others => DEFAULT_FORWARDING_MATCHES);
-   
-    signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
-    
-    type SlotControl is record
-        full: std_logic;
-        issued: std_logic;
-        killed: std_logic;
-            killed_T: std_logic;
-        trial: std_logic;
-            trial_T: std_logic;
-        trialUpdated: std_logic;
-        living: std_logic;
-        ready: std_logic;
-        readyFull: std_logic;
-        readyLiving: std_logic;
-        selected: std_logic;
-    end record;
-    
-    type SlotControlArray is array(natural range <>) of SlotControl;
-    
-    signal controlSigs, controlSigsPrev, controlSigs_T: SlotControlArray(0 to QUEUE_SIZE_EXT-1);
-    
-    -- TODO: universal function for all vector sizes
-    function compareIndBefore(tagA, tagB: SmallNumber; PTR_SIZE: natural) return std_logic is
-        variable tC: SmallNumber := (others => '0');
-    begin
-        tC := sub(tagA, tagB);
-        return tC(PTR_SIZE-1);
-    end function;    
 
-    function getControlSignals(content: SchedulerInfoArray; events: EventState) return SlotControlArray is
-        variable res: SlotControlArray(content'range);        
-        variable readyFullVec, selectedVec: std_logic_vector(content'range) := (others => '0');
-    begin
-        for i in res'range loop        
-            res(i).full := content(i).dynamic.full;
-            res(i).issued := content(i).dynamic.issued;
-            
-            res(i).trial := killByTag(compareTagBefore(events.preExecCausing.tags.renameIndex, content(i).dynamic.renameIndex), '1', '0');
-               res(i).trial_T := killByTag(compareIndBefore(events.preExecCausing.tags.bqPointerSeq, content(i).static.bqPointerSeq, 6) , '1', '0'); -- TODO: temp value of PTR_SIZE!
-            if false then -- Use bqPointerSeq to flush IQ
-               res(i).trial := res(i).trial_T;
-            end if;
-                
-            res(i).trialUpdated := content(i).dynamic.trial;
-            
-            res(i).killed := (res(i).trialUpdated and events.execEvent) or events.lateEvent;
-
-            res(i).living := res(i).full and not res(i).killed;
-
-            res(i).ready := not isNonzero(content(i).dynamic.missing(0 to 1)) and content(i).dynamic.active;            
-            res(i).readyFull := res(i).ready;
-            res(i).readyLiving := res(i).ready and res(i).living;
-
-            readyFullVec(i) := res(i).readyFull;
-            
-        end loop;
-        
-        selectedVec := getFirstOne(readyFullVec);
-        
-        for i in res'range loop
-            res(i).selected := selectedVec(i);
-        end loop;
-        
-        return res;
-    end function;
-
-    function getFullVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).full;
-        end loop;
-        return res;
-    end function;
-
-    function getLivingVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).living;
-        end loop;
-        return res;
-    end function;
-
-    function getKilledVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).killed;
-        end loop;
-        return res;
-    end function;
-
-        function getKilledVec_T(arr: SlotControlArray) return std_logic_vector is
-            variable res: std_logic_vector(arr'range) := (others => '0');
-        begin
-            for i in res'range loop
-                res(i) := arr(i).killed_T;
-            end loop;
-            return res;
-        end function;
-
-    function getTrialVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).trial;
-        end loop;
-        return res;
-    end function;
-
-        function getTrialVec_T(arr: SlotControlArray) return std_logic_vector is
-            variable res: std_logic_vector(arr'range) := (others => '0');
-        begin
-            for i in res'range loop
-                res(i) := arr(i).trial_T;
-            end loop;
-            return res;
-        end function;
-
-    function getTrialUpdatedVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).trialUpdated;
-        end loop;
-        return res;
-    end function;
-    
-    function getReadyVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).ready;
-        end loop;
-        return res;
-    end function;
-
-    function getReadyFullVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).readyFull;
-        end loop;
-        return res;
-    end function;
-    
-    function getReadyLiveVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).readyLiving;
-        end loop;
-        return res;
-    end function;    
-    
-    function getSelectedVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).selected;
-        end loop;
-        return res;
-    end function;
-    
-    function updateRegStatus(content: SchedulerInfoArray; rrf: std_logic_vector) return SchedulerInfoArray is
+    function updateRenameIndex(content: SchedulerInfoArray) return SchedulerInfoArray is
         variable res: SchedulerInfoArray(content'range) := content;
         variable earlyStage: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1);
     begin
-        earlyStage := updateRR(earlyStage, rrf);
-        
+        earlyStage := restoreRenameIndex(earlyStage);
+
         res(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1) := earlyStage;
         return res;
     end function;
-
-    signal rrfStored: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
     
     function assignStaticPtr(arr: SchedulerInfoArray; p: natural) return SchedulerInfoArray is
         variable res: SchedulerInfoArray(arr'range) := arr;
@@ -269,7 +92,6 @@ architecture Behavioral of IssueQueue is
         end loop;
         return res;
     end function;
-
     
     function mergeWithStatic(si: SchedulerInfo; st: StaticInfo; tag: InsTag) return SchedulerInfo is
         variable res: SchedulerInfo := si;
@@ -286,102 +108,90 @@ architecture Behavioral of IssueQueue is
 
 begin
     newArr_T <= assignStaticPtr(newArr, S_firstFree);
-
-    fmaExt_T <= findForwardingMatchesArray(queueContentExt_T, fni);
-
-    INPUT_SYNCHRONOUS: process(clk)
-        variable rm: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+    
+    MANAGEMENT: block
+        signal trialMask, readyMaskLiveExt_T, killMaskExt_T, readyMaskAllExt_T, selMaskExt_T: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
+        signal queueContentExtRR_T, queueContentExtNext_T, queueContentUpdatedExt_T, queueContentUpdatedSelExt_T: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
+        signal fmaExt_T: ForwardingMatchesArray(0 to IQ_SIZE + PIPE_WIDTH -1) := (others => DEFAULT_FORWARDING_MATCHES);
+        signal controlSigs_T: SlotControlArray(0 to QUEUE_SIZE_EXT-1);
     begin
-        if rising_edge(clk) then
-            rm := (newArr(0).dynamic.full, newArr(0).dynamic.full, newArr(0).dynamic.full,
-                   newArr(1).dynamic.full, newArr(1).dynamic.full, newArr(1).dynamic.full,
-                   newArr(2).dynamic.full, newArr(2).dynamic.full, newArr(2).dynamic.full,
-                   newArr(3).dynamic.full, newArr(3).dynamic.full, newArr(3).dynamic.full
-                   );
-            if prevSendingOK = '1' then
-                rrfStored <= readyRegFlags and rm;
-            else
-                rrfStored <= (others => '0');
+    
+        QUEUE_SYNCHRONOUS: process(clk)
+        begin
+            if rising_edge(clk) then        
+                queueContentExt_T <= queueContentExtNext_T;
+    
+                sentKilled_T <= sendingKilled_T;            
+                isSent <= sends_T;
+                isSent2 <= isSent;
+    
             end if;
-        end if;
-    end process;
+        end process;
 
-	QUEUE_SYNCHRONOUS: process(clk)
-	begin
-		if rising_edge(clk) then		
-            queueContentExt_T <= queueContentExtNext_T;
-
-			sentKilled_T <= sendingKilled_T;			
-			isSent <= sends_T;
-			isSent2 <= isSent;
-
-		end if;
-	end process;
-
-
-	        
-    issuedTag <= selectedSlot.dynamic.renameIndex;
-
-    controlSigs_T <= getControlSignals(queueContentUpdatedSelExt_T, events);               
-
-    -- Vector signals
-    killMaskExt_T <= getKilledVec(controlSigs_T);
-    trialMask <= getTrialVec(controlSigs_T);
-        trialMask_T <= getTrialVec_T(controlSigs_T);
-    fullMaskExt_T <= getFullVec(controlSigs_T);
-    readyMaskAllExt_T <= getReadyVec(controlSigs_T);
-    readyMaskLiveExt_T <= getReadyLiveVec(controlSigs_T);        
-    selMaskExt_T <= getSelectedVec(controlSigs_T);
-
-    -- Scalar signals
-    anyReadyLive_T <= isNonzero(readyMaskLiveExt_T);
-    anyReadyFull_T <= isNonzero(readyMaskAllExt_T);
-    sends_T <= anyReadyFull_T and nextAccepting;
-    sendingKilled_T <= isNonzero(killMaskExt_T and selMaskExt_T);
-
-    -- Content manipulation
-    queueContentExtRR_T <= updateRegStatus(queueContentExt_T, rrfStored);
-    queueContentUpdatedExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, false, DONT_MATCH1, FORWARDING_D, FORWARDING_D);
-    queueContentUpdatedSelExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, true, DONT_MATCH1, FORWARDING, FORWARDING1);
-
-    queueContentExtNext_T <= iqNext_N2(queueContentUpdatedExt_T, newArr_T, prevSendingOK, sends_T, killMaskExt_T, trialMask, selMaskExt_T, 0);
-    queueContentExtNext_N <= iqNext_N(queueContentUpdatedExt_T, newArr_T, prevSendingOK, sends_T, killMaskExt_T, selMaskExt_T, 0);
-
-    selectedSlot <= prioSelect16(queueContentUpdatedSelExt_T, readyMaskAllExt_T);
+        fmaExt_T <= findForwardingMatchesArray(queueContentExt_T, fni);
+    
+        controlSigs_T <= getControlSignals(queueContentUpdatedSelExt_T, events);               
+    
+        -- Vector signals
+        killMaskExt_T <= getKilledVec(controlSigs_T);
+        trialMask <= getTrialVec(controlSigs_T);
+        fullMaskExt_T <= getFullVec(controlSigs_T);
+        readyMaskAllExt_T <= getReadyVec(controlSigs_T);
+        readyMaskLiveExt_T <= getReadyLiveVec(controlSigs_T);        
+        selMaskExt_T <= getSelectedVec(controlSigs_T);
+    
+        -- Scalar signals
+        anyReadyLive_T <= isNonzero(readyMaskLiveExt_T);
+        anyReadyFull_T <= isNonzero(readyMaskAllExt_T);
+        sends_T <= anyReadyFull_T and nextAccepting;
+        sendingKilled_T <= isNonzero(killMaskExt_T and selMaskExt_T);
+    
+        isEmpty <= not isNonzero(fullMaskExt_T);
+    
+        -- Content manipulation
+        queueContentExtRR_T <= updateRenameIndex(queueContentExt_T);
+        
+        queueContentUpdatedExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, false, DONT_MATCH1, FORWARDING_D, FORWARDING_D);
+        queueContentUpdatedSelExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, true, DONT_MATCH1, FORWARDING, FORWARDING1);
+    
+        queueContentExtNext_T <= iqNext_N2(queueContentUpdatedExt_T, newArr_T, prevSendingOK, sends_T, killMaskExt_T, trialMask, selMaskExt_T, readyRegFlags, 0);
+    
+        selectedSlot <= prioSelect16(queueContentUpdatedSelExt_T, readyMaskAllExt_T);
+    
+    end block;
+    
+    dispatchDataNew_T <= getSchedEntrySlot(selectedSlot);
 
     -- Output signals
-    dispatchDataNew_T <= getSchedEntrySlot(selectedSlot);
-        dispatchDataNew_T2 <= getSchedEntrySlot(mergeWithStatic(selectedSlot, S_selectedStaticRestored, S_selectedTag));
-
-	acceptingOut <= not isNonzero(fullMaskExt_T(4 to 7));               
-	acceptingMore <= not isNonzero(fullMaskExt_T(0 to 7));
 	schedulerOut <= TMP_restoreState(sends_T, dispatchDataNew_T.ins, dispatchDataNew_T.state);
-	
-    outputSignals <=            
-                      (sending => sends_T,
+
+	acceptingOut <= not isNonzero(fullMaskExt_T(4 to 7));
+	acceptingMore <= not isNonzero(fullMaskExt_T(0 to 7));
+
+    outputSignals <=   (sending => sends_T,
                         cancelled => sentKilled_T,
                         ready => anyReadyLive_T,
-                        empty => not isNonzero(fullMaskExt_T));
+                        empty => isEmpty);
 
 
     
     STATIC_PART_CONTROL: block
+        type StaticMaskArray is array(0 to STATIC_ARRAY_SIZE-1) of std_logic_vector(0 to PIPE_WIDTH-1);
+        type StaticInfoArray2D is array(integer range<>, integer range<>) of StaticInfo;
     
-            signal S_tagArray, S_tagArrayNext: InsTagArray(0 to STATIC_ARRAY_SIZE-1) := (others => (others => '0'));
-            signal S_fullMask, S_fullMaskNext, S_killMask: std_logic_vector(0 to STATIC_ARRAY_SIZE-1) := (others => '0');
-    
-            type StaticMaskArray is array(0 to STATIC_ARRAY_SIZE-1) of std_logic_vector(0 to PIPE_WIDTH-1);
-    
-            signal staticMasks, staticMasksNext: StaticMaskArray := (others => (others => '0'));
-    
-            type StaticInfoArray2D is array(integer range<>, integer range<>) of StaticInfo;
-            signal S_staticContent: StaticInfoArray2D(0 to STATIC_ARRAY_SIZE-1, 0 to PIPE_WIDTH-1) := (others => (others => DEFAULT_STATIC_INFO)); 
+        signal S_tagArray, S_tagArrayNext: InsTagArray(0 to STATIC_ARRAY_SIZE-1) := (others => (others => '0'));
+        signal S_fullMask, S_fullMaskNext, S_killMask: std_logic_vector(0 to STATIC_ARRAY_SIZE-1) := (others => '0');
+        signal S_lqPtr, S_sqPtr, S_bqPtr, S_immHigh: WordArray(0 to STATIC_ARRAY_SIZE-1) := (others => (others => '0'));  
+        signal S_lqWord, S_sqWord, S_bqWord, S_immHighWord: Word := (others => '0');
 
-            signal S_lqPtr, S_sqPtr, S_bqPtr, S_immHigh: WordArray(0 to STATIC_ARRAY_SIZE-1) := (others => (others => '0'));
-            
-            signal S_lqWord, S_sqWord, S_bqWord, S_immHighWord: Word := (others => '0');
+        signal staticMasks, staticMasksNext: StaticMaskArray := (others => (others => '0'));
+        signal S_staticContent: StaticInfoArray2D(0 to STATIC_ARRAY_SIZE-1, 0 to PIPE_WIDTH-1) := (others => (others => DEFAULT_STATIC_INFO));
+ 
+        signal issuedTag, issuedTag1, issuedTag2: InsTag := (others => '0');
 
-       
+        signal S_firstFreePrev, S_issued, S_issued1, S_issued2, S_issued3: natural := 0;
+        signal S_selectedTag: InsTag := (others => '0'); 
+           
         function S_updateTagArray(arr: InsTagArray; ind: natural; newTag: InsTag) return InsTagArray is
             variable res: InsTagArray(arr'range) := arr;
         begin
@@ -398,12 +208,10 @@ begin
                     res(i) := '0';
                 end if;
             end loop;
-        
-        
+
             if prevSending = '1' then
                 res(indSet) := '1';
-            end if;
-            
+            end if;         
             
             if events.lateEvent = '1' then
                 res := (others => '0');
@@ -489,6 +297,8 @@ begin
             return res;
         end function;                   
     begin
+        issuedTag <= selectedSlot.dynamic.renameIndex;
+    
         S_tagArrayNext <= S_updateTagArray(S_tagArray, S_firstFree, newArr(0).dynamic.renameIndex);
         S_fullMaskNext <= S_updateFullMask(S_fullMask, prevSendingOK, S_firstFree, staticMasks, events, S_killMask);
 
@@ -520,11 +330,11 @@ begin
                    S_staticContent(S_firstFree, 2) <= newArr(2).static;
                    S_staticContent(S_firstFree, 3) <= newArr(3).static;
                    
-                       S_lqPtr(S_firstFree) <= newArr(0).static.lqPointer & newArr(1).static.lqPointer & newArr(2).static.lqPointer & newArr(3).static.lqPointer;
-                       S_sqPtr(S_firstFree) <= newArr(0).static.sqPointer & newArr(1).static.sqPointer & newArr(2).static.sqPointer & newArr(3).static.sqPointer;
-                       S_bqPtr(S_firstFree) <= newArr(0).static.bqPointer & newArr(1).static.bqPointer & newArr(2).static.bqPointer & newArr(3).static.bqPointer;
-                       S_immHigh(S_firstFree) <= newArr(0).static.immValue(15 downto 8) & newArr(1).static.immValue(15 downto 8)
-                                             & newArr(2).static.immValue(15 downto 8) & newArr(3).static.immValue(15 downto 8);
+                   S_lqPtr(S_firstFree) <= newArr(0).static.lqPointer & newArr(1).static.lqPointer & newArr(2).static.lqPointer & newArr(3).static.lqPointer;
+                   S_sqPtr(S_firstFree) <= newArr(0).static.sqPointer & newArr(1).static.sqPointer & newArr(2).static.sqPointer & newArr(3).static.sqPointer;
+                   S_bqPtr(S_firstFree) <= newArr(0).static.bqPointer & newArr(1).static.bqPointer & newArr(2).static.bqPointer & newArr(3).static.bqPointer;
+                   S_immHigh(S_firstFree) <= newArr(0).static.immValue(15 downto 8) & newArr(1).static.immValue(15 downto 8)
+                                         & newArr(2).static.immValue(15 downto 8) & newArr(3).static.immValue(15 downto 8);
                end if;
     
                S_firstFreePrev <= S_firstFree;
