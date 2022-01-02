@@ -309,49 +309,6 @@ begin
 		outputSpecial => specialOutROB		
 	);     
 
-    MAIN_VIEW: if VIEW_ON generate
-        use work.Viewing.all;
-        
-        signal frontEv, execEv, lateEv: InstructionSlot := DEFAULT_INS_SLOT;
-        signal frontEvStr, execEvStr, lateEvStr: InsString := (others => ' ');
-        signal renamedText, committedText: InsStringArray(0 to PIPE_WIDTH-1) := (others => (others => ' '));
-        signal lastEffectiveText: InsString := (others => ' ');
-        
-        signal renamedIntTextRe, renamedFloatTextRe, renamedMergedText, renamedTextBQ, renamedTextLQ, renamedTextSQ: GenericStageView;   
-        signal robOutText: GenericStageView;          
-    begin
-        frontEv <= (frontEventSignal, frontCausing);
-        execEv  <= (execEventSignal,  execCausing);
-        lateEv  <= (lateEventSignal,  lateCausing);
-
-        renamedMergedText <= getInsStringArray(renamedDataLivingRe);
-        
-        renamedText <= getInsStringArray(renamedDataLivingRe, physDisasm);
-        committedText <= getInsStringArray(committedOut, physDisasm);
-        lastEffectiveText <= getInsString(lastEffectiveOut, physDisasm);
-        
-        renamedTextBQ <= getInsStringArray(renamedDataToBQ);
-        renamedTextLQ <= getInsStringArray(renamedDataToLQ);
-        renamedTextSQ <= getInsStringArray(renamedDataToSQ);
-        
-        
-        renamedIntTextRe <= getInsStringArray(renamedDataLivingRe);
-        renamedFloatTextRe <= getInsStringArray(renamedDataLivingFloatRe);
-        
-        robOutText <= getInsStringArray(dataOutROB);
-        
-        frontEvStr <= getInsString(frontEv, control);
-        execEvStr <= getInsString(execEv, control);
-        lateEvStr <= getInsString(lateEv, control);
-                       
-        process (clk)
-        begin
-           if rising_edge(clk) then 
---                if cmpGtU(cycleCounter, 10) = '1' then --and cmpLtU(cycleCounter, 1000) = '1' then
---                end if;                         
-             end if;
-        end process;
-    end generate;
 
     TEMP_EXEC: block
         use work.LogicExec.all;
@@ -759,7 +716,7 @@ begin
             schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingReMem), intStoreMask, false, useStoreArg2(renamedArgsInt));
             schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, true, FORWARDING_MODES_SV_INT_D, FORWARDING_MODES_SV_INT_D);
 
-            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem), fpStoreMask, false, useStoreArg2(renamedArgsFloat), true);
+            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem), fpStoreMask, false, useStoreArg2(renamedArgsFloat));
             schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, true, FORWARDING_MODES_SV_FLOAT_D, FORWARDING_MODES_SV_FLOAT_D);
 
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
@@ -882,7 +839,7 @@ begin
         begin
             fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat);
 
-            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingFloatRe), fpMask, false, renamedArgsFloat, true);
+            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingFloatRe), fpMask, false, renamedArgsFloat);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, false, FORWARDING_MODES_FLOAT_D, FORWARDING_MODES_FLOAT_D);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)
@@ -1218,111 +1175,9 @@ begin
          
               readyRegFlagsInt <= readyRegFlagsIntNext    ;-- and not groupDependencyFlags;
               readyRegFlagsFloat <= readyRegFlagsFloatNext;-- and not groupDependencyFlags;
-               
-         READY_REG_FLAGS: process(clk)
-         begin
-            if rising_edge(clk) then
-                if renamedSending = '1' then
-                            ch0 <= bool2std(readyRegFlagsInt_C = readyRegFlagsInt);
-                            ch1 <= bool2std(readyRegFlagsFloat_T = readyRegFlagsFloat);
-                else 
-                            ch0 <= '1';                  
-                            ch1 <= '1';                  
-                end if;
-            end if;
-         end process;
          
        sysRegSending <= sysRegRead;
-
-	   VIEW: if VIEW_ON generate
-            use work.Viewing.all;
-           
-            signal cycleCount: Mword := (others => '0');
-            
-            signal issueTextI0, issueTextM0, issueTextSVI, issueTextSVF, issueTextF0: InsStringArray(0 to 0);
-            signal slotTextRegReadF0: InsStringArray(0 to 0);            
-            signal slotTextI0_E0, slotTextI0_E1, slotTextI0_E2, slotTextM0_E0, slotTextM0_E1i, slotTextM0_E2i, slotTextM0_E1f, slotTextM0_E2f: InsStringArray(0 to 0);
-            
-            signal iqInputI0, iqInputI1, iqInputM0, iqInputSVI, iqInputSVF, iqInputF0: GenericStageView;
-            signal execOutputsText1, execOutputsText2: InsStringArray(0 to 3);
- 
-            type SubpipeMonitor is record
-                empty: std_logic;
-                lastSent: integer;
-                lastComp: integer;
-            end record;
-            
-            constant DEFAULT_SUBPIPE_MONITOR: SubpipeMonitor := ('0', -1, -1);
-            
-            function updateSubpipeMonitor(sm: SubpipeMonitor; empty: std_logic; cycleCtr: Mword; sent, comp: std_logic) return SubpipeMonitor is
-                variable res: SubpipeMonitor := sm;
-            begin
-                res.empty := empty;
-                if sent = '1' then
-                    res.lastSent := 0;
-                elsif res.lastSent >= 0 then
-                    res.lastSent := res.lastSent + 1;
-                end if;
-                if comp = '1' then
-                    res.lastComp := 0;
-                elsif res.lastComp >= 0 then
-                    res.lastComp := res.lastComp + 1;
-                end if;
-                return res;
-            end function;
-            
-            signal slotM0_E1iText, slotM0_E2iText: InsString := (others=> ' ');
-            
-            signal monitorI0, monitorM0, monitorSVI, monitorSVF, monitorF0: SubpipeMonitor := DEFAULT_SUBPIPE_MONITOR; 
-         begin
-            cycleCount <= cycleCounter;
-            
-            execOutputsText1 <= getInsStringArray(execOutputs1);
-            execOutputsText2 <= getInsStringArray(execOutputs2);
-            
-            
-            iqInputI0 <= getInsStringArray(schedDataI0);
-            iqInputM0 <= getInsStringArray(schedDataM0);
-            iqInputSVI <= getInsStringArray(schedDataStoreValue);
-            iqInputSVF <= getInsStringArray(schedDataStoreValueFloat);
-            iqInputF0 <= getInsStringArray(schedDataF0);
-         
-            issueTextI0 <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotIssueI0));
-            issueTextM0 <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotIssueM0));
-            issueTextSVI <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotIssueIntSV));
-            issueTextSVF <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotIssueFloatSV));
-            issueTextF0 <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotIssueF0));
-
-            
-            slotTextRegReadF0 <= getInsStringArray(SchedulerEntrySlotArray'(0 => slotRegReadF0));
-
-            slotTextI0_E0 <= getInsStringArray(slotI0_E0);
-            slotTextI0_E1 <= getInsStringArray(slotI0_E1);
-            slotTextI0_E2 <= getInsStringArray(slotI0_E2);
-
-            slotTextM0_E0 <= getInsStringArray(slotM0_E0);
-            slotTextM0_E1i <= getInsStringArray(slotM0_E1i);
-            slotTextM0_E1f <= getInsStringArray(slotM0_E1f);
-            slotTextM0_E2i <= getInsStringArray(slotM0_E2i);
-            slotTextM0_E2f <= getInsStringArray(slotM0_E2f);
-
-            slotM0_E1iText <= getInsString(slotM0_E1i(0), transfer);
-            slotM0_E2iText <= getInsString(slotM0_E2i(0), transfer);
-
-            process (clk)
-            begin
-                if rising_edge(clk) then
-                    -- Issue & complete monitoring
-                    -- sendingSel* - from IQ;  sendingIssue* - form Issue stage
-                    monitorI0 <= updateSubpipeMonitor(monitorI0, outSigsI0.empty, cycleCounter, outSigsI0.sending, slotI0_D0(0).full);
-                    monitorM0 <= updateSubpipeMonitor(monitorM0, outSigsM0.empty, cycleCounter, outSigsM0.sending, slotM0_D0i(0).full or slotM0_D0f(0).full);
-                    monitorSVI <= updateSubpipeMonitor(monitorSVI, outSigsSVI.empty, cycleCounter, outSigsSVI.sending, '0');
-                    monitorSVF <= updateSubpipeMonitor(monitorSVF, outSigsSVF.empty, cycleCounter, outSigsSVF.sending, '0');
-                    monitorF0 <= updateSubpipeMonitor(monitorF0, outSigsF0.empty, cycleCounter, outSigsF0.sending, slotF0_D0(0).full); 
-                    
-                end if;
-            end process;                                     
-         end generate;      
+     
     end block; -- TEMP_EXEC
 
 

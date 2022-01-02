@@ -24,7 +24,6 @@ entity ReorderBuffer is
 		en: in std_logic;
 		
 		lateEventSignal: in std_logic;
-		--commitGroupCtr: in InsTag;
 
 		execEndSigs1: in InstructionSlotArray(0 to 3);
 		execEndSigs2: in InstructionSlotArray(0 to 3);
@@ -60,10 +59,10 @@ begin
 	causingPtrLong <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN_LONG; -- TEMP!
 	
     NEW_DEV: block
-        signal staticInput, staticOutput, staticOutput_D, staticOutput_D_Pre: StaticOpInfoArray;
+        signal staticInput, staticOutput, staticOutput_D_Pre: StaticOpInfoArray;
         signal dynamicInput, dynamicOutput, dynamicOutput_Pre: DynamicOpInfoArray;
 
-        signal staticGroupInput, staticGroupOutput, staticGroupOutput_D, staticGroupOutput_D_Pre: StaticGroupInfo;
+        signal staticGroupInput, staticGroupOutput_D, staticGroupOutput_D_Pre: StaticGroupInfo;
         signal dynamicGroupInput, dynamicGroupOutput, dynamicGroupOutput_Pre: DynamicGroupInfo;
         
         signal staticContent: StaticOpInfoArray2D := (others => (others => DEFAULT_STATIC_OP_INFO));
@@ -75,6 +74,8 @@ begin
         signal serialInput, serialOutput: std_logic_vector(TMP_SERIAL_MEM_WIDTH-1 downto 0) := (others=> '0');
         signal serialMemContent: SerialMem := (others => (others => '0'));                         
     begin
+    
+        -- Inputs
         serialInput <= serializeStatic(staticInput, staticGroupInput);
            
         staticInput <= getStaticOpInfoA(inputData);
@@ -83,20 +84,19 @@ begin
         staticGroupInput <= getStaticGroupInfo(inputData, inputSpecial);
         dynamicGroupInput <= getDynamicGroupInfo(inputData, inputSpecial);
 
-        --outputDataSig <= getInstructionSlotArray_T(staticOutput_D, dynamicOutput, staticGroupOutput_D, dynamicGroupOutput);
-                outputDataSig_Pre <= getInstructionSlotArray_T(staticOutput_D_Pre, dynamicOutput_Pre, staticGroupOutput_D_Pre, dynamicGroupOutput_Pre);
+        -- Outputs
+        outputDataSig_Pre <= getInstructionSlotArray_T(staticOutput_D_Pre, dynamicOutput_Pre, staticGroupOutput_D_Pre, dynamicGroupOutput_Pre);
         outputSpecialSig <= getSpecialSlot_T(staticGroupOutput_D, dynamicGroupOutput);
 
-    	   outputCompleted_Pre <= groupCompleted(outputDataSig_Pre, dynamicOutput_Pre);
+    	outputCompleted_Pre <= groupCompleted(outputDataSig_Pre, dynamicOutput_Pre);
+
+        dynamicOutput_Pre <= readDynamicOutput(dynamicContent, startPtrNext);
+        dynamicGroupOutput_Pre <= readDynamicGroupOutput(dynamicGroupContent, startPtrNext);
+        
+        staticOutput_D_Pre <= deserializeStaticInfoA(serialMemContent(slv2u(startPtrNext)));                    
+        staticGroupOutput_D_Pre <= deserializeStaticGroupInfo(serialMemContent(slv2u(startPtrNext)));
 
 
-
-                dynamicOutput_Pre <= readDynamicOutput(dynamicContent, startPtrNext);
-                dynamicGroupOutput_Pre <= readDynamicGroupOutput(dynamicGroupContent, startPtrNext);
-                
-                staticOutput_D_Pre <= deserializeStaticInfoA(serialMemContent(slv2u(startPtrNext)));                    
-                staticGroupOutput_D_Pre <= deserializeStaticGroupInfo(serialMemContent(slv2u(startPtrNext)));
-    
         SYNCH: process (clk)
         begin
             if rising_edge(clk) then
@@ -120,19 +120,13 @@ begin
                    
                 -- Read output
                 staticOutput <= readStaticOutput(staticContent, startPtrNext);
-                staticGroupOutput <= readStaticGroupOutput(staticGroupContent, startPtrNext);
 
-                --dynamicOutput <= readDynamicOutput(dynamicContent, startPtrNext);
-                    dynamicOutput <= dynamicOutput_Pre;
-                --dynamicGroupOutput <= readDynamicGroupOutput(dynamicGroupContent, startPtrNext);
-                    dynamicGroupOutput <= dynamicGroupOutput_Pre;
+                dynamicOutput <= dynamicOutput_Pre;
+                dynamicGroupOutput <= dynamicGroupOutput_Pre;
                 
                 serialOutput <= serialMemContent(slv2u(startPtrNext));
                 
-                --staticOutput_D <= deserializeStaticInfoA(serialMemContent(slv2u(startPtrNext)));
-                    staticOutput_D <= staticOutput_D_Pre;                   
-                --staticGroupOutput_D <= deserializeStaticGroupInfo(serialMemContent(slv2u(startPtrNext)));
-                    staticGroupOutput_D <= staticGroupOutput_D_Pre;
+                staticGroupOutput_D <= staticGroupOutput_D_Pre;
                   
                 outputDataSig <= outputDataSig_Pre;
                 outputCompleted <= outputCompleted_Pre;             
@@ -198,30 +192,4 @@ begin
     isSending <= outputCompleted and nextAccepting and not outputEmpty;  
 	sendingOut <= isSending;
 
-	
-	VIEW: if VIEW_ON generate
-	   use work.Viewing.all;
-	
-	   type StageTextArray is array (integer range <>) of InsStringArray(0 to PIPE_WIDTH-1);
-	   
-	   signal robView: StageTextArray(0 to ROB_SIZE-1);	   
-	   subtype RobSlotText is string(1 to 80);
-	   type RobSlotArray is array(integer range <>) of RobSlotText;
-	   
-	   signal robText: InsStringArray(0 to ROB_SIZE-1) := (others => (others => ' '));
-	begin	   
-	    --robView <= createRobView(content);
-        
-        ROB_TEXT: for i in 0 to ROB_SIZE-1 generate
-        --    robText(i) <= sprintRobRow(content(i).ops);
-        end generate;
-        
-        process(clk)
-        begin
-            if rising_edge(clk) then 
-
-            end if;
-        end process;
-        
-    end generate;
 end Behavioral;

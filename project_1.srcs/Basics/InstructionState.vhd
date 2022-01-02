@@ -272,7 +272,7 @@ type InstructionSlotArray is array(integer range <>) of InstructionSlot;
 
 type SchedulerState is record
 	issued: std_logic;
-    newInQueue: std_logic;
+    --newInQueue: std_logic;
         
     branchIns: std_logic;
         
@@ -304,7 +304,7 @@ end record;
 
 constant DEFAULT_SCHEDULER_STATE: SchedulerState := ( 
       issued => '0',
-      newInQueue => '0',
+      --newInQueue => '0',
 
       branchIns => '0',
       

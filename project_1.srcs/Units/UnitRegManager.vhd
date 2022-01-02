@@ -747,6 +747,7 @@ begin
          
          TMP_MASKED_OUT: for i in 0 to PIPE_WIDTH-1 generate
             TMP_spMaskedDataOut(i) <= (renamedBase(i).full, frontDataLastLiving(i).ins);
+                                        --frontDataLastLiving(i);
          end generate;
          
 end Behavioral;

@@ -58,7 +58,6 @@ type DynamicInfo is record
 
     issued: std_logic;
     trial: std_logic;
-    newInQueue: std_logic;
 
     renameIndex: InsTag;
     argSpec: InstructionArgSpec;
@@ -82,7 +81,7 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
 
     issued => '0',
     trial => '0',
-    newInQueue => '0',
+    --newInQueue => '0',
 
     renameIndex => (others => '0'),
     argSpec => DEFAULT_ARG_SPEC,
@@ -103,13 +102,11 @@ type DynamicInfoArray is array(natural range <>) of DynamicInfo;
 
 type SchedulerInfo is record
     dynamic: DynamicInfo;
-    --        dynamic_T: DynamicInfo;
     static: StaticInfo;
 end record;
 
 constant DEFAULT_SCHEDULER_INFO: SchedulerInfo := (
     DEFAULT_DYNAMIC_INFO,
-    --    DEFAULT_DYNAMIC_INFO,
     DEFAULT_STATIC_INFO
 );
 
@@ -128,7 +125,7 @@ type WakeupArray2D is array(natural range <>, natural range <>) of WakeupStruct;
 function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo; 
 function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo;
 
-function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray; constant USE_OLD: boolean := true) return SchedulerInfoArray;
+function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray) return SchedulerInfoArray;
 
 function getSchedEntrySlot(info: SchedulerInfo) return SchedulerEntrySlot;
 
@@ -144,22 +141,13 @@ return SchedulerEntrySlot;
 
 function updateDispatchArgs(st: SchedulerState; vals: MwordArray; regValues: MwordArray; TMP_DELAY: boolean; REGS_ONLY: boolean) return SchedulerState;
 
---    function iqNext_N(queueContent: SchedulerInfoArray;
---                      inputData: SchedulerInfoArray;
-                      
---                      prevSending, sends: std_logic;
---                      killMask, selMask: std_logic_vector;
---                      TEST_MODE: natural)
---    return SchedulerInfoArray;
-
-    function iqNext_N2(queueContent: SchedulerInfoArray;
-                      inputData: SchedulerInfoArray;
-                      
-                      prevSending, sends: std_logic;
-                      killMask, trialMask, selMask: std_logic_vector;
-                      rrf: std_logic_vector;
-                      TEST_MODE: natural)
-    return SchedulerInfoArray;
+function iqNext_N2(queueContent: SchedulerInfoArray;
+                  inputData: SchedulerInfoArray;           
+                  prevSending, sends: std_logic;
+                  killMask, trialMask, selMask: std_logic_vector;
+                  rrf: std_logic_vector;
+                  TEST_MODE: natural)
+return SchedulerInfoArray;
 
 function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector;
 
@@ -401,16 +389,29 @@ function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant 
     variable res: DynamicInfo;
 begin
     res.full := isl.full;
-        res.active := res.full;
+    res.active := res.full;
     res.issued := '0';
-        res.trial := '0';
-    res.newInQueue := '1';
+    res.trial := '0';
+    --res.newInQueue := '1';
     
     res.renameIndex := isl.ins.tags.renameIndex;
     res.staticPtr := (others => '0'); -- points to entry with static info
 
     res.argSpec := isl.ins.physicalArgSpec;
-        
+    
+    -- Possibility to implement late allocation or advanced renaming schemes - delayed selection of args
+    if false then
+        for i in 0 to 2 loop
+            if ri.sourcesNew(i) = '1' then
+                res.argSpec.args(i) := ri.physicalSourcesNew(i);
+            elsif ri.sourcesStable(i) = '1' then
+                res.argSpec.args(i) := ri.physicalSourcesStable(i);
+            else
+                res.argSpec.args(i) := ri.physicalSources(i);
+            end if;
+        end loop;
+    end if;
+
     res.stored := (others => '0');
     res.missing := not stInfo.zero;                               
     res.readyNow := (others => '0');
@@ -431,50 +432,7 @@ begin
 end function; 
 
 
-    function getIssueDynamicInfo2(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo is
-        variable res: DynamicInfo;
-    begin
-        res.full := isl.full;
-            res.active := res.full;
-        res.issued := '0';
-            res.trial := '0';
-        res.newInQueue := '1';
-        
-        res.renameIndex := isl.ins.tags.renameIndex;
-        res.staticPtr := (others => '0'); -- points to entry with static info
-    
-        res.argSpec := isl.ins.physicalArgSpec;
-        
-        for i in 0 to 2 loop
-            if ri.sourcesNew(i) = '1' then
-                res.argSpec.args(i) := ri.physicalSourcesNew(i);
-            elsif ri.sourcesStable(i) = '1' then
-                res.argSpec.args(i) := ri.physicalSourcesStable(i);
-            else
-                res.argSpec.args(i) := ri.physicalSources(i);
-            end if;
-        end loop;
-
-        res.stored := (others => '0');
-        res.missing := not stInfo.zero;                               
-        res.readyNow := (others => '0');
-        res.readyNext := (others => '0');
-        res.readyM2  := (others => '0');
-    
-        res.argLocsPipe := (others => (others => '0'));
-        res.argSrc := (others => "00000010");
-        
-        if HAS_IMM and isl.ins.constantArgs.immSel = '1' then
-            if IMM_AS_REG then
-                res.argSpec.args(1) := isl.ins.constantArgs.imm(PhysName'length-1 downto 0);
-                    res.argSpec.args(1)(7) := '0';
-            end if;
-        end if;
-                     
-        return res;
-    end function; 
-
-function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray; constant USE_OLD: boolean := true) return SchedulerInfoArray is
+function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray) return SchedulerInfoArray is
     variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1);
     variable slot: InstructionSlot := DEFAULT_INS_SLOT;
 begin
@@ -482,12 +440,7 @@ begin
         slot := insVec(i);
         slot.full := mask(i);
         res(i).static := getIssueStaticInfo(slot, USE_IMM, ria(i));
-        if USE_OLD then
-            res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, ria(i));
-        else
-            res(i).dynamic := getIssueDynamicInfo2(slot, res(i).static, USE_IMM, ria(i));
-        end if;
-           --     assert res(i).dynamic = res(i).dynamic_T;
+        res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, ria(i));
     end loop;
     return res;
     
@@ -499,6 +452,8 @@ function getSchedEntrySlot(info: SchedulerInfo) return SchedulerEntrySlot is
     variable res: SchedulerEntrySlot;
 begin
     res.ins := DEFAULT_INS_STATE;
+
+    res.full := info.dynamic.full;
 
     res.state.operation := info.static.operation;
 
@@ -513,10 +468,8 @@ begin
         
     res.state.zero := info.static.zero;
 
-    res.full := info.dynamic.full;
-
     res.state.issued := info.dynamic.issued;
-    res.state.newInQueue := info.dynamic.newInQueue;
+    --res.state.newInQueue := info.dynamic.newInQueue;
     
     res.state.renameIndex := info.dynamic.renameIndex;
     res.state.argSpec := info.dynamic.argSpec;
@@ -704,13 +657,13 @@ begin
         res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
         res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
 
-            if res.argSrc(0)(1) /= '1' then
-                res.argSpec.args(0) := (others => '0');
-            end if;
-    
-            if res.argSrc(1)(1) /= '1' or res.zero(1) = '1' then
-                res.argSpec.args(1) := (others => '0');
-            end if;
+        if res.argSrc(0)(1) /= '1' then
+            res.argSpec.args(0) := (others => '0');
+        end if;
+
+        if res.argSrc(1)(1) /= '1' or res.zero(1) = '1' then
+            res.argSpec.args(1) := (others => '0');
+        end if;
         
         return res;
     end if;
@@ -764,96 +717,6 @@ begin
     
     return res;
 end function;
-
---    function iqNext_N(queueContent: SchedulerInfoArray;
---                      inputData: SchedulerInfoArray;               
---                      prevSending, sends: std_logic;
---                      killMask, selMask: std_logic_vector;
---                      TEST_MODE: natural
---                             )
---    return SchedulerInfoArray is
---        constant LEN: natural := queueContent'length;
---        constant MAIN_LEN: natural := queueContent'length - PIPE_WIDTH;
---        variable res: SchedulerInfoArray(queueContent'range) := queueContent;
---        variable shifted1, shifted2: SchedulerInfoArray(0 to MAIN_LEN-1) := (others => DEFAULT_SCHEDULER_INFO);
---        variable fullMask, fullMaskNew: std_logic_vector(queueContent'range) := extractFullMask(queueContent);
---        variable fullMaskIn: std_logic_vector(0 to PIPE_WIDTH-1) := extractFullMask(inputData);
---        variable fullMaskEarly: std_logic_vector(0 to PIPE_WIDTH-1) := fullMask(MAIN_LEN to LEN-1);
---        variable e1, e2, pAv, cAv: integer := -1;
---        variable insA, insD: integer := -1;
---    begin
---            for i in 0 to LEN-1 loop
---                if queueContent(i).dynamic.issued = '1' then       
---                    res(i).dynamic.full := '0';
---                end if;
-                
---                if (selMask(i) and sends) = '1' then
---                    res(i).dynamic.issued := '1';
---                    res(i).dynamic.active := '0';
---                end if;
-                
---                if killMask(i) = '1' then
---                    res(i).dynamic.full := '0';
---                    res(i).dynamic.active := '0';
---                 end if;
---            end loop;
-    
---            fullMask := extractFullMask(res);
-
---        -- Scan full mask for first empty and first available slot
---        -- First available is first after last full
---        e1 := find1free(fullMask(0 to MAIN_LEN-1));
---        e2 := find2free(fullMask(0 to MAIN_LEN-1));
---        pAv := findAvailable(fullMask(0 to MAIN_LEN-1));
---        cAv := findCompletelyAvailable(fullMask(0 to MAIN_LEN-1));
-        
---        -- Shift (compact) content!
---        shifted1(0 to MAIN_LEN-2) := res(1 to MAIN_LEN-1); 
---        shifted2(0 to MAIN_LEN-3) := res(2 to MAIN_LEN-1); 
-        
---        if e1 = e2 and e1 >= 0 and e1 < MAIN_LEN-2 then
---            for i in 0 to MAIN_LEN-1 loop
---                if i >= e1 then
---                    res(i) := shifted2(i);
---                end if;
---            end loop;
---        elsif e1 >= 0 and e1 < MAIN_LEN-1 then
---            for i in 0 to MAIN_LEN-1 loop
---                if i >= e1 then
---                    res(i) := shifted1(i);
---                end if;
---            end loop;
---        end if;
-
---                -- Find av slots in updated mask
---                fullMaskNew := extractFullMask(res);
---                pAv := findAvailable(fullMaskNew(0 to MAIN_LEN-1));
---                cAv := findCompletelyAvailable(fullMaskNew(0 to MAIN_LEN-1));                
-                
---            if pAv = -1 or cAv = -1 then
---               return res; 
---            end if;
-
---        -- Find insertion point: index where earlyStage(0) will go (even if it's empty so won't be written)
---        insA := findInsertionSimplified(pAv, cAv, fullMaskNew(0 to MAIN_LEN-1), fullMaskEarly);
-
---        if fullMask(MAIN_LEN+1 to MAIN_LEN+2) = "00" then
---            insD := insA + 1; -- compress 1001 -> 11
---        else
---            insD := insA + 3;
---        end if;
-        
---        if insA <= MAIN_LEN - PIPE_WIDTH then -- 
---            res := moveEarlyStage(res, insA, insD);
---        end if;
-
---        if prevSending = '1' then
---            res(MAIN_LEN to LEN-1) := inputData;
---        end if;
-        
---        return res;
---    end function;
-
 
 
     function iqNext_N2(queueContent: SchedulerInfoArray;
@@ -1275,10 +1138,7 @@ begin
        rrf := rr(3*i to 3*i + 2);
        res(i).dynamic.missing := res(i).dynamic.missing and not rrf;
    end loop;
-   
---   for i in 1 to PIPE_WIDTH-1 loop
---       res(i).dynamic.renameIndex := clearTagLow(res(0).dynamic.renameIndex) or i2slv(i, TAG_SIZE);
---   end loop;
+
    return res;
 end function;
 
