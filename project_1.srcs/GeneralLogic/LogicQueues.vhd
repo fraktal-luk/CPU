@@ -202,6 +202,7 @@ begin
     return res;
 end function;
 
+-- UNUSED?
 function getAddressMatching(content: MwordArray; adr: Mword) return std_logic_vector is
     variable res: std_logic_vector(content'range);
 begin
