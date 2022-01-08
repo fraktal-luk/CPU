@@ -99,6 +99,7 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
 
     type RenameInfo is record
         destSel: std_logic;
+        destSelFP: std_logic;
         virtualDest: RegName;
         physicalDest: PhysName;
         sourceSel: std_logic_vector(0 to 2);
@@ -117,6 +118,7 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
 
     constant DEFAULT_RENAME_INFO: RenameInfo := (
         destSel => '0',
+        destSelFP => '0',
         virtualDest => (others => '0'),
         physicalDest => (others => '0'),
         sourceSel => (others => '0'),
@@ -130,6 +132,10 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
         sourcesNew => (others => '0'),
         sourcesReady => (others => '0')        
     );
+
+    function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInfoArray;
+
+        function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray;
 
 
 function adjustStage(content: InstructionSlotArray) return InstructionSlotArray;
@@ -297,6 +303,33 @@ end package;
 
 
 package body PipelineGeneral is
+
+
+function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInfoArray is
+    variable res: RenameInfoArray(intArgs'range) := intArgs;
+begin
+    for i in res'range loop
+        if floatArgs(i).destSelFP = '1' then        
+            res(i).destSel := '1';
+            res(i).destSelFP := '1';
+            res(i).virtualDest := floatArgs(i).virtualDest;
+            res(i).physicalDest := floatArgs(i).physicalDest;
+        end if;
+    end loop;
+    return res;
+end function;
+
+
+        function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray is
+            variable res: PhysNameArray(0 to 3*PIPE_WIDTH-1);
+        begin
+            res(0 to 2) := ri(0).physicalSourcesNew;-- & ri(1).physicalSourcesNew & ri(2).physicalSourcesNew & ri(3).physicalSourcesNew;
+            res(3 to 5) := ri(1).physicalSourcesNew;
+            res(6 to 8) := ri(2).physicalSourcesNew;
+            res(9 to 11) := ri(3).physicalSourcesNew;
+            return res;
+        end function;
+
 
 
 -- TODO: move to LogicFront? 
@@ -1071,6 +1104,10 @@ function useStoreArg2(ria: RenameInfoArray) return RenameInfoArray is
     variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := ria;
 begin
     for i in 0 to PIPE_WIDTH-1 loop
+            res(i).destSel := '0';
+            res(i).destSelFP := '0';
+            res(i).physicalDest := (others => '0');
+    
         res(i).sourceSel(0) := res(i).sourceSel(2);
         res(i).sourceConst(0) := res(i).sourceConst(2); 
         res(i).virtualSources(0) := res(i).virtualSources(2);

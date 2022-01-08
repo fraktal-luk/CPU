@@ -410,7 +410,24 @@ begin
                 res.argSpec.args(i) := ri.physicalSources(i);
             end if;
         end loop;
+        
     end if;
+
+                if res.argSpec.dest /= ri.physicalDest and ri.destSel = '1' then
+                --    res.staticPtr := (others => 'U');
+                end if;
+
+                if res.argSpec.floatDestSel /= ri.destSelFP then
+                --    res.staticPtr := (others => 'Z');
+                end if;
+
+            res.argSpec.dest := ri.physicalDest;
+            res.argSpec.intDestSel := ri.destSel and not ri.destSelFP;
+            res.argSpec.floatDestSel := ri.destSelFP;
+            res.argSpec.args(0) := ri.physicalSourcesNew(0);
+            res.argSpec.args(1) := ri.physicalSourcesNew(1);
+            res.argSpec.args(2) := ri.physicalSourcesNew(2);
+
 
     res.stored := (others => '0');
     res.missing := not stInfo.zero;                               

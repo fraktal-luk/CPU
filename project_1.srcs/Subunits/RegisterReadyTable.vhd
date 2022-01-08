@@ -27,8 +27,9 @@ entity RegisterReadyTable is
 		--stageDataToReserve: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 
 		newPhysDests: in PhysNameArray(0 to PIPE_WIDTH-1);
+	       newPhysSources: in PhysNameArray(0 to 3*PIPE_WIDTH-1);
 	
-		stageDataReserved: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+		--stageDataReserved: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 
 		writingMask: in std_logic_vector(0 to WRITE_WIDTH-1);
 		writingData: in InstructionStateArray(0 to WRITE_WIDTH-1);
@@ -60,7 +61,17 @@ architecture Behavioral of RegisterReadyTable is
         end loop;		
         return res;
     end function;	
+
+    function extractReadyRegBits(bits: std_logic_vector; args: PhysNameArray) return std_logic_vector is
+        variable res: std_logic_vector(0 to args'length-1) := (others => '0'); -- 31) := (others=>'0');
+    begin
+        for i in 0 to args'length-1 loop
+            res(i) := bits(slv2u(args(i)(PHYS_REG_BITS-1 downto 0)));
+        end loop;		
+        return res;
+    end function;
     
+ 
     function initList(IS_FP: boolean) return std_logic_vector is
         variable res: std_logic_vector(0 to N_PHYSICAL_REGS-1) := (others => '0');
     begin
@@ -184,6 +195,7 @@ begin
             end if;
         end process;
         
-        readyRegFlagsNext <= extractReadyRegBits(content, stageDataReserved);				
+        readyRegFlagsNext <= --extractReadyRegBits(content, stageDataReserved);				
+                                extractReadyRegBits(content, newPhysSources);				
     end block;
 end Behavioral;

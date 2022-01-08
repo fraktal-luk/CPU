@@ -422,6 +422,7 @@ architecture Behavioral of UnitRegManager is
         for i in 0 to PIPE_WIDTH-1 loop
             if IS_FP then        
                 res(i).destSel := insVec(i).ins.virtualArgSpec.floatDestSel;
+                res(i).destSelFP := insVec(i).ins.virtualArgSpec.floatDestSel;
             else    
                 res(i).destSel := insVec(i).ins.virtualArgSpec.intDestSel;
             end if;
@@ -446,8 +447,9 @@ architecture Behavioral of UnitRegManager is
                 res(i).physicalSourcesStable(j) := newPhysSourcesStable(3*i + j);
             end loop;
 
-            res(i).deps := depVec(i); 
-            
+            res(i).deps := depVec(i);
+                 res(i).physicalSourcesNew := res(i).physicalSources;
+                                
             for j in 0 to 2 loop
                 res(i).sourcesNew(j) := isNonzero(res(i).deps(j));
                 for k in PIPE_WIDTH-1 downto 0 loop
@@ -456,7 +458,7 @@ architecture Behavioral of UnitRegManager is
                         exit;
                     end if;
                 end loop;
-            end loop;    
+            end loop;
             
             res(i).sourcesStable := newSourceSelector(3*i to 3*i + 2);            
             res(i).sourcesReady := (others => '0');
@@ -474,7 +476,7 @@ architecture Behavioral of UnitRegManager is
     
     signal inputRenameInfoInt, inputRenameInfoFloat, storedRenameInfoInt, storedRenameInfoFloat, outputRenameInfoInt, outputRenameInfoFloat: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 begin
-       inputRenameInfoInt <= getRenameInfo(frontDataLastLiving, newIntDests, newIntSources_NR, newIntSourcesAlt, newSourceSelectorInt);
+       inputRenameInfoInt <= getRenameInfo(frontDataLastLiving, newIntDests, newIntSources, newIntSourcesAlt, newSourceSelectorInt);
        inputRenameInfoFloat <= getRenameInfo(frontDataLastLiving, newFloatDests, newFloatSources, newFloatSourcesAlt, newSourceSelectorFloat, true);
 
     frontLastSending <= frontLastSendingIn and not eventSig;

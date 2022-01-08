@@ -242,7 +242,6 @@ begin
 	   accepting <= bool2std(pStart /= addIntTrunc(pEnd, 2, QUEUE_PTR_SIZE)) and bool2std(pStart /= addIntTrunc(pEnd, 1, QUEUE_PTR_SIZE)); -- Need 2 reserve slots because one group could be on the way
     
        -- C. out
-       --isSending <= committingBr;
        committingBr <= committing and robData(0).ins.controlInfo.firstBr and not taggedEmpty;
        committedDataOut <= (committingBr, setInstructionTarget(DEFAULT_INS_STATE, targetOutput));	       
        

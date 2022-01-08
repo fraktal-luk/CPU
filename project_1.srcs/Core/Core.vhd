@@ -79,7 +79,7 @@ architecture Behavioral of Core is
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData, committedOut: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-        signal renamedArgsInt, renamedArgsFloat: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+        signal renamedArgsInt, renamedArgsFloat, renamedArgsMerged: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 
     signal bqCompare, bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
            specialAction, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
@@ -286,6 +286,7 @@ begin
     renamedDataLivingReMem <= TMP_recodeMem(renamedDataLivingRe);
     renamedDataLivingFloatReMem <= TMP_recodeMem(renamedDataLivingFloatRe);
    
+        renamedArgsMerged <= mergeRenameInfoFP(renamedArgsInt, renamedArgsFloat);
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(
@@ -337,10 +338,10 @@ begin
                     slotF0_E0, slotF0_E1, slotF0_E2, slotF0_D0, slotF0_D1,
                     slotDummy: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                     
 
-        signal schedDataI0, dataToQueueI0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-        signal schedDataM0, dataToQueueM0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);      
-        signal schedDataF0, dataToQueueF0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-        signal schedDataStoreValue, schedDataStoreValueFloat: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+--        signal schedDataI0, dataToQueueI0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+--        signal schedDataM0, dataToQueueM0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);      
+--        signal schedDataF0, dataToQueueF0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
+--        signal schedDataStoreValue, schedDataStoreValueFloat: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
 
         signal NEW_ARR_DUMMY, newArrShared: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
         signal dataToIntWriteQueue, dataToFloatWriteQueue, dataToIntRF, dataToFloatRF: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -348,7 +349,9 @@ begin
        signal regsSelI0,           regsSelM0, regsSelS0, regsSelFloatA, regsSelFloatC, regsSelFS0, regsSelF0: PhysNameArray(0 to 2) := (others => (others => '0'));
        signal regValsI0, regValsB, regValsM0, regValsS0, regValsE, regValsFloatA, regValsFloatB, regValsFloatC, regValsFS0, regValsF0: MwordArray(0 to 2) := (others => (others => '0'));
        signal readyRegFlagsInt, readyRegFlagsInt_C, readyRegFlagsFloat, readyRegFlagsInt_T, readyRegFlagsFloat_T, readyRegFlagsIntNext, readyRegFlagsIntNext_C, readyRegFlagsSV, readyRegFlagsFloatNext, readyRegFlagsFloatSV: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
-
+        
+       signal newIntSources, newFloatSources, newIntSources_T, newFloatSources_T: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+       
        -- Issue control 
        signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, allowIssueStoreDataFP, allowIssueStageStoreDataFP,
               memSubpipeSent, fp0subpipeSelected, lockIssueI0, allowIssueI0, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady, intWriteConflict: std_logic := '0';
@@ -374,6 +377,16 @@ begin
                 signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';
                 
     begin
+    
+            ch0 <= bool2std(newIntSources_T = newIntSources);
+            ch1 <= bool2std(newFloatSources_T = newFloatSources);
+    
+        newIntSources_T <= work.LogicRenaming.getPhysicalArgs(renamedDataLivingRe);
+        newFloatSources_T <= work.LogicRenaming.getPhysicalArgs(renamedDataLivingFloatRe);
+    
+            newIntSources <= TMP_getPhysicalArgsNew(renamedArgsInt);
+            newFloatSources <= TMP_getPhysicalArgsNew(renamedArgsFloat);
+    
         aluMask <= getAluMask1(renamedDataLivingRe);
         memMask <= getMemMask1(renamedDataLivingRe);
         fpMask <= getFpMask1(renamedDataLivingRe);
@@ -454,7 +467,7 @@ begin
                             unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.ins.specificOperation.arith);
                         end if;
                     end process;
-                              
+
                     subpipeI0_RegRead <= makeExecResult(slotRegReadI0, slotRegReadI0.full);
 
             dataToAlu(0) <= (slotRegReadI0.full, executeAlu(slotRegReadI0.ins, slotRegReadI0.state, bqSelected.ins, branchData, unfoldedAluOp));
@@ -468,7 +481,7 @@ begin
                 input => dataToAlu(0),
                 output => slotI0_E0(0),        
                 events => eventsOnlyLate
-            );      
+            );
                 subpipeI0_E0 <= makeExecResult(slotI0_E0(0), slotI0_E0(0).full);
 
             branchData <= basicBranch(slotRegReadI0.full and slotRegReadI0.state.branchIns, slotRegReadI0.ins, slotRegReadI0.state, bqSelected.ins, unfoldedAluOp);                  
@@ -511,7 +524,7 @@ begin
            
            signal memLoadValue: Mword := (others => '0');                                                            
         begin
-           schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true, removeArg2(renamedArgsInt));         
+           schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true, removeArg2(renamedArgsMerged));         
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D, FORWARDING_MODES_NONE);
                         
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
@@ -1109,7 +1122,8 @@ begin
              
              sendingToReserve => frontLastSending,                 
              newPhysDests => newIntDests,
-             stageDataReserved => renamedDataLivingRe,
+                newPhysSources => newIntSources,
+             --stageDataReserved => renamedDataLivingRe,
                 
              
              writingMask(0) => dataToIntRF(0).full,
@@ -1160,7 +1174,8 @@ begin
              
              sendingToReserve => frontLastSending,                 
              newPhysDests => newFloatDests,
-             stageDataReserved => renamedDataLivingFloatPre,
+             --stageDataReserved => renamedDataLivingFloatPre,
+                newPhysSources => newFloatSources,
                  
              writingMask(0) => dataToFloatRF(0).full,  
              writingData(0) => dataToFloatRF(0).ins,
