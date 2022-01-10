@@ -73,9 +73,9 @@ architecture Behavioral of Core is
             sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, committedSending: std_logic := '0';
 
     signal frontDataLastLiving, TMP_frontDataSpMasked,
-            renamedDataLivingIntOut, renamedDataLivingFloatOut,          
-            renamedDataLivingFloatPre,
-            renamedDataLivingMem, renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingFloatRe, renamedDataLivingFloatReMem,
+            renamedDataLivingIntOut,-- renamedDataLivingFloatOut,          
+            --renamedDataLivingFloatPre,
+            renamedDataLivingMem, renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged, --renamedDataLivingFloatRe,-- renamedDataLivingFloatReMem,
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData, committedOut: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
@@ -220,7 +220,7 @@ begin
         nextAccepting => canSendRename,
 
         renamedDataLiving => renamedDataLivingIntOut,
-        renamedDataLivingFloat => renamedDataLivingFloatOut,
+        --renamedDataLivingFloat => renamedDataLivingFloatOut,
         
         renamedArgsInt => renamedArgsInt,
         renamedArgsFloat => renamedArgsFloat,
@@ -263,7 +263,7 @@ begin
     end process;
 
     renamedDataLivingRe <= renamedDataLivingIntOut;
-    renamedDataLivingFloatPre <= renamedDataLivingFloatOut;
+    --renamedDataLivingFloatPre <= renamedDataLivingFloatOut;
 
     canSendFront <= renameAccepting and not stopRename;
     canSendRename <= not stopRename;  --  Could also be : queuesAccepting;
@@ -272,6 +272,9 @@ begin
     renamedDataToSQ <= setFullMask(renamedDataLivingReMem, getStoreMask1(renamedDataLivingRe));
     renamedDataToLQ <= setFullMask(renamedDataLivingReMem, getLoadMask1(renamedDataLivingRe));
     
+
+    renamedDataLivingMerged <= --renamedDataLivingRe;
+                                replaceDests(renamedDataLivingRe, renamedArgsMerged);
 
     lsbrAccepting <= robAccepting and acceptingSQ and acceptingLQ;
     lsbrAcceptingMore <= robAcceptingMore and not almostFullSQ and not almostFullLQ;
@@ -282,9 +285,11 @@ begin
     queuesAccepting <= lsbrAccepting and issueQueuesAccepting;
     queuesAcceptingMore <= lsbrAcceptingMore and issueQueuesAcceptingMore;
 
-    renamedDataLivingFloatRe <= mergeFP(renamedDataLivingRe, renamedDataLivingFloatPre);
+   -- renamedDataLivingFloatRe <= --mergeFP(renamedDataLivingRe, renamedDataLivingFloatPre);
+   --                             renamedDataLivingRe;
     renamedDataLivingReMem <= TMP_recodeMem(renamedDataLivingRe);
-    renamedDataLivingFloatReMem <= TMP_recodeMem(renamedDataLivingFloatRe);
+    --renamedDataLivingFloatReMem <= --TMP_recodeMem(renamedDataLivingFloatRe);
+    --                                renamedDataLivingReMem;
    
         renamedArgsMerged <= mergeRenameInfoFP(renamedArgsInt, renamedArgsFloat);
 
@@ -298,7 +303,7 @@ begin
 		execEndSigs2 => execOutputs2,
 		
 		inputSpecial => specialAction,		
-		inputData => renamedDataLivingRe,
+		inputData => renamedDataLivingMerged,
 		prevSending => renamedSending,
 		
 		acceptingOut => robAccepting,
@@ -381,8 +386,8 @@ begin
             ch0 <= bool2std(newIntSources_T = newIntSources);
             ch1 <= bool2std(newFloatSources_T = newFloatSources);
     
-        newIntSources_T <= work.LogicRenaming.getPhysicalArgs(renamedDataLivingRe);
-        newFloatSources_T <= work.LogicRenaming.getPhysicalArgs(renamedDataLivingFloatRe);
+        --newIntSources_T <= work.LogicRenaming.getPhysicalArgs(renamedDataLivingRe);
+        --newFloatSources_T <= work.LogicRenaming.getPhysicalArgs(renamedDataLivingFloatRe);
     
             newIntSources <= TMP_getPhysicalArgsNew(renamedArgsInt);
             newFloatSources <= TMP_getPhysicalArgsNew(renamedArgsFloat);
@@ -729,7 +734,7 @@ begin
             schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingReMem), intStoreMask, false, useStoreArg2(renamedArgsInt));
             schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, true, FORWARDING_MODES_SV_INT_D, FORWARDING_MODES_SV_INT_D);
 
-            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingFloatReMem), fpStoreMask, false, useStoreArg2(renamedArgsFloat));
+            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingReMem), fpStoreMask, false, useStoreArg2(renamedArgsFloat));
             schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, true, FORWARDING_MODES_SV_FLOAT_D, FORWARDING_MODES_SV_FLOAT_D);
 
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
@@ -852,7 +857,8 @@ begin
         begin
             fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat);
 
-            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingFloatRe), fpMask, false, renamedArgsFloat);
+            --schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingFloatRe), fpMask, false, renamedArgsFloat);
+            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingRe), fpMask, false, renamedArgsFloat);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, false, FORWARDING_MODES_FLOAT_D, FORWARDING_MODES_FLOAT_D);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)
@@ -1183,9 +1189,9 @@ begin
          );
      
          SRC_LATE_OVERRIDE: if true or TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
-              readyRegFlagsInt_T <= updateArgStates(renamedDataLivingRe, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext);
+              readyRegFlagsInt_T <= updateArgStates(renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext);
                --         readyRegFlagsInt_C <= updateArgStates(renamedDataLivingRe_C, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext_C);
-              readyRegFlagsFloat_T <= updateArgStatesFloat(renamedDataLivingFloatPre, renamedArgsInt, renamedArgsFloat, readyRegFlagsFloatNext);
+              readyRegFlagsFloat_T <= updateArgStatesFloat(renamedArgsInt, renamedArgsFloat, readyRegFlagsFloatNext);
          end generate;
          
               readyRegFlagsInt <= readyRegFlagsIntNext    ;-- and not groupDependencyFlags;

@@ -32,7 +32,7 @@ port(
     
     renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
 
-    renamedDataLivingFloat: out InstructionSlotArray(0 to PIPE_WIDTH-1);    
+    --renamedDataLivingFloat: out InstructionSlotArray(0 to PIPE_WIDTH-1);    
     renamedSending: out std_logic;
     
     nextAccepting: in std_logic;
@@ -530,34 +530,34 @@ begin
     );    
 
     
-    SUBUNIT_RENAME_FLOAT: entity work.GenericStage(Behavioral)--Renaming)
-    generic map(
-        USE_CLEAR => '0',
-        WIDTH => PIPE_WIDTH,
-            KEEP_DEST => '1'
-    )
-    port map(
-        clk => clk, reset => '0', en => '0',
+--    SUBUNIT_RENAME_FLOAT: entity work.GenericStage(Behavioral)--Renaming)
+--    generic map(
+--        USE_CLEAR => '0',
+--        WIDTH => PIPE_WIDTH,
+--            KEEP_DEST => '1'
+--    )
+--    port map(
+--        clk => clk, reset => '0', en => '0',
         
-        prevSending => frontLastSending,    
-        stageDataIn => stageDataRenameInFloat,
+--        prevSending => frontLastSending,    
+--        stageDataIn => stageDataRenameInFloat,
         
-        acceptingOut => open,
+--        acceptingOut => open,
         
-        nextAccepting => nextAccepting,
-        sendingOut => open,
-        stageDataOut => renamedDataLivingFloatPre,
+--        nextAccepting => nextAccepting,
+--        sendingOut => open,
+--        stageDataOut => renamedDataLivingFloatPre,
         
-        execEventSignal => '0',
-        lateEventSignal => eventSig, -- because Exec is always older than Rename     
-        execCausing => DEFAULT_INSTRUCTION_STATE
-    );
+--        execEventSignal => '0',
+--        lateEventSignal => eventSig, -- because Exec is always older than Rename     
+--        execCausing => DEFAULT_INSTRUCTION_STATE
+--    );
 
     renamedDataLivingIntSig <=   postprocessRenamed( restoreRenameIndex(renamedDataLivingPre), depVecPrev);
-    renamedDataLivingFloatSig <= postprocessRenamed( restoreRenameIndex(renamedDataLivingFloatPre), depVecPrev);
+    --renamedDataLivingFloatSig <= postprocessRenamed( restoreRenameIndex(renamedDataLivingFloatPre), depVecPrev);
 
     renamedDataLiving <= renamedDataLivingIntSig;
-    renamedDataLivingFloat <= renamedDataLivingFloatSig;
+    --renamedDataLivingFloat <= renamedDataLivingFloatSig;
     
     renameGroupCtrNext <=   commitGroupCtr when lateEventSignal = '1'
                        else clearTagLow(execCausing.tags.renameIndex) when execEventSignal = '1'

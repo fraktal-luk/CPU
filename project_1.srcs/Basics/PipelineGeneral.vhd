@@ -248,8 +248,10 @@ function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArra
 function removeArg2(ria: RenameInfoArray) return RenameInfoArray;
 function useStoreArg2(ria: RenameInfoArray) return RenameInfoArray;
 
-function updateArgStates(insVec: InstructionSlotArray; riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_logic_vector) return std_logic_vector;
-function updateArgStatesFloat(insVec: InstructionSlotArray; riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_logic_vector) return std_logic_vector;
+function updateArgStates(riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_logic_vector) return std_logic_vector;
+function updateArgStatesFloat(riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_logic_vector) return std_logic_vector;
+
+function replaceDests(insVec: InstructionSlotArray; ria: RenameInfoArray) return InstructionSlotArray;
 
 
 function clearRawInfo(ins: InstructionState) return InstructionState;      -- ip, bits; this is raw program data 
@@ -1146,7 +1148,7 @@ begin
 end function;
 
 
-function updateArgStates(insVec: InstructionSlotArray; riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_logic_vector) return std_logic_vector is
+function updateArgStates(riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_logic_vector) return std_logic_vector is
     variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
@@ -1155,7 +1157,7 @@ begin
     return res;
 end function;
 
-function updateArgStatesFloat(insVec: InstructionSlotArray; riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_logic_vector) return std_logic_vector is
+function updateArgStatesFloat(riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_logic_vector) return std_logic_vector is
     variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
@@ -1193,6 +1195,21 @@ begin
     res.ins.physicalArgSpec.dest := insS0.ins.physicalArgSpec.dest or insS1.ins.physicalArgSpec.dest;
     return res;
 end function;
+        
+        
+function replaceDests(insVec: InstructionSlotArray; ria: RenameInfoArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(insVec'range) := insVec;
+begin
+    for i in res'range loop
+         res(i).ins.physicalArgSpec.intDestSel := ria(i).destSel and not ria(i).destSelFP;
+         res(i).ins.physicalArgSpec.floatDestSel := ria(i).destSelFP;
+         
+         res(i).ins.physicalArgSpec.dest := ria(i).physicalDest;
+    end loop;
+    return res;
+end function;
+        
+        
         
 function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := content;
