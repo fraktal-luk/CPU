@@ -26,10 +26,13 @@ port(
     frontDataLastLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1);
         
         TMP_spMaskedDataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+
+    renamedArgsInt: out RenameInfoArray(0 to PIPE_WIDTH-1);
+    renamedArgsFloat: out RenameInfoArray(0 to PIPE_WIDTH-1);
     
     renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
-    --    renamedDataLiving_T: out InstructionSlotArray(0 to PIPE_WIDTH-1);
-    renamedDataLivingFloat: out InstructionSlotArray(0 to PIPE_WIDTH-1);    
+
+    --renamedDataLivingFloat: out InstructionSlotArray(0 to PIPE_WIDTH-1);    
     renamedSending: out std_logic;
     
     nextAccepting: in std_logic;
@@ -39,7 +42,8 @@ port(
     bqPointer: in SmallNumber;
     sqPointer: in SmallNumber;
     lqPointer: in SmallNumber;
-    
+        bqPointerSeq: in SmallNumber;
+
     newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     
@@ -60,29 +64,79 @@ end UnitRegManager;
 
 
 architecture Behavioral of UnitRegManager is
-    signal stageDataRenameIn, stageDataRenameIn_T, stageDataRenameInFloat, renamedDataLivingPre, renamedDataLivingPre_T, renamedDataLivingFloatPre,
-               stageDataToCommit, stageDataCommitInt, stageDataCommitFloat: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal stageDataRenameIn, stageDataRenameIn_C, stageDataRenameIn_T, stageDataRenameInFloat, renamedDataLivingIntSig,-- renamedDataLivingIntSig_C,
+                renamedDataLivingFloatSig, renamedDataLivingPre,-- renamedDataLivingPre_C,
+                 renamedDataLivingPre_T, renamedDataLivingFloatPre,
+               stageDataToCommit, stageDataCommitInt, stageDataCommitFloat,
+               T_renamedDataLivingInt, T_renamedDataLivingFloat
+               : InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, robSendingDelayed, sendingCommitInt, frontLastSending, renamedSendingSig, sendingCommitFloat,
                renameLockState, renameLockStateNext, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed, renameLockEndDelayedNext: std_logic := '0';
  
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG; -- This is rewinded on events
     signal renameCtr, renameCtrNext: Word := (others => '0');
 
-    signal newIntDests, newFloatDests, assignedDests, physStableInt, physStableFloat: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+    signal newIntDests, newFloatDests, physStableInt, physStableFloat: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal newIntDestPointer, newFloatDestPointer: SmallNumber := (others => '0');
-    signal newIntSources, newFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+    signal newIntSources, newIntSources_NR, newIntSourcesAlt, newFloatSources, newFloatSourcesAlt: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+    signal newSourceSelectorInt, newSourceSelectorFloat --, storedSourceSelectorInt, storedSourceSelectorFloat
+                    : std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
     
     signal renamedBase, stageDataToCommitDelayed: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+
+    signal depVec, depVecPrev: DependencyVec := DEFAULT_DEP_VEC;
+
+    signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;    
+
+
+    function replaceSourcesInt(insVec: InstructionSlotArray; depVec: DependencyVec) return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+    begin
+        -- Overwrite sources depending on destinations of this group
+        for i in 0 to PIPE_WIDTH-1 loop
+           for k in 0 to 2 loop -- For each of 3 possible source arguments
+                for j in PIPE_WIDTH-1 downto 0 loop
+                    if j >= i then
+                        next;
+                    end if;
+                    
+                    if depVec(i)(k)(j) = '1'   
+                        and res(i).ins.virtualArgSpec.intArgSel(k) = '1' and res(j).ins.virtualArgSpec.intDestSel = '1' and isNonzero(res(j).ins.virtualArgSpec.dest) = '1' -- intSel match
+                    then
+                        res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
+                        exit;             
+                    end if;
+                end loop;
+            end loop;
+        end loop;        
+        
+        return res;
+    end function;
     
-    
-    type DependencySpec is array(0 to 2) of std_logic_vector(0 to PIPE_WIDTH-1); 
-    type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
-    
-    constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
-    signal depVec: DependencyVec := DEFAULT_DEP_VEC;
-    
-    signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-       
+    function replaceSourcesFloat(insVec: InstructionSlotArray; depVec: DependencyVec) return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+    begin
+        -- Overwrite sources depending on destinations of this group
+        for i in 0 to PIPE_WIDTH-1 loop
+            for k in 0 to 2 loop -- For each of 3 possible source arguments
+                for j in PIPE_WIDTH-1 downto 0 loop
+                    if j >= i then
+                        next;
+                    end if;
+                    
+                    if depVec(i)(k)(j) = '1'
+                        and res(i).ins.virtualArgSpec.floatArgSel(k) = '1' and res(j).ins.virtualArgSpec.floatDestSel = '1' -- intSel match
+                    then
+                        res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
+                        exit;                   
+                    end if;
+                end loop;
+            end loop;
+        end loop;
+        
+        return res;
+    end function;
+               
     function renameGroupBase(   insVec: InstructionSlotArray;
                                 newIntDests: PhysNameArray;
                                 newFloatDests: PhysNameArray;                                
@@ -92,11 +146,12 @@ architecture Behavioral of UnitRegManager is
                                 bqPointer: SmallNumber;
                                 sqPointer: SmallNumber;
                                 lqPointer: SmallNumber;
+                                    bqPointerSeq: SmallNumber;
                                 renameCtr: Word;                               
                                 dbtrap: std_logic)
      return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-        variable reserveSelSig, takeVecInt, takeVecFloat, stores, loads: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
+        variable reserveSelSig, takeVecInt, takeVecFloat, stores, loads, branches: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
         variable nToTake: integer := 0;
         variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
         variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
@@ -104,6 +159,8 @@ architecture Behavioral of UnitRegManager is
     begin
         stores := getStoreMask(TMP_recodeMem(insVec));
         loads := getLoadMask(TMP_recodeMem(insVec));
+        branches := getBranchMask(insVec);
+        
         -- Assign dest registers
         for i in 0 to PIPE_WIDTH-1 loop
             if res(i).ins.virtualArgSpec.floatDestSel = '1' then
@@ -131,6 +188,7 @@ architecture Behavioral of UnitRegManager is
             res(i).ins.tags.bqPointer := bqPointer;     
             res(i).ins.tags.sqPointer := addIntTrunc(sqPointer, countOnes(stores(0 to i-1)), SQ_PTR_SIZE + 1);
             res(i).ins.tags.lqPointer := addIntTrunc(lqPointer, countOnes(loads(0 to i-1)), LQ_PTR_SIZE + 1);
+            res(i).ins.tags.bqPointerSeq := addIntTrunc(bqPointerSeq, countOnes(branches(0 to i-1)), BQ_PTR_SIZE + 2 + 1); -- CAREFUL, TODO: define BQ_SEQ_PTR_SIZE
         end loop;
 
         -- If found special instruction or exception, kill next ones
@@ -221,28 +279,10 @@ architecture Behavioral of UnitRegManager is
             res(i).ins.physicalArgSpec.args(2) := newPhysSources(3*i+2);      
         end loop;  
         
-        -- Overwrite sources depending on destinations of this group
-        for i in 0 to PIPE_WIDTH-1 loop
-           for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
-                    
-                    if depVec(i)(k)(j) = '1'   
-                        and res(i).ins.virtualArgSpec.intArgSel(k) = res(j).ins.virtualArgSpec.intDestSel -- intSel match
-                    then
-                        res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
-                        exit;             
-                    end if;
-                end loop;
-            end loop;
-
-        end loop;        
-          
+        res := replaceSourcesInt(res, depVec);
+        
         return res;
     end function;
-    
  
     function renameGroupFloat(insVec: InstructionSlotArray;
                               newFloatSources: PhysNameArray;
@@ -258,27 +298,8 @@ architecture Behavioral of UnitRegManager is
             res(i).ins.physicalArgSpec.args(2) := newFloatSources(3*i+2);           
         end loop;
         
-        -- Overwrite sources depending on destinations of this group
-        -- TODO: arg name comparisons are shared with int registers! Reuse the same comparators
-        for i in 0 to PIPE_WIDTH-1 loop
-            for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
-                    
-                    if depVec(i)(k)(j) = '1'
-                        and res(i).ins.virtualArgSpec.floatArgSel(k) = res(j).ins.virtualArgSpec.floatDestSel -- intSel match
-                    then
-                        res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
-                        exit;                   
-                    end if;
-                end loop;
-            end loop;                     
+        res := replaceSourcesFloat(res, depVec);
 
-        end loop;
-
-        -- TODO: move this somewhere else?
         for i in res'range loop
             if res(i).ins.classInfo.fpRename = '0' then
                 res(i).full := '0';
@@ -295,6 +316,52 @@ architecture Behavioral of UnitRegManager is
             
         return res;
     end function;
+
+    function getRealDepVecInt(insVec: InstructionSlotArray; depVec: DependencyVec) return DependencyVec is
+        variable res: DependencyVec := (others => (others => (others => '0')));
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            for k in 0 to 2 loop -- For each of 3 possible source arguments
+                for j in PIPE_WIDTH-1 downto 0 loop
+                    if j >= i then
+                        next;
+                    end if;
+                    
+                    if depVec(i)(k)(j) = '1'
+                        and insVec(i).ins.virtualArgSpec.intArgSel(k) = '1' and insVec(j).ins.virtualArgSpec.intDestSel = '1' -- intSel match
+                    then
+                        res(i)(k)(j) := '1';
+                        exit;                        
+                    end if;
+                end loop;
+            end loop;                     
+    
+        end loop;        
+        return res;
+    end function;
+
+    function getRealDepVecFloat(insVec: InstructionSlotArray; depVec: DependencyVec) return DependencyVec is
+        variable res: DependencyVec := (others => (others => (others => '0')));
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            for k in 0 to 2 loop -- For each of 3 possible source arguments
+                for j in PIPE_WIDTH-1 downto 0 loop
+                    if j >= i then
+                        next;
+                    end if;
+                    
+                    if depVec(i)(k)(j) = '1'
+                        and insVec(i).ins.virtualArgSpec.floatArgSel(k) = '1' and insVec(j).ins.virtualArgSpec.floatDestSel = '1'
+                    then
+                        res(i)(k)(j) := '1';
+                        exit;                   
+                    end if;
+                end loop;
+            end loop;                     
+    
+        end loop;        
+        return res;
+    end function;   
 
     function classifyForDispatch(insVec: InstructionSlotArray) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
@@ -334,9 +401,85 @@ architecture Behavioral of UnitRegManager is
         end loop;
         
         return res;
-    end function;    
+    end function;
+
+
+    
+
+    function getRenameInfo(insVec: InstructionSlotArray; newPhysDests, newPhysSources, newPhysSourcesStable: PhysNameArray; newSourceSelector: std_logic_vector; constant IS_FP: boolean := false)
+    return RenameInfoArray is
+        variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+        variable dests: PhysNameArray(0 to PIPE_WIDTH-1) := assignDests(insVec, newPhysDests, IS_FP);
+        variable depVec: DependencyVec;
+    begin
+        depVec := findDeps(insVec);
+        if IS_FP then
+            depVec := getRealDepVecFloat(insVec, depVec);
+        else
+            depVec := getRealDepVecInt(insVec, depVec);
+        end if;
+        
+        for i in 0 to PIPE_WIDTH-1 loop
+            if IS_FP then        
+                res(i).destSel := insVec(i).ins.virtualArgSpec.floatDestSel;
+                res(i).destSelFP := insVec(i).ins.virtualArgSpec.floatDestSel;
+            else    
+                res(i).destSel := insVec(i).ins.virtualArgSpec.intDestSel;
+            end if;
+            
+            res(i).virtualDest := insVec(i).ins.virtualArgSpec.dest(4 downto 0);
+            res(i).physicalDest := dests(i);
+
+            if IS_FP then
+                res(i).sourceSel := insVec(i).ins.virtualArgSpec.floatArgSel;
+            else
+                res(i).sourceSel := insVec(i).ins.virtualArgSpec.intArgSel;
+            end if;
+                
+            for j in 0 to 2 loop
+                res(i).sourceConst(j) :=   (insVec(i).ins.virtualArgSpec.intArgSel(j) and not isNonzero(insVec(i).ins.virtualArgSpec.args(j)(4 downto 0))) -- int r0
+                                        or (not insVec(i).ins.virtualArgSpec.intArgSel(j) and not insVec(i).ins.virtualArgSpec.floatArgSel(j))             -- not used
+                                        or (bool2std(j = 1) and insVec(i).ins.constantArgs.immSel);                                                        -- imm
+
+                res(i).virtualSources(j) := insVec(i).ins.virtualArgSpec.args(j)(4 downto 0);
+                
+                res(i).physicalSources(j) := newPhysSources(3*i + j);
+                res(i).physicalSourcesStable(j) := newPhysSourcesStable(3*i + j);
+            end loop;
+
+            res(i).deps := depVec(i);
+                 res(i).physicalSourcesNew := res(i).physicalSources;
+                                
+            for j in 0 to 2 loop
+                res(i).sourcesNew(j) := isNonzero(res(i).deps(j));
+                for k in PIPE_WIDTH-1 downto 0 loop
+                    if res(i).deps(j)(k) = '1' then
+                        res(i).physicalSourcesNew(j) := dests(k);
+                        exit;
+                    end if;
+                end loop;
+            end loop;
+            
+            res(i).sourcesStable := newSourceSelector(3*i to 3*i + 2);            
+            res(i).sourcesReady := (others => '0');
+        end loop;
+        return res;
+    end function;
+
+    function postprocessRenamed(insVec: InstructionSlotArray; depVec: DependencyVec) return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+    begin
+
+        return res;
+    end function;
+    
+    
+    signal inputRenameInfoInt, inputRenameInfoFloat, storedRenameInfoInt, storedRenameInfoFloat, outputRenameInfoInt, outputRenameInfoFloat: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 begin
-        frontLastSending <= frontLastSendingIn and not eventSig;
+       inputRenameInfoInt <= getRenameInfo(frontDataLastLiving, newIntDests, newIntSources, newIntSourcesAlt, newSourceSelectorInt);
+       inputRenameInfoFloat <= getRenameInfo(frontDataLastLiving, newFloatDests, newFloatSources, newFloatSourcesAlt, newSourceSelectorFloat, true);
+
+    frontLastSending <= frontLastSendingIn and not eventSig;
 
     eventSig <= execEventSignal or lateEventSignal;
 
@@ -351,41 +494,17 @@ begin
                                     bqPointer,
                                     sqPointer,
                                     lqPointer,
+                                        bqPointerSeq,
                                     renameCtr,
                                     '0' --dbtrapOn
                                     );
 
     stageDataRenameIn <=        renameGroupInt(     renamedBase, newIntSources, depVec); 
+    --    stageDataRenameIn_C <=        renameGroupInt(     renamedBase, newIntSources_NR, depVec); 
     stageDataRenameInFloat <=   renameGroupFloat(   renamedBase, newFloatSources, depVec); -- like above
     -- TODO: ^ or assign dests above, not in renameGroupBase, to keep Int and FP path separate, and merge them ony when going to ROB - it could be good for layout
-            
-    assignedDests <= getPhysicalDests(renamedBase);
 
-               stageDataRenameIn_T <= classifyForDispatch(TMP_recodeMem(stageDataRenameIn));
-                    
---            SUBUNIT_RENAME_INT_T: entity work.GenericStage(Behavioral)--Renaming)
---            generic map(
---                USE_CLEAR => '0',
---                WIDTH => PIPE_WIDTH,
---                    KEEP_DEST => '1'
---            )
---            port map(
---                clk => clk, reset => '0', en => '0',
-                
---                prevSending => frontLastSending,    
---                stageDataIn => stageDataRenameIn_T,
-                
---                acceptingOut => open,
-                
---                nextAccepting => nextAccepting,
---                sendingOut => open,--renamedSendingSig,
---                stageDataOut => renamedDataLivingPre_T,
-                
---                execEventSignal => '0',
---                lateEventSignal => eventSig, -- because Exec is always older than Rename     
---                execCausing => DEFAULT_INSTRUCTION_STATE
---            );
-    
+    stageDataRenameIn_T <= classifyForDispatch(TMP_recodeMem(stageDataRenameIn));
                                                                                      
     SUBUNIT_RENAME_INT: entity work.GenericStage(Behavioral)--Renaming)
     generic map(
@@ -409,40 +528,36 @@ begin
         lateEventSignal => eventSig, -- because Exec is always older than Rename     
         execCausing => DEFAULT_INSTRUCTION_STATE
     );    
+
     
-    SUBUNIT_RENAME_FLOAT: entity work.GenericStage(Behavioral)--Renaming)
-    generic map(
-        USE_CLEAR => '0',
-        WIDTH => PIPE_WIDTH,
-            KEEP_DEST => '1'
-    )
-    port map(
-        clk => clk, reset => '0', en => '0',
+--    SUBUNIT_RENAME_FLOAT: entity work.GenericStage(Behavioral)--Renaming)
+--    generic map(
+--        USE_CLEAR => '0',
+--        WIDTH => PIPE_WIDTH,
+--            KEEP_DEST => '1'
+--    )
+--    port map(
+--        clk => clk, reset => '0', en => '0',
         
-        prevSending => frontLastSending,    
-        stageDataIn => stageDataRenameInFloat,
+--        prevSending => frontLastSending,    
+--        stageDataIn => stageDataRenameInFloat,
         
-        acceptingOut => open,
+--        acceptingOut => open,
         
-        nextAccepting => nextAccepting,
-        sendingOut => open,
-        stageDataOut => renamedDataLivingFloatPre,
+--        nextAccepting => nextAccepting,
+--        sendingOut => open,
+--        stageDataOut => renamedDataLivingFloatPre,
         
-        execEventSignal => '0',
-        lateEventSignal => eventSig, -- because Exec is always older than Rename     
-        execCausing => DEFAULT_INSTRUCTION_STATE
-    );
-    
-    renamedDataLiving <=  --classifyForDispatch(
-                                restoreRenameIndex(renamedDataLivingPre)
-                          --)
-                          ;
-                          
---                renamedDataLiving_T <= -- classifyForDispatch(
---                                                      restoreRenameIndex(renamedDataLivingPre_T)
---                                        --        )
---                                                ;
-    renamedDataLivingFloat <= restoreRenameIndex(renamedDataLivingFloatPre);
+--        execEventSignal => '0',
+--        lateEventSignal => eventSig, -- because Exec is always older than Rename     
+--        execCausing => DEFAULT_INSTRUCTION_STATE
+--    );
+
+    renamedDataLivingIntSig <=   postprocessRenamed( restoreRenameIndex(renamedDataLivingPre), depVecPrev);
+    --renamedDataLivingFloatSig <= postprocessRenamed( restoreRenameIndex(renamedDataLivingFloatPre), depVecPrev);
+
+    renamedDataLiving <= renamedDataLivingIntSig;
+    --renamedDataLivingFloat <= renamedDataLivingFloatSig;
     
     renameGroupCtrNext <=   commitGroupCtr when lateEventSignal = '1'
                        else clearTagLow(execCausing.tags.renameIndex) when execEventSignal = '1'
@@ -459,8 +574,6 @@ begin
         --                         Should compare to commitCtrNext instead?
         --                         But remember that rewinding GPR map needs a cycle, and before it happens,
         --                         renaming can't be done! So this delay may be caused by this problem.
-    
-    --renameLockEndDelayed <= renameLockState and renameLockReleaseDelayed;
         
         renameLockStateNext <= '1' when eventSig = '1'
                         else   '0' when renameLockReleaseDelayed = '1'
@@ -468,7 +581,7 @@ begin
         
             renameLockEndDelayedNext <= renameLockStateNext and renameLockRelease;
         
-    COMMON_SYNCHRONOUS: process(clk)     
+    COMMON_SYNCHRONOUS: process(clk)
     begin
         if rising_edge(clk) then                
             if frontLastSending = '1' then
@@ -489,10 +602,23 @@ begin
             robSendingDelayed <= sendingFromROB;
             
             renameLockReleaseDelayed <= renameLockRelease;
-                renameLockEndDelayed <= renameLockEndDelayedNext;                
-        end if;    
+            renameLockEndDelayed <= renameLockEndDelayedNext;
+            
+            if frontLastSending = '1' then             
+                storedRenameInfoInt <= inputRenameInfoInt;
+                storedRenameInfoFloat <= inputRenameInfoFloat;
+            
+                depVecPrev <= depVec;
+            end if;
+        end if;
     end process;
+
+    outputRenameInfoInt <= storedRenameInfoInt;
+    outputRenameInfoFloat <= storedRenameInfoFloat;
     
+    renamedArgsInt <= outputRenameInfoInt;
+    renamedArgsFloat <= outputRenameInfoFloat;
+
     stageDataToCommit <= setDestFlags(robDataLiving);
     
     SUBUNIT_COMMIT_INT: entity work.GenericStage(Behavioral)
@@ -530,8 +656,12 @@ begin
         newPhysDestsOrig => newIntDests,    -- MAPPING (from FREE LIST)
         
         sendingToCommit => robSendingDelayed,   
-        stageDataToCommit => stageDataToCommitDelayed,        
-        newPhysSources => newIntSources,    -- TO SEQ
+        stageDataToCommit => stageDataToCommitDelayed,
+        
+        newPhysSources => newIntSources,
+        newPhysSources_NR => newIntSources_NR,
+        newPhysSourcesAlt => newIntSourcesAlt,
+        newPhysSourceSelector => newSourceSelectorInt,
         prevStablePhysDests => physStableInt  -- FOR MAPPING (to FREE LIST)
     );
     
@@ -550,7 +680,10 @@ begin
         sendingToCommit => robSendingDelayed,
         stageDataToCommit => stageDataToCommitDelayed,
         
-        newPhysSources => newFloatSources,        
+        newPhysSources => newFloatSources,
+        newPhysSources_NR => open,
+        newPhysSourcesAlt => newFloatSourcesAlt,
+        newPhysSourceSelector => newSourceSelectorFloat,
         prevStablePhysDests => physStableFloat
     );
 
@@ -616,6 +749,7 @@ begin
          
          TMP_MASKED_OUT: for i in 0 to PIPE_WIDTH-1 generate
             TMP_spMaskedDataOut(i) <= (renamedBase(i).full, frontDataLastLiving(i).ins);
+                                        --frontDataLastLiving(i);
          end generate;
          
 end Behavioral;

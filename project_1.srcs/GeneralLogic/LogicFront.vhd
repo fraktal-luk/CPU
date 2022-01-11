@@ -55,7 +55,7 @@ begin
     res.classInfo.useLQ := decodedIns.classInfo.useLQ;
 
      if res.specificOperation.subpipe = none then                 	
-        res.controlInfo.specialAction := '1'; -- TODO: move this to classInfo?
+        res.controlInfo.specialAction := '1';
         -- CAREFUL: Those ops don't get issued, they are handled at retirement
         res.classInfo.mainCluster := '0';
         res.classInfo.secCluster := '0';

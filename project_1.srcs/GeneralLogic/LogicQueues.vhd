@@ -41,7 +41,7 @@ procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber;
 procedure updateAddress(signal content: inout QueueEntryArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);
 procedure updateValue(signal content: inout QueueEntryArray; isl: InstructionSlot);
 
-    procedure updateAddressArr(signal content: inout MwordArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);
+procedure updateAddressArr(signal content: inout MwordArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);
 
 
 constant CMP_ADDRESS_LENGTH: natural := --32;
@@ -49,10 +49,10 @@ constant CMP_ADDRESS_LENGTH: natural := --32;
 
 function getAddressCompleted(content: QueueEntryArray) return std_logic_vector;
 function getAddressMatching(content: QueueEntryArray; adr: Mword) return std_logic_vector;
-    function getAddressMatching(content: MwordArray; adr: Mword) return std_logic_vector;
+function getAddressMatching(content: MwordArray; adr: Mword) return std_logic_vector;
 
-    function addressLowMatching(a, b: Mword) return std_logic;
-    function addressHighMatching(a, b: Mword) return std_logic;
+function addressLowMatching(a, b: Mword) return std_logic;
+function addressHighMatching(a, b: Mword) return std_logic;
 
 function getWhichMemOp(content: QueueEntryArray) return std_logic_vector;
 function getDrainOutput_T(elem: QueueEntry; value: Mword) return InstructionState;
@@ -61,8 +61,12 @@ function getDrainOutput_T(elem: QueueEntry; value: Mword) return InstructionStat
 function cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
 function cmpIndexAfter(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
 function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, nFull: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
+
 function getNumCommittedEffective(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber; 
 function getNumCommitted(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber;
+
+function getNumCommittedEffectiveBr(robData: InstructionSlotArray) return SmallNumber;
+function getNumCommittedBr(robData: InstructionSlotArray) return SmallNumber;
 
 end package;
 
@@ -178,38 +182,36 @@ begin
 end function;
 
 
-    function addressLowMatching(a, b: Mword) return std_logic is
-    begin
-        return bool2std(a(CMP_ADDRESS_LENGTH-1 downto 0) = b(CMP_ADDRESS_LENGTH-1 downto 0));
-    end function;
+function addressLowMatching(a, b: Mword) return std_logic is
+begin
+    return bool2std(a(CMP_ADDRESS_LENGTH-1 downto 0) = b(CMP_ADDRESS_LENGTH-1 downto 0));
+end function;
 
-    function addressHighMatching(a, b: Mword) return std_logic is
-    begin
-        return bool2std(a(31 downto CMP_ADDRESS_LENGTH) = b(31 downto CMP_ADDRESS_LENGTH));
-    end function;
+function addressHighMatching(a, b: Mword) return std_logic is
+begin
+    return bool2std(a(31 downto CMP_ADDRESS_LENGTH) = b(31 downto CMP_ADDRESS_LENGTH));
+end function;
 
 
 function getAddressMatching(content: QueueEntryArray; adr: Mword) return std_logic_vector is
     variable res: std_logic_vector(content'range);
 begin
-    for i in content'range loop
-        
-        res(i) := --bool2std(content(i).address = adr);
-                    addressLowMatching(content(i).address, adr);
+    for i in content'range loop      
+        res(i) := addressLowMatching(content(i).address, adr);
     end loop;
     return res;
 end function;
 
-    function getAddressMatching(content: MwordArray; adr: Mword) return std_logic_vector is
-        variable res: std_logic_vector(content'range);
-    begin
-        for i in content'range loop
-            
-            res(i) := --bool2std(content(i).address = adr);
-                        addressLowMatching(content(i), adr);
-        end loop;
-        return res;
-    end function;
+-- UNUSED?
+function getAddressMatching(content: MwordArray; adr: Mword) return std_logic_vector is
+    variable res: std_logic_vector(content'range);
+begin
+    for i in content'range loop
+        
+        res(i) := addressLowMatching(content(i), adr);
+    end loop;
+    return res;
+end function;
 
 function getWhichMemOp(content: QueueEntryArray) return std_logic_vector is
     variable res: std_logic_vector(content'range);
@@ -249,8 +251,7 @@ end function;
         res.controlInfo.newEvent := elem.hasEvent;
         res.controlInfo.firstBr := elem.first;
         res.controlInfo.sqMiss := not elem.completedV;   
-        res.target := --elem.address;
-                        adr;
+        res.target := adr;
         res.result := value;    
         return res;
     end function;
@@ -319,8 +320,7 @@ return SmallNumber is
 begin
     -- Shift by pStart
     nShift := slv2u(pStart);
-    count := --slv2u(subTruncZ(pEnd, pStart, QUEUE_PTR_SIZE));
-             slv2u(nFull);
+    count := slv2u(nFull);
     
     tmpVecExt := olderSQ & olderSQ;
     
@@ -339,6 +339,7 @@ begin
     return res;
 end function;
 
+-- scan: full and syncEvent; full and [usingQ]
  function getNumCommittedEffective(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber is
     variable res: SmallNumber := (others => '0');
     variable k: integer := 0;
@@ -363,6 +364,7 @@ end function;
     return i2slv(k, SMALL_NUMBER_SIZE);
  end function;
  
+ -- scan: newEvent and syncEvent; [usingQ] 
  function getNumCommitted(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber is
     variable res: SmallNumber := (others => '0');
     variable k: integer := 0;
@@ -388,5 +390,43 @@ end function;
     return i2slv(k, SMALL_NUMBER_SIZE);
  end function;
 
+    -- scan: full and syncEvent; full and branch
+     function getNumCommittedEffectiveBr(robData: InstructionSlotArray) return SmallNumber is
+        variable res: SmallNumber := (others => '0');
+        variable k: integer := 0;
+        variable found: boolean := false;
+     begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            if robData(i).full = '1' and hasSyncEvent(robData(i).ins) = '1' then
+                exit;
+            end if;
+            
+            if robData(i).full = '1' and robData(i).ins.classInfo.branchIns = '1' then
+                k := k + 1;
+            end if;
+
+        end loop;
+        return i2slv(k, SMALL_NUMBER_SIZE);
+     end function;
+     
+     -- scan: newEvent and syncEvent; branch
+     function getNumCommittedBr(robData: InstructionSlotArray) return SmallNumber is
+        variable res: SmallNumber := (others => '0');
+        variable k: integer := 0;
+        variable found: boolean := false;
+     begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            -- A redirected branch cuts a group in SQ, so it must stop there
+            if robData(i).ins.controlInfo.newEvent = '1' and hasSyncEvent(robData(i).ins) = '0' then
+                exit;
+            end if;
+
+            -- Not only full, because exceptions clear following 'full' bits
+            if robData(i).ins.classInfo.branchIns = '1' then
+                k := k + 1;
+            end if;
+        end loop;
+        return i2slv(k, SMALL_NUMBER_SIZE);
+     end function;
 
 end package body;

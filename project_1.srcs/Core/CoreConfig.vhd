@@ -9,7 +9,7 @@ package CoreConfig is
 
 --function checkSynthesis return boolean;
 
-constant CLEAR_DEBUG_INFO: boolean := true;
+constant CLEAR_DEBUG_INFO: boolean := false;
 constant VIEW_ON: boolean := false;
 
    constant DEBUG_LOG_COMMITTED: boolean := false;
@@ -32,7 +32,6 @@ constant CLEAR_DEST_SEL_ON_EMPTY: boolean := false; -- When op gets empty, sets 
 
 constant PHYS_REG_BITS: natural := 6 + LOG2_PIPE_WIDTH;
 
--- CAREFUL, TODO: compute it by log2 from number of phys regs
 constant PHYS_REG_BITS_EFFECTIVE: natural := PHYS_REG_BITS - 1;
 
 constant N_PHYSICAL_REGS: natural := 128;
@@ -68,6 +67,10 @@ constant LQ_PTR_SIZE: natural := countOnes(LQ_PTR_MASK);
     
     constant TMP_PARAM_I0_DELAY: boolean := true;
     constant TMP_PARAM_M0_DELAY: boolean := true;
+    
+    constant TMP_PARAM_LATE_SRC_DEP_OVERRIDE: boolean := false;
+    constant TMP_PARAM_LATE_SRC_STABLE_OVERRIDE: boolean := false;
+
 end CoreConfig;
 
 

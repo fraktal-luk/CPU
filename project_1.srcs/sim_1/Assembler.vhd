@@ -344,7 +344,6 @@ begin
     for i in 0 to p'length-1 loop
         if p(i)(0)(1) = '@' then -- Keyword
             tmpStr(1 to  p(i)(0)'length-1) := p(i)(0)(2 to p(i)(0)'length);
-            -- TODO
             -- when proc
             if matches(tmpStr, "proc") then
                 -- add name to labels

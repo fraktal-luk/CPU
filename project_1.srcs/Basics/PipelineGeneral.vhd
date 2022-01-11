@@ -14,6 +14,10 @@ use work.InstructionState.all;
 
 package PipelineGeneral is
 
+
+type PhysicalSubpipe is (ALU, Mem, FP, StoreDataInt, StoreDataFloat);
+
+
 type ExecResult is record
     full: std_logic;
     tag: InsTag;
@@ -31,9 +35,10 @@ type EventState is record
     lateEvent: std_logic;
     execEvent: std_logic;
     execCausing: InstructionState;
+    preExecCausing: InstructionState;
 end record;
 
-constant DEFAULT_EVENT_STATE: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE);
+constant DEFAULT_EVENT_STATE: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE);
 
 type IssueQueueSignals is record
     sending: std_logic;
@@ -86,6 +91,53 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
 );
 
 
+    type DependencySpec is array(0 to 2) of std_logic_vector(0 to PIPE_WIDTH-1); 
+    type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
+    
+    constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
+    
+
+    type RenameInfo is record
+        destSel: std_logic;
+        destSelFP: std_logic;
+        virtualDest: RegName;
+        physicalDest: PhysName;
+        sourceSel: std_logic_vector(0 to 2);
+        sourceConst: std_logic_vector(0 to 2); 
+        virtualSources: RegNameArray(0 to 2);
+        physicalSources: PhysNameArray(0 to 2);
+        physicalSourcesStable: PhysNameArray(0 to 2);
+        physicalSourcesNew: PhysNameArray(0 to 2); -- sources in case of of group dependency        
+        deps: DependencySpec;
+        sourcesStable: std_logic_vector(0 to 2); -- true if source is from stable map - always ready
+        sourcesNew: std_logic_vector(0 to 2);   -- true if group dependency
+        sourcesReady: std_logic_vector(0 to 2); -- ready as read from ReadyTable based on NewestMap 
+    end record;
+
+    type RenameInfoArray is array(natural range <>) of RenameInfo;
+
+    constant DEFAULT_RENAME_INFO: RenameInfo := (
+        destSel => '0',
+        destSelFP => '0',
+        virtualDest => (others => '0'),
+        physicalDest => (others => '0'),
+        sourceSel => (others => '0'),
+        sourceConst => (others => '0'),
+        virtualSources => (others => (others => '0')),
+        physicalSources => (others => (others => '0')),
+        physicalSourcesStable => (others => (others => '0')),
+        physicalSourcesNew => (others => (others => '0')),
+        deps => (others => (others => '0')),
+        sourcesStable => (others => '0'),
+        sourcesNew => (others => '0'),
+        sourcesReady => (others => '0')        
+    );
+
+    function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInfoArray;
+
+        function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray;
+
+
 function adjustStage(content: InstructionSlotArray) return InstructionSlotArray;
 
 function compactMask(vec: std_logic_vector) return std_logic_vector; -- WARNING: only for 4 elements
@@ -114,7 +166,7 @@ function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) retur
 
 function makeSlotArray(ia: InstructionStateArray; fm: std_logic_vector) return InstructionSlotArray;
 
-function killByTag(before, ei, int: std_logic) return std_logic;
+function compareIndBefore(tagA, tagB: SmallNumber; PTR_SIZE: natural) return std_logic;
 
 -- UNUSED?
 function getKillMask(content: InstructionStateArray; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
@@ -185,10 +237,21 @@ function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray
 function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
 
-function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray;
-function prepareForStoreValueFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray;
+function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray;
+function prepareForStoreValueFloatIQ(--insVecInt,
+                                     insVecFloat: InstructionSlotArray) return InstructionSlotArray;
 
-function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
+--function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
+
+function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray;
+
+function removeArg2(ria: RenameInfoArray) return RenameInfoArray;
+function useStoreArg2(ria: RenameInfoArray) return RenameInfoArray;
+
+function updateArgStates(riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_logic_vector) return std_logic_vector;
+function updateArgStatesFloat(riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_logic_vector) return std_logic_vector;
+
+function replaceDests(insVec: InstructionSlotArray; ria: RenameInfoArray) return InstructionSlotArray;
 
 
 function clearRawInfo(ins: InstructionState) return InstructionState;      -- ip, bits; this is raw program data 
@@ -222,6 +285,9 @@ function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural)
 function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray; 
 
 
+function setPhysSources(insVec: InstructionSlotArray; newPhysSources: PhysNameArray; newestSelector, depVec: std_logic_vector) return InstructionSlotArray;
+
+
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
                                 s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
                                 s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
@@ -239,6 +305,33 @@ end package;
 
 
 package body PipelineGeneral is
+
+
+function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInfoArray is
+    variable res: RenameInfoArray(intArgs'range) := intArgs;
+begin
+    for i in res'range loop
+        if floatArgs(i).destSelFP = '1' then        
+            res(i).destSel := '1';
+            res(i).destSelFP := '1';
+            res(i).virtualDest := floatArgs(i).virtualDest;
+            res(i).physicalDest := floatArgs(i).physicalDest;
+        end if;
+    end loop;
+    return res;
+end function;
+
+
+        function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray is
+            variable res: PhysNameArray(0 to 3*PIPE_WIDTH-1);
+        begin
+            res(0 to 2) := ri(0).physicalSourcesNew;-- & ri(1).physicalSourcesNew & ri(2).physicalSourcesNew & ri(3).physicalSourcesNew;
+            res(3 to 5) := ri(1).physicalSourcesNew;
+            res(6 to 8) := ri(2).physicalSourcesNew;
+            res(9 to 11) := ri(3).physicalSourcesNew;
+            return res;
+        end function;
+
 
 
 -- TODO: move to LogicFront? 
@@ -566,19 +659,20 @@ begin
 	return res;
 end function;
 
-function killByTag(before, ei, int: std_logic) return std_logic is
+function compareIndBefore(tagA, tagB: SmallNumber; PTR_SIZE: natural) return std_logic is
+    variable tC: SmallNumber := (others => '0');
 begin
-    return (before and ei) or int;
-end function;
+    tC := sub(tagA, tagB);
+    return tC(PTR_SIZE-1);
+end function; 
 
-function getKillMask(content: InstructionStateArray;-- fullMask: std_logic_vector;
-							causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
+function getKillMask(content: InstructionStateArray; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
 return std_logic_vector is
 	variable res: std_logic_vector(0 to content'length-1);
 begin
 	for i in 0 to content'length-1 loop
-		res(i) := killByTag(compareTagBefore(causing.tags.renameIndex, content(i).tags.renameIndex),
-									execEventSig, lateEventSig);-- and fullMask(i);
+		res(i) := (compareTagBefore(causing.tags.renameIndex, content(i).tags.renameIndex) and execEventSig)
+		   or lateEventSig;
 	end loop;
 	return res;
 end function;
@@ -920,102 +1014,158 @@ end function;
 
 
 
-function prepareForStoreValueIQ(insVec: InstructionStateArray) return InstructionStateArray is
-    variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
+function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
 begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        --res(i).operation := (General, unknown);
-    
-        res(i).constantArgs.immSel := '0';
-        
-        res(i).virtualArgSpec.intDestSel := '0';
-        res(i).virtualArgSpec.floatDestSel := '0';                
-        
-        res(i).virtualArgSpec.intArgSel(0) := res(i).virtualArgSpec.intArgSel(2);
-        res(i).virtualArgSpec.intArgSel(1) := '0';
-        res(i).virtualArgSpec.intArgSel(2) := '0';                
-        res(i).virtualArgSpec.floatArgSel(0) := '0';
-        res(i).virtualArgSpec.floatArgSel(1) := '0';                                    
-        res(i).virtualArgSpec.floatArgSel(2) := '0';                
-        
-        res(i).virtualArgSpec.args(0) := res(i).virtualArgSpec.args(2);
-        res(i).virtualArgSpec.args(1) := (others => '0');
-        res(i).virtualArgSpec.args(2) := (others => '0');
+    for i in 0 to PIPE_WIDTH-1 loop    
+        res(i).ins.constantArgs.immSel := '0';
 
-        res(i).physicalArgSpec.intDestSel := '0';
-        res(i).physicalArgSpec.floatDestSel := '0';                
+        res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+        res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;               
         
-        res(i).physicalArgSpec.intArgSel(0) := res(i).physicalArgSpec.intArgSel(2);
-        res(i).physicalArgSpec.intArgSel(1) := '0';                
-        res(i).physicalArgSpec.intArgSel(2) := '0';                
-        res(i).physicalArgSpec.floatArgSel(0) := '0';--res(i).virtualArgSpec.floatArgSel(2);
-        res(i).physicalArgSpec.floatArgSel(1) := '0';                                    
-        res(i).physicalArgSpec.floatArgSel(2) := '0';                
-        
-        res(i).physicalArgSpec.args(0) := res(i).physicalArgSpec.args(2);
-        res(i).physicalArgSpec.args(1) := (others => '0');                                              
-        res(i).physicalArgSpec.args(2) := (others => '0');                                              
+        res(i).ins.virtualArgSpec.intArgSel(0) := insVec(i).ins.virtualArgSpec.intArgSel(2);
+        res(i).ins.virtualArgSpec.args(0) := insVec(i).ins.virtualArgSpec.args(2);
+
+        res(i).ins.physicalArgSpec.intArgSel(0) := insVec(i).ins.physicalArgSpec.intArgSel(2);
+        res(i).ins.physicalArgSpec.args(0) := insVec(i).ins.physicalArgSpec.args(2);                                             
     end loop;
     
     return res;
 end function;
 
 
-function prepareForStoreValueFloatIQ(insVecInt, insVecFloat: InstructionStateArray) return InstructionStateArray is
-    variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVecInt;
+function prepareForStoreValueFloatIQ(insVecFloat: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVecFloat;
 begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        --res(i).operation := (General, unknown);            
-    
-        res(i).constantArgs.immSel := '0';
+    for i in 0 to PIPE_WIDTH-1 loop    
+        res(i).ins.constantArgs.immSel := '0';
         
-        res(i).virtualArgSpec.intDestSel := '0';
-        res(i).virtualArgSpec.floatDestSel := '0';                
-        
-        res(i).virtualArgSpec.intArgSel(0) := '0';
-        res(i).virtualArgSpec.intArgSel(1) := '0';                
-        res(i).virtualArgSpec.intArgSel(2) := '0';                
-        res(i).virtualArgSpec.floatArgSel(0) := res(i).virtualArgSpec.floatArgSel(2);
-        res(i).virtualArgSpec.floatArgSel(1) := '0';                
-        res(i).virtualArgSpec.floatArgSel(2) := '0';                
-        
-        res(i).virtualArgSpec.args(0) := insVecFloat(i).virtualArgSpec.args(2);
-        res(i).virtualArgSpec.args(1) := (others => '0');
-        res(i).virtualArgSpec.args(2) := (others => '0');
-
-
-        res(i).physicalArgSpec.intDestSel := '0';
-        res(i).physicalArgSpec.floatDestSel := '0';                
-        
-        res(i).physicalArgSpec.intArgSel(0) := '0';
-        res(i).physicalArgSpec.intArgSel(1) := '0';                
-        res(i).physicalArgSpec.intArgSel(2) := '0';                
-        res(i).physicalArgSpec.floatArgSel(0) := res(i).physicalArgSpec.floatArgSel(2);
-        res(i).physicalArgSpec.floatArgSel(1) := '0';                
-        res(i).physicalArgSpec.floatArgSel(2) := '0';                
-        
-        res(i).physicalArgSpec.args(0) := insVecFloat(i).physicalArgSpec.args(2);
-        res(i).physicalArgSpec.args(1) := (others => '0');                                              
-        res(i).physicalArgSpec.args(2) := (others => '0');                                              
+        res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+        res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;
+              
+        res(i).ins.virtualArgSpec.floatArgSel(0) := insVecFloat(i).ins.virtualArgSpec.floatArgSel(2);
+        res(i).ins.virtualArgSpec.args(0) := insVecFloat(i).ins.virtualArgSpec.args(2);
+               
+        res(i).ins.physicalArgSpec.floatArgSel(0) := insVecFloat(i).ins.physicalArgSpec.floatArgSel(2);
+        res(i).ins.physicalArgSpec.args(0) := insVecFloat(i).ins.physicalArgSpec.args(2);                                            
     end loop;
     
     return res;
 end function;
 
 
-function removeArg2(insVec: InstructionStateArray) return InstructionStateArray is
-    variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
+--function removeArg2(insVec: InstructionStateArray) return InstructionStateArray is
+--    variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
+--begin
+--    for i in 0 to PIPE_WIDTH-1 loop
+--        res(i).virtualArgSpec.intArgSel(2) := '0';
+--        res(i).virtualArgSpec.args(2) := (others => '0');
+        
+--        res(i).physicalArgSpec.intArgSel(2) := '0';
+--        res(i).physicalArgSpec.args(2) := (others => '0');                                                
+--    end loop;
+    
+--    return res;
+--end function;
+
+function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i).virtualArgSpec.intArgSel(2) := '0';
-        res(i).virtualArgSpec.args(2) := (others => '0');
+        res(i).ins.virtualArgSpec.intArgSel(2) := '0';
+        res(i).ins.virtualArgSpec.args(2) := (others => '0');
         
-        res(i).physicalArgSpec.intArgSel(2) := '0';
-        res(i).physicalArgSpec.args(2) := (others => '0');                                                
+        res(i).ins.physicalArgSpec.intArgSel(2) := '0';
+        res(i).ins.physicalArgSpec.args(2) := (others => '0');                                                
     end loop;
     
     return res;
 end function;
+
+
+function removeArg2(ria: RenameInfoArray) return RenameInfoArray is
+    variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := ria;
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i).sourceSel(2) := '0';
+        res(i).sourceConst(2) := '1'; 
+        res(i).virtualSources(2) := (others => '0');
+        res(i).physicalSources(2) := (others => '0');
+        res(i).physicalSourcesStable(2) := (others => '0');
+        res(i).physicalSourcesNew(2) := (others => '0'); -- sources in case of of group dependency        
+        res(i).deps(2) := (others => '0');
+        res(i).sourcesStable(2) := '1'; -- true if source is from stable map - always ready
+        res(i).sourcesNew(2) := '0';   -- true if group dependency
+        res(i).sourcesReady(2) := '0'; -- ready as read from ReadyTable based on NewestMap 
+    end loop;
+    
+    return res;
+end function;
+
+function useStoreArg2(ria: RenameInfoArray) return RenameInfoArray is
+    variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := ria;
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+            res(i).destSel := '0';
+            res(i).destSelFP := '0';
+            res(i).physicalDest := (others => '0');
+    
+        res(i).sourceSel(0) := res(i).sourceSel(2);
+        res(i).sourceConst(0) := res(i).sourceConst(2); 
+        res(i).virtualSources(0) := res(i).virtualSources(2);
+        res(i).physicalSources(0) := res(i).physicalSources(2);
+        res(i).physicalSourcesStable(0) := res(i).physicalSourcesStable(2);
+        res(i).physicalSourcesNew(0) := res(i).physicalSourcesNew(2); -- sources in case of of group dependency        
+        res(i).deps(0) := res(i).deps(2);
+        res(i).sourcesStable(0) := res(i).sourcesStable(2); -- true if source is from stable map - always ready
+        res(i).sourcesNew(0) := res(i).sourcesNew(2);   -- true if group dependency
+        res(i).sourcesReady(0) := res(i).sourcesReady(2); -- ready as read from ReadyTable based on NewestMap
+
+        res(i).sourceSel(1) := '0';
+        res(i).sourceConst(1) := '1'; 
+        res(i).virtualSources(1) := (others => '0');
+        res(i).physicalSources(1) := (others => '0');
+        res(i).physicalSourcesStable(1) := (others => '0');
+        res(i).physicalSourcesNew(1) := (others => '0'); -- sources in case of of group dependency        
+        res(i).deps(1) := (others => '0');
+        res(i).sourcesStable(1) := '1'; -- true if source is from stable map - always ready
+        res(i).sourcesNew(1) := '0';   -- true if group dependency
+        res(i).sourcesReady(1) := '0'; -- ready as read from ReadyTable based on NewestMap
+        
+        res(i).sourceSel(2) := '0';
+        res(i).sourceConst(2) := '1'; 
+        res(i).virtualSources(2) := (others => '0');
+        res(i).physicalSources(2) := (others => '0');
+        res(i).physicalSourcesStable(2) := (others => '0');
+        res(i).physicalSourcesNew(2) := (others => '0'); -- sources in case of of group dependency        
+        res(i).deps(2) := (others => '0');
+        res(i).sourcesStable(2) := '1'; -- true if source is from stable map - always ready
+        res(i).sourcesNew(2) := '0';   -- true if group dependency
+        res(i).sourcesReady(2) := '0'; -- ready as read from ReadyTable based on NewestMap        
+    end loop;
+    
+    return res;
+end function;
+
+
+function updateArgStates(riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_logic_vector) return std_logic_vector is
+    variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(3*i to 3*i + 2) := ((riaInt(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaInt(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
+    end loop;
+    return res;
+end function;
+
+function updateArgStatesFloat(riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_logic_vector) return std_logic_vector is
+    variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(3*i to 3*i + 2) := ((riaFloat(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaFloat(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
+    end loop;
+    return res;
+end function;
+
 
 function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(insArr'range) := insArr;
@@ -1045,6 +1195,21 @@ begin
     res.ins.physicalArgSpec.dest := insS0.ins.physicalArgSpec.dest or insS1.ins.physicalArgSpec.dest;
     return res;
 end function;
+        
+        
+function replaceDests(insVec: InstructionSlotArray; ria: RenameInfoArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(insVec'range) := insVec;
+begin
+    for i in res'range loop
+         res(i).ins.physicalArgSpec.intDestSel := ria(i).destSel and not ria(i).destSelFP;
+         res(i).ins.physicalArgSpec.floatDestSel := ria(i).destSelFP;
+         
+         res(i).ins.physicalArgSpec.dest := ria(i).physicalDest;
+    end loop;
+    return res;
+end function;
+        
+        
         
 function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := content;
@@ -1094,6 +1259,8 @@ function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray
 begin
     for i in res'range loop
         res(i).ins.specificOperation.memory := MemOp'val(slv2u(res(i).ins.specificOperation.bits));
+        
+        --    res(i).ins.constantArgs.immSel := '1';
     end loop;
 
     return res;
@@ -1260,6 +1427,23 @@ begin
     res.value := isl.ins.result;    
     return res;
 end function;
+
+
+    function setPhysSources(insVec: InstructionSlotArray;
+                            newPhysSources: PhysNameArray;
+                            newestSelector, depVec: std_logic_vector)
+    return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+    begin
+        -- Assign src registers
+        for i in 0 to PIPE_WIDTH-1 loop                    
+            res(i).ins.physicalArgSpec.args(0) := newPhysSources(3*i+0);
+            res(i).ins.physicalArgSpec.args(1) := newPhysSources(3*i+1);
+            res(i).ins.physicalArgSpec.args(2) := newPhysSources(3*i+2);                 
+        end loop;
+
+        return res;
+    end function;
 
 
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
