@@ -60,10 +60,13 @@ architecture Behavioral of IssueQueue is
 
     signal newArr_T: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
               
-    signal queueContentExt_T: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
-    signal fullMaskExt_T: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
+    signal queueContent: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
+        signal queueContent_NS: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
 
-	signal anyReadyFull_T, anyReadyLive_T, sends_T, sendingKilled_T, isSent, isSent2, sentKilled_T, isEmpty: std_logic := '0';
+    signal fullMask: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
+        signal fullMask_NS: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
+
+	signal anyReadyFull, anyReadyLive, sends, sendingKilled, isSent, isSent2, sentKilled, isEmpty: std_logic := '0';
     
     signal selectedSlot: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
 	signal dispatchDataNew_T: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
@@ -110,67 +113,67 @@ begin
     newArr_T <= assignStaticPtr(newArr, S_firstFree);
     
     MANAGEMENT: block
-        signal trialMask, readyMaskLiveExt_T, killMaskExt_T, readyMaskAllExt_T, selMaskExt_T: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
-        signal queueContentExtRR_T, queueContentExtNext_T, queueContentUpdatedExt_T, queueContentUpdatedSelExt_T: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
-        signal fmaExt_T: ForwardingMatchesArray(0 to IQ_SIZE + PIPE_WIDTH -1) := (others => DEFAULT_FORWARDING_MATCHES);
-        signal controlSigs_T: SlotControlArray(0 to QUEUE_SIZE_EXT-1);
+        signal trialMask, readyMaskLive, killMask, readyMaskAll, selMask: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
+        signal queueContentRR, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
+        signal fma: ForwardingMatchesArray(0 to IQ_SIZE + PIPE_WIDTH -1) := (others => DEFAULT_FORWARDING_MATCHES);
+        signal controlSigs: SlotControlArray(0 to QUEUE_SIZE_EXT-1);
     begin
     
         QUEUE_SYNCHRONOUS: process(clk)
         begin
             if rising_edge(clk) then        
-                queueContentExt_T <= queueContentExtNext_T;
+                queueContent <= queueContentNext;
     
-                sentKilled_T <= sendingKilled_T;            
-                isSent <= sends_T;
+                sentKilled <= sendingKilled;            
+                isSent <= sends;
                 isSent2 <= isSent;
     
             end if;
         end process;
 
-        fmaExt_T <= findForwardingMatchesArray(queueContentExt_T, fni);
+        fma <= findForwardingMatchesArray(queueContent, fni);
     
-        controlSigs_T <= getControlSignals(queueContentUpdatedSelExt_T, events);               
+        controlSigs <= getControlSignals(queueContentUpdatedSel, events);               
     
         -- Vector signals
-        killMaskExt_T <= getKilledVec(controlSigs_T);
-        trialMask <= getTrialVec(controlSigs_T);
-        fullMaskExt_T <= getFullVec(controlSigs_T);
-        readyMaskAllExt_T <= getReadyVec(controlSigs_T);
-        readyMaskLiveExt_T <= getReadyLiveVec(controlSigs_T);        
-        selMaskExt_T <= getSelectedVec(controlSigs_T);
+        killMask <= getKilledVec(controlSigs);
+        trialMask <= getTrialVec(controlSigs);
+        fullMask <= getFullVec(controlSigs);
+        readyMaskAll <= getReadyVec(controlSigs);
+        readyMaskLive <= getReadyLiveVec(controlSigs);        
+        selMask <= getSelectedVec(controlSigs);
     
         -- Scalar signals
-        anyReadyLive_T <= isNonzero(readyMaskLiveExt_T);
-        anyReadyFull_T <= isNonzero(readyMaskAllExt_T);
-        sends_T <= anyReadyFull_T and nextAccepting;
-        sendingKilled_T <= isNonzero(killMaskExt_T and selMaskExt_T);
+        anyReadyLive <= isNonzero(readyMaskLive);
+        anyReadyFull <= isNonzero(readyMaskAll);
+        sends <= anyReadyFull and nextAccepting;
+        sendingKilled <= isNonzero(killMask and selMask);
     
-        isEmpty <= not isNonzero(fullMaskExt_T);
+        isEmpty <= not isNonzero(fullMask);
     
         -- Content manipulation
-        queueContentExtRR_T <= updateRenameIndex(queueContentExt_T);
+        queueContentRR <= updateRenameIndex(queueContent);
         
-        queueContentUpdatedExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, false, DONT_MATCH1, FORWARDING_D, FORWARDING_D);
-        queueContentUpdatedSelExt_T <= updateSchedulerArray(queueContentExtRR_T, fni, fmaExt_T, false, true, DONT_MATCH1, FORWARDING, FORWARDING1);
+        queueContentUpdated <= updateSchedulerArray(queueContentRR, fni, fma, false, false, DONT_MATCH1, FORWARDING_D, FORWARDING_D);
+        queueContentUpdatedSel <= updateSchedulerArray(queueContentRR, fni, fma, false, true, DONT_MATCH1, FORWARDING, FORWARDING1);
     
-        queueContentExtNext_T <= iqNext_N2(queueContentUpdatedExt_T, newArr_T, prevSendingOK, sends_T, killMaskExt_T, trialMask, selMaskExt_T, readyRegFlags, 0);
+        queueContentNext <= iqNext_N2(queueContentUpdated, newArr_T, prevSendingOK, sends, killMask, trialMask, selMask, readyRegFlags, 0);
     
-        selectedSlot <= prioSelect16(queueContentUpdatedSelExt_T, readyMaskAllExt_T);
+        selectedSlot <= prioSelect16(queueContentUpdatedSel, readyMaskAll);
     
     end block;
     
     dispatchDataNew_T <= getSchedEntrySlot(selectedSlot);
 
     -- Output signals
-	schedulerOut <= TMP_restoreState(sends_T, dispatchDataNew_T.ins, dispatchDataNew_T.state);
+	schedulerOut <= TMP_restoreState(sends, dispatchDataNew_T.ins, dispatchDataNew_T.state);
 
-	acceptingOut <= not isNonzero(fullMaskExt_T(4 to 7));
-	acceptingMore <= not isNonzero(fullMaskExt_T(0 to 7));
+	acceptingOut <= not isNonzero(fullMask(4 to 7));
+	acceptingMore <= not isNonzero(fullMask(0 to 7));
 
-    outputSignals <=   (sending => sends_T,
-                        cancelled => sentKilled_T,
-                        ready => anyReadyLive_T,
+    outputSignals <=   (sending => sends,
+                        cancelled => sentKilled,
+                        ready => anyReadyLive,
                         empty => isEmpty);
 
 
