@@ -149,6 +149,15 @@ function iqNext_N2(queueContent: SchedulerInfoArray;
                   TEST_MODE: natural)
 return SchedulerInfoArray;
 
+    function iqNext_NS(queueContent: SchedulerInfoArray;
+                      inputData: SchedulerInfoArray;           
+                      prevSending, sends: std_logic;
+                      killMask, trialMask, selMask: std_logic_vector;
+                      rrf: std_logic_vector;
+                      TEST_MODE: natural)
+    return SchedulerInfoArray;
+
+
 function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector;
 
 function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;-- fnm: ForwardingMap;
@@ -924,6 +933,71 @@ end function;
                 return res;
     end function;
     
+
+        
+            function iqNext_NS(queueContent: SchedulerInfoArray;
+                              inputData: SchedulerInfoArray;               
+                              prevSending, sends: std_logic;
+                              killMask, trialMask, selMask: std_logic_vector;
+                              rrf: std_logic_vector;
+                              TEST_MODE: natural
+                                     )
+            return SchedulerInfoArray is
+                constant LEN: natural := queueContent'length;
+                constant MAIN_LEN: natural := queueContent'length - PIPE_WIDTH;
+                variable res: SchedulerInfoArray(queueContent'range) := queueContent;
+                variable newArr: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputData;                
+                variable fullMask, activeMask, fullMaskNew: std_logic_vector(queueContent'range) := extractFullMask(queueContent);
+                variable cnt: natural := 0;
+                
+                variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+            begin                
+                    for i in 0 to LEN-1 loop
+                        if queueContent(i).dynamic.issued = '1' then       
+                            res(i).dynamic.full := '0';
+                        end if;
+                        
+                        if (selMask(i) and sends) = '1' then
+                            res(i).dynamic.issued := '1';
+                            res(i).dynamic.active := '0';
+                        end if;
+                    end loop;    
+        
+                    for i in 0 to LEN-1 loop
+                        if killMask(i) = '1' then
+                            res(i).dynamic.full := '0';
+                            res(i).dynamic.active := '0';
+                         end if;
+                         
+                         if trialMask(i) = '1' then
+                             res(i).dynamic.trial := '1';
+                         end if;
+                    end loop;
+            
+                    fullMask := extractFullMask(res);
+    
+                for j in 0 to PIPE_WIDTH-1 loop
+                    rm(3*j to 3*j + 2) := (others => inputData(j).dynamic.full); 
+                end loop; 
+            
+                rrfFull := rm and rrf;
+                newArr := restoreRenameIndex(updateRR(inputData, rrfFull));
+            
+                if prevSending = '1' then
+                    for i in 0 to LEN-1 loop
+                        if fullMask(i) /= '1' then
+                            res(i) := newArr(cnt);
+                            cnt := cnt + 1;
+                            if cnt = PIPE_WIDTH then
+                                exit;
+                            end if;
+                        end if;
+                    end loop;
+                end if;
+                
+                return res;
+            end function;
+
     
 function getWakeupStructStatic(arg: natural; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray; selection: boolean)
 return WakeupStruct is
