@@ -63,7 +63,7 @@ architecture Behavioral of IssueQueue is
     signal queueContent: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
         
         type slv2D is array(natural range <>, natural range <>) of std_logic;
-        signal TMP_ageMatrix, TMP_ageMatrixNext: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := (others => (others => '0'));
+        signal TMP_ageMatrix, TMP_ageMatrixNext, selMatrix: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := (others => (others => '0'));
         signal TMP_insertionLocs: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
         function TMP_getNewLocs(fullMask: std_logic_vector) return slv2D is
@@ -120,13 +120,45 @@ architecture Behavioral of IssueQueue is
             return res;
         end function;
 
+    function TMP_getSelMask(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector is
+        variable res: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := readyMask;--(others => '0');
+        variable si: SchedulerInfo;
+    begin
+        for i in 0 to QUEUE_SIZE_EXT-1 loop
+            for j in 0 to QUEUE_SIZE_EXT-1 loop
+                if j = i then
+                    next;
+                end if;
+                
+                if (readyMask(j) and ageMatrix(i, j)) = '1' then
+                    res(i) := '0';
+                    exit;
+                end if;
+            end loop;
+        end loop;
+             
+        return res;
+    end function;
+
+    function TMP_getSelMatrix(readyMask: std_logic_vector; ageMatrix: slv2D) return slv2D is
+        variable res: slv2D(0 to QUEUE_SIZE_EXT-1,0 to QUEUE_SIZE_EXT-1) := (others => (others => '0'));
+        variable si: SchedulerInfo;
+    begin
+        for i in 0 to QUEUE_SIZE_EXT-1 loop
+            for j in 0 to QUEUE_SIZE_EXT-1 loop
+                res(i, j) := readyMask(j) and ageMatrix(i, j);
+            end loop;
+        end loop;
+             
+        return res;
+    end function;
 
         signal queueContent_NS, queueContentRR_NS, queueContentNext_NS, queueContentUpdated_NS, queueContentUpdatedSel_NS:
             SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
 
         signal fma_NS: ForwardingMatchesArray(0 to IQ_SIZE + PIPE_WIDTH -1) := (others => DEFAULT_FORWARDING_MATCHES);
 
-        signal fullMask_NS, trialMask_NS, readyMaskLive_NS, killMask_NS, readyMaskAll_NS, selMask_NS: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
+        signal fullMask_NS, trialMask_NS, readyMaskLive_NS, killMask_NS, readyMaskAll_NS, selMask_NS, selMask_TrNS: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
         signal controlSigs_NS: SlotControlArray(0 to QUEUE_SIZE_EXT-1);
     
         signal selectedSlot_NS: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
@@ -138,6 +170,9 @@ architecture Behavioral of IssueQueue is
     
     signal selectedSlot: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
 	signal dispatchDataNew_T: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+
+    	signal dispatchDataNew_NS: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+
 
     signal S_firstFree: natural := 0;       
     signal S_selectedStatic, S_selectedStaticRestored: StaticInfo := DEFAULT_STATIC_INFO;
@@ -206,6 +241,8 @@ architecture Behavioral of IssueQueue is
 begin
     newArr_T <= assignStaticPtr(newArr, S_firstFree);
     
+        ch0 <= bool2std(selMask_TrNS = selMask_NS);
+    
     MANAGEMENT: block
         signal trialMask, readyMaskLive, killMask, readyMaskAll, selMask: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
         signal queueContentRR, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
@@ -257,9 +294,12 @@ begin
             readyMaskLive_NS <= getReadyLiveVec(controlSigs_NS);
             
             -- TMP: find by tag where the op is corresponding to selection from shifting queue      
-            selMask_NS <= --getSelectedVec(controlSigs_NS);
+            selMask_TrNS <= --getSelectedVec(controlSigs_NS);
                             TMP_trSelMask(selMask, queueContent, queueContent_NS);
-                
+            selMask_NS <= TMP_getSelMask(readyMaskAll_NS, TMP_ageMatrix);
+            
+            selMatrix <= TMP_getSelMatrix(readyMaskAll_NS, TMP_ageMatrix);
+            
         isEmpty <= not isNonzero(fullMask);
     
         -- Content manipulation
@@ -274,7 +314,7 @@ begin
             TMP_ageMatrixNext <= TMP_updateAgeMatrix(TMP_ageMatrix, TMP_insertionLocs, fullMask_NS);
             TMP_insertionLocs <= TMP_getNewLocs(fullMask_NS);
 
-            queueContentRR_NS <= updateRenameIndex(queueContent_NS);
+            queueContentRR_NS <= (queueContent_NS);
 
             queueContentUpdated_NS <= updateSchedulerArray(queueContentRR_NS, fni, fma_NS, false, false, DONT_MATCH1, FORWARDING_D, FORWARDING_D);
             queueContentUpdatedSel_NS <= updateSchedulerArray(queueContentRR_NS, fni, fma_NS, false, true, DONT_MATCH1, FORWARDING, FORWARDING1);

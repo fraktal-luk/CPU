@@ -947,7 +947,7 @@ end function;
                 constant MAIN_LEN: natural := queueContent'length - PIPE_WIDTH;
                 variable res: SchedulerInfoArray(queueContent'range) := queueContent;
                 variable newArr: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputData;                
-                variable fullMask, activeMask, fullMaskNew: std_logic_vector(queueContent'range) := extractFullMask(queueContent);
+                variable oldFullMask, fullMask, activeMask, fullMaskNew: std_logic_vector(queueContent'range) := extractFullMask(queueContent);
                 variable cnt: natural := 0;
                 
                 variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
@@ -985,7 +985,7 @@ end function;
             
                 if prevSending = '1' then
                     for i in 0 to LEN-1 loop
-                        if fullMask(i) /= '1' then
+                        if oldFullMask(i) /= '1' then
                             res(i) := newArr(cnt);
                             cnt := cnt + 1;
                             if cnt = PIPE_WIDTH then
