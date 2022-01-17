@@ -69,7 +69,7 @@ architecture Behavioral of Core is
             lsbrAccepting, lsbrAcceptingMore,
             issueQueuesAccepting, issueQueuesAcceptingMore, renameSendingBr, stopRename,
             queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
-            robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
+            robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,  iqAcceptingI0_NS, iqAcceptingMoreI0_NS,
             sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, committedSending: std_logic := '0';
 
     signal frontDataLastLiving, TMP_frontDataSpMasked,
@@ -383,8 +383,8 @@ begin
                 
     begin
     
-            ch0 <= bool2std(newIntSources_T = newIntSources);
-            ch1 <= bool2std(newFloatSources_T = newFloatSources);
+           -- ch0 <= bool2std(newIntSources_T = newIntSources);
+            --ch1 <= bool2std(newFloatSources_T = newFloatSources);
     
         --newIntSources_T <= work.LogicRenaming.getPhysicalArgs(renamedDataLivingRe);
         --newFloatSources_T <= work.LogicRenaming.getPhysicalArgs(renamedDataLivingFloatRe);
@@ -417,7 +417,7 @@ begin
                 FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING1(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
-                   -- ,NONSHIFT => true
+                    ,NONSHIFT => true
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -436,6 +436,42 @@ begin
                 schedulerOut => slotSelI0,
                 outputSignals => outSigsI0
             );
+
+                            --ch0 <= 
+
+                        ch1 <= bool2std(iqAcceptingI0_NS = iqAcceptingI0);
+                        ch2 <= bool2std(iqAcceptingMoreI0_NS = iqAcceptingMoreI0);
+                            
+                            ch3 <= not ch1 and renamedSending;            
+                            ch4 <= iqAcceptingMoreI0_NS and not issueQueuesAcceptingMore;
+            
+--                    IQUEUE_I0_NS: entity work.IssueQueue(Behavioral)
+--                    generic map(
+--                        IQ_SIZE => IQ_SIZE_I0,
+--                        FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
+--                        FORWARDING1(0 to 2) => FORWARDING_MODES_INT(0 to 2),
+--                        FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
+--                           ,NONSHIFT => true
+--                    )
+--                    port map(
+--                        clk => clk, reset => '0', en => '0',
+                
+--                        --acceptingOut => open,
+--                        --acceptingMore => open,
+--                                           --     acceptingOut => iqAcceptingI0,
+--                                           --     acceptingMore => iqAcceptingMoreI0,
+                        
+--                        prevSendingOK => renamedSending,
+--                        newArr => schedInfoUpdatedA,            
+--                            newArr_Alt => NEW_ARR_DUMMY,
+--                            newArrOut => open,
+--                        fni => fni,
+--                        readyRegFlags => readyRegFlagsInt,
+--                        nextAccepting => allowIssueI0,
+--                        events => events,            
+--                        schedulerOut => open,
+--                        outputSignals => open
+--                    );
             
                 ISSUE_STAGE_I0_NEW: entity work.IssueStage
                 generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
