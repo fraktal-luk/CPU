@@ -169,7 +169,7 @@ begin
                 isAlmostFull <= cmpGtU(nFullNext, ROB_SIZE-2);
             	
             	-- TODO: check
-                outputEmpty <= bool2std(startPtrNext = endPtr) or lateEventSignal;                
+                outputEmpty <= bool2std(startPtrLongNext = endPtrLong) or lateEventSignal;
                 
                 if lateEventSignal = '1' or execEvent = '1' then
                     recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
