@@ -258,7 +258,7 @@ begin
                       else  add(nFull, sub(nIn, nOut));
 
         nIn <= i2slv(countOnes(extractFullMask(newArr_T)), SMALL_NUMBER_SIZE) when prevSendingOK = '1' else (others => '0'); 
-        nOut <= i2slv(1, SMALL_NUMBER_SIZE) when (isSent and not sentKilled) = '1' else (others => '0');
+        nOut <= i2slv(1, SMALL_NUMBER_SIZE) when (isSent_NS and not sentKilled_NS) = '1' else (others => '0');
     
     MANAGEMENT: block
         signal trialMask, readyMaskLive, killMask, readyMaskAll, selMask: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
@@ -270,7 +270,10 @@ begin
         QUEUE_SYNCHRONOUS: process(clk)
         begin
             if rising_edge(clk) then        
-                queueContent <= queueContentNext;
+                if not NONSHIFT then
+                    queueContent <= queueContentNext;
+                end if;
+                
                     queueContent_NS <= queueContentNext_NS;
                     TMP_ageMatrix <= TMP_ageMatrixNext;
                         
@@ -361,7 +364,7 @@ begin
             queueContentUpdated_NS <= updateSchedulerArray(queueContentRR_NS, fni, fma_NS, false, false, DONT_MATCH1, FORWARDING_D, FORWARDING_D);
             queueContentUpdatedSel_NS <= updateSchedulerArray(queueContentRR_NS, fni, fma_NS, false, true, DONT_MATCH1, FORWARDING, FORWARDING1);
     
-            queueContentNext_NS <= iqNext_NS(queueContentUpdated_NS, newArr_T, prevSendingOK, sends, killMask_NS, trialMask_NS, selMask_NS, readyRegFlags, 0);
+            queueContentNext_NS <= iqNext_NS(queueContentUpdated_NS, newArr_T, prevSendingOK, sends_NS, killMask_NS, trialMask_NS, selMask_NS, readyRegFlags, 0);
     
         selectedSlot <= prioSelect16(queueContentUpdatedSel, readyMaskAll);
             selectedSlot_NS <= prioSelect16(queueContentUpdatedSel_NS, selMask_NS);
