@@ -129,6 +129,9 @@ function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector;
 
 function getSchedEntrySlot(info: SchedulerInfo) return SchedulerEntrySlot;
 
+function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
+
+
 function TMP_restoreState(full: std_logic; ins: InstructionState; st: SchedulerState) return SchedulerEntrySlot;
 
 function TMP_prepareDispatchSlot(input: SchedulerEntrySlot; prevSending: std_logic) return SchedulerEntrySlot;
@@ -1241,5 +1244,66 @@ begin
    end loop;
    return res;
 end function;
+
+function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo is
+    variable res: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+begin
+
+    if a.static.operation.subpipe /= None then
+        res.static.operation.subpipe := a.static.operation.subpipe;  
+    else
+        res.static.operation.subpipe := b.static.operation.subpipe;
+    end if;
+    res.static.operation.bits := a.static.operation.bits or b.static.operation.bits;
+    res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
+    res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
+    res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
+
+    res.static.branchIns := a.static.branchIns or b.static.branchIns;
+    res.static.bqPointer := a.static.bqPointer or b.static.bqPointer;--: SmallNumber;
+    res.static.sqPointer := a.static.sqPointer or b.static.sqPointer;--: SmallNumber;
+    res.static.lqPointer := a.static.lqPointer or b.static.lqPointer;-- SmallNumber;        
+    res.static.bqPointerSeq := a.static.bqPointerSeq or b.static.bqPointerSeq;--: SmallNumber;
+    
+    res.static.immediate :=  a.static.immediate or b.static.immediate;
+    res.static.immValue :=  a.static.immValue or b.static.immValue;
+    res.static.zero :=  a.static.zero or b.static.zero;
+    
+
+    res.dynamic.full := a.dynamic.full or b.dynamic.full;
+    res.dynamic.active := a.dynamic.active or b.dynamic.active;
+    res.dynamic.issued := a.dynamic.issued or b.dynamic.issued;
+    res.dynamic.trial := a.dynamic.trial or b.dynamic.trial;
+    
+    res.dynamic.renameIndex := a.dynamic.renameIndex or b.dynamic.renameIndex;
+
+    --    
+    res.dynamic.argSpec.intDestSel := a.dynamic.argSpec.intDestSel or b.dynamic.argSpec.intDestSel;
+    res.dynamic.argSpec.floatDestSel := a.dynamic.argSpec.floatDestSel or b.dynamic.argSpec.floatDestSel;
+    res.dynamic.argSpec.dest := a.dynamic.argSpec.dest or b.dynamic.argSpec.dest;
+    res.dynamic.argSpec.intArgSel := a.dynamic.argSpec.intArgSel or b.dynamic.argSpec.intArgSel;
+    res.dynamic.argSpec.floatArgSel := a.dynamic.argSpec.floatArgSel or b.dynamic.argSpec.floatArgSel;
+    
+    for i in 0 to 2 loop
+        res.dynamic.argSpec.args(i) := a.dynamic.argSpec.args(i) or b.dynamic.argSpec.args(i);
+    end loop;
+
+   
+    res.dynamic.staticPtr := a.dynamic.staticPtr or b.dynamic.staticPtr;
+    
+    res.dynamic.stored := a.dynamic.stored or b.dynamic.stored;
+    res.dynamic.missing := a.dynamic.missing or b.dynamic.missing;
+    res.dynamic.readyNow := a.dynamic.readyNow or b.dynamic.readyNow;
+    res.dynamic.readyNext := a.dynamic.readyNext or b.dynamic.readyNext;
+    res.dynamic.readyM2 := a.dynamic.readyM2 or b.dynamic.readyM2;
+    
+    for i in 0 to 2 loop
+        res.dynamic.argLocsPipe(i) := a.dynamic.argLocsPipe(i) or b.dynamic.argLocsPipe(i);
+        res.dynamic.argSrc(i) := a.dynamic.argSrc(i) or b.dynamic.argSrc(i);   
+    end loop;
+    
+    return res;
+end function;
+
 
 end LogicIssue;

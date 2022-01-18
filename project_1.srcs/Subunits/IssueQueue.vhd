@@ -27,7 +27,7 @@ entity IssueQueue is
 		FORWARDING: ForwardingModeArray := (0 => (-100, false));  -- Can be used immediately
 		FORWARDING1: ForwardingModeArray := (0 => (-100, false));
 		FORWARDING_D: ForwardingModeArray := (0 => (-100, false)); -- Can be used with 1 cycle delay
-		NONSHIFT: boolean := false
+		NONSHIFT: boolean := true --false
 	);
 	port(
 		clk: in std_logic;
@@ -125,20 +125,35 @@ architecture Behavioral of IssueQueue is
         end function;
 
     function TMP_getSelMask(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector is
-        variable res: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := readyMask;--(others => '0');
-        variable si: SchedulerInfo;
+        variable res: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := --readyMask;--
+                                                                 (others => '0');
+        variable row: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
     begin
         for i in 0 to QUEUE_SIZE_EXT-1 loop
             for j in 0 to QUEUE_SIZE_EXT-1 loop
-                if j = i then
-                    next;
-                end if;
-                
-                if (readyMask(j) and ageMatrix(i, j)) = '1' then
-                    res(i) := '0';
-                    exit;
-                end if;
+                row(j) := readyMask(j) and ageMatrix(i, j);
             end loop;
+            row(i) := '0';
+
+            if isNonzero(row(0 to QUEUE_SIZE_EXT/2 - 1)) = '1' or isNonzero(row(QUEUE_SIZE_EXT/2 to QUEUE_SIZE_EXT-1)) = '1' then
+                res(i) := '0';
+            else
+                res(i) := readyMask(i);
+            end if;
+
+--            for j in 0 to QUEUE_SIZE_EXT-1 loop
+--                if j = i then
+--                    next;
+--                end if;
+                
+                
+--                if (readyMask(j) and ageMatrix(i, j)) = '1' then
+--                    res(i) := '0';
+--                    exit;
+--                end if;
+                
+                
+--            end loop;
         end loop;
              
         return res;
@@ -165,7 +180,7 @@ architecture Behavioral of IssueQueue is
         signal fullMask_NS, trialMask_NS, readyMaskLive_NS, killMask_NS, readyMaskAll_NS, selMask_NS, selMask_TrNS: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
         signal controlSigs_NS: SlotControlArray(0 to QUEUE_SIZE_EXT-1);
     
-        signal selectedSlot_NS: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+        signal selectedSlot_NS, selectedSlot_NS_T: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
 
 
     signal fullMask: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
@@ -245,6 +260,31 @@ architecture Behavioral of IssueQueue is
         return res;
     end function;
 
+    function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return SchedulerInfo is
+        variable res, a, b: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+        variable maskedQueue: SchedulerInfoArray(inputElems'range) := (others => DEFAULT_SCHEDULER_INFO);
+    begin
+        for i in 0 to QUEUE_SIZE_EXT-1 loop
+            if selMask(i) = '1' then
+                maskedQueue(i) := inputElems(i);
+            end if;
+        end loop;
+    
+        for i in 0 to QUEUE_SIZE_EXT/2-1 loop
+            a := orSchedEntrySlot(a, maskedQueue(i));
+            b := orSchedEntrySlot(b, maskedQueue(i + QUEUE_SIZE_EXT/2));
+        end loop;
+        
+        res := orSchedEntrySlot(a, b);
+        return res;
+    end function;
+    
+    function TMP_cmpSchedInfo(a, b: SchedulerInfo) return boolean is
+        variable bNew: SchedulerInfo := b;
+    begin
+        bNew.static.operation := a.static.operation;
+        return a = bNew;
+    end function; 
 begin
     newArr_T <= assignStaticPtr(newArr, S_firstFree);
     
@@ -367,7 +407,8 @@ begin
             queueContentNext_NS <= iqNext_NS(queueContentUpdated_NS, newArr_T, prevSendingOK, sends_NS, killMask_NS, trialMask_NS, selMask_NS, readyRegFlags, 0);
     
         selectedSlot <= prioSelect16(queueContentUpdatedSel, readyMaskAll);
-            selectedSlot_NS <= prioSelect16(queueContentUpdatedSel_NS, selMask_NS);
+            selectedSlot_NS_T <= prioSelect16(queueContentUpdatedSel_NS, selMask_NS);
+            selectedSlot_NS <= queueSelect(queueContentUpdatedSel_NS, selMask_NS);
     
     end block;
 
@@ -401,8 +442,9 @@ begin
                             empty => isEmpty_NS);
     end generate;
 
-            ch3 <= bool2std(sends = sends_NS and sentKilled = sentKilled_NS and anyReadyLive = anyReadyLive_NS and isEmpty = isEmpty_NS);
-            --ch4 <= bool2std();
+            ch3 <= bool2std(TMP_cmpSchedInfo(selectedSlot_NS_T, selectedSlot_NS));
+            ch4 <= bool2std(selectedSlot_NS_T.dynamic = selectedSlot_NS.dynamic);
+            ch5 <= bool2std(selectedSlot_NS_T.static = selectedSlot_NS.static);
     
     STATIC_PART_CONTROL: block
         type StaticMaskArray is array(0 to STATIC_ARRAY_SIZE-1) of std_logic_vector(0 to PIPE_WIDTH-1);
