@@ -119,6 +119,9 @@ type WakeupStruct is record
     match:   std_logic;         
 end record;
 
+        type slv2D is array(natural range <>, natural range <>) of std_logic;
+
+
 constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", "00000010", '0');
 type WakeupArray2D is array(natural range <>, natural range <>) of WakeupStruct;
 
@@ -157,6 +160,7 @@ return SchedulerInfoArray;
                       prevSending, sends: std_logic;
                       killMask, trialMask, selMask: std_logic_vector;
                       rrf: std_logic_vector;
+                      insertionLocs: slv2D;
                       TEST_MODE: natural)
     return SchedulerInfoArray;
 
@@ -943,6 +947,7 @@ end function;
                               prevSending, sends: std_logic;
                               killMask, trialMask, selMask: std_logic_vector;
                               rrf: std_logic_vector;
+                              insertionLocs: slv2D;
                               TEST_MODE: natural
                                      )
             return SchedulerInfoArray is
@@ -987,15 +992,34 @@ end function;
                 newArr := restoreRenameIndex(updateRR(inputData, rrfFull));
             
                 if prevSending = '1' then
-                    for i in 0 to LEN-1 loop
-                        if oldFullMask(i) /= '1' then
-                            res(i) := newArr(cnt);
-                            cnt := cnt + 1;
-                            if cnt = PIPE_WIDTH then
-                                exit;
-                            end if;
-                        end if;
-                    end loop;
+--                        if oldFullMask(0) /= '1' then
+                        
+--                            res(0 to 3) := newArr;
+--                        elsif oldFullMask(4) /= '1' then 
+--                            res(4 to 7) := newArr;
+--                        else
+--                            res(8 to 11) := newArr;
+--                        end if;
+--                        return res;
+                    
+--                    for i in 0 to LEN-1 loop
+--                        if oldFullMask(i) /= '1' then
+--                            res(i) := newArr(cnt);
+--                            cnt := cnt + 1;
+--                            if cnt = PIPE_WIDTH then
+--                                exit;
+--                            end if;
+--                        end if;
+--                    end loop;
+                    
+                        for i in 0 to PIPE_WIDTH-1 loop
+                            for k in 0 to LEN-1 loop
+                                if insertionLocs(k, i) = '1' then
+                                    res(k) := newArr(i);
+                                    exit;
+                                end if;
+                            end loop;
+                        end loop;
                 end if;
                 
                 return res;

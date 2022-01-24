@@ -64,11 +64,16 @@ architecture Behavioral of IssueQueue is
     signal queueContent: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
         
         
+        signal TMP_inputSlots: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
+        signal TMP_bankCounts: SmallNumberArray(0 to 3) := (others => (others => '0'));
+        signal TMP_inputDirs: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0'); 
+        
+
+        
         signal	   nFull_C,    nFull, nFullNext, nIn, nOut, recoveryCounter: SmallNumber := (others => '0');
 
-        type slv2D is array(natural range <>, natural range <>) of std_logic;
         signal TMP_ageMatrix, TMP_ageMatrixNext, selMatrix: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := (others => (others => '0'));
-        signal TMP_insertionLocs: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
+        signal TMP_insertionLocs, TMP_insertionLocs_Banked: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
         function TMP_getNewLocs(fullMask: std_logic_vector) return slv2D is
             variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -85,6 +90,24 @@ architecture Behavioral of IssueQueue is
             end loop;            
             return res;
         end function;
+
+            function TMP_getNewLocs_Banked(fullMask: std_logic_vector) return slv2D is
+                variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
+                variable cnt: natural := 0;
+                constant N_BANKS: natural := 4;
+                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+            begin
+               for i in 0 to BANK_SIZE-1 loop
+                   for b in 0 to N_BANKS-1 loop
+                        if fullMask(i * BANK_SIZE + b) /= '1' then
+                            res(i * BANK_SIZE + b, b) := '1';
+                            exit;
+                        end if;
+                    end loop;
+                end loop;
+          
+                return res;
+            end function;
 
         function TMP_updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D is
             variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := ageMatrix;
@@ -140,20 +163,6 @@ architecture Behavioral of IssueQueue is
             else
                 res(i) := readyMask(i);
             end if;
-
---            for j in 0 to QUEUE_SIZE_EXT-1 loop
---                if j = i then
---                    next;
---                end if;
-                
-                
---                if (readyMask(j) and ageMatrix(i, j)) = '1' then
---                    res(i) := '0';
---                    exit;
---                end if;
-                
-                
---            end loop;
         end loop;
              
         return res;
@@ -397,18 +406,23 @@ begin
 
 
             TMP_ageMatrixNext <= TMP_updateAgeMatrix(TMP_ageMatrix, TMP_insertionLocs, fullMask_NS);
+            --    TMP_ageMatrixNext_Banked <= TMP_updateAgeMatrix(TMP_ageMatrix_Banked, TMP_insertionLocs_Banked, fullMask_NS);
             TMP_insertionLocs <= TMP_getNewLocs(fullMask_NS);
+                TMP_insertionLocs_Banked <= TMP_getNewLocs(fullMask_NS);
 
             queueContentRR_NS <= (queueContent_NS);
 
             queueContentUpdated_NS <= updateSchedulerArray(queueContentRR_NS, fni, fma_NS, false, false, DONT_MATCH1, FORWARDING_D, FORWARDING_D);
             queueContentUpdatedSel_NS <= updateSchedulerArray(queueContentRR_NS, fni, fma_NS, false, true, DONT_MATCH1, FORWARDING, FORWARDING1);
     
-            queueContentNext_NS <= iqNext_NS(queueContentUpdated_NS, newArr_T, prevSendingOK, sends_NS, killMask_NS, trialMask_NS, selMask_NS, readyRegFlags, 0);
+            queueContentNext_NS <= iqNext_NS(queueContentUpdated_NS, newArr_T, prevSendingOK, sends_NS, killMask_NS, trialMask_NS, selMask_NS, readyRegFlags, 
+                                            TMP_insertionLocs,
+                                            0);
     
         selectedSlot <= prioSelect16(queueContentUpdatedSel, readyMaskAll);
             selectedSlot_NS_T <= prioSelect16(queueContentUpdatedSel_NS, selMask_NS);
             selectedSlot_NS <= queueSelect(queueContentUpdatedSel_NS, selMask_NS);
+                               -- prioSelect16(queueContentUpdatedSel_NS, readyMaskAll_NS);
     
     end block;
 
