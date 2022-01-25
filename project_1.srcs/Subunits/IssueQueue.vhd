@@ -432,8 +432,7 @@ begin
             
             
             -- TMP: find by tag where the op is corresponding to selection from shifting queue      
-            selMask_TrNS <= --getSelectedVec(controlSigs_NS);
-                            TMP_trSelMask(selMask, queueContent, queueContent_NS);
+            selMask_TrNS <= TMP_trSelMask(selMask, queueContent, queueContent_NS);
             selMask_NS <= TMP_getSelMask(readyMaskAll_NS, TMP_ageMatrix);
             
             selMatrix <= TMP_getSelMatrix(readyMaskAll_NS, TMP_ageMatrix);
@@ -449,12 +448,10 @@ begin
     
         queueContentNext <= iqNext_N2(queueContentUpdated, newArr_T, prevSendingOK, sends, killMask, trialMask, selMask, readyRegFlags, 0);
 
-
             TMP_ageMatrixNext <= TMP_updateAgeMatrix(TMP_ageMatrix, TMP_insertionLocs, fullMask_NS);
-            --    TMP_ageMatrixNext_Banked <= TMP_updateAgeMatrix(TMP_ageMatrix_Banked, TMP_insertionLocs_Banked, fullMask_NS);
-            TMP_insertionLocs <= --TMP_getNewLocs(fullMask_NS);
-                                    TMP_insertionLocs_Banked;
-                TMP_insertionLocs_Banked <= TMP_getNewLocs_Banked(fullMask_NS);
+            
+            TMP_insertionLocs <= TMP_insertionLocs_Banked;
+            TMP_insertionLocs_Banked <= TMP_getNewLocs_Banked(fullMask_NS);
 
             queueContentRR_NS <= (queueContent_NS);
 
@@ -464,12 +461,12 @@ begin
             queueContentNext_NS <= iqNext_NS(queueContentUpdated_NS, newArr_T, prevSendingOK, sends_NS, killMask_NS, trialMask_NS, selMask_NS, readyRegFlags, 
                                             TMP_insertionLocs,
                                             0);
-    
+
         selectedSlot <= prioSelect16(queueContentUpdatedSel, readyMaskAll);
+
             selectedSlot_NS_T <= prioSelect16(queueContentUpdatedSel_NS, selMask_NS);
             selectedSlot_NS <= queueSelect(queueContentUpdatedSel_NS, selMask_NS);
-                               -- prioSelect16(queueContentUpdatedSel_NS, readyMaskAll_NS);
-    
+
     end block;
 
     dispatchDataNew_T <= getSchedEntrySlot(selectedSlot);
@@ -494,10 +491,10 @@ begin
         schedulerOut <= TMP_restoreState(sends_NS, dispatchDataNew_NS.ins, dispatchDataNew_NS.state);
 
         acceptingOut <= --not isFull;
-                            TMP_accepting_Banked(TMP_bankCounts);
+                        TMP_accepting_Banked(TMP_bankCounts);
         
         acceptingMore <= --not isAlmostFull;
-                            TMP_acceptingMore_Banked(TMP_bankCounts);
+                         TMP_acceptingMore_Banked(TMP_bankCounts);
 
         outputSignals <=   (sending => sends_NS,
                             cancelled => sentKilled_NS,

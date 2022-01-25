@@ -43,7 +43,7 @@ constant FREE_LIST_SIZE: positive := 256;
 constant IMM_AS_REG: boolean := true;
 
 
-constant IQ_SIZE_I0: natural := 8;
+constant IQ_SIZE_I0: natural := 8 + 4;
 constant IQ_SIZE_M0: natural := 8;
 constant IQ_SIZE_F0: natural := 8;
 constant IQ_SIZE_INT_SV: natural := 8;

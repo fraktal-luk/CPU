@@ -798,6 +798,9 @@ end function;
                  
                  if trialMask(i) = '1' then
                      res(i).dynamic.trial := '1';
+                     
+                    else
+                        res(i).dynamic.trial := '0';
                  end if;
             end loop;
     
@@ -935,6 +938,9 @@ end function;
             
                 if prevSending = '1' then
                     res(MAIN_LEN to LEN-1) := restoreRenameIndex(updateRR(inputData, rrfFull));
+                        for i in MAIN_LEN to LEN-1 loop
+                            res(i).dynamic.trial := '1';
+                        end loop;
                 end if;
                 
                 return res;
@@ -979,7 +985,11 @@ end function;
                          
                          if trialMask(i) = '1' then
                              res(i).dynamic.trial := '1';
+                             
+                          else
+                                res(i).dynamic.trial := '0';
                          end if;
+                         
                     end loop;
             
                     fullMask := extractFullMask(res);
@@ -1016,6 +1026,7 @@ end function;
                             for k in 0 to LEN-1 loop
                                 if insertionLocs(k, i) = '1' then
                                     res(k) := newArr(i);
+                                        res(k).dynamic.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
                                     exit;
                                 end if;
                             end loop;
