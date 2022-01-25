@@ -97,16 +97,58 @@ architecture Behavioral of IssueQueue is
                 constant N_BANKS: natural := 4;
                 constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
             begin
-               for i in 0 to BANK_SIZE-1 loop
-                   for b in 0 to N_BANKS-1 loop
-                        if fullMask(i * BANK_SIZE + b) /= '1' then
-                            res(i * BANK_SIZE + b, b) := '1';
+               for b in 0 to N_BANKS-1 loop
+                   for i in 0 to BANK_SIZE-1 loop
+                        if fullMask(i * N_BANKS + b) /= '1' then
+                            res(i * N_BANKS + b, b) := '1';
                             exit;
                         end if;
                     end loop;
                 end loop;
           
                 return res;
+            end function;
+
+            function TMP_getBankCounts(fullMask: std_logic_vector) return SmallNumberArray is
+                variable res: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+                variable cnt: natural := 0;
+                constant N_BANKS: natural := 4;
+                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+            begin
+               for i in 0 to BANK_SIZE-1 loop
+                   for b in 0 to N_BANKS-1 loop
+                        if fullMask(i * N_BANKS + b) = '1' then
+                            res(b) := addInt(res(b), 1);
+                        end if;
+                    end loop;
+                end loop;            
+                return res;
+            end function;
+
+            function TMP_accepting_Banked(counts: SmallNumberArray) return std_logic is
+                variable cnt: natural := 0;
+                constant N_BANKS: natural := 4;
+                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+            begin
+               for b in 0 to N_BANKS-1 loop
+                    if slv2u(counts(b)) > BANK_SIZE - 1  then
+                        return '0';
+                    end if;
+                end loop;
+                return '1';
+            end function;
+
+            function TMP_acceptingMore_Banked(counts: SmallNumberArray) return std_logic is
+                variable cnt: natural := 0;
+                constant N_BANKS: natural := 4;
+                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+            begin
+               for b in 0 to N_BANKS-1 loop
+                    if slv2u(counts(b)) > BANK_SIZE - 2  then
+                        return '0';
+                    end if;
+                end loop;
+                return '1';
             end function;
 
         function TMP_updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D is
@@ -316,6 +358,9 @@ begin
         signal controlSigs: SlotControlArray(0 to QUEUE_SIZE_EXT-1);
     begin
     
+    
+           TMP_bankCounts <= TMP_getBankCounts(fullMask_NS);
+    
         QUEUE_SYNCHRONOUS: process(clk)
         begin
             if rising_edge(clk) then        
@@ -407,8 +452,9 @@ begin
 
             TMP_ageMatrixNext <= TMP_updateAgeMatrix(TMP_ageMatrix, TMP_insertionLocs, fullMask_NS);
             --    TMP_ageMatrixNext_Banked <= TMP_updateAgeMatrix(TMP_ageMatrix_Banked, TMP_insertionLocs_Banked, fullMask_NS);
-            TMP_insertionLocs <= TMP_getNewLocs(fullMask_NS);
-                TMP_insertionLocs_Banked <= TMP_getNewLocs(fullMask_NS);
+            TMP_insertionLocs <= --TMP_getNewLocs(fullMask_NS);
+                                    TMP_insertionLocs_Banked;
+                TMP_insertionLocs_Banked <= TMP_getNewLocs_Banked(fullMask_NS);
 
             queueContentRR_NS <= (queueContent_NS);
 
@@ -447,9 +493,12 @@ begin
         -- Output signals
         schedulerOut <= TMP_restoreState(sends_NS, dispatchDataNew_NS.ins, dispatchDataNew_NS.state);
 
-        acceptingOut <= not isFull;
-        acceptingMore <= not isAlmostFull;
-    
+        acceptingOut <= --not isFull;
+                            TMP_accepting_Banked(TMP_bankCounts);
+        
+        acceptingMore <= --not isAlmostFull;
+                            TMP_acceptingMore_Banked(TMP_bankCounts);
+
         outputSignals <=   (sending => sends_NS,
                             cancelled => sentKilled_NS,
                             ready => anyReadyLive_NS,
