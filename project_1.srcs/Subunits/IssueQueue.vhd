@@ -63,17 +63,33 @@ architecture Behavioral of IssueQueue is
 
     signal queueContent: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
         
-        
+        signal TMP_inputAdrs: SmallNumberArray(0 to 3) := (others => (others => '0'));  -- address where to write for each bank (first free slot)   
         signal TMP_inputSlots: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
         signal TMP_bankCounts: SmallNumberArray(0 to 3) := (others => (others => '0'));
-        signal TMP_inputDirs: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0'); 
-        
 
+        signal TMP_inputDirs: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0'); 
         
         signal	   nFull_C,    nFull, nFullNext, nIn, nOut, recoveryCounter: SmallNumber := (others => '0');
 
         signal TMP_ageMatrix, TMP_ageMatrixNext, selMatrix: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := (others => (others => '0'));
         signal TMP_insertionLocs, TMP_insertionLocs_Banked: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
+        
+        signal selBank, selBankAdr: natural := 0; 
+
+            signal selectedBankValues: WordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+            signal selectedValue: Word := (others => '0');
+            signal bank0, bank1, bank2, bank3: WordArray(0 to QUEUE_SIZE_EXT/4 - 1) := (others => (others => '0'));
+
+            function TMP_setImmValue(si: SchedulerInfo; val: Word) return SchedulerInfo is
+                variable res: SchedulerInfo := si;
+            begin
+                --res.static.immValue := val;
+                res.static.bqPointer := val(7 downto 0);
+                res.static.sqPointer := val(15 downto 8);
+                res.static.lqPointer := val(23 downto 16);
+                
+                return res;
+            end function;
 
         function TMP_getNewLocs(fullMask: std_logic_vector) return slv2D is
             variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -101,6 +117,24 @@ architecture Behavioral of IssueQueue is
                    for i in 0 to BANK_SIZE-1 loop
                         if fullMask(i * N_BANKS + b) /= '1' then
                             res(i * N_BANKS + b, b) := '1';
+                            exit;
+                        end if;
+                    end loop;
+                end loop;
+          
+                return res;
+            end function;
+
+            function TMP_getNewAdrs_Banked(fullMask: std_logic_vector) return SmallNumberArray is
+                variable res: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+                variable cnt: natural := 0;
+                constant N_BANKS: natural := 4;
+                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+            begin
+               for b in 0 to N_BANKS-1 loop
+                   for i in 0 to BANK_SIZE-1 loop
+                        if fullMask(i * N_BANKS + b) /= '1' then
+                            res(b) := i2slv(i, SMALL_NUMBER_SIZE);
                             exit;
                         end if;
                     end loop;
@@ -149,6 +183,36 @@ architecture Behavioral of IssueQueue is
                     end if;
                 end loop;
                 return '1';
+            end function;
+    
+            function TMP_getBank(selMask: std_logic_vector) return natural is
+                constant N_BANKS: natural := 4;
+                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+            begin
+                for i in 0 to N_BANKS-1 loop
+                    for j in 0 to BANK_SIZE-1 loop
+                        if selMask(i + N_BANKS*j) = '1' then
+                            return i;
+                        end if;
+                    end loop;
+                end loop;
+                
+                return 0;
+            end function;
+
+            function TMP_getBankAdr(selMask: std_logic_vector) return natural is
+                constant N_BANKS: natural := 4;
+                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+            begin
+                for i in 0 to N_BANKS-1 loop
+                    for j in 0 to BANK_SIZE-1 loop
+                        if selMask(i + N_BANKS*j) = '1' then
+                            return j;
+                        end if;
+                    end loop;
+                end loop;
+                
+                return 0;
             end function;
 
         function TMP_updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D is
@@ -358,7 +422,7 @@ begin
         signal controlSigs: SlotControlArray(0 to QUEUE_SIZE_EXT-1);
     begin
     
-    
+           TMP_inputAdrs <= TMP_getNewAdrs_Banked(fullMask_NS);    
            TMP_bankCounts <= TMP_getBankCounts(fullMask_NS);
     
         QUEUE_SYNCHRONOUS: process(clk)
@@ -391,9 +455,31 @@ begin
            
                 isFull <= cmpGtU(nFullNext, QUEUE_SIZE_EXT - PIPE_WIDTH);
                 isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE_EXT - 2*PIPE_WIDTH);
-                                    
+                 
+                 
+                     if prevSendingOK = '1' and newArr_T(0).dynamic.full = '1' then
+                           bank0(slv2u(TMP_inputAdrs(0))) <= X"00" & newArr_T(0).static.lqPointer & newArr_T(0).static.sqPointer & newArr_T(0).static.bqPointer;
+                     end if;
+                     
+                     if prevSendingOK = '1' and newArr_T(1).dynamic.full = '1' then
+                           bank1(slv2u(TMP_inputAdrs(1))) <= --newArr_T(1).static.immValue;
+                                                                 X"00" & newArr_T(1).static.lqPointer & newArr_T(1).static.sqPointer & newArr_T(1).static.bqPointer;
+                     end if;
+                     
+                     if prevSendingOK = '1' and newArr_T(2).dynamic.full = '1' then
+                           bank2(slv2u(TMP_inputAdrs(2))) <= --newArr_T(2).static.immValue;
+                                                                 X"00" & newArr_T(2).static.lqPointer & newArr_T(2).static.sqPointer & newArr_T(2).static.bqPointer;
+                     end if;
+                     
+                     if prevSendingOK = '1' and newArr_T(3).dynamic.full = '1' then
+                           bank3(slv2u(TMP_inputAdrs(3))) <= --newArr_T(3).static.immValue;
+                                                             X"00" & newArr_T(3).static.lqPointer & newArr_T(3).static.sqPointer & newArr_T(3).static.bqPointer;
+                     end if;
             end if;
         end process;
+
+                selectedBankValues <= (bank0(selBankAdr), bank1(selBankAdr), bank2(selBankAdr), bank3(selBankAdr));
+                selectedValue <= selectedBankValues(selBank);
 
         fma <= findForwardingMatchesArray(queueContent, fni);
             fma_NS <= findForwardingMatchesArray(queueContent_NS, fni);
@@ -466,11 +552,17 @@ begin
 
             selectedSlot_NS_T <= prioSelect16(queueContentUpdatedSel_NS, selMask_NS);
             selectedSlot_NS <= queueSelect(queueContentUpdatedSel_NS, selMask_NS);
-
+            
+            selBank <= TMP_getBank(selMask_NS);
+            selBankAdr <= TMP_getBankAdr(selMask_NS);
+            
     end block;
 
     dispatchDataNew_T <= getSchedEntrySlot(selectedSlot);
+    
+    
         dispatchDataNew_NS <= getSchedEntrySlot(selectedSlot_NS);
+                                                --TMP_setImmValue(selectedSlot_NS, selectedValue));
 
 
     WHEN_SH: if not NONSHIFT generate
