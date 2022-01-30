@@ -20,7 +20,7 @@ use work.ForwardingNetwork.all;
 
 entity IssueQueue is
 	generic(
-		IQ_SIZE: natural := 8;
+		IQ_SIZE: natural := 12;
 		IS_FP: boolean := false;
 		ALT_INPUT: boolean := false;
 		DONT_MATCH1: boolean := false;
@@ -56,7 +56,7 @@ end IssueQueue;
 
 
 architecture Behavioral of IssueQueue is
-    constant QUEUE_SIZE_EXT: natural := IQ_SIZE + PIPE_WIDTH;
+    constant QUEUE_SIZE_EXT: natural := IQ_SIZE;-- + PIPE_WIDTH;
     constant STATIC_ARRAY_SIZE: natural := 8;
 
     signal newArr_T: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
@@ -290,7 +290,7 @@ architecture Behavioral of IssueQueue is
         signal queueContent_NS, queueContentRR_NS, queueContentNext_NS, queueContentUpdated_NS, queueContentUpdatedSel_NS:
             SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
 
-        signal fma_NS: ForwardingMatchesArray(0 to IQ_SIZE + PIPE_WIDTH -1) := (others => DEFAULT_FORWARDING_MATCHES);
+        signal fma_NS: ForwardingMatchesArray(0 to QUEUE_SIZE_EXT - 1) := (others => DEFAULT_FORWARDING_MATCHES);
 
         signal fullMask_NS, trialMask_NS, readyMaskLive_NS, killMask_NS, readyMaskAll_NS, selMask_NS, selMask_TrNS: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
         signal controlSigs_NS: SlotControlArray(0 to QUEUE_SIZE_EXT-1);
@@ -319,11 +319,11 @@ architecture Behavioral of IssueQueue is
 
     function updateRenameIndex(content: SchedulerInfoArray) return SchedulerInfoArray is
         variable res: SchedulerInfoArray(content'range) := content;
-        variable earlyStage: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1);
+        variable earlyStage: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content(QUEUE_SIZE_EXT - PIPE_WIDTH to QUEUE_SIZE_EXT-1);
     begin
         earlyStage := restoreRenameIndex(earlyStage);
 
-        res(IQ_SIZE to IQ_SIZE + PIPE_WIDTH-1) := earlyStage;
+        res(QUEUE_SIZE_EXT - PIPE_WIDTH to QUEUE_SIZE_EXT-1) := earlyStage;
         return res;
     end function;
     
@@ -418,7 +418,7 @@ begin
     MANAGEMENT: block
         signal trialMask, readyMaskLive, killMask, readyMaskAll, selMask: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
         signal queueContentRR, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
-        signal fma: ForwardingMatchesArray(0 to IQ_SIZE + PIPE_WIDTH -1) := (others => DEFAULT_FORWARDING_MATCHES);
+        signal fma: ForwardingMatchesArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_FORWARDING_MATCHES);
         signal controlSigs: SlotControlArray(0 to QUEUE_SIZE_EXT-1);
     begin
     
