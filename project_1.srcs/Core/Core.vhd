@@ -62,7 +62,7 @@ architecture Behavioral of Core is
     signal pcDataSig, frontCausing, execCausing, preExecCausing, execCausingDelayed, lateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
 
     signal pcSending, frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
-           frontEventSignal, bqAccepting, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ,-- dbEmpty,
+           frontEventSignal, bqAccepting, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ,
            canSendFront, canSendRename,
            execEventSignal, execEventSignalDelayed, lateEventSignal, lateEventSetPC,
             robSending, robAccepting, renamedSending, commitAccepting,
@@ -73,9 +73,7 @@ architecture Behavioral of Core is
             sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, committedSending: std_logic := '0';
 
     signal frontDataLastLiving, TMP_frontDataSpMasked,
-            renamedDataLivingIntOut,-- renamedDataLivingFloatOut,          
-            --renamedDataLivingFloatPre,
-            renamedDataLivingMem, renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged, --renamedDataLivingFloatRe,-- renamedDataLivingFloatReMem,
+            renamedDataLivingIntOut, renamedDataLivingMem, renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged,
             dataOutROB, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ, bqData, bpData, committedOut: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
@@ -220,7 +218,6 @@ begin
         nextAccepting => canSendRename,
 
         renamedDataLiving => renamedDataLivingIntOut,
-        --renamedDataLivingFloat => renamedDataLivingFloatOut,
         
         renamedArgsInt => renamedArgsInt,
         renamedArgsFloat => renamedArgsFloat,
@@ -263,7 +260,6 @@ begin
     end process;
 
     renamedDataLivingRe <= renamedDataLivingIntOut;
-    --renamedDataLivingFloatPre <= renamedDataLivingFloatOut;
 
     canSendFront <= renameAccepting and not stopRename;
     canSendRename <= not stopRename;  --  Could also be : queuesAccepting;
@@ -273,8 +269,7 @@ begin
     renamedDataToLQ <= setFullMask(renamedDataLivingReMem, getLoadMask1(renamedDataLivingRe));
     
 
-    renamedDataLivingMerged <= --renamedDataLivingRe;
-                                replaceDests(renamedDataLivingRe, renamedArgsMerged);
+    renamedDataLivingMerged <= replaceDests(renamedDataLivingRe, renamedArgsMerged);
 
     lsbrAccepting <= robAccepting and acceptingSQ and acceptingLQ;
     lsbrAcceptingMore <= robAcceptingMore and not almostFullSQ and not almostFullLQ;
@@ -285,13 +280,9 @@ begin
     queuesAccepting <= lsbrAccepting and issueQueuesAccepting;
     queuesAcceptingMore <= lsbrAcceptingMore and issueQueuesAcceptingMore;
 
-   -- renamedDataLivingFloatRe <= --mergeFP(renamedDataLivingRe, renamedDataLivingFloatPre);
-   --                             renamedDataLivingRe;
     renamedDataLivingReMem <= TMP_recodeMem(renamedDataLivingRe);
-    --renamedDataLivingFloatReMem <= --TMP_recodeMem(renamedDataLivingFloatRe);
-    --                                renamedDataLivingReMem;
    
-        renamedArgsMerged <= mergeRenameInfoFP(renamedArgsInt, renamedArgsFloat);
+    renamedArgsMerged <= mergeRenameInfoFP(renamedArgsInt, renamedArgsFloat);
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(
@@ -343,11 +334,6 @@ begin
                     slotF0_E0, slotF0_E1, slotF0_E2, slotF0_D0, slotF0_D1,
                     slotDummy: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                     
 
---        signal schedDataI0, dataToQueueI0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
---        signal schedDataM0, dataToQueueM0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);      
---        signal schedDataF0, dataToQueueF0: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
---        signal schedDataStoreValue, schedDataStoreValueFloat: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
-
         signal NEW_ARR_DUMMY, newArrShared: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
         signal dataToIntWriteQueue, dataToFloatWriteQueue, dataToIntRF, dataToFloatRF: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
@@ -355,7 +341,7 @@ begin
        signal regValsI0, regValsB, regValsM0, regValsS0, regValsE, regValsFloatA, regValsFloatB, regValsFloatC, regValsFS0, regValsF0: MwordArray(0 to 2) := (others => (others => '0'));
        signal readyRegFlagsInt, readyRegFlagsInt_C, readyRegFlagsFloat, readyRegFlagsInt_T, readyRegFlagsFloat_T, readyRegFlagsIntNext, readyRegFlagsIntNext_C, readyRegFlagsSV, readyRegFlagsFloatNext, readyRegFlagsFloatSV: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
         
-       signal newIntSources, newFloatSources, newIntSources_T, newFloatSources_T: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+       signal newIntSources, newFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
        
        -- Issue control 
        signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, allowIssueStoreDataFP, allowIssueStageStoreDataFP,
@@ -379,18 +365,10 @@ begin
         signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
         
-                signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';
-                
+                signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';        
     begin
-    
-           -- ch0 <= bool2std(newIntSources_T = newIntSources);
-            --ch1 <= bool2std(newFloatSources_T = newFloatSources);
-    
-        --newIntSources_T <= work.LogicRenaming.getPhysicalArgs(renamedDataLivingRe);
-        --newFloatSources_T <= work.LogicRenaming.getPhysicalArgs(renamedDataLivingFloatRe);
-    
-            newIntSources <= TMP_getPhysicalArgsNew(renamedArgsInt);
-            newFloatSources <= TMP_getPhysicalArgsNew(renamedArgsFloat);
+        newIntSources <= TMP_getPhysicalArgsNew(renamedArgsInt);
+        newFloatSources <= TMP_getPhysicalArgsNew(renamedArgsFloat);
     
         aluMask <= getAluMask1(renamedDataLivingRe);
         memMask <= getMemMask1(renamedDataLivingRe);
@@ -437,41 +415,6 @@ begin
                 outputSignals => outSigsI0
             );
 
-                            --ch0 <= 
-
-                        ch1 <= bool2std(iqAcceptingI0_NS = iqAcceptingI0);
-                        ch2 <= bool2std(iqAcceptingMoreI0_NS = iqAcceptingMoreI0);
-                            
-                            ch3 <= not ch1 and renamedSending;            
-                            ch4 <= iqAcceptingMoreI0_NS and not issueQueuesAcceptingMore;
-            
---                    IQUEUE_I0_NS: entity work.IssueQueue(Behavioral)
---                    generic map(
---                        IQ_SIZE => IQ_SIZE_I0,
---                        FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
---                        FORWARDING1(0 to 2) => FORWARDING_MODES_INT(0 to 2),
---                        FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
---                           ,NONSHIFT => true
---                    )
---                    port map(
---                        clk => clk, reset => '0', en => '0',
-                
---                        --acceptingOut => open,
---                        --acceptingMore => open,
---                                           --     acceptingOut => iqAcceptingI0,
---                                           --     acceptingMore => iqAcceptingMoreI0,
-                        
---                        prevSendingOK => renamedSending,
---                        newArr => schedInfoUpdatedA,            
---                            newArr_Alt => NEW_ARR_DUMMY,
---                            newArrOut => open,
---                        fni => fni,
---                        readyRegFlags => readyRegFlagsInt,
---                        nextAccepting => allowIssueI0,
---                        events => events,            
---                        schedulerOut => open,
---                        outputSignals => open
---                    );
             
                 ISSUE_STAGE_I0_NEW: entity work.IssueStage
                 generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
@@ -562,8 +505,7 @@ begin
            signal dataToAgu, dataToAguInt, dataToAguFloat, dataOutMem0,
                          dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-           signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
-           
+           signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1); 
            signal memLoadValue: Mword := (others => '0');                                                            
         begin
            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true, removeArg2(renamedArgsMerged));         
@@ -587,7 +529,7 @@ begin
                     newArr_Alt => newArrShared,
                fni => fni,
                readyRegFlags => readyRegFlagsInt,
-               nextAccepting =>allowIssueM0,
+               nextAccepting => allowIssueM0,
                events => events,
                schedulerOut => slotSelM0,
                outputSignals => outSigsM0
@@ -605,7 +547,7 @@ begin
                    fni => fni,
                    regValues => (others => (others => '0'))   
                );
-                   
+
                 subpipeM0_Sel <= makeExecResult(slotIssueM0, slotIssueM0.full);
 
                 sendingToRegReadM0 <= slotIssueM0.full and not outSigsM0.cancelled;
@@ -894,7 +836,6 @@ begin
         begin
             fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat);
 
-            --schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingFloatRe), fpMask, false, renamedArgsFloat);
             schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingRe), fpMask, false, renamedArgsFloat);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, false, FORWARDING_MODES_FLOAT_D, FORWARDING_MODES_FLOAT_D);
 
@@ -1165,10 +1106,7 @@ begin
              
              sendingToReserve => frontLastSending,                 
              newPhysDests => newIntDests,
-                newPhysSources => newIntSources,
-             --stageDataReserved => renamedDataLivingRe,
-                
-             
+             newPhysSources => newIntSources,
              writingMask(0) => dataToIntRF(0).full,
              writingData(0) => dataToIntRF(0).ins,
              readyRegFlagsNext => readyRegFlagsIntNext
@@ -1217,9 +1155,7 @@ begin
              
              sendingToReserve => frontLastSending,                 
              newPhysDests => newFloatDests,
-             --stageDataReserved => renamedDataLivingFloatPre,
-                newPhysSources => newFloatSources,
-                 
+             newPhysSources => newFloatSources,    
              writingMask(0) => dataToFloatRF(0).full,  
              writingData(0) => dataToFloatRF(0).ins,
              readyRegFlagsNext => readyRegFlagsFloatNext
@@ -1258,11 +1194,11 @@ begin
 	    
 	    prevSendingRe => renameSendingBr,
 	    
-	           renamedPtr => bqPointerSeq,
+	    renamedPtr => bqPointerSeq,
 	       
 	    bqPtrOut => bqPointer,
 	    
-	           dataInRe => TMP_frontDataSpMasked,
+	    dataInRe => TMP_frontDataSpMasked,
 		dataIn => renamedDataToBQ,
 		dataInBr => bpData,
 
