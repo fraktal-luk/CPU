@@ -20,7 +20,8 @@ use work.ForwardingNetwork.all;
 
 package LogicIssue is
 
-constant PHYS_NAME_NONE: PhysName := (others => '1');
+constant PHYS_NAME_NONE: PhysName := --(others => '1');
+                                        (others => '0');
 
 type StaticInfo is record
     operation: SpecificOp;

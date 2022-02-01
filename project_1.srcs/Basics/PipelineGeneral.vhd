@@ -27,6 +27,8 @@ end record;
 
 constant DEFAULT_EXEC_RESULT: ExecResult := ('0', tag => (others => '0'), dest => (others => '0'), value => (others => '0'));
 
+type ExecResultArray is array(integer range <>) of ExecResult;
+
 function makeExecResult(isl: InstructionSlot; full: std_logic) return ExecResult;
 function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecResult;
 
@@ -700,8 +702,8 @@ begin
                    res(i).ins.physicalArgSpec.intDestSel := '0';
                    res(i).ins.virtualArgSpec.floatDestSel := '0';
                 end if;		    
-			    res(i).ins.physicalArgSpec.dest := --(others => '0');
-			                                       (others => '1');
+			    res(i).ins.physicalArgSpec.dest := (others => '0');
+			                                       --(others => '1');
 			end if;
 			res(i).ins.controlInfo.newEvent := '0';
 		end loop;

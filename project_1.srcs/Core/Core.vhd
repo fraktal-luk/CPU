@@ -336,6 +336,7 @@ begin
 
         signal NEW_ARR_DUMMY, newArrShared: SchedulerEntrySlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCH_ENTRY_SLOT);
         signal dataToIntWriteQueue, dataToFloatWriteQueue, dataToIntRF, dataToFloatRF: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+            signal resultToIntWQ, resultToFloatWQ, resultToIntRF, resultToFloatRF: ExecResult := DEFAULT_EXEC_RESULT;
 
        signal regsSelI0,           regsSelM0, regsSelS0, regsSelFloatA, regsSelFloatC, regsSelFS0, regsSelF0: PhysNameArray(0 to 2) := (others => (others => '0'));
        signal regValsI0, regValsB, regValsM0, regValsS0, regValsE, regValsFloatA, regValsFloatB, regValsFloatC, regValsFS0, regValsF0: MwordArray(0 to 2) := (others => (others => '0'));
@@ -953,69 +954,83 @@ begin
          allowIssueStoreDataFP <= allowIssueStoreDataInt;
          
          -------------------------------------------
-            STAGE_I0_D0: entity work.GenericStage2(Behavioral)
-            generic map(
-                COMPARE_TAG => '0'
-            )
-            port map(
-                clk => clk, reset => '0', en => '0',
-                input => slotI0_E0(0),
-                output => slotI0_D0(0),
-                events => DEFAULT_EVENT_STATE
-            );
-                subpipeI0_D0 <= makeExecResult(slotI0_D0(0), slotI0_D0(0).full);
+--            STAGE_I0_D0: entity work.GenericStage2(Behavioral)
+--            generic map(
+--                COMPARE_TAG => '0'
+--            )
+--            port map(
+--                clk => clk, reset => '0', en => '0',
+--                input => slotI0_E0(0),
+--                output => slotI0_D0(0),
+--                events => DEFAULT_EVENT_STATE
+--            );
+                --subpipeI0_D0 <= makeExecResult(slotI0_D0(0), slotI0_D0(0).full);
 
-            STAGE_M0_D0: entity work.GenericStage2(Behavioral)
-            generic map(
-                COMPARE_TAG => '0'
-            )
-            port map(
-                clk => clk, reset => '0', en => '0',
-                input => slotM0_E2i(0),
-                output => slotM0_D0i(0),
-                events => DEFAULT_EVENT_STATE
-            );        
-                subpipeM0_D0i <= makeExecResult(slotM0_D0i(0), slotM0_D0i(0).full); -- TODO: handle i/f
+                TMP_EXEC_D0: process (clk)
+                begin
+                    if rising_edge(clk) then
+                        subpipeI0_D0 <= subpipeI0_E0;
+                        
+                        subpipeM0_D0i <= subpipeM0_E2i;
+                        subpipeM0_D0f <= subpipeM0_E2f;
+                        subpipeM0_D1f <= subpipeM0_D0f;
+                        
+                        subpipeF0_D0 <= subpipeF0_E2;
+                    end if;
+                end process;
 
-            STAGE_M0_D0F: entity work.GenericStage2(Behavioral)
-            generic map(
-                COMPARE_TAG => '0'
-            )
-            port map(
-                clk => clk, reset => '0', en => '0',
-                input => slotM0_E2f(0),
-                output => slotM0_D0f(0),
-                events => DEFAULT_EVENT_STATE
-            );
-                subpipeM0_D0f <= makeExecResult(slotM0_D0f(0), slotM0_D0f(0).full); -- TODO: handle i/f
+--            STAGE_M0_D0: entity work.GenericStage2(Behavioral)
+--            generic map(
+--                COMPARE_TAG => '0'
+--            )
+--            port map(
+--                clk => clk, reset => '0', en => '0',
+--                input => slotM0_E2i(0),
+--                output => slotM0_D0i(0),
+--                events => DEFAULT_EVENT_STATE
+--            );        
+--            --    subpipeM0_D0i <= makeExecResult(slotM0_D0i(0), slotM0_D0i(0).full); -- TODO: handle i/f
+
+--            STAGE_M0_D0F: entity work.GenericStage2(Behavioral)
+--            generic map(
+--                COMPARE_TAG => '0'
+--            )
+--            port map(
+--                clk => clk, reset => '0', en => '0',
+--                input => slotM0_E2f(0),
+--                output => slotM0_D0f(0),
+--                events => DEFAULT_EVENT_STATE
+--            );
+            --    subpipeM0_D0f <= makeExecResult(slotM0_D0f(0), slotM0_D0f(0).full); -- TODO: handle i/f
             
             -- After FP_LOAD_DELAY
-            STAGE_M0_D1F: entity work.GenericStage2(Behavioral)
-            generic map(
-                COMPARE_TAG => '1'
-            )
-            port map(
-                clk => clk, reset => '0', en => '0',
-                input => slotM0_D0f(0),
-                output => slotM0_D1f(0),
-                events => DEFAULT_EVENT_STATE
-            );
-                subpipeM0_D1f <= makeExecResult(slotM0_D1f(0), slotM0_D1f(0).full); -- TODO: handle i/f
+--            STAGE_M0_D1F: entity work.GenericStage2(Behavioral)
+--            generic map(
+--                COMPARE_TAG => '1'
+--            )
+--            port map(
+--                clk => clk, reset => '0', en => '0',
+--                input => slotM0_D0f(0),
+--                output => slotM0_D1f(0),
+--                events => DEFAULT_EVENT_STATE
+--            );
+--            --    subpipeM0_D1f <= makeExecResult(slotM0_D1f(0), slotM0_D1f(0).full); -- TODO: handle i/f
 
-            STAGE_F0_D0: entity work.GenericStage2(Behavioral)
-            generic map(
-                COMPARE_TAG => '1'
-            )
-            port map(
-                clk => clk, reset => '0', en => '0',
-                input => slotF0_E2(0),
-                output => slotF0_D0(0),
-                events => DEFAULT_EVENT_STATE
-            );
+--            STAGE_F0_D0: entity work.GenericStage2(Behavioral)
+--            generic map(
+--                COMPARE_TAG => '1'
+--            )
+--            port map(
+--                clk => clk, reset => '0', en => '0',
+--                input => slotF0_E2(0),
+--                output => slotF0_D0(0),
+--                events => DEFAULT_EVENT_STATE
+--            );
             
-            subpipeF0_D0 <= makeExecResult(slotF0_D0(0), slotF0_D0(0).full); -- TODO: handle i/f
+            --subpipeF0_D0 <= makeExecResult(slotF0_D0(0), slotF0_D0(0).full); -- TODO: handle i/f
 
-            intWriteConflict <= slotI0_E0(0).full and slotM0_E2i(0).full;
+            intWriteConflict <= --slotI0_E0(0).full and slotM0_E2i(0).full;
+                                    subpipeI0_E0.full and subpipeM0_E2i.full;
                 
             SCHED_BLOCK: process(clk)
             begin
@@ -1063,27 +1078,37 @@ begin
          regsSelF0 <= work.LogicRenaming.getPhysicalArgs(slotIssueF0);
 
 
-        dataToIntWriteQueue <= slotM0_E2i when slotM0_E2i(0).full = '1' else slotI0_E0;
+        --dataToIntWriteQueue <= slotM0_E2i when slotM0_E2i(0).full = '1' else slotI0_E0;
+            resultToIntWQ <= subpipeM0_E2i when subpipeM0_E2i.full = '1' else subpipeI0_E0;
         
-        INT_WRITE_QUEUE: entity work.GenericStage2(Behavioral)
-        generic map(
-            COMPARE_TAG => '0'
-        )
-        port map(
-            clk => clk, reset => '0', en => '0',
-            input => dataToIntWriteQueue(0),
-            output => dataToIntRF(0),  
-            events => DEFAULT_EVENT_STATE
-        );
+--        INT_WRITE_QUEUE: entity work.GenericStage2(Behavioral)
+--        generic map(
+--            COMPARE_TAG => '0'
+--        )
+--        port map(
+--            clk => clk, reset => '0', en => '0',
+--            input => dataToIntWriteQueue(0),
+--            output => dataToIntRF(0),  
+--            events => DEFAULT_EVENT_STATE
+--        );
+            
+         TMP_WQ: process (clk)
+         begin   
+            if rising_edge(clk) then
+                resultToIntRF <= resultToIntWQ;
+                resultToFloatRF <= resultToFloatWQ;
+            end if;
+         end process;
             
 		 INT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(WIDTH => 4, WRITE_WIDTH => 1)
          port map(
              clk => clk, reset => '0', en => '0',
                  
-             writeAllow => dataToIntRF(0).full,
+             writeAllow => '1',--dataToIntRF(0).full,
              writeInput => dataToIntRF,
- 
+                writeInput_T(0) => resultToIntRF,
+                
              readAllowVec => (others => '1'), -- TEMP!
              
              selectRead(0 to 2) => regsSelI0,
@@ -1109,29 +1134,33 @@ begin
              newPhysSources => newIntSources,
              writingMask(0) => dataToIntRF(0).full,
              writingData(0) => dataToIntRF(0).ins,
+                writingData_T(0) => resultToIntRF,
              readyRegFlagsNext => readyRegFlagsIntNext
          );
 
-            dataToFloatWriteQueue <= slotM0_E2f when slotM0_E2f(0).full = '1' else slotF0_E2;
+           -- dataToFloatWriteQueue <= slotM0_E2f when slotM0_E2f(0).full = '1' else slotF0_E2;
+                  resultToFloatWQ <= subpipeM0_E2f when subpipeM0_E2f.full = '1' else subpipeF0_E2;
+
             
-            FLOAT_WRITE_QUEUE: entity work.GenericStage2(Behavioral)
-            generic map(
-                COMPARE_TAG => '0'
-            )
-            port map(
-                clk => clk, reset => '0', en => '0',
-                input => dataToFloatWriteQueue(0),
-                output => dataToFloatRF(0),  
-                events => DEFAULT_EVENT_STATE
-            );
+--            FLOAT_WRITE_QUEUE: entity work.GenericStage2(Behavioral)
+--            generic map(
+--                COMPARE_TAG => '0'
+--            )
+--            port map(
+--                clk => clk, reset => '0', en => '0',
+--                input => dataToFloatWriteQueue(0),
+--                output => dataToFloatRF(0),  
+--                events => DEFAULT_EVENT_STATE
+--            );
 
 		 FLOAT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(IS_FP => true, WIDTH => 4, WRITE_WIDTH => 1)
          port map(
              clk => clk, reset => '0', en => '0',
                  
-             writeAllow => dataToFloatRF(0).full,
+             writeAllow => '1',--dataToFloatRF(0).full,
              writeInput => dataToFloatRF,
+                writeInput_T(0) => resultToFloatRF,
  
              readAllowVec => (others => '1'),
              
@@ -1158,6 +1187,7 @@ begin
              newPhysSources => newFloatSources,    
              writingMask(0) => dataToFloatRF(0).full,  
              writingData(0) => dataToFloatRF(0).ins,
+                writingData_T(0) => resultToFloatRF,
              readyRegFlagsNext => readyRegFlagsFloatNext
          );
      
