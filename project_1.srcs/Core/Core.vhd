@@ -420,17 +420,19 @@ begin
                 ISSUE_STAGE_I0_NEW: entity work.IssueStage
                 generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
                 port map(
-                    clk => clk, reset => '0', en => '0',      
+                    clk => clk, reset => '0', en => '0',
                     prevSending => outSigsI0.sending,
                     nextAccepting => '1',    
                     input => slotSelI0,               
                     output => slotIssueI0,
-                    events => events,         
+                    events => events,
+                              --  DEFAULT_EVENT_STATE,         
                     fni => fni,
                     regValues => (others => (others => '0'))
                 );
             
-                subpipeI0_Sel <= makeExecResult(slotIssueI0, slotIssueI0.full);
+                subpipeI0_Sel <= makeExecResult(--slotIssueI0, slotIssueI0.full);
+                                                work.LogicIssue.TMP_restoreState(slotIssueI0.full, slotIssueI0.state), slotIssueI0.full);
 
                 sendingToRegReadI0 <= slotIssueI0.full and not outSigsI0.cancelled;
                         
@@ -443,6 +445,7 @@ begin
                     input => slotIssueI0,                
                     output => slotRegReadI0,
                     events => events,
+                                               --DEFAULT_EVENT_STATE,
                     fni => fni,
                     regValues => regValsI0   
                 );
@@ -454,8 +457,10 @@ begin
                         end if;
                     end process;
 
-                    subpipeI0_RegRead <= makeExecResult(slotRegReadI0, slotRegReadI0.full);
+                    subpipeI0_RegRead <= makeExecResult(--slotRegReadI0, slotRegReadI0.full);
+                                                        work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state), slotRegReadI0.full);
 
+            -- NOTE: it seems that only elements of .state used in Exec are: { args: MwordArray; immediate: std_logic }
             dataToAlu(0) <= (slotRegReadI0.full, executeAlu(slotRegReadI0.ins, slotRegReadI0.state, bqSelected.ins, branchData, unfoldedAluOp));
           
             STAGE_I0_E0: entity work.GenericStage2(Behavioral)
@@ -549,7 +554,8 @@ begin
                    regValues => (others => (others => '0'))   
                );
 
-                subpipeM0_Sel <= makeExecResult(slotIssueM0, slotIssueM0.full);
+                subpipeM0_Sel <= makeExecResult(--slotIssueM0, slotIssueM0.full);
+                                                work.LogicIssue.TMP_restoreState(slotIssueM0.full, slotIssueM0.state), slotIssueM0.full);
 
                 sendingToRegReadM0 <= slotIssueM0.full and not outSigsM0.cancelled;
 
@@ -566,7 +572,8 @@ begin
                     regValues => regValsM0  
                 );
              
-                subpipeM0_RegRead <= makeExecResult(slotRegReadM0, slotRegReadM0.full);
+                subpipeM0_RegRead <= makeExecResult(--slotRegReadM0, slotRegReadM0.full);
+                                                    work.LogicIssue.TMP_restoreState(slotRegReadM0.full, slotRegReadM0.state), slotRegReadM0.full);
 
            preIndexSQ <= slotRegReadM0.ins.tags.sqPointer;
            preIndexLQ <= slotRegReadM0.ins.tags.lqPointer;
@@ -876,8 +883,9 @@ begin
                 fni => fniEmpty,
                 regValues => (others => (others => '0'))   
             );        
-                subpipeF0_Sel <= makeExecResult(slotIssueF0, slotIssueF0.full);
-                
+                subpipeF0_Sel <= makeExecResult(--slotIssueF0, slotIssueF0.full);
+                                                work.LogicIssue.TMP_restoreState(slotIssueF0.full, slotIssueF0.state), slotIssueF0.full);
+
             REG_READ_STAGE_F0: entity work.IssueStage
             generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
             port map(
@@ -891,7 +899,8 @@ begin
                 fni => fniFloat,
                 regValues => regValsF0     
             );
-                subpipeF0_RegRead <= makeExecResult(slotRegReadF0, slotRegReadF0.full);
+                subpipeF0_RegRead <= makeExecResult(--slotRegReadF0, slotRegReadF0.full);
+                                                    work.LogicIssue.TMP_restoreState(slotRegReadF0.full, slotRegReadF0.state), slotRegReadF0.full);
           
             dataToFpu0(0) <= (slotRegReadF0.full and not outSigsF0.cancelled, executeFpu(slotRegReadF0.ins, slotRegReadF0.state));
           

@@ -92,5 +92,3 @@ begin
 
 	output <= (sendingOut, stageDataSaved.ins, dispatchDataUpdated.state);	
 end Alternative;
-
-

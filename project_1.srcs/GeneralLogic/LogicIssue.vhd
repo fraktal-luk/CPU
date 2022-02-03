@@ -131,12 +131,13 @@ function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant 
 
 function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray) return SchedulerInfoArray;
 
-function getSchedEntrySlot(info: SchedulerInfo) return SchedulerEntrySlot;
+function getSchedEntrySlot(info: SchedulerInfo) return SchedulerState;
 
 function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
 
 
-function TMP_restoreState(full: std_logic; ins: InstructionState; st: SchedulerState) return SchedulerEntrySlot;
+function TMP_restoreState(full: std_logic;-- ins: InstructionState;
+                                st: SchedulerState) return SchedulerEntrySlot;
 
 function TMP_prepareDispatchSlot(input: SchedulerEntrySlot; prevSending: std_logic) return SchedulerEntrySlot;
 
@@ -482,90 +483,50 @@ begin
 end function;
 
 
-function getSchedEntrySlot(info: SchedulerInfo) return SchedulerEntrySlot is
-    variable res: SchedulerEntrySlot;
+function getSchedEntrySlot(info: SchedulerInfo) return SchedulerState is
+    variable res: SchedulerState := DEFAULT_SCHED_STATE;
 begin
-    res.ins := DEFAULT_INS_STATE;
+    --res.ins := DEFAULT_INS_STATE;
 
-    res.full := info.dynamic.full;
+    --res.full := info.dynamic.full;
 
-    res.state.operation := info.static.operation;
+    res.operation := info.static.operation;
 
-    res.state.branchIns := info.static.branchIns;
-    res.state.bqPointer := info.static.bqPointer;
-    res.state.sqPointer := info.static.sqPointer;
-    res.state.lqPointer := info.static.lqPointer;        
-        res.state.bqPointerSeq := info.static.bqPointerSeq;        
+    res.branchIns := info.static.branchIns;
+    res.bqPointer := info.static.bqPointer;
+    res.sqPointer := info.static.sqPointer;
+    res.lqPointer := info.static.lqPointer;        
+        res.bqPointerSeq := info.static.bqPointerSeq;        
     
-    res.state.immediate := info.static.immediate;    
-    res.state.immValue := info.static.immValue;
+    res.immediate := info.static.immediate;    
+    res.immValue := info.static.immValue;
         
-    res.state.zero := info.static.zero;
+    res.zero := info.static.zero;
 
-    res.state.issued := info.dynamic.issued;
-    --res.state.newInQueue := info.dynamic.newInQueue;
+    res.issued := info.dynamic.issued;
+    --res.newInQueue := info.dynamic.newInQueue;
     
-    res.state.renameIndex := info.dynamic.renameIndex;
-    res.state.argSpec := info.dynamic.argSpec;
+    res.renameIndex := info.dynamic.renameIndex;
+    res.argSpec := info.dynamic.argSpec;
     
-    res.state.stored := info.dynamic.stored;
-    res.state.readNew := (others => '0');
+    res.stored := info.dynamic.stored;
+    res.readNew := (others => '0');
 
-    res.state.missing := info.dynamic.missing;
+    res.missing := info.dynamic.missing;
     
-    res.state.readyNow := info.dynamic.readyNow;
-    res.state.readyNext := info.dynamic.readyNext;
-    res.state.readyM2  := info.dynamic.readyM2;
+    res.readyNow := info.dynamic.readyNow;
+    res.readyNext := info.dynamic.readyNext;
+    res.readyM2  := info.dynamic.readyM2;
 
-    res.state.argLocsPipe := info.dynamic.argLocsPipe;
-    res.state.argSrc := info.dynamic.argSrc;
-
-    res.state.args := (others => (others => '0'));
-
+    res.argLocsPipe := info.dynamic.argLocsPipe;
+    res.argSrc := info.dynamic.argSrc;
+    
     return res;
 end function;
 
 
-function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector is
-	variable res: std_logic_vector(list'range) := (others => '0');
-begin
-	for i in list'range loop
-		if tag(PHYS_REG_BITS-1 downto 0) = list(i)(PHYS_REG_BITS-1 downto 0) then
-			res(i) := '1';
-		end if;
-	end loop;
-	return res;
-end function;
-
-
-function updateArgInfo(ss: DynamicInfo; arg: natural; wakeups: WakeupStruct; selection: boolean)
-return DynamicInfo is
-    variable res: DynamicInfo := ss;
-    variable wakeupVec: std_logic_vector(0 to 2) := (others => '0');
-    variable wakeupPhases: SmallNumberArray(0 to 2) := (others => (others => '0'));  
-begin
-    if ss.missing(arg) = '1' then
-        res.argLocsPipe(arg) := wakeups.argLocsPipe;
-        res.missing(arg) := not wakeups.match; 
-        res.argSrc(arg) := wakeups.argSrc;        
-    else -- update loc
-        if not selection then
-            case res.argSrc(arg)(1 downto 0) is
-                when "11" =>
-                    res.argSrc(arg) := "00000000";
-                when "00" =>
-                    res.argSrc(arg) := "00000001";               
-                when others =>
-                    res.argSrc(arg) := "00000010";
-            end case;                
-        end if;
-    end if;
-
-    return res;
-end function;
-
-
-function TMP_restoreState(full: std_logic; ins: InstructionState; st: SchedulerState) return SchedulerEntrySlot is
+function TMP_restoreState(full: std_logic;-- ins: InstructionState;
+                            st: SchedulerState) return SchedulerEntrySlot is
 	variable res: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 	variable v0, v1: std_logic_vector(1 downto 0) := "00";
 	variable selected0, selected1: Mword := (others => '0');
@@ -576,7 +537,7 @@ function TMP_restoreState(full: std_logic; ins: InstructionState; st: SchedulerS
 	variable imm: Word := (others => '0');
 begin
     res.full := full;
-	res.ins := ins;
+	--res.ins := ins;
 	res.state := st;
 
     res.ins.tags.renameIndex := st.renameIndex;
@@ -598,9 +559,9 @@ begin
 
     -- Clear dest if empty
     if not res.full = '1' then
-        res.ins.physicalArgSpec.intDestSel := '0';
-        res.ins.physicalArgSpec.floatDestSel := '0';
-        res.ins.physicalArgSpec.dest := PHYS_NAME_NONE;
+        --res.ins.physicalArgSpec.intDestSel := '0';
+        --res.ins.physicalArgSpec.floatDestSel := '0';
+        --res.ins.physicalArgSpec.dest := PHYS_NAME_NONE;
     end if;
     
     -- Clear unused fields       
@@ -614,14 +575,15 @@ begin
 end function;
 
 
+
 function TMP_prepareDispatchSlot(input: SchedulerEntrySlot; prevSending: std_logic) return SchedulerEntrySlot is
     variable res: SchedulerEntrySlot := input;
 begin
     if prevSending = '0' or (input.state.argSpec.intDestSel = '0' and input.state.argSpec.floatDestSel = '0') then
-        res.ins.physicalArgSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
-        res.state.argSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
+       res.ins.physicalArgSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
+       res.state.argSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
     end if;
-    
+
     return res;
 end function;
 
@@ -1037,7 +999,46 @@ end function;
                 return res;
             end function;
 
-    
+
+function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector is
+	variable res: std_logic_vector(list'range) := (others => '0');
+begin
+	for i in list'range loop
+		if tag(PHYS_REG_BITS-1 downto 0) = list(i)(PHYS_REG_BITS-1 downto 0) then
+			res(i) := '1';
+		end if;
+	end loop;
+	return res;
+end function;
+
+
+function updateArgInfo(ss: DynamicInfo; arg: natural; wakeups: WakeupStruct; selection: boolean)
+return DynamicInfo is
+    variable res: DynamicInfo := ss;
+    variable wakeupVec: std_logic_vector(0 to 2) := (others => '0');
+    variable wakeupPhases: SmallNumberArray(0 to 2) := (others => (others => '0'));  
+begin
+    if ss.missing(arg) = '1' then
+        res.argLocsPipe(arg) := wakeups.argLocsPipe;
+        res.missing(arg) := not wakeups.match; 
+        res.argSrc(arg) := wakeups.argSrc;        
+    else -- update loc
+        if not selection then
+            case res.argSrc(arg)(1 downto 0) is
+                when "11" =>
+                    res.argSrc(arg) := "00000000";
+                when "00" =>
+                    res.argSrc(arg) := "00000001";               
+                when others =>
+                    res.argSrc(arg) := "00000010";
+            end case;                
+        end if;
+    end if;
+
+    return res;
+end function;
+
+  
 function getWakeupStructStatic(arg: natural; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray; selection: boolean)
 return WakeupStruct is
     variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;

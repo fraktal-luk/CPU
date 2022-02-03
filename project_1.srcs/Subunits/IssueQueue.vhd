@@ -304,9 +304,9 @@ architecture Behavioral of IssueQueue is
     	signal anyReadyFull_NS, anyReadyLive_NS, sends_NS, sendingKilled_NS, isSent_NS, isSent2_NS, sentKilled_NS, isEmpty_NS: std_logic := '0';
     
     signal selectedSlot: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
-	signal dispatchDataNew_T: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+	signal dispatchDataNew_T: SchedulerState := DEFAULT_SCHED_STATE;
 
-    	signal dispatchDataNew_NS: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+    	signal dispatchDataNew_NS: SchedulerState := DEFAULT_SCHED_STATE;
 
 
     signal S_firstFree: natural := 0;       
@@ -567,7 +567,7 @@ begin
 
     WHEN_SH: if not NONSHIFT generate
         -- Output signals
-        schedulerOut <= TMP_restoreState(sends, dispatchDataNew_T.ins, dispatchDataNew_T.state);
+        schedulerOut <= TMP_restoreState(sends, dispatchDataNew_T);
 
         acceptingOut <= not isNonzero(fullMask(4 to 7));
         acceptingMore <= not isNonzero(fullMask(0 to 7));
@@ -580,7 +580,7 @@ begin
 
     WHEN_NSH: if NONSHIFT generate
         -- Output signals
-        schedulerOut <= TMP_restoreState(sends_NS, dispatchDataNew_NS.ins, dispatchDataNew_NS.state);
+        schedulerOut <= TMP_restoreState(sends_NS, dispatchDataNew_NS);
 
         acceptingOut <= --not isFull;
                         TMP_accepting_Banked(TMP_bankCounts);
