@@ -77,7 +77,7 @@ architecture Behavioral of BranchQueue is
 
 	signal pStart, pStartNext, pEnd, pEndNext, pStartLong, pStartLongNext, pEndLong, pEndLongNext, pTagged,
 	       pRenamed, pRenamedNext, pTaggedNext, pTaggedLong, pTaggedLongNext, pRenamedLong, pRenamedLongNext,
-	       pSelectPrev, pSelect, pCausing, pSelectLong, pSelectLongPrev, pCausingLong: SmallNumber := (others => '0');
+	       pSelectPrev, pSelect, pCausing, pSelectLong, pSelectLongPrev, pCausingLong, pCausingLongPrev: SmallNumber := (others => '0');
     signal isFull, isAlmostFull: std_logic := '0';
 
 	signal accepting, committingBr, earlyInputSending, lateInputSending: std_logic := '0';	   
@@ -175,17 +175,17 @@ begin
         pStartLongNext <= addIntTrunc(pStartLong, 1, QUEUE_PTR_SIZE+1) when committingBr = '1' else pStartLong;
     
         pTaggedLongNext <= pStartLong when lateEventSignal = '1'
-            else       addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
+            else       addIntTrunc(pCausingLongPrev, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
             else       addIntTrunc(pTaggedLong, 1, QUEUE_PTR_SIZE+1) when lateInputSending = '1'
             else       pTaggedLong;
         
         pRenamedLongNext <= pStartLong when lateEventSignal = '1'
-            else       addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
+            else       addIntTrunc(pCausingLongPrev, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
             else       addIntTrunc(pRenamedLong, 1, QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
             else       pRenamedLong;
 
         pEndLongNext <= pStartLong when lateEventSignal = '1'
-            else    addIntTrunc(pCausingLong, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
+            else    addIntTrunc(pCausingLongPrev, 1, QUEUE_PTR_SIZE+1) when execEventSignal = '1'
             else    addIntTrunc(pEndLong, 1, QUEUE_PTR_SIZE+1) when earlyInputSending = '1'
             else    pEndLong;
 
@@ -208,6 +208,8 @@ begin
 
 	           pCausing <= pSelectPrev;
 	           pCausingLong <= pSelectLongPrev;
+	           
+	           pCausingLongPrev <= pCausingLong;
 	           
 	           pStartLong <= pStartLongNext;
                pTaggedLong <= pTaggedLongNext;

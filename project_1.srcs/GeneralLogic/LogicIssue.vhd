@@ -60,6 +60,9 @@ type DynamicInfo is record
     issued: std_logic;
     trial: std_logic;
 
+        pulledBack: std_logic;
+        stageCtr: SmallNumber;
+
     renameIndex: InsTag;
     argSpec: InstructionArgSpec;
 
@@ -82,7 +85,9 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
 
     issued => '0',
     trial => '0',
-    --newInQueue => '0',
+        
+        pulledBack => '0',
+        stageCtr => (others => '0'),
 
     renameIndex => (others => '0'),
     argSpec => DEFAULT_ARG_SPEC,
@@ -404,13 +409,13 @@ end function;
 
 
 function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo is
-    variable res: DynamicInfo;
+    variable res: DynamicInfo := DEFAULT_DYNAMIC_INFO;
 begin
     res.full := isl.full;
     res.active := res.full;
     res.issued := '0';
     res.trial := '0';
-    --res.newInQueue := '1';
+    
     
     res.renameIndex := isl.ins.tags.renameIndex;
     res.staticPtr := (others => '0'); -- points to entry with static info
@@ -928,15 +933,18 @@ end function;
                 variable cnt: natural := 0;
                 
                 variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
-            begin                
+            begin
                     for i in 0 to LEN-1 loop
-                        if queueContent(i).dynamic.issued = '1' then       
+                        if queueContent(i).dynamic.issued = '1' then      
                             res(i).dynamic.full := '0';
+                                res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1);
                         end if;
                         
                         if (selMask(i) and sends) = '1' then
                             res(i).dynamic.issued := '1';
                             res(i).dynamic.active := '0';
+                            
+                                res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1); 
                         end if;
                     end loop;    
         

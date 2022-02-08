@@ -311,10 +311,10 @@ begin
         use work.LogicExec.all;
         
         -- Selection from IQ and state after Issue stage
-        signal      slotSelI0, slotIssueI0, slotRegReadI0,
+        signal      slotSelI0, slotIssueI0, slotRegReadI0,      slotIssueI0_out, slotRegReadI0_out,
                     slotSelI1, slotIssueI1, slotRegReadI1,
-                    slotSelM0, slotIssueM0, slotRegReadM0,
-                    slotSelF0, slotIssueF0, slotRegReadF0,
+                    slotSelM0, slotIssueM0, slotRegReadM0,      slotIssueM0_out, slotRegReadM0_out,
+                    slotSelF0, slotIssueF0, slotRegReadF0,      slotIssueF0_out, slotRegReadF0_out,
                
                     slotSel4, slotIssue4, slotSel5, slotIssue5, slotSel6, slotIssue6,
 
@@ -424,12 +424,17 @@ begin
                     prevSending => outSigsI0.sending,
                     nextAccepting => '1',    
                     input => slotSelI0,               
-                    output => slotIssueI0,
+                    output => slotIssueI0_out,
                     events => events,
                               --  DEFAULT_EVENT_STATE,         
                     fni => fni,
                     regValues => (others => (others => '0'))
                 );
+            
+                    slotIssueI0 <= work.LogicIssue.TMP_restoreState(slotIssueI0_out.full, slotIssueI0_out.state);
+                                   -- slotIssueI0_out;
+            
+                        ch0 <= bool2std(slotIssueI0_out.ins = slotIssueI0.ins);
             
                 subpipeI0_Sel <= makeExecResult(--slotIssueI0, slotIssueI0.full);
                                                 work.LogicIssue.TMP_restoreState(slotIssueI0.full, slotIssueI0.state), slotIssueI0.full);
@@ -443,7 +448,7 @@ begin
                     prevSending => sendingToRegReadI0,
                     nextAccepting => '1',
                     input => slotIssueI0,                
-                    output => slotRegReadI0,
+                    output => slotRegReadI0_out,
                     events => events,
                                                --DEFAULT_EVENT_STATE,
                     fni => fni,
@@ -456,6 +461,8 @@ begin
                             unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.ins.specificOperation.arith);
                         end if;
                     end process;
+
+                        slotRegReadI0 <= work.LogicIssue.TMP_restoreState(slotRegReadI0_out.full, slotRegReadI0_out.state);
 
                     subpipeI0_RegRead <= makeExecResult(--slotRegReadI0, slotRegReadI0.full);
                                                         work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state), slotRegReadI0.full);
@@ -548,11 +555,13 @@ begin
                    prevSending => outSigsM0.sending,
                    nextAccepting => '1',
                    input => slotSelM0,
-                   output => slotIssueM0,
+                   output => slotIssueM0_out,
                    events => events,
                    fni => fni,
                    regValues => (others => (others => '0'))   
                );
+
+                        slotIssueM0 <= work.LogicIssue.TMP_restoreState(slotIssueM0_out.full, slotIssueM0_out.state);
 
                 subpipeM0_Sel <= makeExecResult(--slotIssueM0, slotIssueM0.full);
                                                 work.LogicIssue.TMP_restoreState(slotIssueM0.full, slotIssueM0.state), slotIssueM0.full);
@@ -566,11 +575,12 @@ begin
                     prevSending => sendingToRegReadM0,
                     nextAccepting => '1',
                     input => slotIssueM0,                
-                    output => slotRegReadM0,
+                    output => slotRegReadM0_out,
                     events => events,
                     fni => fni,
                     regValues => regValsM0  
                 );
+                        slotRegReadM0 <= work.LogicIssue.TMP_restoreState(slotRegReadM0_out.full, slotRegReadM0_out.state);
              
                 subpipeM0_RegRead <= makeExecResult(--slotRegReadM0, slotRegReadM0.full);
                                                     work.LogicIssue.TMP_restoreState(slotRegReadM0.full, slotRegReadM0.state), slotRegReadM0.full);
@@ -878,11 +888,14 @@ begin
                 nextAccepting => '1',
                 input => slotSelF0,
                 acceptingOut => open,
-                output => slotIssueF0,
+                output => slotIssueF0_out,
                 events => events,
                 fni => fniEmpty,
                 regValues => (others => (others => '0'))   
-            );        
+            );
+            
+                slotIssueF0 <= work.LogicIssue.TMP_restoreState(slotIssueF0_out.full, slotIssueF0_out.state);
+      
                 subpipeF0_Sel <= makeExecResult(--slotIssueF0, slotIssueF0.full);
                                                 work.LogicIssue.TMP_restoreState(slotIssueF0.full, slotIssueF0.state), slotIssueF0.full);
 
@@ -894,11 +907,14 @@ begin
                 nextAccepting => '1',
                 input => slotIssueF0,
                 acceptingOut => open,
-                output => slotRegReadF0,        
+                output => slotRegReadF0_out,        
                 events => events,
                 fni => fniFloat,
                 regValues => regValsF0     
             );
+            
+                slotRegReadF0 <= work.LogicIssue.TMP_restoreState(slotRegReadF0_out.full, slotRegReadF0_out.state);
+
                 subpipeF0_RegRead <= makeExecResult(--slotRegReadF0, slotRegReadF0.full);
                                                     work.LogicIssue.TMP_restoreState(slotRegReadF0.full, slotRegReadF0.state), slotRegReadF0.full);
           
