@@ -47,6 +47,10 @@ type IssueQueueSignals is record
     cancelled: std_logic;
     ready: std_logic;
     empty: std_logic;
+        killSel: std_logic;
+        killSel1: std_logic;
+        killSel2: std_logic;
+        killSel3: std_logic;
 end record;
 
 type ForwardingInfo is record

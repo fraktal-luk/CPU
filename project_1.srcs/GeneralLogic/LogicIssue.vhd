@@ -66,10 +66,11 @@ type DynamicInfo is record
     renameIndex: InsTag;
     argSpec: InstructionArgSpec;
 
-    staticPtr: SmallNumber; -- points to entry with static info
+    --staticPtr: SmallNumber; -- points to entry with static info
 
-    stored:  std_logic_vector(0 to 2);
     missing: std_logic_vector(0 to 2);
+    stored:  std_logic_vector(0 to 2);
+
     readyNow: std_logic_vector(0 to 2);
     readyNext: std_logic_vector(0 to 2);
     readyM2:    std_logic_vector(0 to 2);
@@ -92,7 +93,7 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     renameIndex => (others => '0'),
     argSpec => DEFAULT_ARG_SPEC,
 
-    staticPtr => (others => '0'),
+    --staticPtr => (others => '0'),
 
     stored => (others => '0'),
     missing => (others => '0'),
@@ -418,10 +419,11 @@ begin
     
     
     res.renameIndex := isl.ins.tags.renameIndex;
-    res.staticPtr := (others => '0'); -- points to entry with static info
 
     res.argSpec := isl.ins.physicalArgSpec;
-    
+                res.argSpec.intArgSel := (others => '0');
+                res.argSpec.floatArgSel := (others => '0');
+
     -- Possibility to implement late allocation or advanced renaming schemes - delayed selection of args
     if false then
         for i in 0 to 2 loop
@@ -435,14 +437,6 @@ begin
         end loop;
         
     end if;
-
-                if res.argSpec.dest /= ri.physicalDest and ri.destSel = '1' then
-                --    res.staticPtr := (others => 'U');
-                end if;
-
-                if res.argSpec.floatDestSel /= ri.destSelFP then
-                --    res.staticPtr := (others => 'Z');
-                end if;
 
             res.argSpec.dest := ri.physicalDest;
             res.argSpec.intDestSel := ri.destSel and not ri.destSelFP;
@@ -1334,7 +1328,7 @@ begin
     end loop;
 
    
-    res.dynamic.staticPtr := a.dynamic.staticPtr or b.dynamic.staticPtr;
+    --res.dynamic.staticPtr := a.dynamic.staticPtr or b.dynamic.staticPtr;
     
     res.dynamic.stored := a.dynamic.stored or b.dynamic.stored;
     res.dynamic.missing := a.dynamic.missing or b.dynamic.missing;

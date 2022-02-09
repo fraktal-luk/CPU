@@ -89,53 +89,53 @@ architecture Behavioral of UnitRegManager is
     signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;    
 
 
-    function replaceSourcesInt(insVec: InstructionSlotArray; depVec: DependencyVec) return InstructionSlotArray is
-        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-    begin
-        -- Overwrite sources depending on destinations of this group
-        for i in 0 to PIPE_WIDTH-1 loop
-           for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
+--    function replaceSourcesInt(insVec: InstructionSlotArray; depVec: DependencyVec) return InstructionSlotArray is
+--        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+--    begin
+--        -- Overwrite sources depending on destinations of this group
+--        for i in 0 to PIPE_WIDTH-1 loop
+--           for k in 0 to 2 loop -- For each of 3 possible source arguments
+--                for j in PIPE_WIDTH-1 downto 0 loop
+--                    if j >= i then
+--                        next;
+--                    end if;
                     
-                    if depVec(i)(k)(j) = '1'   
-                        and res(i).ins.virtualArgSpec.intArgSel(k) = '1' and res(j).ins.virtualArgSpec.intDestSel = '1' and isNonzero(res(j).ins.virtualArgSpec.dest) = '1' -- intSel match
-                    then
-                        res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
-                        exit;             
-                    end if;
-                end loop;
-            end loop;
-        end loop;        
+--                    if depVec(i)(k)(j) = '1'   
+--                        and res(i).ins.virtualArgSpec.intArgSel(k) = '1' and res(j).ins.virtualArgSpec.intDestSel = '1' and isNonzero(res(j).ins.virtualArgSpec.dest) = '1' -- intSel match
+--                    then
+--                        res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
+--                        exit;             
+--                    end if;
+--                end loop;
+--            end loop;
+--        end loop;        
         
-        return res;
-    end function;
+--        return res;
+--    end function;
     
-    function replaceSourcesFloat(insVec: InstructionSlotArray; depVec: DependencyVec) return InstructionSlotArray is
-        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-    begin
-        -- Overwrite sources depending on destinations of this group
-        for i in 0 to PIPE_WIDTH-1 loop
-            for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
+--    function replaceSourcesFloat(insVec: InstructionSlotArray; depVec: DependencyVec) return InstructionSlotArray is
+--        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+--    begin
+--        -- Overwrite sources depending on destinations of this group
+--        for i in 0 to PIPE_WIDTH-1 loop
+--            for k in 0 to 2 loop -- For each of 3 possible source arguments
+--                for j in PIPE_WIDTH-1 downto 0 loop
+--                    if j >= i then
+--                        next;
+--                    end if;
                     
-                    if depVec(i)(k)(j) = '1'
-                        and res(i).ins.virtualArgSpec.floatArgSel(k) = '1' and res(j).ins.virtualArgSpec.floatDestSel = '1' -- intSel match
-                    then
-                        res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
-                        exit;                   
-                    end if;
-                end loop;
-            end loop;
-        end loop;
+--                    if depVec(i)(k)(j) = '1'
+--                        and res(i).ins.virtualArgSpec.floatArgSel(k) = '1' and res(j).ins.virtualArgSpec.floatDestSel = '1' -- intSel match
+--                    then
+--                        res(i).ins.physicalArgSpec.args(k) := res(j).ins.physicalArgSpec.dest;
+--                        exit;                   
+--                    end if;
+--                end loop;
+--            end loop;
+--        end loop;
         
-        return res;
-    end function;
+--        return res;
+--    end function;
                
     function renameGroupBase(   insVec: InstructionSlotArray;
                                 newIntDests: PhysNameArray;
@@ -171,9 +171,9 @@ architecture Behavioral of UnitRegManager is
             takeVecInt(i) := insVec(i).ins.virtualArgSpec.intDestSel;
             takeVecFloat(i) := insVec(i).ins.virtualArgSpec.floatDestSel;
             
-            res(i).ins.physicalArgSpec.intArgSel := res(i).ins.virtualArgSpec.intArgSel;
+            --res(i).ins.physicalArgSpec.intArgSel := res(i).ins.virtualArgSpec.intArgSel;
             res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
-            res(i).ins.physicalArgSpec.floatArgSel := res(i).ins.virtualArgSpec.floatArgSel;
+            --res(i).ins.physicalArgSpec.floatArgSel := res(i).ins.virtualArgSpec.floatArgSel;
             res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;     
         end loop;
 
@@ -274,12 +274,12 @@ architecture Behavioral of UnitRegManager is
     begin      
         -- Assign src registers
         for i in 0 to PIPE_WIDTH-1 loop                    
-            res(i).ins.physicalArgSpec.args(0) := newPhysSources(3*i+0);
-            res(i).ins.physicalArgSpec.args(1) := newPhysSources(3*i+1);
-            res(i).ins.physicalArgSpec.args(2) := newPhysSources(3*i+2);      
+            --res(i).ins.physicalArgSpec.args(0) := newPhysSources(3*i+0);
+            --res(i).ins.physicalArgSpec.args(1) := newPhysSources(3*i+1);
+            --res(i).ins.physicalArgSpec.args(2) := newPhysSources(3*i+2);      
         end loop;  
         
-        res := replaceSourcesInt(res, depVec);
+        --res := replaceSourcesInt(res, depVec);
         
         return res;
     end function;
@@ -293,12 +293,12 @@ architecture Behavioral of UnitRegManager is
     begin
         -- Assign src registers
         for i in 0 to PIPE_WIDTH-1 loop
-            res(i).ins.physicalArgSpec.args(0) := newFloatSources(3*i+0);
-            res(i).ins.physicalArgSpec.args(1) := newFloatSources(3*i+1);
-            res(i).ins.physicalArgSpec.args(2) := newFloatSources(3*i+2);           
+            --res(i).ins.physicalArgSpec.args(0) := newFloatSources(3*i+0);
+            --res(i).ins.physicalArgSpec.args(1) := newFloatSources(3*i+1);
+            --res(i).ins.physicalArgSpec.args(2) := newFloatSources(3*i+2);           
         end loop;
         
-        res := replaceSourcesFloat(res, depVec);
+        --res := replaceSourcesFloat(res, depVec);
 
         for i in res'range loop
             if res(i).ins.classInfo.fpRename = '0' then
