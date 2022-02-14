@@ -586,10 +586,10 @@ begin
                             cancelled => sentKilled,
                             ready => anyReadyLive,
                             empty => isEmpty,
-                            killSel => sendingKilled,
-                            killSel1 => sentKilled_NS1,
-                            killSel2 => sentKilled_NS2,
-                            killSel3 => sentKilled_NS3
+                            killSel => '0',
+                            killSel1 => '0',
+                            killSel2 => '0',
+                            killSel3 => '0'
                             );    
     end generate;
 
@@ -607,10 +607,10 @@ begin
                             cancelled => sentKilled_NS,
                             ready => anyReadyLive_NS,
                             empty => isEmpty_NS,
-                            killSel => '0',
-                            killSel1 => '0',
-                            killSel2 => '0',
-                            killSel3 => '0'
+                            killSel => sendingKilled_NS,
+                            killSel1 => sentKilled_NS1,
+                            killSel2 => sentKilled_NS2,
+                            killSel3 => sentKilled_NS3
                             );
     end generate;
 

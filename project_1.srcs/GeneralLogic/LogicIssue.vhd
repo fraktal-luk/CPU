@@ -23,6 +23,8 @@ package LogicIssue is
 constant PHYS_NAME_NONE: PhysName := --(others => '1');
                                         (others => '0');
 
+constant IQ_HOLD_TIME: natural := 3;
+
 type StaticInfo is record
     operation: SpecificOp;
     
@@ -928,36 +930,42 @@ end function;
                 
                 variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
             begin
-                    for i in 0 to LEN-1 loop
-                        if queueContent(i).dynamic.issued = '1' then      
-                            res(i).dynamic.full := '0';
-                                res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1);
-                        end if;
+                for i in 0 to LEN-1 loop
+                    if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME then
+                        res(i).dynamic.full := '0';
+                        res(i).dynamic.stageCtr := (others => '0');
+                    end if;
+                
+                    if queueContent(i).dynamic.issued = '1' then      
+                        --res(i).dynamic.full := '0';
+                            res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1);
+                    end if;
+                    
+                    if (selMask(i) and sends) = '1' then
+                        res(i).dynamic.issued := '1';
+                        res(i).dynamic.active := '0';
                         
-                        if (selMask(i) and sends) = '1' then
-                            res(i).dynamic.issued := '1';
-                            res(i).dynamic.active := '0';
-                            
-                                res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1); 
-                        end if;
-                    end loop;    
-        
-                    for i in 0 to LEN-1 loop
-                        if killMask(i) = '1' then
-                            res(i).dynamic.full := '0';
-                            res(i).dynamic.active := '0';
-                         end if;
+                            res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1); 
+                    end if;
+                end loop;    
+    
+                for i in 0 to LEN-1 loop
+                    if killMask(i) = '1' then
+                        res(i).dynamic.full := '0';
+                        res(i).dynamic.active := '0';
+                            res(i).dynamic.stageCtr := (others => '0');
+                     end if;
+                     
+                     if trialMask(i) = '1' then
+                         res(i).dynamic.trial := '1';
                          
-                         if trialMask(i) = '1' then
-                             res(i).dynamic.trial := '1';
-                             
-                          else
-                                res(i).dynamic.trial := '0';
-                         end if;
-                         
-                    end loop;
+                     else
+                            res(i).dynamic.trial := '0';
+                     end if;
+                     
+                end loop;
             
-                    fullMask := extractFullMask(res);
+                --    fullMask := extractFullMask(res);
     
                 for j in 0 to PIPE_WIDTH-1 loop
                     rm(3*j to 3*j + 2) := (others => inputData(j).dynamic.full); 
@@ -966,36 +974,16 @@ end function;
                 rrfFull := rm and rrf;
                 newArr := restoreRenameIndex(updateRR(inputData, rrfFull));
             
-                if prevSending = '1' then
---                        if oldFullMask(0) /= '1' then
-                        
---                            res(0 to 3) := newArr;
---                        elsif oldFullMask(4) /= '1' then 
---                            res(4 to 7) := newArr;
---                        else
---                            res(8 to 11) := newArr;
---                        end if;
---                        return res;
-                    
---                    for i in 0 to LEN-1 loop
---                        if oldFullMask(i) /= '1' then
---                            res(i) := newArr(cnt);
---                            cnt := cnt + 1;
---                            if cnt = PIPE_WIDTH then
---                                exit;
---                            end if;
---                        end if;
---                    end loop;
-                    
-                        for i in 0 to PIPE_WIDTH-1 loop
-                            for k in 0 to LEN-1 loop
-                                if insertionLocs(k, i) = '1' then
-                                    res(k) := newArr(i);
-                                        res(k).dynamic.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
-                                    exit;
-                                end if;
-                            end loop;
+                if prevSending = '1' then                    
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        for k in 0 to LEN-1 loop
+                            if insertionLocs(k, i) = '1' then
+                                res(k) := newArr(i);
+                                    res(k).dynamic.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
+                                exit;
+                            end if;
                         end loop;
+                    end loop;
                 end if;
                 
                 return res;
