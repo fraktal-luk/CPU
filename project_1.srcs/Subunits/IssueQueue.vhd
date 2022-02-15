@@ -445,7 +445,12 @@ begin
                     selMask_NS3 <= selMask_NS2;
                     selMask_NS4 <= selMask_NS3;
 
-                    sentKilled_NS <= sendingKilled_NS;            
+                    sentKilled_NS <= sendingKilled_NS;
+                        sentKilled_NS1 <= sendingKilled_NS;--isNonzero(killMask_NS and selMask_NS1);
+                        sentKilled_NS2 <= isNonzero(killMask_NS and selMask_NS1);
+                        sentKilled_NS3 <= isNonzero(killMask_NS and selMask_NS2);
+                        sentKilled_NS4 <= isNonzero(killMask_NS and selMask_NS3);                        
+                                
                     isSent_NS <= sends_NS;
                     isSent2_NS <= isSent_NS;
                 
@@ -520,12 +525,7 @@ begin
             anyReadyLive_NS <= isNonzero(readyMaskLive_NS);
             anyReadyFull_NS <= isNonzero(readyMaskAll_NS);
             sends_NS <= anyReadyFull_NS and nextAccepting;
-            sendingKilled_NS <= isNonzero(killMask_NS and selMask_NS);          
-            
-                sentKilled_NS1 <= isNonzero(killMask_NS and selMask_NS1);
-                sentKilled_NS2 <= isNonzero(killMask_NS and selMask_NS2);
-                sentKilled_NS3 <= isNonzero(killMask_NS and selMask_NS3);
-                sentKilled_NS4 <= isNonzero(killMask_NS and selMask_NS4);
+            sendingKilled_NS <= isNonzero(killMask_NS and selMask_NS);
 
             -- TMP: find by tag where the op is corresponding to selection from shifting queue      
             selMask_TrNS <= TMP_trSelMask(selMask, queueContent, queueContent_NS);

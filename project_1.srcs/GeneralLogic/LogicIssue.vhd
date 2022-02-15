@@ -947,6 +947,8 @@ end function;
                         
                             res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1); 
                     end if;
+                    
+                        res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits
                 end loop;    
     
                 for i in 0 to LEN-1 loop
