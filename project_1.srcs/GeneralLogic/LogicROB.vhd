@@ -66,6 +66,8 @@ type DynamicOpInfo is record
     confirmedBranch: std_logic;
     specialAction: std_logic;
     refetch: std_logic;
+        mainCluster: std_logic;
+        secCluster:std_logic;
 end record;
 
 constant DEFAULT_DYNAMIC_GROUP_INFO: DynamicGroupInfo := (
@@ -197,9 +199,11 @@ begin
     res.full := isl.full;
     res.killed := '0';
     res.causing := '0';
-    res.completed0 := not isl.ins.classInfo.mainCluster; 
-    res.completed1 := not isl.ins.classInfo.secCluster;
-    
+    res.completed0 := '0';-- not isl.ins.classInfo.mainCluster; 
+    res.completed1 := '0';--not isl.ins.classInfo.secCluster;
+        res.mainCluster := isl.ins.classInfo.mainCluster;
+        res.secCluster := isl.ins.classInfo.secCluster;
+
     res.hasEvent := '0';
     res.hasException := '0';
     res.confirmedBranch := isl.ins.controlInfo.confirmedBranch;
@@ -559,7 +563,7 @@ begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if      insVec(i).full = '1' 
 		    --and (insVec(i).ins.controlInfo.completed and insVec(i).ins.controlInfo.completed2) = '0'
-		    and (da(i).completed0 and da(i).completed1) = '0'
+		    and ((da(i).completed0 or not da(i).mainCluster) and (da(i).completed1 or not da(i).secCluster)) = '0'
 		then
 			return '0'; 
 		end if;

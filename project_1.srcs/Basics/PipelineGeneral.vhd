@@ -1428,8 +1428,10 @@ function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecRes
     variable res: ExecResult := DEFAULT_EXEC_RESULT;
 begin
     res.full := full;
-    res.tag := isl.ins.tags.renameIndex;
-    res.dest := isl.ins.physicalArgSpec.dest;
+    res.tag := --isl.ins.tags.renameIndex;
+                isl.state.renameIndex;
+    res.dest := --isl.ins.physicalArgSpec.dest;
+                isl.state.argSpec.dest;
     res.value := isl.ins.result;    
     return res;
 end function;

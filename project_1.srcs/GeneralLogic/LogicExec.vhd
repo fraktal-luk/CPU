@@ -121,7 +121,8 @@ package body LogicExec is
 		-- j not taken : if not taken ok, if taken goto dest
 
         targetMatch := bool2std(queueData.target = st.args(1));
-		branchTaken := resolveBranchCondition(st, ins.specificOperation.arith, ac);
+		branchTaken := resolveBranchCondition(st, --ins.specificOperation.arith, ac);
+		                                          st.operation.arith, ac);
 
 		if queueData.controlInfo.frontBranch = '1' and branchTaken = '0' then						
 			res.controlInfo.newEvent := '1';
@@ -271,18 +272,18 @@ package body LogicExec is
 		resultExt(31 downto 0) := addExtNew(arg0, argAddSub, carryIn);	
 		linkAdr := queueData.result;
 
-		if (	(ins.specificOperation.arith = opAdd
-			and arg0(MWORD_SIZE-1) = arg1(MWORD_SIZE-1)
-			and arg0(MWORD_SIZE-1) /= resultExt(MWORD_SIZE-1)))
-			or
-			(	(ins.specificOperation.arith = opSub 
-			and arg0(MWORD_SIZE-1) /= arg1(MWORD_SIZE-1)
-			and arg0(MWORD_SIZE-1) /= resultExt(MWORD_SIZE-1)))
-		then 
-			if false then --ENABLE_INT_OVERFLOW then
-				ov := '1';
-			end if;
-		end if;
+--		if (	(ins.specificOperation.arith = opAdd
+--			and arg0(MWORD_SIZE-1) = arg1(MWORD_SIZE-1)
+--			and arg0(MWORD_SIZE-1) /= resultExt(MWORD_SIZE-1)))
+--			or
+--			(	(ins.specificOperation.arith = opSub 
+--			and arg0(MWORD_SIZE-1) /= arg1(MWORD_SIZE-1)
+--			and arg0(MWORD_SIZE-1) /= resultExt(MWORD_SIZE-1)))
+--		then 
+--			if false then --ENABLE_INT_OVERFLOW then
+--				ov := '1';
+--			end if;
+--		end if;
 	    
 	    res.controlInfo.newEvent := '0';
 	    res.controlInfo.hasException := '0';
