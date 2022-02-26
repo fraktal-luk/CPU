@@ -418,8 +418,8 @@ begin
                 outputSignals => outSigsI0
             );
             
-            ISSUE_STAGE_I0_NEW: entity work.IssueStage
-            generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
+            ISSUE_STAGE_I0: entity work.IssueStage(First)
+            generic map(USE_IMM => true)
             port map(
                 clk => clk, reset => '0', en => '0',
                 prevSending => outSigsI0.sending,
@@ -434,8 +434,8 @@ begin
             subpipeI0_Sel <= makeExecResult(work.LogicIssue.TMP_restoreState(slotIssueI0.full, slotIssueI0.state), slotIssueI0.full);
             sendingToRegReadI0 <= slotIssueI0.full and not outSigsI0.cancelled;
                    
-            RR_STAGE_ALU_NEW: entity work.IssueStage
-            generic map(USE_IMM => true, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
+            RR_STAGE_ALU: entity work.IssueStage(Second)
+            generic map(USE_IMM => true, REGS_ONLY => false)
             port map(
                 clk => clk, reset => '0', en => '0',
                 prevSending => sendingToRegReadI0,
@@ -458,8 +458,7 @@ begin
 
             -- NOTE: it seems that only elements of .state used in Exec are: { args: MwordArray; immediate: std_logic }
             dataToAlu(0) <= (slotRegReadI0.full and not outSigsI0.killSel2,
-                                                executeAlu(work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state).ins,--slotRegReadI0.ins,
-                                                             slotRegReadI0.state, bqSelected.ins, branchData, unfoldedAluOp));
+                                   executeAlu(work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state).ins, slotRegReadI0.state, bqSelected.ins, branchData, unfoldedAluOp));
           
             STAGE_I0_E0: entity work.GenericStage2(Behavioral)
             generic map(
@@ -474,13 +473,12 @@ begin
 
             subpipeI0_E0 <= makeExecResult(slotI0_E0(0), slotI0_E0(0).full);
 
-            branchData <= basicBranch(slotRegReadI0.full and not outSigsI0.killSel2
-                                                    and slotRegReadI0.state.branchIns, work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state).ins,--slotRegReadI0.ins,
-                                                                                       slotRegReadI0.state, bqSelected.ins, unfoldedAluOp);                  
+            branchData <= basicBranch(slotRegReadI0.full and not outSigsI0.killSel2 and slotRegReadI0.state.branchIns,
+                                        work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state).ins, slotRegReadI0.state, bqSelected.ins, unfoldedAluOp);                  
             
             dataToBranch(0) <= (slotRegReadI0.full and not outSigsI0.killSel2
                                                     and slotRegReadI0.state.branchIns, branchData);            
-            bqCompare <= (dataToBranch(0).full, work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state).ins);--slotRegReadI0.ins);
+            bqCompare <= (dataToBranch(0).full, work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state).ins);
             bqCompareEarly <= (sendingToRegReadI0 and slotIssueI0.state.branchIns, work.LogicIssue.TMP_restoreState(slotIssueI0.full, slotIssueI0.state).ins);
             
             STAGE_I0_E0_BRANCH: entity work.GenericStage2(Behavioral)
@@ -543,8 +541,8 @@ begin
                outputSignals => outSigsM0
            );
 
-           ISSUE_STAGE_MEM: entity work.IssueStage
-           generic map(USE_IMM => true, TMP_DELAY => true, NEW_RR => true)
+           ISSUE_STAGE_MEM: entity work.IssueStage(First)
+           generic map(USE_IMM => true)
            port map(
                clk => clk, reset => '0', en => '0',      
                prevSending => outSigsM0.sending,
@@ -560,8 +558,8 @@ begin
 
            sendingToRegReadM0 <= slotIssueM0.full and not outSigsM0.cancelled;
 
-           RR_STAGE_MEM: entity work.IssueStage
-           generic map(USE_IMM => true, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
+           RR_STAGE_MEM: entity work.IssueStage(Second)
+           generic map(USE_IMM => true, REGS_ONLY => false)
            port map(
                clk => clk, reset => '0', en => '0',
                prevSending => sendingToRegReadM0,
@@ -577,14 +575,13 @@ begin
 
            preIndexSQ <= slotRegReadM0.state.sqPointer;
            preIndexLQ <= slotRegReadM0.state.lqPointer;
-           preAddressInput <= (slotRegReadM0.full, work.LogicIssue.TMP_restoreState(slotRegReadM0.full, slotRegReadM0.state).ins);--slotRegReadM0.ins);
+           preAddressInput <= (slotRegReadM0.full, work.LogicIssue.TMP_restoreState(slotRegReadM0.full, slotRegReadM0.state).ins);
 
            sendingFromDLQ <= '0';          -- TEMP!
            dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
 
            sendingToAgu <= (slotRegReadM0.full and not outSigsM0.killSel2) or sendingFromDLQ;
-	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(work.LogicIssue.TMP_restoreState(slotRegReadM0.full, slotRegReadM0.state).ins,-- slotRegReadM0.ins,
-	                                                           slotRegReadM0.state, sendingFromDLQ, dataFromDLQ));
+	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(work.LogicIssue.TMP_restoreState(slotRegReadM0.full, slotRegReadM0.state).ins, slotRegReadM0.state, sendingFromDLQ, dataFromDLQ));
                             
            STAGE_AGU: entity work.GenericStage2(Behavioral)
            generic map(
@@ -756,8 +753,8 @@ begin
                 outputSignals => outSigsSVI
             );
      
-            ISSUE_STAGE_SV: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => true, TMP_DELAY => true, NEW_RR => true)
+            ISSUE_STAGE_SV: entity work.IssueStage(First)
+            generic map(USE_IMM => false, REGS_ONLY => true)
             port map(
                 clk => clk, reset => '0', en => '0',
                 prevSending => outSigsSVI.sending,
@@ -773,8 +770,8 @@ begin
             cancelledSVI1 <= outSigsSVI.cancelled or (storeValueCollision2 and outSigsSVI.killSel2); -- If stalled, it stayed here but kill sig moved to next stage 
             sendingToRegReadI <= slotIssueIntSV.full and not cancelledSVI1;
             
-            REG_READ_STAGE_SV: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => true, TMP_DELAY => false, NEW_RR => true)
+            REG_READ_STAGE_SV: entity work.IssueStage(Second)
+            generic map(USE_IMM => false, REGS_ONLY => true)
             port map(
                 clk => clk, reset => '0', en => '0',
                 prevSending => sendingToRegReadI,
@@ -813,8 +810,8 @@ begin
                 outputSignals => outSigsSVF
             );
     
-            ISSUE_STAGE_FLOAT_SV: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => true, TMP_DELAY => true, NEW_RR => true)
+            ISSUE_STAGE_FLOAT_SV: entity work.IssueStage(First)
+            generic map(USE_IMM => false, REGS_ONLY => true)
             port map(
                 clk => clk, reset => '0', en => '0',
                 prevSending => outSigsSVF.sending,
@@ -829,8 +826,8 @@ begin
 
             sendingToRegReadF <= slotIssueFloatSV.full and not outSigsSVF.cancelled;
     
-            REG_READ_STAGE_FLOAT_SV: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => true, TMP_DELAY => false, NEW_RR => true)
+            REG_READ_STAGE_FLOAT_SV: entity work.IssueStage(Second)
+            generic map(USE_IMM => false, REGS_ONLY => true)
             port map(
                 clk => clk, reset => '0', en => '0',        
                 prevSending => sendingToRegReadF,
@@ -886,8 +883,8 @@ begin
                 outputSignals => outSigsF0
             );
 
-            ISSUE_STAGE_F0: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => true, NEW_RR => true)
+            ISSUE_STAGE_F0: entity work.IssueStage(First)
+            generic map(USE_IMM => false, REGS_ONLY => false)
             port map(
                 clk => clk, reset => '0', en => '0',
                 prevSending => outSigsF0.sending,
@@ -904,8 +901,8 @@ begin
 
             sendingToRegReadF0 <= slotIssueF0.full and not outSigsF0.cancelled;
 
-            REG_READ_STAGE_F0: entity work.IssueStage
-            generic map(USE_IMM => false, REGS_ONLY => false, TMP_DELAY => false, NEW_RR => true)
+            REG_READ_STAGE_F0: entity work.IssueStage(Second)
+            generic map(USE_IMM => false, REGS_ONLY => false)
             port map(
                 clk => clk, reset => '0', en => '0',
                 prevSending => sendingToRegReadF0,
@@ -920,8 +917,7 @@ begin
 
             subpipeF0_RegRead <= makeExecResult(work.LogicIssue.TMP_restoreState(slotRegReadF0.full, slotRegReadF0.state), slotRegReadF0.full);
           
-            dataToFpu0(0) <= (slotRegReadF0.full and not outSigsF0.killSel2, executeFpu(work.LogicIssue.TMP_restoreState(slotRegReadF0.full, slotRegReadF0.state).ins,--slotRegReadF0.ins,
-                                                                                        slotRegReadF0.state));
+            dataToFpu0(0) <= (slotRegReadF0.full and not outSigsF0.killSel2, executeFpu(work.LogicIssue.TMP_restoreState(slotRegReadF0.full, slotRegReadF0.state).ins, slotRegReadF0.state));
 
             STAGE_F0_E0: entity work.GenericStage2(Behavioral)
             generic map(
