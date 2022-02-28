@@ -43,10 +43,10 @@ end IssueStage;
 
 architecture First of IssueStage is
 	signal full, sendingOut: std_logic := '0';
-	signal inputData_TMP, inputDataWithArgs, argState: SchedulerState := DEFAULT_SCHEDULER_STATE;	
+	signal inputDataWithArgs, argState: SchedulerState := DEFAULT_SCHEDULER_STATE;	
 begin
-    inputData_TMP <= TMP_prepareDispatchSlot(input.state, prevSending);
-	inputDataWithArgs <= getDispatchArgValues1(inputData_TMP);
+    --inputData_TMP <= ;
+	inputDataWithArgs <= getDispatchArgValues1(TMP_prepareDispatchSlot(input.state, prevSending));
 
 	SAVE_SCH_STATE: process(clk)
 	begin
@@ -70,10 +70,10 @@ end First;
 
 architecture Second of IssueStage is
 	signal full, sendingOut: std_logic := '0';
-	signal inputData_TMP, inputDataWithArgs, argState: SchedulerState := DEFAULT_SCHEDULER_STATE;	
+	signal inputDataWithArgs, argState: SchedulerState := DEFAULT_SCHEDULER_STATE;	
 begin
-    inputData_TMP <= TMP_prepareDispatchSlot(input.state, prevSending);
-	inputDataWithArgs <= getDispatchArgValues2(inputData_TMP, fni, prevSending, USE_IMM, REGS_ONLY);-- when not TMP_DELAY
+    --inputData_TMP <= TMP_prepareDispatchSlot(input.state, prevSending);
+	inputDataWithArgs <= getDispatchArgValues2(TMP_prepareDispatchSlot(input.state, prevSending), fni, prevSending, USE_IMM, REGS_ONLY);-- when not TMP_DELAY
 
 	SAVE_SCH_STATE: process(clk)
 	begin

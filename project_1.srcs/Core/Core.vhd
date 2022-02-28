@@ -418,35 +418,77 @@ begin
                 outputSignals => outSigsI0
             );
             
-            ISSUE_STAGE_I0: entity work.IssueStage(First)
-            generic map(USE_IMM => true)
-            port map(
-                clk => clk, reset => '0', en => '0',
-                prevSending => outSigsI0.sending,
-                nextAccepting => '1',    
-                input => slotSelI0,               
-                output => slotIssueI0,
-                events => eventsOnlyLate,       
-                fni => fni,
-                regValues => (others => (others => '0'))
-            );
+--            ISSUE_STAGE_I0: entity work.IssueStage(First)
+--            generic map(USE_IMM => true)
+--            port map(
+--                clk => clk, reset => '0', en => '0',
+--                prevSending => outSigsI0.sending,
+--                nextAccepting => '1',    
+--                input => slotSelI0,               
+--                output => open,--slotIssueI0,
+--                events => eventsOnlyLate,       
+--                fni => fni,
+--                regValues => (others => (others => '0'))
+--            );
 
             subpipeI0_Sel <= makeExecResult(work.LogicIssue.TMP_restoreState(slotIssueI0.full, slotIssueI0.state), slotIssueI0.full);
             sendingToRegReadI0 <= slotIssueI0.full and not outSigsI0.cancelled;
-                   
-            RR_STAGE_ALU: entity work.IssueStage(Second)
-            generic map(USE_IMM => true, REGS_ONLY => false)
-            port map(
-                clk => clk, reset => '0', en => '0',
-                prevSending => sendingToRegReadI0,
-                nextAccepting => '1',
-                input => slotIssueI0,                
-                output => slotRegReadI0,
-                events => eventsOnlyLate,
-                fni => fni,
-                regValues => regValsI0   
-            );
-                
+
+--            RR_STAGE_ALU: entity work.IssueStage(Second)
+--            generic map(USE_IMM => true, REGS_ONLY => false)
+--            port map(
+--                clk => clk, reset => '0', en => '0',
+--                prevSending => sendingToRegReadI0,
+--                nextAccepting => '1',
+--                input => slotIssueI0,                
+--                output => open,--slotRegReadI0,
+--                events => eventsOnlyLate,
+--                fni => fni,
+--                regValues => regValsI0   
+--            );
+
+                    TMP_ISSUE_I0: block
+                        use work.LogicIssue.all;
+                    	signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                    	signal fullI, fullR: std_logic := '0';
+                    begin
+
+                        inputDataWithArgsI <= getDispatchArgValues1(TMP_prepareDispatchSlot(slotSelI0.state, outSigsI0.sending));
+
+	                    inputDataWithArgsR <= getDispatchArgValues2(TMP_prepareDispatchSlot(slotIssueI0.state, sendingToRegReadI0), fni, sendingToRegReadI0, true, false);
+
+                        process (clk)
+                        begin
+                            if rising_edge(clk) then
+                                if true then -- nextAccepting
+                                    argStateI <= inputDataWithArgsI;
+                                    fullI <= outSigsI0.sending;
+                                end if;
+                                
+                                if events.lateEvent = '1' then
+                                    fullI <= '0';
+                                end if;
+
+                                if true then -- nextAccepting
+                                    argStateR <= inputDataWithArgsR;
+                                    fullR <= sendingToRegReadI0;
+                                end if;
+                                
+                                if events.lateEvent = '1' then
+                                    fullR <= '0';
+                                end if;
+			                            
+                            end if;
+                        end process;
+
+                            slotIssueI0.full <= fullI;-- and nextAccepting;
+                            slotIssueI0.state <= updateDispatchArgs1(argStateI);
+
+                            slotRegReadI0.full <= fullR;-- and nextAccepting;
+                            slotRegReadI0.state <= updateDispatchArgs2(argStateR, fni.values0, regValsI0, false);
+
+                    end block;
+
             ALU_OP_UNFOLD: process (clk)
             begin
                 if rising_edge(clk) then
@@ -541,35 +583,77 @@ begin
                outputSignals => outSigsM0
            );
 
-           ISSUE_STAGE_MEM: entity work.IssueStage(First)
-           generic map(USE_IMM => true)
-           port map(
-               clk => clk, reset => '0', en => '0',      
-               prevSending => outSigsM0.sending,
-               nextAccepting => '1',
-               input => slotSelM0,
-               output => slotIssueM0,
-               events => eventsOnlyLate,
-               fni => fni,
-               regValues => (others => (others => '0'))   
-           );
+--           ISSUE_STAGE_MEM: entity work.IssueStage(First)
+--           generic map(USE_IMM => true)
+--           port map(
+--               clk => clk, reset => '0', en => '0',      
+--               prevSending => outSigsM0.sending,
+--               nextAccepting => '1',
+--               input => slotSelM0,
+--               output => open,--slotIssueM0,
+--               events => eventsOnlyLate,
+--               fni => fni,
+--               regValues => (others => (others => '0'))   
+--           );
 
            subpipeM0_Sel <= makeExecResult(work.LogicIssue.TMP_restoreState(slotIssueM0.full, slotIssueM0.state), slotIssueM0.full);
 
            sendingToRegReadM0 <= slotIssueM0.full and not outSigsM0.cancelled;
 
-           RR_STAGE_MEM: entity work.IssueStage(Second)
-           generic map(USE_IMM => true, REGS_ONLY => false)
-           port map(
-               clk => clk, reset => '0', en => '0',
-               prevSending => sendingToRegReadM0,
-               nextAccepting => '1',
-               input => slotIssueM0,                
-               output => slotRegReadM0,
-               events => eventsOnlyLate,
-               fni => fni,
-               regValues => regValsM0
-           );
+--           RR_STAGE_MEM: entity work.IssueStage(Second)
+--           generic map(USE_IMM => true, REGS_ONLY => false)
+--           port map(
+--               clk => clk, reset => '0', en => '0',
+--               prevSending => sendingToRegReadM0,
+--               nextAccepting => '1',
+--               input => slotIssueM0,                
+--               output => open,--slotRegReadM0,
+--               events => eventsOnlyLate,
+--               fni => fni,
+--               regValues => regValsM0
+--           );
+
+                    TMP_ISSUE_M0: block
+                        use work.LogicIssue.all;
+                    	signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                    	signal fullI, fullR: std_logic := '0';
+                    begin
+
+                        inputDataWithArgsI <= getDispatchArgValues1(TMP_prepareDispatchSlot(slotSelM0.state, outSigsM0.sending));
+
+	                    inputDataWithArgsR <= getDispatchArgValues2(TMP_prepareDispatchSlot(slotIssueM0.state, sendingToRegReadM0), fni, sendingToRegReadM0, true, false);
+
+                        process (clk)
+                        begin
+                            if rising_edge(clk) then
+                                if true then -- nextAccepting
+                                    argStateI <= inputDataWithArgsI;
+                                    fullI <= outSigsM0.sending;
+                                end if;
+                                
+                                if events.lateEvent = '1' then
+                                    fullI <= '0';
+                                end if;
+
+                                if true then -- nextAccepting
+                                    argStateR <= inputDataWithArgsR;
+                                    fullR <= sendingToRegReadM0;
+                                end if;
+                                
+                                if events.lateEvent = '1' then
+                                    fullR <= '0';
+                                end if;
+			                            
+                            end if;
+                        end process;
+
+                            slotIssueM0.full <= fullI;-- and nextAccepting;
+                            slotIssueM0.state <= updateDispatchArgs1(argStateI);
+
+                            slotRegReadM0.full <= fullR;-- and nextAccepting;
+                            slotRegReadM0.state <= updateDispatchArgs2(argStateR, fni.values0, regValsM0, false);
+
+                    end block;
                     
            subpipeM0_RegRead <= makeExecResult(work.LogicIssue.TMP_restoreState(slotRegReadM0.full, slotRegReadM0.state), slotRegReadM0.full);
 
@@ -753,36 +837,79 @@ begin
                 outputSignals => outSigsSVI
             );
      
-            ISSUE_STAGE_SV: entity work.IssueStage(First)
-            generic map(USE_IMM => false, REGS_ONLY => true)
-            port map(
-                clk => clk, reset => '0', en => '0',
-                prevSending => outSigsSVI.sending,
-                nextAccepting => allowIssueStoreDataInt,
-                input => slotSelIntSV,           
-                acceptingOut => open,
-                output => slotIssueIntSV,
-                events => eventsOnlyLate,
-                fni => fniEmpty,
-                regValues => (others => (others => '0'))   
-            );
+--            ISSUE_STAGE_SV: entity work.IssueStage(First)
+--            generic map(USE_IMM => false, REGS_ONLY => true)
+--            port map(
+--                clk => clk, reset => '0', en => '0',
+--                prevSending => outSigsSVI.sending,
+--                nextAccepting => allowIssueStoreDataInt,
+--                input => slotSelIntSV,           
+--                acceptingOut => open,
+--                output => open,--slotIssueIntSV,
+--                events => eventsOnlyLate,
+--                fni => fniEmpty,
+--                regValues => (others => (others => '0'))   
+--            );
                                          
             cancelledSVI1 <= outSigsSVI.cancelled or (storeValueCollision2 and outSigsSVI.killSel2); -- If stalled, it stayed here but kill sig moved to next stage 
             sendingToRegReadI <= slotIssueIntSV.full and not cancelledSVI1;
             
-            REG_READ_STAGE_SV: entity work.IssueStage(Second)
-            generic map(USE_IMM => false, REGS_ONLY => true)
-            port map(
-                clk => clk, reset => '0', en => '0',
-                prevSending => sendingToRegReadI,
-                nextAccepting => '1',
-                input => slotIssueIntSV,          
-                acceptingOut => open,
-                output => slotRegReadIntSV,
-                events => eventsOnlyLate,
-                fni => fniEmpty,
-                regValues => regValsS0     
-            );
+--            REG_READ_STAGE_SV: entity work.IssueStage(Second)
+--            generic map(USE_IMM => false, REGS_ONLY => true)
+--            port map(
+--                clk => clk, reset => '0', en => '0',
+--                prevSending => sendingToRegReadI,
+--                nextAccepting => '1',
+--                input => slotIssueIntSV,          
+--                acceptingOut => open,
+--                output => open,--slotRegReadIntSV,
+--                events => eventsOnlyLate,
+--                fni => fniEmpty,
+--                regValues => regValsS0     
+--            );
+
+
+                    TMP_ISSUE_SVI: block
+                        use work.LogicIssue.all;
+                    	signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                    	signal fullI, fullR: std_logic := '0';
+                    begin
+
+                        inputDataWithArgsI <= getDispatchArgValues1(TMP_prepareDispatchSlot(slotSelIntSV.state, outSigsSVI.sending));
+
+	                    inputDataWithArgsR <= getDispatchArgValues2(TMP_prepareDispatchSlot(slotIssueIntSV.state, sendingToRegReadI), fni, sendingToRegReadI, false, true);
+
+                        process (clk)
+                        begin
+                            if rising_edge(clk) then
+                                if allowIssueStoreDataInt = '1' then -- nextAccepting
+                                    argStateI <= inputDataWithArgsI;
+                                    fullI <= outSigsSVI.sending;
+                                end if;
+                                
+                                if events.lateEvent = '1' then
+                                    fullI <= '0';
+                                end if;
+
+                                if true then -- nextAccepting
+                                    argStateR <= inputDataWithArgsR;
+                                    fullR <= sendingToRegReadI;
+                                end if;
+                                
+                                if events.lateEvent = '1' then
+                                    fullR <= '0';
+                                end if;
+			                            
+                            end if;
+                        end process;
+
+                            slotIssueIntSV.full <= fullI;-- and nextAccepting;
+                            slotIssueIntSV.state <= updateDispatchArgs1(argStateI);
+
+                            slotRegReadIntSV.full <= fullR;-- and nextAccepting;
+                            slotRegReadIntSV.state <= updateDispatchArgs2(argStateR, fni.values0, regValsS0, true);
+
+                    end block;
 
             sendingToStoreWriteInt <= slotRegReadIntSV.full and not outSigsSVI.killSel2;
    
@@ -810,35 +937,77 @@ begin
                 outputSignals => outSigsSVF
             );
     
-            ISSUE_STAGE_FLOAT_SV: entity work.IssueStage(First)
-            generic map(USE_IMM => false, REGS_ONLY => true)
-            port map(
-                clk => clk, reset => '0', en => '0',
-                prevSending => outSigsSVF.sending,
-                nextAccepting => '1', --allowIssueStageStoreDataFP,    
-                input => slotSelFloatSV,
-                acceptingOut => open,
-                output => slotIssueFloatSV,
-                events => eventsOnlyLate,
-                fni => fniEmpty,
-                regValues => (others => (others => '0'))   
-            );        
+--            ISSUE_STAGE_FLOAT_SV: entity work.IssueStage(First)
+--            generic map(USE_IMM => false, REGS_ONLY => true)
+--            port map(
+--                clk => clk, reset => '0', en => '0',
+--                prevSending => outSigsSVF.sending,
+--                nextAccepting => '1', --allowIssueStageStoreDataFP,    
+--                input => slotSelFloatSV,
+--                acceptingOut => open,
+--                output => open,--slotIssueFloatSV,
+--                events => eventsOnlyLate,
+--                fni => fniEmpty,
+--                regValues => (others => (others => '0'))   
+--            );        
 
             sendingToRegReadF <= slotIssueFloatSV.full and not outSigsSVF.cancelled;
     
-            REG_READ_STAGE_FLOAT_SV: entity work.IssueStage(Second)
-            generic map(USE_IMM => false, REGS_ONLY => true)
-            port map(
-                clk => clk, reset => '0', en => '0',        
-                prevSending => sendingToRegReadF,
-                nextAccepting => '1',
-                input => slotIssueFloatSV,       
-                acceptingOut => open,
-                output => slotRegReadFloatSV,
-                events => eventsOnlyLate,
-                fni => fniEmpty,
-                regValues => regValsFS0     
-            );
+--            REG_READ_STAGE_FLOAT_SV: entity work.IssueStage(Second)
+--            generic map(USE_IMM => false, REGS_ONLY => true)
+--            port map(
+--                clk => clk, reset => '0', en => '0',        
+--                prevSending => sendingToRegReadF,
+--                nextAccepting => '1',
+--                input => slotIssueFloatSV,       
+--                acceptingOut => open,
+--                output => open,--slotRegReadFloatSV,
+--                events => eventsOnlyLate,
+--                fni => fniEmpty,
+--                regValues => regValsFS0     
+--            );
+
+                    TMP_ISSUE_SVF: block
+                        use work.LogicIssue.all;
+                    	signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                    	signal fullI, fullR: std_logic := '0';
+                    begin
+
+                        inputDataWithArgsI <= getDispatchArgValues1(TMP_prepareDispatchSlot(slotSelFloatSV.state, outSigsSVF.sending));
+
+	                    inputDataWithArgsR <= getDispatchArgValues2(TMP_prepareDispatchSlot(slotIssueFloatSV.state, sendingToRegReadF), fni, sendingToRegReadF, false, true);
+
+                        process (clk)
+                        begin
+                            if rising_edge(clk) then
+                                if true then -- nextAccepting
+                                    argStateI <= inputDataWithArgsI;
+                                    fullI <= outSigsSVF.sending;
+                                end if;
+                                
+                                if events.lateEvent = '1' then
+                                    fullI <= '0';
+                                end if;
+
+                                if true then -- nextAccepting
+                                    argStateR <= inputDataWithArgsR;
+                                    fullR <= sendingToRegReadF;
+                                end if;
+                                
+                                if events.lateEvent = '1' then
+                                    fullR <= '0';
+                                end if;
+			                            
+                            end if;
+                        end process;
+
+                            slotIssueFloatSV.full <= fullI;-- and nextAccepting;
+                            slotIssueFloatSV.state <= updateDispatchArgs1(argStateI);
+
+                            slotRegReadFloatSV.full <= fullR;-- and nextAccepting;
+                            slotRegReadFloatSV.state <= updateDispatchArgs2(argStateR, fni.values0, regValsFS0, true);
+
+                    end block;
 
             sendingToStoreWriteFloat <= slotRegReadFloatSV.full and not outSigsSVF.killSel2;
            
@@ -883,37 +1052,80 @@ begin
                 outputSignals => outSigsF0
             );
 
-            ISSUE_STAGE_F0: entity work.IssueStage(First)
-            generic map(USE_IMM => false, REGS_ONLY => false)
-            port map(
-                clk => clk, reset => '0', en => '0',
-                prevSending => outSigsF0.sending,
-                nextAccepting => '1',
-                input => slotSelF0,
-                acceptingOut => open,
-                output => slotIssueF0,
-                events => eventsOnlyLate,
-                fni => fniEmpty,
-                regValues => (others => (others => '0'))   
-            );
+--            ISSUE_STAGE_F0: entity work.IssueStage(First)
+--            generic map(USE_IMM => false, REGS_ONLY => false)
+--            port map(
+--                clk => clk, reset => '0', en => '0',
+--                prevSending => outSigsF0.sending,
+--                nextAccepting => '1',
+--                input => slotSelF0,
+--                acceptingOut => open,
+--                output => open,--slotIssueF0,
+--                events => eventsOnlyLate,
+--                fni => fniEmpty,
+--                regValues => (others => (others => '0'))   
+--            );
            
             subpipeF0_Sel <= makeExecResult(work.LogicIssue.TMP_restoreState(slotIssueF0.full, slotIssueF0.state), slotIssueF0.full);
 
             sendingToRegReadF0 <= slotIssueF0.full and not outSigsF0.cancelled;
 
-            REG_READ_STAGE_F0: entity work.IssueStage(Second)
-            generic map(USE_IMM => false, REGS_ONLY => false)
-            port map(
-                clk => clk, reset => '0', en => '0',
-                prevSending => sendingToRegReadF0,
-                nextAccepting => '1',
-                input => slotIssueF0,
-                acceptingOut => open,
-                output => slotRegReadF0,        
-                events => eventsOnlyLate,
-                fni => fniFloat,
-                regValues => regValsF0     
-            );
+--            REG_READ_STAGE_F0: entity work.IssueStage(Second)
+--            generic map(USE_IMM => false, REGS_ONLY => false)
+--            port map(
+--                clk => clk, reset => '0', en => '0',
+--                prevSending => sendingToRegReadF0,
+--                nextAccepting => '1',
+--                input => slotIssueF0,
+--                acceptingOut => open,
+--                output => open,--slotRegReadF0,        
+--                events => eventsOnlyLate,
+--                fni => fniFloat,
+--                regValues => regValsF0     
+--            );
+
+                    TMP_ISSUE_F0: block
+                        use work.LogicIssue.all;
+                    	signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                    	signal fullI, fullR: std_logic := '0';
+                    begin
+
+                        inputDataWithArgsI <= getDispatchArgValues1(TMP_prepareDispatchSlot(slotSelF0.state, outSigsF0.sending));
+
+	                    inputDataWithArgsR <= getDispatchArgValues2(TMP_prepareDispatchSlot(slotIssueF0.state, sendingToRegReadF0), fni, sendingToRegReadF0, false, false);
+
+                        process (clk)
+                        begin
+                            if rising_edge(clk) then
+                                if true then -- nextAccepting
+                                    argStateI <= inputDataWithArgsI;
+                                    fullI <= outSigsF0.sending;
+                                end if;
+                                
+                                if events.lateEvent = '1' then
+                                    fullI <= '0';
+                                end if;
+
+                                if true then -- nextAccepting
+                                    argStateR <= inputDataWithArgsR;
+                                    fullR <= sendingToRegReadF0;
+                                end if;
+                                
+                                if events.lateEvent = '1' then
+                                    fullR <= '0';
+                                end if;
+			                            
+                            end if;
+                        end process;
+
+                            slotIssueF0.full <= fullI;-- and nextAccepting;
+                            slotIssueF0.state <= updateDispatchArgs1(argStateI);
+
+                            slotRegReadF0.full <= fullR;-- and nextAccepting;
+                            slotRegReadF0.state <= updateDispatchArgs2(argStateR, fni.values0, regValsF0, false);
+
+                    end block;
+
 
             subpipeF0_RegRead <= makeExecResult(work.LogicIssue.TMP_restoreState(slotRegReadF0.full, slotRegReadF0.state), slotRegReadF0.full);
           
