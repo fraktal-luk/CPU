@@ -31,6 +31,8 @@ type ExecResultArray is array(integer range <>) of ExecResult;
 
 function makeExecResult(isl: InstructionSlot; full: std_logic) return ExecResult;
 function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecResult;
+function makeExecResult(isl: SchedulerEntrySlot) return ExecResult;
+function makeExecResult(isl: SchedulerState) return ExecResult;
 
 
 type EventState is record
@@ -1436,6 +1438,29 @@ begin
     return res;
 end function;
 
+function makeExecResult(isl: SchedulerEntrySlot) return ExecResult is
+    variable res: ExecResult := DEFAULT_EXEC_RESULT;
+begin
+    res.full := isl.full;
+    res.tag := --isl.ins.tags.renameIndex;
+                isl.state.renameIndex;
+    res.dest := --isl.ins.physicalArgSpec.dest;
+                isl.state.argSpec.dest;
+    --res.value := isl.ins.result;    
+    return res;
+end function;
+
+function makeExecResult(isl: SchedulerState) return ExecResult is
+    variable res: ExecResult := DEFAULT_EXEC_RESULT;
+begin
+    res.full := isl.full;
+    res.tag := --isl.ins.tags.renameIndex;
+                isl.renameIndex;
+    res.dest := --isl.ins.physicalArgSpec.dest;
+                isl.argSpec.dest;
+    --res.value := isl.ins.result;    
+    return res;
+end function;
 
     function setPhysSources(insVec: InstructionSlotArray;
                             newPhysSources: PhysNameArray;

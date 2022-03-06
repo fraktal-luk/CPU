@@ -271,8 +271,9 @@ type InstructionSlotArray is array(integer range <>) of InstructionSlot;
 
 
 type SchedulerState is record
+        full: std_logic;
+
 	issued: std_logic;
-    --newInQueue: std_logic;
         
     branchIns: std_logic;
         
@@ -280,7 +281,7 @@ type SchedulerState is record
     bqPointer: SmallNumber;
     sqPointer: SmallNumber;
     lqPointer: SmallNumber;        
-        bqPointerSeq: SmallNumber;        
+    bqPointerSeq: SmallNumber;        
         
     operation: SpecificOp;
     argSpec: InstructionArgSpec;
@@ -298,13 +299,13 @@ type SchedulerState is record
     args: MwordArray(0 to 2);
     
     argLocsPipe: SmallNumberArray(0 to 2);
-    --argLocsPhase: SmallNumberArray(0 to 2);	
     argSrc: SmallNumberArray(0 to 2);	
 end record;
 
-constant DEFAULT_SCHEDULER_STATE: SchedulerState := ( 
+constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
+            full => '0',        
+
       issued => '0',
-      --newInQueue => '0',
 
       branchIns => '0',
       
@@ -312,7 +313,7 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       bqPointer => (others => '0'),
       sqPointer => (others => '0'),
       lqPointer => (others => '0'),                    
-          bqPointerSeq => (others => '0'),                    
+      bqPointerSeq => (others => '0'),                    
             
       operation => DEFAULT_SPECIFIC_OP,
       argSpec => DEFAULT_ARG_SPEC,          
@@ -329,7 +330,6 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       readNew => (others => '0'),
       args => (others => (others=>'0')),
       argLocsPipe => (others => (others => '0')),
-      --argLocsPhase => (others => (others => '0')),
       argSrc => (others => (others => '0'))
       );
 

@@ -147,9 +147,13 @@ function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
 function TMP_restoreState(full: std_logic;-- ins: InstructionState;
                                 st: SchedulerState) return SchedulerEntrySlot;
 
+function TMP_getIns(st: SchedulerState) return InstructionState;
+
 function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) return SchedulerState;
 
 function getDispatchArgValues1(input: SchedulerState) return SchedulerState;
+
+function getDispatchArgValues_Is(input: SchedulerState; prevSending: std_logic) return SchedulerState;
 
 function getDispatchArgValues2(input: SchedulerState;
                                     fni: ForwardingInfo;
@@ -157,8 +161,20 @@ function getDispatchArgValues2(input: SchedulerState;
                                     USE_IMM: boolean; REGS_ONLY: boolean)
 return SchedulerState;
 
+function getDispatchArgValues_RR(input: SchedulerState;
+                                 prevSending: std_logic;
+                                 fni: ForwardingInfo;
+                                 USE_IMM: boolean; REGS_ONLY: boolean)
+return SchedulerState;
+
 function updateDispatchArgs1(st: SchedulerState) return SchedulerState;
+
+function updateDispatchArgs_Is(st: SchedulerState; full: std_logic) return SchedulerState;
+
 function updateDispatchArgs2(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean) return SchedulerState;
+
+function updateDispatchArgs_RR(st: SchedulerState; full: std_logic; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean) return SchedulerState;
+
 
 function iqNext_N2(queueContent: SchedulerInfoArray;
                   inputData: SchedulerInfoArray;           
@@ -580,9 +596,61 @@ end function;
 
 
 
+function TMP_getIns(st: SchedulerState) return InstructionState is
+	variable res: InstructionState := DEFAULT_INS_STATE;
+	variable v0, v1: std_logic_vector(1 downto 0) := "00";
+	variable selected0, selected1: Mword := (others => '0');
+	variable ready: std_logic_vector(0 to 2) := (others=>'0');
+	variable locs: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
+	constant Z3: std_logic_vector(0 to 2) := (others => '0');
+	constant ZZ3: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
+	variable imm: Word := (others => '0');
+begin
+    --res.full := full;
+	--res.ins := ins;
+	--res.state := st;
+
+    res.tags.renameIndex := st.renameIndex;
+    res.tags.bqPointer := st.bqPointer;
+    res.tags.sqPointer := st.sqPointer;
+    res.tags.lqPointer := st.lqPointer;
+        res.tags.bqPointerSeq := st.bqPointerSeq;
+
+    res.specificOperation := st.operation;
+
+    res.physicalArgSpec.dest := st.argSpec.dest;
+    res.physicalArgSpec.intDestSel := st.argSpec.intDestSel;
+    res.physicalArgSpec.floatDestSel := st.argSpec.floatDestSel;
+    
+    res.physicalArgSpec.intArgSel := (others => '0');
+    res.physicalArgSpec.floatArgSel := (others => '0');
+        
+    res.physicalArgSpec.args := st.argSpec.args;
+
+    -- Clear dest if empty
+   -- if not res.full = '1' then
+        --res.ins.physicalArgSpec.intDestSel := '0';
+        --res.ins.physicalArgSpec.floatDestSel := '0';
+        --res.ins.physicalArgSpec.dest := PHYS_NAME_NONE;
+   -- end if;
+    
+    -- Clear unused fields       
+    if CLEAR_DEBUG_INFO then
+        res := clearAbstractInfo(res);
+    end if;
+    res.controlInfo.newEvent := '0';
+    res.controlInfo.hasInterrupt := '0';
+        
+	return res;
+end function;
+
+
+
 function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) return SchedulerState is
     variable res: SchedulerState := input;
 begin
+    res.full := prevSending;
+    
     if prevSending = '0' or (input.argSpec.intDestSel = '0' and input.argSpec.floatDestSel = '0') then
        --res.ins.physicalArgSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
        res.argSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
@@ -594,6 +662,16 @@ end function;
 
 function getDispatchArgValues1(input: SchedulerState) return SchedulerState is
     variable res: SchedulerState := input;
+begin
+    if IMM_AS_REG then
+        res.immValue(PhysName'length-2 downto 0) := res.argSpec.args(1)(6 downto 0);
+    end if;
+    
+    return res;
+end function;
+
+function getDispatchArgValues_Is(input: SchedulerState; prevSending: std_logic) return SchedulerState is
+    variable res: SchedulerState := TMP_prepareDispatchSlot(input, prevSending);
 begin
     if IMM_AS_REG then
         res.immValue(PhysName'length-2 downto 0) := res.argSpec.args(1)(6 downto 0);
@@ -622,6 +700,27 @@ begin
 
 end function;
 
+function updateDispatchArgs_Is(st: SchedulerState; full: std_logic)
+return SchedulerState is
+    variable res: SchedulerState := st;
+begin
+    res.full := full;
+
+    res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
+    res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
+
+    if res.argSrc(0)(1) /= '1' then
+        res.argSpec.args(0) := (others => '0');
+    end if;
+
+    if res.argSrc(1)(1) /= '1' or res.zero(1) = '1' then
+        res.argSpec.args(1) := (others => '0');
+    end if;
+    
+    return res;
+
+end function;
+
 function getDispatchArgValues2(input: SchedulerState;
                                     fni: ForwardingInfo;
                                     prevSending: std_logic;
@@ -629,6 +728,56 @@ function getDispatchArgValues2(input: SchedulerState;
 return SchedulerState is
     variable res: SchedulerState := input;
 begin
+    if REGS_ONLY then
+        res.stored := (others => '0');
+        return res;    
+    end if;
+
+    if res.zero(0) = '1' then
+        res.args(0) := (others => '0');
+        res.stored(0) := '1';
+    elsif res.argSrc(0)(1 downto 0) = "00" then
+        res.args(0) := fni.values0(slv2u(res.argLocsPipe(0)(1 downto 0)));
+        res.stored(0) := '1';
+    elsif res.argSrc(0)(1 downto 0) = "01" then
+        res.args(0) := fni.values1(slv2u(res.argLocsPipe(0)(1 downto 0)));
+        if res.argSrc(0)(1 downto 0) = "01" then -- becomes redundant
+            res.stored(0) := '1';
+        end if;
+    else
+        res.args(0) := (others => '0');           
+    end if;
+
+    if res.zero(1) = '1' then
+        if USE_IMM then
+            res.args(1)(31 downto 16) := (others => res.immValue(15));
+            res.args(1)(15 downto 0) := res.immValue;
+        else
+            res.args(1) := (others => '0');
+        end if;
+        res.stored(1) := '1';
+    elsif res.argSrc(1)(1 downto 0) = "00" then
+        res.args(1) := fni.values0(slv2u(res.argLocsPipe(1)(1 downto 0)));
+        res.stored(1) := '1';
+    elsif res.argSrc(1)(1 downto 0) = "01" then
+        res.args(1) := fni.values1(slv2u(res.argLocsPipe(1)(1 downto 0)));
+        res.stored(1) := '1';
+    else
+        res.args(1) := (others => '0');
+    end if;
+    
+    return res;
+end function;
+
+
+function getDispatchArgValues_RR(input: SchedulerState;
+                                 prevSending: std_logic;
+                                 fni: ForwardingInfo;
+                                 USE_IMM: boolean; REGS_ONLY: boolean)
+return SchedulerState is
+    variable res: SchedulerState := TMP_prepareDispatchSlot(input, prevSending);
+begin
+
     if REGS_ONLY then
         res.stored := (others => '0');
         return res;    
@@ -700,6 +849,38 @@ begin
 
     return res;
 end function;
+
+function updateDispatchArgs_RR(st: SchedulerState; full: std_logic; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean)
+return SchedulerState is
+    variable res: SchedulerState := st;
+begin
+    res.full := full;
+
+    if REGS_ONLY then
+        res.args(0) := regValues(0);
+        res.args(1) := regValues(1);
+        return res;
+    end if;
+
+    if res.readNew(0) = '1' then
+        res.args(0) := vals(slv2u(res.argLocsPipe(0)(1 downto 0)));
+    else
+        res.args(0) := res.args(0) or regValues(0);
+    end if;
+    
+    res.stored(0) := '1';
+
+    if res.readNew(1) = '1' then
+        res.args(1) := vals(slv2u(res.argLocsPipe(1)(1 downto 0)));
+    else
+        res.args(1) := res.args(1) or regValues(1);
+    end if;
+
+    res.stored(1) := '1';         
+
+    return res;
+end function;
+
 
 function moveEarlyStage(content: SchedulerInfoArray; insA, insD: integer) return SchedulerInfoArray is
     variable res: SchedulerInfoArray(content'range) := content;
