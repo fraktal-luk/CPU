@@ -38,9 +38,11 @@ package LogicExec is
 	function execLogicOr(ins: InstructionState) return InstructionState;
 	function execLogicXor(ins: InstructionState) return InstructionState;
 
-	function basicBranch(sending: std_logic; ins: InstructionState; st: SchedulerState; queueData: InstructionState; ac: AluControl) return InstructionState;
+	function basicBranch(sending: std_logic;-- ins: InstructionState;
+	                       st: SchedulerState; queueData: InstructionState; ac: AluControl) return InstructionState;
 
-	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState; branchIns: InstructionState; ac: AluControl) return InstructionState;
+	function executeAlu(--ins: InstructionState;
+	                    st: SchedulerState; queueData: InstructionState; branchIns: InstructionState; ac: AluControl) return InstructionState;
 
 	function executeFpu(ins: InstructionState; st: SchedulerState) return InstructionState;
 
@@ -108,8 +110,9 @@ package body LogicExec is
 		
 	end function;
 
-	function basicBranch(sending: std_logic; ins: InstructionState; st: SchedulerState; queueData: InstructionState; ac: AluControl) return InstructionState is
-		variable res: InstructionState := ins;
+	function basicBranch(sending: std_logic;-- ins: InstructionState;
+	                       st: SchedulerState; queueData: InstructionState; ac: AluControl) return InstructionState is
+		variable res: InstructionState := work.LogicIssue.TMP_getIns(st);--ins;
 		variable branchTaken, targetMatch: std_logic := '0';
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
 		variable targetEqual: std_logic := '0';
@@ -198,9 +201,10 @@ package body LogicExec is
 		return res;
 	end function;
 	
-	function executeAlu(ins: InstructionState; st: SchedulerState; queueData: InstructionState; branchIns: InstructionState; ac: AluControl)
+	function executeAlu(--ins: InstructionState;
+	                    st: SchedulerState; queueData: InstructionState; branchIns: InstructionState; ac: AluControl)
 	return InstructionState is
-		variable res: InstructionState := ins;
+		variable res: InstructionState := work.LogicIssue.TMP_getIns(st);-- ins;
 		variable result, linkAdr: Mword := (others => '0');
 		variable arg0, arg1, arg2: Mword := (others => '0');
 		variable argAddSub: Mword := (others => '0');

@@ -74,7 +74,7 @@ function deserializeEarlyInfo(v: std_logic_vector) return EarlyInfo;
 function deserializeLateInfo(v: std_logic_vector) return LateInfo;
 
 
-function getMatchedSlot(slotPtr: SmallNumber; cmpAdrSlot: InstructionSlot; earlySelected: EarlyInfo; lateSelected: LateInfo)
+function getMatchedSlot(slotPtr: SmallNumber; full: std_logic; renameIndex: InsTag; earlySelected: EarlyInfo; lateSelected: LateInfo)
 return InstructionSlot;
 
 end package;
@@ -182,7 +182,7 @@ begin
     return res;
 end function;
 
-function getMatchedSlot(slotPtr: SmallNumber; cmpAdrSlot: InstructionSlot; earlySelected: EarlyInfo; lateSelected: LateInfo)
+function getMatchedSlot(slotPtr: SmallNumber; full: std_logic; renameIndex: InsTag; earlySelected: EarlyInfo; lateSelected: LateInfo)
 return InstructionSlot is
    variable res: InstructionSlot := DEFAULT_INS_SLOT;
    constant ipBase: Mword := earlySelected.ip;
@@ -203,12 +203,13 @@ begin
    useVecSQ(1 to PIPE_WIDTH-1) := lateSelected.usingSQ;
    useVecLQ(1 to PIPE_WIDTH-1) := lateSelected.usingLQ;
 
-   lowPtr := slv2u(getTagLow(cmpAdrSlot.ins.tags.renameIndex));
+   lowPtr := slv2u(getTagLow(--cmpAdrSlot.ins.tags.renameIndex));
+                             renameIndex));
    
    res.ins.controlInfo.frontBranch := earlySelected.frontBranch(lowPtr);
    res.ins.controlInfo.confirmedBranch := earlySelected.confirmedBranch(lowPtr);
    
-   res.full := cmpAdrSlot.full;
+   res.full := full;--cmpAdrSlot.full;
 
    res.ins.ip := trgs(lowPtr);
        -- !!! this doesn't work for register branches

@@ -79,7 +79,7 @@ architecture Behavioral of Core is
 
         signal renamedArgsInt, renamedArgsFloat, renamedArgsMerged: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 
-    signal bqCompare, bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
+    signal bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
            specialAction, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
     signal bqPointer, bqPointerSeq, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
@@ -97,6 +97,8 @@ architecture Behavioral of Core is
     signal cycleCounter: Word := (others => '0');
     
     signal events, eventsOnlyLate: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE);
+
+           signal bqUpdate_N, bqCompareEarly_N: ExecResult := DEFAULT_EXEC_RESULT;
     
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
 begin
@@ -368,7 +370,7 @@ begin
         signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
         
-                signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';        
+                signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';                
     begin
         newIntSources <= TMP_getPhysicalArgsNew(renamedArgsInt);
         newFloatSources <= TMP_getPhysicalArgsNew(renamedArgsFloat);
@@ -468,7 +470,7 @@ begin
             -- NOTE: it seems that only elements of .state used in Exec are: { args: MwordArray; immediate: std_logic }
             dataToAlu(0) <= (slotRegReadI0.state.full and not outSigsI0.killSel2,
                                    executeAlu(--work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state).ins,
-                                              work.LogicIssue.TMP_getIns(slotRegReadI0.state),
+                                              --work.LogicIssue.TMP_getIns(slotRegReadI0.state),
                                               slotRegReadI0.state, bqSelected.ins, branchData, unfoldedAluOp));
           
             STAGE_I0_E0: entity work.GenericStage2(Behavioral)
@@ -486,16 +488,17 @@ begin
 
             branchData <= basicBranch(slotRegReadI0.state.full and not outSigsI0.killSel2 and slotRegReadI0.state.branchIns,
                                         --work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state).ins,
-                                        work.LogicIssue.TMP_getIns(slotRegReadI0.state),
+                                        --work.LogicIssue.TMP_getIns(slotRegReadI0.state),
                                         slotRegReadI0.state, bqSelected.ins, unfoldedAluOp);                  
             
             dataToBranch(0) <= (slotRegReadI0.state.full and not outSigsI0.killSel2
                                                     and slotRegReadI0.state.branchIns, branchData);            
-            bqCompare <= (dataToBranch(0).full, --work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state).ins);
-                                                work.LogicIssue.TMP_getIns(slotRegReadI0.state));
+            --bqCompare <= (dataToBranch(0).full, --work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state).ins);
+            --                                    work.LogicIssue.TMP_getIns(slotRegReadI0.state));
             bqCompareEarly <= (sendingToRegReadI0 and slotIssueI0.state.branchIns, --work.LogicIssue.TMP_restoreState(slotIssueI0.full, slotIssueI0.state).ins);
                                                                                    work.LogicIssue.TMP_getIns(slotIssueI0.state));
-
+                bqCompareEarly_N.full <= bqCompareEarly.full;
+                bqCompareEarly_N.tag <= bqCompareEarly.ins.tags.renameIndex;
             
             STAGE_I0_E0_BRANCH: entity work.GenericStage2(Behavioral)
             generic map(
@@ -512,6 +515,10 @@ begin
             execCausing <= clearDbCausing(dataFromBranch.ins);
             preExecCausing <= clearDbCausing(dataToBranch(0).ins);
             bqUpdate <= dataFromBranch; -- TODO: possibly redundant cause execCausing can carry the data
+                    bqUpdate_N.full <= dataFromBranch.full;
+                    bqUpdate_N.tag <= dataFromBranch.ins.tags.renameIndex;
+                    --bqUpdate_N.dest <= null;
+                    bqUpdate_N.value <= dataFromBranch.ins.target; 
             
             DELAYED_EXEC_EVENT: process (clk)
             begin
@@ -562,21 +569,16 @@ begin
                 signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
                 signal fullI, fullR: std_logic := '0';
             begin
-
-                inputDataWithArgsI <= getDispatchArgValues1(TMP_prepareDispatchSlot(slotSelM0.state, outSigsM0.sending));
-
-                slotIssueM0.full <= fullI;-- and nextAccepting;
-                slotIssueM0.state <= updateDispatchArgs1(argStateI);
-
-                subpipeM0_Issue <= makeExecResult(work.LogicIssue.TMP_restoreState(slotIssueM0.full, slotIssueM0.state), slotIssueM0.full);
-
-                inputDataWithArgsR <= getDispatchArgValues2(TMP_prepareDispatchSlot(slotIssueM0.state, sendingToRegReadM0), fni, sendingToRegReadM0, true, false);
-                sendingToRegReadM0 <= slotIssueM0.full and not outSigsM0.cancelled;
-
-                slotRegReadM0.full <= fullR;-- and nextAccepting;
-                slotRegReadM0.state <= updateDispatchArgs2(argStateR, fni.values0, regValsM0, false);
-                
-                subpipeM0_RegRead <= makeExecResult(work.LogicIssue.TMP_restoreState(slotRegReadM0.full, slotRegReadM0.state), slotRegReadM0.full);
+                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelM0.state, outSigsM0.sending);
+                -- Reg
+                slotIssueM0.full <= fullI;
+                slotIssueM0.state <= updateDispatchArgs_Is(argStateI, fullI);
+                -- pseudo interface
+                sendingToRegReadM0 <= slotIssueM0.state.full and not outSigsM0.cancelled;
+                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueM0.state, sendingToRegReadM0, fni, true, false);
+                -- Reg
+                slotRegReadM0.full <= fullR;
+                slotRegReadM0.state <= updateDispatchArgs_RR(argStateR, fullR, fni.values0, regValsM0, false);
 
                 process (clk)
                 begin
@@ -587,6 +589,7 @@ begin
                         end if;
                         
                         if events.lateEvent = '1' then
+                            argStateI.full <= '0';
                             fullI <= '0';
                         end if;
 
@@ -596,12 +599,16 @@ begin
                         end if;
                         
                         if events.lateEvent = '1' then
+                            argStateR.full <= '0';
                             fullR <= '0';
                         end if;
                                 
                     end if;
                 end process;
 
+                subpipeM0_Issue <= makeExecResult(slotIssueM0.state);
+                subpipeM0_RegRead <= makeExecResult(slotRegReadM0.state);
+                
             end block;
                     
 
@@ -751,7 +758,7 @@ begin
 
         SUBPIPES_STORE_VALUE: block
             signal fmaIntSV, fmaFloatSV: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
-            signal sendingToRegReadI, sendingToRegReadF: std_logic := '0';
+            signal sendingToRegReadI, sendingToRegReadF, sendingToRegReadIntSV, sendingToRegReadFloatSV: std_logic := '0';
             signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoFloatA, schedInfoUpdatedFloatA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
         begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
@@ -792,21 +799,20 @@ begin
                 signal fullI, fullR: std_logic := '0';
             begin
 
-                inputDataWithArgsI <= getDispatchArgValues1(TMP_prepareDispatchSlot(slotSelIntSV.state, outSigsSVI.sending));
-
-                slotIssueIntSV.full <= fullI;-- and nextAccepting;
-                slotIssueIntSV.state <= updateDispatchArgs1(argStateI);
-
                 cancelledSVI1 <= outSigsSVI.cancelled or (storeValueCollision2 and outSigsSVI.killSel2); -- If stalled, it stayed here but kill sig moved to next stage
 
-
-                inputDataWithArgsR <= getDispatchArgValues2(TMP_prepareDispatchSlot(slotIssueIntSV.state, sendingToRegReadI), fni, sendingToRegReadI, false, true);
-                sendingToRegReadI <= slotIssueIntSV.full and not cancelledSVI1;
-
-                slotRegReadIntSV.full <= fullR;-- and nextAccepting;
-                slotRegReadIntSV.state <= updateDispatchArgs2(argStateR, fni.values0, regValsS0, true);
-
-
+                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelIntSV.state, outSigsSVI.sending);
+                -- Reg
+                slotIssueIntSV.full <= fullI;
+                slotIssueIntSV.state <= updateDispatchArgs_Is(argStateI, fullI);
+                -- pseudo interface
+                sendingToRegReadIntSV <= slotIssueIntSV.state.full and not cancelledSVI1;
+          
+                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueIntSV.state, sendingToRegReadIntSV, fni, false, true);
+                -- Reg
+                slotRegReadIntSV.full <= fullR;
+                slotRegReadIntSV.state <= updateDispatchArgs_RR(argStateR, fullR, fni.values0, regValsS0, true);
+    
                 process (clk)
                 begin
                     if rising_edge(clk) then
@@ -816,15 +822,17 @@ begin
                         end if;
                         
                         if events.lateEvent = '1' then
+                            argStateI.full <= '0';
                             fullI <= '0';
                         end if;
-
+    
                         if true then -- nextAccepting
                             argStateR <= inputDataWithArgsR;
-                            fullR <= sendingToRegReadI;
+                            fullR <= sendingToRegReadIntSV;
                         end if;
                         
                         if events.lateEvent = '1' then
+                            argStateR.full <= '0';
                             fullR <= '0';
                         end if;
                                 
@@ -864,17 +872,18 @@ begin
                 signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
                 signal fullI, fullR: std_logic := '0';
             begin
-                inputDataWithArgsI <= getDispatchArgValues1(TMP_prepareDispatchSlot(slotSelFloatSV.state, outSigsSVF.sending));
-
-                slotIssueFloatSV.full <= fullI;-- and nextAccepting;
-                slotIssueFloatSV.state <= updateDispatchArgs1(argStateI);
-
-                inputDataWithArgsR <= getDispatchArgValues2(TMP_prepareDispatchSlot(slotIssueFloatSV.state, sendingToRegReadF), fni, sendingToRegReadF, false, true);
-                sendingToRegReadF <= slotIssueFloatSV.full and not outSigsSVF.cancelled;
-
-                slotRegReadFloatSV.full <= fullR;-- and nextAccepting;
-                slotRegReadFloatSV.state <= updateDispatchArgs2(argStateR, fni.values0, regValsFS0, true);
-
+            
+                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelFloatSV.state, outSigsSVF.sending);
+                -- Reg
+                slotIssueFloatSV.full <= fullI;
+                slotIssueFloatSV.state <= updateDispatchArgs_Is(argStateI, fullI);
+                -- pseudo interface
+                sendingToRegReadFloatSV <= slotIssueFloatSV.state.full and not outSigsSVF.cancelled;
+                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueFloatSV.state, sendingToRegReadFloatSV, fniFloat, false, true);
+                -- Reg
+                slotRegReadFloatSV.full <= fullR;
+                slotRegReadFloatSV.state <= updateDispatchArgs_RR(argStateR, fullR, fniFloat.values0, regValsFS0, true);
+    
                 process (clk)
                 begin
                     if rising_edge(clk) then
@@ -884,18 +893,20 @@ begin
                         end if;
                         
                         if events.lateEvent = '1' then
+                            argStateI.full <= '0';
                             fullI <= '0';
                         end if;
-
+    
                         if true then -- nextAccepting
                             argStateR <= inputDataWithArgsR;
-                            fullR <= sendingToRegReadF;
+                            fullR <= sendingToRegReadFloatSV;
                         end if;
                         
                         if events.lateEvent = '1' then
+                            argStateR.full <= '0';
                             fullR <= '0';
                         end if;
-
+                                
                     end if;
                 end process;
 
@@ -949,23 +960,18 @@ begin
                 use work.LogicIssue.all;
                 signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
                 signal fullI, fullR: std_logic := '0';
-            begin
-                inputDataWithArgsI <= getDispatchArgValues1(TMP_prepareDispatchSlot(slotSelF0.state, outSigsF0.sending));
-
-                slotIssueF0.full <= fullI;-- and nextAccepting;
-                slotIssueF0.state <= updateDispatchArgs1(argStateI);
-
-                subpipeF0_Issue <= makeExecResult(work.LogicIssue.TMP_restoreState(slotIssueF0.full, slotIssueF0.state), slotIssueF0.full);
-
-
-                inputDataWithArgsR <= getDispatchArgValues2(TMP_prepareDispatchSlot(slotIssueF0.state, sendingToRegReadF0), fni, sendingToRegReadF0, false, false);
-                sendingToRegReadF0 <= slotIssueF0.full and not outSigsF0.cancelled;
-
-                slotRegReadF0.full <= fullR;-- and nextAccepting;
-                slotRegReadF0.state <= updateDispatchArgs2(argStateR, fni.values0, regValsF0, false);
-                    
-                subpipeF0_RegRead <= makeExecResult(work.LogicIssue.TMP_restoreState(slotRegReadF0.full, slotRegReadF0.state), slotRegReadF0.full);
-
+            begin    
+                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelF0.state, outSigsF0.sending);
+                -- Reg
+                slotIssueF0.full <= fullI;
+                slotIssueF0.state <= updateDispatchArgs_Is(argStateI, fullI);
+                -- pseudo interface
+                sendingToRegReadF0 <= slotIssueF0.state.full and not outSigsF0.cancelled;
+                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueF0.state, sendingToRegReadF0, fniFloat, false, false);
+                -- Reg
+                slotRegReadF0.full <= fullR;
+                slotRegReadF0.state <= updateDispatchArgs_RR(argStateR, fullR, fniFloat.values0, regValsF0, false);
+    
                 process (clk)
                 begin
                     if rising_edge(clk) then
@@ -975,20 +981,25 @@ begin
                         end if;
                         
                         if events.lateEvent = '1' then
+                            argStateI.full <= '0';
                             fullI <= '0';
                         end if;
-
+    
                         if true then -- nextAccepting
                             argStateR <= inputDataWithArgsR;
                             fullR <= sendingToRegReadF0;
                         end if;
                         
                         if events.lateEvent = '1' then
+                            argStateR.full <= '0';
                             fullR <= '0';
                         end if;
                                 
                     end if;
                 end process;
+    
+                subpipeF0_Issue <= makeExecResult(slotIssueF0.state);
+                subpipeF0_RegRead <= makeExecResult(slotRegReadF0.state);
 
             end block;
 
@@ -1250,9 +1261,12 @@ begin
 		dataIn => renamedDataToBQ,
 		dataInBr => bpData,
 
-		storeValueInput => bqUpdate,
-		compareAddressInput => bqCompare,
-        compareAddressQuickInput => bqCompareEarly,
+		--storeValueInput => bqUpdate,
+		    storeValueInput_N => bqUpdate_N,
+		--compareAddressInput => bqCompare,
+        --compareAddressQuickInput => bqCompareEarly,
+            compareAddressQuickInput_N => bqCompareEarly_N,
+        compareQuickPtr => bqCompareEarly.ins.tags.bqPointer,
 
 		selectedDataOutput => bqSelected,
 

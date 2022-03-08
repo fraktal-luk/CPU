@@ -44,9 +44,12 @@ entity BranchQueue is
 
         bqPtrOut: out SmallNumber;
 
-		storeValueInput: in InstructionSlot;
-		compareAddressInput: in InstructionSlot;
-        compareAddressQuickInput: in InstructionSlot;
+		--storeValueInput: in InstructionSlot;
+		  storeValueInput_N: in ExecResult;
+		--compareAddressInput: in InstructionSlot;
+        --compareAddressQuickInput: in InstructionSlot;
+          compareAddressQuickInput_N: in ExecResult;
+        compareQuickPtr: in SmallNumber;
 
 		selectedDataOutput: out InstructionSlot;
 
@@ -132,8 +135,10 @@ begin
                    end if;
     
                    -- Write target array
-                   if storeValueInput.full = '1' then
-                       targetArray(slv2u(pCausing)) <= storeValueInput.ins.target;
+                   if --storeValueInput.full = '1' then
+                      storeValueInput_N.full = '1' then
+                       targetArray(slv2u(pCausing)) <= --storeValueInput.ins.target;
+                                                        storeValueInput_N.value;
                    end if;   
                 end if;
                 
@@ -155,11 +160,15 @@ begin
            earlySelected <= deserializeEarlyInfo(earlySerialSelected);
            lateSelected <= deserializeLateInfo(lateSerialSelected);
     
-           selectedDataSlotPre <= getMatchedSlot(pSelect, compareAddressQuickInput, earlySelected, lateSelected);
+           selectedDataSlotPre <= getMatchedSlot(pSelect, --compareAddressQuickInput.full, compareAddressQuickInput.ins.tags.renameIndex,
+                                                            compareAddressQuickInput_N.full, compareAddressQuickInput_N.tag,
+                                                            earlySelected, lateSelected);
         end block;
 
-        pSelect <= compareAddressQuickInput.ins.tags.bqPointer and PTR_MASK_SN;
-        pSelectLong <= compareAddressQuickInput.ins.tags.bqPointer;
+        pSelect <= --compareAddressQuickInput.ins.tags.bqPointer and PTR_MASK_SN;
+                    compareQuickPtr and PTR_MASK_SN;
+        pSelectLong <= --compareAddressQuickInput.ins.tags.bqPointer;
+                        compareQuickPtr;
        
 
         pStartNext <= pStartLongNext and PTR_MASK_SN;
