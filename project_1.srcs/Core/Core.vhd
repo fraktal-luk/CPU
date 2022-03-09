@@ -82,7 +82,7 @@ architecture Behavioral of Core is
     signal bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
            specialAction, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
-    signal bqPointer, bqPointerSeq, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
+    signal bqPointer, bqPointerSeq, lqPointer, sqPointer, preIndexSQ, preIndexLQ, sqValuePointer: SmallNumber := (others => '0');
            
     signal commitGroupCtr: InsTag := (others => '0');
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -98,7 +98,9 @@ architecture Behavioral of Core is
     
     signal events, eventsOnlyLate: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE);
 
-           signal bqUpdate_N, bqCompareEarly_N: ExecResult := DEFAULT_EXEC_RESULT;
+    signal preAddressOp: SpecificOp := DEFAULT_SPECIFIC_OP;
+
+           signal bqUpdate_N, bqCompareEarly_N, sqValueResult: ExecResult := DEFAULT_EXEC_RESULT;
     
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
 begin
@@ -370,6 +372,7 @@ begin
         signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
         
+            signal stateExecStoreValue: SchedulerState := DEFAULT_SCHED_STATE;
                 signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';                
     begin
         newIntSources <= TMP_getPhysicalArgsNew(renamedArgsInt);
@@ -614,13 +617,15 @@ begin
 
            preIndexSQ <= slotRegReadM0.state.sqPointer;
            preIndexLQ <= slotRegReadM0.state.lqPointer;
-           preAddressInput <= (slotRegReadM0.full, work.LogicIssue.TMP_restoreState(slotRegReadM0.full, slotRegReadM0.state).ins);
+           --preAddressInput <= (slotRegReadM0.full, work.LogicIssue.TMP_restoreState(slotRegReadM0.full, slotRegReadM0.state).ins);
+                preAddressOp <= slotRegReadM0.state.operation;
 
            sendingFromDLQ <= '0';          -- TEMP!
            dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
 
            sendingToAgu <= (slotRegReadM0.full and not outSigsM0.killSel2) or sendingFromDLQ;
-	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(work.LogicIssue.TMP_restoreState(slotRegReadM0.full, slotRegReadM0.state).ins, slotRegReadM0.state, sendingFromDLQ, dataFromDLQ));
+	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(--work.LogicIssue.TMP_restoreState(slotRegReadM0.full, slotRegReadM0.state).ins, 
+	                                                           slotRegReadM0.state, sendingFromDLQ, dataFromDLQ));
                             
            STAGE_AGU: entity work.GenericStage2(Behavioral)
            generic map(
@@ -914,9 +919,11 @@ begin
 
             sendingToStoreWriteFloat <= slotRegReadFloatSV.full and not outSigsSVF.killSel2;
            
-            dataToExecStoreValue <= getStoreDataOp(work.LogicIssue.TMP_restoreState(slotRegReadFloatSV.full, slotRegReadFloatSV.state)) when slotRegReadFloatSV.full = '1'
-                            else    getStoreDataOp(work.LogicIssue.TMP_restoreState(slotRegReadIntSV.full, slotRegReadIntSV.state));
-                
+            --dataToExecStoreValue <= getStoreDataOp(work.LogicIssue.TMP_restoreState(slotRegReadFloatSV.full, slotRegReadFloatSV.state)) when slotRegReadFloatSV.full = '1'
+            --                else    getStoreDataOp(work.LogicIssue.TMP_restoreState(slotRegReadIntSV.full, slotRegReadIntSV.state));
+                                
+                stateExecStoreValue <= slotRegReadFloatSV.state when slotRegReadFloatSV.full = '1'
+                                  else slotRegReadIntSV.state;
             sendingToStoreWrite <= sendingToStoreWriteInt or sendingToStoreWriteFloat;
         end block;
 
@@ -1047,9 +1054,14 @@ begin
             subpipeF0_E2 <= makeExecResult(slotF0_E2(0), slotF0_E2(0).full);
   
          end block;
-         
-         sqValueInput <= -- CAREFUL: This implies that integer StoreData op value is lost when Int and FP are issued simultaneously. This must be prevented by scheduler!
-                        (sendingToStoreWrite, setInstructionResult(dataToExecStoreValue.ins, dataToExecStoreValue.state.args(0)));
+
+                -- sqPointer, full, result
+                sqValueResult.full <= sendingToStoreWrite;
+                sqValueResult.value <= --dataToExecStoreValue.state.args(0);
+                                        stateExecStoreValue.args(0);
+                
+                sqValuePointer <= --dataToExecStoreValue.state.sqPointer;
+                                    stateExecStoreValue.sqPointer;
          
          -- StoreData issue control:
          -- When Int and FP store data issue at the same time, the port conflict is resolved thus:
@@ -1111,7 +1123,9 @@ begin
          execOutputs1(3) <= (slotF0_E2(0).full, slotF0_E2(0).ins);
             
          -- TODO: include mem hit in 'full' flag! Should merge some info from Float path??
-         execOutputs2(2) <= (dataToExecStoreValue.full, dataToExecStoreValue.ins);
+         execOutputs2(2) <= --(dataToExecStoreValue.full, dataToExecStoreValue.ins);
+                              (sendingToStoreWrite, work.LogicIssue.TMP_getIns(stateExecStoreValue));
+
 
          fni <= buildForwardingNetwork(   DEFAULT_EXEC_RESULT, subpipeI0_Issue,     subpipeI0_RegRead,   subpipeI0_E0,        subpipeI0_D0,
                                           DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT,
@@ -1303,10 +1317,14 @@ begin
             
         renamedPtr => sqPointer,
             
-		storeValueInput => sqValueInput, 
+		--storeValueInput => sqValueInput,
+		  storeValuePtr => sqValuePointer,
+		  storeValueResult => sqValueResult,
+		
 		compareAddressInput => memAddressInput,
         compareIndexInput => preIndexSQ,
-        preCompareAddressInput => preAddressInput,
+        --preCompareAddressInput => preAddressInput,
+            preCompareOp => preAddressOp,
             
 		selectedDataOutput => sqSelectedOutput,
 
@@ -1346,10 +1364,14 @@ begin
 
         renamedPtr => lqPointer,
 
-		storeValueInput => DEFAULT_INSTRUCTION_SLOT, 
+		--storeValueInput => DEFAULT_INSTRUCTION_SLOT,
+		    storeValuePtr => (others => '0'),
+            storeValueResult => DEFAULT_EXEC_RESULT,
+		
 		compareAddressInput => memAddressInput,
         compareIndexInput => preIndexLQ,        
-        preCompareAddressInput => preAddressInput,
+        --preCompareAddressInput => preAddressInput,
+             preCompareOp => preAddressOp,
              
 		selectedDataOutput => lqSelectedOutput,
 

@@ -36,10 +36,14 @@ entity StoreQueue is
 
         renamedPtr: out SmallNumber;
 
-		storeValueInput: in InstructionSlot;
+		--storeValueInput: in InstructionSlot;
+		  storeValuePtr: in SmallNumber;
+		  storeValueResult: in ExecResult;
+		
 		compareAddressInput: in InstructionSlot;
         compareIndexInput: in SmallNumber;
-        preCompareAddressInput: InstructionSlot;
+        --preCompareAddressInput: in InstructionSlot;
+            preCompareOp: in SpecificOp;
 
 		selectedDataOutput: out InstructionSlot;
 
@@ -132,7 +136,9 @@ begin
         -----
         -- Ptrs for random access updating
         adrPtr <= compareAddressInput.ins.tags.sqPointer and PTR_MASK_SN;
-        storePtr <= storeValueInput.ins.tags.sqPointer and PTR_MASK_SN;
+        storePtr <= --storeValueInput.ins.tags.sqPointer
+                      storeValuePtr  
+                        and PTR_MASK_SN;
         ----
     
         -- Read ptr determinded by address matching - SQ only??
@@ -145,7 +151,8 @@ begin
         memOpMask <= getWhichMemOp(queueContent);
                -- TODO: could/should be pStartLongNext?
         newerNextLQ <= cmpIndexAfter(pStartLong, pTaggedLong, compareIndexInput, QUEUE_SIZE, PTR_MASK_SN) and memOpMask
-                                                                         when isStoreMemOp(preCompareAddressInput.ins) = '1' else (others => '0');
+                                                                         --when isStoreMemOp(preCompareAddressInput.ins) = '1' else (others => '0');
+                                                                         when isStoreMemOp(preCompareOp) = '1' else (others => '0');
         newerLQ <=     newerRegLQ and addressMatchMask;
 
 
@@ -153,7 +160,8 @@ begin
         addressMatchMask_T <= getAddressMatching(queueContentShifting, compareAddressInput.ins.result) and getAddressCompleted(queueContentShifting);
 
         olderNextSQ_T <= cmpIndexBefore((others => '0'), nFull, subTruncZ(compareIndexInput, pDrainLongPrev, QUEUE_SIZE), QUEUE_SIZE, PTR_MASK_SN) -- TODO: nFull is not correct 
-                                                                         when isLoadMemOp(preCompareAddressInput.ins) = '1' else (others => '0');
+                                                                         --when isLoadMemOp(preCompareAddressInput.ins) = '1' else (others => '0');
+                                                                         when isLoadMemOp(preCompareOp) = '1' else (others => '0');
         olderSQ_T <=   olderRegSQ_T and addressMatchMask_T;
 
 
@@ -178,9 +186,13 @@ begin
                 end if;
                 
                 -- E. val update
-                if storeValueInput.full = '1' and not IS_LOAD_QUEUE then
-                    updateValue(queueContent, storeValueInput);
-                    storeValues(slv2u(storePtr)) <= storeValueInput.ins.result;
+                if --storeValueInput.full = '1'
+                    storeValueResult.full = '1'
+                        and not IS_LOAD_QUEUE then
+                    updateValue(queueContent,-- storeValueInput, --storeValueInput.ins.tags.sqPointer);
+                                                                storeValuePtr);
+                    storeValues(slv2u(storePtr)) <= --storeValueInput.ins.result;
+                                                    storeValueResult.value;
                 end if;
           
           end if;

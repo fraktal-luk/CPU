@@ -221,6 +221,9 @@ function isStoreMemOp(ins: InstructionState) return std_logic;
 function isLoadSysOp(ins: InstructionState) return std_logic;
 function isStoreSysOp(ins: InstructionState) return std_logic;
 
+function isLoadMemOp(op: SpecificOp) return std_logic;
+function isStoreMemOp(op: SpecificOp) return std_logic;
+
 -- sorting subpipelines
 function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector;
@@ -1331,6 +1334,18 @@ function isStoreSysOp(ins: InstructionState) return std_logic is
 begin
     return bool2std(ins.specificOperation.memory = opStoreSys);        
 end function;
+
+
+function isLoadMemOp(op: SpecificOp) return std_logic is
+begin
+    return bool2std(op.memory = opLoad);        
+end function;
+
+function isStoreMemOp(op: SpecificOp) return std_logic is
+begin
+    return bool2std(op.memory = opStore);
+end function;
+
 
 function hasSyncEvent(ins: InstructionState) return std_logic is
 begin

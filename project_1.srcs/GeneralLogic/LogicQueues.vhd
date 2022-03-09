@@ -39,7 +39,8 @@ type QueueEntryArray is array (natural range <>) of QueueEntry;
 procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);    
 procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber; insVec: InstructionSlotArray; constant IS_LOAD_QUEUE: boolean);
 procedure updateAddress(signal content: inout QueueEntryArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);
-procedure updateValue(signal content: inout QueueEntryArray; isl: InstructionSlot);
+procedure updateValue(signal content: inout QueueEntryArray;-- isl: InstructionSlot;
+                                            ind: SmallNumber);
 
 procedure updateAddressArr(signal content: inout MwordArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);
 
@@ -162,16 +163,17 @@ end procedure;
         end if;        
     end procedure;
 
-procedure updateValue(signal content: inout QueueEntryArray; isl: InstructionSlot) is
+procedure updateValue(signal content: inout QueueEntryArray;-- isl: InstructionSlot;
+                            ind: SmallNumber) is
     constant LEN: natural := content'length;
     constant PTR_MASK_SN: SmallNumber := i2slv(LEN-1, SMALL_NUMBER_SIZE);
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
-    constant indV: SmallNumber := isl.ins.tags.sqPointer and PTR_MASK_SN;
-    constant ind: natural := slv2u(indV);
+    constant indV: SmallNumber := ind and PTR_MASK_SN;
+    constant index: natural := slv2u(indV);
 begin
-    content(ind).completedV <= '1';
+    content(index).completedV <= '1';
 end procedure;
-        
+
 function getAddressCompleted(content: QueueEntryArray) return std_logic_vector is
     variable res: std_logic_vector(content'range);
 begin

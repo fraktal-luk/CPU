@@ -46,7 +46,7 @@ architecture First of IssueStage is
 	signal inputDataWithArgs, argState: SchedulerState := DEFAULT_SCHEDULER_STATE;	
 begin
     --inputData_TMP <= ;
-	inputDataWithArgs <= getDispatchArgValues1(TMP_prepareDispatchSlot(input.state, prevSending));
+	--inputDataWithArgs <= getDispatchArgValues1(TMP_prepareDispatchSlot(input.state, prevSending));
 
 	SAVE_SCH_STATE: process(clk)
 	begin
@@ -64,7 +64,7 @@ begin
 	end process;
 
     output.full <= full and nextAccepting;
-    output.state <= updateDispatchArgs1(argState);
+    --output.state <= updateDispatchArgs1(argState);
 
 end First;
 
@@ -73,7 +73,7 @@ architecture Second of IssueStage is
 	signal inputDataWithArgs, argState: SchedulerState := DEFAULT_SCHEDULER_STATE;	
 begin
     --inputData_TMP <= TMP_prepareDispatchSlot(input.state, prevSending);
-	inputDataWithArgs <= getDispatchArgValues2(TMP_prepareDispatchSlot(input.state, prevSending), fni, prevSending, USE_IMM, REGS_ONLY);-- when not TMP_DELAY
+	--inputDataWithArgs <= getDispatchArgValues2(TMP_prepareDispatchSlot(input.state, prevSending), fni, prevSending, USE_IMM, REGS_ONLY);-- when not TMP_DELAY
 
 	SAVE_SCH_STATE: process(clk)
 	begin
@@ -91,6 +91,6 @@ begin
 	end process;
 
     output.full <= full and nextAccepting;
-    output.state <= updateDispatchArgs2(argState, fni.values0, regValues, REGS_ONLY);
+    --output.state <= updateDispatchArgs2(argState, fni.values0, regValues, REGS_ONLY);
 
 end Second;
