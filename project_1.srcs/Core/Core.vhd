@@ -91,7 +91,9 @@ architecture Behavioral of Core is
     signal sysRegReadValue: Mword := (others => '0');
     signal sysRegReadSel: slv5 := (others => '0');
 
-    signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);    
+    signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
+        
     signal dataFromSB: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal cycleCounter: Word := (others => '0');
@@ -297,6 +299,9 @@ begin
 		execEndSigs1 => execOutputs1,
 		execEndSigs2 => execOutputs2,
 		
+		  execSigsMain => execOutMain,
+		  execSigsSec => execOutSec,
+		
 		inputSpecial => specialAction,		
 		inputData => renamedDataLivingMerged,
 		prevSending => renamedSending,
@@ -360,10 +365,21 @@ begin
        signal outSigsI0, outSigsM0, outSigsSVI, outSigsSVF, outSigsF0: IssueQueueSignals := (others => '0');
        
        signal subpipeI0_Issue, subpipeI0_RegRead, subpipeI0_E0,                                                        subpipeI0_D0,
-              subpipeM0_Issue, subpipeM0_RegRead, subpipeM0_E0,
-                                                subpipeM0_E0i,  subpipeM0_E1i, subpipeM0_E2i, subpipeM0_E3i,         subpipeM0_D0i, subpipeM0_D1i,
-                                                subpipeM0_E0f,  subpipeM0_E1f, subpipeM0_E2f, subpipeM0_E3f,         subpipeM0_D0f, subpipeM0_D1f,                                                              
+              subpipeM0_Issue, subpipeM0_RegRead, subpipeM0_E0,                  subpipeM0_E2,
+                                subpipeM0_RRi,    subpipeM0_E0i,  subpipeM0_E1i, subpipeM0_E2i, subpipeM0_E3i,         subpipeM0_D0i, subpipeM0_D1i,
+                                subpipeM0_RRf,    subpipeM0_E0f,  subpipeM0_E1f, subpipeM0_E2f, subpipeM0_E3f,         subpipeM0_D0f, subpipeM0_D1f,
+                                                                                              
               subpipeF0_Issue, subpipeF0_RegRead, subpipeF0_E0, subpipeF0_E1,subpipeF0_E2, subpipeF0_D0,
+              
+              
+                                subpipeI0_E0_N, subpipeI0_RegRead_u,
+                                subpipeI0_E0_Nb, subpipeI0_RegRead_b,
+              
+              subpipeM0_RR,     subpipeM0_E0_N, subpipeM0_E0i_N, subpipeM0_E0f_N,
+                                subpipeM0_E1_N, subpipeM0_E1i_N, subpipeM0_E1f_N,   subpipeM0_E1_Nu,
+                                subpipeM0_E2_N, subpipeM0_E2i_N, subpipeM0_E2f_N,
+                                subpipeM0_E3_N, subpipeM0_E3i_N, subpipeM0_E3f_N,
+                                
               subpipe_DUMMY
                 : ExecResult := DEFAULT_EXEC_RESULT;
                 
@@ -471,10 +487,26 @@ begin
 
 
             -- NOTE: it seems that only elements of .state used in Exec are: { args: MwordArray; immediate: std_logic }
-            dataToAlu(0) <= (slotRegReadI0.state.full and not outSigsI0.killSel2,
-                                   executeAlu(--work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state).ins,
-                                              --work.LogicIssue.TMP_getIns(slotRegReadI0.state),
-                                              slotRegReadI0.state, bqSelected.ins, branchData, unfoldedAluOp));
+            dataToAlu(0) <= (slotRegReadI0.state.full and not outSigsI0.killSel2, executeAlu(slotRegReadI0.state, bqSelected.ins, branchData, unfoldedAluOp));
+          
+                    subpipeI0_RegRead_u.full <= dataToAlu(0).full;
+                    subpipeI0_RegRead_u.tag <= subpipeI0_RegRead.tag;
+                    subpipeI0_RegRead_u.dest <= subpipeI0_RegRead.dest;
+                    subpipeI0_RegRead_u.value <= dataToAlu(0).ins.result;
+
+                    subpipeI0_RegRead_b.full <= dataToBranch(0).full;
+                    subpipeI0_RegRead_b.tag <= subpipeI0_RegRead.tag;
+                    --subpipeI0_RegRead_b.dest <= subpipeI0_RegRead.dest;
+                    subpipeI0_RegRead_b.value <= dataToBranch(0).ins.result;
+          
+                process (clk)
+                begin
+                    if rising_edge(clk) then
+                        subpipeI0_E0_N <= subpipeI0_RegRead_u;
+                        subpipeI0_E0_Nb <= subpipeI0_RegRead_b;
+                    end if;
+                end process;
+          
           
             STAGE_I0_E0: entity work.GenericStage2(Behavioral)
             generic map(
@@ -489,17 +521,10 @@ begin
 
             subpipeI0_E0 <= makeExecResult(slotI0_E0(0), slotI0_E0(0).full);
 
-            branchData <= basicBranch(slotRegReadI0.state.full and not outSigsI0.killSel2 and slotRegReadI0.state.branchIns,
-                                        --work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state).ins,
-                                        --work.LogicIssue.TMP_getIns(slotRegReadI0.state),
-                                        slotRegReadI0.state, bqSelected.ins, unfoldedAluOp);                  
+            branchData <= basicBranch(slotRegReadI0.state.full and not outSigsI0.killSel2 and slotRegReadI0.state.branchIns, slotRegReadI0.state, bqSelected.ins, unfoldedAluOp);                  
             
-            dataToBranch(0) <= (slotRegReadI0.state.full and not outSigsI0.killSel2
-                                                    and slotRegReadI0.state.branchIns, branchData);            
-            --bqCompare <= (dataToBranch(0).full, --work.LogicIssue.TMP_restoreState(slotRegReadI0.full, slotRegReadI0.state).ins);
-            --                                    work.LogicIssue.TMP_getIns(slotRegReadI0.state));
-            bqCompareEarly <= (sendingToRegReadI0 and slotIssueI0.state.branchIns, --work.LogicIssue.TMP_restoreState(slotIssueI0.full, slotIssueI0.state).ins);
-                                                                                   work.LogicIssue.TMP_getIns(slotIssueI0.state));
+            dataToBranch(0) <= (slotRegReadI0.state.full and not outSigsI0.killSel2 and slotRegReadI0.state.branchIns, branchData);            
+            bqCompareEarly <= (sendingToRegReadI0 and slotIssueI0.state.branchIns, work.LogicIssue.TMP_getIns(slotIssueI0.state));
                 bqCompareEarly_N.full <= bqCompareEarly.full;
                 bqCompareEarly_N.tag <= bqCompareEarly.ins.tags.renameIndex;
             
@@ -520,7 +545,6 @@ begin
             bqUpdate <= dataFromBranch; -- TODO: possibly redundant cause execCausing can carry the data
                     bqUpdate_N.full <= dataFromBranch.full;
                     bqUpdate_N.tag <= dataFromBranch.ins.tags.renameIndex;
-                    --bqUpdate_N.dest <= null;
                     bqUpdate_N.value <= dataFromBranch.ins.target; 
             
             DELAYED_EXEC_EVENT: process (clk)
@@ -536,7 +560,6 @@ begin
         SUBPIPE_MEM: block
            signal dataToAgu, dataToAguInt, dataToAguFloat, dataOutMem0,
                          dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
-
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1); 
            signal memLoadValue: Mword := (others => '0');                                                            
         begin
@@ -613,19 +636,47 @@ begin
                 subpipeM0_RegRead <= makeExecResult(slotRegReadM0.state);
                 
             end block;
-                    
 
            preIndexSQ <= slotRegReadM0.state.sqPointer;
            preIndexLQ <= slotRegReadM0.state.lqPointer;
-           --preAddressInput <= (slotRegReadM0.full, work.LogicIssue.TMP_restoreState(slotRegReadM0.full, slotRegReadM0.state).ins);
                 preAddressOp <= slotRegReadM0.state.operation;
 
            sendingFromDLQ <= '0';          -- TEMP!
            dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
 
+                    subpipeM0_RR.full <= (slotRegReadM0.full and not outSigsM0.killSel2) and not lateEventSignal;
+                    subpipeM0_RR.tag <= slotRegReadM0.state.renameIndex;
+                    subpipeM0_RR.dest <= slotRegReadM0.state.argSpec.dest;
+
+                    subpipeM0_RRi.full <= (slotRegReadM0.full and not outSigsM0.killSel2) and slotRegReadM0.state.argSpec.intDestSel   and not lateEventSignal;
+                    subpipeM0_RRi.tag <= slotRegReadM0.state.renameIndex;
+                    subpipeM0_RRi.dest <= slotRegReadM0.state.argSpec.dest when slotRegReadM0.state.argSpec.intDestSel = '1' else (others => '0');
+
+                    subpipeM0_RRf.full <= (slotRegReadM0.full and not outSigsM0.killSel2) and slotRegReadM0.state.argSpec.floatDestSel  and not lateEventSignal;
+                    subpipeM0_RRf.tag <= slotRegReadM0.state.renameIndex;
+                    subpipeM0_RRf.dest <= slotRegReadM0.state.argSpec.dest when slotRegReadM0.state.argSpec.floatDestSel = '1' else (others => '0');
+    
+                    process (clk)
+                    begin
+                        if rising_edge(clk) then
+                            subpipeM0_E0_N <= subpipeM0_RR;
+                            subpipeM0_E0i_N <= subpipeM0_RRi;
+                            subpipeM0_E0f_N <= subpipeM0_RRf;
+
+                            subpipeM0_E1_N <= subpipeM0_E0_N;
+                            subpipeM0_E1i_N <= subpipeM0_E0i_N;
+                            subpipeM0_E1f_N <= subpipeM0_E0f_N;
+
+                            -- Here we integrate mem read result
+
+                            subpipeM0_E2_N <= subpipeM0_E1_Nu;
+                            subpipeM0_E2i_N <= subpipeM0_E1i_N;
+                            subpipeM0_E2f_N <= subpipeM0_E1f_N;
+                        end if;
+                    end process;
+
            sendingToAgu <= (slotRegReadM0.full and not outSigsM0.killSel2) or sendingFromDLQ;
-	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(--work.LogicIssue.TMP_restoreState(slotRegReadM0.full, slotRegReadM0.state).ins, 
-	                                                           slotRegReadM0.state, sendingFromDLQ, dataFromDLQ));
+	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(slotRegReadM0.state, sendingFromDLQ, dataFromDLQ));
                             
            STAGE_AGU: entity work.GenericStage2(Behavioral)
            generic map(
@@ -643,7 +694,8 @@ begin
 
            dataToAguInt <= clearFloatDest(dataToAgu);
            dataToAguFloat <= clearIntDest(dataToAgu);
-                
+
+
            STAGE_AGU_INT: entity work.GenericStage2(Behavioral)
            generic map(
                COMPARE_TAG => '1'
@@ -717,7 +769,20 @@ begin
 
            dataInMemInt1 <= clearFloatDest(dataInMem1); -- with zeroed dest when load is FP
            dataInMemFloat1 <= clearIntDest(dataInMem1); -- with zeroed dest when load is Int??
-                                                  	       
+
+                subpipeM0_E1_Nu.full <= slotM0_E1i(0).full;
+                subpipeM0_E1_Nu.tag <= subpipeM0_E1_N.tag;
+                subpipeM0_E1_Nu.dest <= subpipeM0_E1_N.dest;
+                subpipeM0_E1_Nu.value <= dataInMem1(0).ins.result;
+                
+           
+           
+                    subpipeM0_E2.full <= subpipeM0_E2i.full or subpipeM0_E2f.full;
+                    subpipeM0_E2.tag <= subpipeM0_E2i.tag;
+                    subpipeM0_E2.dest <= subpipeM0_E2i.dest or subpipeM0_E2f.dest;
+                    subpipeM0_E2.value <= subpipeM0_E2i.value;
+                    
+             
            -- Source selection and verification
 	       STAGE_MEM1: entity work.GenericStage2(Behavioral)
            generic map(
@@ -918,13 +983,10 @@ begin
             end block;
 
             sendingToStoreWriteFloat <= slotRegReadFloatSV.full and not outSigsSVF.killSel2;
-           
-            --dataToExecStoreValue <= getStoreDataOp(work.LogicIssue.TMP_restoreState(slotRegReadFloatSV.full, slotRegReadFloatSV.state)) when slotRegReadFloatSV.full = '1'
-            --                else    getStoreDataOp(work.LogicIssue.TMP_restoreState(slotRegReadIntSV.full, slotRegReadIntSV.state));
-                                
-                stateExecStoreValue <= slotRegReadFloatSV.state when slotRegReadFloatSV.full = '1'
+              
+            stateExecStoreValue <= slotRegReadFloatSV.state when slotRegReadFloatSV.full = '1'
                                   else slotRegReadIntSV.state;
-            sendingToStoreWrite <= sendingToStoreWriteInt or sendingToStoreWriteFloat;
+            sendingToStoreWrite <= sendingToStoreWriteInt or sendingToStoreWriteFloat;            
         end block;
 
         
@@ -1009,9 +1071,7 @@ begin
                 subpipeF0_RegRead <= makeExecResult(slotRegReadF0.state);
 
             end block;
-
-
-          
+    
             dataToFpu0(0) <= (slotRegReadF0.full and not outSigsF0.killSel2, executeFpu(work.LogicIssue.TMP_restoreState(slotRegReadF0.full, slotRegReadF0.state).ins, slotRegReadF0.state));
 
             STAGE_F0_E0: entity work.GenericStage2(Behavioral)
@@ -1057,11 +1117,10 @@ begin
 
                 -- sqPointer, full, result
                 sqValueResult.full <= sendingToStoreWrite;
-                sqValueResult.value <= --dataToExecStoreValue.state.args(0);
-                                        stateExecStoreValue.args(0);
+                sqValueResult.tag <= stateExecStoreValue.renameIndex;
+                sqValueResult.value <= stateExecStoreValue.args(0);
                 
-                sqValuePointer <= --dataToExecStoreValue.state.sqPointer;
-                                    stateExecStoreValue.sqPointer;
+                sqValuePointer <= stateExecStoreValue.sqPointer;
          
          -- StoreData issue control:
          -- When Int and FP store data issue at the same time, the port conflict is resolved thus:
@@ -1122,10 +1181,15 @@ begin
          execOutputs1(2) <= mergePhysDests(slotM0_E2i(0), slotM0_E2f(0)); --  [dest := Int.dest | Float.dest];             
          execOutputs1(3) <= (slotF0_E2(0).full, slotF0_E2(0).ins);
             
+            execOutMain(0) <= subpipeI0_E0;
+            execOutMain(2) <= --subpipeM0_E2_N;
+                                subpipeM0_E2;
+            execOutMain(3) <= subpipeF0_E2;
+            
+            execOutSec(2) <= sqValueResult;
+            
          -- TODO: include mem hit in 'full' flag! Should merge some info from Float path??
-         execOutputs2(2) <= --(dataToExecStoreValue.full, dataToExecStoreValue.ins);
-                              (sendingToStoreWrite, work.LogicIssue.TMP_getIns(stateExecStoreValue));
-
+         execOutputs2(2) <= (sendingToStoreWrite, work.LogicIssue.TMP_getIns(stateExecStoreValue));
 
          fni <= buildForwardingNetwork(   DEFAULT_EXEC_RESULT, subpipeI0_Issue,     subpipeI0_RegRead,   subpipeI0_E0,        subpipeI0_D0,
                                           DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT,
@@ -1275,10 +1339,7 @@ begin
 		dataIn => renamedDataToBQ,
 		dataInBr => bpData,
 
-		--storeValueInput => bqUpdate,
 		    storeValueInput_N => bqUpdate_N,
-		--compareAddressInput => bqCompare,
-        --compareAddressQuickInput => bqCompareEarly,
             compareAddressQuickInput_N => bqCompareEarly_N,
         compareQuickPtr => bqCompareEarly.ins.tags.bqPointer,
 
@@ -1317,13 +1378,11 @@ begin
             
         renamedPtr => sqPointer,
             
-		--storeValueInput => sqValueInput,
 		  storeValuePtr => sqValuePointer,
 		  storeValueResult => sqValueResult,
 		
 		compareAddressInput => memAddressInput,
         compareIndexInput => preIndexSQ,
-        --preCompareAddressInput => preAddressInput,
             preCompareOp => preAddressOp,
             
 		selectedDataOutput => sqSelectedOutput,
@@ -1364,13 +1423,11 @@ begin
 
         renamedPtr => lqPointer,
 
-		--storeValueInput => DEFAULT_INSTRUCTION_SLOT,
 		    storeValuePtr => (others => '0'),
             storeValueResult => DEFAULT_EXEC_RESULT,
 		
 		compareAddressInput => memAddressInput,
         compareIndexInput => preIndexLQ,        
-        --preCompareAddressInput => preAddressInput,
              preCompareOp => preAddressOp,
              
 		selectedDataOutput => lqSelectedOutput,

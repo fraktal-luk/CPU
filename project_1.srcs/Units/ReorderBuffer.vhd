@@ -28,6 +28,9 @@ entity ReorderBuffer is
 		execEndSigs1: in InstructionSlotArray(0 to 3);
 		execEndSigs2: in InstructionSlotArray(0 to 3);
 		
+		  execSigsMain: in ExecResultArray(0 to 3);
+		  execSigsSec: in ExecResultArray(0 to 3);
+		
 		inputSpecial: in InstructionSlot;
 		inputData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		prevSending: in std_logic;
@@ -101,8 +104,8 @@ begin
         begin
             if rising_edge(clk) then
                 -- Update content
-                updateDynamicContent(dynamicContent, execEndSigs1, 0);
-                updateDynamicContent(dynamicContent, execEndSigs2, 1);
+                updateDynamicContent(dynamicContent, execEndSigs1, execSigsMain, 0);
+                updateDynamicContent(dynamicContent, execEndSigs2, execSigsSec, 1);
 
                 updateDynamicContentBranch(dynamicContent, execEndSigs1(0));
                 updateDynamicContentMemEvent(dynamicContent, execEndSigs1(2));

@@ -136,7 +136,7 @@ function readDynamicOutput(content: DynamicOpInfoArray2D; ptr: SmallNumber) retu
 function readStaticGroupOutput(content: StaticGroupInfoArray; ptr: SmallNumber) return StaticGroupInfo;
 function readDynamicGroupOutput(content: DynamicGroupInfoArray; ptr: SmallNumber) return DynamicGroupInfo;
 
-procedure updateDynamicContent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlotArray; constant CLUSTER: natural);
+procedure updateDynamicContent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlotArray; execSigs: ExecResultArray; constant CLUSTER: natural);
 procedure updateDynamicGroupBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; ind: natural);
 procedure updateDynamicContentBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot);
 procedure updateDynamicGroupMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; ind: natural);
@@ -453,23 +453,27 @@ begin
 end function;
 
 
-procedure updateDynamicContent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlotArray; constant CLUSTER: natural) is
+procedure updateDynamicContent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlotArray; execSigs: ExecResultArray; constant CLUSTER: natural) is
     variable groupInd, opInd: natural;
     variable tagHigh,tagHighTrunc: SmallNumber;
 begin
     for i in execInfo'range loop
-        tagHigh := getTagHighSN(execInfo(i).ins.tags.renameIndex);
-        tagHighTrunc := tagHigh and PTR_MASK_SN;
-        groupInd := slv2u(tagHighTrunc);
-        opInd := slv2u(getTagLow(execInfo(i).ins.tags.renameIndex));
-    
-        if execInfo(i).full = '1' then
-            if CLUSTER = 0 then
-                content(groupInd, opInd).completed0 <= '1';
-            else--elsif cluster = 1 then
-                content(groupInd, opInd).completed1 <= '1';                   
+            tagHigh := getTagHighSN(--execInfo(i).ins.tags.renameIndex);
+                                    execSigs(i).tag);
+            tagHighTrunc := tagHigh and PTR_MASK_SN;
+            groupInd := slv2u(tagHighTrunc);
+            opInd := slv2u(getTagLow(--execInfo(i).ins.tags.renameIndex));
+                                     execSigs(i).tag)); 
+        
+            if --execInfo(i).full = '1' then
+                execSigs(i).full = '1' then
+                if CLUSTER = 0 then
+                    content(groupInd, opInd).completed0 <= '1';
+                else--elsif cluster = 1 then
+                    content(groupInd, opInd).completed1 <= '1';                   
+                end if;
             end if;
-        end if;
+
     end loop;
     
 end procedure;
@@ -495,7 +499,7 @@ begin
         
             if execInfo.ins.controlInfo.newEvent = '1' then
                 content(groupInd, i).causing <= '1';                        
-                eventFound:= true;
+                eventFound := true;
             end if;
         end if;
     end loop;
