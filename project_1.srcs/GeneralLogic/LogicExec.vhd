@@ -453,8 +453,10 @@ package body LogicExec is
     begin
         if fromDLQ = '1' then
             res := dlqData;
-        else
+        elsif st.full = '1'then
             res.result := add(st.args(0), st.args(1));
+        else
+            res.result := (others => '0');
         end if;
 
 		if CLEAR_DEBUG_INFO then
