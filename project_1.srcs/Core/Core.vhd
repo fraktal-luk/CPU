@@ -708,34 +708,34 @@ begin
            subpipeM0_E0 <= --makeExecResult(slotM0_E0(0), slotM0_E0(0).full);
                            subpipeM0_E0_N;
 
-           dataToAguInt <= clearFloatDest(dataToAgu);
-           dataToAguFloat <= clearIntDest(dataToAgu);
+--           dataToAguInt <= clearFloatDest(dataToAgu);
+--           dataToAguFloat <= clearIntDest(dataToAgu);
 
 
-           STAGE_AGU_INT: entity work.GenericStage2(Behavioral)
-           generic map(
-               COMPARE_TAG => '1'
-           )
-           port map(
-               clk => clk, reset => reset, en => en,
-               input => dataToAguInt(0),
-               output => slotM0_E0i(0),
-               events => events
-           );
+--           STAGE_AGU_INT: entity work.GenericStage2(Behavioral)
+--           generic map(
+--               COMPARE_TAG => '1'
+--           )
+--           port map(
+--               clk => clk, reset => reset, en => en,
+--               input => dataToAguInt(0),
+--               output => slotM0_E0i(0),
+--               events => events
+--           );
            
-           --subpipeM0_E0i <= makeExecResult(slotM0_E0i(0), slotM0_E0i(0).full);
+--           --subpipeM0_E0i <= makeExecResult(slotM0_E0i(0), slotM0_E0i(0).full);
            
-           STAGE_AGU_FLOAT: entity work.GenericStage2(Behavioral)
-           generic map(
-               COMPARE_TAG => --'1'
-                                '0'
-           )
-           port map(
-               clk => clk, reset => reset, en => en,
-               input => dataToAguFloat(0),
-               output => slotM0_E0f(0),
-               events => events
-           );
+--           STAGE_AGU_FLOAT: entity work.GenericStage2(Behavioral)
+--           generic map(
+--               COMPARE_TAG => --'1'
+--                                '0'
+--           )
+--           port map(
+--               clk => clk, reset => reset, en => en,
+--               input => dataToAguFloat(0),
+--               output => slotM0_E0f(0),
+--               events => events
+--           );
            
            --subpipeM0_E0f <= makeExecResult(slotM0_E0f(0), slotM0_E0f(0).full);
 
