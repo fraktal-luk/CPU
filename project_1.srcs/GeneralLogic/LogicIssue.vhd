@@ -142,7 +142,7 @@ function getSchedEntrySlot(info: SchedulerInfo) return SchedulerState;
 function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
 
 
-function TMP_restoreState(full: std_logic; st: SchedulerState) return SchedulerEntrySlot;
+--function TMP_restoreState(full: std_logic; st: SchedulerState) return SchedulerEntrySlot;
 
 function TMP_getIns(st: SchedulerState) return InstructionState;
 
@@ -523,45 +523,47 @@ begin
 end function;
 
 
-function TMP_restoreState(full: std_logic; st: SchedulerState) return SchedulerEntrySlot is
-	variable res: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
-	variable v0, v1: std_logic_vector(1 downto 0) := "00";
-	variable selected0, selected1: Mword := (others => '0');
-	variable ready: std_logic_vector(0 to 2) := (others=>'0');
-	variable locs: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
-	constant Z3: std_logic_vector(0 to 2) := (others => '0');
-	constant ZZ3: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
-	variable imm: Word := (others => '0');
-begin
-    res.full := full;
-	res.state := st;
+--function TMP_restoreState(full: std_logic; st: SchedulerState) return SchedulerEntrySlot is
+--	variable res: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+--	variable v0, v1: std_logic_vector(1 downto 0) := "00";
+--	variable selected0, selected1: Mword := (others => '0');
+--	variable ready: std_logic_vector(0 to 2) := (others=>'0');
+--	variable locs: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
+--	constant Z3: std_logic_vector(0 to 2) := (others => '0');
+--	constant ZZ3: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
+--	variable imm: Word := (others => '0');
+--begin
+--    res.full := full;
+--	res.state := st;
 
-    res.ins.tags.renameIndex := st.renameIndex;
-    res.ins.tags.bqPointer := st.bqPointer;
-    res.ins.tags.sqPointer := st.sqPointer;
-    res.ins.tags.lqPointer := st.lqPointer;
-        res.ins.tags.bqPointerSeq := st.bqPointerSeq;
+--        return res;
 
-    res.ins.specificOperation := st.operation;
+--    res.ins.tags.renameIndex := st.renameIndex;
+--    res.ins.tags.bqPointer := st.bqPointer;
+--    res.ins.tags.sqPointer := st.sqPointer;
+--    res.ins.tags.lqPointer := st.lqPointer;
+--        res.ins.tags.bqPointerSeq := st.bqPointerSeq;
 
-    res.ins.physicalArgSpec.dest := res.state.argSpec.dest;
-    res.ins.physicalArgSpec.intDestSel := res.state.argSpec.intDestSel;
-    res.ins.physicalArgSpec.floatDestSel := res.state.argSpec.floatDestSel;
+--    res.ins.specificOperation := st.operation;
+
+--    res.ins.physicalArgSpec.dest := res.state.argSpec.dest;
+--    res.ins.physicalArgSpec.intDestSel := res.state.argSpec.intDestSel;
+--    res.ins.physicalArgSpec.floatDestSel := res.state.argSpec.floatDestSel;
     
-    res.ins.physicalArgSpec.intArgSel := (others => '0');
-    res.ins.physicalArgSpec.floatArgSel := (others => '0');
+--    res.ins.physicalArgSpec.intArgSel := (others => '0');
+--    res.ins.physicalArgSpec.floatArgSel := (others => '0');
         
-    res.ins.physicalArgSpec.args := res.state.argSpec.args;
+--    res.ins.physicalArgSpec.args := res.state.argSpec.args;
     
-    -- Clear unused fields       
-    if CLEAR_DEBUG_INFO then
-        res.ins := clearAbstractInfo(res.ins);
-    end if;
-    res.ins.controlInfo.newEvent := '0';
-    res.ins.controlInfo.hasInterrupt := '0';
+--    -- Clear unused fields       
+--    if CLEAR_DEBUG_INFO then
+--        res.ins := clearAbstractInfo(res.ins);
+--    end if;
+--    res.ins.controlInfo.newEvent := '0';
+--    res.ins.controlInfo.hasInterrupt := '0';
         
-	return res;
-end function;
+--	return res;
+--end function;
 
 
 

@@ -79,10 +79,11 @@ architecture Behavioral of Core is
 
         signal renamedArgsInt, renamedArgsFloat, renamedArgsMerged: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 
-    signal bqCompareEarly, bqSelected, bqUpdate, sqValueInput, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
+    signal bqSelected, sqValueInput, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
            specialAction, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
     
-    signal bqPointer, bqPointerSeq, lqPointer, sqPointer, preIndexSQ, preIndexLQ, sqValuePointer: SmallNumber := (others => '0');
+    signal bqPointer, bqPointerSeq, lqPointer, sqPointer, preIndexSQ, preIndexLQ--, sqValuePointer
+                    : SmallNumber := (others => '0');
            
     signal commitGroupCtr: InsTag := (others => '0');
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -359,30 +360,26 @@ begin
               storeValueCollision1, storeValueCollision2, cancelledSVI1,
               sendingToStoreWrite, sendingToStoreWriteInt, sendingToStoreWriteFloat: std_logic := '0';
 
-       signal sendingFromDLQ, sendingToAgu, sendingToRegReadI0, sendingToRegReadM0: std_logic := '0';       
+       signal sendingBranchRR, sendingFromDLQ, sendingToAgu, sendingToRegReadI0, sendingToRegReadM0: std_logic := '0';       
        signal dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
        
        signal outSigsI0, outSigsM0, outSigsSVI, outSigsSVF, outSigsF0: IssueQueueSignals := (others => '0');
        
-       signal subpipeI0_Issue, subpipeI0_RegRead, subpipeI0_E0,                                                        subpipeI0_D0,
-              subpipeM0_Issue, subpipeM0_RegRead, subpipeM0_E0,                  subpipeM0_E2,
-                                subpipeM0_RRi,    subpipeM0_E0i,  subpipeM0_E1i, subpipeM0_E2i, subpipeM0_E3i,         subpipeM0_D0i, subpipeM0_D1i,
-                                subpipeM0_RRf,    subpipeM0_E0f,  subpipeM0_E1f, subpipeM0_E2f, subpipeM0_E3f,         subpipeM0_D0f, subpipeM0_D1f,
-                                                                                              
-              subpipeF0_Issue, subpipeF0_RegRead, subpipeF0_E0, subpipeF0_E1,subpipeF0_E2, subpipeF0_D0,
-                                                  subpipeF0_E0_N, subpipeF0_E1_N, subpipeF0_E2_N,
-                                subpipeF0_RRu,
-              
-                                subpipeI0_E0_N, subpipeI0_RegRead_u,
-                                subpipeI0_E0_Nb, subpipeI0_RegRead_b,
-              
-                                subpipeM0_RR_u,
-              
-              subpipeM0_RR,     subpipeM0_E0_N, subpipeM0_E0i_N, subpipeM0_E0f_N,
-                                subpipeM0_E1_N, subpipeM0_E1i_N, subpipeM0_E1f_N,   subpipeM0_E1_Nu, subpipeM0_E1i_Nu, subpipeM0_E1f_Nu,
-                                subpipeM0_E2_N, subpipeM0_E2i_N, subpipeM0_E2f_N,
-                                subpipeM0_E3_N, subpipeM0_E3i_N, subpipeM0_E3f_N,
-                                
+       signal subpipeI0_Issue, subpipeI0_RegRead, subpipeI0_E0,                                          subpipeI0_D0,
+                                   subpipeI0_RegRead_u,
+                                   subpipeI0_RegRead_b, subpipeI0_E0_Nb,
+
+              subpipeM0_Issue, subpipeM0_RegRead, subpipeM0_E0,    subpipeM0_E1_N,    subpipeM0_E2_N,
+                                subpipeM0_RR, subpipeM0_RR_u,
+                                   subpipeM0_RRi, subpipeM0_E0i_N, subpipeM0_E1i_N,   subpipeM0_E2i_N,   subpipeM0_D0i, subpipeM0_D1i,
+                                   subpipeM0_RRf, subpipeM0_E0f_N, subpipeM0_E1f_N,   subpipeM0_E2f_N,   subpipeM0_D0f, subpipeM0_D1f,
+                                                                            subpipeM0_E1_Nu,
+                                                                            subpipeM0_E1i_Nu,
+                                                                            subpipeM0_E1f_Nu,
+                                                                                      
+              subpipeF0_Issue, subpipeF0_RegRead, subpipeF0_E0,    subpipeF0_E1,      subpipeF0_E2,      subpipeF0_D0,
+                                           subpipeF0_RRu,
+  
               subpipe_DUMMY
                 : ExecResult := DEFAULT_EXEC_RESULT;
                 
@@ -390,6 +387,8 @@ begin
         signal aluMask, memMask, fpMask, intStoreMask, fpStoreMask, branchMask, sqMask, lqMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
         signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
+
+           signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
         
             signal stateExecStoreValue: SchedulerState := DEFAULT_SCHED_STATE;
                 signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';                
@@ -408,7 +407,6 @@ begin
         
         SUBPIPE_ALU: block
            signal dataToAlu, dataToBranch: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);           
-           signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
            signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;           
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
         begin
@@ -501,52 +499,31 @@ begin
                     subpipeI0_RegRead_b.tag <= subpipeI0_RegRead.tag;
                     --subpipeI0_RegRead_b.dest <= subpipeI0_RegRead.dest;
                     subpipeI0_RegRead_b.value <= dataToBranch(0).ins.result;
-          
+
+            branchData <= basicBranch(slotRegReadI0.state.full and not outSigsI0.killSel2 and not lateEventSignal and slotRegReadI0.state.branchIns,
+                                            slotRegReadI0.state, bqSelected.ins, unfoldedAluOp);   
+            dataToBranch(0) <= (slotRegReadI0.state.full and not outSigsI0.killSel2 and not lateEventSignal and slotRegReadI0.state.branchIns, branchData);  
+
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        subpipeI0_E0_N <= subpipeI0_RegRead_u;
+                        subpipeI0_E0 <= subpipeI0_RegRead_u;
                         subpipeI0_E0_Nb <= subpipeI0_RegRead_b;
+                            dataFromBranch <= dataToBranch(0);
                     end if;
                 end process;
-          
-          
-            STAGE_I0_E0: entity work.GenericStage2(Behavioral)
-            generic map(
-                COMPARE_TAG => '0'
-            )
-            port map(
-                clk => clk, reset => '0', en => '0',
-                input => dataToAlu(0),
-                output => slotI0_E0(0),
-                events => eventsOnlyLate
-            );
 
-            subpipeI0_E0 <= --makeExecResult(slotI0_E0(0), slotI0_E0(0).full);
-                            subpipeI0_E0_N;
+            sendingBranchRR <= (sendingToRegReadI0 and slotIssueI0.state.branchIns);
+            
+                bqCompareEarly_N.full <= sendingBranchRR;
+                bqCompareEarly_N.tag <= slotIssueI0.state.renameIndex;
+                bqCompareEarly_N.dest <= slotIssueI0.state.bqPointer;
 
-            branchData <= basicBranch(slotRegReadI0.state.full and not outSigsI0.killSel2 and slotRegReadI0.state.branchIns, slotRegReadI0.state, bqSelected.ins, unfoldedAluOp);                  
-            
-            dataToBranch(0) <= (slotRegReadI0.state.full and not outSigsI0.killSel2 and slotRegReadI0.state.branchIns, branchData);            
-            bqCompareEarly <= (sendingToRegReadI0 and slotIssueI0.state.branchIns, work.LogicIssue.TMP_getIns(slotIssueI0.state));
-                bqCompareEarly_N.full <= bqCompareEarly.full;
-                bqCompareEarly_N.tag <= bqCompareEarly.ins.tags.renameIndex;
-            
-            STAGE_I0_E0_BRANCH: entity work.GenericStage2(Behavioral)
-            generic map(
-                COMPARE_TAG => '0'
-            )
-            port map(
-                clk => clk, reset => '0', en => '0',
-                input => dataToBranch(0),
-                output => dataFromBranch,
-                events => eventsOnlyLate                  
-            );
             
             execEventSignal <= dataFromBranch.ins.controlInfo.newEvent and dataFromBranch.full; -- TODO: remove 'full' here because is factored into 'newEvent'?
             execCausing <= clearDbCausing(dataFromBranch.ins);
             preExecCausing <= clearDbCausing(dataToBranch(0).ins);
-            bqUpdate <= dataFromBranch; -- TODO: possibly redundant cause execCausing can carry the data
+            
                     bqUpdate_N.full <= dataFromBranch.full;
                     bqUpdate_N.tag <= dataFromBranch.ins.tags.renameIndex;
                     bqUpdate_N.value <= dataFromBranch.ins.target; 
@@ -562,8 +539,7 @@ begin
          
             
         SUBPIPE_MEM: block
-           signal dataToAgu, dataToAguInt, dataToAguFloat, dataOutMem0,
-                         dataInMem0, dataInMemInt0, dataInMemFloat0, dataInMem1, dataInMemInt1, dataInMemFloat1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+           signal dataToAgu, dataToAguInt, dataToAguFloat, dataInMem1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1); 
            signal memLoadValue: Mword := (others => '0');                                                            
         begin
@@ -671,11 +647,11 @@ begin
                     process (clk)
                     begin
                         if rising_edge(clk) then
-                            subpipeM0_E0_N <= subpipeM0_RR_u;
+                            subpipeM0_E0 <= subpipeM0_RR_u;
                             subpipeM0_E0i_N <= subpipeM0_RRi;
                             subpipeM0_E0f_N <= subpipeM0_RRf;
 
-                            subpipeM0_E1_N <= subpipeM0_E0_N;
+                            subpipeM0_E1_N <= subpipeM0_E0;
                             subpipeM0_E1i_N <= subpipeM0_E0i_N;
                             subpipeM0_E1f_N <= subpipeM0_E0f_N;
 
@@ -684,170 +660,47 @@ begin
                             subpipeM0_E2_N <= subpipeM0_E1_Nu;
                             subpipeM0_E2i_N <= subpipeM0_E1i_Nu;
                             subpipeM0_E2f_N <= subpipeM0_E1f_Nu;
+                            
+                            
+                            slotM0_E0 <= dataToAgu;
+                            slotM0_E1i <= slotM0_E0;                       
+                            slotM0_E2i <= dataInMem1;
+
                         end if;
                     end process;
-
-                        ch0 <= bool2std(subpipeM0_E1i_N = subpipeM0_E1i);
-                        ch1 <= bool2std(subpipeM0_E1f_N = subpipeM0_E1f);
 
            sendingToAgu <= ((slotRegReadM0.full and not outSigsM0.killSel2) or sendingFromDLQ) and not lateEventSignal;
 	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(slotRegReadM0.state, sendingFromDLQ, dataFromDLQ));
 
-           STAGE_AGU: entity work.GenericStage2(Behavioral)
-           generic map(
-               COMPARE_TAG => --'1'
-                                '0'
-           )
-           port map(
-               clk => clk, reset => reset, en => en,
-               input => dataToAgu(0),
-               output => slotM0_E0(0),
-               events => events
-           );
-           
-           subpipeM0_E0 <= --makeExecResult(slotM0_E0(0), slotM0_E0(0).full);
-                           subpipeM0_E0_N;
-
---           dataToAguInt <= clearFloatDest(dataToAgu);
---           dataToAguFloat <= clearIntDest(dataToAgu);
-
-
---           STAGE_AGU_INT: entity work.GenericStage2(Behavioral)
---           generic map(
---               COMPARE_TAG => '1'
---           )
---           port map(
---               clk => clk, reset => reset, en => en,
---               input => dataToAguInt(0),
---               output => slotM0_E0i(0),
---               events => events
---           );
-           
---           --subpipeM0_E0i <= makeExecResult(slotM0_E0i(0), slotM0_E0i(0).full);
-           
---           STAGE_AGU_FLOAT: entity work.GenericStage2(Behavioral)
---           generic map(
---               COMPARE_TAG => --'1'
---                                '0'
---           )
---           port map(
---               clk => clk, reset => reset, en => en,
---               input => dataToAguFloat(0),
---               output => slotM0_E0f(0),
---               events => events
---           );
-           
-           --subpipeM0_E0f <= makeExecResult(slotM0_E0f(0), slotM0_E0f(0).full);
-
-	       dataInMem0(0) <= (slotM0_E0(0).full, slotM0_E0(0).ins);
-           memAddressInput <= dataInMem0(0);
-
-           dataInMemInt0 <= clearFloatDest(dataInMem0);
-           dataInMemFloat0 <= clearIntDest(dataInMem0);
-
-           -- TLB lookup, Dcache access
-	       STAGE_MEM0: entity work.GenericStage2(Behavioral)
-           generic map(
-               COMPARE_TAG => --'1'
-                                '0'
-           )
-           port map(
-               clk => clk, reset => reset, en => en,
-               input => dataInMemInt0(0),
-               output => slotM0_E1i(0),
-               events => events     
-           );
-
-           --subpipeM0_E1i <= makeExecResult(slotM0_E1i(0), slotM0_E1i(0).full);
-
-	       STAGE_MEM0_FLOAT: entity work.GenericStage2(Behavioral)
-           generic map(
-               COMPARE_TAG => --'1'
-                                '0'
-           )
-           port map(
-               clk => clk, reset => reset, en => en,
-               input => dataInMemFloat0(0),
-               output => slotM0_E1f(0),               
-               events => events              
-           );
-
-           --subpipeM0_E1f <= makeExecResult(slotM0_E1f(0), slotM0_E1i(0).full);
-                      
-           dataOutMem0(0) <= mergePhysDests(slotM0_E1i(0), slotM0_E1f(0)); -- [dest := Int.dest | Float.dest];
+               memAddressInput <= slotM0_E0(0);
 
            dataInMem1(0).full <= slotM0_E1i(0).full;
-           dataInMem1(0).ins <= getLSResultData(dataOutMem0(0).ins,
+           dataInMem1(0).ins <= getLSResultData(slotM0_E1i(0).ins,
                                                   '1', (others => '0'),
                                                   memLoadReady, memLoadValue,
                                                   sysRegSending, sysRegReadValue,
                                                   sqSelectedOutput, lqSelectedOutput);
-
-           dataInMemInt1 <= clearFloatDest(dataInMem1); -- with zeroed dest when load is FP
-           dataInMemFloat1 <= clearIntDest(dataInMem1); -- with zeroed dest when load is Int??
 
                 subpipeM0_E1_Nu.full <= subpipeM0_E1_N.full;
                 subpipeM0_E1_Nu.tag <= subpipeM0_E1_N.tag;
                 subpipeM0_E1_Nu.dest <= subpipeM0_E1_N.dest;
                 subpipeM0_E1_Nu.value <= dataInMem1(0).ins.result;
                 
+                subpipeM0_E1i_Nu.full <= subpipeM0_E1i_N.full;
+                subpipeM0_E1i_Nu.tag <= subpipeM0_E1i_N.tag;
+                subpipeM0_E1i_Nu.dest <= subpipeM0_E1i_N.dest;
+                subpipeM0_E1i_Nu.value <= dataInMem1(0).ins.result;
 
-                                subpipeM0_E1i_Nu.full <= subpipeM0_E1i_N.full;
-                                subpipeM0_E1i_Nu.tag <= subpipeM0_E1i_N.tag;
-                                subpipeM0_E1i_Nu.dest <= subpipeM0_E1i_N.dest;
-                                subpipeM0_E1i_Nu.value <= dataInMem1(0).ins.result;
-                                
-
-                                                subpipeM0_E1f_Nu.full <= slotM0_E1f(0).full;
-                                                subpipeM0_E1f_Nu.tag <= subpipeM0_E1f_N.tag;
-                                                subpipeM0_E1f_Nu.dest <= subpipeM0_E1f_N.dest;
-                                                subpipeM0_E1f_Nu.value <= dataInMem1(0).ins.result;           
-       
---                    subpipeM0_E2.full <= subpipeM0_E2i.full or subpipeM0_E2f.full;
---                    subpipeM0_E2.tag <= subpipeM0_E2i.tag;
---                    subpipeM0_E2.dest <= subpipeM0_E2i.dest or subpipeM0_E2f.dest;
---                    subpipeM0_E2.value <= subpipeM0_E2i.value;
-                    
-             
-           -- Source selection and verification
-	       STAGE_MEM1: entity work.GenericStage2(Behavioral)
-           generic map(
-               COMPARE_TAG => --'1'
-                                '0'
-           )
-           port map(
-               clk => clk, reset => reset, en => en,
-               input => dataInMemInt1(0),
-               output => slotM0_E2i(0),
-               events => events             
-           );
-
-           --subpipeM0_E2i <= makeExecResult(slotM0_E2i(0), slotM0_E2i(0).full);
-           
-           -- Branching into FP cluster
-           STAGE_MEM1_FLOAT: entity work.GenericStage2(Behavioral)
-           generic map(
-               COMPARE_TAG => --'1'
-                                '0'
-           )
-           port map(
-               clk => clk, reset => reset, en => en,
-               input => dataInMemFloat1(0),
-               output => slotM0_E2f(0),
-               events => events              
-           );
-
-           --subpipeM0_E2f <= makeExecResult(slotM0_E2f(0), slotM0_E2f(0).full);
+                subpipeM0_E1f_Nu.full <= subpipeM0_E1f_N.full;
+                subpipeM0_E1f_Nu.tag <= subpipeM0_E1f_N.tag;
+                subpipeM0_E1f_Nu.dest <= subpipeM0_E1f_N.dest;
+                subpipeM0_E1f_Nu.value <= dataInMem1(0).ins.result;           
 
            -- TEMP mem interface    
-		   dread <=--lotM0_E0(0).full;
-		              subpipeM0_E0.full;
-           dadr <= --slotM0_E0(0).ins.result;
-                      subpipeM0_E0.value;
-           sysRegReadSel <= --slotM0_E0(0).ins.result(4 downto 0);
-                              subpipeM0_E0.value(4 downto 0);
-           sysRegRead <= --slotM0_E0(0).full and isLoadSysOp(slotM0_E0(0).ins);
-                            subpipeM0_E0.full and isLoadSysOp(slotM0_E0(0).ins); 
+		   dread <= subpipeM0_E0.full;
+           dadr <= subpipeM0_E0.value;
+           sysRegReadSel <= subpipeM0_E0.value(4 downto 0);
+           sysRegRead <= subpipeM0_E0.full;
            
            memLoadReady <= dvalid;              
            memLoadValue <= din;      
@@ -1021,7 +874,7 @@ begin
 
         
         SUBPIPE_FP0: block
-            signal dataToFpu0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+            --signal dataToFpu0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
             signal fmaF0: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);          
             signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
             signal sendingToRegReadF0: std_logic := '0';
@@ -1102,52 +955,14 @@ begin
 
             end block;
     
-            dataToFpu0(0) <= (slotRegReadF0.full and not outSigsF0.killSel2, executeFpu(work.LogicIssue.TMP_restoreState(slotRegReadF0.full, slotRegReadF0.state).ins, slotRegReadF0.state));
+            --dataToFpu0(0) <= (slotRegReadF0.full and not outSigsF0.killSel2, executeFpu(work.LogicIssue.TMP_restoreState(slotRegReadF0.full, slotRegReadF0.state).ins, slotRegReadF0.state));
 
             subpipeF0_RRu.full <= slotRegReadF0.full and not outSigsF0.killSel2;
             subpipeF0_RRu.tag <= slotRegReadF0.state.renameIndex;
             subpipeF0_RRu.dest <= slotRegReadF0.state.argSpec.dest;
-            subpipeF0_RRu.value <= executeFpu(work.LogicIssue.TMP_restoreState(slotRegReadF0.full, slotRegReadF0.state).ins, slotRegReadF0.state).result;
+            subpipeF0_RRu.value <= executeFpu(--work.LogicIssue.TMP_restoreState(slotRegReadF0.full, slotRegReadF0.state).ins, 
+                                              slotRegReadF0.state).result;
 
---            STAGE_F0_E0: entity work.GenericStage2(Behavioral)
---            generic map(
---                COMPARE_TAG => '0'
---            )
---            port map(
---                clk => clk, reset => '0', en => '0',
---                input => dataToFpu0(0),
---                output => slotF0_E0(0),
---                events => eventsOnlyLate
---            );     
-
---            --subpipeF0_E0 <= makeExecResult(slotF0_E0(0), slotF0_E0(0).full);
-
---            STAGE_F0_E1: entity work.GenericStage2(Behavioral)
---            generic map(
---                COMPARE_TAG => '0'
---            )
---            port map(
---                clk => clk, reset => '0', en => '0',
---                input => slotF0_E0(0),
---                output => slotF0_E1(0),  
---                events => eventsOnlyLate
---            );
-            
---            --subpipeF0_E1 <= makeExecResult(slotF0_E1(0), slotF0_E1(0).full);
-
---            STAGE_F0_E2: entity work.GenericStage2(Behavioral)
---            generic map(
---                COMPARE_TAG => '0'
---            )
---            port map(
---                clk => clk, reset => '0', en => '0',
---                input => slotF0_E1(0),
---                output => slotF0_E2(0),
---                events => eventsOnlyLate
---            );
-            
-            --subpipeF0_E2 <= makeExecResult(slotF0_E2(0), slotF0_E2(0).full);
-            
             process (clk)
             begin
                 if rising_edge(clk) then
@@ -1162,9 +977,10 @@ begin
                 -- sqPointer, full, result
                 sqValueResult.full <= sendingToStoreWrite;
                 sqValueResult.tag <= stateExecStoreValue.renameIndex;
+                sqValueResult.dest <= stateExecStoreValue.sqPointer;
                 sqValueResult.value <= stateExecStoreValue.args(0);
                 
-                sqValuePointer <= stateExecStoreValue.sqPointer;
+                --sqValuePointer <= stateExecStoreValue.sqPointer;
          
          -- StoreData issue control:
          -- When Int and FP store data issue at the same time, the port conflict is resolved thus:
@@ -1191,18 +1007,15 @@ begin
             if rising_edge(clk) then
                  subpipeI0_D0 <= subpipeI0_E0;
 
-                 subpipeM0_D0i <= --subpipeM0_E2i;
-                                  subpipeM0_E2i_N;
-                 subpipeM0_D0f <= --subpipeM0_E2f;
-                                  subpipeM0_E2f_N;
+                 subpipeM0_D0i <= subpipeM0_E2i_N;
+                 subpipeM0_D0f <= subpipeM0_E2f_N;
                  subpipeM0_D1f <= subpipeM0_D0f;
 
                  subpipeF0_D0 <= subpipeF0_E2;
              end if;
          end process;
 
-         intWriteConflict <= --subpipeI0_E0.full and subpipeM0_E2i.full;
-                             subpipeI0_E0.full and subpipeM0_E2i_N.full;
+         intWriteConflict <= subpipeI0_E0.full and subpipeM0_E2i_N.full;
 
          SCHED_BLOCK: process(clk)
          begin
@@ -1224,31 +1037,28 @@ begin
          lockIssueF0 <= '0';
          allowIssueF0 <= not lockIssueF0;
 
-         execOutputs1(0) <= (slotI0_E0(0).full, slotI0_E0(0).ins);
-         execOutputs1(2) <= mergePhysDests(slotM0_E2i(0), slotM0_E2f(0)); --  [dest := Int.dest | Float.dest];             
-         execOutputs1(3) <= (slotF0_E2(0).full, slotF0_E2(0).ins);
-            
+            execOutputs1(0).full <= dataFromBranch.full;
+            execOutputs1(0).ins.controlInfo <= dataFromBranch.ins.controlInfo;
+
+            execOutputs1(2).full <= subpipeM0_E2_N.full;
+            execOutputs1(2).ins.controlInfo <= slotM0_E2i(0).ins.controlInfo;            
+
+   
             execOutMain(0) <= subpipeI0_E0;
             execOutMain(2) <= subpipeM0_E2_N;
-                              --  subpipeM0_E2_N;
             execOutMain(3) <= subpipeF0_E2;
             
             execOutSec(2) <= sqValueResult;
             
-         -- TODO: include mem hit in 'full' flag! Should merge some info from Float path??
-         execOutputs2(2) <= (sendingToStoreWrite, work.LogicIssue.TMP_getIns(stateExecStoreValue));
-
          fni <= buildForwardingNetwork(   DEFAULT_EXEC_RESULT, subpipeI0_Issue,     subpipeI0_RegRead,   subpipeI0_E0,        subpipeI0_D0,
                                           DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT,
-                                          subpipeM0_RegRead,   --subpipeM0_E0i,       subpipeM0_E1i,       subpipeM0_E2i,       subpipeM0_D0i
-                                                               subpipeM0_E0i_N,       subpipeM0_E1i_N,       subpipeM0_E2i_N,       subpipeM0_D0i
+                                          subpipeM0_RegRead,   subpipeM0_E0i_N,     subpipeM0_E1i_N,     subpipeM0_E2i_N,     subpipeM0_D0i
                                           
                                         );
     
          fniFloat <= buildForwardingNetworkFP( subpipeF0_RegRead,   subpipeF0_E0,        subpipeF0_E1,        subpipeF0_E2,        subpipeF0_D0,
                                                DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT,
-                                               --subpipeM0_E0f,       subpipeM0_E1f,       subpipeM0_E2f,       subpipeM0_D0f,       subpipeM0_D1f
-                                               subpipeM0_E0f_N,       subpipeM0_E1f_N,       subpipeM0_E2f_N,       subpipeM0_D0f,       subpipeM0_D1f                                        
+                                               subpipeM0_E0f_N,     subpipeM0_E1f_N,     subpipeM0_E2f_N,     subpipeM0_D0f,       subpipeM0_D1f                                        
                                             );
 
          regsSelI0 <= work.LogicRenaming.getPhysicalArgs(slotIssueI0);
@@ -1260,8 +1070,7 @@ begin
          regsSelF0 <= work.LogicRenaming.getPhysicalArgs(slotIssueF0);
 
 
-         resultToIntWQ <= --subpipeM0_E2i when subpipeM0_E2i.full = '1' else subpipeI0_E0;
-                          subpipeM0_E2i_N when subpipeM0_E2i_N.full = '1' else subpipeI0_E0;
+         resultToIntWQ <= subpipeM0_E2i_N when subpipeM0_E2i_N.full = '1' else subpipeI0_E0;
          TMP_WQ: process (clk)
          begin   
             if rising_edge(clk) then
@@ -1308,15 +1117,14 @@ begin
              readyRegFlagsNext => readyRegFlagsIntNext
          );
 
-         resultToFloatWQ <= --subpipeM0_E2f when subpipeM0_E2f.full = '1' else subpipeF0_E2;
-                            subpipeM0_E2f_N when subpipeM0_E2f_N.full = '1' else subpipeF0_E2;
+         resultToFloatWQ <= subpipeM0_E2f_N when subpipeM0_E2f_N.full = '1' else subpipeF0_E2;
 
 		 FLOAT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(IS_FP => true, WIDTH => 4, WRITE_WIDTH => 1)
          port map(
              clk => clk, reset => '0', en => '0',
                  
-             writeAllow => '1',--dataToFloatRF(0).full,
+             writeAllow => '1',
              writeInput => dataToFloatRF,
                 writeInput_T(0) => resultToFloatRF,
  
@@ -1392,7 +1200,7 @@ begin
 
 		    storeValueInput_N => bqUpdate_N,
             compareAddressQuickInput_N => bqCompareEarly_N,
-        compareQuickPtr => bqCompareEarly.ins.tags.bqPointer,
+        compareQuickPtr => bqCompareEarly_N.dest,--> bqCompareEarly.ins.tags.bqPointer,
 
 		selectedDataOutput => bqSelected,
 
@@ -1429,7 +1237,7 @@ begin
             
         renamedPtr => sqPointer,
             
-		  storeValuePtr => sqValuePointer,
+		  storeValuePtr => sqValueResult.dest,--sqValuePointer,
 		  storeValueResult => sqValueResult,
 		
 		compareAddressInput => memAddressInput,

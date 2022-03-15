@@ -66,8 +66,8 @@ type DynamicOpInfo is record
     confirmedBranch: std_logic;
     specialAction: std_logic;
     refetch: std_logic;
-        mainCluster: std_logic;
-        secCluster:std_logic;
+    mainCluster: std_logic;
+    secCluster:std_logic;
 end record;
 
 constant DEFAULT_DYNAMIC_GROUP_INFO: DynamicGroupInfo := (
@@ -137,10 +137,10 @@ function readStaticGroupOutput(content: StaticGroupInfoArray; ptr: SmallNumber) 
 function readDynamicGroupOutput(content: DynamicGroupInfoArray; ptr: SmallNumber) return DynamicGroupInfo;
 
 procedure updateDynamicContent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlotArray; execSigs: ExecResultArray; constant CLUSTER: natural);
-procedure updateDynamicGroupBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; ind: natural);
-procedure updateDynamicContentBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot);
-procedure updateDynamicGroupMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; ind: natural);
-procedure updateDynamicContentMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot);
+procedure updateDynamicGroupBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; tag: InsTag; ind: natural);
+procedure updateDynamicContentBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; tag: InsTag);
+procedure updateDynamicGroupMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; tag: InsTag; ind: natural);
+procedure updateDynamicContentMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; tag: InsTag);
 
 function groupCompleted(insVec: InstructionSlotArray; da: DynamicOpInfoArray) return std_logic;
    
@@ -199,10 +199,10 @@ begin
     res.full := isl.full;
     res.killed := '0';
     res.causing := '0';
-    res.completed0 := '0';-- not isl.ins.classInfo.mainCluster; 
-    res.completed1 := '0';--not isl.ins.classInfo.secCluster;
-        res.mainCluster := isl.ins.classInfo.mainCluster;
-        res.secCluster := isl.ins.classInfo.secCluster;
+    res.completed0 := '0';
+    res.completed1 := '0';
+    res.mainCluster := isl.ins.classInfo.mainCluster;
+    res.secCluster := isl.ins.classInfo.secCluster;
 
     res.hasEvent := '0';
     res.hasException := '0';
@@ -227,15 +227,12 @@ end function;
         res.full := dyn.full;
         res.ins.controlInfo.killed := dyn.killed;
         res.ins.controlInfo.causing := dyn.causing;
-        --res.ins.controlInfo.completed := dyn.completed0; 
-        --res.ins.controlInfo.completed2 := dyn.completed1;
-        
+
         res.ins.controlInfo.newEvent := dyn.hasEvent;
         res.ins.controlInfo.hasException := dyn.hasException;
         res.ins.controlInfo.confirmedBranch := dyn.confirmedBranch;
         res.ins.controlInfo.specialAction := dyn.specialAction; -- ???
-        res.ins.controlInfo.refetch := dyn.refetch; --isl.ins.controlInfo.refetch;
-        
+        res.ins.controlInfo.refetch := dyn.refetch;
 
         res.ins.virtualArgSpec.intDestSel := stat.virtualIntDestSel;
         res.ins.virtualArgSpec.floatDestSel := stat.virtualFloatDestSel;
@@ -270,10 +267,8 @@ end function;
         res.ins.specificOperation.system := SysOp'val(slv2u(si.specialOp));
         res.ins.specificOperation.bits := si.specialOp;
         
-        --res.useBQ := isa(0).ins.controlInfo.firstBr;
         return res;
     end function;
-
 
 ----------------------------------------------------------
 
@@ -318,8 +313,6 @@ begin
 end function;
 
 
-
-
 function deserializeStaticInfo(w: Word) return StaticOpInfo is
     variable res: StaticOpInfo;
 begin
@@ -336,7 +329,7 @@ begin
 end function;
 
 function deserializeStaticInfoA(v: std_logic_vector) return StaticOpInfoArray is
-    variable res: StaticOpInfoArray;--std_logic_vector(PIPE_WIDTH*18 - 1 downto 0); -- CAREFUL: temp num of bits
+    variable res: StaticOpInfoArray;
     variable w: Word := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
@@ -354,17 +347,6 @@ begin
     res.useBQ := b(4);
     return res;
 end function;
-
---function deserializeStatic(ia: StaticOpInfoArray; gr: StaticGroupInfo) return std_logic_vector is
---    variable res: std_logic_vector(PIPE_WIDTH*18 + 6 - 1 downto 0);
---begin
---    res(PIPE_WIDTH*18 - 1 downto 0) := serializeStaticInfoA(ia);
---    res(PIPE_WIDTH*18 + 6 - 1 downto PIPE_WIDTH*18) := serializeStaticGroupInfo(gr);
---    return res;
---end function;
-
-
-
 
 
 function serializeOp(isl: InstructionSlot) return std_logic_vector is
@@ -458,35 +440,30 @@ procedure updateDynamicContent(signal content: inout DynamicOpInfoArray2D; execI
     variable tagHigh,tagHighTrunc: SmallNumber;
 begin
     for i in execInfo'range loop
-            tagHigh := getTagHighSN(--execInfo(i).ins.tags.renameIndex);
-                                    execSigs(i).tag);
-            tagHighTrunc := tagHigh and PTR_MASK_SN;
-            groupInd := slv2u(tagHighTrunc);
-            opInd := slv2u(getTagLow(--execInfo(i).ins.tags.renameIndex));
-                                     execSigs(i).tag)); 
-        
-            if --execInfo(i).full = '1' then
-                execSigs(i).full = '1' then
-                if CLUSTER = 0 then
-                    content(groupInd, opInd).completed0 <= '1';
-                else--elsif cluster = 1 then
-                    content(groupInd, opInd).completed1 <= '1';                   
-                end if;
-            end if;
-
-    end loop;
+        tagHigh := getTagHighSN(execSigs(i).tag);
+        tagHighTrunc := tagHigh and PTR_MASK_SN;
+        groupInd := slv2u(tagHighTrunc);
+        opInd := slv2u(getTagLow(execSigs(i).tag)); 
     
+        if execSigs(i).full = '1' then
+            if CLUSTER = 0 then
+                content(groupInd, opInd).completed0 <= '1';
+            else--elsif cluster = 1 then
+                content(groupInd, opInd).completed1 <= '1';                   
+            end if;
+        end if;
+    end loop;
 end procedure;
 
-procedure updateDynamicGroupBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; ind: natural) is
+procedure updateDynamicGroupBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; tag: InsTag; ind: natural) is
     variable groupInd, opInd: natural;
     variable tagHigh,tagHighTrunc: SmallNumber;
     variable eventFound: boolean := false;
 begin
-    tagHigh := getTagHighSN(execInfo.ins.tags.renameIndex);
+    tagHigh := getTagHighSN(tag);
     tagHighTrunc := tagHigh and PTR_MASK_SN;
     groupInd := slv2u(tagHighTrunc);
-    opInd := slv2u(getTagLow(execInfo.ins.tags.renameIndex));
+    opInd := slv2u(getTagLow(tag));
 
     for i in 0 to PIPE_WIDTH-1 loop
         if eventFound then
@@ -505,28 +482,28 @@ begin
     end loop;
 end procedure;
  
-procedure updateDynamicContentBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot) is
+procedure updateDynamicContentBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; tag: InsTag) is
     variable groupInd, opInd: natural;
     variable tagHigh,tagHighTrunc: SmallNumber;
 begin
-    tagHigh := getTagHighSN(execInfo.ins.tags.renameIndex);
+    tagHigh := getTagHighSN(tag);
     tagHighTrunc := tagHigh and PTR_MASK_SN;
     groupInd := slv2u(tagHighTrunc);
-    --opInd := slv2u(getTagLow(execInfo.ins.tags.renameIndex));
+
     if execInfo.full = '1' then
-        updateDynamicGroupBranch(content, execInfo, groupInd);
-    end if;         
+        updateDynamicGroupBranch(content, execInfo, tag, groupInd);
+    end if;
 end procedure;         
 
-procedure updateDynamicGroupMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; ind: natural) is
+procedure updateDynamicGroupMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; tag: InsTag; ind: natural) is
     variable groupInd, opInd: natural;
     variable tagHigh,tagHighTrunc: SmallNumber;
     variable eventFound: boolean := false;
 begin
-    tagHigh := getTagHighSN(execInfo.ins.tags.renameIndex);
+    tagHigh := getTagHighSN(tag);
     tagHighTrunc := tagHigh and PTR_MASK_SN;
     groupInd := slv2u(tagHighTrunc);
-    opInd := slv2u(getTagLow(execInfo.ins.tags.renameIndex));
+    opInd := slv2u(getTagLow(tag));
 
     for i in 0 to PIPE_WIDTH-1 loop
         if eventFound then
@@ -543,30 +520,24 @@ begin
         
     end loop;
 end procedure;
-
  
-procedure updateDynamicContentMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot) is
+procedure updateDynamicContentMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionSlot; tag: InsTag) is
     variable groupInd, opInd: natural;
     variable tagHigh,tagHighTrunc: SmallNumber;
 begin
         tagHigh := getTagHighSN(execInfo.ins.tags.renameIndex);
         tagHighTrunc := tagHigh and PTR_MASK_SN;
         groupInd := slv2u(tagHighTrunc);
-        --opInd := slv2u(getTagLow(execInfo.ins.tags.renameIndex));
     
         if execInfo.full = '1' then
-            updateDynamicGroupMemEvent(content, execInfo, groupInd);
+            updateDynamicGroupMemEvent(content, execInfo, tag, groupInd);
         end if;        
 end procedure;
-
-
-
 
 function groupCompleted(insVec: InstructionSlotArray; da: DynamicOpInfoArray) return std_logic is
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
 		if      insVec(i).full = '1' 
-		    --and (insVec(i).ins.controlInfo.completed and insVec(i).ins.controlInfo.completed2) = '0'
 		    and ((da(i).completed0 or not da(i).mainCluster) and (da(i).completed1 or not da(i).secCluster)) = '0'
 		then
 			return '0'; 

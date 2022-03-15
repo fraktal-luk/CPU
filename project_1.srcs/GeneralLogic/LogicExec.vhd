@@ -38,28 +38,22 @@ package LogicExec is
 	function execLogicOr(ins: InstructionState) return InstructionState;
 	function execLogicXor(ins: InstructionState) return InstructionState;
 
-	function basicBranch(sending: std_logic;-- ins: InstructionState;
-	                       st: SchedulerState; queueData: InstructionState; ac: AluControl) return InstructionState;
+	function basicBranch(sending: std_logic; st: SchedulerState; queueData: InstructionState; ac: AluControl) return InstructionState;
 
-	function executeAlu(--ins: InstructionState;
-	                    st: SchedulerState; queueData: InstructionState; branchIns: InstructionState; ac: AluControl) return InstructionState;
+	function executeAlu(st: SchedulerState; queueData: InstructionState; branchIns: InstructionState; ac: AluControl) return InstructionState;
 
-	function executeFpu(ins: InstructionState; st: SchedulerState) return InstructionState;
+	function executeFpu(st: SchedulerState) return InstructionState;
 
-    function calcEffectiveAddress(--ins: InstructionState;
-                                    st: SchedulerState; fromDLQ: std_logic; dlqData: InstructionState)
+    function calcEffectiveAddress(st: SchedulerState; fromDLQ: std_logic; dlqData: InstructionState)
     return InstructionState;        
 
     function getLSResultData(ins: InstructionState;
                               tlbReady: std_logic; tlbValue: Mword;
                               memLoadReady: std_logic; memLoadValue: Mword;
                               sysLoadReady: std_logic; sysLoadValue: Mword;
-                              --storeForwardSending: std_logic; storeForwardIns: InstructionState;
                               storeForwardOutput: InstructionSlot;
                               lqSelectedOutput: InstructionSlot
                              ) return InstructionState;
-                                        
-    function getStoreDataOp(ss: SchedulerEntrySlot) return SchedulerEntrySlot;
                                                
 end LogicExec;
 
@@ -97,22 +91,10 @@ package body LogicExec is
 	begin
 		isZero := not isNonzero(ss.args(0));
 			
-		    return ac.jumpType(1) or (ac.jumpType(0) xor isZero); 
-			
-		if op = opJ then
-			return '1';
-		elsif op = opJnz and isZero = '0' then
-			return '1';
-		elsif op = opJz and isZero = '1' then
-		    return '1';
-		else
-			return '0';
-		end if;	
-		
+		return ac.jumpType(1) or (ac.jumpType(0) xor isZero);
 	end function;
 
-	function basicBranch(sending: std_logic;-- ins: InstructionState;
-	                       st: SchedulerState; queueData: InstructionState; ac: AluControl) return InstructionState is
+	function basicBranch(sending: std_logic; st: SchedulerState; queueData: InstructionState; ac: AluControl) return InstructionState is
 		variable res: InstructionState := work.LogicIssue.TMP_getIns(st);--ins;
 		variable branchTaken, targetMatch: std_logic := '0';
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
@@ -125,8 +107,7 @@ package body LogicExec is
 		-- j not taken : if not taken ok, if taken goto dest
 
         targetMatch := bool2std(queueData.target = st.args(1));
-		branchTaken := resolveBranchCondition(st, --ins.specificOperation.arith, ac);
-		                                          st.operation.arith, ac);
+		branchTaken := resolveBranchCondition(st, st.operation.arith, ac);
 
 		if queueData.controlInfo.frontBranch = '1' and branchTaken = '0' then						
 			res.controlInfo.newEvent := '1';
@@ -153,25 +134,23 @@ package body LogicExec is
 			res.controlInfo.confirmedBranch := '1';			
 		end if;
 
+        if branchTaken = '0' then
+            trueTarget := queueData.result;
+        elsif st.immediate = '1' then
+            trueTarget := queueData.target;
+        else
+            trueTarget := st.args(1);
+        end if;
+        
+        if      (queueData.controlInfo.frontBranch xor branchTaken) = '1'
+            or  (queueData.controlInfo.frontBranch and branchTaken and not st.immediate and not targetMatch) = '1'
+        then
+            res.controlInfo.newEvent := sending;
+        else
+            res.controlInfo.newEvent := '0';
+        end if;
 
-                if branchTaken = '0' then
-                    trueTarget := queueData.result;
-                elsif st.immediate = '1' then
-                    trueTarget := queueData.target;
-                else
-                    trueTarget := st.args(1);
-                end if;
-                
-                if      (queueData.controlInfo.frontBranch xor branchTaken) = '1'
-                    or  (queueData.controlInfo.frontBranch and branchTaken and not st.immediate and not targetMatch) = '1'
-                then
-                    res.controlInfo.newEvent := --'1';
-                                                sending;
-                else
-                    res.controlInfo.newEvent := '0';
-                end if;
-
-                res.controlInfo.confirmedBranch := branchTaken;
+        res.controlInfo.confirmedBranch := branchTaken;
 
 		res.target := trueTarget;
 		-- Return address
@@ -202,8 +181,7 @@ package body LogicExec is
 		return res;
 	end function;
 	
-	function executeAlu(--ins: InstructionState;
-	                    st: SchedulerState; queueData: InstructionState; branchIns: InstructionState; ac: AluControl)
+	function executeAlu(st: SchedulerState; queueData: InstructionState; branchIns: InstructionState; ac: AluControl)
 	return InstructionState is
 		variable res: InstructionState := work.LogicIssue.TMP_getIns(st);-- ins;
 		variable result, linkAdr: Mword := (others => '0');
@@ -223,18 +201,16 @@ package body LogicExec is
 		arg1 := st.args(1);
 		arg2 := st.args(2);
 
-		if --ins.specificOperation.arith = opSub then
-		   ac.sub = '1' then
+		if ac.sub = '1' then
 			argAddSub := not arg1;
 			carryIn := '1';
 		else
 			argAddSub := arg1;
 			carryIn := '0';
 		end if;
-	
+
 		shTemp(5 downto 0) := arg1(5 downto 0);
-		if --ins.specificOperation.arith = opShl then
-		      ac.shiftType = "00" then
+		if ac.shiftType = "00" then
 			shNum := subSN(shNum, shTemp);
 		else
 			shNum := shTemp;
@@ -243,23 +219,17 @@ package body LogicExec is
 		shH := slv2s(shNum(5 downto 3));
 		shL := slv2u(shNum(2 downto 0));
 	
-		if --ins.specificOperation.arith = opSha then
-		      ac.shiftType = "01" then
+		if ac.shiftType = "01" then
 			tempBits(95 downto 64) := (others => arg0(MWORD_SIZE-1));	
 		end if;
 		tempBits(63 downto 32) := arg0;
-	
+
 		shiftedBytes := tempBits(71 + 8*shH downto 32 + 8*shH);	
-	
-	       shiftInput(31 downto 0) := arg0;
-	       rotated := rotate64(shiftInput, arg1(5 downto 0));
-	       shiftOutput := rotated; -- TEMP: works for 32b and 5-bit shift amount
---	       if arg1(9) = '0' then
---	           shiftOutput := clearRight64(rotated, arg1(5 downto 0));
---	       else
---	           shiftOutput := rotated; -- TEMP!
---	       end if;
-	       
+
+        shiftInput(31 downto 0) := arg0;
+        rotated := rotate64(shiftInput, arg1(5 downto 0));
+        shiftOutput := rotated; -- TEMP: works for 32b and 5-bit shift amount
+
 		-- Shifting: divide into byte part and intra-byte part
 		--	shift left by 8*H + L
 		-- must be universal: the H part also negative
@@ -276,36 +246,17 @@ package body LogicExec is
 		
 		resultExt(31 downto 0) := addExtNew(arg0, argAddSub, carryIn);	
 		linkAdr := queueData.result;
-
---		if (	(ins.specificOperation.arith = opAdd
---			and arg0(MWORD_SIZE-1) = arg1(MWORD_SIZE-1)
---			and arg0(MWORD_SIZE-1) /= resultExt(MWORD_SIZE-1)))
---			or
---			(	(ins.specificOperation.arith = opSub 
---			and arg0(MWORD_SIZE-1) /= arg1(MWORD_SIZE-1)
---			and arg0(MWORD_SIZE-1) /= resultExt(MWORD_SIZE-1)))
---		then 
---			if false then --ENABLE_INT_OVERFLOW then
---				ov := '1';
---			end if;
---		end if;
 	    
 	    res.controlInfo.newEvent := '0';
 	    res.controlInfo.hasException := '0';
-			
-			
-			addExtNewP(arg0, argAddSub, carryIn, resultExt0, resultExt1, cl, cm0, cm1);
+		
+		addExtNewP(arg0, argAddSub, carryIn, resultExt0, resultExt1, cl, cm0, cm1);
 
         if (ac.adder and ((cl and cm1) or cm0)) = '1' then
             result(31 downto 20) := resultExt1(31 downto 20);
             result(19 downto 0) := resultExt0(19 downto 0);
         elsif ac.adder = '1' then
-            result := resultExt0;      
-
---		if --ins.specificOperation.arith = opAdd or ins.specificOperation.arith = opSub then
---		      ac.adder = '1' then
---			carry := resultExt(MWORD_SIZE); -- CAREFUL, with subtraction carry is different, keep in mind
---			result := resultExt(MWORD_SIZE-1 downto 0);					
+            result := resultExt0;
 		else
 		      if ac.jump = '1' then
 					result := linkAdr;
@@ -314,8 +265,7 @@ package body LogicExec is
                   res.controlInfo.frontBranch := branchIns.controlInfo.frontBranch;
                   res.controlInfo.confirmedBranch := branchIns.controlInfo.confirmedBranch;		      
 		      elsif ac.shifter = '1' then
-		          result := --shiftedBytes(31 + shL downto shL);
-		                      shiftOutput(31 downto 0);
+		          result := shiftOutput(31 downto 0);
 		      else
 		          case ac.bitop is
 		              when "0000" =>
@@ -326,22 +276,7 @@ package body LogicExec is
 		                  result := arg0 xor arg1;
 		          end case;
 		      end if; 
-		
---			case ins.specificOperation.arith is
---				when opAnd =>
---					result := arg0 and arg1;				
---				when opOr =>
---					result := arg0 or arg1;
---				when opJ | opJz | opJnz => 
---					result := linkAdr;
-					
---					res.controlInfo.newEvent := branchIns.controlInfo.newEvent;
---                    res.controlInfo.frontBranch := branchIns.controlInfo.frontBranch;
---                    res.controlInfo.confirmedBranch := branchIns.controlInfo.confirmedBranch;
 
---				when others => 
---					result := shiftedBytes(31 + shL downto shL);
---			end case;
 		end if;
 
 		if ov = '1' then
@@ -414,12 +349,12 @@ package body LogicExec is
         end function;
 
 	
-	function executeFpu(ins: InstructionState; st: SchedulerState) return InstructionState is
-       variable res: InstructionState := ins;
+	function executeFpu(st: SchedulerState) return InstructionState is
+       variable res: InstructionState := DEFAULT_INS_STATE;--ins;
 	begin
-        if ins.specificOperation.float = opOr then
+        if st.operation.float = opOr then 
            res.result := st.args(0) or st.args(1);
-        elsif ins.specificOperation.float = opMove then
+        elsif st.operation.float = opMove then
            res.result := st.args(0);
         else
            
@@ -446,8 +381,7 @@ package body LogicExec is
 	end function;
 
             
-    function calcEffectiveAddress(--ins: InstructionState;
-                                    st: SchedulerState; fromDLQ: std_logic; dlqData: InstructionState)
+    function calcEffectiveAddress(st: SchedulerState; fromDLQ: std_logic; dlqData: InstructionState)
     return InstructionState is
         variable res: InstructionState := work.LogicIssue.TMP_getIns(st);--ins;
     begin
@@ -484,11 +418,10 @@ package body LogicExec is
                               tlbReady: std_logic; tlbValue: Mword;	    
                               memLoadReady: std_logic; memLoadValue: Mword;
                               sysLoadReady: std_logic; sysLoadValue: Mword;
-                              --storeForwardSending: std_logic; storeForwardIns: InstructionState;
                               storeForwardOutput: InstructionSlot;
                               lqSelectedOutput: InstructionSlot                                         
                              ) return InstructionState is
-        variable res: InstructionState := ins;
+        variable res: InstructionState := DEFAULT_INS_STATE; --ins;
     begin
         -- mfc/mtc?
         -- tlb/access error?
@@ -533,27 +466,5 @@ package body LogicExec is
         -- TODO: remember about miss/hit status and reason of miss if relevant!
         return res;
     end function;
-    
-    function getStoreDataOp(ss: SchedulerEntrySlot) return SchedulerEntrySlot is
-        variable res: SchedulerEntrySlot := ss;
-    begin
-    
-        if CLEAR_DEBUG_INFO then
-		    res.ins := clearDbCounters(res.ins);
-            res.ins := clearRawInfo(res.ins);
-            
-            res.ins.specificOperation := DEFAULT_SPECIFIC_OP;
-            
-            res.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
-            res.ins.classInfo := DEFAULT_CLASS_INFO;
-                    
-            res.ins.virtualArgSpec := DEFAULT_ARG_SPEC;
-            res.ins.physicalArgSpec := DEFAULT_ARG_SPEC;
-            
-            res.ins.target := (others => '0');
-            res.ins.result := (others => '0');
-        end if;
-        
-        return res;
-    end function;    
+   
 end LogicExec;

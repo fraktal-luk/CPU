@@ -58,8 +58,10 @@ architecture Behavioral of ReorderBuffer is
     signal ch0, ch1, ch2, ch3: std_logic := '0';
 begin
 	execEvent <= execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
-	causingPtr <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
-	causingPtrLong <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN_LONG; -- TEMP!
+	causingPtr <= getTagHighSN(--execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
+	                             execSigsMain(0).tag) and PTR_MASK_SN;
+	causingPtrLong <= getTagHighSN(--execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN_LONG; -- TEMP!
+	                               execSigsMain(0).tag) and PTR_MASK_SN_LONG;
 	
     NEW_DEV: block
         signal staticInput, staticOutput, staticOutput_D_Pre: StaticOpInfoArray;
@@ -107,8 +109,8 @@ begin
                 updateDynamicContent(dynamicContent, execEndSigs1, execSigsMain, 0);
                 updateDynamicContent(dynamicContent, execEndSigs2, execSigsSec, 1);
 
-                updateDynamicContentBranch(dynamicContent, execEndSigs1(0));
-                updateDynamicContentMemEvent(dynamicContent, execEndSigs1(2));
+                updateDynamicContentBranch(dynamicContent, execEndSigs1(0), execSigsMain(0).tag);
+                updateDynamicContentMemEvent(dynamicContent, execEndSigs1(2), execSigsMain(2).tag);
 
                 -- Write inputs
                 if prevSending = '1' then                    

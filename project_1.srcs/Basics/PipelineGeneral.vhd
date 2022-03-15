@@ -249,10 +249,7 @@ function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
 
 function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray;
-function prepareForStoreValueFloatIQ(--insVecInt,
-                                     insVecFloat: InstructionSlotArray) return InstructionSlotArray;
-
---function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
+function prepareForStoreValueFloatIQ(insVecFloat: InstructionSlotArray) return InstructionSlotArray;
 
 function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray;
 
@@ -914,8 +911,6 @@ function getMemMask(insVec: InstructionSlotArray) return std_logic_vector is
 begin
 	return getSubpipeMask(insVec, Mem);
 end function;
-
-
         
         function getBranchMask1(insVec: InstructionSlotArray) return std_logic_vector is
             variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
@@ -999,10 +994,6 @@ end function;
         end function;
 
 
-
-
-
-
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray is
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
@@ -1064,20 +1055,6 @@ begin
     return res;
 end function;
 
-
---function removeArg2(insVec: InstructionStateArray) return InstructionStateArray is
---    variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
---begin
---    for i in 0 to PIPE_WIDTH-1 loop
---        res(i).virtualArgSpec.intArgSel(2) := '0';
---        res(i).virtualArgSpec.args(2) := (others => '0');
-        
---        res(i).physicalArgSpec.intArgSel(2) := '0';
---        res(i).physicalArgSpec.args(2) := (others => '0');                                                
---    end loop;
-    
---    return res;
---end function;
 
 function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
@@ -1445,10 +1422,8 @@ function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecRes
     variable res: ExecResult := DEFAULT_EXEC_RESULT;
 begin
     res.full := full;
-    res.tag := --isl.ins.tags.renameIndex;
-                isl.state.renameIndex;
-    res.dest := --isl.ins.physicalArgSpec.dest;
-                isl.state.argSpec.dest;
+    res.tag := isl.state.renameIndex;
+    res.dest := isl.state.argSpec.dest;
     res.value := isl.ins.result;    
     return res;
 end function;
@@ -1457,11 +1432,9 @@ function makeExecResult(isl: SchedulerEntrySlot) return ExecResult is
     variable res: ExecResult := DEFAULT_EXEC_RESULT;
 begin
     res.full := isl.full;
-    res.tag := --isl.ins.tags.renameIndex;
-                isl.state.renameIndex;
-    res.dest := --isl.ins.physicalArgSpec.dest;
-                isl.state.argSpec.dest;
-    --res.value := isl.ins.result;    
+    res.tag := isl.state.renameIndex;
+    res.dest := isl.state.argSpec.dest;
+
     return res;
 end function;
 
@@ -1469,11 +1442,9 @@ function makeExecResult(isl: SchedulerState) return ExecResult is
     variable res: ExecResult := DEFAULT_EXEC_RESULT;
 begin
     res.full := isl.full;
-    res.tag := --isl.ins.tags.renameIndex;
-                isl.renameIndex;
-    res.dest := --isl.ins.physicalArgSpec.dest;
-                isl.argSpec.dest;
-    --res.value := isl.ins.result;    
+    res.tag := isl.renameIndex;
+    res.dest := isl.argSpec.dest;
+
     return res;
 end function;
 
