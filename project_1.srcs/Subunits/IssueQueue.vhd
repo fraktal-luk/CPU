@@ -568,17 +568,17 @@ begin
             
     end block;
 
-    dispatchDataNew_T <= getSchedEntrySlot(selectedSlot);
+    dispatchDataNew_T <= getSchedEntrySlot(selectedSlot, sends);
     
     
-        dispatchDataNew_NS <= getSchedEntrySlot(selectedSlot_NS);
+        dispatchDataNew_NS <= getSchedEntrySlot(selectedSlot_NS, sends_NS);
                                                 --TMP_setImmValue(selectedSlot_NS, selectedValue));
 
 
     WHEN_SH: if not NONSHIFT generate
         -- Output signals
         --schedulerOut <= TMP_restoreState(sends, dispatchDataNew_T);
-            schedulerOut.full <= sends;
+            --schedulerOut.full <= sends;
             schedulerOut.state <= dispatchDataNew_T;
 
         acceptingOut <= not isNonzero(fullMask(4 to 7));
@@ -598,7 +598,7 @@ begin
     WHEN_NSH: if NONSHIFT generate
         -- Output signals
         --schedulerOut <= TMP_restoreState(sends_NS, dispatchDataNew_NS);
-            schedulerOut.full <= sends_NS;
+          --  schedulerOut.full <= sends_NS;
             schedulerOut.state <= dispatchDataNew_NS;
         
         acceptingOut <= --not isFull;

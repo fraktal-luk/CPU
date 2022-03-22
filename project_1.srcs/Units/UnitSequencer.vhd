@@ -257,7 +257,7 @@ begin
     
     COMMIT_STAGE: if VIEW_ON generate
        use std.textio.all;
-       use work.Viewing.all;
+--       use work.Viewing.all;
        file outFile: text open write_mode is DEBUG_FILE_PREFIX & "committed.txt"; 
     begin
         stageDataToCommit <= recreateGroup(robDataLiving, dataFromBQV, stageDataLastEffectiveOutA(0).ins.target, commitCtr);
@@ -291,7 +291,7 @@ begin
             if rising_edge(clk) then
                 if DEBUG_LOG_COMMITTED then
                     if sendingToCommit = '1' then
-                        printGroup(stageDataToCommit, outFile);
+--                        printGroup(stageDataToCommit, outFile);
                     end if;
                 end if;
             end if;
@@ -392,15 +392,15 @@ begin
         );
     end block;
 
-	COMMITTED_VIEW: if VIEW_ON generate
-	   use work.Viewing.all;	        
-       signal committedText: GenericStageView;
-       signal lastEffectiveText, lateCausingText: InsStringArray(0 to 0);
-    begin
-       committedText <= getInsStringArray(stageDataCommitOutA);
-       lastEffectiveText <= getInsStringArray(stageDataLastEffectiveOutA);
-       lateCausingText <= getInsStringArray(stageDataLateCausingOut);
-    end generate;
+--	COMMITTED_VIEW: if VIEW_ON generate
+--	   use work.Viewing.all;	        
+--       signal committedText: GenericStageView;
+--       signal lastEffectiveText, lateCausingText: InsStringArray(0 to 0);
+--    begin
+--       committedText <= getInsStringArray(stageDataCommitOutA);
+--       lastEffectiveText <= getInsStringArray(stageDataLastEffectiveOutA);
+--       lateCausingText <= getInsStringArray(stageDataLateCausingOut);
+--    end generate;
 
     intAllowOut <= not eventCommitted and not lateEventSending;
     intAckOut <= sendingToLateCausing and intCommitted;

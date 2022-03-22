@@ -137,7 +137,7 @@ function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant 
 
 function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray) return SchedulerInfoArray;
 
-function getSchedEntrySlot(info: SchedulerInfo) return SchedulerState;
+function getSchedEntrySlot(info: SchedulerInfo; full: std_logic) return SchedulerState;
 
 function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
 
@@ -156,9 +156,11 @@ function getDispatchArgValues_RR(input: SchedulerState;
                                  USE_IMM: boolean; REGS_ONLY: boolean)
 return SchedulerState;
 
-function updateDispatchArgs_Is(st: SchedulerState; full: std_logic) return SchedulerState;
+function updateDispatchArgs_Is(st: SchedulerState--; full: std_logic
+                ) return SchedulerState;
 
-function updateDispatchArgs_RR(st: SchedulerState; full: std_logic; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean) return SchedulerState;
+function updateDispatchArgs_RR(st: SchedulerState;-- full: std_logic;
+                    vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean) return SchedulerState;
 
 
 function iqNext_N2(queueContent: SchedulerInfoArray;
@@ -486,9 +488,11 @@ begin
 end function;
 
 
-function getSchedEntrySlot(info: SchedulerInfo) return SchedulerState is
+function getSchedEntrySlot(info: SchedulerInfo; full: std_logic) return SchedulerState is
     variable res: SchedulerState := DEFAULT_SCHED_STATE;
 begin
+    res.full := full;
+
     res.operation := info.static.operation;
 
     res.branchIns := info.static.branchIns;
@@ -627,11 +631,11 @@ begin
     return res;
 end function;
 
-function updateDispatchArgs_Is(st: SchedulerState; full: std_logic)
+function updateDispatchArgs_Is(st: SchedulerState)--; full: std_logic)
 return SchedulerState is
     variable res: SchedulerState := st;
 begin
-    res.full := full;
+    --res.full := full;
 
     res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
     res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
@@ -699,11 +703,12 @@ begin
 end function;
 
 
-function updateDispatchArgs_RR(st: SchedulerState; full: std_logic; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean)
+function updateDispatchArgs_RR(st: SchedulerState;-- full: std_logic;
+                                vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean)
 return SchedulerState is
     variable res: SchedulerState := st;
 begin
-    res.full := full;
+    --res.full := full;
 
     if REGS_ONLY then
         res.args(0) := regValues(0);

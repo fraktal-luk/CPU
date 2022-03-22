@@ -126,11 +126,11 @@ begin
     sendingOut <= isSending;
 
 	
-	VIEW: if VIEW_ON generate
-       use work.Viewing.all;
-	   signal queueTxt: InsStringArray(0 to IBUFFER_SIZE-1);
-	begin
-	   --queueTxt <= getInsStringArray(queueData);
-	end generate;	
+--	VIEW: if VIEW_ON generate
+--       --use work.Viewing.all;
+--	   --signal queueTxt: InsStringArray(0 to IBUFFER_SIZE-1);
+--	begin
+--	   --queueTxt <= getInsStringArray(queueData);
+--	end generate;	
 
 end Implem;

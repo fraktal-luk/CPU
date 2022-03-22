@@ -29,9 +29,9 @@ constant DEFAULT_EXEC_RESULT: ExecResult := ('0', tag => (others => '0'), dest =
 
 type ExecResultArray is array(integer range <>) of ExecResult;
 
-function makeExecResult(isl: InstructionSlot; full: std_logic) return ExecResult;
-function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecResult;
-function makeExecResult(isl: SchedulerEntrySlot) return ExecResult;
+--function makeExecResult(isl: InstructionSlot; full: std_logic) return ExecResult;
+--function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecResult;
+--function makeExecResult(isl: SchedulerEntrySlot) return ExecResult;
 function makeExecResult(isl: SchedulerState) return ExecResult;
 
 
@@ -151,8 +151,8 @@ function adjustStage(content: InstructionSlotArray) return InstructionSlotArray;
 function compactMask(vec: std_logic_vector) return std_logic_vector; -- WARNING: only for 4 elements
 function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector;
 
-function getNewElem(remv: std_logic_vector; newContent: InstructionSlotArray) return InstructionSlot; -- UNUSED 
-function getNewElemSch(remv: std_logic_vector; newContent: SchedulerEntrySlotArray) return SchedulerEntrySlot;
+--function getNewElem(remv: std_logic_vector; newContent: InstructionSlotArray) return InstructionSlot; -- UNUSED 
+--function getNewElemSch(remv: std_logic_vector; newContent: SchedulerEntrySlotArray) return SchedulerEntrySlot;
 
 -- general InstructionState handling 
 function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionState; -- UNUSED
@@ -165,10 +165,10 @@ function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray;
 function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
 
 function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector;
-function extractFullMask(queueContent: SchedulerEntrySlotArray) return std_logic_vector;
+--function extractFullMask(queueContent: SchedulerEntrySlotArray) return std_logic_vector;
 
-function extractData(queueContent: InstructionSlotArray) return InstructionStateArray;
-function extractData(queueContent: SchedulerEntrySlotArray) return InstructionStateArray;
+--function extractData(queueContent: InstructionSlotArray) return InstructionStateArray;
+--function extractData(queueContent: SchedulerEntrySlotArray) return InstructionStateArray;
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
@@ -557,32 +557,32 @@ begin
     return res;
 end function;
 
--- UNUSED?
-function getNewElem(remv: std_logic_vector; newContent: InstructionSlotArray) return InstructionSlot is
-    variable res: InstructionSlot := newContent(0);
-    variable inputMask: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
-    variable sel: std_logic_vector(1 downto 0) := "00";
-    variable remVec: std_logic_vector(0 to 2) := remv;               
-begin
-    inputMask := extractFullMask(newContent);
-    sel := getSelector(remVec, inputMask(0 to 2));
-    res := newContent(slv2u(sel));        
-    return res;    
-end function;
+---- UNUSED?
+--function getNewElem(remv: std_logic_vector; newContent: InstructionSlotArray) return InstructionSlot is
+--    variable res: InstructionSlot := newContent(0);
+--    variable inputMask: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
+--    variable sel: std_logic_vector(1 downto 0) := "00";
+--    variable remVec: std_logic_vector(0 to 2) := remv;               
+--begin
+--    inputMask := extractFullMask(newContent);
+--    sel := getSelector(remVec, inputMask(0 to 2));
+--    res := newContent(slv2u(sel));        
+--    return res;    
+--end function;
 
--- UNUSED?
-function getNewElemSch(remv: std_logic_vector; newContent: SchedulerEntrySlotArray)
-return SchedulerEntrySlot is
-    variable res: SchedulerEntrySlot := newContent(0);
-    variable inputMask: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
-    variable sel: std_logic_vector(1 downto 0) := "00";
-    variable remVec: std_logic_vector(0 to 2) := remv;               
-begin
-    inputMask := extractFullMask(newContent);
-    sel := getSelector(remVec, inputMask(0 to 2));
-    res := newContent(slv2u(sel));        
-    return res;    
-end function;
+---- UNUSED?
+--function getNewElemSch(remv: std_logic_vector; newContent: SchedulerEntrySlotArray)
+--return SchedulerEntrySlot is
+--    variable res: SchedulerEntrySlot := newContent(0);
+--    variable inputMask: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
+--    variable sel: std_logic_vector(1 downto 0) := "00";
+--    variable remVec: std_logic_vector(0 to 2) := remv;               
+--begin
+--    inputMask := extractFullMask(newContent);
+--    sel := getSelector(remVec, inputMask(0 to 2));
+--    res := newContent(slv2u(sel));        
+--    return res;    
+--end function;
 
 function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionState is
 	variable res: InstructionState := ins;
@@ -639,33 +639,34 @@ begin
 	return res;
 end function;
 
-function extractFullMask(queueContent: SchedulerEntrySlotArray) return std_logic_vector is
-	variable res: std_logic_vector(0 to queueContent'length-1) := (others => '0');
-begin
-	for i in res'range loop
-		res(i) := queueContent(i).full;
-	end loop;
-	return res;
-end function;
+--function extractFullMask(queueContent: SchedulerEntrySlotArray) return std_logic_vector is
+--	variable res: std_logic_vector(0 to queueContent'length-1) := (others => '0');
+--begin
+--	for i in res'range loop
+--		res(i) := queueContent(i).full;
+--		          --queueContent(i).state.full;
+--	end loop;
+--	return res;
+--end function;
 
-function extractData(queueContent: InstructionSlotArray) return InstructionStateArray is
-	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => DEFAULT_INS_STATE);
-begin
-	for i in res'range loop
-		res(i) := queueContent(i).ins;
-	end loop;
-	return res;
-end function;
+--function extractData(queueContent: InstructionSlotArray) return InstructionStateArray is
+--	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => DEFAULT_INS_STATE);
+--begin
+--	for i in res'range loop
+--		res(i) := queueContent(i).ins;
+--	end loop;
+--	return res;
+--end function;
 
 
-function extractData(queueContent: SchedulerEntrySlotArray) return InstructionStateArray is
-	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => DEFAULT_INS_STATE);
-begin
-	for i in res'range loop
-		res(i) := queueContent(i).ins;
-	end loop;
-	return res;
-end function;
+--function extractData(queueContent: SchedulerEntrySlotArray) return InstructionStateArray is
+--	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => DEFAULT_INS_STATE);
+--begin
+--	for i in res'range loop
+--		res(i) := queueContent(i).ins;
+--	end loop;
+--	return res;
+--end function;
 
 function compareIndBefore(tagA, tagB: SmallNumber; PTR_SIZE: natural) return std_logic is
     variable tC: SmallNumber := (others => '0');
@@ -1408,35 +1409,35 @@ end function;
 
 
 
-function makeExecResult(isl: InstructionSlot; full: std_logic) return ExecResult is
-    variable res: ExecResult := DEFAULT_EXEC_RESULT;
-begin
-    res.full := full;
-    res.tag := isl.ins.tags.renameIndex;
-    res.dest := isl.ins.physicalArgSpec.dest;
-    res.value := isl.ins.result;    
-    return res;
-end function;
+--function makeExecResult(isl: InstructionSlot; full: std_logic) return ExecResult is
+--    variable res: ExecResult := DEFAULT_EXEC_RESULT;
+--begin
+--    res.full := full;
+--    res.tag := isl.ins.tags.renameIndex;
+--    res.dest := isl.ins.physicalArgSpec.dest;
+--    res.value := isl.ins.result;    
+--    return res;
+--end function;
 
-function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecResult is
-    variable res: ExecResult := DEFAULT_EXEC_RESULT;
-begin
-    res.full := full;
-    res.tag := isl.state.renameIndex;
-    res.dest := isl.state.argSpec.dest;
-    res.value := isl.ins.result;    
-    return res;
-end function;
+--function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecResult is
+--    variable res: ExecResult := DEFAULT_EXEC_RESULT;
+--begin
+--    res.full := full;
+--    res.tag := isl.state.renameIndex;
+--    res.dest := isl.state.argSpec.dest;
+----    res.value := isl.ins.result;    
+--    return res;
+--end function;
 
-function makeExecResult(isl: SchedulerEntrySlot) return ExecResult is
-    variable res: ExecResult := DEFAULT_EXEC_RESULT;
-begin
-    res.full := isl.full;
-    res.tag := isl.state.renameIndex;
-    res.dest := isl.state.argSpec.dest;
+--function makeExecResult(isl: SchedulerEntrySlot) return ExecResult is
+--    variable res: ExecResult := DEFAULT_EXEC_RESULT;
+--begin
+--    res.full := isl.full;
+--    res.tag := isl.state.renameIndex;
+--    res.dest := isl.state.argSpec.dest;
 
-    return res;
-end function;
+--    return res;
+--end function;
 
 function makeExecResult(isl: SchedulerState) return ExecResult is
     variable res: ExecResult := DEFAULT_EXEC_RESULT;

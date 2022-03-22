@@ -336,16 +336,16 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
 constant DEFAULT_SCHED_STATE: SchedulerState := DEFAULT_SCHEDULER_STATE;
 																				
 type SchedulerEntrySlot is record
-	full: std_logic;
-	ins: InstructionState;
+	--full: std_logic;
+	--ins: InstructionState;
 	state: SchedulerState;
 end record;
 
-constant DEFAULT_SCHEDULER_ENTRY_SLOT: SchedulerEntrySlot := (full => '0',
-                                                              ins => DEFAULT_INS_STATE,
+constant DEFAULT_SCHEDULER_ENTRY_SLOT: SchedulerEntrySlot := (--full => '0',
+                                                              --ins => DEFAULT_INS_STATE,
                                                               state => DEFAULT_SCHEDULER_STATE);
-constant DEFAULT_SCH_ENTRY_SLOT: SchedulerEntrySlot := (full => '0',
-                                                        ins => DEFAULT_INS_STATE,
+constant DEFAULT_SCH_ENTRY_SLOT: SchedulerEntrySlot := (--full => '0',
+                                                        --ins => DEFAULT_INS_STATE,
                                                         state => DEFAULT_SCHEDULER_STATE);
 
 type SchedulerEntrySlotArray is array(integer range <>) of SchedulerEntrySlot;

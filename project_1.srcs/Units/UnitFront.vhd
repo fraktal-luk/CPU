@@ -256,38 +256,38 @@ begin
 		execCausing => DEFAULT_INSTRUCTION_STATE
 	);
 
-	VIEW: if VIEW_ON generate
-	   use work.Viewing.all;
-        signal insBufInput, stagePreBuffer, branchTransferData, stageOut: GenericStageView;
-        signal stageFetch0, stageFetch1: FetchStageView;
+--	VIEW: if VIEW_ON generate
+--	   --use work.Viewing.all;
+--        signal insBufInput, stagePreBuffer, branchTransferData, stageOut: GenericStageView;
+--        signal stageFetch0, stageFetch1: FetchStageView;
         
-        function expandToSlotArray(ia: InstructionSlotArray; wa: WordArray) return InstructionSlotArray is
-            variable res: InstructionSlotArray(wa'range) := (others => DEFAULT_INS_SLOT);
-            variable adrHi, adrLo: Mword := ia(0).ins.ip; 
-        begin
-            adrHi(ALIGN_BITS-1 downto 0) := (others => '0');
-            adrLo(MWORD_SIZE-1 downto ALIGN_BITS) := (others => '0');    
+--        function expandToSlotArray(ia: InstructionSlotArray; wa: WordArray) return InstructionSlotArray is
+--            variable res: InstructionSlotArray(wa'range) := (others => DEFAULT_INS_SLOT);
+--            variable adrHi, adrLo: Mword := ia(0).ins.ip; 
+--        begin
+--            adrHi(ALIGN_BITS-1 downto 0) := (others => '0');
+--            adrLo(MWORD_SIZE-1 downto ALIGN_BITS) := (others => '0');    
         
-            for i in 0 to wa'length-1 loop
-                res(i).ins.bits := wa(i);
-                res(i).ins.ip := i2slv(slv2u(adrHi) + 4*i, 32);
-                if ia(0).full = '1' and slv2u(adrLo) <= 4*i then
-                    res(i).full := '1';
-                end if;
-            end loop;
+--            for i in 0 to wa'length-1 loop
+--                res(i).ins.bits := wa(i);
+--                res(i).ins.ip := i2slv(slv2u(adrHi) + 4*i, 32);
+--                if ia(0).full = '1' and slv2u(adrLo) <= 4*i then
+--                    res(i).full := '1';
+--                end if;
+--            end loop;
             
-            return res;
-        end function;  
-    begin
-        insBufInput <= getInsStringArray(earlyBranchMultiDataInA);
+--            return res;
+--        end function;  
+--    begin
+--        insBufInput <= getInsStringArray(earlyBranchMultiDataInA);
 
-        stageFetch0 <= getInsStringArray(expandToSlotArray(stageDataOutFetch0, fetchedLine0));
-        stageFetch1 <= getInsStringArray(expandToSlotArray(stageDataOutFetch1, fetchedLine1));
-        stagePreBuffer <= getInsStringArray(earlyBranchMultiDataOutA);
+--        stageFetch0 <= getInsStringArray(expandToSlotArray(stageDataOutFetch0, fetchedLine0));
+--        stageFetch1 <= getInsStringArray(expandToSlotArray(stageDataOutFetch1, fetchedLine1));
+--        stagePreBuffer <= getInsStringArray(earlyBranchMultiDataOutA);
         
-        branchTransferData <= getInsStringArray(dataBranchTransferOut);
+--        branchTransferData <= getInsStringArray(dataBranchTransferOut);
         
-        stageOut <= getInsStringArray(ibufDataOut);
-    end generate;
+--        stageOut <= getInsStringArray(ibufDataOut);
+--    end generate;
 
 end Behavioral;

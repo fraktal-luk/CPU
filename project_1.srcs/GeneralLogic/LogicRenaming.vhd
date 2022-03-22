@@ -28,6 +28,7 @@ function getPhysicalArgs(insVec: InstructionSlotArray) return PhysNameArray;
 function getPhysicalDests(insVec: InstructionSlotArray) return PhysNameArray;
 
 function getPhysicalArgs(sch: SchedulerEntrySlot) return PhysNameArray;
+function getPhysicalArgs(sch: SchedulerState) return PhysNameArray;
 
 function whichTakeReg(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector;
 function findOverriddenDests(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector;
@@ -218,6 +219,15 @@ begin
         res(0) := sch.state.argSpec.args(0);
         res(1) := sch.state.argSpec.args(1);
         res(2) := sch.state.argSpec.args(2);
+    return res;
+end function;
+
+function getPhysicalArgs(sch: SchedulerState) return PhysNameArray is
+    variable res: PhysNameArray(0 to 2) := (others=>(others=>'0'));
+begin
+        res(0) := sch.argSpec.args(0);
+        res(1) := sch.argSpec.args(1);
+        res(2) := sch.argSpec.args(2);
     return res;
 end function;
 
