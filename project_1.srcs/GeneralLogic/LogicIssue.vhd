@@ -20,8 +20,7 @@ use work.ForwardingNetwork.all;
 
 package LogicIssue is
 
-constant PHYS_NAME_NONE: PhysName := --(others => '1');
-                                        (others => '0');
+constant PHYS_NAME_NONE: PhysName := (others => '0');
 
 constant IQ_HOLD_TIME: natural := 3;
 
@@ -32,7 +31,7 @@ type StaticInfo is record
     bqPointer: SmallNumber;
     sqPointer: SmallNumber;
     lqPointer: SmallNumber;        
-        bqPointerSeq: SmallNumber;
+    bqPointerSeq: SmallNumber;
     
     immediate: std_logic;    
     immValue: Hword;
@@ -46,7 +45,7 @@ constant DEFAULT_STATIC_INFO: StaticInfo := (
     bqPointer => (others => '0'),
     sqPointer => (others => '0'),
     lqPointer => (others => '0'),  
-        bqPointerSeq => (others => '0'),  
+    bqPointerSeq => (others => '0'),  
     
     immediate => '0',
     immValue => (others => '0'),
@@ -62,8 +61,8 @@ type DynamicInfo is record
     issued: std_logic;
     trial: std_logic;
 
-        pulledBack: std_logic;
-        stageCtr: SmallNumber;
+    pulledBack: std_logic;
+    stageCtr: SmallNumber;
 
     renameIndex: InsTag;
     argSpec: InstructionArgSpec;
@@ -87,13 +86,11 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     issued => '0',
     trial => '0',
         
-        pulledBack => '0',
-        stageCtr => (others => '0'),
+    pulledBack => '0',
+    stageCtr => (others => '0'),
 
     renameIndex => (others => '0'),
     argSpec => DEFAULT_ARG_SPEC,
-
-    --staticPtr => (others => '0'),
 
     stored => (others => '0'),
     missing => (others => '0'),
@@ -126,7 +123,7 @@ type WakeupStruct is record
     match:   std_logic;         
 end record;
 
-        type slv2D is array(natural range <>, natural range <>) of std_logic;
+type slv2D is array(natural range <>, natural range <>) of std_logic;
 
 
 constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", "00000010", '0');
@@ -142,8 +139,6 @@ function getSchedEntrySlot(info: SchedulerInfo; full: std_logic) return Schedule
 function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
 
 
---function TMP_restoreState(full: std_logic; st: SchedulerState) return SchedulerEntrySlot;
-
 function TMP_getIns(st: SchedulerState) return InstructionState;
 
 function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) return SchedulerState;
@@ -156,11 +151,9 @@ function getDispatchArgValues_RR(input: SchedulerState;
                                  USE_IMM: boolean; REGS_ONLY: boolean)
 return SchedulerState;
 
-function updateDispatchArgs_Is(st: SchedulerState--; full: std_logic
-                ) return SchedulerState;
+function updateDispatchArgs_Is(st: SchedulerState) return SchedulerState;
 
-function updateDispatchArgs_RR(st: SchedulerState;-- full: std_logic;
-                    vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean) return SchedulerState;
+function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean) return SchedulerState;
 
 
 function iqNext_N2(queueContent: SchedulerInfoArray;
@@ -248,7 +241,7 @@ package body LogicIssue is
             res(i).issued := content(i).dynamic.issued;
             
             res(i).trial := compareTagBefore(events.preExecCausing.tags.renameIndex, content(i).dynamic.renameIndex);
-               res(i).trial_T := compareIndBefore(events.preExecCausing.tags.bqPointerSeq, content(i).static.bqPointerSeq, 6); -- TODO: temp value of PTR_SIZE!
+            res(i).trial_T := compareIndBefore(events.preExecCausing.tags.bqPointerSeq, content(i).static.bqPointerSeq, 6); -- TODO: temp value of PTR_SIZE!
             if false then -- Use bqPointerSeq to flush IQ
                res(i).trial := res(i).trial_T;
             end if;
@@ -424,13 +417,12 @@ begin
     res.active := res.full;
     res.issued := '0';
     res.trial := '0';
-    
-    
+
     res.renameIndex := isl.ins.tags.renameIndex;
 
     res.argSpec := isl.ins.physicalArgSpec;
-                res.argSpec.intArgSel := (others => '0');
-                res.argSpec.floatArgSel := (others => '0');
+    res.argSpec.intArgSel := (others => '0');
+    res.argSpec.floatArgSel := (others => '0');
 
     -- Possibility to implement late allocation or advanced renaming schemes - delayed selection of args
     if false then
@@ -446,13 +438,12 @@ begin
         
     end if;
 
-            res.argSpec.dest := ri.physicalDest;
-            res.argSpec.intDestSel := ri.destSel and not ri.destSelFP;
-            res.argSpec.floatDestSel := ri.destSelFP;
-            res.argSpec.args(0) := ri.physicalSourcesNew(0);
-            res.argSpec.args(1) := ri.physicalSourcesNew(1);
-            res.argSpec.args(2) := ri.physicalSourcesNew(2);
-
+    res.argSpec.dest := ri.physicalDest;
+    res.argSpec.intDestSel := ri.destSel and not ri.destSelFP;
+    res.argSpec.floatDestSel := ri.destSelFP;
+    res.argSpec.args(0) := ri.physicalSourcesNew(0);
+    res.argSpec.args(1) := ri.physicalSourcesNew(1);
+    res.argSpec.args(2) := ri.physicalSourcesNew(2);
 
     res.stored := (others => '0');
     res.missing := not stInfo.zero;                               
@@ -466,7 +457,7 @@ begin
     if HAS_IMM and isl.ins.constantArgs.immSel = '1' then
         if IMM_AS_REG then
             res.argSpec.args(1) := isl.ins.constantArgs.imm(PhysName'length-1 downto 0);
-                res.argSpec.args(1)(7) := '0';
+            res.argSpec.args(1)(7) := '0';
         end if;
     end if;
                  
@@ -525,50 +516,6 @@ begin
     
     return res;
 end function;
-
-
---function TMP_restoreState(full: std_logic; st: SchedulerState) return SchedulerEntrySlot is
---	variable res: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
---	variable v0, v1: std_logic_vector(1 downto 0) := "00";
---	variable selected0, selected1: Mword := (others => '0');
---	variable ready: std_logic_vector(0 to 2) := (others=>'0');
---	variable locs: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
---	constant Z3: std_logic_vector(0 to 2) := (others => '0');
---	constant ZZ3: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
---	variable imm: Word := (others => '0');
---begin
---    res.full := full;
---	res.state := st;
-
---        return res;
-
---    res.ins.tags.renameIndex := st.renameIndex;
---    res.ins.tags.bqPointer := st.bqPointer;
---    res.ins.tags.sqPointer := st.sqPointer;
---    res.ins.tags.lqPointer := st.lqPointer;
---        res.ins.tags.bqPointerSeq := st.bqPointerSeq;
-
---    res.ins.specificOperation := st.operation;
-
---    res.ins.physicalArgSpec.dest := res.state.argSpec.dest;
---    res.ins.physicalArgSpec.intDestSel := res.state.argSpec.intDestSel;
---    res.ins.physicalArgSpec.floatDestSel := res.state.argSpec.floatDestSel;
-    
---    res.ins.physicalArgSpec.intArgSel := (others => '0');
---    res.ins.physicalArgSpec.floatArgSel := (others => '0');
-        
---    res.ins.physicalArgSpec.args := res.state.argSpec.args;
-    
---    -- Clear unused fields       
---    if CLEAR_DEBUG_INFO then
---        res.ins := clearAbstractInfo(res.ins);
---    end if;
---    res.ins.controlInfo.newEvent := '0';
---    res.ins.controlInfo.hasInterrupt := '0';
-        
---	return res;
---end function;
-
 
 
 function TMP_getIns(st: SchedulerState) return InstructionState is
@@ -631,12 +578,9 @@ begin
     return res;
 end function;
 
-function updateDispatchArgs_Is(st: SchedulerState)--; full: std_logic)
-return SchedulerState is
+function updateDispatchArgs_Is(st: SchedulerState) return SchedulerState is
     variable res: SchedulerState := st;
 begin
-    --res.full := full;
-
     res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
     res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
 
@@ -703,13 +647,10 @@ begin
 end function;
 
 
-function updateDispatchArgs_RR(st: SchedulerState;-- full: std_logic;
-                                vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean)
+function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean)
 return SchedulerState is
     variable res: SchedulerState := st;
 begin
-    --res.full := full;
-
     if REGS_ONLY then
         res.args(0) := regValues(0);
         res.args(1) := regValues(1);
@@ -934,10 +875,10 @@ end function;
                 
                 res(MAIN_LEN to LEN-1) := (others => DEFAULT_SCHEDULER_INFO);
                     
-                    -- Update reg args with zeros, just to enforce default behavior of renameIndex (copy from first to all, adding fixed endings)
-                    -- TODO: just retore proper r.I without using this function
-                    res(MAIN_LEN to LEN-1) := restoreRenameIndex(res(MAIN_LEN to LEN-1)); 
-                    
+                -- Update reg args with zeros, just to enforce default behavior of renameIndex (copy from first to all, adding fixed endings)
+                -- TODO: just retore proper r.I without using this function
+                res(MAIN_LEN to LEN-1) := restoreRenameIndex(res(MAIN_LEN to LEN-1)); 
+                
                     
                 for j in 0 to PIPE_WIDTH-1 loop
                     rm(3*j to 3*j + 2) := (others => inputData(j).dynamic.full); 
@@ -947,9 +888,9 @@ end function;
             
                 if prevSending = '1' then
                     res(MAIN_LEN to LEN-1) := restoreRenameIndex(updateRR(inputData, rrfFull));
-                        for i in MAIN_LEN to LEN-1 loop
-                            res(i).dynamic.trial := '1';
-                        end loop;
+                    for i in MAIN_LEN to LEN-1 loop
+                        res(i).dynamic.trial := '1';
+                    end loop;
                 end if;
                 
                 return res;
@@ -982,15 +923,13 @@ end function;
                     end if;
                 
                     if queueContent(i).dynamic.issued = '1' then      
-                        --res(i).dynamic.full := '0';
-                            res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1);
+                        res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1);
                     end if;
                     
                     if (selMask(i) and sends) = '1' then
                         res(i).dynamic.issued := '1';
                         res(i).dynamic.active := '0';
-                        
-                            res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1); 
+                        res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1); 
                     end if;
                     
                         res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits
@@ -1000,19 +939,16 @@ end function;
                     if killMask(i) = '1' then
                         res(i).dynamic.full := '0';
                         res(i).dynamic.active := '0';
-                            res(i).dynamic.stageCtr := (others => '0');
+                        res(i).dynamic.stageCtr := (others => '0');
                      end if;
                      
                      if trialMask(i) = '1' then
-                         res(i).dynamic.trial := '1';
-                         
+                         res(i).dynamic.trial := '1';           
                      else
-                            res(i).dynamic.trial := '0';
+                         res(i).dynamic.trial := '0';
                      end if;
                      
                 end loop;
-            
-                --    fullMask := extractFullMask(res);
     
                 for j in 0 to PIPE_WIDTH-1 loop
                     rm(3*j to 3*j + 2) := (others => inputData(j).dynamic.full); 
