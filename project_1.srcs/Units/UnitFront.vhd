@@ -61,7 +61,7 @@ architecture Behavioral of UnitFront is
 	
 	signal fetchedLine0, fetchedLine1: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0')); 
 	signal frontBranchEvent, killAll, killAllOrFront: std_logic := '0';
-	signal sendingToEarlyBranch, sendingToBQ, sendingToBuffer, fetchStall: std_logic := '0'; 
+	signal sendingToEarlyBranch, sendingToBQ, sendingToBuffer, fetchStall,  full0, full1, fullBr, fullBt, sf0, sf1, sfBr, sfBu, sfBt,  ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0'; 
 	
 	signal frontCausingSig, earlyBranchIn: InstructionState := DEFAULT_INSTRUCTION_STATE;
 	signal predictedAddress: Mword := (others => '0');
@@ -84,78 +84,114 @@ begin
     stageDataInFetch0(0).ins.target <= pcDataLiving.target;
     stageDataInFetch0(0).ins.tags.fetchCtr <= fetchCounter when not CLEAR_DEBUG_INFO else (others => '0');
 
-	SUBUNIT_FETCH_0: entity work.GenericStage(Behavioral)
-	generic map(
-		WIDTH => 1 --PIPE_WIDTH
-	)
-	port map(
-		clk => clk, reset => '0', en => '0',
+--	SUBUNIT_FETCH_0: entity work.GenericStage(Behavioral)
+--	generic map(
+--		WIDTH => 1 --PIPE_WIDTH
+--	)
+--	port map(
+--		clk => clk, reset => '0', en => '0',
 				
-		prevSending => pcSending,	
-		nextAccepting => acceptingOutFetch1,
-		stageDataIn => stageDataInFetch0,
+--		prevSending => pcSending,	
+--		nextAccepting => acceptingOutFetch1,
+--		stageDataIn => stageDataInFetch0,
 		
-		acceptingOut => acceptingOutFetch0,
-		sendingOut => sendingOutFetch0,
-		stageDataOut => stageDataOutFetch0,
+--		acceptingOut => acceptingOutFetch0,
+--		--sendingOut => sendingOutFetch0,
+--		--stageDataOut => stageDataOutFetch0,
 		
-		execEventSignal => killAllOrFront,
-		lateEventSignal => killAll,
-		execCausing => DEFAULT_INSTRUCTION_STATE
-	);
+--		execEventSignal => killAllOrFront,
+--		lateEventSignal => killAll,
+--		execCausing => DEFAULT_INSTRUCTION_STATE
+--	);
 
 	
 	fetchedLine0 <= iin;
 	
-	SUBUNIT_FETCH_1: entity work.GenericStage(Behavioral)
-	generic map(
-		WIDTH => 1 --PIPE_WIDTH
-	)
-	port map(
-		clk => clk, reset => resetSig, en => enSig,
+--	SUBUNIT_FETCH_1: entity work.GenericStage(Behavioral)
+--	generic map(
+--		WIDTH => 1 --PIPE_WIDTH
+--	)
+--	port map(
+--		clk => clk, reset => resetSig, en => enSig,
 				
-		prevSending => sendingOutFetch0,	
-		nextAccepting => '1',--earlyBranchAccepting,
-		acceptingOut => acceptingOutFetch1,
+--		prevSending => sendingOutFetch0,	
+--		nextAccepting => '1',--earlyBranchAccepting,
+--		acceptingOut => acceptingOutFetch1,
 		
-		stageDataIn => stageDataOutFetch0,
-		sendingOut => sendingOutFetch1,
-		stageDataOut => stageDataOutFetch1,
+--		stageDataIn => stageDataOutFetch0,
+--		--sendingOut => sendingOutFetch1,
+--		--stageDataOut => stageDataOutFetch1,
 		
-		execEventSignal => killAllOrFront,
-		lateEventSignal => killAll,
-		execCausing => DEFAULT_INSTRUCTION_STATE
-	);	
+--		execEventSignal => killAllOrFront,
+--		lateEventSignal => killAll,
+--		execCausing => DEFAULT_INSTRUCTION_STATE
+--	);	
 
     process(clk)
     begin
         if rising_edge(clk) then
             fetchedLine1 <= fetchedLine0;
             fetchCounter <= fetchCounterNext;
+            
+            
+                full0 <= bool2std(pcSending = '1');
+                if killAllOrFront = '1' then full0 <= '0'; end if;
+
+                full1 <= sendingOutFetch0;
+                if killAllOrFront = '1' then full1 <= '0'; end if;
+                
+                fullBr <= sendingOutFetch1;
+                if killAll = '1' then fullBr <= '0'; end if;
+                
+                
+                fullBt <= bool2std(sendingToBranchTransfer = '1');
+                if killAll = '1' then fullBt <= '0'; end if;
+
+                earlyBranchDataOutA <= stageDataInEarlyBranch;
+                dataBranchTransferOut <= dataToBranchTransfer;
+
+                stageDataOutFetch0 <= stageDataInFetch0;
+                stageDataOutFetch1 <= stageDataOutFetch0;
+
         end if;
     end process;
     
+    --sf0
+    sendingOutFetch0
+    <= full0 and not killAllOrFront;
+    --sf1
+    sendingOutFetch1
+    <= full1 and not killAllOrFront;
+    --sfBr
+    earlyBranchSending
+    <= fullBr and not killAll;
+    --sfBt
+    sendingToBQ
+    <= fullBt and not killAll;
+    
+    ch0 <= sendingOutFetch0 xnor sf0;
+    ch1 <= sendingOutFetch1 xnor sf1;
+    ch2 <= earlyBranchSending xnor sfBr;
+    ch3 <= sendingToBQ xnor sfBt;
+    
+--   sendingOutFetch0 <= pcSending;
+--     fullF0 <= pcSending;
+--     sendingOutFetch0 <= fullF0 and not eventSignal;
+--     if eventSignal = '1' then fullF0 <= '0'; end if;
+
+--   stageDataOutFetch0 <= stageDataInFetch0;
+
+--    sendingOutFetch1 <= sendingOutFetch0;
+--      fullF1 <= sendingOutFetch0;
+--      sendingOutFetch1 <= fullF1 and not eventSignal;
+--     if eventSignal = '1' then fullF1 <= '0'; end if;
+
+--    stageDataOutFetch1 <= stageDataOutFetch0;
+    
+    
+    
 	earlyBranchMultiDataInA <= getFrontEventMulti(predictedAddress, stageDataOutFetch1(0).ins, fetchedLine1);
-	                      
-	SUBUNIT_EARLY_BRANCH_MULTI: entity work.GenericStage(Behavioral)
-	generic map(
-		WIDTH => PIPE_WIDTH
-	)
-	port map(
-		clk => clk, reset => resetSig, en => enSig,
-				
-		prevSending => sendingOutFetch1,	
-		nextAccepting => '1',
-		stageDataIn => earlyBranchMultiDataInA,
-		
-		acceptingOut => open,
-		sendingOut => earlyBranchMultiSending,
-		stageDataOut => earlyBranchMultiDataOutA,
-		
-		execEventSignal => killAll, -- CAREFUL: not killing on stall, because is sent to void
-		lateEventSignal => killAll,
-		execCausing => DEFAULT_INSTRUCTION_STATE
-	);
+
 
 	fetchStall <= sendingOutFetch1 and (not bufferAccepting or not bpAccepting);
 
@@ -164,24 +200,24 @@ begin
     sendingToEarlyBranch <= sendingOutFetch1;
 	stageDataInEarlyBranch(0) <= (sendingOutFetch1, earlyBranchIn);
 										
-	SUBUNIT_EARLY_BRANCH: entity work.GenericStage(Behavioral)
-	port map(
-		clk => clk, reset => resetSig, en => enSig,
+--	SUBUNIT_EARLY_BRANCH: entity work.GenericStage(Behavioral)
+--	port map(
+--		clk => clk, reset => resetSig, en => enSig,
 				
-		prevSending => sendingToEarlyBranch,	
-		nextAccepting => '1',
-		stageDataIn => stageDataInEarlyBranch,
+--		prevSending => sendingToEarlyBranch,	
+--		nextAccepting => '1',
+--		stageDataIn => stageDataInEarlyBranch,
 			
-		acceptingOut => open,--earlyBranchAccepting,
-		sendingOut => earlyBranchSending,
-		stageDataOut => earlyBranchDataOutA,
+--		acceptingOut => open,--earlyBranchAccepting,
+--		--sendingOut => earlyBranchSending,
+--		--stageDataOut => earlyBranchDataOutA,
 		
-		execEventSignal => killAll, -- CAREFUL: not killing on stall, because is sent to void
-		lateEventSignal => killAll,
-		execCausing => DEFAULT_INSTRUCTION_STATE
-	);
+--		execEventSignal => killAll, -- CAREFUL: not killing on stall, because is sent to void
+--		lateEventSignal => killAll,
+--		execCausing => DEFAULT_INSTRUCTION_STATE
+--	);
 
-	frontBranchEvent <= earlyBranchDataOutA(0).ins.controlInfo.newEvent;
+	frontBranchEvent <= earlyBranchDataOutA(0).ins.controlInfo.newEvent and earlyBranchSending;
 	frontEventSignal <= frontBranchEvent;
 	frontCausingSig <= clearDbCausing(earlyBranchDataOutA(0).ins);
 	
@@ -236,25 +272,26 @@ begin
     bpSending <= sendingToBQ;
                 -- sendingToBranchTransfer;
 
-    SUBUNIT_BRANCH_TRANSFER: entity work.GenericStage(Behavioral)
-	generic map(
-		WIDTH => PIPE_WIDTH
-	)
-	port map(
-		clk => clk, reset => resetSig, en => enSig,
+
+--    SUBUNIT_BRANCH_TRANSFER: entity work.GenericStage(Behavioral)
+--	generic map(
+--		WIDTH => PIPE_WIDTH
+--	)
+--	port map(
+--		clk => clk, reset => resetSig, en => enSig,
 				
-		prevSending => sendingToBranchTransfer,	
-		nextAccepting => '1',
-		stageDataIn => dataToBranchTransfer,
+--		prevSending => sendingToBranchTransfer,	
+--		nextAccepting => '1',
+--		stageDataIn => dataToBranchTransfer,
 		
-		acceptingOut => open,
-		sendingOut => sendingToBQ,
-		stageDataOut => dataBranchTransferOut,
+--		acceptingOut => open,
+--		--sendingOut => sendingToBQ,
+--		--stageDataOut => dataBranchTransferOut,
 		
-		execEventSignal => killAll,
-		lateEventSignal => killAll,
-		execCausing => DEFAULT_INSTRUCTION_STATE
-	);
+--		execEventSignal => killAll,
+--		lateEventSignal => killAll,
+--		execCausing => DEFAULT_INSTRUCTION_STATE
+--	);
 
 --	VIEW: if VIEW_ON generate
 --	   --use work.Viewing.all;

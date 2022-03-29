@@ -25,11 +25,14 @@ entity ReorderBuffer is
 		
 		lateEventSignal: in std_logic;
 
-		execEndSigs1: in InstructionSlotArray(0 to 3);
-		execEndSigs2: in InstructionSlotArray(0 to 3);
+		--execEndSigs1: in InstructionSlotArray(0 to 3);
+		--execEndSigs2: in InstructionSlotArray(0 to 3);
 		
 		  execSigsMain: in ExecResultArray(0 to 3);
 		  execSigsSec: in ExecResultArray(0 to 3);
+		
+		  branchControl: in InstructionControlInfo;
+		  memoryControl: in InstructionControlInfo;
 		
 		inputSpecial: in InstructionSlot;
 		inputData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
@@ -57,7 +60,9 @@ architecture Behavioral of ReorderBuffer is
 
     signal ch0, ch1, ch2, ch3: std_logic := '0';
 begin
-	execEvent <= execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
+	execEvent <= --execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
+	               branchControl.full and branchControl.newEvent;
+	
 	causingPtr <= getTagHighSN(--execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
 	                             execSigsMain(0).tag) and PTR_MASK_SN;
 	causingPtrLong <= getTagHighSN(--execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN_LONG; -- TEMP!
@@ -106,11 +111,19 @@ begin
         begin
             if rising_edge(clk) then
                 -- Update content
-                updateDynamicContent(dynamicContent, execEndSigs1, execSigsMain, 0);
-                updateDynamicContent(dynamicContent, execEndSigs2, execSigsSec, 1);
+                updateDynamicContent(dynamicContent, --execEndSigs1, 
+                                                        execSigsMain, 0);
+                updateDynamicContent(dynamicContent, --execEndSigs2, 
+                                                        execSigsSec, 1);
 
-                updateDynamicContentBranch(dynamicContent, execEndSigs1(0), execSigsMain(0).tag);
-                updateDynamicContentMemEvent(dynamicContent, execEndSigs1(2), execSigsMain(2).tag);
+                updateDynamicContentBranch(dynamicContent, --execEndSigs1(0).full, execEndSigs1(0).ins.controlInfo,
+                                                           branchControl.full, branchControl,                      
+                                                                                 execSigsMain(0).tag);
+               -- updateDynamicContentMemEvent(dynamicContent, execEndSigs1(2).full, execEndSigs1(2).ins.controlInfo, execSigsMain(2).tag);
+                updateDynamicContentMemEvent(dynamicContent, execSigsMain(2).full, --execEndSigs1(2).ins.controlInfo,
+                                                                                    memoryControl,
+                                                                execSigsMain(2).tag);
+                
 
                 -- Write inputs
                 if prevSending = '1' then                    

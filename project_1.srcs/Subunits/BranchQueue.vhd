@@ -51,22 +51,22 @@ entity BranchQueue is
           compareAddressQuickInput_N: in ExecResult;
         compareQuickPtr: in SmallNumber;
 
-		selectedDataOutput: out InstructionSlot;
+		selectedDataOutput: out InstructionSlot; -- result, target, control info, tags
 
 		committing: in std_logic;
 		robData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 
 		lateEventSignal: in std_logic;
 		execEventSignal: in std_logic;
-		execCausing: in InstructionState;
+		execCausing: in InstructionState; -- only for tag!
 		
 		nextAccepting: in std_logic;  -- UNUSED	
 		sendingSQOut: out std_logic;
-		dataOutV: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+		--dataOutV: out InstructionSlotArray(0 to PIPE_WIDTH-1);
 		
 		committedEmpty: out std_logic;
         committedSending: out std_logic;
-        committedDataOut: out InstructionSlot		
+        committedDataOut: out InstructionSlot	-- ONLY target	
 	);
 end BranchQueue;
 

@@ -42,6 +42,7 @@ procedure updateAddress(signal content: inout QueueEntryArray; isl: InstructionS
 procedure updateValue(signal content: inout QueueEntryArray;-- isl: InstructionSlot;
                                             ind: SmallNumber);
 
+-- UNUSED
 procedure updateAddressArr(signal content: inout MwordArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);
 
 

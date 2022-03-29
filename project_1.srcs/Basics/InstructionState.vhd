@@ -102,6 +102,7 @@ constant INITIAL_GROUP_TAG_INC: InsTag := i2slv(0, TAG_SIZE);
 type InsTagArray is array (integer range <>) of InsTag;
 
 type InstructionControlInfo is record
+    full: std_logic;
 	newEvent: std_logic; -- True if any new event appears
 	hasInterrupt: std_logic;
 	hasException: std_logic;
@@ -181,6 +182,7 @@ end record;
 type InstructionStateArray is array(integer range <>) of InstructionState;
 
 constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
+    full => '0',
     newEvent => '0',
     hasInterrupt => '0',
     hasException => '0',

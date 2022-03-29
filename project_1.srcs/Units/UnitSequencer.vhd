@@ -59,8 +59,6 @@ entity UnitSequencer is
     robSpecial: in InstructionSlot;
     sendingFromROB: in std_logic;
     
-    dataFromBQV: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-    
     bqTargetData: in InstructionSlot;
     
     dataFromSB: in InstructionSlot;
@@ -69,7 +67,6 @@ entity UnitSequencer is
     
     -- Counter outputs
     commitGroupCtrOut: out InsTag;
-    --commitGroupCtrIncOut: out InsTag;
 
     committedOut: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     committedSending: out std_logic;
@@ -90,11 +87,12 @@ end UnitSequencer;
 architecture Behavioral of UnitSequencer is
 	signal resetSig, enSig: std_logic := '0';							
 
-    signal pcNext: Mword := (others => '0');        
+    signal pcCurrent, pcNext: Mword := (others => '0');        
     signal stageDataOutPC, newLateCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
     signal sendingToPC, sendingOutPC, acceptingOutPC, sendingToLastEffective, running: std_logic := '0';
     signal eventOccurred, killPC, eventCommitted, intCommitted, intSuppressed, lateEventSending, dbtrapOn, restartPC: std_logic := '0';    
-    signal sendingToLateCausing, committingEvent, sendingToCommit, sendingOutCommit, commitLocked: std_logic := '0';
+    signal sendingToLateCausing, committingEvent, sendingToCommit, sendingOutCommit, commitLocked,
+                T_fullPC, T_fullLastEffective, T_fullLateCausing: std_logic := '0';
     signal commitGroupCtr, commitGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
     signal commitGroupCtrInc, commitGroupCtrIncNext: InsTag := INITIAL_GROUP_TAG_INC;
 
@@ -118,7 +116,7 @@ architecture Behavioral of UnitSequencer is
     constant HAS_RESET_SEQ: std_logic := '0';
     constant HAS_EN_SEQ: std_logic := '0';
 
-      signal  ch0, ch1: std_logic := '0';
+      signal  ch0, ch1, ch2, ch3, ch4, ch5: std_logic := '0';
 begin
     resetSig <= reset and HAS_RESET_SEQ;
     enSig <= en or not HAS_EN_SEQ;
@@ -145,31 +143,24 @@ begin
             elsif killPC = '1' then
                 running <= '0';
             end if;
+            
+            T_fullPC <= bool2std(sendingToPC = '1');
+            
+            if sendingToPC = '1' then
+                tmpPcOutA <= stageDataToPC;
+            end if;
         end if;
     end process;
 
-
-    SUBUNIT_PC: entity work.GenericStage(Behavioral) port map(
-        clk => clk, reset => resetSig, en => enSig,
-                
-        prevSending => sendingToPC,
-
-        nextAccepting => running, -- In multithreaded implementation it should be '1' for selected thread 
-        stageDataIn => stageDataToPC,
+         sendingOutPC <= T_fullPC and not (eventOccurred or lateEventSending);   
+         lateEventSending <= T_fullLateCausing;      
         
-        acceptingOut => acceptingOutPC,
-        sendingOut => sendingOutPC,
-        stageDataOut => tmpPcOutA,
-        
-        execEventSignal => eventOccurred,
-        lateEventSignal => lateEventSending,
-        execCausing => DEFAULT_INSTRUCTION_STATE
-    );            
+        pcCurrent <= tmpPcOutA(0).ins.ip;
     
-    stageDataOutPC.ip <= tmpPcOutA(0).ins.ip;
+    stageDataOutPC.ip <= pcCurrent;
     stageDataOutPC.target <= pcNext; -- CAREFUL: Attaching next address from line predictor. Correct?
     
-    pcNext <= getNextPC(stageDataOutPC.ip, (others => '0'), '0');
+    pcNext <= getNextPC(pcCurrent, (others => '0'), '0');
 
     ----------------------------------------------------------------------
     
@@ -252,53 +243,7 @@ begin
     end process;        
     
     sendingToCommit <= sendingFromROB;
-
     commitCtrNext <= addInt(commitCtr, countOnes(extractFullMask(robDataLiving))) when sendingToCommit = '1' else commitCtr;
-    
-    COMMIT_STAGE: if VIEW_ON generate
-       use std.textio.all;
---       use work.Viewing.all;
-       file outFile: text open write_mode is DEBUG_FILE_PREFIX & "committed.txt"; 
-    begin
-        stageDataToCommit <= recreateGroup(robDataLiving, dataFromBQV, stageDataLastEffectiveOutA(0).ins.target, commitCtr);
-
-        -- Commit stage: in order again                
-        SUBUNIT_COMMIT: entity work.GenericStage(Behavioral)
-        generic map(
-            WIDTH => PIPE_WIDTH
-        )
-        port map(
-            clk => clk, reset => resetSig, en => enSig,
-            
-            -- Interface with CQ
-            prevSending => sendingToCommit,
-            stageDataIn => stageDataToCommit,
-            acceptingOut => open, -- unused but don't remove
-            
-            -- Interface with hypothetical further stage
-            nextAccepting => '1',
-            sendingOut => sendingOutCommit,
-            stageDataOut => stageDataCommitOutA,
-            
-            -- Event interface
-            execEventSignal => '0', -- CAREFUL: committed cannot be killed!
-            lateEventSignal => '0',    
-            execCausing => execCausing
-        );
-        
-        PRINTOUT: process (clk)
-        begin
-            if rising_edge(clk) then
-                if DEBUG_LOG_COMMITTED then
-                    if sendingToCommit = '1' then
---                        printGroup(stageDataToCommit, outFile);
-                    end if;
-                end if;
-            end if;
-        end process;
-        
-    end generate;
-
 
     EVENT_HANDLING: block
     
@@ -313,26 +258,6 @@ begin
        stageDataLastEffectiveInA(0) <= getNewEffective(sendingToCommit, robDataLiving, bqTargetData,
                                                        stageDataLastEffectiveOutA(0).ins, stageDataLateCausingOut(0).ins, lateEventSending);                                                                                   
         sendingToLastEffective <= sendingToCommit or lateEventSending;
-    
-        LAST_EFFECTIVE_SLOT: entity work.GenericStage(Behavioral)
-        port map(
-            clk => clk, reset => resetSig, en => enSig,
-            
-            -- Interface with CQ
-            prevSending => sendingToLastEffective,
-            stageDataIn => stageDataLastEffectiveInA,
-            
-            acceptingOut => open, -- unused but don't remove
-            
-            nextAccepting => '1',
-            sendingOut => open,
-            stageDataOut => stageDataLastEffectiveOutA,
-            
-            -- Event interface
-            execEventSignal => '0', -- CAREFUL: committed cannot be killed!
-            lateEventSignal => '0',    
-            execCausing => DEFAULT_INSTRUCTION_STATE
-        );
     
         committingEvent <= sendingToCommit and anyEvent(robDataLiving); -- ???
     
@@ -362,45 +287,30 @@ begin
                 if lateEventSending = '1' then
                     commitLocked <= '0';
                 end if;
+                
+                    if sendingToLastEffective = '1' then
+                        stageDataLastEffectiveOutA <= stageDataLastEffectiveInA;
+                    else
+                        stageDataLastEffectiveOutA(0).full <= '0';
+                        stageDataLastEffectiveOutA(0).ins.controlInfo.newEvent <= '0';
+                    end if;
+
+                    T_fullLateCausing <= sendingToLateCausing;
+                    if sendingToLateCausing = '1' then
+                        stageDataLateCausingOut <= stageDataLateCausingIn;
+                    else
+                        stageDataLateCausingOut(0).full <= '0';
+                        stageDataLateCausingOut(0).ins.controlInfo.newEvent <= '0';
+                    end if;
             end if;
         end process;
-        
+
         sendingToLateCausing <= (eventCommitted or intCommitted) and sbEmpty;
         
         newLateCausing <= getLatePCData(stageDataLastEffectiveOutA(0).ins, intCommitted, intTypeCommitted,
                                             currentState, linkRegExc, linkRegInt, savedStateExc, savedStateInt, special);   
         stageDataLateCausingIn(0) <= (sendingToLateCausing, newLateCausing);
-    
-        LATE_CAUSING_SLOT: entity work.GenericStage(Behavioral)
-        port map(
-            clk => clk, reset => resetSig, en => enSig,
-            
-            prevSending => sendingToLateCausing,
-            stageDataIn => stageDataLateCausingIn,
-            
-            acceptingOut => open, -- unused but don't remove
-            
-            -- Interface with hypothetical further stage
-            nextAccepting => '1',
-            sendingOut => lateEventSending,
-            stageDataOut => stageDataLateCausingOut,
-            
-            -- Event interface
-            execEventSignal => '0', -- CAREFUL: committed cannot be killed!
-            lateEventSignal => '0',    
-            execCausing => DEFAULT_INSTRUCTION_STATE
-        );
     end block;
-
---	COMMITTED_VIEW: if VIEW_ON generate
---	   use work.Viewing.all;	        
---       signal committedText: GenericStageView;
---       signal lastEffectiveText, lateCausingText: InsStringArray(0 to 0);
---    begin
---       committedText <= getInsStringArray(stageDataCommitOutA);
---       lastEffectiveText <= getInsStringArray(stageDataLastEffectiveOutA);
---       lateCausingText <= getInsStringArray(stageDataLateCausingOut);
---    end generate;
 
     intAllowOut <= not eventCommitted and not lateEventSending;
     intAckOut <= sendingToLateCausing and intCommitted;
@@ -411,20 +321,6 @@ begin
     commitAccepting <= not commitLocked; -- Blocked while procesing event
                         
     doneSig <= eventCommitted and bool2std(special.ins.specificOperation.system = opSend);
-    failSig <= eventCommitted and bool2std(special.ins.specificOperation.system = opError);
-    
-    OUTPUT_VIEWING: if VIEW_ON generate
-        committedOut <= stageDataCommitOutA;
-        committedSending <= sendingOutCommit;
-        
-        lastEffectiveOut <= stageDataLastEffectiveOutA(0);
-    end generate;
-    
---    NO_OUTPUT_VIEWING: if not VIEW_ON generate
---        committedOut <= (others => DEFAULT_INS_SLOT);
---        committedSending <= '0';
-        
---        lastEffectiveOut <= DEFAULT_INS_SLOT;
---    end generate;    
+    failSig <= eventCommitted and bool2std(special.ins.specificOperation.system = opError); 
             
 end Behavioral;

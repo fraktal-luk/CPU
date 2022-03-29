@@ -77,14 +77,16 @@ architecture Behavioral of Core is
     signal  renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged,
             renamedDataToBQ, renamedDataToSQ, renamedDataToLQ,
             dataOutROB,
-             bqData, committedOut: 
+             --bqData,
+              committedOut: 
                 InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-    signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
+    --signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal dataFromSB: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-    signal bqSelected, sqValueInput, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
+    signal bqSelected, --sqValueInput,
+                            preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
            specialAction, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 
         signal renamedArgsInt, renamedArgsFloat, renamedArgsMerged: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
@@ -108,6 +110,8 @@ architecture Behavioral of Core is
     signal events, eventsOnlyLate: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE);
 
     signal preAddressOp: SpecificOp := DEFAULT_SPECIFIC_OP;
+
+    signal branchCtrl, memoryCtrl: InstructionControlInfo := DEFAULT_CONTROL_INFO;
 
            signal bqUpdate, bqCompareEarly, sqValueResult: ExecResult := DEFAULT_EXEC_RESULT;
     
@@ -167,7 +171,7 @@ begin
         robDataLiving => dataOutROB,
         robSpecial => specialOutROB,
         ---
-        dataFromBQV => bqData,
+        --dataFromBQV => bqData,
         bqTargetData => bqTargetData,
 
         sbSending => sbSending,
@@ -300,12 +304,17 @@ begin
 		
 		lateEventSignal => lateEventSignal,
 
-		execEndSigs1 => execOutputs1,
-		execEndSigs2 => execOutputs2,
+		--execEndSigs1 => execOutputs1,
+		--execEndSigs2 => execOutputs2,
 		
 		  execSigsMain => execOutMain,
 		  execSigsSec => execOutSec,
-		
+
+		  branchControl => --execOutputs1(0).ins.controlInfo,
+		                      branchCtrl,
+		  memoryControl => --execOutputs1(2).ins.controlInfo,
+                                memoryCtrl,
+
 		inputSpecial => specialAction,		
 		inputData => renamedDataLivingMerged,
 		prevSending => renamedSending,
@@ -509,7 +518,7 @@ begin
                 end process;
 
             sendingBranchRR <= (sendingToRegReadI0 and slotIssueI0.state.branchIns);
-            
+
                 bqCompareEarly.full <= sendingBranchRR;
                 bqCompareEarly.tag <= slotIssueI0.state.renameIndex;
                 bqCompareEarly.dest <= slotIssueI0.state.bqPointer;
@@ -993,12 +1002,15 @@ begin
          lockIssueF0 <= '0';
          allowIssueF0 <= not lockIssueF0;
 
-            execOutputs1(0).full <= dataFromBranch.full;
-            execOutputs1(0).ins.controlInfo <= dataFromBranch.ins.controlInfo;
+         --   execOutputs1(0).full <= dataFromBranch.full;
+         --   execOutputs1(0).ins.controlInfo <= dataFromBranch.ins.controlInfo;
 
-            execOutputs1(2).full <= subpipeM0_E2.full;
-            execOutputs1(2).ins.controlInfo <= slotM0_E2i(0).ins.controlInfo;            
+                branchCtrl <= dataFromBranch.ins.controlInfo;
 
+         --   execOutputs1(2).full <= subpipeM0_E2.full;
+         --   execOutputs1(2).ins.controlInfo <= slotM0_E2i(0).ins.controlInfo;
+
+                memoryCtrl <= slotM0_E2i(0).ins.controlInfo;
    
             execOutMain(0) <= subpipeI0_E0;
             execOutMain(2) <= subpipeM0_E2;
@@ -1158,7 +1170,7 @@ begin
 		execCausing => execCausingDelayed,
 		nextAccepting => commitAccepting,		
 		sendingSQOut => open,
-		dataOutV => bqData,
+		--dataOutV => bqData,
 		
 		committedDataOut => bqTargetData
 	);

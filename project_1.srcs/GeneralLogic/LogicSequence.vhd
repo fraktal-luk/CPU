@@ -28,7 +28,8 @@ function newPCData( commitEvent: std_logic; commitCausing: InstructionState;
 return InstructionState;
 
 -- Unifies content of ROB slot with BQ, other queues etc. to restore full state at Commit
-function recreateGroup(insVec: InstructionSlotArray; bqGroup: InstructionSlotArray; prevTarget: Mword; commitCtr32: Word)
+function recreateGroup(insVec: InstructionSlotArray;-- bqGroup: InstructionSlotArray;
+                            prevTarget: Mword; commitCtr32: Word)
 return InstructionSlotArray;
 
 function getNewEffective(sendingToCommit: std_logic; robDataLiving: InstructionSlotArray; bqTargetData: InstructionSlot;
@@ -134,7 +135,9 @@ end function;
 
 -- TODO: move to Visibility?
 -- Unifies content of ROB slot with BQ, others queues etc. to restore full state needed at Commit
-function recreateGroup(insVec: InstructionSlotArray; bqGroup: InstructionSlotArray; prevTarget: Mword; commitCtr32: Word)
+-- CAREFUL: probably not useful at all
+function recreateGroup(insVec: InstructionSlotArray;-- bqGroup: InstructionSlotArray;
+                                prevTarget: Mword; commitCtr32: Word)
 return InstructionSlotArray is
 	variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
 	variable targets: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -148,7 +151,7 @@ begin
 	-- Take branch targets to correct places
 	for i in 0 to PIPE_WIDTH-1 loop
 		if insVec(i).full = '1' and insVec(i).ins.controlInfo.confirmedBranch = '1' then
-			targets(i) := bqGroup(i).ins.target;
+			--targets(i) := bqGroup(i).ins.target;
 			confBr(i) := '1';
 		end if;
 	end loop;

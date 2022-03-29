@@ -109,6 +109,8 @@ package body LogicExec is
         targetMatch := bool2std(queueData.target = st.args(1));
 		branchTaken := resolveBranchCondition(st, st.operation.arith, ac);
 
+        res.controlInfo.full := sending;
+
 		if queueData.controlInfo.frontBranch = '1' and branchTaken = '0' then						
 			res.controlInfo.newEvent := '1';
 			trueTarget := queueData.result;

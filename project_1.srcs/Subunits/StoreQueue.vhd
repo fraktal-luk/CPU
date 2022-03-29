@@ -39,24 +39,24 @@ entity StoreQueue is
 		storeValuePtr: in SmallNumber;
 		storeValueResult: in ExecResult;
 		
-		compareAddressInput: in InstructionSlot;
+		compareAddressInput: in InstructionSlot;  -- sqPointer, result, op
         compareIndexInput: in SmallNumber;
         preCompareOp: in SpecificOp;
 
-		selectedDataOutput: out InstructionSlot;
+		selectedDataOutput: out InstructionSlot;   -- result, target, ctrl, op
 
 		committing: in std_logic;
 		robData: in InstructionSlotArray(0 to PIPE_WIDTH-1);		
 
 		lateEventSignal: in std_logic;
 		execEventSignal: in std_logic;
-		execCausing: in InstructionState;
+		execCausing: in InstructionState;   -- pointers
 		
 		nextAccepting: in std_logic;		
 
 		committedEmpty: out std_logic;
 		committedSending: out std_logic;
-		committedDataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1)
+		committedDataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1)  -- similar to selectedDataOutput
 	);
 end StoreQueue;
 
@@ -92,7 +92,7 @@ architecture Behavioral of StoreQueue is
 
 
     function shiftQueueContent(content: QueueEntryArray; startPtrNext, nFullNext: SmallNumber;
-                               ev, prevSending, draining: std_logic; compareAddressInput: InstructionSlot) return QueueEntryArray is
+                               ev, prevSending, draining: std_logic; compareAddressInput: InstructionSlot; sqPtr: SmallNumber; op: SpecificOp; adr: Mword) return QueueEntryArray is
         variable res: QueueEntryArray(0 to content'length-1) := content;
         constant LEN: natural := content'length;
         variable currentPtr: SmallNumber := (others => '0');
@@ -102,14 +102,18 @@ architecture Behavioral of StoreQueue is
             res(LEN-1).completedA := '0';
         end if;
 
-        currentPtr := subTruncZ(compareAddressInput.ins.tags.sqPointer, startPtrNext, QUEUE_PTR_SIZE);
+        currentPtr := subTruncZ(sqPtr,--compareAddressInput.ins.tags.sqPointer,
+                                startPtrNext, QUEUE_PTR_SIZE);
 
-        if compareAddressInput.full = '1' and isStoreOp(compareAddressInput.ins) = '1' then
+        if compareAddressInput.full = '1' and --isStoreOp(compareAddressInput.ins) = '1' then
+                                                isStoreOp(op) = '1' then
             res(slv2u(currentPtr)).completedA := '1';
         end if;
 
-        if compareAddressInput.full = '1' and isStoreMemOp(compareAddressInput.ins) = '1' then
-            res(slv2u(currentPtr)).address := compareAddressInput.ins.result;
+        if compareAddressInput.full = '1' and --isStoreMemOp(compareAddressInput.ins) = '1' then
+                                                isStoreMemOp(op) = '1' then
+            res(slv2u(currentPtr)).address := --compareAddressInput.ins.result;
+                                              adr;
         end if;
         
         if ev = '1' then
@@ -165,7 +169,9 @@ begin
 
                 --------
                 -- SQ only
-                queueContentShifting <= shiftQueueContent(queueContentShifting, pDrainLong, nFullNext, execEventSignal or lateEventSignal, prevSending, isDrainingPrev, compareAddressInput);
+                queueContentShifting <= shiftQueueContent(queueContentShifting, pDrainLong, nFullNext, execEventSignal or lateEventSignal,
+                                                            prevSending, isDrainingPrev, compareAddressInput, adrPtr, compareAddressInput.ins.specificOperation,
+                                                            compareAddressInput.ins.result);
                 -------
          
                 -- Front input
