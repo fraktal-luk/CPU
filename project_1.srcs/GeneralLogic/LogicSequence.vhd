@@ -21,20 +21,20 @@ function getLatePCData(commitCausing: InstructionState; int: std_logic; intType:
 								currentState, linkExc, linkInt, stateExc, stateInt: Mword; special: InstructionSlot)
 return InstructionState;
 
-function newPCData( commitEvent: std_logic; commitCausing: InstructionState;
-						  execEvent: std_logic; execCausing: InstructionState;	
-						  frontEvent: std_logic; frontCausing: InstructionState;
+function newPCData( commitEvent: std_logic; lateTarget: Mword;
+						  execEvent: std_logic; execTarget: Mword;	
+						  frontEvent: std_logic; frontTarget: Mword;
 						  pcNext: Mword)
 return InstructionState;
 
 -- Unifies content of ROB slot with BQ, other queues etc. to restore full state at Commit
-function recreateGroup(insVec: InstructionSlotArray;-- bqGroup: InstructionSlotArray;
-                            prevTarget: Mword; commitCtr32: Word)
+function recreateGroup(insVec: InstructionSlotArray; prevTarget: Mword; commitCtr32: Word)
 return InstructionSlotArray;
 
-function getNewEffective(sendingToCommit: std_logic; robDataLiving: InstructionSlotArray; bqTargetData: InstructionSlot;
-								 lastEffectiveIns, lateTargetIns: InstructionState;
-								 evtPhase2: std_logic)
+function getNewEffective(sendingToCommit: std_logic; robDataLiving: InstructionSlotArray;
+                            bqTargetFull: std_logic;
+                            bqTarget, lastEffectiveTarget: Mword;
+						 lateTargetIns: InstructionState; evtPhase2: std_logic)
 return InstructionSlot;
 
 function anyEvent(insVec: InstructionSlotArray) return std_logic;
@@ -111,20 +111,20 @@ begin
 end function;
 
 
-function newPCData( commitEvent: std_logic; commitCausing: InstructionState;
-						  execEvent: std_logic; execCausing: InstructionState;	
-						  frontEvent: std_logic; frontCausing: InstructionState;
+function newPCData(       commitEvent: std_logic; lateTarget: Mword;
+						  execEvent: std_logic; execTarget: Mword;	
+						  frontEvent: std_logic; frontTarget: Mword;
 						  pcNext: Mword)
 return InstructionState is
 	variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
 	variable newPC: Mword := (others=>'0');
 begin
 	if commitEvent = '1' then
-		res.ip := commitCausing.target;
+		res.ip := lateTarget;
 	elsif execEvent = '1' then		
-		res.ip := execCausing.target;
+		res.ip := execTarget;
 	elsif frontEvent = '1' then
-		res.ip := frontCausing.target;
+		res.ip := frontTarget;
 	else	-- Go to the next line
 		res.ip := pcNext;
 	end if;
@@ -136,8 +136,7 @@ end function;
 -- TODO: move to Visibility?
 -- Unifies content of ROB slot with BQ, others queues etc. to restore full state needed at Commit
 -- CAREFUL: probably not useful at all
-function recreateGroup(insVec: InstructionSlotArray;-- bqGroup: InstructionSlotArray;
-                                prevTarget: Mword; commitCtr32: Word)
+function recreateGroup(insVec: InstructionSlotArray; prevTarget: Mword; commitCtr32: Word)
 return InstructionSlotArray is
 	variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
 	variable targets: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -151,7 +150,6 @@ begin
 	-- Take branch targets to correct places
 	for i in 0 to PIPE_WIDTH-1 loop
 		if insVec(i).full = '1' and insVec(i).ins.controlInfo.confirmedBranch = '1' then
-			--targets(i) := bqGroup(i).ins.target;
 			confBr(i) := '1';
 		end if;
 	end loop;
@@ -170,8 +168,7 @@ begin
 end function;
 
 
-function getLastEffective(newContent: InstructionSlotArray)-- effectiveMask: std_logic_vector)
-return InstructionState is
+function getLastEffective(newContent: InstructionSlotArray) return InstructionState is
     variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
 begin
     res := newContent(0).ins;
@@ -187,16 +184,15 @@ begin
 end function;
 
 
-function getNewEffective(sendingToCommit: std_logic; robDataLiving: InstructionSlotArray; bqTargetData: InstructionSlot;
-						 lastEffectiveIns, lateTargetIns: InstructionState; evtPhase2: std_logic)
+function getNewEffective(sendingToCommit: std_logic; robDataLiving: InstructionSlotArray;
+                            bqTargetFull: std_logic;
+                            bqTarget, lastEffectiveTarget: Mword;
+						 lateTargetIns: InstructionState; evtPhase2: std_logic)
 return InstructionSlot is
 	variable res: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-	variable insToLastEffective: InstructionState;	
 	variable targetInc: Mword := (others => '0');
 	variable anyConfirmed: boolean := false;
 begin
-	insToLastEffective := getLastEffective(robDataLiving);
-
     for i in PIPE_WIDTH-1 downto 0 loop
         if robDataLiving(i).full = '1' then
             targetInc := i2slv(4*(i+1), MWORD_SIZE);  -- CAREFUL: only for 4b instructions
@@ -214,12 +210,12 @@ begin
 	   return ('1', lateTargetIns);
 	end if;
 	
-    res := (sendingToCommit, insToLastEffective);
+    res := (sendingToCommit, getLastEffective(robDataLiving));
 
-    if bqTargetData.full = '1' and anyConfirmed then -- TODO, CHECK: bqTargetData.full will always be '1' if anyConfirmed?
-        res.ins.target := bqTargetData.ins.target;
+    if bqTargetFull = '1' and anyConfirmed then -- TODO, CHECK: bqTargetData.full will always be '1' if anyConfirmed?
+        res.ins.target := bqTarget;
     else
-        res.ins.target := add(lastEffectiveIns.target, targetInc);        
+        res.ins.target := add(lastEffectiveTarget, targetInc);        
     end if;
     
     if CLEAR_DEBUG_INFO then

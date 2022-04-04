@@ -54,7 +54,7 @@ port(
     commitGroupCtr: in InsTag;
   
     execCausing: in InstructionState;
-    lateCausing: in InstructionState;
+    --lateCausing: in InstructionState;
     
     execEventSignal: in std_logic;
     lateEventSignal: in std_logic

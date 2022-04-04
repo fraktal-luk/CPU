@@ -436,8 +436,7 @@ begin
 end function;
 
 
-procedure updateDynamicContent(signal content: inout DynamicOpInfoArray2D; --execInfo: InstructionSlotArray;
-                                                                            execSigs: ExecResultArray; constant CLUSTER: natural) is
+procedure updateDynamicContent(signal content: inout DynamicOpInfoArray2D; execSigs: ExecResultArray; constant CLUSTER: natural) is
     variable groupInd, opInd: natural;
     variable tagHigh,tagHighTrunc: SmallNumber;
 begin
@@ -472,12 +471,10 @@ begin
             content(groupInd, i).full <= '0';
             content(groupInd, i).killed <= '1';              
         elsif opInd = i then
-            --if execInfo.ins.controlInfo.confirmedBranch = '1' then
             if execInfo.confirmedBranch = '1' then
                 content(groupInd, i).confirmedBranch <= '1';                    
             end if;                
         
-            --if execInfo.ins.controlInfo.newEvent = '1' then
             if execInfo.newEvent = '1' then
                 content(groupInd, i).causing <= '1';                        
                 eventFound := true;
@@ -494,7 +491,7 @@ begin
     tagHighTrunc := tagHigh and PTR_MASK_SN;
     groupInd := slv2u(tagHighTrunc);
 
-    if useCtrl = '1' then --execInfo.full = '1' then
+    if useCtrl = '1' then
         updateDynamicGroupBranch(content, execInfo, tag, groupInd);
     end if;
 end procedure;         
@@ -514,7 +511,6 @@ begin
             content(groupInd, i).full <= '0';
             content(groupInd, i).killed <= '1';                   
         elsif opInd = i then
-            --if execInfo.ins.controlInfo.specialAction = '1' then
             if execInfo.specialAction = '1' then
                 content(groupInd, i).specialAction <= '1';   
                 content(groupInd, i).refetch <= '1';                    
@@ -530,12 +526,11 @@ procedure updateDynamicContentMemEvent(signal content: inout DynamicOpInfoArray2
     variable groupInd, opInd: natural;
     variable tagHigh,tagHighTrunc: SmallNumber;
 begin
-        tagHigh := getTagHighSN(--execInfo.ins.tags.renameIndex);
-                                tag);
+        tagHigh := getTagHighSN(tag);
         tagHighTrunc := tagHigh and PTR_MASK_SN;
         groupInd := slv2u(tagHighTrunc);
     
-        if useCtrl = '1' then --execInfo.full = '1' then
+        if useCtrl = '1' then
             updateDynamicGroupMemEvent(content, execInfo, tag, groupInd);
         end if;        
 end procedure;

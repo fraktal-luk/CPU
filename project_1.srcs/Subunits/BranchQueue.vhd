@@ -44,11 +44,8 @@ entity BranchQueue is
 
         bqPtrOut: out SmallNumber;
 
-		--storeValueInput: in InstructionSlot;
-		  storeValueInput_N: in ExecResult;
-		--compareAddressInput: in InstructionSlot;
-        --compareAddressQuickInput: in InstructionSlot;
-          compareAddressQuickInput_N: in ExecResult;
+		storeValueInput_N: in ExecResult;
+        compareAddressQuickInput_N: in ExecResult;
         compareQuickPtr: in SmallNumber;
 
 		selectedDataOutput: out InstructionSlot; -- result, target, control info, tags
@@ -58,15 +55,14 @@ entity BranchQueue is
 
 		lateEventSignal: in std_logic;
 		execEventSignal: in std_logic;
-		execCausing: in InstructionState; -- only for tag!
-		
+        execCausing_N: in ExecResult;
+
 		nextAccepting: in std_logic;  -- UNUSED	
 		sendingSQOut: out std_logic;
-		--dataOutV: out InstructionSlotArray(0 to PIPE_WIDTH-1);
 		
 		committedEmpty: out std_logic;
         committedSending: out std_logic;
-        committedDataOut: out InstructionSlot	-- ONLY target	
+        committedDataOut_N: out ExecResult
 	);
 end BranchQueue;
 
@@ -80,17 +76,16 @@ architecture Behavioral of BranchQueue is
 
 	signal pStart, pStartNext, pEnd, pEndNext, pStartLong, pStartLongNext, pEndLong, pEndLongNext, pTagged,
 	       pRenamed, pRenamedNext, pTaggedNext, pTaggedLong, pTaggedLongNext, pRenamedLong, pRenamedLongNext,
-	       pSelectPrev, pSelect, pCausing, pSelectLong, pSelectLongPrev, pCausingLong, pCausingLongPrev: SmallNumber := (others => '0');
-    signal isFull, isAlmostFull: std_logic := '0';
+	       pSelectPrev, pSelect, pCausing, pSelectLong, pSelectLongPrev, pCausingLong, pCausingLongPrev,
+            pRenamedSeqLong, pRenamedSeqLongNext, pStartSeqLong, pStartSeqLongNext, pFlushSeqLong: SmallNumber := (others => '0');
 
-	signal accepting, committingBr, earlyInputSending, lateInputSending: std_logic := '0';	   
+    signal isFull, isAlmostFull, accepting, committingBr, earlyInputSending, lateInputSending: std_logic := '0';	   
 	signal memEmpty, taggedEmpty: std_logic := '1'; -- CAREFUL: starting with '1' 
 	   
     signal nInRe, nOut, nCommitted, nCommittedEffective: SmallNumber := (others => '0');   
-    signal pRenamedSeqLong, pRenamedSeqLongNext, pStartSeqLong, pStartSeqLongNext, pFlushSeqLong: SmallNumber := (others => '0');
     	       
     signal recoveryCounter: SmallNumber := (others => '0');
-    
+
 	signal targetArray: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
     signal targetOutput: Mword := (others => '0');
 
@@ -135,10 +130,8 @@ begin
                    end if;
     
                    -- Write target array
-                   if --storeValueInput.full = '1' then
-                      storeValueInput_N.full = '1' then
-                       targetArray(slv2u(pCausing)) <= --storeValueInput.ins.target;
-                                                        storeValueInput_N.value;
+                   if storeValueInput_N.full = '1' then
+                       targetArray(slv2u(pCausing)) <= storeValueInput_N.value;
                    end if;   
                 end if;
                 
@@ -160,15 +153,11 @@ begin
            earlySelected <= deserializeEarlyInfo(earlySerialSelected);
            lateSelected <= deserializeLateInfo(lateSerialSelected);
     
-           selectedDataSlotPre <= getMatchedSlot(pSelect, --compareAddressQuickInput.full, compareAddressQuickInput.ins.tags.renameIndex,
-                                                            compareAddressQuickInput_N.full, compareAddressQuickInput_N.tag,
-                                                            earlySelected, lateSelected);
+           selectedDataSlotPre <= getMatchedSlot(pSelect, compareAddressQuickInput_N.full, compareAddressQuickInput_N.tag, earlySelected, lateSelected);
         end block;
 
-        pSelect <= --compareAddressQuickInput.ins.tags.bqPointer and PTR_MASK_SN;
-                    compareQuickPtr and PTR_MASK_SN;
-        pSelectLong <= --compareAddressQuickInput.ins.tags.bqPointer;
-                        compareQuickPtr;
+        pSelect <= compareQuickPtr and PTR_MASK_SN;
+        pSelectLong <= compareQuickPtr;
        
 
         pStartNext <= pStartLongNext and PTR_MASK_SN;
@@ -206,7 +195,7 @@ begin
                     else       addIntTrunc(pRenamedSeqLong, slv2u(nInRe), QUEUE_PTR_SIZE + 2 +1) when prevSendingRe = '1' -- CAREFUL: ptr size here also
                     else       pRenamedSeqLong;
 
-        pFlushSeqLong <= execCausing.tags.bqPointerSeq;
+        pFlushSeqLong <= execCausing_N.dest;
 
 
 	   SYNCH_POINTERS: process (clk)
@@ -254,8 +243,8 @@ begin
     
        -- C. out
        committingBr <= committing and robData(0).ins.controlInfo.firstBr and not taggedEmpty;
-       committedDataOut <= (committingBr, setInstructionTarget(DEFAULT_INS_STATE, targetOutput));	       
-       
+       committedDataOut_N.full <= committingBr;
+       committedDataOut_N.value <= targetOutput;
 
     -- Acc sigs
 	acceptingOut <= '1';
@@ -267,10 +256,9 @@ begin
 	    
     -- C. out
 	sendingSQOut <= committingBr;
-
-		
+	
 	bqPtrOut <= pRenamedLong;
 
-        renamedPtr <= pRenamedSeqLong;
+    renamedPtr <= pRenamedSeqLong;
 
 end Behavioral;

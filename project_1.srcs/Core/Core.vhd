@@ -53,7 +53,7 @@ entity Core is
 		   -- Other buses for development 
            iaux : in  Mword;
            oaux : out  Mword			  
-			  
+
 		);
 end Core;
 
@@ -70,30 +70,21 @@ architecture Behavioral of Core is
             issueQueuesAccepting, issueQueuesAcceptingMore, renameSendingBr, stopRename,
             queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
             robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
-            sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, committedSending: std_logic := '0';
+            sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
+            : std_logic := '0';
 
-    signal frontDataLastLiving, bpData, TMP_frontDataSpMasked: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-
-    signal  renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged,
-            renamedDataToBQ, renamedDataToSQ, renamedDataToLQ,
-            dataOutROB,
-             --bqData,
-              committedOut: 
-                InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-
-    --signal execOutputs1, execOutputs2: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal frontDataLastLiving, bpData, TMP_frontDataSpMasked,
+          renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ,
+            dataOutROB: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal dataFromSB: InstructionSlotArray(0 to 3) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-    signal bqSelected, --sqValueInput,
-                            preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput,
-           specialAction, specialOutROB, lastEffectiveOut, bqTargetData: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+    signal bqSelected, preAddressInput, sqSelectedOutput, memAddressInput, lqSelectedOutput, specialAction: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 
-        signal renamedArgsInt, renamedArgsFloat, renamedArgsMerged: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
-    
-    signal bqPointer, bqPointerSeq, lqPointer, sqPointer, preIndexSQ, preIndexLQ
-                    : SmallNumber := (others => '0');
-           
+    signal renamedArgsInt, renamedArgsFloat, renamedArgsMerged: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+
+    signal bqPointer, bqPointerSeq, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
+
     signal commitGroupCtr: InsTag := (others => '0');
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
@@ -101,19 +92,19 @@ architecture Behavioral of Core is
     signal sysRegReadValue: Mword := (others => '0');
     signal sysRegReadSel: slv5 := (others => '0');
 
-
     signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
-
 
     signal cycleCounter: Word := (others => '0');
     
-    signal events, eventsOnlyLate: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE);
+    signal events: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE);
 
-    signal preAddressOp: SpecificOp := DEFAULT_SPECIFIC_OP;
+    signal preAddressOp, specialOutROB_N: SpecificOp := DEFAULT_SPECIFIC_OP;
 
     signal branchCtrl, memoryCtrl: InstructionControlInfo := DEFAULT_CONTROL_INFO;
 
-           signal bqUpdate, bqCompareEarly, sqValueResult: ExecResult := DEFAULT_EXEC_RESULT;
+           signal bqUpdate, bqCompareEarly, sqValueResult,      
+                    frontEvent_N, execEvent_N, execResultDelayed, lateEvent_N, bqTargetData_N, bqTargetData_N2, dataFromSB_N,
+                    execCausingDelayedSQ, execCausingDelayedLQ: ExecResult := DEFAULT_EXEC_RESULT;
     
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
 begin
@@ -129,7 +120,10 @@ begin
     intType <= (int0, int1);
 
     events <= (lateEventSignal, execEventSignal, execCausing, preExecCausing);
-    eventsOnlyLate <= (lateEvent => lateEventSignal, execEvent => '0', execCausing => DEFAULT_INS_STATE, preExecCausing => DEFAULT_INS_STATE);
+
+        execEvent_N <= (execEventSignal, InsTag'(others => '0'), execCausing.tags.bqPointerSeq, execCausing.target);
+        dataFromSB_N <= (dataFromSB(0).full and isStoreSysOp(dataFromSB(0).ins), InsTag'(others => '0'),
+                                    zeroExtend(dataFromSB(0).ins.target(4 downto 0), SMALL_NUMBER_SIZE), dataFromSB(0).ins.result);
 
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
 	generic map(DEBUG_FILE_PREFIX => DEBUG_FILE_PREFIX)
@@ -141,7 +135,6 @@ begin
         sysRegReadValue => sysRegReadValue,
 
         -- to front pipe
-        frontAccepting => frontAccepting,
         pcDataLiving => pcDataSig,
         pcSending => pcSending,
         
@@ -151,40 +144,30 @@ begin
         -- Events in
         intSignal => intSignal,
         intType => intType,
-        execEventSignal => execEventSignal,
-        execCausing => execCausing,
-        
-        frontEventSignal => frontEventSignal,
-        frontCausing => frontCausing,
-        
+        execEventSignal => execEventSignal,        
+        frontEventSignal => frontEventSignal,        
+             frontEvent_N => frontEvent_N,
+             execEvent_N => execEvent_N,
+                     
         -- Events out
         lateEventOut => lateEventSignal,
         lateEventSetPC => lateEventSetPC,
-        lateCausing => lateCausing,
-        -- Data from front pipe interface        
-        frontLastSending => frontLastSending,
-        frontDataLastLiving => frontDataLastLiving,
+             lateEvent_N => lateEvent_N,
 
         -- Interface from ROB
         commitAccepting => commitAccepting,
         sendingFromROB => robSending,    
         robDataLiving => dataOutROB,
-        robSpecial => specialOutROB,
+            robSpecial_N => specialOutROB_N,
         ---
-        --dataFromBQV => bqData,
-        bqTargetData => bqTargetData,
-
+            bqTargetData_N => bqTargetData_N,
+            
         sbSending => sbSending,
-        dataFromSB => dataFromSB(0),
+            dataFromSB_N => dataFromSB_N,
         sbEmpty => sbEmpty,
 
         commitGroupCtrOut => commitGroupCtr,
-        
-        committedOut => committedOut,
-        committedSending => committedSending,
-        
-        lastEffectiveOut => lastEffectiveOut,
-        
+
         doneSig => oaux(0),
         failSig => oaux(1)
     );
@@ -212,16 +195,16 @@ begin
         lastSending => frontLastSending,
         
         frontEventSignal => frontEventSignal,
-        frontCausing => frontCausing,
-        
-        execCausing => execCausing,
-        lateCausing => lateCausing,
+            frontCausing_N => frontEvent_N,
+
+            execCausing_N => execEvent_N,
+            lateCausing_N => lateEvent_N,
         
         execEventSignal => execEventSignal,
         lateEventSignal => lateEventSignal,
         lateEventSetPC => lateEventSetPC
     );    
-
+            lateCausing.target <= lateEvent_N.value;
             
     REGISTER_MANAGER: entity work.UnitRegManager(Behavioral)
     port map(
@@ -259,7 +242,6 @@ begin
         commitGroupCtr => commitGroupCtr,
 		
 		execCausing => execCausing,
-        lateCausing => lateCausing,
         
         execEventSignal => execEventSignal,
         lateEventSignal => lateEventSignal
@@ -304,18 +286,14 @@ begin
 		
 		lateEventSignal => lateEventSignal,
 
-		--execEndSigs1 => execOutputs1,
-		--execEndSigs2 => execOutputs2,
-		
 		  execSigsMain => execOutMain,
 		  execSigsSec => execOutSec,
 
-		  branchControl => --execOutputs1(0).ins.controlInfo,
-		                      branchCtrl,
-		  memoryControl => --execOutputs1(2).ins.controlInfo,
-                                memoryCtrl,
+		  branchControl => branchCtrl,
+		  memoryControl => memoryCtrl,
 
-		inputSpecial => specialAction,		
+		  specialOp => specialAction.ins.specificOperation,
+			
 		inputData => renamedDataLivingMerged,
 		prevSending => renamedSending,
 		
@@ -325,7 +303,7 @@ begin
 		nextAccepting => commitAccepting,
 		sendingOut => robSending, 
 		outputData => dataOutROB,
-		outputSpecial => specialOutROB		
+		  outputSpecial_N => specialOutROB_N		
 	);     
 
 
@@ -370,8 +348,7 @@ begin
               storeValueCollision1, storeValueCollision2, cancelledSVI1,
               sendingToStoreWrite, sendingToStoreWriteInt, sendingToStoreWriteFloat: std_logic := '0';
 
-       signal sendingFromDLQ, 
-                sendingBranchRR, sendingToAgu, sendingToRegReadI0, sendingToRegReadM0: std_logic := '0';  -- MOVE to subpipes     
+       signal sendingFromDLQ, sendingBranchRR, sendingToAgu, sendingToRegReadI0, sendingToRegReadM0: std_logic := '0';  -- MOVE to subpipes     
        signal dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
 
            signal dataFromBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT; -- CLEANUP
@@ -393,7 +370,6 @@ begin
                                                                                       
               subpipeF0_Issue, subpipeF0_RegRead, subpipeF0_E0,    subpipeF0_E1,      subpipeF0_E2,      subpipeF0_D0,
                                            subpipeF0_RRu,
-  
               subpipe_DUMMY
                 : ExecResult := DEFAULT_EXEC_RESULT;
                 
@@ -417,7 +393,7 @@ begin
         branchMask <= getBranchMask1((renamedDataLivingRe));
         
         SUBPIPE_ALU: block
-           signal dataToAlu, dataToBranch: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);           
+           signal dataToAlu, dataToBranch: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
            signal branchData: InstructionState := DEFAULT_INSTRUCTION_STATE;           
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
         begin
@@ -492,28 +468,28 @@ begin
 
 
             -- NOTE: it seems that only elements of .state used in Exec are: { args: MwordArray; immediate: std_logic }
-            dataToAlu(0) <= (slotRegReadI0.state.full and not outSigsI0.killSel2, executeAlu(slotRegReadI0.state, bqSelected.ins, branchData, unfoldedAluOp));
+            dataToAlu <= (slotRegReadI0.state.full and not outSigsI0.killSel2, executeAlu(slotRegReadI0.state, bqSelected.ins, branchData, unfoldedAluOp));
           
-                    subpipeI0_RegRead_u.full <= dataToAlu(0).full;
+                    subpipeI0_RegRead_u.full <= dataToAlu.full;
                     subpipeI0_RegRead_u.tag <= subpipeI0_RegRead.tag;
                     subpipeI0_RegRead_u.dest <= subpipeI0_RegRead.dest;
-                    subpipeI0_RegRead_u.value <= dataToAlu(0).ins.result;
+                    subpipeI0_RegRead_u.value <= dataToAlu.ins.result;
 
-                    subpipeI0_RegRead_b.full <= dataToBranch(0).full;
+                    subpipeI0_RegRead_b.full <= dataToBranch.full;
                     subpipeI0_RegRead_b.tag <= subpipeI0_RegRead.tag;
                     --subpipeI0_RegRead_b.dest <= subpipeI0_RegRead.dest;
-                    subpipeI0_RegRead_b.value <= dataToBranch(0).ins.result;
+                    subpipeI0_RegRead_b.value <= dataToBranch.ins.result;
 
             branchData <= basicBranch(slotRegReadI0.state.full and not outSigsI0.killSel2 and not lateEventSignal and slotRegReadI0.state.branchIns,
                                             slotRegReadI0.state, bqSelected.ins, unfoldedAluOp);   
-            dataToBranch(0) <= (slotRegReadI0.state.full and not outSigsI0.killSel2 and not lateEventSignal and slotRegReadI0.state.branchIns, branchData);  
+            dataToBranch <= (slotRegReadI0.state.full and not outSigsI0.killSel2 and not lateEventSignal and slotRegReadI0.state.branchIns, branchData);  
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
                         subpipeI0_E0 <= subpipeI0_RegRead_u;
                         subpipeI0_E0_b <= subpipeI0_RegRead_b;
-                            dataFromBranch <= dataToBranch(0);
+                            dataFromBranch <= dataToBranch;
                     end if;
                 end process;
 
@@ -526,7 +502,7 @@ begin
             
             execEventSignal <= dataFromBranch.ins.controlInfo.newEvent and dataFromBranch.full; -- TODO: remove 'full' here because is factored into 'newEvent'?
             execCausing <= clearDbCausing(dataFromBranch.ins);
-            preExecCausing <= clearDbCausing(dataToBranch(0).ins);
+            preExecCausing <= clearDbCausing(dataToBranch.ins);
             
                     bqUpdate.full <= dataFromBranch.full;
                     bqUpdate.tag <= dataFromBranch.ins.tags.renameIndex;
@@ -537,6 +513,7 @@ begin
                 if rising_edge(clk) then
                     execEventSignalDelayed <= execEventSignal;
                     execCausingDelayed <= execCausing;
+                    execResultDelayed <= execEvent_N;
                 end if;
             end process;
         end block;
@@ -1002,14 +979,7 @@ begin
          lockIssueF0 <= '0';
          allowIssueF0 <= not lockIssueF0;
 
-         --   execOutputs1(0).full <= dataFromBranch.full;
-         --   execOutputs1(0).ins.controlInfo <= dataFromBranch.ins.controlInfo;
-
                 branchCtrl <= dataFromBranch.ins.controlInfo;
-
-         --   execOutputs1(2).full <= subpipeM0_E2.full;
-         --   execOutputs1(2).ins.controlInfo <= slotM0_E2i(0).ins.controlInfo;
-
                 memoryCtrl <= slotM0_E2i(0).ins.controlInfo;
    
             execOutMain(0) <= subpipeI0_E0;
@@ -1167,12 +1137,11 @@ begin
 
 		lateEventSignal => lateEventSignal,
 		execEventSignal => execEventSignalDelayed,
-		execCausing => execCausingDelayed,
+		  execCausing_N => DEFAULT_EXEC_RESULT,
 		nextAccepting => commitAccepting,		
 		sendingSQOut => open,
-		--dataOutV => bqData,
 		
-		committedDataOut => bqTargetData
+		  committedDataOut_N => bqTargetData_N
 	);
 
     STORE_QUEUE: entity work.StoreQueue(Behavioral)
@@ -1209,7 +1178,7 @@ begin
 
 		lateEventSignal => lateEventSignal,
 		execEventSignal => execEventSignalDelayed,
-        execCausing => execCausingDelayed,
+		  execCausing_N => execCausingDelayedSQ,
 		
 		nextAccepting => commitAccepting,
 
@@ -1217,6 +1186,7 @@ begin
         committedSending => sbSending,
         committedDataOut => dataFromSB
 	);
+        execCausingDelayedSQ.dest <= execCausingDelayed.tags.sqPointer;
 
 
     LOAD_QUEUE: entity work.StoreQueue(Behavioral)
@@ -1254,7 +1224,7 @@ begin
 
 		lateEventSignal => lateEventSignal,
 		execEventSignal => execEventSignalDelayed,
-        execCausing => execCausingDelayed,
+		  execCausing_N => execCausingDelayedLQ,
 		
 		nextAccepting => commitAccepting,
 		
@@ -1262,6 +1232,8 @@ begin
         committedSending => open,
         committedDataOut => open
 	);
+
+        execCausingDelayedLQ.dest <= execCausingDelayed.tags.lqPointer;
 
 	MEMORY_INTERFACE: block
 		signal sysStoreAddressW: Mword := (others => '0');

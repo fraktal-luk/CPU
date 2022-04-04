@@ -25,16 +25,14 @@ entity ReorderBuffer is
 		
 		lateEventSignal: in std_logic;
 
-		--execEndSigs1: in InstructionSlotArray(0 to 3);
-		--execEndSigs2: in InstructionSlotArray(0 to 3);
+		execSigsMain: in ExecResultArray(0 to 3);
+		execSigsSec: in ExecResultArray(0 to 3);
 		
-		  execSigsMain: in ExecResultArray(0 to 3);
-		  execSigsSec: in ExecResultArray(0 to 3);
+		branchControl: in InstructionControlInfo;
+		memoryControl: in InstructionControlInfo;
 		
-		  branchControl: in InstructionControlInfo;
-		  memoryControl: in InstructionControlInfo;
+		specialOp: in SpecificOp;
 		
-		inputSpecial: in InstructionSlot;
 		inputData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		prevSending: in std_logic;
 		acceptingOut: out std_logic;
@@ -44,7 +42,7 @@ entity ReorderBuffer is
 		sendingOut: out std_logic; 
 		
 		outputData: out InstructionSlotArray(0 to PIPE_WIDTH-1);
-		outputSpecial: out InstructionSlot
+		outputSpecial_N: out SpecificOp
 	);	
 end ReorderBuffer;
 
@@ -52,7 +50,7 @@ end ReorderBuffer;
 architecture Behavioral of ReorderBuffer is
 
     signal outputDataSig, outputDataSig_Pre: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
-    signal outputSpecialSig: InstructionSlot := DEFAULT_INS_SLOT;
+    signal outputSpecialSig, inputSpecial_N: InstructionSlot := DEFAULT_INS_SLOT;
         
 	signal isSending, isEmpty, outputCompleted, outputCompleted_Pre, outputEmpty, execEvent, isFull, isAlmostFull: std_logic := '0';
 	signal startPtr, startPtrNext, endPtr, endPtrNext, causingPtr: SmallNumber := (others => '0');	
@@ -60,13 +58,12 @@ architecture Behavioral of ReorderBuffer is
 
     signal ch0, ch1, ch2, ch3: std_logic := '0';
 begin
-	execEvent <= --execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
-	               branchControl.full and branchControl.newEvent;
+    inputSpecial_N.ins.specificOperation <= specialOp;
+
+	execEvent <= branchControl.full and branchControl.newEvent;
 	
-	causingPtr <= getTagHighSN(--execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
-	                             execSigsMain(0).tag) and PTR_MASK_SN;
-	causingPtrLong <= getTagHighSN(--execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN_LONG; -- TEMP!
-	                               execSigsMain(0).tag) and PTR_MASK_SN_LONG;
+	causingPtr <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN;
+	causingPtrLong <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN_LONG;
 	
     NEW_DEV: block
         signal staticInput, staticOutput, staticOutput_D_Pre: StaticOpInfoArray;
@@ -91,8 +88,8 @@ begin
         staticInput <= getStaticOpInfoA(inputData);
         dynamicInput <= getDynamicOpInfoA(inputData);
         
-        staticGroupInput <= getStaticGroupInfo(inputData, inputSpecial);
-        dynamicGroupInput <= getDynamicGroupInfo(inputData, inputSpecial);
+        staticGroupInput <= getStaticGroupInfo(inputData, inputSpecial_N);
+        dynamicGroupInput <= getDynamicGroupInfo(inputData, inputSpecial_N);
 
         -- Outputs
         outputDataSig_Pre <= getInstructionSlotArray_T(staticOutput_D_Pre, dynamicOutput_Pre, staticGroupOutput_D_Pre, dynamicGroupOutput_Pre);
@@ -111,19 +108,11 @@ begin
         begin
             if rising_edge(clk) then
                 -- Update content
-                updateDynamicContent(dynamicContent, --execEndSigs1, 
-                                                        execSigsMain, 0);
-                updateDynamicContent(dynamicContent, --execEndSigs2, 
-                                                        execSigsSec, 1);
+                updateDynamicContent(dynamicContent, execSigsMain, 0);
+                updateDynamicContent(dynamicContent, execSigsSec, 1);
 
-                updateDynamicContentBranch(dynamicContent, --execEndSigs1(0).full, execEndSigs1(0).ins.controlInfo,
-                                                           branchControl.full, branchControl,                      
-                                                                                 execSigsMain(0).tag);
-               -- updateDynamicContentMemEvent(dynamicContent, execEndSigs1(2).full, execEndSigs1(2).ins.controlInfo, execSigsMain(2).tag);
-                updateDynamicContentMemEvent(dynamicContent, execSigsMain(2).full, --execEndSigs1(2).ins.controlInfo,
-                                                                                    memoryControl,
-                                                                execSigsMain(2).tag);
-                
+                updateDynamicContentBranch(dynamicContent, branchControl.full, branchControl, execSigsMain(0).tag);
+                updateDynamicContentMemEvent(dynamicContent, execSigsMain(2).full, memoryControl, execSigsMain(2).tag);
 
                 -- Write inputs
                 if prevSending = '1' then                    
@@ -202,7 +191,7 @@ begin
     end block;
 
     outputData <= outputDataSig;
-    outputSpecial <= outputSpecialSig;
+        outputSpecial_N <= outputSpecialSig.ins.specificOperation;
 
 	acceptingOut <= not isFull;
     acceptingMore <= not isAlmostFull;

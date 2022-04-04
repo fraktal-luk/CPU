@@ -94,7 +94,7 @@ begin
         res.targets(i) := insVec(i).ins.target;
         res.links(i) := insVec(i).ins.result;
     end loop;
-    
+
     res.ip := insVec(0).ins.ip;
     return res;
 end function;

@@ -50,7 +50,7 @@ entity StoreQueue is
 
 		lateEventSignal: in std_logic;
 		execEventSignal: in std_logic;
-		execCausing: in InstructionState;   -- pointers
+    		execCausing_N: in ExecResult;
 		
 		nextAccepting: in std_logic;		
 
@@ -102,18 +102,14 @@ architecture Behavioral of StoreQueue is
             res(LEN-1).completedA := '0';
         end if;
 
-        currentPtr := subTruncZ(sqPtr,--compareAddressInput.ins.tags.sqPointer,
-                                startPtrNext, QUEUE_PTR_SIZE);
+        currentPtr := subTruncZ(sqPtr, startPtrNext, QUEUE_PTR_SIZE);
 
-        if compareAddressInput.full = '1' and --isStoreOp(compareAddressInput.ins) = '1' then
-                                                isStoreOp(op) = '1' then
+        if compareAddressInput.full = '1' and isStoreOp(op) = '1' then
             res(slv2u(currentPtr)).completedA := '1';
         end if;
 
-        if compareAddressInput.full = '1' and --isStoreMemOp(compareAddressInput.ins) = '1' then
-                                                isStoreMemOp(op) = '1' then
-            res(slv2u(currentPtr)).address := --compareAddressInput.ins.result;
-                                              adr;
+        if compareAddressInput.full = '1' and isStoreMemOp(op) = '1' then
+            res(slv2u(currentPtr)).address := adr;
         end if;
         
         if ev = '1' then
@@ -252,8 +248,7 @@ begin
             else       addIntTrunc(pRenamedLong, slv2u(nInRe), QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
             else       pRenamedLong;
     
-    pFlushLong <= execCausing.tags.lqPointer when IS_LOAD_QUEUE
-             else execCausing.tags.sqPointer;
+    pFlushLong <= execCausing_N.dest;
    
      process (clk)   
      begin
