@@ -39,6 +39,10 @@ type QueueEntryArray is array (natural range <>) of QueueEntry;
 procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);    
 procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber; insVec: InstructionSlotArray; constant IS_LOAD_QUEUE: boolean);
 procedure updateAddress(signal content: inout QueueEntryArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);
+procedure updateAddress_N(signal content: inout QueueEntryArray;-- isl: InstructionSlot; 
+                                                                   er: ExecResult;
+                                                                    constant IS_LOAD_QUEUE: boolean);
+
 procedure updateValue(signal content: inout QueueEntryArray;-- isl: InstructionSlot;
                                             ind: SmallNumber);
 
@@ -138,6 +142,36 @@ begin
     if allow = '1' then
         content(ind).completedA <= '1';
         content(ind).address <= isl.ins.result;
+    end if;        
+end procedure;
+
+
+procedure updateAddress_N(signal content: inout QueueEntryArray;-- isl: InstructionSlot; 
+                                                                   er: ExecResult;
+                                                                    constant IS_LOAD_QUEUE: boolean) is
+    constant LEN: natural := content'length;
+    constant PTR_MASK_SN: SmallNumber := i2slv(LEN-1, SMALL_NUMBER_SIZE);
+    constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);        
+    variable indV: SmallNumber;
+    variable ind: natural;
+    variable allow: std_logic;
+begin
+    allow := er.full;
+    indV := er.dest and PTR_MASK_SN; -- TODO: difference between LQ and SQ?
+    if not IS_LOAD_QUEUE then
+        --indV := isl.ins.tags.sqPointer and PTR_MASK_SN;
+        --allow := isStoreOp(isl.ins);           
+    else
+        --indV := isl.ins.tags.lqPointer and PTR_MASK_SN;
+        --allow := isLoadOp(isl.ins);
+    end if;
+    
+    ind := slv2u(indV);
+    
+    if allow = '1' then
+        content(ind).completedA <= '1';
+        content(ind).address <= --isl.ins.result;
+                                er.value;
     end if;        
 end procedure;
 
@@ -250,7 +284,7 @@ end function;
         else
             res.specificOperation := sop(None, opStore);                        
         end if;
-        
+
         res.controlInfo.newEvent := elem.hasEvent;
         res.controlInfo.firstBr := elem.first;
         res.controlInfo.sqMiss := not elem.completedV;   

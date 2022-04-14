@@ -181,6 +181,18 @@ end record;
 
 type InstructionStateArray is array(integer range <>) of InstructionState;
 
+type ControlPacket is record
+    controlInfo: InstructionControlInfo;
+    op: SpecificOp;
+    tags: InstructionTags;
+    tag: InsTag;
+    ip: Mword;
+    nip: Mword;
+    target: Mword;
+end record;
+
+type ControlPacketArray is array(integer range <>) of ControlPacket;
+
 constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
     full => '0',
     newEvent => '0',
@@ -258,7 +270,17 @@ constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
 );
 
 constant DEFAULT_INS_STATE: InstructionState := DEFAULT_INSTRUCTION_STATE;
-	
+
+constant DEFAULT_CONTROL_PACKET: ControlPacket := (
+    controlInfo => DEFAULT_CONTROL_INFO,
+    op => DEFAULT_SPECIFIC_OP,
+    tags => DEFAULT_INSTRUCTION_TAGS,
+    tag => (others => '0'),
+    ip => (others => '0'),
+    nip => (others => '0'),
+    target => (others => '0')
+);
+
 -- Created to enable *Array				
 type InstructionSlot is record 
 	full: std_logic;

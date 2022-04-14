@@ -21,8 +21,8 @@ entity UnitFront is
 		iin: in WordArray(0 to FETCH_WIDTH-1);
 
 		-- Interface PC to front
-		pcDataLiving: in InstructionState;
-		pcSending: in std_logic;
+		pcDataIn: in ControlPacket;
+		  
 		frontAccepting: out std_logic;
 
 		bpAccepting: in std_logic;
@@ -51,12 +51,14 @@ end UnitFront;
 architecture Behavioral of UnitFront is
 	signal resetSig, enSig: std_logic := '0';							
 
+    signal cpFetch0, cpFetch1: ControlPacket := DEFAULT_CONTROL_PACKET;
+
     signal stageDataInFetch1, dataToIbuffer, dataToBranchTransfer, dataBranchTransferOut: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal stageDataInFetch0, stageDataOutFetch0, stageDataOutFetch1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal dummyBP0, dummyBP1: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0'); -- Results from BP 
 	signal sendingOutFetch0, sendingOutFetch1, sendingOutBuffer, bufferAccepting, earlyBranchSending, sendingToBranchTransfer: std_logic := '0';
-	signal frontBranchEvent, killAll, killAllOrFront: std_logic := '0';
+	signal pcEn, frontBranchEvent, killAll, killAllOrFront: std_logic := '0';
 	
 	signal fetchedLine0, fetchedLine1: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0')); 
 	signal sendingToEarlyBranch, sendingToBQ, sendingToBuffer, fetchStall,  full0, full1, fullBr, fullBt,
@@ -71,9 +73,11 @@ begin
 	killAll <= execEventSignal or lateEventSignal;
     killAllOrFront <= killAll or frontBranchEvent;
 
-    fetchCounterNext <= addInt(fetchCounter, PIPE_WIDTH) when pcSending = '1' else fetchCounter;
+    fetchCounterNext <= addInt(fetchCounter, PIPE_WIDTH) when pcEn = '1' else fetchCounter;
 
 	fetchedLine0 <= iin;
+
+    pcEn <= pcDataIn.controlInfo.full;
 
     process(clk)
     begin
@@ -83,7 +87,7 @@ begin
             -- fetchedLine0: assigned async
             fetchedLine1 <= fetchedLine0;
 
-            full0 <= bool2std(pcSending = '1') and not killAllOrFront; -- F0
+            full0 <= bool2std(pcEn = '1') and not killAllOrFront;
             full1 <= sendingOutFetch0 and not killAllOrFront;          -- F1
             fullBr <= sendingOutFetch1 and not killAll;                -- F2
             fullBt <= bool2std(sendingToBranchTransfer = '1') and not killAll; -- F2
@@ -108,8 +112,8 @@ begin
         end if;
     end process;
 
-    stageDataInFetch0(0).ins.ip <= pcDataLiving.ip;
-    stageDataInFetch0(0).ins.target <= pcDataLiving.target;
+    stageDataInFetch0(0).ins.ip <= pcDataIn.ip;
+    stageDataInFetch0(0).ins.target <= pcDataIn.target;
 
     stageDataInFetch0(0).ins.tags.fetchCtr <= fetchCounter when not CLEAR_DEBUG_INFO else (others => '0');
 

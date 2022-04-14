@@ -48,7 +48,8 @@ entity BranchQueue is
         compareAddressQuickInput_N: in ExecResult;
         compareQuickPtr: in SmallNumber;
 
-		selectedDataOutput: out InstructionSlot; -- result, target, control info, tags
+		--selectedDataOutput: out InstructionSlot; -- result, target, control info, tags
+    		selectedDataOutput_N: out ControlPacket; -- result, target, control info, tags
 
 		committing: in std_logic;
 		robData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
@@ -252,8 +253,13 @@ begin
     acceptingBr <= accepting;       
 
     -- E. out
-	selectedDataOutput <= selectedDataSlot;
-	    
+	--selectedDataOutput <= selectedDataSlot;
+	    selectedDataOutput_N.controlInfo <= selectedDataSlot.ins.controlInfo;
+	    selectedDataOutput_N.tags <= selectedDataSlot.ins.tags;
+	    selectedDataOutput_N.ip <= selectedDataSlot.ins.ip;
+	    selectedDataOutput_N.target <= selectedDataSlot.ins.target;
+	    selectedDataOutput_N.nip <= selectedDataSlot.ins.result;
+
     -- C. out
 	sendingSQOut <= committingBr;
 	

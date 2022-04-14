@@ -46,14 +46,16 @@ port(
     newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     
-    specialActionOut: out InstructionSlot;
+    --specialActionOut: out InstructionSlot;
+        specialOut: out SpecificOp;
     
     robDataLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1);
     sendingFromROB: in std_logic;
    
     commitGroupCtr: in InsTag;
   
-    execCausing: in InstructionState;
+    --execCausing: in InstructionState;
+        execCausing_N: in ControlPacket;
     --lateCausing: in InstructionState;
     
     execEventSignal: in std_logic;
@@ -435,7 +437,8 @@ begin
     renamedDataLiving <= postprocessRenamed(restoreRenameIndex(renamedDataLivingPre), depVecPrev);
 
     renameGroupCtrNext <=   commitGroupCtr when lateEventSignal = '1'
-                       else clearTagLow(execCausing.tags.renameIndex) when execEventSignal = '1'
+                       else clearTagLow(--execCausing.tags.renameIndex) when execEventSignal = '1'
+                                        execCausing_N.tags.renameIndex) when execEventSignal = '1'
                        else addInt(renameGroupCtr, PIPE_WIDTH) when frontLastSending = '1'
                        else renameGroupCtr;
     
@@ -573,7 +576,8 @@ begin
         rewind => eventSig,
         execEventSignal => execEventSignal,
         lateEventSignal => lateEventSignal,
-        causingPointer => execCausing.tags.intPointer,
+        causingPointer => --execCausing.tags.intPointer,
+                          execCausing_N.tags.intPointer,
         
         sendingToReserve => frontLastSendingIn, 
         takeAllow => frontLastSendingIn,
@@ -598,7 +602,8 @@ begin
         rewind => eventSig,
         execEventSignal => execEventSignal,
         lateEventSignal => lateEventSignal,        
-        causingPointer => execCausing.tags.floatPointer,
+        causingPointer => --execCausing.tags.floatPointer,
+                          execCausing_N.tags.floatPointer,
         
         sendingToReserve => frontLastSendingIn, 
         takeAllow => frontLastSendingIn,	-- FROM SEQ
@@ -613,7 +618,8 @@ begin
         physStableDelayed => physStableFloat -- FOR MAPPING (from MAP)
     );
 	
-	specialActionOut <= specialActionSlot;
+	--specialActionOut <= specialActionSlot;
+    	specialOut <= specialActionSlot.ins.specificOperation;
 	
     newPhysDestsOut <= newIntDests;
     newFloatDestsOut <= newFloatDests; 
@@ -626,5 +632,5 @@ begin
          TMP_MASKED_OUT: for i in 0 to PIPE_WIDTH-1 generate
             TMP_spMaskedDataOut(i) <= (renamedBase(i).full, frontDataLastLiving(i).ins);
          end generate;
-         
+
 end Behavioral;

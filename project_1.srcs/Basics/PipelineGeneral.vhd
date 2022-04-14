@@ -1267,7 +1267,6 @@ begin
     return bool2std(op.memory = opStore or op.memory = opStoreSys);
 end function;
 
-
 function isLoadSysOp(op: SpecificOp) return std_logic is
 begin
     return bool2std(op.memory = opLoadSys);        

@@ -46,9 +46,10 @@ entity UnitSequencer is
     lateEvent_N: out ExecResult;
 
     -- Interface PC <-> front pipe
-    pcSending: out std_logic;        
-    pcDataLiving: out InstructionState;   -- !!!!
-
+--    pcSending: out std_logic;        
+--    pcDataLiving: out InstructionState;   -- !!!!
+        pcDataOut: out ControlPacket;
+        
     -- Interface with ROB
     commitAccepting: out std_logic;
     
@@ -81,6 +82,8 @@ end UnitSequencer;
 architecture Behavioral of UnitSequencer is
 	signal resetSig, enSig: std_logic := '0';							
 
+    signal pcDataSig: ControlPacket := DEFAULT_CONTROL_PACKET;
+    
     signal pcNew, pcCurrent, pcNext: Mword := (others => '0');        
     signal stageDataOutPC: InstructionState := DEFAULT_INSTRUCTION_STATE;
     signal sendingToPC, sendingOutPC, acceptingOutPC, sendingToLastEffective, running,
@@ -217,8 +220,14 @@ begin
     end block;
     
     -- OUTPUT
-    pcDataLiving <= stageDataOutPC;
-    pcSending <= sendingOutPC;
+--    pcDataLiving <= stageDataOutPC;
+--    pcSending <= sendingOutPC;
+        
+        pcDataSig.controlInfo.full <= sendingOutPC;
+        pcDataSig.ip <= pcCurrent;
+        pcDataSig.target <= pcNext;
+        
+        pcDataOut <= pcDataSig;
     ----------
 
 
