@@ -26,15 +26,17 @@ entity RegisterMapper is
 		en: in std_logic;
 		
 		rewind: in std_logic;
-		causingInstruction: in InstructionState; -- CAREFUL: not used now, mapping restored from stable
+		--causingInstruction: in InstructionState; -- CAREFUL: not used now, mapping restored from stable
 		
 		sendingToReserve: in std_logic;
 		stageDataToReserve: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+		  reserveInfoA: in RenameInfoArray(0 to PIPE_WIDTH-1);
 		newPhysDestsOrig: in PhysNameArray(0 to PIPE_WIDTH-1); -- to write to newest map
 
 		sendingToCommit: in std_logic;
 		stageDataToCommit: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-		
+		  commitInfoA: in RenameInfoArray(0 to PIPE_WIDTH-1);
+
 		newPhysSources: out PhysNameArray(0 to 3*PIPE_WIDTH-1);		
 		newPhysSources_NR: out PhysNameArray(0 to 3*PIPE_WIDTH-1);		
 		newPhysSourcesAlt: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
@@ -54,6 +56,10 @@ architecture Behavioral of RegisterMapper is
     signal selectReserve, selectCommit: RegNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal selectNewest: RegNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
+            signal reserve_C, commit_C, psels_C: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+            signal selectReserve_C, selectCommit_C: RegNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+            signal selectNewest_C: RegNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+
     signal writeCommit: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 	signal readNewest, readNewest_NR, readNewest_T, readNewest_T2, readStableSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 	signal readStable, readStable_T, readStable_T2, prevDests, prevDests_T, prevDests_T2: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -62,7 +68,7 @@ architecture Behavioral of RegisterMapper is
     
     signal newSelectedA, stableSelectedA: RegMaskArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     
-    signal ch0, ch1: std_logic := '0';    
+    signal ch0, ch1,  cha, chb, chc, chd, che, chf: std_logic := '0';    
 begin
             ch0 <= bool2std(readStable_T2 = readStable);
             ch1 <= bool2std(readNewest_T2 = readNewest_T);
@@ -77,13 +83,24 @@ begin
 
 
     psels <= getPhysicalFloatDestSels(stageDataToCommit) when IS_FP else getPhysicalIntDestSels(stageDataToCommit);
+        --psels_C <= getPhysicalFloatDestSels(stageDataToCommit) when IS_FP else getPhysicalIntDestSels(stageDataToCommit);
 
-	reserve <= whichTakeReg(stageDataToReserve, IS_FP); 
+	reserve_C <= whichTakeReg(stageDataToReserve, IS_FP); 
+    	reserve <= whichTakeReg(reserveInfoA, IS_FP); 
+
+            cha <= bool2std(reserve = reserve_C);
+            chb <= bool2std(selectReserve = selectReserve_C);
+            chc <= bool2std(selectCommit = selectCommit_C);
+            chd <= bool2std(selectNewest = selectNewest_C);
+
 	commit <= psels;
 	
-	selectReserve <= getVirtualDests(stageDataToReserve);
+	selectReserve_C <= getVirtualDests(stageDataToReserve);
+    	selectReserve <= getVirtualDests(reserveInfoA);
 	selectCommit <= getVirtualDests(stageDataToCommit);
-	selectNewest <= getVirtualArgs(stageDataToReserve);
+    	selectCommit_C <= getVirtualDests(reserveInfoA);
+	selectNewest_C <= getVirtualArgs(stageDataToReserve);
+    	selectNewest <= getVirtualArgs(reserveInfoA);
 	
 	writeCommit <= getPhysicalDests(stageDataToCommit);	
 

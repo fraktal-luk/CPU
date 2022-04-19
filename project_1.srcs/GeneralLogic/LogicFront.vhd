@@ -30,6 +30,7 @@ function getEarlyEvent(earlyBranchMultiDataInA: InstructionSlotArray; target, pr
 return InstructionState;
 	
 function prepareForBQ(ip: Mword; insVec: InstructionSlotArray) return InstructionSlotArray;
+function prepareForBQ_N(ip: Mword; insVec: InstructionSlotArray) return ControlPacketArray;
 
 end LogicFront;
 
@@ -319,6 +320,56 @@ begin
 
     -- TMP!
     res(0).ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) := ip(MWORD_SIZE-1 downto ALIGN_BITS);
+    
+	return res;
+end function;
+
+
+function prepareForBQ_N(ip: Mword; insVec: InstructionSlotArray) return ControlPacketArray is
+	variable insVecSh: InstructionSlotArray(insVec'range) := insVec;
+	variable res: ControlPacketArray(0 to insVec'length-1) := (others => DEFAULT_CONTROL_PACKET);
+	variable result, target: Mword;
+	variable branchMask: std_logic_vector(insVec'range) := (others => '0');
+	variable nSh: natural := 0;
+begin
+    -- insVec: USES (controlInfo, target, full, classInfo.branchIns) [ result is overwritten]
+
+    insVecSh := insVec;
+    branchMask := getBranchMask(insVec);
+    nSh := slv2u(ip(ALIGN_BITS-1 downto 2));
+
+    for i in 0 to PIPE_WIDTH-1 loop
+        if not TMP_PARAM_COMPRESS_RETURN then
+            if i + nSh >= PIPE_WIDTH-1 then
+                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ip(MWORD_SIZE-1 downto ALIGN_BITS), 1);
+                insVecSh(i).ins.result(ALIGN_BITS-1 downto 0) := (others => '0');
+            else
+                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := ip(MWORD_SIZE-1 downto ALIGN_BITS);      
+                insVecSh(i).ins.result(ALIGN_BITS-1 downto 2) := i2slv(i + nSh + 1, ALIGN_BITS-2);                           
+            end if;
+        else    
+            if i + nSh >= PIPE_WIDTH-1 then
+                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := i2slv(1, MWORD_SIZE-ALIGN_BITS);
+                insVecSh(i).ins.result(ALIGN_BITS-1 downto 0) := (others => '0');
+            else
+                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := (others => '0');
+                insVecSh(i).ins.result(ALIGN_BITS-1 downto 2) := i2slv(i + nSh + 1, ALIGN_BITS-2);                           
+            end if;
+        end if;         
+    end loop;
+
+	for i in insVec'range loop
+--       if CLEAR_DEBUG_INFO then -- Otherwise everything remains
+--           res(i).ins := DEFAULT_INS_STATE;
+           res(i).controlInfo := insVecSh(i).ins.controlInfo;
+	       res(i).controlInfo.full := branchMask(i) and insVec(i).full; -- TODO: getBranchMask already check for 'full' - remove it here?
+           res(i).target := insVecSh(i).ins.target;
+           res(i).nip := insVecSh(i).ins.result;
+--	   end if;
+	end loop;
+
+    -- TMP!
+    res(0).ip(MWORD_SIZE-1 downto ALIGN_BITS) := ip(MWORD_SIZE-1 downto ALIGN_BITS);
     
 	return res;
 end function;

@@ -56,7 +56,7 @@ package LogicExec is
 
 	function executeFpu(st: SchedulerState) return InstructionState;
 
-    function calcEffectiveAddress(st: SchedulerState; fromDLQ: std_logic; dlqData: InstructionState)
+    function calcEffectiveAddress(st: SchedulerState; fromDLQ: std_logic; dlqData: ExecResult)
     return InstructionState;        
 
     function getLSResultData(ins: InstructionState;
@@ -544,12 +544,12 @@ package body LogicExec is
 	end function;
 
             
-    function calcEffectiveAddress(st: SchedulerState; fromDLQ: std_logic; dlqData: InstructionState)
+    function calcEffectiveAddress(st: SchedulerState; fromDLQ: std_logic; dlqData: ExecResult)
     return InstructionState is
         variable res: InstructionState := work.LogicIssue.TMP_getIns(st);--ins;
     begin
         if fromDLQ = '1' then
-            res := dlqData;
+            --res := dlqData;
         elsif st.full = '1'then
             res.result := add(st.args(0), st.args(1));
         else

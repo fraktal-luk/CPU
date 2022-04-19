@@ -53,7 +53,10 @@ architecture Behavioral of ReorderBuffer is
     signal outputSpecialSig, inputSpecial_N: InstructionSlot := DEFAULT_INS_SLOT;
         
 	signal isSending, isEmpty, outputCompleted, outputCompleted_Pre, outputEmpty, execEvent, isFull, isAlmostFull: std_logic := '0';
-	signal startPtr, startPtrNext, endPtr, endPtrNext, causingPtr: SmallNumber := (others => '0');	
+	--signal --startPtr,
+	  --      startPtrNext--, 
+	        --endPtr, endPtrNext--, causingPtr
+	    --       : SmallNumber := (others => '0');	
 	signal startPtrLong, startPtrLongNext, endPtrLong, endPtrLongNext, causingPtrLong: SmallNumber := (others => '0');	
 
     signal ch0, ch1, ch2, ch3: std_logic := '0';
@@ -62,7 +65,7 @@ begin
 
 	execEvent <= branchControl.full and branchControl.newEvent;
 	
-	causingPtr <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN;
+	--causingPtr <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN;
 	causingPtrLong <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN_LONG;
 	
     NEW_DEV: block
@@ -97,11 +100,11 @@ begin
 
     	outputCompleted_Pre <= groupCompleted(outputDataSig_Pre, dynamicOutput_Pre);
 
-        dynamicOutput_Pre <= readDynamicOutput(dynamicContent, startPtrNext);
-        dynamicGroupOutput_Pre <= readDynamicGroupOutput(dynamicGroupContent, startPtrNext);
+        dynamicOutput_Pre <= readDynamicOutput(dynamicContent, startPtrLongNext);
+        dynamicGroupOutput_Pre <= readDynamicGroupOutput(dynamicGroupContent, startPtrLongNext);
         
-        staticOutput_D_Pre <= deserializeStaticInfoA(serialMemContent(slv2u(startPtrNext)));                    
-        staticGroupOutput_D_Pre <= deserializeStaticGroupInfo(serialMemContent(slv2u(startPtrNext)));
+        staticOutput_D_Pre <= deserializeStaticInfoA(serialMemContent(p2i(startPtrLongNext, ROB_SIZE)));                    
+        staticGroupOutput_D_Pre <= deserializeStaticGroupInfo(serialMemContent(p2i(startPtrLongNext, ROB_SIZE)));
 
 
         SYNCH: process (clk)
@@ -116,22 +119,22 @@ begin
 
                 -- Write inputs
                 if prevSending = '1' then                    
-                    writeStaticInput(staticContent, staticInput, endPtr);
-                    writeStaticGroupInput(staticGroupContent, staticGroupInput, endPtr);
+                    writeStaticInput(staticContent, staticInput, endPtrLong);
+                    writeStaticGroupInput(staticGroupContent, staticGroupInput, endPtrLong);
 
-                    writeDynamicInput(dynamicContent, dynamicInput, endPtr);
-                    writeDynamicGroupInput(dynamicGroupContent, dynamicGroupInput, endPtr);
+                    writeDynamicInput(dynamicContent, dynamicInput, endPtrLong);
+                    writeDynamicGroupInput(dynamicGroupContent, dynamicGroupInput, endPtrLong);
                     
-                    serialMemContent(slv2u(endPtr)) <= serialInput;
+                    serialMemContent(p2i(endPtrLong, ROB_SIZE)) <= serialInput;
                 end if;
                    
                 -- Read output
-                staticOutput <= readStaticOutput(staticContent, startPtrNext);
+                staticOutput <= readStaticOutput(staticContent, startPtrLongNext);
 
                 dynamicOutput <= dynamicOutput_Pre;
                 dynamicGroupOutput <= dynamicGroupOutput_Pre;
                 
-                serialOutput <= serialMemContent(slv2u(startPtrNext));
+                serialOutput <= serialMemContent(p2i(startPtrLongNext, ROB_SIZE));
                 
                 staticGroupOutput_D <= staticGroupOutput_D_Pre;
                   
@@ -159,10 +162,10 @@ begin
 
         nFullNext <= getNumFull(startPtrLongNext, endPtrLongNext, ROB_PTR_SIZE);     
        
-        startPtr <= startPtrLong and PTR_MASK_SN;
-        endPtr <= endPtrLong and PTR_MASK_SN;
-        startPtrNext <= startPtrLongNext and PTR_MASK_SN;
-        endPtrNext <= endPtrLongNext and PTR_MASK_SN;
+--        startPtr <= startPtrLong and PTR_MASK_SN;
+--        endPtr <= endPtrLong and PTR_MASK_SN;
+--        startPtrNext <= startPtrLongNext and PTR_MASK_SN;
+--        endPtrNext <= endPtrLongNext and PTR_MASK_SN;
         
         MANAGEMENT: process (clk)
         begin

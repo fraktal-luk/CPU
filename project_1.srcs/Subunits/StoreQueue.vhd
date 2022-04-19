@@ -31,8 +31,11 @@ entity StoreQueue is
    	    prevSendingRe: in std_logic;
 		prevSending: in std_logic;
 
-        dataInRe: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-		dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+        --dataInRe: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+            renameMask: in std_logic_vector(0 to PIPE_WIDTH-1);
+		--dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+		    inputMask: in std_logic_vector(0 to PIPE_WIDTH-1);
+		    systemMask: in std_logic_vector(0 to PIPE_WIDTH-1);
 
         renamedPtr: out SmallNumber;
 
@@ -48,7 +51,9 @@ entity StoreQueue is
         selectedDataOutput_N: out ControlPacket;
 
 		committing: in std_logic;
-		robData: in InstructionSlotArray(0 to PIPE_WIDTH-1);		
+		--robData: in InstructionSlotArray(0 to PIPE_WIDTH-1);		
+		    commitMask: in std_logic_vector(0 to PIPE_WIDTH-1);
+		    commitEffectiveMask: in std_logic_vector(0 to PIPE_WIDTH-1);
 
 		lateEventSignal: in std_logic;
 		execEventSignal: in std_logic;
@@ -70,8 +75,11 @@ architecture Behavioral of StoreQueue is
 
 	signal addressMatchMask, memOpMask, newerLQ, newerRegLQ, newerNextLQ, olderNextSQ_T, olderRegSQ_T, olderSQ_T, addressMatchMask_T: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
-	signal pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pTagged, pTaggedNext, pFlush, storePtr, adrPtr, pSelect, pRenamed, pRenamedNext,
-	       pStartEffective, pStartEffectiveNext,
+	signal --pStart_S, pStartNext_S, pDrain_S,-- pDrainNext_S, pDrainPrev_S,-- pTagged_S, pTaggedNext_S,-- pFlush, 
+	           --storePtr_S, 
+	           adrPtr,-- adrPtr_S,
+	            pSelect,-- pRenamed, pRenamedNext,
+	       --pStartEffective, pStartEffectiveNext,
            pStartLong, pStartLongNext, pDrainLong, pDrainLongNext, pDrainLongPrev, pTaggedLong, pTaggedLongNext, pFlushLong, pRenamedLong, pRenamedLongNext,
 	       pStartLongEffective, pStartLongEffectiveNext,
 	       nFull, nFullNext, nIn, nInRe, nOut, nCommitted, nCommittedEffective, recoveryCounter: SmallNumber := (others => '0');
@@ -86,9 +94,7 @@ architecture Behavioral of StoreQueue is
     signal drainOutput, selectedOutput: InstructionState := DEFAULT_INS_STATE;
     signal drainValue, selectedValue, drainAddress, selectedAddress, selectionAddress: Mword := (others => '0');
 
-    --signal queueContent: QueueEntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_QUEUE_ENTRY);
     signal selectedEntry, drainEntry: QueueEntry := DEFAULT_QUEUE_ENTRY;
-    --signal selectionAddress: Mword := (others => '0');
 
     signal updateResult: ExecResult := DEFAULT_EXEC_RESULT;
 
@@ -140,12 +146,13 @@ begin
     begin   
         -----
         -- Ptrs for random access updating
-        adrPtr <= compareAddressInput_N.dest and PTR_MASK_SN;
-        storePtr <= storeValuePtr and PTR_MASK_SN;
+        adrPtr <= compareAddressInput_N.dest;
+        --adrPtr_S <= compareAddressInput_N.dest and PTR_MASK_SN;
+        --storePtr_S <= storeValuePtr and PTR_MASK_SN;
         ----
     
         -- Read ptr determinded by address matching - SQ only??
-        pSelect <=  addTruncZ( findNewestMatchIndex(olderSQ_T, (others => '0'), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE);
+        pSelect <=  addTruncZ( findNewestMatchIndex(olderSQ_T, (others => '0'), nFull, QUEUE_PTR_SIZE), pDrainLongPrev, QUEUE_PTR_SIZE);
     
         -- Forw. matching
         
@@ -180,20 +187,21 @@ begin
          
                 -- Front input
                 if prevSending = '1' then
-                    updateOnInput(queueContent, pTagged, dataIn, IS_LOAD_QUEUE);
+                    updateOnInput(queueContent, pTaggedLong,-- dataIn,
+                                                                inputMask, systemMask, IS_LOAD_QUEUE);
                 end if;
                 
                 -- E. adr update
                     -- ExecResult'( full: [based on queue type: isLoad or isStore], tag, [lqPointer/sqPointer], value)
                 if compareAddressInput_N.full = '1' then
                     updateAddress_N(queueContent, updateResult, IS_LOAD_QUEUE);
-                    addresses(slv2u(adrPtr)) <= compareAddressInput_N.value;
+                    addresses(p2i(adrPtr, QUEUE_SIZE)) <= compareAddressInput_N.value;
                 end if;
                 
                 -- E. val update
                 if storeValueResult.full = '1' and not IS_LOAD_QUEUE then
                     updateValue(queueContent, storeValuePtr);
-                    storeValues(slv2u(storePtr)) <= storeValueResult.value;
+                    storeValues(p2i(storeValuePtr, QUEUE_SIZE)) <= storeValueResult.value;
                 end if;
           
           end if;
@@ -207,14 +215,14 @@ begin
                     isSelected <= compareAddressInput_N.full and isNonzero(newerLQ);
                 end if;
 
-                selectedEntry <= queueContent(slv2u(pSelect));
-                selectedValue <= storeValues(slv2u(pSelect));
-                selectedAddress <= addresses(slv2u(pSelect));
+                selectedEntry <= queueContent(p2i(pSelect, QUEUE_SIZE));
+                selectedValue <= storeValues(p2i(pSelect, QUEUE_SIZE));
+                selectedAddress <= addresses(p2i(pSelect, QUEUE_SIZE));
                                 
                 -- D. outputs
-                drainEntry <= queueContent(slv2u(pDrain));
-                drainValue <= storeValues(slv2u(pDrain));
-                drainAddress <= addresses(slv2u(pDrain));
+                drainEntry <= queueContent(p2i(pDrainLong, QUEUE_SIZE));
+                drainValue <= storeValues(p2i(pDrainLong, QUEUE_SIZE));
+                drainAddress <= addresses(p2i(pDrainLong, QUEUE_SIZE));
             end if;
         end process;
         
@@ -226,20 +234,20 @@ begin
     end block;
     
 
-    pDrain <= pDrainLong and PTR_MASK_SN;
-    pDrainPrev <= pDrainLongPrev and PTR_MASK_SN;
-    pStart <= pStartLong and PTR_MASK_SN;
-    pStartEffective <= pStartLongEffective and PTR_MASK_SN;
-    pTagged <= pTaggedLong and PTR_MASK_SN;
-    pRenamed <= pRenamedLong and PTR_MASK_SN;
-    pFlush <=   pFlushLong and PTR_MASK_SN;
+--    pDrain_S <= pDrainLong and PTR_MASK_SN;
+--    pDrainPrev_S <= pDrainLongPrev and PTR_MASK_SN;
+--    pStart_S <= pStartLong and PTR_MASK_SN;
+--    pStartEffective <= pStartLongEffective and PTR_MASK_SN;
+--    pTagged_S <= pTaggedLong and PTR_MASK_SN;
+    --pRenamed <= pRenamedLong and PTR_MASK_SN;
+    --pFlush <=   pFlushLong and PTR_MASK_SN;
   
 
-    pStartEffectiveNext <= pStartLongEffectiveNext and PTR_MASK_SN;
-    pDrainNext <= pDrainLongNext and PTR_MASK_SN;
-    pStartNext <= pStartLongNext and PTR_MASK_SN;
-    pTaggedNext <= pTaggedLongNext and PTR_MASK_SN;
-    pRenamedNext <= pRenamedLongNext and PTR_MASK_SN;
+--    pStartEffectiveNext <= pStartLongEffectiveNext and PTR_MASK_SN;
+--    pDrainNext_S <= pDrainLongNext and PTR_MASK_SN;
+--    pStartNext_S <= pStartLongNext and PTR_MASK_SN;
+--    pTaggedNext_S <= pTaggedLongNext and PTR_MASK_SN;
+    --pRenamedNext <= pRenamedLongNext and PTR_MASK_SN;
 
     pStartLongEffectiveNext <= addTruncZ(pStartLongEffective, nCommittedEffective, QUEUE_PTR_SIZE+1) when committing = '1'
                         else pStartLongNext when nowCancelled = '1' and drainEqual = '1'
@@ -249,7 +257,8 @@ begin
 
     pTaggedLongNext <= pStartLongNext when lateEventSignal = '1'
             else   pFlushLong when execEventSignal = '1' 
-            else   addIntTrunc(pTaggedLong, countOnes(extractFullMask(dataIn)), QUEUE_PTR_SIZE+1) when prevSending = '1'
+            else   --addIntTrunc(pTaggedLong, countOnes(extractFullMask(dataIn)), QUEUE_PTR_SIZE+1) when prevSending = '1'
+                   addIntTrunc(pTaggedLong, countOnes(inputMask), QUEUE_PTR_SIZE+1) when prevSending = '1'
             else   pTaggedLong;
                             
     pRenamedLongNext <= pStartLong when lateEventSignal = '1'
@@ -313,28 +322,35 @@ begin
 		end if;
 	end process;
 				
-	nIn <= i2slv( countOnes(extractFullMask(dataIn)), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
+	nIn <= --i2slv( countOnes(extractFullMask(dataIn)), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
+		      i2slv( countOnes(inputMask), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
 		
 	LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
     	nFullNext <= getNumFull(pStartLongNext, pTaggedLongNext, QUEUE_PTR_SIZE);
     	
-	    nInRe <= i2slv(countOnes(getLoadMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
+	    nInRe <= --i2slv(countOnes(getLoadMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
+	             i2slv(countOnes(renameMask), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
         nOut <= nCommitted when committing = '1' else (others => '0');
     end generate;
     
     STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
     	nFullNext <= getNumFull(pDrainLong, pTaggedLongNext, QUEUE_PTR_SIZE);
 	    -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
-        nInRe <= i2slv(countOnes(getStoreMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    	
+        nInRe <= --i2slv(countOnes(getStoreMask(TMP_recodeMem(dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    	
+                 i2slv(countOnes(renameMask), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    	
         nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isDrainingPrev = '1' else (others => '0');		  
     end generate;
 
     --CAREFUL: this is only for SQ
-    nCommitted <= getNumCommitted(robData, IS_LOAD_QUEUE);
-    nCommittedEffective <= getNumCommittedEffective(robData, IS_LOAD_QUEUE);
-    
-    drainEffectiveEqual <= bool2std(pDrain = pStartEffective);
-    drainEqual <= bool2std(pDrain = pStart);
+    nCommitted <= --getNumCommitted(robData, IS_LOAD_QUEUE);
+                    --i2slv(countOnes(getCommittedMask(robData, IS_LOAD_QUEUE)), SMALL_NUMBER_SIZE);
+                    i2slv(countOnes(commitMask), SMALL_NUMBER_SIZE);
+    nCommittedEffective <= --getNumCommittedEffective(robData, IS_LOAD_QUEUE);
+                    --i2slv(countOnes(getCommittedEffectiveMask(robData, IS_LOAD_QUEUE)), SMALL_NUMBER_SIZE);
+                    i2slv(countOnes(commitEffectiveMask), SMALL_NUMBER_SIZE);
+
+    drainEffectiveEqual <= bool2std(pStartLongEffective = pDrainLong);
+    drainEqual <= bool2std(pStartLong = pDrainLong);
     drainReq <= not drainEqual;
 
 
@@ -371,7 +387,7 @@ begin
 
 	-- D. output (ctrl)
     committedDataOut_N <= committedOutputSig_N;
-	committedEmpty <= bool2std(pStart = pDrainPrev);
+	committedEmpty <= bool2std(pStartLong = pDrainLongPrev);
 	committedSending <= isDrainingPrev;
 
 end Behavioral;

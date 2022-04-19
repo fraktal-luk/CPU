@@ -56,6 +56,7 @@ constant DEFAULT_LATE_INFO: LateInfo := (others => (others => '0'));
 type LateInfoArray is array (natural range <>) of LateInfo;
 
 function getEarlyInfo(insVec: InstructionSlotArray) return EarlyInfo;
+function getEarlyInfo_N(cpa: ControlPacketArray) return EarlyInfo;
 
 function getLateInfo(insVec: InstructionSlotArray) return LateInfo;
 
@@ -74,7 +75,8 @@ function deserializeEarlyInfo(v: std_logic_vector) return EarlyInfo;
 function deserializeLateInfo(v: std_logic_vector) return LateInfo;
 
 
-function getMatchedSlot(slotPtr: SmallNumber; full: std_logic; renameIndex: InsTag; earlySelected: EarlyInfo; lateSelected: LateInfo)
+function getMatchedSlot(--slotPtr: SmallNumber;
+                        full: std_logic; renameIndex: InsTag; earlySelected: EarlyInfo; lateSelected: LateInfo)
 return InstructionSlot;
 
 end package;
@@ -99,6 +101,21 @@ begin
     return res;
 end function;
 
+function getEarlyInfo_N(cpa: ControlPacketArray) return EarlyInfo is
+    variable res: EarlyInfo;
+begin
+    for i in cpa'range loop
+        res.full(i) := cpa(i).controlInfo.full;
+        res.frontBranch(i) := cpa(i).controlInfo.frontBranch;
+        res.confirmedBranch(i) := cpa(i).controlInfo.confirmedBranch;
+
+        res.targets(i) := cpa(i).target;
+        res.links(i) := cpa(i).nip;
+    end loop;
+
+    res.ip := cpa(0).ip;
+    return res;
+end function;
 
 function getLateInfo(insVec: InstructionSlotArray) return LateInfo is
     variable res: LateInfo;
@@ -182,7 +199,8 @@ begin
     return res;
 end function;
 
-function getMatchedSlot(slotPtr: SmallNumber; full: std_logic; renameIndex: InsTag; earlySelected: EarlyInfo; lateSelected: LateInfo)
+function getMatchedSlot(--slotPtr: SmallNumber;
+                        full: std_logic; renameIndex: InsTag; earlySelected: EarlyInfo; lateSelected: LateInfo)
 return InstructionSlot is
    variable res: InstructionSlot := DEFAULT_INS_SLOT;
    constant ipBase: Mword := earlySelected.ip;

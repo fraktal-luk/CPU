@@ -27,11 +27,13 @@ entity UnitFront is
 
 		bpAccepting: in std_logic;
 		bpSending: out std_logic;
-		bpData: out InstructionSlotArray(0 to FETCH_WIDTH-1);
+		--bpData: out InstructionSlotArray(0 to FETCH_WIDTH-1);
+            bpData_N: out ControlPacketArray(0 to FETCH_WIDTH-1);
 
 		-- Interface front to renaming
 		renameAccepting: in std_logic;		
-		dataLastLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1); 
+		--dataLastLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+		  dataOut_N: out BufferEntryArray; 
 		lastSending: out std_logic;
 		-------
 		
@@ -66,7 +68,11 @@ architecture Behavioral of UnitFront is
 	signal frontCausingSig, earlyBranchIn, earlyBranchOut: InstructionState := DEFAULT_INSTRUCTION_STATE;
 	signal predictedAddress: Mword := (others => '0');
 
+    signal ibufDataOut_N: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
+
 	signal earlyBranchMultiDataInA, ibufDataOut: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+
+    signal bqDataSig, bqDataSigPre: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 	
 	signal fetchCounter, fetchCounterNext: Word := (others => '0');
 begin
@@ -95,7 +101,7 @@ begin
             earlyBranchOut <= earlyBranchIn; -- only .controlInfo, .target ?
                     
             dataBranchTransferOut <= dataToBranchTransfer; -- F2
-            
+                bqDataSig <= bqDataSigPre;
             -- Ibuf is on F2 too
 
             stageDataOutFetch0 <= stageDataInFetch0;
@@ -150,6 +156,7 @@ begin
 
 	sendingToBranchTransfer <= sendingOutFetch1 and not fetchStall;
 	dataToBranchTransfer <= prepareForBQ(stageDataOutFetch1(0).ins.ip, dataToIbuffer);
+    	bqDataSigPre <= prepareForBQ_N(stageDataOutFetch1(0).ins.ip, dataToIbuffer);
 
 	   
 	SUBUNIT_IBUFFER: entity work.InstructionBuffer(Implem)
@@ -162,10 +169,11 @@ begin
 		
 		acceptingOut => bufferAccepting,
 		sendingOut => sendingOutBuffer,
-		stageDataOut => ibufDataOut,
+		--stageDataOut => ibufDataOut,
+		  stageDataOut_N => ibufDataOut_N,
 		
-		execEventSignal => killAll,
-		execCausing => DEFAULT_INSTRUCTION_STATE		
+		execEventSignal => killAll
+		--execCausing => DEFAULT_INSTRUCTION_STATE		
 	);
 
 
@@ -178,10 +186,12 @@ begin
 
     -- Pipeline (F2) (may be delayed any number of cycles)
 	lastSending <= sendingOutBuffer;
-	dataLastLiving <= ibufDataOut;
+	--dataLastLiving <= ibufDataOut;
+    	dataOut_N <= ibufDataOut_N;
     
     -- Pipeline F2    
-    bpData <= dataBranchTransferOut;
+    --bpData <= dataBranchTransferOut;
+        bpData_N <= bqDataSig;
     bpSending <= sendingToBQ;
 
     -- Events

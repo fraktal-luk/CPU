@@ -72,15 +72,21 @@ architecture Behavioral of Core is
             sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
             : std_logic := '0';
 
-    signal frontDataLastLiving, bpData, TMP_frontDataSpMasked,
+    signal --frontDataLastLiving, bpData,
+             TMP_frontDataSpMasked,
            renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ,
             dataOutROB: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+
+    signal branchMaskRe, loadMaskRe, storeMaskRe, branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO,
+            commitMaskSQ, commitEffectiveMaskSQ, commitMaskLQ, commitEffectiveMaskLQ: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+
+    signal frontOutput: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 
     signal renamedArgsInt, renamedArgsFloat, renamedArgsMerged: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 
     signal bqPointer, bqPointerSeq, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
 
-    signal commitGroupCtr: InsTag := (others => '0');
+    signal commitGroupCtr: InsTag := (others => '0'); -- TODO: check if can be internal to RegManager (inc on commit signal)
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal intType: std_logic_vector(0 to 1) := (others => '0');
@@ -91,7 +97,7 @@ architecture Behavioral of Core is
 
     signal cycleCounter: Word := (others => '0');
 
-    signal events: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE);
+    signal events: EventState := DEFAULT_EVENT_STATE;--('0', '0', DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE);
 
     signal specialOp, preAddressOp, specialOutROB_N, memAddressOp: SpecificOp := DEFAULT_SPECIFIC_OP;
 
@@ -101,9 +107,14 @@ architecture Behavioral of Core is
                 frontEvent_N, execEvent_N, execResultDelayed, lateEvent_N, bqTargetData_N, bqTargetData_N2, dataFromSB_N,
                 execCausingDelayedSQ, execCausingDelayedLQ: ExecResult := DEFAULT_EXEC_RESULT;
 
-    signal pcData, branchResult, branchResultDelayed, bqSelected, ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
+    signal pcData, branchResult, branchResultDelayed, bqSelected, ctOutLQ, ctOutSQ, ctOutSB, dataToBranch_N: ControlPacket := DEFAULT_CONTROL_PACKET;
+    --       signal : ControlPacket := DEFAULT_CONTROL_PACKET;  
 
-    signal preExecCausing, dataFromDLQ: InstructionState := DEFAULT_INSTRUCTION_STATE;
+    signal bpData_N: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
+
+
+    --signal preExecCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
+    signal dataFromDLQ: ExecResult := DEFAULT_EXEC_RESULT;
     --signal specialAction: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
@@ -119,7 +130,8 @@ begin
     intSignal <= int0 or int1;
     intType <= (int0, int1);
 
-    events <= (lateEventSignal, execEventSignal, DEFAULT_INS_STATE, preExecCausing); -- preExecCausing USES tags
+    events <= (lateEventSignal, execEventSignal,-- DEFAULT_INS_STATE, DEFAULT_INS_STATE,-- preExecCausing, 
+                                                dataToBranch_N.tags); -- preExecCausing USES tags
 
     execEvent_N <= (execEventSignal, InsTag'(others => '0'), branchResult.tags.bqPointerSeq, branchResult.target);
     dataFromSB_N <= (ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), InsTag'(others => '0'),
@@ -158,6 +170,7 @@ begin
         commitAccepting => commitAccepting,
         sendingFromROB => robSending,    
         robDataLiving => dataOutROB,
+            robData_N => (others => DEFAULT_CONTROL_PACKET),
         robSpecial_N => specialOutROB_N,
         ---
         bqTargetData_N => bqTargetData_N,
@@ -187,10 +200,12 @@ begin
     
         bpAccepting => bqAccepting,
         bpSending => bpSending,
-        bpData => bpData,
+        --bpData => bpData,
+            bpData_N => bpData_N,
     
         renameAccepting => canSendFront,
-        dataLastLiving => frontDataLastLiving,
+        --dataLastLiving => frontDataLastLiving,
+            dataOut_N => frontOutput,
         lastSending => frontLastSending,
         
         frontEventSignal => frontEventSignal,
@@ -209,7 +224,8 @@ begin
         clk => clk,
         renameAccepting => renameAccepting,
         frontLastSendingIn => frontLastSending,
-        frontDataLastLiving => frontDataLastLiving,
+        --frontDataLastLiving => frontDataLastLiving,
+            frontData => frontOutput,
         
         TMP_spMaskedDataOut => TMP_frontDataSpMasked,
         
@@ -392,7 +408,6 @@ begin
         
         SUBPIPE_ALU: block
            signal dataToAlu: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
-           signal dataToBranch_N: ControlPacket := DEFAULT_CONTROL_PACKET;  
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
         begin
             fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);        
@@ -502,7 +517,7 @@ begin
 
             execEventSignal <= branchResult.controlInfo.full and branchResult.controlInfo.newEvent;
 
-            preExecCausing.tags <= dataToBranch_N.tags;
+--            preExecCausing.tags <= dataToBranch_N.tags;
         
             bqUpdate.full <= branchResult.controlInfo.full;
             bqUpdate.tag <= branchResult.tags.renameIndex;
@@ -599,7 +614,7 @@ begin
            preAddressOp <= slotRegReadM0.state.operation;
 
            sendingFromDLQ <= '0';          -- TEMP!
-           dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
+--           dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
 
             subpipeM0_RR.full <= (slotRegReadM0.state.full and not outSigsM0.killSel2) and not lateEventSignal;
             subpipeM0_RR.tag <= slotRegReadM0.state.renameIndex;
@@ -619,7 +634,7 @@ begin
             subpipeM0_RR_u.full <= sendingToAgu;
             subpipeM0_RR_u.tag <= subpipeM0_RR.tag;
             subpipeM0_RR_u.dest <= subpipeM0_RR.dest;
-            subpipeM0_RR_u.value <= calcEffectiveAddress(slotRegReadM0.state, sendingFromDLQ, dataFromDLQ).result;
+            subpipeM0_RR_u.value <= calcEffectiveAddress(slotRegReadM0.state, sendingFromDLQ, dataFromDLQ).result; -- TODO: deduplicate call to calcEff...
 
             process (clk)
             begin
@@ -1111,6 +1126,20 @@ begin
      
     end block; -- TEMP_EXEC
 
+    branchMaskRe <= getBranchMask(TMP_frontDataSpMasked);
+    loadMaskRe <= getLoadMask(TMP_recodeMem(TMP_frontDataSpMasked));
+    storeMaskRe <= getStoreMask(TMP_recodeMem(TMP_frontDataSpMasked));
+
+    branchMaskOO <= extractFullMask(renamedDataToBQ);
+    loadMaskOO <= extractFullMask(renamedDataToLQ);
+    storeMaskOO <= extractFullMask(renamedDataToSQ);
+    systemStoreMaskOO <= getStoreSysMask(renamedDataToSQ);
+    systemLoadMaskOO <= getLoadSysMask(renamedDataToSQ);
+
+    commitMaskSQ <= work.LogicQueues.getCommittedMask(dataOutROB, false);
+    commitMaskLQ <= work.LogicQueues.getCommittedMask(dataOutROB, true);
+    commitEffectiveMaskSQ <= work.LogicQueues.getCommittedEffectiveMask(dataOutROB, false);
+    commitEffectiveMaskLQ <= work.LogicQueues.getCommittedEffectiveMask(dataOutROB, true);
 
     BRANCH_QUEUE: entity work.BranchQueue
 	generic map(
@@ -1135,9 +1164,11 @@ begin
 	       
 	    bqPtrOut => bqPointer,
 	    
-	    dataInRe => TMP_frontDataSpMasked,
+	    --dataInRe => TMP_frontDataSpMasked,
+	       branchMaskRe => branchMaskRe,
 		dataIn => renamedDataToBQ,
-		dataInBr => bpData,
+		--dataInBr => bpData,
+            dataInBr_N => bpData_N,
 
 		storeValueInput_N => bqUpdate,
         compareAddressQuickInput_N => bqCompareEarly,
@@ -1172,9 +1203,12 @@ begin
 	    prevSendingRe => frontLastSending,
 		prevSending => renamedSending,
 		
-		dataInRe => TMP_frontDataSpMasked,
-		dataIn => renamedDataToSQ,
-            
+		--dataInRe => TMP_frontDataSpMasked,
+		  renameMask => storeMaskRe,
+		--dataIn => renamedDataToSQ,
+           inputMask => storeMaskOO,
+           systemMask => systemStoreMaskOO,
+           
         renamedPtr => sqPointer,
             
         storeValuePtr => sqValueResult.dest,
@@ -1189,7 +1223,9 @@ begin
         selectedDataOutput_N => ctOutSQ,
 
 		committing => robSending,
-		robData => dataOutROB,
+		--robData => dataOutROB,
+            commitMask => commitMaskSQ,
+            commitEffectiveMask => commitEffectiveMaskSQ,
 
 		lateEventSignal => lateEventSignal,
 		execEventSignal => execEventSignalDelayed,
@@ -1218,9 +1254,12 @@ begin
 	    prevSendingRe => frontLastSending,				
 		prevSending => renamedSending,
 		
-		dataInRe => TMP_frontDataSpMasked,
-		dataIn => renamedDataToLQ,
-
+		--dataInRe => TMP_frontDataSpMasked,
+		  renameMask => loadMaskRe,
+		--dataIn => renamedDataToLQ,
+            inputMask => loadMaskOO,
+            systemMask => systemLoadMaskOO,
+            
         renamedPtr => lqPointer,
 
 		storeValuePtr => (others => '0'),
@@ -1235,7 +1274,9 @@ begin
         selectedDataOutput_N => ctOutLQ,
 
 		committing => robSending,
-		robData => dataOutROB,
+		--robData => dataOutROB,
+            commitMask => commitMaskLQ,
+            commitEffectiveMask => commitEffectiveMaskLQ,
 
 		lateEventSignal => lateEventSignal,
 		execEventSignal => execEventSignalDelayed,

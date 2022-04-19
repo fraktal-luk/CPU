@@ -226,6 +226,8 @@ end function;
         variable res: InstructionSlot := DEFAULT_INS_SLOT;
     begin
         res.full := dyn.full;
+        
+        res.ins.controlInfo.full := dyn.full;
         res.ins.controlInfo.killed := dyn.killed;
         res.ins.controlInfo.causing := dyn.causing;
 
@@ -385,25 +387,25 @@ end function;
 procedure writeStaticInput(signal content: inout StaticOpInfoArray2D; input: StaticOpInfoArray; ptr: SmallNumber) is
 begin
     for i in input'range loop
-        content(slv2u(ptr), i) <= input(i);
+        content(p2i(ptr, content'length), i) <= input(i);
     end loop;
 end procedure;
 
 procedure writeDynamicInput(signal content: inout DynamicOpInfoArray2D; input: DynamicOpInfoArray; ptr: SmallNumber) is
 begin
     for i in input'range loop
-        content(slv2u(ptr), i) <= input(i);
+        content(p2i(ptr, content'length), i) <= input(i);
     end loop;
 end procedure;
 
 procedure writeStaticGroupInput(signal content: inout StaticGroupInfoArray; input: StaticGroupInfo; ptr: SmallNumber) is
 begin
-    content(slv2u(ptr)) <= input;
+    content(p2i(ptr, content'length)) <= input;
 end procedure;
 
 procedure writeDynamicGroupInput(signal content: inout DynamicGroupInfoArray; input: DynamicGroupInfo; ptr: SmallNumber) is
 begin
-    content(slv2u(ptr)) <= input;
+    content(p2i(ptr, content'length)) <= input;
 end procedure;
 
 
@@ -411,7 +413,7 @@ function readStaticOutput(content: StaticOpInfoArray2D; ptr: SmallNumber) return
     variable res: StaticOpInfoArray;
 begin
     for i in res'range loop
-        res(i):= content(slv2u(ptr), i);
+        res(i):= content(p2i(ptr, content'length), i);
     end loop;
     return res;
 end function;
@@ -420,19 +422,19 @@ function readDynamicOutput(content: DynamicOpInfoArray2D; ptr: SmallNumber) retu
     variable res: DynamicOpInfoArray;
 begin
     for i in res'range loop
-        res(i):= content(slv2u(ptr), i);
+        res(i):= content(p2i(ptr, content'length), i);
     end loop;
     return res;
 end function;
 
 function readStaticGroupOutput(content: StaticGroupInfoArray; ptr: SmallNumber) return StaticGroupInfo is
 begin
-    return content(slv2u(ptr));
+    return content(p2i(ptr, content'length));
 end function;
 
 function readDynamicGroupOutput(content: DynamicGroupInfoArray; ptr: SmallNumber) return DynamicGroupInfo is
 begin
-    return content(slv2u(ptr));
+    return content(p2i(ptr, content'length));
 end function;
 
 

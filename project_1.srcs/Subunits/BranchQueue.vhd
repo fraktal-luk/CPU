@@ -36,9 +36,11 @@ entity BranchQueue is
 		
 		prevSendingRe: in std_logic;
 
-		dataInRe: in InstructionSlotArray(0 to PIPE_WIDTH-1);		
+		--dataInRe: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+		  branchMaskRe: in std_logic_vector(0 to PIPE_WIDTH-1);		
 		dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-		dataInBr: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+		--dataInBr: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+    		dataInBr_N: in ControlPacketArray(0 to PIPE_WIDTH-1);
 
         renamedPtr: out SmallNumber;
 
@@ -48,8 +50,7 @@ entity BranchQueue is
         compareAddressQuickInput_N: in ExecResult;
         compareQuickPtr: in SmallNumber;
 
-		--selectedDataOutput: out InstructionSlot; -- result, target, control info, tags
-    		selectedDataOutput_N: out ControlPacket; -- result, target, control info, tags
+        selectedDataOutput_N: out ControlPacket; -- result, target, control info, tags
 
 		committing: in std_logic;
 		robData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
@@ -75,9 +76,13 @@ architecture Behavioral of BranchQueue is
 
 	signal selectedDataSlot, selectedDataSlotPre: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
 
-	signal pStart, pStartNext, pEnd, pEndNext, pStartLong, pStartLongNext, pEndLong, pEndLongNext, pTagged,
-	       pRenamed, pRenamedNext, pTaggedNext, pTaggedLong, pTaggedLongNext, pRenamedLong, pRenamedLongNext,
-	       pSelectPrev, pSelect, pCausing, pSelectLong, pSelectLongPrev, pCausingLong, pCausingLongPrev,
+	signal --pStart_S, pStartNext_S, pEnd_S, pEndNext_S, 
+	 pStartLong, pStartLongNext, pEndLong, pEndLongNext,
+	-- pTagged_S,
+	    --   pRenamed_S, pRenamedNext_S, pTaggedNext_S, 
+	       pTaggedLong, pTaggedLongNext, pRenamedLong, pRenamedLongNext,
+	       --pSelectPrev_S, pSelect_S, pCausing_S, 
+	       pSelectLong, pSelectLongPrev, pCausingLong, pCausingLongPrev,
             pRenamedSeqLong, pRenamedSeqLongNext, pStartSeqLong, pStartSeqLongNext, pFlushSeqLong: SmallNumber := (others => '0');
 
     signal isFull, isAlmostFull, accepting, committingBr, earlyInputSending, lateInputSending: std_logic := '0';	   
@@ -97,7 +102,8 @@ architecture Behavioral of BranchQueue is
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0'; 
 begin
        
-       earlyInputSending <= prevSendingBr and dataInBr(0).ins.controlInfo.firstBr;
+       earlyInputSending <= prevSendingBr and --dataInBr(0).ins.controlInfo.firstBr;
+                                                dataInBr_N(0).controlInfo.firstBr;
        lateInputSending <= prevSending and dataIn(0).ins.controlInfo.firstBr;
 
        RW: block
@@ -110,7 +116,8 @@ begin
            signal lateInput, lateSelected: LateInfo := DEFAULT_LATE_INFO;      
        begin
 
-           earlyInput <= getEarlyInfo(dataInBr);
+           earlyInput <= --getEarlyInfo(dataInBr);
+                            getEarlyInfo_N(dataInBr_N);
            lateInput <= getLateInfo(dataIn);
            
            earlySerialInput <= serializeEarlyInfo(earlyInput);
@@ -122,17 +129,17 @@ begin
                if rising_edge(clk) then               
                    -- Write early data
                    if earlyInputSending = '1' then                   
-                       earlySerialMem(slv2u(pEnd)) <= earlySerialInput;
+                       earlySerialMem(p2i(pEndLong, QUEUE_SIZE)) <= earlySerialInput;
                    end if;
     
                    -- Write late data
                    if lateInputSending = '1' then
-                       lateSerialMem(slv2u(pTagged)) <= lateSerialInput;                 
+                       lateSerialMem(p2i(pTaggedLong, QUEUE_SIZE)) <= lateSerialInput;                 
                    end if;
     
                    -- Write target array
                    if storeValueInput_N.full = '1' then
-                       targetArray(slv2u(pCausing)) <= storeValueInput_N.value;
+                       targetArray(p2i(pCausingLong, QUEUE_SIZE)) <= storeValueInput_N.value;
                    end if;   
                 end if;
                 
@@ -140,7 +147,7 @@ begin
         
                    -- Read C.: target array
                    if true then
-                      targetOutput <= targetArray(slv2u(pStartNext));                  
+                      targetOutput <= targetArray(p2i(pStartLongNext, QUEUE_SIZE));                  
                    end if;
                    
                    -- Read Exec: all arrays
@@ -148,28 +155,29 @@ begin
                end if;
            end process;
     
-           earlySerialSelected <= earlySerialMem(slv2u(pSelect));
-           lateSerialSelected <= lateSerialMem(slv2u(pSelect));
+           earlySerialSelected <= earlySerialMem(p2i(pSelectLong, QUEUE_SIZE));
+           lateSerialSelected <= lateSerialMem(p2i(pSelectLong, QUEUE_SIZE));
     
            earlySelected <= deserializeEarlyInfo(earlySerialSelected);
            lateSelected <= deserializeLateInfo(lateSerialSelected);
     
-           selectedDataSlotPre <= getMatchedSlot(pSelect, compareAddressQuickInput_N.full, compareAddressQuickInput_N.tag, earlySelected, lateSelected);
+           selectedDataSlotPre <= getMatchedSlot(--pSelect_S,
+                                                 compareAddressQuickInput_N.full, compareAddressQuickInput_N.tag, earlySelected, lateSelected);
         end block;
 
-        pSelect <= compareQuickPtr and PTR_MASK_SN;
+--        pSelect_S <= compareQuickPtr and PTR_MASK_SN;
         pSelectLong <= compareQuickPtr;
        
 
-        pStartNext <= pStartLongNext and PTR_MASK_SN;
-        pTaggedNext <= pTaggedLongNext and PTR_MASK_SN;
-        pRenamedNext <= pRenamedLongNext and PTR_MASK_SN;
-        pEndNext <= pEndLongNext and PTR_MASK_SN;
+--        pStartNext_S <= pStartLongNext and PTR_MASK_SN;
+--        pTaggedNext_S <= pTaggedLongNext and PTR_MASK_SN;
+--        pRenamedNext_S <= pRenamedLongNext and PTR_MASK_SN;
+  --      pEndNext_S <= pEndLongNext and PTR_MASK_SN;
 
-        pStart <= pStartLong and PTR_MASK_SN;
-        pTagged <= pTaggedLong and PTR_MASK_SN;
-        pRenamed <= pRenamedLong and PTR_MASK_SN;
-        pEnd <= pEndLong and PTR_MASK_SN;
+ --       pStart_S <= pStartLong and PTR_MASK_SN;
+--        pTagged_S <= pTaggedLong and PTR_MASK_SN;
+--        pRenamed_S <= pRenamedLong and PTR_MASK_SN;
+--        pEnd_S <= pEndLong and PTR_MASK_SN;
 
         pStartLongNext <= addIntTrunc(pStartLong, 1, QUEUE_PTR_SIZE+1) when committingBr = '1' else pStartLong;
     
@@ -202,10 +210,10 @@ begin
 	   SYNCH_POINTERS: process (clk)
 	   begin
 	       if rising_edge(clk) then
-               pSelectPrev <= pSelect;
+--               pSelectPrev_S <= pSelect_S;
                pSelectLongPrev <= pSelectLong;
 
-	           pCausing <= pSelectPrev;
+--	           pCausing_S <= pSelectPrev_S;
 	           pCausingLong <= pSelectLongPrev;
 	           
 	           pCausingLongPrev <= pCausingLong;
@@ -233,15 +241,18 @@ begin
        end process;
 
 
-        nCommitted <= getNumCommittedBr(robData);
-        nCommittedEffective <= getNumCommittedEffectiveBr(robData);
+       nCommitted <= getNumCommittedBr(robData);
+       nCommittedEffective <= getNumCommittedEffectiveBr(robData);
 
-	    nInRe <= i2slv(countOnes(getBranchMask((dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
-        nOut <= nCommitted when committing = '1' else (others => '0');
+       nInRe <= --i2slv(countOnes(getBranchMask((dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
+                 i2slv(countOnes(branchMaskRe), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
+       nOut <= nCommitted when committing = '1' else (others => '0');
 
        -- Accepting sigs
-	   accepting <= bool2std(pStart /= addIntTrunc(pEnd, 2, QUEUE_PTR_SIZE)) and bool2std(pStart /= addIntTrunc(pEnd, 1, QUEUE_PTR_SIZE)); -- Need 2 reserve slots because one group could be on the way
-    
+       --accepting <= bool2std(pStart_S /= addIntTrunc(pEnd_S, 2, QUEUE_PTR_SIZE)) and bool2std(pStart_S /= addIntTrunc(pEnd_S, 1, QUEUE_PTR_SIZE)); -- Need 2 reserve slots because one group could be on the way
+       --accepting <= bool2std(addIntTrunc(pStart_S, 0, QUEUE_PTR_SIZE) /= addIntTrunc(pEnd_S, 2, QUEUE_PTR_SIZE)) and bool2std(addIntTrunc(pStart_S, 0, QUEUE_PTR_SIZE) /= addIntTrunc(pEnd_S, 1, QUEUE_PTR_SIZE)); -- Need 2 reserve slots because one group could be on the way
+       accepting <= bool2std(addIntTrunc(pStartLong, 0, QUEUE_PTR_SIZE) /= addIntTrunc(pEndLong, 2, QUEUE_PTR_SIZE)) and bool2std(addIntTrunc(pStartLong, 0, QUEUE_PTR_SIZE) /= addIntTrunc(pEndLong, 1, QUEUE_PTR_SIZE)); -- Need 2 reserve slots because one group could be on the way
+
        -- C. out
        committingBr <= committing and robData(0).ins.controlInfo.firstBr and not taggedEmpty;
        committedDataOut_N.full <= committingBr;
@@ -253,12 +264,11 @@ begin
     acceptingBr <= accepting;       
 
     -- E. out
-	--selectedDataOutput <= selectedDataSlot;
-	    selectedDataOutput_N.controlInfo <= selectedDataSlot.ins.controlInfo;
-	    selectedDataOutput_N.tags <= selectedDataSlot.ins.tags;
-	    selectedDataOutput_N.ip <= selectedDataSlot.ins.ip;
-	    selectedDataOutput_N.target <= selectedDataSlot.ins.target;
-	    selectedDataOutput_N.nip <= selectedDataSlot.ins.result;
+    selectedDataOutput_N.controlInfo <= selectedDataSlot.ins.controlInfo;
+    selectedDataOutput_N.tags <= selectedDataSlot.ins.tags;
+    selectedDataOutput_N.ip <= selectedDataSlot.ins.ip;
+    selectedDataOutput_N.target <= selectedDataSlot.ins.target;
+    selectedDataOutput_N.nip <= selectedDataSlot.ins.result;
 
     -- C. out
 	sendingSQOut <= committingBr;

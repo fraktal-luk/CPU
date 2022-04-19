@@ -240,8 +240,8 @@ package body LogicIssue is
             res(i).full := content(i).dynamic.full;
             res(i).issued := content(i).dynamic.issued;
             
-            res(i).trial := compareTagBefore(events.preExecCausing.tags.renameIndex, content(i).dynamic.renameIndex);
-            res(i).trial_T := compareIndBefore(events.preExecCausing.tags.bqPointerSeq, content(i).static.bqPointerSeq, 6); -- TODO: temp value of PTR_SIZE!
+            res(i).trial := compareTagBefore(events.preExecTags.renameIndex, content(i).dynamic.renameIndex);
+            res(i).trial_T := compareIndBefore(events.preExecTags.bqPointerSeq, content(i).static.bqPointerSeq, 6); -- TODO: temp value of PTR_SIZE!
             if false then -- Use bqPointerSeq to flush IQ
                res(i).trial := res(i).trial_T;
             end if;

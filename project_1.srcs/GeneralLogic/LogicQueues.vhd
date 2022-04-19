@@ -36,8 +36,9 @@ constant DEFAULT_QUEUE_ENTRY: QueueEntry := (
         
 type QueueEntryArray is array (natural range <>) of QueueEntry;
 
-procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);    
-procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber; insVec: InstructionSlotArray; constant IS_LOAD_QUEUE: boolean);
+procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural; isl: InstructionSlot; sysOp: std_logic; constant IS_LOAD_QUEUE: boolean);    
+procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber;-- insVec: InstructionSlotArray; 
+                                                                                fullMask, sysMask: std_logic_vector; constant IS_LOAD_QUEUE: boolean);
 procedure updateAddress(signal content: inout QueueEntryArray; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean);
 procedure updateAddress_N(signal content: inout QueueEntryArray;-- isl: InstructionSlot; 
                                                                    er: ExecResult;
@@ -71,6 +72,10 @@ function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, nFull: SmallNum
 function getNumCommittedEffective(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber; 
 function getNumCommitted(robData: InstructionSlotArray; isLQ: boolean) return SmallNumber;
 
+function getCommittedEffectiveMask(robData: InstructionSlotArray; isLQ: boolean) return std_logic_vector;
+function getCommittedMask(robData: InstructionSlotArray; isLQ: boolean) return std_logic_vector;
+
+
 function getNumCommittedEffectiveBr(robData: InstructionSlotArray) return SmallNumber;
 function getNumCommittedBr(robData: InstructionSlotArray) return SmallNumber;
 
@@ -79,13 +84,15 @@ end package;
 
 package body LogicQueues is
 
-procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural; isl: InstructionSlot; constant IS_LOAD_QUEUE: boolean) is
+procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural; isl: InstructionSlot; sysOp: std_logic; constant IS_LOAD_QUEUE: boolean) is
 begin
     if not IS_LOAD_QUEUE then
         content(ind).isSysOp <= isStoreSysOp(isl.ins);
     else
         content(ind).isSysOp <= isLoadSysOp(isl.ins);                
     end if;
+    
+        content(ind).isSysOp <= sysOp;
     
     content(ind).first <= '0'; -- TMP
     content(ind).hasEvent <= '0';
@@ -95,28 +102,30 @@ begin
 end procedure;
 
 
-procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber; insVec: InstructionSlotArray; constant IS_LOAD_QUEUE: boolean) is
+procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber;-- insVec: InstructionSlotArray;
+                                                                                 fullMask, sysMask: std_logic_vector; constant IS_LOAD_QUEUE: boolean) is
     constant LEN: natural := content'length;
     constant PTR_MASK_SN: SmallNumber := i2slv(LEN-1, SMALL_NUMBER_SIZE);
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);        
-    variable queueInds, inputRevInds: IntArray(insVec'range);
-    variable inputInds: IntArray(insVec'range) := (others => insVec'length);
+    variable queueInds, inputRevInds: IntArray(fullMask'range);
+    variable inputInds: IntArray(fullMask'range) := (others => fullMask'length);
     variable tmpPtr: SmallNumber := ptr and PTR_MASK_SN;
-    constant fullMask: std_logic_vector(insVec'range) := extractFullMask(insVec);
+    --constant fullMask: std_logic_vector(insVec'range) := extractFullMask(insVec);
 begin
-    for i in insVec'range loop                
+    for i in fullMask'range loop                
         queueInds(i) := slv2u(tmpPtr);
         tmpPtr := addIntTrunc(tmpPtr, 1, QUEUE_PTR_SIZE);
         inputRevInds(i) := countOnes(fullMask(0 to i-1)); -- which slot input[i] takes after compression
         inputInds(inputRevInds(i)) := i;                  -- 
     end loop;
     
-    for i in insVec'range loop
+    for i in fullMask'range loop
         if i < countOnes(fullMask) then
-            updateElemOnInput(content, queueInds(i), insVec(inputInds(i)), IS_LOAD_QUEUE);
+            updateElemOnInput(content, queueInds(i), DEFAULT_INS_SLOT,--insVec(inputInds(i)),
+                                                     sysMask(inputInds(i)), IS_LOAD_QUEUE);
         end if;
     end loop;
-    
+
     content(queueInds(0)).first <= '1';
 end procedure;
 
@@ -425,6 +434,57 @@ end function;
         end if;
     end loop;
     return i2slv(k, SMALL_NUMBER_SIZE);
+ end function;
+
+-- scan: full and syncEvent; full and [usingQ]
+ function getCommittedEffectiveMask(robData: InstructionSlotArray; isLQ: boolean) return std_logic_vector is
+    variable res: std_logic_vector(robData'range) := (others => '0');
+    variable k: integer := 0;
+    variable found: boolean := false;
+ begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        if robData(i).full = '1' and hasSyncEvent(robData(i).ins) = '1' then
+            exit;
+        end if;
+        
+        if isLQ then
+            if robData(i).full = '1' and robData(i).ins.classInfo.useLQ = '1' then
+                res(i) := '1';
+            end if;            
+        else
+            if robData(i).full = '1' and robData(i).ins.classInfo.secCluster = '1' then
+                res(i) := '1';
+            end if;
+        end if;
+     
+    end loop;
+    return res;
+ end function;
+ 
+ -- scan: newEvent and syncEvent; [usingQ] 
+ function getCommittedMask(robData: InstructionSlotArray; isLQ: boolean) return std_logic_vector is
+    variable res: std_logic_vector(robData'range) := (others => '0');
+    variable k: integer := 0;
+    variable found: boolean := false;
+ begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        -- A redirected branch cuts a group in SQ, so it must stop there
+        if robData(i).ins.controlInfo.newEvent = '1' and hasSyncEvent(robData(i).ins) = '0' then
+            exit;
+        end if;
+    
+        -- Not only full, because exceptions clear following 'full' bits
+        if isLQ then
+            if robData(i).ins.classInfo.useLQ = '1' then
+                res(i) := '1';
+            end if;            
+        else
+            if robData(i).ins.classInfo.secCluster = '1' then
+                res(i) := '1';
+            end if;
+        end if;
+    end loop;
+    return res;
  end function;
 
     -- scan: full and syncEvent; full and branch

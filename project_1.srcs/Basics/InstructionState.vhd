@@ -294,6 +294,42 @@ constant DEFAULT_INS_SLOT: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 type InstructionSlotArray is array(integer range <>) of InstructionSlot;
 
 
+
+type BufferEntry is record
+    full: std_logic;
+    
+    firstBr: std_logic; -- TEMP
+    
+    -- NOTE: for compresion maybe can be just 2 bits:
+    --       (br NT, br T, br T confirmed, special) is 4 possibilities     
+    branchIns: std_logic;
+    frontBranch: std_logic;
+    confirmedBranch: std_logic;
+    specialAction: std_logic;
+    
+    --immSel: std_logic;
+    fpRename: std_logic;           
+    mainCluster: std_logic;
+    secCluster: std_logic;
+    useLQ:      std_logic;
+
+    specificOperation: SpecificOp;
+
+    constantArgs: InstructionConstantArgs;
+    argSpec: InstructionArgSpec;
+end record;
+
+constant DEFAULT_BUFFER_ENTRY: BufferEntry := (
+    specificOperation => sop(None, opNone),
+    constantArgs => DEFAULT_CONSTANT_ARGS,
+    argSpec => DEFAULT_ARG_SPEC,
+    others => '0'
+);
+
+type BufferEntryArray is array(0 to PIPE_WIDTH-1) of BufferEntry;
+type BufferEntryArray2D is array(0 to IBUFFER_SIZE-1, 0 to PIPE_WIDTH-1) of BufferEntry;
+
+
 type SchedulerState is record
         full: std_logic;
 

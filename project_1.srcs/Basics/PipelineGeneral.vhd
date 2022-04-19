@@ -14,6 +14,7 @@ use work.InstructionState.all;
 
 package PipelineGeneral is
 
+function p2i(p: SmallNumber; n: natural) return natural;
 
 type PhysicalSubpipe is (ALU, Mem, FP, StoreDataInt, StoreDataFloat);
 
@@ -35,11 +36,13 @@ function makeExecResult(isl: SchedulerState) return ExecResult;
 type EventState is record
     lateEvent: std_logic;
     execEvent: std_logic;
-    execCausing: InstructionState;
-    preExecCausing: InstructionState;
+    --execCausing: InstructionState;
+    --preExecCausing: InstructionState;
+    preExecTags: InstructionTags;
 end record;
 
-constant DEFAULT_EVENT_STATE: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE);
+constant DEFAULT_EVENT_STATE: EventState := ('0', '0',-- DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE,
+                                                DEFAULT_INSTRUCTION_TAGS);
 
 type IssueQueueSignals is record
     sending: std_logic;
@@ -200,6 +203,7 @@ function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSl
 function getAddressIncrement(ins: InstructionState) return Mword;
 
 function hasSyncEvent(ins: InstructionState) return std_logic;
+function hasSyncEvent(ct: InstructionControlInfo) return std_logic;
 
 function isBranchIns(ins: InstructionState) return std_logic;
 function isLoadOp(ins: InstructionState) return std_logic;
@@ -221,6 +225,8 @@ function isStoreSysOp(op: SpecificOp) return std_logic;
 function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getStoreSysMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getLoadSysMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getFloatStoreMask(insVec, insVecF: InstructionSlotArray) return std_logic_vector;
 function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector;
@@ -306,6 +312,13 @@ end package;
 
 package body PipelineGeneral is
 
+    function p2i(p: SmallNumber; n: natural) return natural is
+        --constant pIn: SmallNumber := p;
+        constant mask: SmallNumber := i2slv(n-1, SMALL_NUMBER_SIZE);
+        constant pT: SmallNumber := p and mask;
+    begin
+        return slv2u(pT);
+    end function;
 
 function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInfoArray is
     variable res: RenameInfoArray(intArgs'range) := intArgs;
@@ -820,6 +833,35 @@ begin
 	return res;
 end function;
 
+function getStoreSysMask(insVec: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+	for i in 0 to PIPE_WIDTH-1 loop
+		if 	  insVec(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
+		      and (insVec(i).ins.specificOperation.memory = opStoreSys)		
+		then
+			res(i) := '1';
+		end if;
+	end loop;
+	
+	return res;
+end function;
+
+function getLoadSysMask(insVec: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+	for i in 0 to PIPE_WIDTH-1 loop
+		if 	  insVec(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
+		      and (insVec(i).ins.specificOperation.memory = opLoadSys)		
+		then
+			res(i) := '1';
+		end if;
+	end loop;
+	
+	return res;
+end function;
+
+
 function getFloatStoreMask(insVec, insVecF: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
@@ -1283,6 +1325,10 @@ begin
     return  ins.controlInfo.hasException or ins.controlInfo.specialAction or ins.controlInfo.dbtrap; 
 end function;
 
+function hasSyncEvent(ct: InstructionControlInfo) return std_logic is
+begin
+    return  ct.hasException or ct.specialAction or ct.dbtrap; 
+end function;
 
 function clearDbCausing(ins: InstructionState) return InstructionState is
     variable res: InstructionState := ins;

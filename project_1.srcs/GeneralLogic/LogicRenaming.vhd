@@ -39,6 +39,23 @@ function getVirtualIntDestSels(insVec: InstructionSlotArray) return std_logic_ve
 function getVirtualFloatDestSels(insVec: InstructionSlotArray) return std_logic_vector;
 
 
+function getVirtualArgs(ria: RenameInfoArray) return RegNameArray;    
+function getVirtualDests(ria: RenameInfoArray) return RegNameArray;
+function getPhysicalArgs(ria: RenameInfoArray) return PhysNameArray;
+function getPhysicalDests(ria: RenameInfoArray) return PhysNameArray;
+
+--function getPhysicalArgs(sch: SchedulerEntrySlot) return PhysNameArray;
+--function getPhysicalArgs(sch: SchedulerState) return PhysNameArray;
+
+function whichTakeReg(ria: RenameInfoArray; fp: boolean) return std_logic_vector;
+function findOverriddenDests(ria: RenameInfoArray; fp: boolean) return std_logic_vector;
+
+function getPhysicalIntDestSels(ria: RenameInfoArray) return std_logic_vector;
+function getPhysicalFloatDestSels(ria: RenameInfoArray) return std_logic_vector;
+function getVirtualIntDestSels(ria: RenameInfoArray) return std_logic_vector;
+function getVirtualFloatDestSels(ria: RenameInfoArray) return std_logic_vector;
+
+
 function initMap(constant IS_FP: boolean) return PhysNameArray;    
 
 function getSelectedA(adr: RegNameArray; mask: std_logic_vector; constant IS_FP: boolean) return RegMaskArray;
@@ -192,12 +209,31 @@ begin
     return res;
 end function;
 
+function getVirtualArgs(ria: RenameInfoArray) return RegNameArray is
+    variable res: RegNameArray(0 to 3*ria'length-1) := (others => (others => '0'));
+begin
+    for i in ria'range loop
+        res(3*i+0) := ria(i).virtualSources(0)(4 downto 0);
+        res(3*i+1) := ria(i).virtualSources(1)(4 downto 0);
+        res(3*i+2) := ria(i).virtualSources(2)(4 downto 0);
+    end loop;
+    return res;
+end function;
 
 function getVirtualDests(insVec: InstructionSlotArray) return RegNameArray is
     variable res: RegNameArray(0 to insVec'length-1) := (others=>(others=>'0'));
 begin
     for i in insVec'range loop
         res(i) := insVec(i).ins.virtualArgSpec.dest(4 downto 0);
+    end loop;
+    return res;
+end function;
+
+function getVirtualDests(ria: RenameInfoArray) return RegNameArray is
+    variable res: RegNameArray(0 to ria'length-1) := (others=>(others=>'0'));
+begin
+    for i in ria'range loop
+        res(i) := ria(i).virtualDest(4 downto 0);
     end loop;
     return res;
 end function;
@@ -209,6 +245,17 @@ begin
         res(3*i+0) := insVec(i).ins.physicalArgSpec.args(0);
         res(3*i+1) := insVec(i).ins.physicalArgSpec.args(1);
         res(3*i+2) := insVec(i).ins.physicalArgSpec.args(2);
+    end loop;
+    return res;
+end function;
+
+function getPhysicalArgs(ria: RenameInfoArray) return PhysNameArray is
+    variable res: PhysNameArray(0 to 3*ria'length-1) := (others=>(others=>'0'));
+begin
+    for i in ria'range loop
+        res(3*i+0) := ria(i).physicalSources(0);
+        res(3*i+1) := ria(i).physicalSources(1);
+        res(3*i+2) := ria(i).physicalSources(2);
     end loop;
     return res;
 end function;
@@ -240,6 +287,14 @@ begin
     return res;
 end function;
 
+function getPhysicalDests(ria: RenameInfoArray) return PhysNameArray is
+    variable res: PhysNameArray(0 to ria'length-1) := (others=>(others=>'0'));
+begin
+    for i in ria'range loop
+        res(i) := ria(i).physicalDest;
+    end loop;
+    return res;
+end function;
 
 function getPhysicalIntDestSels(insVec: InstructionSlotArray) return std_logic_vector is
     variable res: std_logic_vector(0 to insVec'length-1) := (others => '0');
@@ -255,6 +310,24 @@ function getPhysicalFloatDestSels(insVec: InstructionSlotArray) return std_logic
 begin
     for i in insVec'range loop
         res(i) := insVec(i).ins.physicalArgSpec.floatDestSel;
+    end loop;
+    return res;
+end function;
+
+function getPhysicalIntDestSels(ria: RenameInfoArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to ria'length-1) := (others => '0');
+begin
+    for i in ria'range loop
+        res(i) := ria(i).destSel;
+    end loop;
+    return res;
+end function;
+
+function getPhysicalFloatDestSels(ria: RenameInfoArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to ria'length-1) := (others => '0');
+begin
+    for i in ria'range loop
+        res(i) := ria(i).destSelFP;
     end loop;
     return res;
 end function;
@@ -278,12 +351,38 @@ begin
     return res;
 end function;
 
+function getVirtualIntDestSels(ria: RenameInfoArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to ria'length-1) := (others => '0');
+begin
+    for i in ria'range loop
+        res(i) := ria(i).destSel;
+    end loop;
+    return res;
+end function;
+
+function getVirtualFloatDestSels(ria: RenameInfoArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to ria'length-1) := (others => '0');
+begin
+    for i in ria'range loop
+        res(i) := ria(i).destSelFP;
+    end loop;
+    return res;
+end function;
 
 function whichTakeReg(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector is
     variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
         res(i) := ((insVec(i).ins.virtualArgSpec.intDestSel and not bool2std(fp)) or (insVec(i).ins.virtualArgSpec.floatDestSel and bool2std(fp)));
+    end loop;
+    return res;
+end function;
+
+function whichTakeReg(ria: RenameInfoArray; fp: boolean) return std_logic_vector is
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := ((ria(i).destSel and not bool2std(fp)) or (ria(i).destSelFP and bool2std(fp)));
     end loop;
     return res;
 end function;
@@ -296,6 +395,22 @@ begin
 			if 		j > i
 			    and ((insVec(j).ins.virtualArgSpec.intDestSel = '1' and not fp) or (insVec(j).ins.virtualArgSpec.floatDestSel = '1' and fp)) -- Overrides only if really uses a destination!
 				and insVec(i).ins.virtualArgSpec.dest(4 downto 0) = insVec(j).ins.virtualArgSpec.dest(4 downto 0)
+			then				
+				res(i) := '1';
+			end if;
+		end loop;
+	end loop;			
+	return res;
+end function;
+
+function findOverriddenDests(ria: RenameInfoArray; fp: boolean) return std_logic_vector is
+	variable res: std_logic_vector(ria'range) := (others => '0');
+begin
+	for i in ria'range loop
+		for j in ria'range loop
+			if 		j > i
+			    and ((ria(j).destSel = '1' and not fp) or (ria(j).destSelFP = '1' and fp)) -- Overrides only if really uses a destination!
+				and ria(i).virtualDest(4 downto 0) = ria(j).virtualDest(4 downto 0)
 			then				
 				res(i) := '1';
 			end if;
