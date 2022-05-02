@@ -64,21 +64,20 @@ architecture Behavioral of Core is
            frontEventSignal, bqAccepting, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ,
            canSendFront, canSendRename,
            execEventSignal, execEventSignalDelayed, lateEventSignal, lateEventSetPC,
-            robSending, robAccepting, renamedSending, commitAccepting,
-            lsbrAccepting, lsbrAcceptingMore,
-            issueQueuesAccepting, issueQueuesAcceptingMore, renameSendingBr, stopRename,
-            queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
-            robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
-            sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
-            : std_logic := '0';
+           robSending, robAccepting, renamedSending, commitAccepting,
+           lsbrAccepting, lsbrAcceptingMore,
+           issueQueuesAccepting, issueQueuesAcceptingMore, renameSendingBr, stopRename,
+           queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
+           robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
+           sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
+           : std_logic := '0';
 
-    signal --frontDataLastLiving, bpData,
-             TMP_frontDataSpMasked,
+    signal TMP_frontDataSpMasked,
            renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ,
-            dataOutROB: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+           dataOutROB: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal branchMaskRe, loadMaskRe, storeMaskRe, branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO,
-            commitMaskSQ, commitEffectiveMaskSQ, commitMaskLQ, commitEffectiveMaskLQ: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+           commitMaskSQ, commitEffectiveMaskSQ, commitMaskLQ, commitEffectiveMaskLQ, branchCommitMask, branchCommitEffectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
     signal frontOutput: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 
@@ -97,25 +96,21 @@ architecture Behavioral of Core is
 
     signal cycleCounter: Word := (others => '0');
 
-    signal events: EventState := DEFAULT_EVENT_STATE;--('0', '0', DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE);
+    signal events: EventState := DEFAULT_EVENT_STATE;
 
     signal specialOp, preAddressOp, specialOutROB_N, memAddressOp: SpecificOp := DEFAULT_SPECIFIC_OP;
 
-    signal branchCtrl, memoryCtrl: InstructionControlInfo := DEFAULT_CONTROL_INFO;
+    signal branchCtrl, memoryCtrl, memoryCtrlPre: InstructionControlInfo := DEFAULT_CONTROL_INFO;
 
     signal bqUpdate, bqCompareEarly, sqValueResult, memAddressInput_SQ, memAddressInput_LQ,
-                frontEvent_N, execEvent_N, execResultDelayed, lateEvent_N, bqTargetData_N, bqTargetData_N2, dataFromSB_N,
-                execCausingDelayedSQ, execCausingDelayedLQ: ExecResult := DEFAULT_EXEC_RESULT;
+           frontEvent_N, execEvent_N, execResultDelayed, lateEvent_N, bqTargetData_N, bqTargetData_N2, dataFromSB_N,
+           execCausingDelayedSQ, execCausingDelayedLQ: ExecResult := DEFAULT_EXEC_RESULT;
 
     signal pcData, branchResult, branchResultDelayed, bqSelected, ctOutLQ, ctOutSQ, ctOutSB, dataToBranch_N: ControlPacket := DEFAULT_CONTROL_PACKET;
-    --       signal : ControlPacket := DEFAULT_CONTROL_PACKET;  
 
-    signal bpData_N: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
+    signal bpData_N, robOut_N: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 
-
-    --signal preExecCausing: InstructionState := DEFAULT_INSTRUCTION_STATE;
     signal dataFromDLQ: ExecResult := DEFAULT_EXEC_RESULT;
-    --signal specialAction: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
 begin
@@ -130,12 +125,13 @@ begin
     intSignal <= int0 or int1;
     intType <= (int0, int1);
 
-    events <= (lateEventSignal, execEventSignal,-- DEFAULT_INS_STATE, DEFAULT_INS_STATE,-- preExecCausing, 
-                                                dataToBranch_N.tags); -- preExecCausing USES tags
+    events <= (lateEventSignal, execEventSignal, dataToBranch_N.tags);
 
     execEvent_N <= (execEventSignal, InsTag'(others => '0'), branchResult.tags.bqPointerSeq, branchResult.target);
     dataFromSB_N <= (ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), InsTag'(others => '0'),
                      zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
+
+    robOut_N <= convertROBData(dataOutROB);
 
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
 	generic map(DEBUG_FILE_PREFIX => DEBUG_FILE_PREFIX)
@@ -148,7 +144,6 @@ begin
 
         -- to front pipe
         pcDataOut => pcData,
-
 
         intAllowOut => intallow,
         intAckOut => intack,
@@ -169,8 +164,7 @@ begin
         -- Interface from ROB
         commitAccepting => commitAccepting,
         sendingFromROB => robSending,    
-        robDataLiving => dataOutROB,
-            robData_N => (others => DEFAULT_CONTROL_PACKET),
+        robData_N => robOut_N,
         robSpecial_N => specialOutROB_N,
         ---
         bqTargetData_N => bqTargetData_N,
@@ -200,12 +194,10 @@ begin
     
         bpAccepting => bqAccepting,
         bpSending => bpSending,
-        --bpData => bpData,
-            bpData_N => bpData_N,
+        bpData_N => bpData_N,
     
         renameAccepting => canSendFront,
-        --dataLastLiving => frontDataLastLiving,
-            dataOut_N => frontOutput,
+        dataOut_N => frontOutput,
         lastSending => frontLastSending,
         
         frontEventSignal => frontEventSignal,
@@ -224,8 +216,7 @@ begin
         clk => clk,
         renameAccepting => renameAccepting,
         frontLastSendingIn => frontLastSending,
-        --frontDataLastLiving => frontDataLastLiving,
-            frontData => frontOutput,
+        frontData => frontOutput,
         
         TMP_spMaskedDataOut => TMP_frontDataSpMasked,
         
@@ -251,8 +242,7 @@ begin
         newPhysDestsOut => newIntDests,
         newFloatDestsOut => newFloatDests,
 
-        --specialActionOut => specialAction,
-            specialOut => specialOp,
+        specialOut => specialOp,
             
         commitGroupCtr => commitGroupCtr,
 		
@@ -307,8 +297,7 @@ begin
 		branchControl => branchCtrl,
 		memoryControl => memoryCtrl,
 
-		specialOp => --specialAction.ins.specificOperation,
-		              specialOp,
+		specialOp => specialOp,
 			
 		inputData => renamedDataLivingMerged,
 		prevSending => renamedSending,
@@ -340,14 +329,8 @@ begin
                         : SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
        -- Exec and later delay stages
-       signal      slotI0_E0, slotI0_E1, slotI0_E2, slotI0_D0, slotI0_D1,
-                    slotI1_E0, slotI1_E1, slotI1_E2, slotI1_D0, slotI1_D1,
-                    slotM0_E0,
-                    slotM0_E0i, slotM0_E1i, slotM0_E2i, slotM0_D0i, slotM0_D1i, -- Here logical stages get split into Int and FP
-                    slotM0_E0f, slotM0_E1f, slotM0_E2f, slotM0_D0f, slotM0_D1f,
-
-                    slotF0_E0, slotF0_E1, slotF0_E2, slotF0_D0, slotF0_D1,
-                    slotDummy: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                     
+       signal slotM0_E0, slotM0_E1i,
+              slotDummy: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                     
 
        signal resultToIntWQ, resultToFloatWQ, resultToIntRF, resultToFloatRF: ExecResult := DEFAULT_EXEC_RESULT;
 
@@ -407,7 +390,7 @@ begin
         branchMask <= getBranchMask1((renamedDataLivingRe));
         
         SUBPIPE_ALU: block
-           signal dataToAlu: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+           signal dataToAlu: ExecResult := DEFAULT_EXEC_RESULT;
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
         begin
             fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);        
@@ -442,14 +425,14 @@ begin
                 use work.LogicIssue.all;
                 signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelI0.state, outSigsI0.sending);
+                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelI0, outSigsI0.sending);
                 -- Reg
-                slotIssueI0.state <= updateDispatchArgs_Is(argStateI);
+                slotIssueI0 <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
-                sendingToRegReadI0 <= slotIssueI0.state.full and not outSigsI0.cancelled;
-                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueI0.state, sendingToRegReadI0, fni, true, false);
+                sendingToRegReadI0 <= slotIssueI0.full and not outSigsI0.cancelled;
+                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueI0, sendingToRegReadI0, fni, true, false);
                 -- Reg
-                slotRegReadI0.state <= updateDispatchArgs_RR(argStateR, fni.values0, regValsI0, false);
+                slotRegReadI0 <= updateDispatchArgs_RR(argStateR, fni.values0, regValsI0, false);
 
                 process (clk)
                 begin
@@ -465,7 +448,7 @@ begin
                         if true then -- nextAccepting
                             argStateR <= inputDataWithArgsR;
                             
-                            unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.state.operation.arith);
+                            unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.operation.arith);
                         end if;
 
                         if events.lateEvent = '1' then
@@ -475,25 +458,25 @@ begin
                     end if;
                 end process;
 
-                subpipeI0_Issue <= makeExecResult(slotIssueI0.state);
-                subpipeI0_RegRead <= makeExecResult(slotRegReadI0.state);
+                subpipeI0_Issue <= makeExecResult(slotIssueI0);
+                subpipeI0_RegRead <= makeExecResult(slotRegReadI0);
             end block;
 
             -- NOTE: it seems that only elements of .state used in Exec are: { args: MwordArray; immediate: std_logic }
-            dataToAlu <= (slotRegReadI0.state.full and not outSigsI0.killSel2, executeAlu(slotRegReadI0.state, bqSelected.nip, dataToBranch_N.controlInfo, unfoldedAluOp));
+            dataToAlu <= executeAlu(slotRegReadI0, bqSelected.nip, dataToBranch_N.controlInfo, unfoldedAluOp); --);
           
-            subpipeI0_RegRead_u.full <= dataToAlu.full;
+            subpipeI0_RegRead_u.full <= slotRegReadI0.full and not outSigsI0.killSel2;
             subpipeI0_RegRead_u.tag <= subpipeI0_RegRead.tag;
             subpipeI0_RegRead_u.dest <= subpipeI0_RegRead.dest;
-            subpipeI0_RegRead_u.value <= dataToAlu.ins.result;
+            subpipeI0_RegRead_u.value <= dataToAlu.value;
 
             subpipeI0_RegRead_b.full <= dataToBranch_N.controlInfo.full;
             subpipeI0_RegRead_b.tag <= subpipeI0_RegRead.tag;
             --subpipeI0_RegRead_b.dest <= subpipeI0_RegRead.dest;
             subpipeI0_RegRead_b.value <= dataToBranch_N.nip;
 
-            dataToBranch_N <= basicBranch_N(slotRegReadI0.state.full and not outSigsI0.killSel2 and not lateEventSignal and slotRegReadI0.state.branchIns,
-                                            slotRegReadI0.state,
+            dataToBranch_N <= basicBranch_N(slotRegReadI0.full and not outSigsI0.killSel2 and not lateEventSignal and slotRegReadI0.branchIns,
+                                            slotRegReadI0,
                                             bqSelected.tags,
                                             bqSelected.controlInfo,
                                             bqSelected.target,
@@ -509,15 +492,13 @@ begin
                 end if;
             end process;
 
-            sendingBranchRR <= (sendingToRegReadI0 and slotIssueI0.state.branchIns);
+            sendingBranchRR <= (sendingToRegReadI0 and slotIssueI0.branchIns);
 
             bqCompareEarly.full <= sendingBranchRR;
-            bqCompareEarly.tag <= slotIssueI0.state.renameIndex;
-            bqCompareEarly.dest <= slotIssueI0.state.bqPointer;
+            bqCompareEarly.tag <= slotIssueI0.renameIndex;
+            bqCompareEarly.dest <= slotIssueI0.bqPointer;
 
             execEventSignal <= branchResult.controlInfo.full and branchResult.controlInfo.newEvent;
-
---            preExecCausing.tags <= dataToBranch_N.tags;
         
             bqUpdate.full <= branchResult.controlInfo.full;
             bqUpdate.tag <= branchResult.tags.renameIndex;
@@ -541,7 +522,7 @@ begin
         SUBPIPE_MEM: block
            signal dataToAgu, dataInMem1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1); 
-           signal memLoadValue: Mword := (others => '0');                                                            
+           signal memLoadValue, memResult: Mword := (others => '0');                                                            
         begin
            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true, removeArg2(renamedArgsMerged));         
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D, FORWARDING_MODES_NONE);
@@ -573,14 +554,14 @@ begin
                 use work.LogicIssue.all;
                 signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelM0.state, outSigsM0.sending);
+                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelM0, outSigsM0.sending);
                 -- Reg
-                slotIssueM0.state <= updateDispatchArgs_Is(argStateI);
+                slotIssueM0 <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
-                sendingToRegReadM0 <= slotIssueM0.state.full and not outSigsM0.cancelled;
-                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueM0.state, sendingToRegReadM0, fni, true, false);
+                sendingToRegReadM0 <= slotIssueM0.full and not outSigsM0.cancelled;
+                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueM0, sendingToRegReadM0, fni, true, false);
                 -- Reg
-                slotRegReadM0.state <= updateDispatchArgs_RR(argStateR, fni.values0, regValsM0, false);
+                slotRegReadM0 <= updateDispatchArgs_RR(argStateR, fni.values0, regValsM0, false);
 
                 process (clk)
                 begin
@@ -604,37 +585,36 @@ begin
                     end if;
                 end process;
 
-                subpipeM0_Issue <= makeExecResult(slotIssueM0.state);
-                subpipeM0_RegRead <= makeExecResult(slotRegReadM0.state);
+                subpipeM0_Issue <= makeExecResult(slotIssueM0);
+                subpipeM0_RegRead <= makeExecResult(slotRegReadM0);
                 
             end block;
 
-           preIndexSQ <= slotRegReadM0.state.sqPointer;
-           preIndexLQ <= slotRegReadM0.state.lqPointer;
-           preAddressOp <= slotRegReadM0.state.operation;
+           preIndexSQ <= slotRegReadM0.sqPointer;
+           preIndexLQ <= slotRegReadM0.lqPointer;
+           preAddressOp <= slotRegReadM0.operation;
 
            sendingFromDLQ <= '0';          -- TEMP!
---           dataFromDLQ <= DEFAULT_INSTRUCTION_STATE; -- TEMP!
 
-            subpipeM0_RR.full <= (slotRegReadM0.state.full and not outSigsM0.killSel2) and not lateEventSignal;
-            subpipeM0_RR.tag <= slotRegReadM0.state.renameIndex;
-            subpipeM0_RR.dest <= slotRegReadM0.state.argSpec.dest;
+            subpipeM0_RR.full <= (slotRegReadM0.full and not outSigsM0.killSel2) and not lateEventSignal;
+            subpipeM0_RR.tag <= slotRegReadM0.renameIndex;
+            subpipeM0_RR.dest <= slotRegReadM0.argSpec.dest;
 
-            subpipeM0_RRi.full <= (slotRegReadM0.state.full and not outSigsM0.killSel2) and slotRegReadM0.state.argSpec.intDestSel   and not lateEventSignal;
-            subpipeM0_RRi.tag <= slotRegReadM0.state.renameIndex;
-            subpipeM0_RRi.dest <= slotRegReadM0.state.argSpec.dest when slotRegReadM0.state.argSpec.intDestSel = '1' else (others => '0');
+            subpipeM0_RRi.full <= (slotRegReadM0.full and not outSigsM0.killSel2) and slotRegReadM0.argSpec.intDestSel   and not lateEventSignal;
+            subpipeM0_RRi.tag <= slotRegReadM0.renameIndex;
+            subpipeM0_RRi.dest <= slotRegReadM0.argSpec.dest when slotRegReadM0.argSpec.intDestSel = '1' else (others => '0');
             subpipeM0_RRi.value <= subpipeM0_RR_u.value;
 
-            subpipeM0_RRf.full <= (slotRegReadM0.state.full and not outSigsM0.killSel2) and slotRegReadM0.state.argSpec.floatDestSel  and not lateEventSignal;
-            subpipeM0_RRf.tag <= slotRegReadM0.state.renameIndex;
-            subpipeM0_RRf.dest <= slotRegReadM0.state.argSpec.dest when slotRegReadM0.state.argSpec.floatDestSel = '1' else (others => '0');
+            subpipeM0_RRf.full <= (slotRegReadM0.full and not outSigsM0.killSel2) and slotRegReadM0.argSpec.floatDestSel  and not lateEventSignal;
+            subpipeM0_RRf.tag <= slotRegReadM0.renameIndex;
+            subpipeM0_RRf.dest <= slotRegReadM0.argSpec.dest when slotRegReadM0.argSpec.floatDestSel = '1' else (others => '0');
             subpipeM0_RRf.value <= subpipeM0_RR_u.value;
 
 
             subpipeM0_RR_u.full <= sendingToAgu;
             subpipeM0_RR_u.tag <= subpipeM0_RR.tag;
             subpipeM0_RR_u.dest <= subpipeM0_RR.dest;
-            subpipeM0_RR_u.value <= calcEffectiveAddress(slotRegReadM0.state, sendingFromDLQ, dataFromDLQ).result; -- TODO: deduplicate call to calcEff...
+            subpipeM0_RR_u.value <= calcEffectiveAddress(slotRegReadM0, sendingFromDLQ, dataFromDLQ).result; -- TODO: deduplicate call to calcEff...
 
             process (clk)
             begin
@@ -654,49 +634,56 @@ begin
                     subpipeM0_E2f <= subpipeM0_E1f_u;
                     
                     
-                    slotM0_E0 <= dataToAgu;
-                    slotM0_E1i <= slotM0_E0;                       
-                    slotM0_E2i <= dataInMem1;
-
+                    slotM0_E0(0).full <= sendingToAgu;
+                    slotM0_E0(0).ins.specificOperation <= dataToAgu(0).ins.specificOperation;
+                    slotM0_E0(0).ins.result <= dataToAgu(0).ins.result;
+                    slotM0_E0(0).ins.tags <= dataToAgu(0).ins.tags;
+                
+                    slotM0_E1i(0).ins.specificOperation <= slotM0_E0(0).ins.specificOperation;               
+                    slotM0_E1i(0).ins.result <= slotM0_E0(0).ins.result;
+                
+                    memoryCtrl <= memoryCtrlPre;
                 end if;
             end process;
 
-           sendingToAgu <= ((slotRegReadM0.state.full and not outSigsM0.killSel2) or sendingFromDLQ) and not lateEventSignal;
-	       dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(slotRegReadM0.state, sendingFromDLQ, dataFromDLQ));
+            sendingToAgu <= ((slotRegReadM0.full and not outSigsM0.killSel2) or sendingFromDLQ) and not lateEventSignal;
+	        dataToAgu(0) <= (sendingToAgu, calcEffectiveAddress(slotRegReadM0, sendingFromDLQ, dataFromDLQ));
 
-              memAddressInput_SQ.full <= slotM0_E0(0).full;
-              memAddressInput_SQ.tag <= slotM0_E0(0).ins.tags.renameIndex;
-              memAddressInput_SQ.dest <= slotM0_E0(0).ins.tags.sqPointer;
-              memAddressInput_SQ.value <= slotM0_E0(0).ins.result;
+            memAddressInput_SQ.full <= slotM0_E0(0).full;
+            memAddressInput_SQ.tag <= slotM0_E0(0).ins.tags.renameIndex;
+            memAddressInput_SQ.dest <= slotM0_E0(0).ins.tags.sqPointer;
+            memAddressInput_SQ.value <= slotM0_E0(0).ins.result;
 
-              memAddressInput_LQ.full <= slotM0_E0(0).full;
-              memAddressInput_LQ.tag <= slotM0_E0(0).ins.tags.renameIndex;
-              memAddressInput_LQ.dest <= slotM0_E0(0).ins.tags.lqPointer;
-              memAddressInput_LQ.value <= slotM0_E0(0).ins.result;
+            memAddressInput_LQ.full <= slotM0_E0(0).full;
+            memAddressInput_LQ.tag <= slotM0_E0(0).ins.tags.renameIndex;
+            memAddressInput_LQ.dest <= slotM0_E0(0).ins.tags.lqPointer;
+            memAddressInput_LQ.value <= slotM0_E0(0).ins.result;
 
-              memAddressOp <= slotM0_E0(0).ins.specificOperation;
+            memAddressOp <= slotM0_E0(0).ins.specificOperation;
 
-           dataInMem1(0).full <= slotM0_E1i(0).full;
-           dataInMem1(0).ins <= getLSResultData(slotM0_E1i(0).ins,
+            dataInMem1(0).ins <= getLSResultData(slotM0_E1i(0).ins,
                                                   '1', (others => '0'),
                                                   memLoadReady, memLoadValue,
                                                   sysRegSending, sysRegReadValue,
                                                   ctOutSQ, ctOutLQ);
 
+            memoryCtrlPre <= dataInMem1(0).ins.controlInfo;
+            memResult <= dataInMem1(0).ins.result;
+
             subpipeM0_E1_u.full <= subpipeM0_E1.full;
             subpipeM0_E1_u.tag <= subpipeM0_E1.tag;
             subpipeM0_E1_u.dest <= subpipeM0_E1.dest;
-            subpipeM0_E1_u.value <= dataInMem1(0).ins.result;
+            subpipeM0_E1_u.value <= memResult;
             
             subpipeM0_E1i_u.full <= subpipeM0_E1i.full;
             subpipeM0_E1i_u.tag <= subpipeM0_E1i.tag;
             subpipeM0_E1i_u.dest <= subpipeM0_E1i.dest;
-            subpipeM0_E1i_u.value <= dataInMem1(0).ins.result;
-    
+            subpipeM0_E1i_u.value <= memResult;
+                                        
             subpipeM0_E1f_u.full <= subpipeM0_E1f.full;
             subpipeM0_E1f_u.tag <= subpipeM0_E1f.tag;
             subpipeM0_E1f_u.dest <= subpipeM0_E1f.dest;
-            subpipeM0_E1f_u.value <= dataInMem1(0).ins.result;           
+            subpipeM0_E1f_u.value <= memResult;         
 
            -- TEMP mem interface    
 		   dread <= subpipeM0_E0.full;
@@ -754,15 +741,15 @@ begin
 
                 cancelledSVI1 <= outSigsSVI.cancelled or (storeValueCollision2 and outSigsSVI.killSel2); -- If stalled, it stayed here but kill sig moved to next stage
 
-                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelIntSV.state, outSigsSVI.sending);
+                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelIntSV, outSigsSVI.sending);
                 -- Reg
-                slotIssueIntSV.state <= updateDispatchArgs_Is(argStateI);
+                slotIssueIntSV <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
-                sendingToRegReadIntSV <= slotIssueIntSV.state.full and not cancelledSVI1;
+                sendingToRegReadIntSV <= slotIssueIntSV.full and not cancelledSVI1;
           
-                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueIntSV.state, sendingToRegReadIntSV, fni, false, true);
+                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueIntSV, sendingToRegReadIntSV, fni, false, true);
                 -- Reg
-                slotRegReadIntSV.state <= updateDispatchArgs_RR(argStateR, fni.values0, regValsS0, true);
+                slotRegReadIntSV <= updateDispatchArgs_RR(argStateR, fni.values0, regValsS0, true);
     
                 process (clk)
                 begin
@@ -788,7 +775,7 @@ begin
 
             end block;
 
-            sendingToStoreWriteInt <= slotRegReadIntSV.state.full and not outSigsSVI.killSel2;
+            sendingToStoreWriteInt <= slotRegReadIntSV.full and not outSigsSVI.killSel2;
    
             ------------------------------------
             readyRegFlagsFloatSV <= (readyRegFlagsFloat(2), '0', '0', readyRegFlagsFloat(5), '0', '0', readyRegFlagsFloat(8), '0', '0', readyRegFlagsFloat(11), '0', '0');
@@ -818,14 +805,14 @@ begin
                 signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
             
-                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelFloatSV.state, outSigsSVF.sending);
+                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelFloatSV, outSigsSVF.sending);
                 -- Reg
-                slotIssueFloatSV.state <= updateDispatchArgs_Is(argStateI);
+                slotIssueFloatSV <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
-                sendingToRegReadFloatSV <= slotIssueFloatSV.state.full and not outSigsSVF.cancelled;
-                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueFloatSV.state, sendingToRegReadFloatSV, fniFloat, false, true);
+                sendingToRegReadFloatSV <= slotIssueFloatSV.full and not outSigsSVF.cancelled;
+                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueFloatSV, sendingToRegReadFloatSV, fniFloat, false, true);
                 -- Reg
-                slotRegReadFloatSV.state <= updateDispatchArgs_RR(argStateR, fniFloat.values0, regValsFS0, true);
+                slotRegReadFloatSV <= updateDispatchArgs_RR(argStateR, fniFloat.values0, regValsFS0, true);
     
                 process (clk)
                 begin
@@ -851,10 +838,10 @@ begin
 
             end block;
 
-            sendingToStoreWriteFloat <= slotRegReadFloatSV.state.full and not outSigsSVF.killSel2;
+            sendingToStoreWriteFloat <= slotRegReadFloatSV.full and not outSigsSVF.killSel2;
               
-            stateExecStoreValue <= slotRegReadFloatSV.state when slotRegReadFloatSV.state.full = '1'
-                                  else slotRegReadIntSV.state;
+            stateExecStoreValue <= slotRegReadFloatSV when slotRegReadFloatSV.full = '1'
+                                  else slotRegReadIntSV;
             sendingToStoreWrite <= sendingToStoreWriteInt or sendingToStoreWriteFloat;            
         end block;
 
@@ -896,14 +883,14 @@ begin
                 use work.LogicIssue.all;
                 signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin    
-                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelF0.state, outSigsF0.sending);
+                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelF0, outSigsF0.sending);
                 -- Reg
-                slotIssueF0.state <= updateDispatchArgs_Is(argStateI);
+                slotIssueF0 <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
-                sendingToRegReadF0 <= slotIssueF0.state.full and not outSigsF0.cancelled;
-                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueF0.state, sendingToRegReadF0, fniFloat, false, false);
+                sendingToRegReadF0 <= slotIssueF0.full and not outSigsF0.cancelled;
+                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueF0, sendingToRegReadF0, fniFloat, false, false);
                 -- Reg
-                slotRegReadF0.state <= updateDispatchArgs_RR(argStateR, fniFloat.values0, regValsF0, false);
+                slotRegReadF0 <= updateDispatchArgs_RR(argStateR, fniFloat.values0, regValsF0, false);
     
                 process (clk)
                 begin
@@ -927,15 +914,15 @@ begin
                     end if;
                 end process;
     
-                subpipeF0_Issue <= makeExecResult(slotIssueF0.state);
-                subpipeF0_RegRead <= makeExecResult(slotRegReadF0.state);
+                subpipeF0_Issue <= makeExecResult(slotIssueF0);
+                subpipeF0_RegRead <= makeExecResult(slotRegReadF0);
 
             end block;
 
-            subpipeF0_RRu.full <= slotRegReadF0.state.full and not outSigsF0.killSel2;
-            subpipeF0_RRu.tag <= slotRegReadF0.state.renameIndex;
-            subpipeF0_RRu.dest <= slotRegReadF0.state.argSpec.dest;
-            subpipeF0_RRu.value <= executeFpu(slotRegReadF0.state).result;
+            subpipeF0_RRu.full <= slotRegReadF0.full and not outSigsF0.killSel2;
+            subpipeF0_RRu.tag <= slotRegReadF0.renameIndex;
+            subpipeF0_RRu.dest <= slotRegReadF0.argSpec.dest;
+            subpipeF0_RRu.value <= executeFpu(slotRegReadF0).result;
 
             process (clk)
             begin
@@ -1009,7 +996,7 @@ begin
          allowIssueF0 <= not lockIssueF0;
 
          branchCtrl <= branchResult.controlInfo;
-         memoryCtrl <= slotM0_E2i(0).ins.controlInfo;
+        -- memoryCtrl <= slotM0_E2i(0).ins.controlInfo;
    
             execOutMain(0) <= subpipeI0_E0;
             execOutMain(2) <= subpipeM0_E2;
@@ -1027,13 +1014,13 @@ begin
                                                subpipeM0_E0f,       subpipeM0_E1f,       subpipeM0_E2f,       subpipeM0_D0f,       subpipeM0_D1f                                        
                                             );
 
-         regsSelI0 <= work.LogicRenaming.getPhysicalArgs(slotIssueI0.state);
-         regsSelM0 <= work.LogicRenaming.getPhysicalArgs(slotIssueM0.state);
+         regsSelI0 <= work.LogicRenaming.getPhysicalArgs(slotIssueI0);
+         regsSelM0 <= work.LogicRenaming.getPhysicalArgs(slotIssueM0);
          -- TEMP!
-         regsSelS0 <= work.LogicRenaming.getPhysicalArgs(slotIssueIntSV.state);
-         regsSelFS0 <= work.LogicRenaming.getPhysicalArgs(slotIssueFloatSV.state);
+         regsSelS0 <= work.LogicRenaming.getPhysicalArgs(slotIssueIntSV);
+         regsSelFS0 <= work.LogicRenaming.getPhysicalArgs(slotIssueFloatSV);
          
-         regsSelF0 <= work.LogicRenaming.getPhysicalArgs(slotIssueF0.state);
+         regsSelF0 <= work.LogicRenaming.getPhysicalArgs(slotIssueF0);
 
 
          resultToIntWQ <= subpipeM0_E2i when subpipeM0_E2i.full = '1' else subpipeI0_E0;
@@ -1050,7 +1037,7 @@ begin
          port map(
              clk => clk, reset => '0', en => '0',
 
-                writeInput_T(0) => resultToIntRF,                
+             writeInput_T(0) => resultToIntRF,                
              readAllowVec => (others => '1'), -- TEMP!
              
              selectRead(0 to 2) => regsSelI0,
@@ -1074,7 +1061,7 @@ begin
              sendingToReserve => frontLastSending,                 
              newPhysDests => newIntDests,
              newPhysSources => newIntSources,
-                writingData_T(0) => resultToIntRF,
+             writingData_T(0) => resultToIntRF,
              readyRegFlagsNext => readyRegFlagsIntNext
          );
 
@@ -1085,7 +1072,7 @@ begin
          port map(
              clk => clk, reset => '0', en => '0',
 
-                writeInput_T(0) => resultToFloatRF, 
+             writeInput_T(0) => resultToFloatRF, 
              readAllowVec => (others => '1'),
              
              selectRead(0 to 2) => regsSelF0,
@@ -1109,7 +1096,7 @@ begin
              sendingToReserve => frontLastSending,                 
              newPhysDests => newFloatDests,
              newPhysSources => newFloatSources,
-                writingData_T(0) => resultToFloatRF,
+             writingData_T(0) => resultToFloatRF,
              readyRegFlagsNext => readyRegFlagsFloatNext
          );
      
@@ -1119,9 +1106,9 @@ begin
               readyRegFlagsFloat_T <= updateArgStatesFloat(renamedArgsInt, renamedArgsFloat, readyRegFlagsFloatNext);
          end generate;
          
-              readyRegFlagsInt <= readyRegFlagsIntNext    ;-- and not groupDependencyFlags;
-              readyRegFlagsFloat <= readyRegFlagsFloatNext;-- and not groupDependencyFlags;
-         
+         readyRegFlagsInt <= readyRegFlagsIntNext    ;-- and not groupDependencyFlags;
+         readyRegFlagsFloat <= readyRegFlagsFloatNext;-- and not groupDependencyFlags;
+     
        sysRegSending <= sysRegRead;
      
     end block; -- TEMP_EXEC
@@ -1140,6 +1127,9 @@ begin
     commitMaskLQ <= work.LogicQueues.getCommittedMask(dataOutROB, true);
     commitEffectiveMaskSQ <= work.LogicQueues.getCommittedEffectiveMask(dataOutROB, false);
     commitEffectiveMaskLQ <= work.LogicQueues.getCommittedEffectiveMask(dataOutROB, true);
+
+    branchCommitMask <= work.LogicQueues.getCommittedMaskBr(dataOutROB);
+    branchCommitEffectiveMask <= work.LogicQueues.getCommittedEffectiveMaskBr(dataOutROB);
 
     BRANCH_QUEUE: entity work.BranchQueue
 	generic map(
@@ -1164,11 +1154,9 @@ begin
 	       
 	    bqPtrOut => bqPointer,
 	    
-	    --dataInRe => TMP_frontDataSpMasked,
-	       branchMaskRe => branchMaskRe,
+	    branchMaskRe => branchMaskRe,
 		dataIn => renamedDataToBQ,
-		--dataInBr => bpData,
-            dataInBr_N => bpData_N,
+        dataInBr_N => bpData_N,
 
 		storeValueInput_N => bqUpdate,
         compareAddressQuickInput_N => bqCompareEarly,
@@ -1177,7 +1165,9 @@ begin
         selectedDataOutput_N => bqSelected,
 
 		committing => robSending, -- When ROB is sending so is BQ if it has corresponding branches
-		robData => dataOutROB,
+        commitBr => dataOutROB(0).ins.controlInfo.firstBr,
+        commitMask => branchCommitMask,
+        commitEffectiveMask => branchCommitEffectiveMask,
 
 		lateEventSignal => lateEventSignal,
 		execEventSignal => execEventSignalDelayed,
@@ -1203,11 +1193,9 @@ begin
 	    prevSendingRe => frontLastSending,
 		prevSending => renamedSending,
 		
-		--dataInRe => TMP_frontDataSpMasked,
-		  renameMask => storeMaskRe,
-		--dataIn => renamedDataToSQ,
-           inputMask => storeMaskOO,
-           systemMask => systemStoreMaskOO,
+        renameMask => storeMaskRe,
+        inputMask => storeMaskOO,
+        systemMask => systemStoreMaskOO,
            
         renamedPtr => sqPointer,
             
@@ -1223,9 +1211,8 @@ begin
         selectedDataOutput_N => ctOutSQ,
 
 		committing => robSending,
-		--robData => dataOutROB,
-            commitMask => commitMaskSQ,
-            commitEffectiveMask => commitEffectiveMaskSQ,
+        commitMask => commitMaskSQ,
+        commitEffectiveMask => commitEffectiveMaskSQ,
 
 		lateEventSignal => lateEventSignal,
 		execEventSignal => execEventSignalDelayed,
@@ -1254,11 +1241,9 @@ begin
 	    prevSendingRe => frontLastSending,				
 		prevSending => renamedSending,
 		
-		--dataInRe => TMP_frontDataSpMasked,
-		  renameMask => loadMaskRe,
-		--dataIn => renamedDataToLQ,
-            inputMask => loadMaskOO,
-            systemMask => systemLoadMaskOO,
+		renameMask => loadMaskRe,
+        inputMask => loadMaskOO,
+        systemMask => systemLoadMaskOO,
             
         renamedPtr => lqPointer,
 
@@ -1274,9 +1259,8 @@ begin
         selectedDataOutput_N => ctOutLQ,
 
 		committing => robSending,
-		--robData => dataOutROB,
-            commitMask => commitMaskLQ,
-            commitEffectiveMask => commitEffectiveMaskLQ,
+        commitMask => commitMaskLQ,
+        commitEffectiveMask => commitEffectiveMaskLQ,
 
 		lateEventSignal => lateEventSignal,
 		execEventSignal => execEventSignalDelayed,

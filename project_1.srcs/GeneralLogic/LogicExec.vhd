@@ -52,7 +52,9 @@ package LogicExec is
 
 	function executeAlu(st: SchedulerState;-- queueData: InstructionState; branchIns: InstructionState;
 	                                           link: Mword; ctrl: InstructionControlInfo;
-	                                           ac: AluControl) return InstructionState;
+	                                           ac: AluControl)
+	                                           --return InstructionState;
+	                                           return ExecResult;
 
 	function executeFpu(st: SchedulerState) return InstructionState;
 
@@ -341,8 +343,10 @@ package body LogicExec is
 	function executeAlu(st: SchedulerState;-- queueData: InstructionState; branchIns: InstructionState;
 	                                           link: Mword; ctrl: InstructionControlInfo;
 	                                           ac: AluControl)
-	return InstructionState is
+	--return InstructionState is
+	return ExecResult is
 		variable res: InstructionState := work.LogicIssue.TMP_getIns(st);-- ins;
+		variable res_N: ExecResult := DEFAULT_EXEC_RESULT;
 		variable result, linkAdr: Mword := (others => '0');
 		variable arg0, arg1, arg2: Mword := (others => '0');
 		variable argAddSub: Mword := (others => '0');
@@ -467,7 +471,9 @@ package body LogicExec is
 		    res.target := (others => '0');
 		end if;
 		
-		return res;
+		  res_N.full := st.full;
+		  res_N.value := result;
+		return res_N;
 	end function;
 
 
@@ -546,8 +552,17 @@ package body LogicExec is
             
     function calcEffectiveAddress(st: SchedulerState; fromDLQ: std_logic; dlqData: ExecResult)
     return InstructionState is
-        variable res: InstructionState := work.LogicIssue.TMP_getIns(st);--ins;
+        variable res: InstructionState := --work.LogicIssue.TMP_getIns(st);--ins;
+                                            DEFAULT_INS_STATE;
     begin
+        res.specificOperation := st.operation;
+    
+        res.tags.renameIndex := st.renameIndex;
+        res.tags.bqPointer := st.bqPointer;
+        res.tags.bqPointerSeq := st.bqPointerSeq;
+        res.tags.sqPointer := st.sqPointer;
+        res.tags.lqPointer := st.lqPointer;
+    
         if fromDLQ = '1' then
             --res := dlqData;
         elsif st.full = '1'then

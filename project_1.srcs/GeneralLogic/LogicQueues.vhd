@@ -79,6 +79,9 @@ function getCommittedMask(robData: InstructionSlotArray; isLQ: boolean) return s
 function getNumCommittedEffectiveBr(robData: InstructionSlotArray) return SmallNumber;
 function getNumCommittedBr(robData: InstructionSlotArray) return SmallNumber;
 
+     function getCommittedEffectiveMaskBr(robData: InstructionSlotArray) return std_logic_vector;
+     function getCommittedMaskBr(robData: InstructionSlotArray) return std_logic_vector;
+
 end package;
 
 
@@ -524,6 +527,49 @@ end function;
             end if;
         end loop;
         return i2slv(k, SMALL_NUMBER_SIZE);
+     end function;
+
+    -- scan: full and syncEvent; full and branch
+     function getCommittedEffectiveMaskBr(robData: InstructionSlotArray) return std_logic_vector is
+        variable res: std_logic_vector(robData'range) := (others => '0');
+        variable k: integer := 0;
+        variable found: boolean := false;
+     begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            if robData(i).full = '1' and hasSyncEvent(robData(i).ins) = '1' then
+                exit;
+            end if;
+
+            if robData(i).full = '1' and robData(i).ins.classInfo.branchIns = '1' then
+                k := k + 1;
+                res(i) := '1';
+            end if;
+
+        end loop;
+        return --i2slv(k, SMALL_NUMBER_SIZE);
+                res;
+     end function;
+     
+     -- scan: newEvent and syncEvent; branch
+     function getCommittedMaskBr(robData: InstructionSlotArray) return std_logic_vector is
+        variable res: std_logic_vector(robData'range) := (others => '0');
+        variable k: integer := 0;
+        variable found: boolean := false;
+     begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            -- A redirected branch cuts a group in SQ, so it must stop there
+            if robData(i).ins.controlInfo.newEvent = '1' and hasSyncEvent(robData(i).ins) = '0' then
+                exit;
+            end if;
+
+            -- Not only full, because exceptions clear following 'full' bits
+            if robData(i).ins.classInfo.branchIns = '1' then
+                k := k + 1;
+                res(i) := '1';
+            end if;
+        end loop;
+        return --i2slv(k, SMALL_NUMBER_SIZE);
+                res;
      end function;
 
 end package body;

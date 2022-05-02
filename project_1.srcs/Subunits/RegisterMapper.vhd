@@ -29,12 +29,12 @@ entity RegisterMapper is
 		--causingInstruction: in InstructionState; -- CAREFUL: not used now, mapping restored from stable
 		
 		sendingToReserve: in std_logic;
-		stageDataToReserve: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+		--stageDataToReserve: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		  reserveInfoA: in RenameInfoArray(0 to PIPE_WIDTH-1);
 		newPhysDestsOrig: in PhysNameArray(0 to PIPE_WIDTH-1); -- to write to newest map
 
 		sendingToCommit: in std_logic;
-		stageDataToCommit: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+		--stageDataToCommit: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		  commitInfoA: in RenameInfoArray(0 to PIPE_WIDTH-1);
 
 		newPhysSources: out PhysNameArray(0 to 3*PIPE_WIDTH-1);		
@@ -60,7 +60,7 @@ architecture Behavioral of RegisterMapper is
             signal selectReserve_C, selectCommit_C: RegNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
             signal selectNewest_C: RegNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
-    signal writeCommit: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+    signal writeCommit, writeCommit_C: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 	signal readNewest, readNewest_NR, readNewest_T, readNewest_T2, readStableSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 	signal readStable, readStable_T, readStable_T2, prevDests, prevDests_T, prevDests_T2: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     
@@ -82,27 +82,27 @@ begin
         newestMapNext_NoRewind <= getNextMap(newestMap_NoRewind, stableMap, newPhysDestsOrig, reserve, newSelectedA, sendingToReserve, '0');
 
 
-    psels <= getPhysicalFloatDestSels(stageDataToCommit) when IS_FP else getPhysicalIntDestSels(stageDataToCommit);
-        --psels_C <= getPhysicalFloatDestSels(stageDataToCommit) when IS_FP else getPhysicalIntDestSels(stageDataToCommit);
+--    psels_C <= getPhysicalFloatDestSels(stageDataToCommit) when IS_FP else getPhysicalIntDestSels(stageDataToCommit);
+        psels <= getPhysicalFloatDestSels(commitInfoA) when IS_FP else getPhysicalIntDestSels(commitInfoA);
 
-	reserve_C <= whichTakeReg(stageDataToReserve, IS_FP); 
+--	reserve_C <= whichTakeReg(stageDataToReserve, IS_FP); 
     	reserve <= whichTakeReg(reserveInfoA, IS_FP); 
 
-            cha <= bool2std(reserve = reserve_C);
-            chb <= bool2std(selectReserve = selectReserve_C);
-            chc <= bool2std(selectCommit = selectCommit_C);
-            chd <= bool2std(selectNewest = selectNewest_C);
+            cha <= bool2std(psels = psels_C);
+            chb <= bool2std(selectCommit = selectCommit_C);
+            chc <= bool2std(writeCommit = writeCommit_C);
 
 	commit <= psels;
 	
-	selectReserve_C <= getVirtualDests(stageDataToReserve);
+--	selectReserve_C <= getVirtualDests(stageDataToReserve);
     	selectReserve <= getVirtualDests(reserveInfoA);
-	selectCommit <= getVirtualDests(stageDataToCommit);
-    	selectCommit_C <= getVirtualDests(reserveInfoA);
-	selectNewest_C <= getVirtualArgs(stageDataToReserve);
+	--selectCommit_C <= getVirtualDests(stageDataToCommit);
+    	selectCommit <= getVirtualDests(commitInfoA);
+	--selectNewest_C <= getVirtualArgs(stageDataToReserve);
     	selectNewest <= getVirtualArgs(reserveInfoA);
 	
-	writeCommit <= getPhysicalDests(stageDataToCommit);	
+	--writeCommit_C <= getPhysicalDests(stageDataToCommit);	
+    	writeCommit <= getPhysicalDests(commitInfoA);	
 
 	-- Read
 	READ_NEWEST: for i in 0 to 3*PIPE_WIDTH-1 generate
@@ -316,7 +316,8 @@ begin
                               else     mapMemS3(slv2u(selectCommit(i))); --rowNum);	    
 	    end generate;
 
-            compressedDests <= assignDests(stageDataToReserve, newPhysDestsOrig, IS_FP); -- TODO: different for FP!
+            --compressedDests <= assignDests(stageDataToReserve, newPhysDestsOrig, IS_FP); -- TODO: different for FP!
+            compressedDests <= assignDests(reserveInfoA, newPhysDestsOrig, IS_FP); -- TODO: different for FP!
 
 
                 mappingTablePtrNext <=    0 when mappingTablePtr = N_MAPPINGS-1 else     mappingTablePtr + 1;
@@ -423,29 +424,29 @@ begin
         
         
         
-            vselReserve <= getVirtualIntDestSels(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
-            pselReserve <= getPhysicalIntDestSels(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
-            fullMaskReserve <= extractFullMask(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
-               tagReserve <= stageDataToReserve(0).ins.tags.renameIndex;
+--            vselReserve <= getVirtualIntDestSels(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
+--            pselReserve <= getPhysicalIntDestSels(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
+--            fullMaskReserve <= extractFullMask(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
+--               tagReserve <= stageDataToReserve(0).ins.tags.renameIndex;
     
-                excMaskReserve <= getExceptionMask(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
-                causingMaskReserve <= getCausingMask(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
-                killedMaskReserve <= getKilledMask(stageDataToReserve)  when sendingToReserve = '1' else (others => '0');
-                ignoredMaskReserve <= getIgnoredMask(stageDataToReserve)  when sendingToReserve = '1' else (others => '0');
+--                excMaskReserve <= getExceptionMask(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
+--                causingMaskReserve <= getCausingMask(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
+--                killedMaskReserve <= getKilledMask(stageDataToReserve)  when sendingToReserve = '1' else (others => '0');
+--                ignoredMaskReserve <= getIgnoredMask(stageDataToReserve)  when sendingToReserve = '1' else (others => '0');
     
-                   igVselReserve <= ignoredMaskReserve and vselReserve;
+--                   igVselReserve <= ignoredMaskReserve and vselReserve;
         
-            vselCommit <= getVirtualIntDestSels(stageDataToCommit)  when sendingToCommit = '1' else (others => '0');
-            pselCommit <= getPhysicalIntDestSels(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
-            fullMaskCommit <= extractFullMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
-               tagCommit <= stageDataToCommit(0).ins.tags.renameIndex;
+--            vselCommit <= getVirtualIntDestSels(stageDataToCommit)  when sendingToCommit = '1' else (others => '0');
+--            pselCommit <= getPhysicalIntDestSels(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
+--            fullMaskCommit <= extractFullMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
+--               tagCommit <= stageDataToCommit(0).ins.tags.renameIndex;
         
         
         
-                excMaskCommit <= getExceptionMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
-                causingMaskCommit <= getCausingMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
-                killedMaskCommit <= getKilledMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
-                ignoredMaskCommit <= getIgnoredMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
+--                excMaskCommit <= getExceptionMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
+--                causingMaskCommit <= getCausingMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
+--                killedMaskCommit <= getKilledMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
+--                ignoredMaskCommit <= getIgnoredMask(stageDataToCommit) when sendingToCommit = '1' else (others => '0');
         
                    igVselCommit <= ignoredMaskCommit and vselCommit;
                    

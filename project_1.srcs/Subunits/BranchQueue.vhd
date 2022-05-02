@@ -36,11 +36,9 @@ entity BranchQueue is
 		
 		prevSendingRe: in std_logic;
 
-		--dataInRe: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-		  branchMaskRe: in std_logic_vector(0 to PIPE_WIDTH-1);		
+		branchMaskRe: in std_logic_vector(0 to PIPE_WIDTH-1);		
 		dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-		--dataInBr: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-    		dataInBr_N: in ControlPacketArray(0 to PIPE_WIDTH-1);
+        dataInBr_N: in ControlPacketArray(0 to PIPE_WIDTH-1);
 
         renamedPtr: out SmallNumber;
 
@@ -53,7 +51,10 @@ entity BranchQueue is
         selectedDataOutput_N: out ControlPacket; -- result, target, control info, tags
 
 		committing: in std_logic;
-		robData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+		    
+        commitBr: in std_logic;
+        commitMask: in std_logic_vector(0 to PIPE_WIDTH-1);
+        commitEffectiveMask: in std_logic_vector(0 to PIPE_WIDTH-1);
 
 		lateEventSignal: in std_logic;
 		execEventSignal: in std_logic;
@@ -76,14 +77,9 @@ architecture Behavioral of BranchQueue is
 
 	signal selectedDataSlot, selectedDataSlotPre: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
 
-	signal --pStart_S, pStartNext_S, pEnd_S, pEndNext_S, 
-	 pStartLong, pStartLongNext, pEndLong, pEndLongNext,
-	-- pTagged_S,
-	    --   pRenamed_S, pRenamedNext_S, pTaggedNext_S, 
-	       pTaggedLong, pTaggedLongNext, pRenamedLong, pRenamedLongNext,
-	       --pSelectPrev_S, pSelect_S, pCausing_S, 
+	signal pStartLong, pStartLongNext, pEndLong, pEndLongNext, pTaggedLong, pTaggedLongNext, pRenamedLong, pRenamedLongNext,
 	       pSelectLong, pSelectLongPrev, pCausingLong, pCausingLongPrev,
-            pRenamedSeqLong, pRenamedSeqLongNext, pStartSeqLong, pStartSeqLongNext, pFlushSeqLong: SmallNumber := (others => '0');
+           pRenamedSeqLong, pRenamedSeqLongNext, pStartSeqLong, pStartSeqLongNext, pFlushSeqLong: SmallNumber := (others => '0');
 
     signal isFull, isAlmostFull, accepting, committingBr, earlyInputSending, lateInputSending: std_logic := '0';	   
 	signal memEmpty, taggedEmpty: std_logic := '1'; -- CAREFUL: starting with '1' 
@@ -102,8 +98,7 @@ architecture Behavioral of BranchQueue is
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0'; 
 begin
        
-       earlyInputSending <= prevSendingBr and --dataInBr(0).ins.controlInfo.firstBr;
-                                                dataInBr_N(0).controlInfo.firstBr;
+       earlyInputSending <= prevSendingBr and dataInBr_N(0).controlInfo.firstBr;
        lateInputSending <= prevSending and dataIn(0).ins.controlInfo.firstBr;
 
        RW: block
@@ -116,8 +111,7 @@ begin
            signal lateInput, lateSelected: LateInfo := DEFAULT_LATE_INFO;      
        begin
 
-           earlyInput <= --getEarlyInfo(dataInBr);
-                            getEarlyInfo_N(dataInBr_N);
+           earlyInput <= getEarlyInfo_N(dataInBr_N);
            lateInput <= getLateInfo(dataIn);
            
            earlySerialInput <= serializeEarlyInfo(earlyInput);
@@ -161,23 +155,10 @@ begin
            earlySelected <= deserializeEarlyInfo(earlySerialSelected);
            lateSelected <= deserializeLateInfo(lateSerialSelected);
     
-           selectedDataSlotPre <= getMatchedSlot(--pSelect_S,
-                                                 compareAddressQuickInput_N.full, compareAddressQuickInput_N.tag, earlySelected, lateSelected);
+           selectedDataSlotPre <= getMatchedSlot(compareAddressQuickInput_N.full, compareAddressQuickInput_N.tag, earlySelected, lateSelected);
         end block;
 
---        pSelect_S <= compareQuickPtr and PTR_MASK_SN;
         pSelectLong <= compareQuickPtr;
-       
-
---        pStartNext_S <= pStartLongNext and PTR_MASK_SN;
---        pTaggedNext_S <= pTaggedLongNext and PTR_MASK_SN;
---        pRenamedNext_S <= pRenamedLongNext and PTR_MASK_SN;
-  --      pEndNext_S <= pEndLongNext and PTR_MASK_SN;
-
- --       pStart_S <= pStartLong and PTR_MASK_SN;
---        pTagged_S <= pTaggedLong and PTR_MASK_SN;
---        pRenamed_S <= pRenamedLong and PTR_MASK_SN;
---        pEnd_S <= pEndLong and PTR_MASK_SN;
 
         pStartLongNext <= addIntTrunc(pStartLong, 1, QUEUE_PTR_SIZE+1) when committingBr = '1' else pStartLong;
     
@@ -210,10 +191,8 @@ begin
 	   SYNCH_POINTERS: process (clk)
 	   begin
 	       if rising_edge(clk) then
---               pSelectPrev_S <= pSelect_S;
                pSelectLongPrev <= pSelectLong;
 
---	           pCausing_S <= pSelectPrev_S;
 	           pCausingLong <= pSelectLongPrev;
 	           
 	           pCausingLongPrev <= pCausingLong;
@@ -241,20 +220,17 @@ begin
        end process;
 
 
-       nCommitted <= getNumCommittedBr(robData);
-       nCommittedEffective <= getNumCommittedEffectiveBr(robData);
-
-       nInRe <= --i2slv(countOnes(getBranchMask((dataInRe))), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
-                 i2slv(countOnes(branchMaskRe), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
+       nCommitted <= i2slv(countOnes(commitMask), SMALL_NUMBER_SIZE);
+       nCommittedEffective <= i2slv(countOnes(commitEffectiveMask), SMALL_NUMBER_SIZE);
+                    
+       nInRe <= i2slv(countOnes(branchMaskRe), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
        nOut <= nCommitted when committing = '1' else (others => '0');
 
        -- Accepting sigs
-       --accepting <= bool2std(pStart_S /= addIntTrunc(pEnd_S, 2, QUEUE_PTR_SIZE)) and bool2std(pStart_S /= addIntTrunc(pEnd_S, 1, QUEUE_PTR_SIZE)); -- Need 2 reserve slots because one group could be on the way
-       --accepting <= bool2std(addIntTrunc(pStart_S, 0, QUEUE_PTR_SIZE) /= addIntTrunc(pEnd_S, 2, QUEUE_PTR_SIZE)) and bool2std(addIntTrunc(pStart_S, 0, QUEUE_PTR_SIZE) /= addIntTrunc(pEnd_S, 1, QUEUE_PTR_SIZE)); -- Need 2 reserve slots because one group could be on the way
        accepting <= bool2std(addIntTrunc(pStartLong, 0, QUEUE_PTR_SIZE) /= addIntTrunc(pEndLong, 2, QUEUE_PTR_SIZE)) and bool2std(addIntTrunc(pStartLong, 0, QUEUE_PTR_SIZE) /= addIntTrunc(pEndLong, 1, QUEUE_PTR_SIZE)); -- Need 2 reserve slots because one group could be on the way
 
        -- C. out
-       committingBr <= committing and robData(0).ins.controlInfo.firstBr and not taggedEmpty;
+       committingBr <= committing and commitBr and not taggedEmpty;
        committedDataOut_N.full <= committingBr;
        committedDataOut_N.value <= targetOutput;
 

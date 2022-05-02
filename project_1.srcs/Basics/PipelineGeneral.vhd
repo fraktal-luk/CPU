@@ -107,6 +107,7 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
     type RenameInfo is record
         destSel: std_logic;
         destSelFP: std_logic;
+            psel: std_logic;
         virtualDest: RegName;
         physicalDest: PhysName;
         sourceSel: std_logic_vector(0 to 2);
@@ -126,6 +127,7 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
     constant DEFAULT_RENAME_INFO: RenameInfo := (
         destSel => '0',
         destSelFP => '0',
+            psel => '0',
         virtualDest => (others => '0'),
         physicalDest => (others => '0'),
         sourceSel => (others => '0'),
@@ -160,6 +162,7 @@ function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray;
 function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
 
 function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector;
+function extractFullMask(cpa: ControlPacketArray) return std_logic_vector;
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
@@ -293,6 +296,7 @@ function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray)
 
 function setPhysSources(insVec: InstructionSlotArray; newPhysSources: PhysNameArray; newestSelector, depVec: std_logic_vector) return InstructionSlotArray;
 
+function convertROBData(isa: InstructionSlotArray) return ControlPacketArray;
 
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
                                 s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
@@ -618,6 +622,14 @@ begin
 	return res;
 end function;
 
+function extractFullMask(cpa: ControlPacketArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to cpa'length-1) := (others => '0');
+begin
+	for i in res'range loop
+		res(i) := cpa(i).controlInfo.full;
+	end loop;
+	return res;
+end function;
 
 function compareIndBefore(tagA, tagB: SmallNumber; PTR_SIZE: natural) return std_logic is
     variable tC: SmallNumber := (others => '0');
@@ -1416,6 +1428,19 @@ begin
 
     return res;
 end function;
+
+function convertROBData(isa: InstructionSlotArray) return ControlPacketArray is
+    variable res: ControlPacketArray(isa'range) := (others => DEFAULT_CONTROL_PACKET);
+begin
+    for i in res'range loop
+        res(i).controlInfo := isa(i).ins.controlInfo;
+        res(i).controlInfo.full := isa(i).full;
+        
+        res(i).target := isa(i).ins.target;
+    end loop;
+    return res;
+end function;
+
 
     function setPhysSources(insVec: InstructionSlotArray;
                             newPhysSources: PhysNameArray;

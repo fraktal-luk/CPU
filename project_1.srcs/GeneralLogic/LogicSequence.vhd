@@ -34,15 +34,18 @@ return InstructionState;
 function recreateGroup(insVec: InstructionSlotArray; prevTarget: Mword; commitCtr32: Word)
 return InstructionSlotArray;
 
-function getNewEffective(sendingToCommit: std_logic; robDataLiving: InstructionSlotArray;
+function getNewEffective(sendingToCommit: std_logic;
+                          --  robDataLiving: InstructionSlotArray;
+                                robData_N: ControlPacketArray;
                             bqTargetFull: std_logic;
                             bqTarget, lastEffectiveTarget: Mword;
-						 lateTargetIns: InstructionState;
+						 --lateTargetIns: InstructionState;
 						 lateCt: InstructionControlInfo; lateTarget: Mword;
 						 evtPhase2: std_logic)
 return InstructionSlot;
 
 function anyEvent(insVec: InstructionSlotArray) return std_logic;
+function anyEvent(cpa: ControlPacketArray) return std_logic;
 
 end LogicSequence;
 
@@ -196,10 +199,12 @@ begin
 end function;
 
 
-function getNewEffective(sendingToCommit: std_logic; robDataLiving: InstructionSlotArray;
+function getNewEffective(sendingToCommit: std_logic;
+                          --  robDataLiving: InstructionSlotArray;
+                                robData_N: ControlPacketArray;
                             bqTargetFull: std_logic;
                             bqTarget, lastEffectiveTarget: Mword;
-						 lateTargetIns: InstructionState;
+						 --lateTargetIns: InstructionState;
 						 lateCt: InstructionControlInfo; lateTarget: Mword;						 
 						 evtPhase2: std_logic)
 return InstructionSlot is
@@ -209,14 +214,16 @@ return InstructionSlot is
 	variable anyConfirmed: boolean := false;
 begin
     for i in PIPE_WIDTH-1 downto 0 loop
-        if robDataLiving(i).full = '1' then
+        if --robDataLiving(i).full = '1' then
+            robData_N(i).controlInfo.full = '1' then
             targetInc := i2slv(4*(i+1), MWORD_SIZE);  -- CAREFUL: only for 4b instructions
             exit;
         end if;
     end loop;
    
     for i in 0 to PIPE_WIDTH-1 loop 
-        if robDataLiving(i).full = '1' and robDataLiving(i).ins.controlInfo.confirmedBranch = '1' then 
+        --if robDataLiving(i).full = '1' and robDataLiving(i).ins.controlInfo.confirmedBranch = '1' then 
+        if robData_N(i).controlInfo.full = '1' and robData_N(i).controlInfo.confirmedBranch = '1' then 
             anyConfirmed := true;
         end if;
     end loop;
@@ -232,11 +239,17 @@ begin
 --function getLastEffective(newContent: InstructionSlotArray) return InstructionState is
 --    variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
 --begin
-    lastEff := robDataLiving(0).ins;
+    --lastEff := robDataLiving(0).ins;
+        lastEff.controlInfo := robData_N(0).controlInfo;
+        lastEff.target := robData_N(0).target;
     for i in PIPE_WIDTH-1 downto 0 loop
-        if robDataLiving(i).full = '1' then
-            lastEff := robDataLiving(i).ins;
-            lastEff.controlInfo.newEvent := hasSyncEvent(robDataLiving(i).ins.controlInfo); -- Announce that event is to happen now!                       
+        if --robDataLiving(i).full = '1' then
+            robData_N(i).controlInfo.full = '1' then
+            --lastEff := robDataLiving(i).ins;
+                   lastEff.controlInfo := robData_N(i).controlInfo;
+                   lastEff.controlInfo.newEvent := hasSyncEvent(robData_N(i).controlInfo);
+                   lastEff.target := robData_N(i).target;
+            --lastEff.controlInfo.newEvent := hasSyncEvent(robDataLiving(i).ins.controlInfo); -- Announce that event is to happen now!
             exit;
         end if;
     end loop;
@@ -278,6 +291,16 @@ function anyEvent(insVec: InstructionSlotArray) return std_logic is
 begin
     for i in 0 to PIPE_WIDTH-1 loop
         if (insVec(i).ins.controlInfo.full = '1') and hasSyncEvent(insVec(i).ins.controlInfo) = '1' then
+            return '1';
+        end if;            
+    end loop;
+    return '0'; 
+end function;
+
+function anyEvent(cpa: ControlPacketArray) return std_logic is
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        if (cpa(i).controlInfo.full = '1') and hasSyncEvent(cpa(i).controlInfo) = '1' then
             return '1';
         end if;            
     end loop;

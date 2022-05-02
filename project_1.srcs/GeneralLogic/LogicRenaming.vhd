@@ -27,7 +27,7 @@ function getVirtualDests(insVec: InstructionSlotArray) return RegNameArray;
 function getPhysicalArgs(insVec: InstructionSlotArray) return PhysNameArray;
 function getPhysicalDests(insVec: InstructionSlotArray) return PhysNameArray;
 
-function getPhysicalArgs(sch: SchedulerEntrySlot) return PhysNameArray;
+--function getPhysicalArgs(sch: SchedulerEntrySlot) return PhysNameArray;
 function getPhysicalArgs(sch: SchedulerState) return PhysNameArray;
 
 function whichTakeReg(insVec: InstructionSlotArray; fp: boolean) return std_logic_vector;
@@ -55,6 +55,7 @@ function getPhysicalFloatDestSels(ria: RenameInfoArray) return std_logic_vector;
 function getVirtualIntDestSels(ria: RenameInfoArray) return std_logic_vector;
 function getVirtualFloatDestSels(ria: RenameInfoArray) return std_logic_vector;
 
+function getPsels(ria: RenameInfoArray) return std_logic_vector;
 
 function initMap(constant IS_FP: boolean) return PhysNameArray;    
 
@@ -77,6 +78,11 @@ function selAndCompactPhysDests(physStableDelayed, physCommitDestsDelayed: PhysN
 return PhysNameArray;
 
     function assignDests(       insVec: InstructionSlotArray;
+                                newDests: PhysNameArray;
+                                constant IS_FP: boolean)
+    return PhysNameArray;
+
+    function assignDests(       ria: RenameInfoArray;
                                 newDests: PhysNameArray;
                                 constant IS_FP: boolean)
     return PhysNameArray;
@@ -107,6 +113,30 @@ package body LogicRenaming is
             end if;
             takeVecInt(i) := insVec(i).ins.virtualArgSpec.intDestSel;   
             takeVecFloat(i) := insVec(i).ins.virtualArgSpec.floatDestSel;   
+        end loop;
+        return res;       
+    end function;
+
+    function assignDests(       ria: RenameInfoArray;
+                                newDests: PhysNameArray;
+                                constant IS_FP: boolean)
+    return PhysNameArray is
+        variable res: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+        variable reserveSelSig, takeVecInt, takeVecFloat, stores, loads: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
+        variable nToTake: integer := 0;
+        variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
+        variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
+       	variable found: boolean := false;
+    begin
+        -- Assign dest registers
+        for i in 0 to PIPE_WIDTH-1 loop
+            if ria(i).destSel = '1' and not IS_FP then
+                res(i) := newDests(countOnes(takeVecInt)); -- how many used before
+            elsif ria(i).destSelFP = '1' and IS_FP then
+                res(i) := newDests(countOnes(takeVecFloat)); -- how many used before
+            end if;
+            takeVecInt(i) := ria(i).destSel;   
+            takeVecFloat(i) := ria(i).destSelFP;   
         end loop;
         return res;       
     end function;
@@ -260,14 +290,14 @@ begin
     return res;
 end function;
 
-function getPhysicalArgs(sch: SchedulerEntrySlot) return PhysNameArray is
-    variable res: PhysNameArray(0 to 2) := (others=>(others=>'0'));
-begin
-        res(0) := sch.state.argSpec.args(0);
-        res(1) := sch.state.argSpec.args(1);
-        res(2) := sch.state.argSpec.args(2);
-    return res;
-end function;
+--function getPhysicalArgs(sch: SchedulerEntrySlot) return PhysNameArray is
+--    variable res: PhysNameArray(0 to 2) := (others=>(others=>'0'));
+--begin
+--        res(0) := sch.state.argSpec.args(0);
+--        res(1) := sch.state.argSpec.args(1);
+--        res(2) := sch.state.argSpec.args(2);
+--    return res;
+--end function;
 
 function getPhysicalArgs(sch: SchedulerState) return PhysNameArray is
     variable res: PhysNameArray(0 to 2) := (others=>(others=>'0'));
@@ -332,6 +362,14 @@ begin
     return res;
 end function;
 
+function getPsels(ria: RenameInfoArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to ria'length-1) := (others => '0');
+begin
+    for i in ria'range loop
+        res(i) := ria(i).psel;
+    end loop;
+    return res;
+end function;
 
 function getVirtualIntDestSels(insVec: InstructionSlotArray) return std_logic_vector is
     variable res: std_logic_vector(0 to insVec'length-1) := (others => '0');

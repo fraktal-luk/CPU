@@ -23,10 +23,9 @@ port(
     
     renameAccepting: out std_logic;
     frontLastSendingIn: in std_logic;
-    --frontDataLastLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-        frontData: in BufferEntryArray;
-        
-        TMP_spMaskedDataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+    frontData: in BufferEntryArray;
+    
+    TMP_spMaskedDataOut: out InstructionSlotArray(0 to PIPE_WIDTH-1);
 
     renamedArgsInt: out RenameInfoArray(0 to PIPE_WIDTH-1);
     renamedArgsFloat: out RenameInfoArray(0 to PIPE_WIDTH-1);
@@ -47,17 +46,14 @@ port(
     newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     
-    --specialActionOut: out InstructionSlot;
-        specialOut: out SpecificOp;
+    specialOut: out SpecificOp;
     
     robDataLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1);
     sendingFromROB: in std_logic;
    
     commitGroupCtr: in InsTag;
   
-    --execCausing: in InstructionState;
-        execCausing_N: in ControlPacket;
-    --lateCausing: in InstructionState;
+    execCausing_N: in ControlPacket;
     
     execEventSignal: in std_logic;
     lateEventSignal: in std_logic
@@ -68,7 +64,6 @@ end UnitRegManager;
 architecture Behavioral of UnitRegManager is
     signal stageDataRenameIn, stageDataRenameIn_T, stageDataRenameInFloat, renamedDataLivingPre, renamedDataLivingPre_T, stageDataToCommit, stageDataCommitInt, stageDataCommitFloat,
                 renamedBase, stageDataToCommitDelayed, frontDataISL
-    
                : InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, robSendingDelayed, sendingCommitInt, frontLastSending, renamedSendingSig, sendingCommitFloat,
                renameLockState, renameLockStateNext, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed, renameLockEndDelayedNext,
@@ -83,8 +78,6 @@ architecture Behavioral of UnitRegManager is
     signal newIntDestPointer, newFloatDestPointer: SmallNumber := (others => '0');
     signal newIntSources, newIntSources_NR, newIntSourcesAlt, newFloatSources, newFloatSourcesAlt, zeroSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
     signal newSourceSelectorInt, newSourceSelectorFloat, zeroSelector: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
-    
-    --signal renamedBase, stageDataToCommitDelayed: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal depVec, depVecPrev: DependencyVec := DEFAULT_DEP_VEC;
 
@@ -99,7 +92,7 @@ architecture Behavioral of UnitRegManager is
                                 bqPointer: SmallNumber;
                                 sqPointer: SmallNumber;
                                 lqPointer: SmallNumber;
-                                    bqPointerSeq: SmallNumber;
+                                bqPointerSeq: SmallNumber;
                                 renameCtr: Word;                               
                                 dbtrap: std_logic)
      return InstructionSlotArray is
@@ -397,6 +390,62 @@ architecture Behavioral of UnitRegManager is
         return res;
     end function;
 
+    function getRenameInfoSC(insVec: InstructionSlotArray; constant IS_FP: boolean := false)
+    return RenameInfoArray is
+        variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+        variable depVec: DependencyVec;
+    begin
+        depVec := findDeps(insVec);
+        if IS_FP then
+            depVec := getRealDepVecFloat(insVec, depVec);
+        else
+            depVec := getRealDepVecInt(insVec, depVec);
+        end if;
+        
+        for i in 0 to PIPE_WIDTH-1 loop
+            if IS_FP then        
+                res(i).destSel := insVec(i).ins.virtualArgSpec.floatDestSel;
+                res(i).destSelFP := insVec(i).ins.virtualArgSpec.floatDestSel;
+                
+                res(i).psel := insVec(i).ins.physicalArgSpec.floatDestSel;
+            else    
+                res(i).destSel := insVec(i).ins.virtualArgSpec.intDestSel;
+                res(i).psel := insVec(i).ins.physicalArgSpec.intDestSel;
+            end if;
+            
+            
+            res(i).virtualDest := insVec(i).ins.virtualArgSpec.dest(4 downto 0);
+            res(i).physicalDest := insVec(i).ins.physicalArgSpec.dest;
+
+            if IS_FP then
+                res(i).sourceSel := insVec(i).ins.virtualArgSpec.floatArgSel;
+            else
+                res(i).sourceSel := insVec(i).ins.virtualArgSpec.intArgSel;
+            end if;
+
+            for j in 0 to 2 loop
+                res(i).sourceConst(j) :=   (insVec(i).ins.virtualArgSpec.intArgSel(j) and not isNonzero(insVec(i).ins.virtualArgSpec.args(j)(4 downto 0))) -- int r0
+                                        or (not insVec(i).ins.virtualArgSpec.intArgSel(j) and not insVec(i).ins.virtualArgSpec.floatArgSel(j))             -- not used
+                                        or (bool2std(j = 1) and insVec(i).ins.constantArgs.immSel);                                                        -- imm
+            end loop;
+
+            res(i).deps := depVec(i);
+            res(i).physicalSourcesNew := res(i).physicalSources;
+                                
+            for j in 0 to 2 loop
+                res(i).sourcesNew(j) := isNonzero(res(i).deps(j));
+                for k in PIPE_WIDTH-1 downto 0 loop
+                    if res(i).deps(j)(k) = '1' then
+                        exit;
+                    end if;
+                end loop;
+            end loop;
+            
+            res(i).sourcesReady := (others => '0');
+        end loop;
+        return res;
+    end function;
+
     function postprocessRenamed(insVec: InstructionSlotArray; depVec: DependencyVec) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
     begin
@@ -404,7 +453,8 @@ architecture Behavioral of UnitRegManager is
         return res;
     end function;   
     
-    signal inputRenameInfoInt, inputRenameInfoFloat, resultRenameInfoInt, resultRenameInfoFloat, storedRenameInfoInt, storedRenameInfoFloat: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+    signal inputRenameInfoInt, inputRenameInfoFloat, resultRenameInfoInt, resultRenameInfoFloat, storedRenameInfoInt, storedRenameInfoFloat,
+                inputCommitInfoInt, inputCommitInfoFloat, inputFreeInfoInt, inputFreeInfoFloat: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 begin
 
     frontDataISL <= work.LogicIbuffer.getInsSlotArray(frontData);
@@ -415,15 +465,19 @@ begin
     resultRenameInfoInt <= getRenameInfo(frontDataISL, newIntDests, newIntSources, newIntSourcesAlt, newSourceSelectorInt);
     resultRenameInfoFloat <= getRenameInfo(frontDataISL, newFloatDests, newFloatSources, newFloatSourcesAlt, newSourceSelectorFloat, true);
 
+    inputCommitInfoInt <= getRenameInfoSC(stageDataToCommitDelayed);
+    inputCommitInfoFloat <= getRenameInfoSC(stageDataToCommitDelayed, true);
+    inputFreeInfoInt <= getRenameInfoSC(stageDataCommitInt);
+    inputFreeInfoFloat <= getRenameInfoSC(stageDataCommitFloat, true);
+
+
     frontLastSending <= frontLastSendingIn and not eventSig;
 
     eventSig <= execEventSignal or lateEventSignal;
 
-    depVec <= findDeps(--frontDataLastLiving);
-                            frontDataISL);
+    depVec <= findDeps(frontDataISL);
 
-    renamedBase <= renameGroupBase(--frontDataLastLiving,
-                                        frontDataISL,
+    renamedBase <= renameGroupBase( frontDataISL,
                                     newIntDests, 
                                     newFloatDests,
                                     renameGroupCtrNext,
@@ -432,7 +486,7 @@ begin
                                     bqPointer,
                                     sqPointer,
                                     lqPointer,
-                                        bqPointerSeq,
+                                    bqPointerSeq,
                                     renameCtr,
                                     '0' --dbtrapOn
                                     );
@@ -446,8 +500,7 @@ begin
     renamedDataLiving <= postprocessRenamed(restoreRenameIndex(renamedDataLivingPre), depVecPrev);
 
     renameGroupCtrNext <=   commitGroupCtr when lateEventSignal = '1'
-                       else clearTagLow(--execCausing.tags.renameIndex) when execEventSignal = '1'
-                                        execCausing_N.tags.renameIndex) when execEventSignal = '1'
+                       else clearTagLow(execCausing_N.tags.renameIndex) when execEventSignal = '1'
                        else addInt(renameGroupCtr, PIPE_WIDTH) when frontLastSending = '1'
                        else renameGroupCtr;
     
@@ -462,19 +515,13 @@ begin
         --                         But remember that rewinding GPR map needs a cycle, and before it happens,
         --                         renaming can't be done! So this delay may be caused by this problem.
         
-        renameLockStateNext <= '1' when eventSig = '1'
+    renameLockStateNext <= '1' when eventSig = '1'
                         else   '0' when renameLockReleaseDelayed = '1'
                         else   renameLockState;
         
-            renameLockEndDelayedNext <= renameLockStateNext and renameLockRelease;
+    renameLockEndDelayedNext <= renameLockStateNext and renameLockRelease;
 
-
-               -- T_renameSending <= T_renameFull and nextAccepting and not eventSig;
-                    renamedSendingSig <= T_renameFull and nextAccepting and not eventSig;
-
-
-                  ch0 <=  renamedSendingSig xnor T_renameSending;
-                  ch1 <= bool2std(renamedDataLivingPre_T = renamedDataLivingPre);
+    renamedSendingSig <= T_renameFull and nextAccepting and not eventSig;
 
     COMMON_SYNCHRONOUS: process(clk)
     begin
@@ -486,10 +533,8 @@ begin
             if frontLastSending = '1' then
                 T_renameFull <= '1';
                 renamedDataLivingPre <= stageDataRenameIn_T;
-            elsif -- T_renameSending = '1' then
-                  renamedSendingSig = '1' then
+            elsif renamedSendingSig = '1' then
                 T_renameFull <= '0';
-                -- renamedDataLivingPre_T <= (others => DEFAULT_INS_SLOT);
             end if;
     
             if eventSig = '1' then
@@ -537,20 +582,13 @@ begin
         clk => clk, en => '0', reset => '0',
         
         rewind => renameLockEndDelayed,
-        --causingInstruction => DEFAULT_INSTRUCTION_STATE,
         
         sendingToReserve => frontLastSendingIn,
-        stageDataToReserve => --frontDataLastLiving,
-                                frontDataISL,
-                               -- (others => DEFAULT_INS_SLOT),
-            reserveInfoA => --(others => DEFAULT_RENAME_INFO),
-                            inputRenameInfoInt,
+        reserveInfoA => inputRenameInfoInt,
         newPhysDestsOrig => newIntDests,    -- MAPPING (from FREE LIST)
         
-        sendingToCommit => robSendingDelayed,   
-        stageDataToCommit => stageDataToCommitDelayed,
-            commitInfoA => (others => DEFAULT_RENAME_INFO),
-
+        sendingToCommit => robSendingDelayed,
+        commitInfoA => inputCommitInfoInt,
         newPhysSources => newIntSources,
         newPhysSources_NR => newIntSources_NR,
         newPhysSourcesAlt => newIntSourcesAlt,
@@ -564,19 +602,14 @@ begin
         clk => clk, en => '0', reset => '0',
         
         rewind => renameLockEndDelayed,
-        --causingInstruction => DEFAULT_INSTRUCTION_STATE,
         
         sendingToReserve => frontLastSendingIn,
-        stageDataToReserve => --frontDataLastLiving,
-                                frontDataISL,
-                                --(others => DEFAULT_INS_SLOT),
-            reserveInfoA => --(others => DEFAULT_RENAME_INFO),
-                            inputRenameInfoFloat,
+
+        reserveInfoA => inputRenameInfoFloat,
         newPhysDestsOrig => newFloatDests,
         
         sendingToCommit => robSendingDelayed,
-        stageDataToCommit => stageDataToCommitDelayed,
-            commitInfoA => (others => DEFAULT_RENAME_INFO),
+        commitInfoA => inputCommitInfoFloat,
 
         newPhysSources => newFloatSources,
         newPhysSources_NR => open,
@@ -595,22 +628,17 @@ begin
         rewind => eventSig,
         execEventSignal => execEventSignal,
         lateEventSignal => lateEventSignal,
-        causingPointer => --execCausing.tags.intPointer,
-                          execCausing_N.tags.intPointer,
+        causingPointer => execCausing_N.tags.intPointer,
         
         sendingToReserve => frontLastSendingIn, 
         takeAllow => frontLastSendingIn,
-        stageDataToReserve => --frontDataLastLiving,
-                                --frontDataISL,
-                                (others => DEFAULT_INS_SLOT),
-            reserveInfoA => --(others => DEFAULT_RENAME_INFO),
-                            inputRenameInfoInt,
+
+        reserveInfoA => inputRenameInfoInt,
         newPhysDests => newIntDests,
         newPhysDestPointer => newIntDestPointer,
     
         sendingToRelease => sendingCommitInt,
-        stageDataToRelease => stageDataCommitInt,
-            releaseInfoA => (others => DEFAULT_RENAME_INFO),
+        releaseInfoA => inputFreeInfoInt,
 
         physStableDelayed => physStableInt
     );
@@ -625,29 +653,22 @@ begin
         rewind => eventSig,
         execEventSignal => execEventSignal,
         lateEventSignal => lateEventSignal,        
-        causingPointer => --execCausing.tags.floatPointer,
-                          execCausing_N.tags.floatPointer,
+        causingPointer => execCausing_N.tags.floatPointer,
         
         sendingToReserve => frontLastSendingIn, 
         takeAllow => frontLastSendingIn,	-- FROM SEQ
-        stageDataToReserve => --frontDataLastLiving,
-                                --frontDataISL,
-                                (others => DEFAULT_INS_SLOT),
-            reserveInfoA => --(others => DEFAULT_RENAME_INFO),
-                            inputRenameInfoFloat,
+
+        reserveInfoA => inputRenameInfoFloat,
 
         newPhysDests => newFloatDests,			-- TO SEQ
         newPhysDestPointer => newFloatDestPointer, -- TO SEQ
     
         sendingToRelease => sendingCommitFloat,  -- FROM SEQ
-        stageDataToRelease => stageDataCommitFloat,  -- FROM SEQ
-            releaseInfoA => (others => DEFAULT_RENAME_INFO),
-
+        releaseInfoA => inputFreeInfoFloat,
         physStableDelayed => physStableFloat -- FOR MAPPING (from MAP)
     );
 	
-	--specialActionOut <= specialActionSlot;
-    	specialOut <= specialActionSlot.ins.specificOperation;
+    specialOut <= specialActionSlot.ins.specificOperation;
 	
     newPhysDestsOut <= newIntDests;
     newFloatDestsOut <= newFloatDests; 
@@ -655,12 +676,10 @@ begin
  
     renamedSending <= renamedSendingSig;   
     
-    renamingBr <= frontLastSending and --frontDataLastLiving(0).ins.controlInfo.firstBr;
-                                        frontDataISL(0).ins.controlInfo.firstBr;
+    renamingBr <= frontLastSending and frontDataISL(0).ins.controlInfo.firstBr;
          
          TMP_MASKED_OUT: for i in 0 to PIPE_WIDTH-1 generate
-            TMP_spMaskedDataOut(i) <= (renamedBase(i).full, --frontDataLastLiving(i).ins);
-                                                            frontDataISL(i).ins);
+            TMP_spMaskedDataOut(i) <= (renamedBase(i).full, frontDataISL(i).ins);
          end generate;
 
 end Behavioral;

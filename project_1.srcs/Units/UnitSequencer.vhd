@@ -53,7 +53,7 @@ entity UnitSequencer is
     -- Interface with ROB
     commitAccepting: out std_logic;
     
-    robDataLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1); -- !!!!
+    --robDataLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1); -- !!!!
         robData_N: in ControlPacketArray(0 to PIPE_WIDTH-1);
     robSpecial_N: in SpecificOp;
     
@@ -268,7 +268,8 @@ begin
     end process;        
     
     sendingToCommit <= sendingFromROB;
-    commitCtrNext <= addInt(commitCtr, countOnes(extractFullMask(robDataLiving))) when sendingToCommit = '1' else commitCtr;
+    --commitCtrNext <= addInt(commitCtr, countOnes(extractFullMask(robDataLiving))) when sendingToCommit = '1' else commitCtr;
+        commitCtrNext <= addInt(commitCtr, countOnes(extractFullMask(robData_N))) when sendingToCommit = '1' else commitCtr;
 
     EVENT_HANDLING: block
     begin
@@ -279,18 +280,20 @@ begin
         --            When committing a taken branch -> fill with target from BQ output
         --            When committing normal op -> increment by length of the op
         --            The 'target' field will be used to update return address for exc/int                             
-       stageDataLastEffectiveInA <= getNewEffective(sendingToCommit, robDataLiving,-- bqTargetData,
+       stageDataLastEffectiveInA <= getNewEffective(sendingToCommit,-- robDataLiving,-- bqTargetData,
+                                                            robData_N,
                                                             bqTargetData_N.full,
                                                             bqTargetData_N.value,
                                                        --stageDataLastEffectiveOutA.ins.target,
                                                             lastEffectiveTarget,
-                                                       DEFAULT_INS_STATE,--stageDataLateCausingOut.ins, -- USES: whole, only when lateEventSending
+                                                       --DEFAULT_INS_STATE,--stageDataLateCausingOut.ins, -- USES: whole, only when lateEventSending
                                                        --stageDataLateCausingOut.ins.controlInfo, stageDataLateCausingOut.ins.target,
                                                             lateCausingCt, lateCausingTarget,
                                                        lateEventSending);                                                                                   
         sendingToLastEffective <= sendingToCommit or lateEventSending;
     
-        committingEvent <= sendingToCommit and anyEvent(robDataLiving); -- ???
+        committingEvent <= sendingToCommit and anyEvent(--robDataLiving); -- ???
+                                                        robData_N);
     
         EVENT_INCOMING: process(clk)
         begin
