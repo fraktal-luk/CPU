@@ -298,6 +298,13 @@ function setPhysSources(insVec: InstructionSlotArray; newPhysSources: PhysNameAr
 
 function convertROBData(isa: InstructionSlotArray) return ControlPacketArray;
 
+function unfoldOp(op: SpecificOp) return SpecificOp;
+
+function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray;
+
+function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray;
+
+
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
                                 s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
                                 s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
@@ -1441,6 +1448,89 @@ begin
     return res;
 end function;
 
+function unfoldOp(op: SpecificOp) return SpecificOp is
+    variable res: SpecificOp := op;
+begin          
+    case op.subpipe is
+        when ALU =>
+            res.arith := ArithOp'val(slv2u(op.bits));     
+        when None =>
+            res.system := SysOp'val(slv2u(op.bits));
+        when FP =>
+            res.float := FpOp'val(slv2u(op.bits));
+        when others =>
+            res.memory := MemOp'val(slv2u(op.bits));
+    end case;
+    return res;
+end function;
+
+function getInsSlot(elem: BufferEntry) return InstructionSlot is
+    variable res: InstructionSlot := DEFAULT_INS_SLOT;
+begin
+    res.full := elem.full;
+
+    res.ins.controlInfo.firstBr := elem.firstBr;
+
+    
+    res.ins.classInfo.branchIns := elem.branchIns;
+    res.ins.controlInfo.frontBranch := elem.frontBranch;
+    res.ins.controlInfo.confirmedBranch := elem.confirmedBranch;
+    res.ins.controlInfo.specialAction := elem.specialAction;
+
+    res.ins.classInfo.fpRename := elem.fpRename;           
+    res.ins.classInfo.mainCluster := elem.mainCluster;            
+    res.ins.classInfo.secCluster := elem.secCluster;            
+    res.ins.classInfo.useLQ := elem.useLQ;
+    
+    res.ins.specificOperation := unfoldOp(elem.specificOperation);
+    
+    res.ins.constantArgs := elem.constantArgs;
+    res.ins.virtualArgSpec := elem.argSpec; 
+    return res;
+end function;
+
+function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(elemVec'range);
+begin
+    for i in res'range loop
+        res(i) := getInsSlot(elemVec(i));
+    end loop;
+    return res;
+end function;
+
+function getEntry(isl: InstructionSlot) return BufferEntry is
+    variable res: BufferEntry;
+begin
+    res.full := isl.full;
+    
+    res.firstBr := isl.ins.controlInfo.firstBr;
+    
+    res.branchIns := isl.ins.classInfo.branchIns;
+    res.frontBranch := isl.ins.controlInfo.frontBranch;
+    res.confirmedBranch := isl.ins.controlInfo.confirmedBranch;
+    res.specialAction := isl.ins.controlInfo.specialAction;
+
+    res.fpRename := isl.ins.classInfo.fpRename;           
+    res.mainCluster := isl.ins.classInfo.mainCluster;            
+    res.secCluster := isl.ins.classInfo.secCluster;            
+    res.useLQ   := isl.ins.classInfo.useLQ;
+    
+    res.specificOperation := isl.ins.specificOperation;
+    
+    res.constantArgs := isl.ins.constantArgs;
+    res.argSpec := isl.ins.virtualArgSpec;
+    
+    return res;
+end function;
+
+function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray is
+    variable res: BufferEntryArray;
+begin
+    for i in res'range loop
+        res(i) := getEntry(insVec(i));
+    end loop;            
+    return res;
+end function;
 
     function setPhysSources(insVec: InstructionSlotArray;
                             newPhysSources: PhysNameArray;

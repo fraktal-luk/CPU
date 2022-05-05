@@ -194,17 +194,17 @@ begin
     
         bpAccepting => bqAccepting,
         bpSending => bpSending,
-        bpData_N => bpData_N,
+        bpData => bpData_N,
     
         renameAccepting => canSendFront,
-        dataOut_N => frontOutput,
+        dataOut => frontOutput,
         lastSending => frontLastSending,
         
         frontEventSignal => frontEventSignal,
-        frontCausing_N => frontEvent_N,
+        frontCausing => frontEvent_N,
 
-        execCausing_N => execEvent_N,
-        lateCausing_N => lateEvent_N,
+        execCausing => execEvent_N,
+        lateCausing => lateEvent_N,
         
         execEventSignal => execEventSignal,
         lateEventSignal => lateEventSignal,

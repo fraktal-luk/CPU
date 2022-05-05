@@ -457,7 +457,8 @@ architecture Behavioral of UnitRegManager is
                 inputCommitInfoInt, inputCommitInfoFloat, inputFreeInfoInt, inputFreeInfoFloat: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 begin
 
-    frontDataISL <= work.LogicIbuffer.getInsSlotArray(frontData);
+    frontDataISL <= --work.LogicIbuffer.
+                    getInsSlotArray(frontData);
 
     inputRenameInfoInt <= getRenameInfo(frontDataISL,      zeroDests, zeroSources, zeroSources, zeroSelector);
     inputRenameInfoFloat <= getRenameInfo(frontDataISL,    zeroDests, zeroSources, zeroSources, zeroSelector, true);
