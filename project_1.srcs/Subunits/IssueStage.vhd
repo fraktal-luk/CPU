@@ -18,10 +18,8 @@ use work.LogicIssue.all;
 
 entity IssueStage is
 	generic(USE_IMM: boolean := true;
-	        REGS_ONLY: boolean := false;
-	        DELAY_ONLY: boolean := false;
-	        TMP_DELAY: boolean := false;
-	        NEW_RR: boolean := false);
+	        REGS_ONLY: boolean := false
+	        );
 	port(
 		clk: in std_logic;
 		reset: in std_logic;
@@ -43,54 +41,56 @@ entity IssueStage is
 end IssueStage;
 
 
-architecture Alternative of IssueStage is
-	signal inputDataWithArgs, inputData_TMP, dispatchDataUpdated: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
-	signal sendingOut: std_logic := '0';
-	signal stageDataSaved, stageDataIn: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
-	signal argState, argStateNext: SchedulerState := DEFAULT_SCHEDULER_STATE;
-	
-	--   signal TMP_argReads0, TMP_argReads1: IntArray(0 to 2);		
+architecture First of IssueStage is
+	signal full, sendingOut: std_logic := '0';
+	signal inputDataWithArgs, argState: SchedulerState := DEFAULT_SCHEDULER_STATE;	
 begin
-    inputData_TMP <= TMP_prepareDispatchSlot(input, prevSending);
-	inputDataWithArgs <= getDispatchArgValues(inputData_TMP, fni, prevSending, USE_IMM, REGS_ONLY, TMP_DELAY);-- when not TMP_DELAY 
+    --inputData_TMP <= ;
+	--inputDataWithArgs <= getDispatchArgValues1(TMP_prepareDispatchSlot(input.state, prevSending));
 
-    argStateNext <= inputData_TMP.state when false-- TMP_DELAY
-               else inputDataWithArgs.state; 
-    
-	stageDataIn <= (prevSending, inputData_TMP.ins);
-
-	BASIC_LOGIC: entity work.GenericStage(Behavioral)
-	generic map(
-		COMPARE_TAG => '1'
-	)
-	port map(
-		clk => clk, reset => reset, en => en,
-		
-		prevSending => prevSending,
-		nextAccepting => nextAccepting,
-		
-		stageDataIn(0) => stageDataIn,
-		acceptingOut => acceptingOut,
-		sendingOut => sendingOut,
-		stageDataOut(0) => stageDataSaved,
-		
-		execEventSignal => events.execEvent,
-		lateEventSignal => events.lateEvent,
-		execCausing => events.execCausing
-	);
-	
 	SAVE_SCH_STATE: process(clk)
 	begin
 		if rising_edge(clk) then
 		    if nextAccepting = '1' then -- CAREFUL: this is to enable stalling 
-			    argState <= argStateNext;
-			end if; 
+			    argState <= inputDataWithArgs;
+
+			    full <= prevSending;
+			end if;
+			
+			if events.lateEvent = '1' then
+			    full <= '0';
+			end if;
 		end if;
 	end process;
 
-    dispatchDataUpdated.state <= updateDispatchArgs(argState, fni.values0, regValues, TMP_DELAY, REGS_ONLY);
+    output.full <= full and nextAccepting;
+    --output.state <= updateDispatchArgs1(argState);
 
-	output <= (sendingOut, stageDataSaved.ins, dispatchDataUpdated.state);	
-end Alternative;
+end First;
 
+architecture Second of IssueStage is
+	signal full, sendingOut: std_logic := '0';
+	signal inputDataWithArgs, argState: SchedulerState := DEFAULT_SCHEDULER_STATE;	
+begin
+    --inputData_TMP <= TMP_prepareDispatchSlot(input.state, prevSending);
+	--inputDataWithArgs <= getDispatchArgValues2(TMP_prepareDispatchSlot(input.state, prevSending), fni, prevSending, USE_IMM, REGS_ONLY);-- when not TMP_DELAY
 
+	SAVE_SCH_STATE: process(clk)
+	begin
+		if rising_edge(clk) then
+		    if nextAccepting = '1' then -- CAREFUL: this is to enable stalling 
+			    argState <= inputDataWithArgs;
+
+			    full <= prevSending;
+			end if;
+			
+			if events.lateEvent = '1' then
+			    full <= '0';
+			end if;
+		end if;
+	end process;
+
+    output.full <= full and nextAccepting;
+    --output.state <= updateDispatchArgs2(argState, fni.values0, regValues, REGS_ONLY);
+
+end Second;

@@ -14,6 +14,7 @@ use work.InstructionState.all;
 
 package PipelineGeneral is
 
+function p2i(p: SmallNumber; n: natural) return natural;
 
 type PhysicalSubpipe is (ALU, Mem, FP, StoreDataInt, StoreDataFloat);
 
@@ -27,24 +28,31 @@ end record;
 
 constant DEFAULT_EXEC_RESULT: ExecResult := ('0', tag => (others => '0'), dest => (others => '0'), value => (others => '0'));
 
-function makeExecResult(isl: InstructionSlot; full: std_logic) return ExecResult;
-function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecResult;
+type ExecResultArray is array(integer range <>) of ExecResult;
+
+function makeExecResult(isl: SchedulerState) return ExecResult;
 
 
 type EventState is record
     lateEvent: std_logic;
     execEvent: std_logic;
-    execCausing: InstructionState;
-    preExecCausing: InstructionState;
+    --execCausing: InstructionState;
+    --preExecCausing: InstructionState;
+    preExecTags: InstructionTags;
 end record;
 
-constant DEFAULT_EVENT_STATE: EventState := ('0', '0', DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE);
+constant DEFAULT_EVENT_STATE: EventState := ('0', '0',-- DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE,
+                                                DEFAULT_INSTRUCTION_TAGS);
 
 type IssueQueueSignals is record
     sending: std_logic;
     cancelled: std_logic;
     ready: std_logic;
     empty: std_logic;
+        killSel: std_logic;
+        killSel1: std_logic;
+        killSel2: std_logic;
+        killSel3: std_logic;
 end record;
 
 type ForwardingInfo is record
@@ -90,7 +98,6 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
     others => (others => '0')
 );
 
-
     type DependencySpec is array(0 to 2) of std_logic_vector(0 to PIPE_WIDTH-1); 
     type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
     
@@ -100,6 +107,7 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
     type RenameInfo is record
         destSel: std_logic;
         destSelFP: std_logic;
+            psel: std_logic;
         virtualDest: RegName;
         physicalDest: PhysName;
         sourceSel: std_logic_vector(0 to 2);
@@ -119,6 +127,7 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
     constant DEFAULT_RENAME_INFO: RenameInfo := (
         destSel => '0',
         destSelFP => '0',
+            psel => '0',
         virtualDest => (others => '0'),
         physicalDest => (others => '0'),
         sourceSel => (others => '0'),
@@ -135,16 +144,12 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
 
     function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInfoArray;
 
-        function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray;
-
+    function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray;
 
 function adjustStage(content: InstructionSlotArray) return InstructionSlotArray;
 
 function compactMask(vec: std_logic_vector) return std_logic_vector; -- WARNING: only for 4 elements
 function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector;
-
-function getNewElem(remv: std_logic_vector; newContent: InstructionSlotArray) return InstructionSlot; -- UNUSED 
-function getNewElemSch(remv: std_logic_vector; newContent: SchedulerEntrySlotArray) return SchedulerEntrySlot;
 
 -- general InstructionState handling 
 function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionState; -- UNUSED
@@ -157,10 +162,7 @@ function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray;
 function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
 
 function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector;
-function extractFullMask(queueContent: SchedulerEntrySlotArray) return std_logic_vector;
-
-function extractData(queueContent: InstructionSlotArray) return InstructionStateArray;
-function extractData(queueContent: SchedulerEntrySlotArray) return InstructionStateArray;
+function extractFullMask(cpa: ControlPacketArray) return std_logic_vector;
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
@@ -204,6 +206,7 @@ function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSl
 function getAddressIncrement(ins: InstructionState) return Mword;
 
 function hasSyncEvent(ins: InstructionState) return std_logic;
+function hasSyncEvent(ct: InstructionControlInfo) return std_logic;
 
 function isBranchIns(ins: InstructionState) return std_logic;
 function isLoadOp(ins: InstructionState) return std_logic;
@@ -213,10 +216,20 @@ function isStoreMemOp(ins: InstructionState) return std_logic;
 function isLoadSysOp(ins: InstructionState) return std_logic;
 function isStoreSysOp(ins: InstructionState) return std_logic;
 
+function isLoadMemOp(op: SpecificOp) return std_logic;
+function isStoreMemOp(op: SpecificOp) return std_logic;
+function isLoadOp(op: SpecificOp) return std_logic;
+function isStoreOp(op: SpecificOp) return std_logic;
+function isLoadSysOp(op: SpecificOp) return std_logic;
+function isStoreSysOp(op: SpecificOp) return std_logic;
+
+
 -- sorting subpipelines
 function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getStoreSysMask(insVec: InstructionSlotArray) return std_logic_vector;
+function getLoadSysMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getFloatStoreMask(insVec, insVecF: InstructionSlotArray) return std_logic_vector;
 function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector;
@@ -238,10 +251,7 @@ function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
 
 function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray;
-function prepareForStoreValueFloatIQ(--insVecInt,
-                                     insVecFloat: InstructionSlotArray) return InstructionSlotArray;
-
---function removeArg2(insVec: InstructionStateArray) return InstructionStateArray;
+function prepareForStoreValueFloatIQ(insVecFloat: InstructionSlotArray) return InstructionSlotArray;
 
 function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray;
 
@@ -284,9 +294,9 @@ function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural)
 
 function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray; 
 
-
 function setPhysSources(insVec: InstructionSlotArray; newPhysSources: PhysNameArray; newestSelector, depVec: std_logic_vector) return InstructionSlotArray;
 
+function convertROBData(isa: InstructionSlotArray) return ControlPacketArray;
 
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
                                 s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
@@ -306,6 +316,13 @@ end package;
 
 package body PipelineGeneral is
 
+    function p2i(p: SmallNumber; n: natural) return natural is
+        --constant pIn: SmallNumber := p;
+        constant mask: SmallNumber := i2slv(n-1, SMALL_NUMBER_SIZE);
+        constant pT: SmallNumber := p and mask;
+    begin
+        return slv2u(pT);
+    end function;
 
 function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInfoArray is
     variable res: RenameInfoArray(intArgs'range) := intArgs;
@@ -360,8 +377,8 @@ begin
         end if;          
     end loop;
       
-        -- TMP!
-        res(0).ins.controlInfo.firstBr := content(0).ins.controlInfo.firstBr;
+    -- TMP!
+    res(0).ins.controlInfo.firstBr := content(0).ins.controlInfo.firstBr;
         
     return res;
 end function;
@@ -548,33 +565,7 @@ begin
     end case;
     return res;
 end function;
-
--- UNUSED?
-function getNewElem(remv: std_logic_vector; newContent: InstructionSlotArray) return InstructionSlot is
-    variable res: InstructionSlot := newContent(0);
-    variable inputMask: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
-    variable sel: std_logic_vector(1 downto 0) := "00";
-    variable remVec: std_logic_vector(0 to 2) := remv;               
-begin
-    inputMask := extractFullMask(newContent);
-    sel := getSelector(remVec, inputMask(0 to 2));
-    res := newContent(slv2u(sel));        
-    return res;    
-end function;
-
--- UNUSED?
-function getNewElemSch(remv: std_logic_vector; newContent: SchedulerEntrySlotArray)
-return SchedulerEntrySlot is
-    variable res: SchedulerEntrySlot := newContent(0);
-    variable inputMask: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
-    variable sel: std_logic_vector(1 downto 0) := "00";
-    variable remVec: std_logic_vector(0 to 2) := remv;               
-begin
-    inputMask := extractFullMask(newContent);
-    sel := getSelector(remVec, inputMask(0 to 2));
-    res := newContent(slv2u(sel));        
-    return res;    
-end function;
+ 
 
 function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionState is
 	variable res: InstructionState := ins;
@@ -631,30 +622,11 @@ begin
 	return res;
 end function;
 
-function extractFullMask(queueContent: SchedulerEntrySlotArray) return std_logic_vector is
-	variable res: std_logic_vector(0 to queueContent'length-1) := (others => '0');
+function extractFullMask(cpa: ControlPacketArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to cpa'length-1) := (others => '0');
 begin
 	for i in res'range loop
-		res(i) := queueContent(i).full;
-	end loop;
-	return res;
-end function;
-
-function extractData(queueContent: InstructionSlotArray) return InstructionStateArray is
-	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => DEFAULT_INS_STATE);
-begin
-	for i in res'range loop
-		res(i) := queueContent(i).ins;
-	end loop;
-	return res;
-end function;
-
-
-function extractData(queueContent: SchedulerEntrySlotArray) return InstructionStateArray is
-	variable res: InstructionStateArray(0 to queueContent'length-1) := (others => DEFAULT_INS_STATE);
-begin
-	for i in res'range loop
-		res(i) := queueContent(i).ins;
+		res(i) := cpa(i).controlInfo.full;
 	end loop;
 	return res;
 end function;
@@ -700,11 +672,11 @@ begin
                    res(i).ins.physicalArgSpec.intDestSel := '0';
                    res(i).ins.virtualArgSpec.floatDestSel := '0';
                 end if;		    
-			    res(i).ins.physicalArgSpec.dest := --(others => '0');
-			                                       (others => '1');
+                res(i).ins.physicalArgSpec.dest := (others => '0');
 			end if;
 			res(i).ins.controlInfo.newEvent := '0';
 		end loop;
+
 		for i in 0 to LEN-1 loop
 			res(i).full := '0';
 		end loop;
@@ -794,7 +766,6 @@ begin
 end function;
 
 
-
 function getCausingMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(insVec'range) := (others=>'0');
 begin
@@ -874,6 +845,35 @@ begin
 	return res;
 end function;
 
+function getStoreSysMask(insVec: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+	for i in 0 to PIPE_WIDTH-1 loop
+		if 	  insVec(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
+		      and (insVec(i).ins.specificOperation.memory = opStoreSys)		
+		then
+			res(i) := '1';
+		end if;
+	end loop;
+	
+	return res;
+end function;
+
+function getLoadSysMask(insVec: InstructionSlotArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+	for i in 0 to PIPE_WIDTH-1 loop
+		if 	  insVec(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
+		      and (insVec(i).ins.specificOperation.memory = opLoadSys)		
+		then
+			res(i) := '1';
+		end if;
+	end loop;
+	
+	return res;
+end function;
+
+
 function getFloatStoreMask(insVec, insVecF: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
@@ -903,8 +903,6 @@ function getMemMask(insVec: InstructionSlotArray) return std_logic_vector is
 begin
 	return getSubpipeMask(insVec, Mem);
 end function;
-
-
         
         function getBranchMask1(insVec: InstructionSlotArray) return std_logic_vector is
             variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
@@ -988,10 +986,6 @@ end function;
         end function;
 
 
-
-
-
-
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray is
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
@@ -1010,8 +1004,6 @@ begin
     end loop;
     return res;
 end function;
-
-
 
 
 function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray is
@@ -1054,20 +1046,6 @@ begin
 end function;
 
 
---function removeArg2(insVec: InstructionStateArray) return InstructionStateArray is
---    variable res: InstructionStateArray(0 to PIPE_WIDTH-1) := insVec;
---begin
---    for i in 0 to PIPE_WIDTH-1 loop
---        res(i).virtualArgSpec.intArgSel(2) := '0';
---        res(i).virtualArgSpec.args(2) := (others => '0');
-        
---        res(i).physicalArgSpec.intArgSel(2) := '0';
---        res(i).physicalArgSpec.args(2) := (others => '0');                                                
---    end loop;
-    
---    return res;
---end function;
-
 function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
 begin
@@ -1106,10 +1084,10 @@ function useStoreArg2(ria: RenameInfoArray) return RenameInfoArray is
     variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := ria;
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-            res(i).destSel := '0';
-            res(i).destSelFP := '0';
-            res(i).physicalDest := (others => '0');
-    
+        res(i).destSel := '0';
+        res(i).destSelFP := '0';
+        res(i).physicalDest := (others => '0');
+
         res(i).sourceSel(0) := res(i).sourceSel(2);
         res(i).sourceConst(0) := res(i).sourceConst(2); 
         res(i).virtualSources(0) := res(i).virtualSources(2);
@@ -1258,9 +1236,7 @@ function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
     for i in res'range loop
-        res(i).ins.specificOperation.memory := MemOp'val(slv2u(res(i).ins.specificOperation.bits));
-        
-        --    res(i).ins.constantArgs.immSel := '1';
+        res(i).ins.specificOperation.memory := MemOp'val(slv2u(res(i).ins.specificOperation.bits));        
     end loop;
 
     return res;
@@ -1324,11 +1300,47 @@ begin
     return bool2std(ins.specificOperation.memory = opStoreSys);        
 end function;
 
+
+function isLoadMemOp(op: SpecificOp) return std_logic is
+begin
+    return bool2std(op.memory = opLoad);        
+end function;
+
+function isStoreMemOp(op: SpecificOp) return std_logic is
+begin
+    return bool2std(op.memory = opStore);
+end function;
+
+function isLoadOp(op: SpecificOp) return std_logic is
+begin
+    return bool2std(op.memory = opLoad or op.memory = opLoadSys);        
+end function;
+
+function isStoreOp(op: SpecificOp) return std_logic is
+begin
+    return bool2std(op.memory = opStore or op.memory = opStoreSys);
+end function;
+
+function isLoadSysOp(op: SpecificOp) return std_logic is
+begin
+    return bool2std(op.memory = opLoadSys);        
+end function;
+
+function isStoreSysOp(op: SpecificOp) return std_logic is
+begin
+    return bool2std(op.memory = opStoreSys);
+end function;
+
+
 function hasSyncEvent(ins: InstructionState) return std_logic is
 begin
     return  ins.controlInfo.hasException or ins.controlInfo.specialAction or ins.controlInfo.dbtrap; 
 end function;
 
+function hasSyncEvent(ct: InstructionControlInfo) return std_logic is
+begin
+    return  ct.hasException or ct.specialAction or ct.dbtrap; 
+end function;
 
 function clearDbCausing(ins: InstructionState) return InstructionState is
     variable res: InstructionState := ins;
@@ -1407,24 +1419,25 @@ begin
 end function; 
 
 
-
-function makeExecResult(isl: InstructionSlot; full: std_logic) return ExecResult is
+function makeExecResult(isl: SchedulerState) return ExecResult is
     variable res: ExecResult := DEFAULT_EXEC_RESULT;
 begin
-    res.full := full;
-    res.tag := isl.ins.tags.renameIndex;
-    res.dest := isl.ins.physicalArgSpec.dest;
-    res.value := isl.ins.result;    
+    res.full := isl.full;
+    res.tag := isl.renameIndex;
+    res.dest := isl.argSpec.dest;
+
     return res;
 end function;
 
-function makeExecResult(isl: SchedulerEntrySlot; full: std_logic) return ExecResult is
-    variable res: ExecResult := DEFAULT_EXEC_RESULT;
+function convertROBData(isa: InstructionSlotArray) return ControlPacketArray is
+    variable res: ControlPacketArray(isa'range) := (others => DEFAULT_CONTROL_PACKET);
 begin
-    res.full := full;
-    res.tag := isl.ins.tags.renameIndex;
-    res.dest := isl.ins.physicalArgSpec.dest;
-    res.value := isl.ins.result;    
+    for i in res'range loop
+        res(i).controlInfo := isa(i).ins.controlInfo;
+        res(i).controlInfo.full := isa(i).full;
+        
+        res(i).target := isa(i).ins.target;
+    end loop;
     return res;
 end function;
 

@@ -21,25 +21,25 @@ entity UnitFront is
 		iin: in WordArray(0 to FETCH_WIDTH-1);
 
 		-- Interface PC to front
-		pcDataLiving: in InstructionState;
-		pcSending: in std_logic;
+		pcDataIn: in ControlPacket;
+		  
 		frontAccepting: out std_logic;
 
 		bpAccepting: in std_logic;
 		bpSending: out std_logic;
-		bpData: out InstructionSlotArray(0 to FETCH_WIDTH-1);
+        bpData_N: out ControlPacketArray(0 to FETCH_WIDTH-1);
 
 		-- Interface front to renaming
 		renameAccepting: in std_logic;		
-		dataLastLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1); 
+		dataOut_N: out BufferEntryArray; 
 		lastSending: out std_logic;
 		-------
 		
 		frontEventSignal: out std_logic;
-		frontCausing: out InstructionState;
-		
-		execCausing: in InstructionState;
-		lateCausing: in InstructionState;
+		frontCausing_N: out ExecResult;
+
+		execCausing_N: in ExecResult;
+		lateCausing_N: in ExecResult;
 		
 		execEventSignal: in std_logic;
 		lateEventSignal: in std_logic;
@@ -51,147 +51,94 @@ end UnitFront;
 architecture Behavioral of UnitFront is
 	signal resetSig, enSig: std_logic := '0';							
 
-    signal stageDataInFetch1: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal stageDataInFetch0: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal cpFetch0, cpFetch1: ControlPacket := DEFAULT_CONTROL_PACKET;
+
+    signal dataToIbuffer: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal stageDataInFetch0, stageDataOutFetch0, stageDataOutFetch1: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal dummyBP0, dummyBP1: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0'); -- Results from BP 
-	signal sendingOutFetch0, sendingOutFetch1, sendingOutBuffer: std_logic := '0';	
-	signal acceptingOutFetch0, acceptingOutFetch1, bufferAccepting: std_logic := '0';
-	signal earlyBranchSending, earlyBranchMultiSending, sendingToBranchTransfer: std_logic := '0';
+	signal sendingOutFetch0, sendingOutFetch1, sendingOutBuffer, bufferAccepting, earlyBranchSending, sendingToBranchTransfer: std_logic := '0';
+	signal pcEn, frontBranchEvent, killAll, killAllOrFront: std_logic := '0';
 	
 	signal fetchedLine0, fetchedLine1: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0')); 
-	signal frontBranchEvent, killAll, killAllOrFront: std_logic := '0';
-	signal sendingToEarlyBranch, sendingToBQ, sendingToBuffer, fetchStall: std_logic := '0'; 
-	
-	signal frontCausingSig, earlyBranchIn: InstructionState := DEFAULT_INSTRUCTION_STATE;
+	signal sendingToEarlyBranch, sendingToBQ, sendingToBuffer, fetchStall,  full0, full1, fullBr, fullBt,
+	                                                                                                      ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0';	
+	signal frontCausingSig, earlyBranchIn, earlyBranchOut: InstructionState := DEFAULT_INSTRUCTION_STATE;
 	signal predictedAddress: Mword := (others => '0');
 
-	signal stageDataOutFetch0, stageDataOutFetch1, stageDataInEarlyBranch, earlyBranchDataOutA: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal ibufDataOut_N: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 
-    --                              earlyBranchMultiDataOutA UNUSED!
-	signal earlyBranchMultiDataInA, earlyBranchMultiDataOutA, ibufDataOut: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+	signal earlyBranchMultiDataInA: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+
+    signal bqDataSig, bqDataSigPre: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 	
-	signal dataToIbuffer, dataToBranchTransfer, dataBranchTransferOut: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	signal fetchCounter, fetchCounterNext: Word := (others => '0');
 begin
 	killAll <= execEventSignal or lateEventSignal;
     killAllOrFront <= killAll or frontBranchEvent;
 
-    fetchCounterNext <= addInt(fetchCounter, PIPE_WIDTH) when pcSending = '1' else fetchCounter;
+    fetchCounterNext <= addInt(fetchCounter, PIPE_WIDTH) when pcEn = '1' else fetchCounter;
 
-    stageDataInFetch0(0).full <= pcSending;
-    stageDataInFetch0(0).ins.ip <= pcDataLiving.ip;
-    stageDataInFetch0(0).ins.target <= pcDataLiving.target;
-    stageDataInFetch0(0).ins.tags.fetchCtr <= fetchCounter when not CLEAR_DEBUG_INFO else (others => '0');
-
-	SUBUNIT_FETCH_0: entity work.GenericStage(Behavioral)
-	generic map(
-		WIDTH => 1 --PIPE_WIDTH
-	)
-	port map(
-		clk => clk, reset => '0', en => '0',
-				
-		prevSending => pcSending,	
-		nextAccepting => acceptingOutFetch1,
-		stageDataIn => stageDataInFetch0,
-		
-		acceptingOut => acceptingOutFetch0,
-		sendingOut => sendingOutFetch0,
-		stageDataOut => stageDataOutFetch0,
-		
-		execEventSignal => killAllOrFront,
-		lateEventSignal => killAll,
-		execCausing => DEFAULT_INSTRUCTION_STATE
-	);
-
-	
 	fetchedLine0 <= iin;
-	
-	SUBUNIT_FETCH_1: entity work.GenericStage(Behavioral)
-	generic map(
-		WIDTH => 1 --PIPE_WIDTH
-	)
-	port map(
-		clk => clk, reset => resetSig, en => enSig,
-				
-		prevSending => sendingOutFetch0,	
-		nextAccepting => '1',--earlyBranchAccepting,
-		acceptingOut => acceptingOutFetch1,
-		
-		stageDataIn => stageDataOutFetch0,
-		sendingOut => sendingOutFetch1,
-		stageDataOut => stageDataOutFetch1,
-		
-		execEventSignal => killAllOrFront,
-		lateEventSignal => killAll,
-		execCausing => DEFAULT_INSTRUCTION_STATE
-	);	
+
+    pcEn <= pcDataIn.controlInfo.full;
 
     process(clk)
     begin
         if rising_edge(clk) then
-            fetchedLine1 <= fetchedLine0;
             fetchCounter <= fetchCounterNext;
+
+            -- fetchedLine0: assigned async
+            fetchedLine1 <= fetchedLine0;
+
+            full0 <= bool2std(pcEn = '1') and not killAllOrFront;
+            full1 <= sendingOutFetch0 and not killAllOrFront;          -- F1
+            fullBr <= sendingOutFetch1 and not killAll;                -- F2
+            fullBt <= bool2std(sendingToBranchTransfer = '1') and not killAll; -- F2
+
+            earlyBranchOut <= earlyBranchIn; -- only .controlInfo, .target ?
+                    
+            bqDataSig <= bqDataSigPre;
+            -- Ibuf is on F2 too
+
+            stageDataOutFetch0 <= stageDataInFetch0;
+            stageDataOutFetch1 <= stageDataOutFetch0;  -- .ip, .target
+
+            -- Stage F0
+            
+            -- Stage F1
+            
+            -- Stage Ibuf/BrEval
+            
+            -- 
+
         end if;
     end process;
+
+    stageDataInFetch0(0).ins.ip <= pcDataIn.ip;
+    stageDataInFetch0(0).ins.target <= pcDataIn.target;
+
+    stageDataInFetch0(0).ins.tags.fetchCtr <= fetchCounter when not CLEAR_DEBUG_INFO else (others => '0');
     
-	earlyBranchMultiDataInA <= getFrontEventMulti(predictedAddress, stageDataOutFetch1(0).ins, fetchedLine1);
-	                      
-	SUBUNIT_EARLY_BRANCH_MULTI: entity work.GenericStage(Behavioral)
-	generic map(
-		WIDTH => PIPE_WIDTH
-	)
-	port map(
-		clk => clk, reset => resetSig, en => enSig,
-				
-		prevSending => sendingOutFetch1,	
-		nextAccepting => '1',
-		stageDataIn => earlyBranchMultiDataInA,
-		
-		acceptingOut => open,
-		sendingOut => earlyBranchMultiSending,
-		stageDataOut => earlyBranchMultiDataOutA,
-		
-		execEventSignal => killAll, -- CAREFUL: not killing on stall, because is sent to void
-		lateEventSignal => killAll,
-		execCausing => DEFAULT_INSTRUCTION_STATE
-	);
+    sendingOutFetch0 <= full0 and not killAllOrFront;
+    sendingOutFetch1 <= full1 and not killAllOrFront;
+    earlyBranchSending <= fullBr and not killAll;
+    sendingToBQ <= fullBt and not killAll;
+    
+    -- src for Ibuf and BT
+	earlyBranchMultiDataInA <= getFrontEventMulti(predictedAddress, stageDataOutFetch1(0).ins.ip, stageDataOutFetch1(0).ins.target, fetchedLine1);
 
-	fetchStall <= sendingOutFetch1 and (not bufferAccepting or not bpAccepting);
-
-	earlyBranchIn <= getEarlyEvent(stageDataOutFetch1(0).ins, earlyBranchMultiDataInA, predictedAddress, fetchStall);
-			
     sendingToEarlyBranch <= sendingOutFetch1;
-	stageDataInEarlyBranch(0) <= (sendingOutFetch1, earlyBranchIn);
-										
-	SUBUNIT_EARLY_BRANCH: entity work.GenericStage(Behavioral)
-	port map(
-		clk => clk, reset => resetSig, en => enSig,
-				
-		prevSending => sendingToEarlyBranch,	
-		nextAccepting => '1',
-		stageDataIn => stageDataInEarlyBranch,
-			
-		acceptingOut => open,--earlyBranchAccepting,
-		sendingOut => earlyBranchSending,
-		stageDataOut => earlyBranchDataOutA,
-		
-		execEventSignal => killAll, -- CAREFUL: not killing on stall, because is sent to void
-		lateEventSignal => killAll,
-		execCausing => DEFAULT_INSTRUCTION_STATE
-	);
 
-	frontBranchEvent <= earlyBranchDataOutA(0).ins.controlInfo.newEvent;
-	frontEventSignal <= frontBranchEvent;
-	frontCausingSig <= clearDbCausing(earlyBranchDataOutA(0).ins);
-	
+    earlyBranchIn <= getEarlyEvent(earlyBranchMultiDataInA, stageDataOutFetch1(0).ins.target, predictedAddress, fetchStall);
+
 	SAVE_PRED_TARGET: process(clk)
 	begin
 		if rising_edge(clk) then
 			if lateEventSetPC = '1' then				
-				predictedAddress <= lateCausing.target;
+				predictedAddress <= lateCausing_N.value;
 			elsif execEventSignal = '1' then
-				predictedAddress <= execCausing.target;
+				predictedAddress <= execCausing_N.value;
 			elsif frontBranchEvent = '1' then -- CAREFUL: must equal frontEventSignal
 				predictedAddress <= frontCausingSig.target;
 			elsif sendingToEarlyBranch = '1' then -- Normal flow - target from line predictor
@@ -200,9 +147,12 @@ begin
 		end if;
 	end process;
 	
-	sendingToBuffer <= sendingOutFetch1 and not fetchStall;
-	   
-	   dataToIbuffer <= adjustStage(earlyBranchMultiDataInA);
+	sendingToBuffer <= sendingOutFetch1 and not fetchStall; 
+	dataToIbuffer <= adjustStage(earlyBranchMultiDataInA);
+
+	sendingToBranchTransfer <= sendingOutFetch1 and not fetchStall;
+    bqDataSigPre <= prepareForBQ_N(stageDataOutFetch1(0).ins.ip, dataToIbuffer);
+
 	   
 	SUBUNIT_IBUFFER: entity work.InstructionBuffer(Implem)
 	port map(
@@ -214,80 +164,33 @@ begin
 		
 		acceptingOut => bufferAccepting,
 		sendingOut => sendingOutBuffer,
-		stageDataOut => ibufDataOut,
+		stageDataOut_N => ibufDataOut_N,
 		
-		execEventSignal => killAll,
-		execCausing => DEFAULT_INSTRUCTION_STATE		
+		execEventSignal => killAll
 	);
 
+
+	fetchStall <= sendingOutFetch1 and (not bufferAccepting or not bpAccepting);
+
+	frontBranchEvent <= earlyBranchOut.controlInfo.newEvent and earlyBranchSending;
+    frontCausingSig.target <= earlyBranchOut.target;
+
+    -- Outputs 
+
+    -- Pipeline (F2) (may be delayed any number of cycles)
 	lastSending <= sendingOutBuffer;
-	dataLastLiving <= ibufDataOut;
-	frontAccepting <= '1';
-
-	frontCausing <= frontCausingSig;
-   
-	sendingToBranchTransfer <= sendingOutFetch1 and not fetchStall;
-
-	dataToBranchTransfer <= prepareForBQ(--earlyBranchMultiDataInA);
-	                                      stageDataOutFetch1(0), dataToIbuffer);
-
-    bpData <= dataBranchTransferOut;
-              --  dataToBranchTransfer;
+    dataOut_N <= ibufDataOut_N;
+    
+    -- Pipeline F2    
+    bpData_N <= bqDataSig;
     bpSending <= sendingToBQ;
-                -- sendingToBranchTransfer;
 
-    SUBUNIT_BRANCH_TRANSFER: entity work.GenericStage(Behavioral)
-	generic map(
-		WIDTH => PIPE_WIDTH
-	)
-	port map(
-		clk => clk, reset => resetSig, en => enSig,
-				
-		prevSending => sendingToBranchTransfer,	
-		nextAccepting => '1',
-		stageDataIn => dataToBranchTransfer,
-		
-		acceptingOut => open,
-		sendingOut => sendingToBQ,
-		stageDataOut => dataBranchTransferOut,
-		
-		execEventSignal => killAll,
-		lateEventSignal => killAll,
-		execCausing => DEFAULT_INSTRUCTION_STATE
-	);
-
-	VIEW: if VIEW_ON generate
-	   use work.Viewing.all;
-        signal insBufInput, stagePreBuffer, branchTransferData, stageOut: GenericStageView;
-        signal stageFetch0, stageFetch1: FetchStageView;
+    -- Events
+	frontEventSignal <= frontBranchEvent;	
+    frontCausing_N.full <= frontBranchEvent;
+    frontCausing_N.value <= earlyBranchOut.target;
         
-        function expandToSlotArray(ia: InstructionSlotArray; wa: WordArray) return InstructionSlotArray is
-            variable res: InstructionSlotArray(wa'range) := (others => DEFAULT_INS_SLOT);
-            variable adrHi, adrLo: Mword := ia(0).ins.ip; 
-        begin
-            adrHi(ALIGN_BITS-1 downto 0) := (others => '0');
-            adrLo(MWORD_SIZE-1 downto ALIGN_BITS) := (others => '0');    
-        
-            for i in 0 to wa'length-1 loop
-                res(i).ins.bits := wa(i);
-                res(i).ins.ip := i2slv(slv2u(adrHi) + 4*i, 32);
-                if ia(0).full = '1' and slv2u(adrLo) <= 4*i then
-                    res(i).full := '1';
-                end if;
-            end loop;
-            
-            return res;
-        end function;  
-    begin
-        insBufInput <= getInsStringArray(earlyBranchMultiDataInA);
-
-        stageFetch0 <= getInsStringArray(expandToSlotArray(stageDataOutFetch0, fetchedLine0));
-        stageFetch1 <= getInsStringArray(expandToSlotArray(stageDataOutFetch1, fetchedLine1));
-        stagePreBuffer <= getInsStringArray(earlyBranchMultiDataOutA);
-        
-        branchTransferData <= getInsStringArray(dataBranchTransferOut);
-        
-        stageOut <= getInsStringArray(ibufDataOut);
-    end generate;
+    -- 	Pipeline backwards
+	frontAccepting <= '1';
 
 end Behavioral;

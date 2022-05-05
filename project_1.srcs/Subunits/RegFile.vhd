@@ -25,8 +25,9 @@ entity RegFile is
           reset : in  STD_LOGIC;
           en : in  STD_LOGIC;
 
-          writeAllow: in std_logic;
-          writeInput: in InstructionSlotArray(0 to WRITE_WIDTH-1);
+          --writeAllow: in std_logic;
+          --writeInput: in InstructionSlotArray(0 to WRITE_WIDTH-1);
+            writeInput_T: in ExecResultArray(0 to WRITE_WIDTH-1);
           
           readAllowVec: in std_logic_vector(0 to 3*WIDTH-1);
           selectRead: in PhysNameArray(0 to 3*WIDTH-1);
@@ -48,6 +49,12 @@ architecture Behavioral of RegFile is
     signal  selectWrite: PhysNameArray(0 to WIDTH-1) := (others => (others => '0'));
     signal  writeValues: MwordArray(0 to WIDTH-1) := (others => (others => '0'));
 
+    --    signal  writeVec_T: std_logic_vector(0 to WIDTH-1) := (others => '0');
+    --    signal  selectWrite_T: PhysNameArray(0 to WIDTH-1) := (others => (others => '0'));
+    --    signal  writeValues_T: MwordArray(0 to WIDTH-1) := (others => (others => '0'));
+        
+        signal ch0, ch1, ch2: std_logic := '0';
+
 	-- Memory block
 	signal content: MwordArray(0 to N_PHYSICAL_REGS-1) := (others => (others => '0'));
 
@@ -60,10 +67,18 @@ begin
 	resetSig <= reset and HAS_RESET_REGFILE;
 	enSig <= en or not HAS_EN_REGFILE;
 
-	writeVec(0) <= writeInput(0).full 
-		      and ((writeInput(0).ins.physicalArgSpec.intDestSel and not bool2std(IS_FP)) or (writeInput(0).ins.physicalArgSpec.floatDestSel and bool2std(IS_FP)));
-	selectWrite(0) <= writeInput(0).ins.physicalArgSpec.dest;
-    writeValues(0) <= writeInput(0).ins.result;
+	--writeVec_T(0) <= writeInput(0).full 
+	--	      and ((writeInput(0).ins.physicalArgSpec.intDestSel and not bool2std(IS_FP)) or (writeInput(0).ins.physicalArgSpec.floatDestSel and bool2std(IS_FP)));
+	--selectWrite_T(0) <= writeInput(0).ins.physicalArgSpec.dest;
+    --writeValues_T(0) <= writeInput(0).ins.result;
+
+	        writeVec(0) <= writeInput_T(0).full and isNonzero(writeInput_T(0).dest);
+	        selectWrite(0) <= writeInput_T(0).dest;
+            writeValues(0) <= writeInput_T(0).value;
+
+      --      ch0 <= bool2std(writeVec_T = writeVec);
+      --      ch1 <= bool2std(selectWrite_T = selectWrite);
+      --      ch2 <= bool2std(writeValues = writeValues);
 
 	writeVecMW(0 to WIDTH-1) <= writeVec;
 	writeVecMW(WIDTH to MAX_WIDTH-1) <= (others => '0');
@@ -85,13 +100,13 @@ begin
 			end loop;
 			
 			-- Writing
-			if writeAllow = '1' then
+			--if writeAllow = '1' then
 				for i in 0 to WRITE_WIDTH-1 loop
 					if writeVecMW(i) = '1' then
 						content(slv2u(selectWriteMW(i)(PHYS_REG_BITS_EFFECTIVE-1 downto 0))) <= writeValuesMW(i);
 					end if;
 				end loop;
-			end if;
+			--end if;
 		end if;
 	end process;
 	

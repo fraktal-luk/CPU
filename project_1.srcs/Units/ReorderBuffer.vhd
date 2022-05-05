@@ -25,10 +25,14 @@ entity ReorderBuffer is
 		
 		lateEventSignal: in std_logic;
 
-		execEndSigs1: in InstructionSlotArray(0 to 3);
-		execEndSigs2: in InstructionSlotArray(0 to 3);
+		execSigsMain: in ExecResultArray(0 to 3);
+		execSigsSec: in ExecResultArray(0 to 3);
 		
-		inputSpecial: in InstructionSlot;
+		branchControl: in InstructionControlInfo;
+		memoryControl: in InstructionControlInfo;
+		
+		specialOp: in SpecificOp;
+		
 		inputData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		prevSending: in std_logic;
 		acceptingOut: out std_logic;
@@ -38,7 +42,7 @@ entity ReorderBuffer is
 		sendingOut: out std_logic; 
 		
 		outputData: out InstructionSlotArray(0 to PIPE_WIDTH-1);
-		outputSpecial: out InstructionSlot
+		outputSpecial_N: out SpecificOp
 	);	
 end ReorderBuffer;
 
@@ -46,17 +50,23 @@ end ReorderBuffer;
 architecture Behavioral of ReorderBuffer is
 
     signal outputDataSig, outputDataSig_Pre: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
-    signal outputSpecialSig: InstructionSlot := DEFAULT_INS_SLOT;
+    signal outputSpecialSig, inputSpecial_N: InstructionSlot := DEFAULT_INS_SLOT;
         
 	signal isSending, isEmpty, outputCompleted, outputCompleted_Pre, outputEmpty, execEvent, isFull, isAlmostFull: std_logic := '0';
-	signal startPtr, startPtrNext, endPtr, endPtrNext, causingPtr: SmallNumber := (others => '0');	
+	--signal --startPtr,
+	  --      startPtrNext--, 
+	        --endPtr, endPtrNext--, causingPtr
+	    --       : SmallNumber := (others => '0');	
 	signal startPtrLong, startPtrLongNext, endPtrLong, endPtrLongNext, causingPtrLong: SmallNumber := (others => '0');	
 
     signal ch0, ch1, ch2, ch3: std_logic := '0';
 begin
-	execEvent <= execEndSigs1(0).full and execEndSigs1(0).ins.controlInfo.newEvent;
-	causingPtr <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN; -- TEMP!
-	causingPtrLong <= getTagHighSN(execEndSigs1(0).ins.tags.renameIndex) and PTR_MASK_SN_LONG; -- TEMP!
+    inputSpecial_N.ins.specificOperation <= specialOp;
+
+	execEvent <= branchControl.full and branchControl.newEvent;
+	
+	--causingPtr <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN;
+	causingPtrLong <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN_LONG;
 	
     NEW_DEV: block
         signal staticInput, staticOutput, staticOutput_D_Pre: StaticOpInfoArray;
@@ -81,8 +91,8 @@ begin
         staticInput <= getStaticOpInfoA(inputData);
         dynamicInput <= getDynamicOpInfoA(inputData);
         
-        staticGroupInput <= getStaticGroupInfo(inputData, inputSpecial);
-        dynamicGroupInput <= getDynamicGroupInfo(inputData, inputSpecial);
+        staticGroupInput <= getStaticGroupInfo(inputData, inputSpecial_N);
+        dynamicGroupInput <= getDynamicGroupInfo(inputData, inputSpecial_N);
 
         -- Outputs
         outputDataSig_Pre <= getInstructionSlotArray_T(staticOutput_D_Pre, dynamicOutput_Pre, staticGroupOutput_D_Pre, dynamicGroupOutput_Pre);
@@ -90,41 +100,41 @@ begin
 
     	outputCompleted_Pre <= groupCompleted(outputDataSig_Pre, dynamicOutput_Pre);
 
-        dynamicOutput_Pre <= readDynamicOutput(dynamicContent, startPtrNext);
-        dynamicGroupOutput_Pre <= readDynamicGroupOutput(dynamicGroupContent, startPtrNext);
+        dynamicOutput_Pre <= readDynamicOutput(dynamicContent, startPtrLongNext);
+        dynamicGroupOutput_Pre <= readDynamicGroupOutput(dynamicGroupContent, startPtrLongNext);
         
-        staticOutput_D_Pre <= deserializeStaticInfoA(serialMemContent(slv2u(startPtrNext)));                    
-        staticGroupOutput_D_Pre <= deserializeStaticGroupInfo(serialMemContent(slv2u(startPtrNext)));
+        staticOutput_D_Pre <= deserializeStaticInfoA(serialMemContent(p2i(startPtrLongNext, ROB_SIZE)));                    
+        staticGroupOutput_D_Pre <= deserializeStaticGroupInfo(serialMemContent(p2i(startPtrLongNext, ROB_SIZE)));
 
 
         SYNCH: process (clk)
         begin
             if rising_edge(clk) then
                 -- Update content
-                updateDynamicContent(dynamicContent, execEndSigs1, 0);
-                updateDynamicContent(dynamicContent, execEndSigs2, 1);
+                updateDynamicContent(dynamicContent, execSigsMain, 0);
+                updateDynamicContent(dynamicContent, execSigsSec, 1);
 
-                updateDynamicContentBranch(dynamicContent, execEndSigs1(0));
-                updateDynamicContentMemEvent(dynamicContent, execEndSigs1(2));
+                updateDynamicContentBranch(dynamicContent, branchControl.full, branchControl, execSigsMain(0).tag);
+                updateDynamicContentMemEvent(dynamicContent, execSigsMain(2).full, memoryControl, execSigsMain(2).tag);
 
                 -- Write inputs
                 if prevSending = '1' then                    
-                    writeStaticInput(staticContent, staticInput, endPtr);
-                    writeStaticGroupInput(staticGroupContent, staticGroupInput, endPtr);
+                    writeStaticInput(staticContent, staticInput, endPtrLong);
+                    writeStaticGroupInput(staticGroupContent, staticGroupInput, endPtrLong);
 
-                    writeDynamicInput(dynamicContent, dynamicInput, endPtr);
-                    writeDynamicGroupInput(dynamicGroupContent, dynamicGroupInput, endPtr);
+                    writeDynamicInput(dynamicContent, dynamicInput, endPtrLong);
+                    writeDynamicGroupInput(dynamicGroupContent, dynamicGroupInput, endPtrLong);
                     
-                    serialMemContent(slv2u(endPtr)) <= serialInput;
+                    serialMemContent(p2i(endPtrLong, ROB_SIZE)) <= serialInput;
                 end if;
                    
                 -- Read output
-                staticOutput <= readStaticOutput(staticContent, startPtrNext);
+                staticOutput <= readStaticOutput(staticContent, startPtrLongNext);
 
                 dynamicOutput <= dynamicOutput_Pre;
                 dynamicGroupOutput <= dynamicGroupOutput_Pre;
                 
-                serialOutput <= serialMemContent(slv2u(startPtrNext));
+                serialOutput <= serialMemContent(p2i(startPtrLongNext, ROB_SIZE));
                 
                 staticGroupOutput_D <= staticGroupOutput_D_Pre;
                   
@@ -152,10 +162,10 @@ begin
 
         nFullNext <= getNumFull(startPtrLongNext, endPtrLongNext, ROB_PTR_SIZE);     
        
-        startPtr <= startPtrLong and PTR_MASK_SN;
-        endPtr <= endPtrLong and PTR_MASK_SN;
-        startPtrNext <= startPtrLongNext and PTR_MASK_SN;
-        endPtrNext <= endPtrLongNext and PTR_MASK_SN;
+--        startPtr <= startPtrLong and PTR_MASK_SN;
+--        endPtr <= endPtrLong and PTR_MASK_SN;
+--        startPtrNext <= startPtrLongNext and PTR_MASK_SN;
+--        endPtrNext <= endPtrLongNext and PTR_MASK_SN;
         
         MANAGEMENT: process (clk)
         begin
@@ -169,7 +179,7 @@ begin
                 isAlmostFull <= cmpGtU(nFullNext, ROB_SIZE-2);
             	
             	-- TODO: check
-                outputEmpty <= bool2std(startPtrNext = endPtr) or lateEventSignal;                
+                outputEmpty <= bool2std(startPtrLongNext = endPtrLong) or lateEventSignal;
                 
                 if lateEventSignal = '1' or execEvent = '1' then
                     recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
@@ -184,7 +194,7 @@ begin
     end block;
 
     outputData <= outputDataSig;
-    outputSpecial <= outputSpecialSig;
+        outputSpecial_N <= outputSpecialSig.ins.specificOperation;
 
 	acceptingOut <= not isFull;
     acceptingMore <= not isAlmostFull;

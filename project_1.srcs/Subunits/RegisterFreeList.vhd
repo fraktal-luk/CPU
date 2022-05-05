@@ -29,36 +29,52 @@ entity RegisterFreeList is
 		
 		sendingToReserve: in std_logic;
 		takeAllow: in std_logic;
-		stageDataToReserve: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-		
+		--stageDataToReserve: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+		  reserveInfoA: in RenameInfoArray(0 to PIPE_WIDTH-1);
+
 		newPhysDests: out PhysNameArray(0 to PIPE_WIDTH-1);
 		newPhysDestPointer: out SmallNumber;
 
 		sendingToRelease: in std_logic;
-		stageDataToRelease: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-		
+		--stageDataToRelease: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+		  releaseInfoA: in RenameInfoArray(0 to PIPE_WIDTH-1);
+
 		physStableDelayed: in PhysNameArray(0 to PIPE_WIDTH-1)
-	);	
+	);
 end RegisterFreeList;
 
 
 architecture Behavioral of RegisterFreeList is
 	constant FP_1: natural := getFp1(IS_FP);
 
-    signal freeListTakeSel, freeListPutSel, stableUpdateSelDelayed, stableTakeUpdate, vsels, psels, overridden: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');    
+    signal freeListTakeSel, freeListTakeSel_C, freeListPutSel, stableUpdateSelDelayed, stableTakeUpdate, vsels, psels, overridden,
+             vsels_C, psels_C, overridden_C: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');    
     signal freeListTakeAllow, freeListPutAllow, freeListRewind: std_logic := '0';
     signal newListPointer: SmallNumber := (others => '0');
     signal physCommitFreedDelayed, physCommitDestsDelayed, newPhysDestsSync, newPhysDestsAsync: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 	  
-    signal recoveryCounter: SmallNumber := (others => '0');    	
+    signal recoveryCounter: SmallNumber := (others => '0');
+        signal ch0, ch1, ch2, ch3, ch4,ch5, ch6: std_logic := '0';  	
 begin
-    vsels <= getVirtualFloatDestSels(stageDataToRelease) when IS_FP else getVirtualIntDestSels(stageDataToRelease);
-    psels <= getPhysicalFloatDestSels(stageDataToRelease) when IS_FP else getPhysicalIntDestSels(stageDataToRelease);
+--    vsels_C <= getVirtualFloatDestSels(stageDataToRelease) when IS_FP else getVirtualIntDestSels(stageDataToRelease);
+--    psels_C <= getPhysicalFloatDestSels(stageDataToRelease) when IS_FP else getPhysicalIntDestSels(stageDataToRelease);
 
-    overridden <= findOverriddenDests(stageDataToRelease, IS_FP);
+--    overridden_C <= findOverriddenDests(stageDataToRelease, IS_FP);
+
+    vsels <= getVirtualFloatDestSels(releaseInfoA) when IS_FP else getVirtualIntDestSels(releaseInfoA);
+    psels <= --getPhysicalFloatDestSels(releaseInfoA) when IS_FP else getPhysicalIntDestSels(releaseInfoA);
+                getPsels(releaseInfoA);
+
+    overridden <= findOverriddenDests(releaseInfoA, IS_FP);
+
+
+        ch0 <= bool2std(vsels_C = vsels);
+        ch1 <= bool2std(psels_C = psels);
+        ch2 <= bool2std(overridden_C = overridden);
 
     physCommitFreedDelayed <= selAndCompactPhysDests(physStableDelayed, physCommitDestsDelayed, stableUpdateSelDelayed, freeListPutSel);
-    physCommitDestsDelayed <= getPhysicalDests(stageDataToRelease);
+    physCommitDestsDelayed <= getPhysicalDests(--stageDataToRelease);
+                                                releaseInfoA);
     
     stableUpdateSelDelayed <= psels and not overridden;  -- CAREFUL: excluding overridden dests
     stableTakeUpdate <= vsels; -- Those which commit any register that won't ever be rewound
@@ -74,7 +90,9 @@ begin
     freeListPutAllow <= sendingToRelease;
     freeListRewind <= rewind;
     
-    freeListTakeSel <= whichTakeReg(stageDataToReserve, IS_FP); -- CAREFUL: must agree with Sequencer signals
+    --    ch0 <= bool2std(freeListTakeSel = freeListTakeSel_C);
+--    freeListTakeSel_C <= whichTakeReg(stageDataToReserve, IS_FP); -- CAREFUL: must agree with Sequencer signals
+        freeListTakeSel <= whichTakeReg(reserveInfoA, IS_FP); -- CAREFUL: must agree with Sequencer signals
     -- Releasing a register every time any dest exists (but not always prev stable!)
     freeListPutSel <= vsels;
     
@@ -179,7 +197,7 @@ begin
 -------------
 -------------        
         VIEW: if VIEW_ON generate
-            use work.Viewing.all;
+            --use work.Viewing.all;
             
             signal vFree, vUsed: std_logic_vector(0 to N_PHYS-1) := (others => '0');
             signal newTaken, newPut: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));

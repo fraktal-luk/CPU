@@ -25,40 +25,6 @@ constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;
 constant MEM_WIDTH: natural := PIPE_WIDTH * 64; 
 
 
-type BufferEntry is record
-    full: std_logic;
-    
-    firstBr: std_logic; -- TEMP
-    
-    -- NOTE: for compresion maybe can be just 2 bits:
-    --       (br NT, br T, br T confirmed, special) is 4 possibilities     
-    branchIns: std_logic;
-    frontBranch: std_logic;
-    confirmedBranch: std_logic;
-    specialAction: std_logic;
-    
-    --immSel: std_logic;
-    fpRename: std_logic;           
-    mainCluster: std_logic;
-    secCluster: std_logic;
-    useLQ:      std_logic;
-    
-    specificOperation: SpecificOp;
-
-    constantArgs: InstructionConstantArgs;
-    argSpec: InstructionArgSpec;
-end record;
-
-constant DEFAULT_BUFFER_ENTRY: BufferEntry := (
-    specificOperation => sop(None, opNone),
-    constantArgs => DEFAULT_CONSTANT_ARGS,
-    argSpec => DEFAULT_ARG_SPEC,
-    others => '0'
-);
-
-type BufferEntryArray is array(0 to PIPE_WIDTH-1) of BufferEntry;
-type BufferEntryArray2D is array(0 to IBUFFER_SIZE-1, 0 to PIPE_WIDTH-1) of BufferEntry;
-
 type SerialMemory is array(0 to IBUFFER_SIZE-1) of std_logic_vector(MEM_WIDTH-1 downto 0);
 
 function formatInput(insVec: PipeStage) return PipeStage;
@@ -87,7 +53,7 @@ function formatInput(insVec: PipeStage) return PipeStage is
 begin
     for i in res'range loop
         res(i).ins.controlInfo.newEvent := '0';
-        
+
         if CLEAR_DEBUG_INFO then    
             res(i).ins := clearAbstractInfo(res(i).ins);
             res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;
@@ -308,7 +274,7 @@ begin
 end procedure;
 
 function readQueue(content: BufferEntryArray2D; ptr: SmallNumber) return BufferEntryArray is
-    constant indV:SmallNumber := ptr and PTR_MASK_SN;
+    constant indV: SmallNumber := ptr and PTR_MASK_SN;
     constant ind: natural := slv2u(indV);
     variable res: BufferEntryArray;
 begin

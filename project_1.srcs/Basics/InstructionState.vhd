@@ -102,6 +102,7 @@ constant INITIAL_GROUP_TAG_INC: InsTag := i2slv(0, TAG_SIZE);
 type InsTagArray is array (integer range <>) of InsTag;
 
 type InstructionControlInfo is record
+    full: std_logic;
 	newEvent: std_logic; -- True if any new event appears
 	hasInterrupt: std_logic;
 	hasException: std_logic;
@@ -180,7 +181,20 @@ end record;
 
 type InstructionStateArray is array(integer range <>) of InstructionState;
 
+type ControlPacket is record
+    controlInfo: InstructionControlInfo;
+    op: SpecificOp;
+    tags: InstructionTags;
+    tag: InsTag;
+    ip: Mword;
+    nip: Mword;
+    target: Mword;
+end record;
+
+type ControlPacketArray is array(integer range <>) of ControlPacket;
+
 constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
+    full => '0',
     newEvent => '0',
     hasInterrupt => '0',
     hasException => '0',
@@ -256,7 +270,17 @@ constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
 );
 
 constant DEFAULT_INS_STATE: InstructionState := DEFAULT_INSTRUCTION_STATE;
-	
+
+constant DEFAULT_CONTROL_PACKET: ControlPacket := (
+    controlInfo => DEFAULT_CONTROL_INFO,
+    op => DEFAULT_SPECIFIC_OP,
+    tags => DEFAULT_INSTRUCTION_TAGS,
+    tag => (others => '0'),
+    ip => (others => '0'),
+    nip => (others => '0'),
+    target => (others => '0')
+);
+
 -- Created to enable *Array				
 type InstructionSlot is record 
 	full: std_logic;
@@ -270,9 +294,46 @@ constant DEFAULT_INS_SLOT: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 type InstructionSlotArray is array(integer range <>) of InstructionSlot;
 
 
+
+type BufferEntry is record
+    full: std_logic;
+    
+    firstBr: std_logic; -- TEMP
+    
+    -- NOTE: for compresion maybe can be just 2 bits:
+    --       (br NT, br T, br T confirmed, special) is 4 possibilities     
+    branchIns: std_logic;
+    frontBranch: std_logic;
+    confirmedBranch: std_logic;
+    specialAction: std_logic;
+    
+    --immSel: std_logic;
+    fpRename: std_logic;           
+    mainCluster: std_logic;
+    secCluster: std_logic;
+    useLQ:      std_logic;
+
+    specificOperation: SpecificOp;
+
+    constantArgs: InstructionConstantArgs;
+    argSpec: InstructionArgSpec;
+end record;
+
+constant DEFAULT_BUFFER_ENTRY: BufferEntry := (
+    specificOperation => sop(None, opNone),
+    constantArgs => DEFAULT_CONSTANT_ARGS,
+    argSpec => DEFAULT_ARG_SPEC,
+    others => '0'
+);
+
+type BufferEntryArray is array(0 to PIPE_WIDTH-1) of BufferEntry;
+type BufferEntryArray2D is array(0 to IBUFFER_SIZE-1, 0 to PIPE_WIDTH-1) of BufferEntry;
+
+
 type SchedulerState is record
+        full: std_logic;
+
 	issued: std_logic;
-    --newInQueue: std_logic;
         
     branchIns: std_logic;
         
@@ -280,7 +341,7 @@ type SchedulerState is record
     bqPointer: SmallNumber;
     sqPointer: SmallNumber;
     lqPointer: SmallNumber;        
-        bqPointerSeq: SmallNumber;        
+    bqPointerSeq: SmallNumber;        
         
     operation: SpecificOp;
     argSpec: InstructionArgSpec;
@@ -298,13 +359,13 @@ type SchedulerState is record
     args: MwordArray(0 to 2);
     
     argLocsPipe: SmallNumberArray(0 to 2);
-    --argLocsPhase: SmallNumberArray(0 to 2);	
     argSrc: SmallNumberArray(0 to 2);	
 end record;
 
-constant DEFAULT_SCHEDULER_STATE: SchedulerState := ( 
+constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
+            full => '0',        
+
       issued => '0',
-      --newInQueue => '0',
 
       branchIns => '0',
       
@@ -312,7 +373,7 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       bqPointer => (others => '0'),
       sqPointer => (others => '0'),
       lqPointer => (others => '0'),                    
-          bqPointerSeq => (others => '0'),                    
+      bqPointerSeq => (others => '0'),                    
             
       operation => DEFAULT_SPECIFIC_OP,
       argSpec => DEFAULT_ARG_SPEC,          
@@ -329,24 +390,27 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       readNew => (others => '0'),
       args => (others => (others=>'0')),
       argLocsPipe => (others => (others => '0')),
-      --argLocsPhase => (others => (others => '0')),
       argSrc => (others => (others => '0'))
       );
 
 constant DEFAULT_SCHED_STATE: SchedulerState := DEFAULT_SCHEDULER_STATE;
 																				
-type SchedulerEntrySlot is record
-	full: std_logic;
-	ins: InstructionState;
-	state: SchedulerState;
-end record;
+--type SchedulerEntrySlot is record
+--	--full: std_logic;
+--	--ins: InstructionState;
+--	state: SchedulerState;
+--end record;
 
-constant DEFAULT_SCHEDULER_ENTRY_SLOT: SchedulerEntrySlot := (full => '0',
-                                                              ins => DEFAULT_INS_STATE,
-                                                              state => DEFAULT_SCHEDULER_STATE);
-constant DEFAULT_SCH_ENTRY_SLOT: SchedulerEntrySlot := (full => '0',
-                                                        ins => DEFAULT_INS_STATE,
-                                                        state => DEFAULT_SCHEDULER_STATE);
+--constant DEFAULT_SCHEDULER_ENTRY_SLOT: SchedulerEntrySlot := (--full => '0',
+--                                                              --ins => DEFAULT_INS_STATE,
+--                                                              state => DEFAULT_SCHEDULER_STATE);
+--constant DEFAULT_SCH_ENTRY_SLOT: SchedulerEntrySlot := (--full => '0',
+--                                                        --ins => DEFAULT_INS_STATE,
+--                                                        state => DEFAULT_SCHEDULER_STATE);
+
+    subtype SchedulerEntrySlot is SchedulerState;
+    constant DEFAULT_SCHEDULER_ENTRY_SLOT: SchedulerEntrySlot := DEFAULT_SCHEDULER_STATE;
+    constant DEFAULT_SCH_ENTRY_SLOT: SchedulerEntrySlot := DEFAULT_SCHEDULER_STATE;
 
 type SchedulerEntrySlotArray is array(integer range <>) of SchedulerEntrySlot;
 
