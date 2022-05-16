@@ -42,6 +42,8 @@ entity ReorderBuffer is
 		sendingOut: out std_logic; 
 		
 		outputData: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+		  outputArgInfoI: out RenameInfoArray(0 to PIPE_WIDTH-1);
+		  outputArgInfoF: out RenameInfoArray(0 to PIPE_WIDTH-1);
 		outputSpecial_N: out SpecificOp
 	);	
 end ReorderBuffer;
@@ -60,6 +62,65 @@ architecture Behavioral of ReorderBuffer is
 	signal startPtrLong, startPtrLongNext, endPtrLong, endPtrLongNext, causingPtrLong: SmallNumber := (others => '0');	
 
     signal ch0, ch1, ch2, ch3: std_logic := '0';
+    
+    
+    -- TMP: to remove
+    function getRenameInfoSC(  -- ia: BufferEntryArray;
+                                insVec: InstructionSlotArray; constant IS_FP: boolean := false)
+    return RenameInfoArray is
+        variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+        variable va, pa: InstructionArgSpec := DEFAULT_ARG_SPEC;
+        variable ca: InstructionConstantArgs := DEFAULT_CONSTANT_ARGS;
+        variable depVec: DependencyVec;
+    begin
+
+        for i in 0 to PIPE_WIDTH-1 loop
+            va := insVec(i).ins.virtualArgSpec;
+            pa := insVec(i).ins.physicalArgSpec;
+            ca := insVec(i).ins.constantArgs;
+        
+            if IS_FP then        
+                res(i).destSel := va.floatDestSel;
+                res(i).destSelFP := va.floatDestSel;
+                
+                res(i).psel := pa.floatDestSel;
+            else
+                res(i).destSel := va.intDestSel;
+                res(i).psel := pa.intDestSel;
+            end if;
+            
+            
+            res(i).virtualDest := va.dest(4 downto 0);
+            res(i).physicalDest := pa.dest;
+
+            if IS_FP then
+                res(i).sourceSel := va.floatArgSel;
+            else
+                res(i).sourceSel := va.intArgSel;
+            end if;
+
+            for j in 0 to 2 loop
+                res(i).sourceConst(j) :=   (va.intArgSel(j) and not isNonzero(va.args(j)(4 downto 0))) -- int r0
+                                        or (not va.intArgSel(j) and not va.floatArgSel(j))             -- not used
+                                        or (bool2std(j = 1) and ca.immSel);                                                        -- imm
+            end loop;
+
+            res(i).deps := depVec(i);
+            res(i).physicalSourcesNew := res(i).physicalSources;
+                                
+            for j in 0 to 2 loop
+                res(i).sourcesNew(j) := isNonzero(res(i).deps(j));
+                for k in PIPE_WIDTH-1 downto 0 loop
+                    if res(i).deps(j)(k) = '1' then
+                        exit;
+                    end if;
+                end loop;
+            end loop;
+            
+            res(i).sourcesReady := (others => '0');
+        end loop;
+        return res;
+    end function;
 begin
     inputSpecial_N.ins.specificOperation <= specialOp;
 
@@ -193,7 +254,12 @@ begin
 
     end block;
 
-    outputData <= outputDataSig;
+    outputData <= setDestFlags(
+                    outputDataSig
+                    );
+        outputArgInfoI <= getRenameInfoSC(setDestFlags(outputDataSig), false);
+        outputArgInfoF <= getRenameInfoSC(setDestFlags(outputDataSig), true);
+                    
         outputSpecial_N <= outputSpecialSig.ins.specificOperation;
 
 	acceptingOut <= not isFull;

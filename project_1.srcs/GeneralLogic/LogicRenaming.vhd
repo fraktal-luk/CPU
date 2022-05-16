@@ -77,7 +77,8 @@ function compactFreedRegs(names: PhysNameArray; mask: std_logic_vector) return P
 function selAndCompactPhysDests(physStableDelayed, physCommitDestsDelayed: PhysNameArray; stableUpdateSelDelayed, freeListPutSel: std_logic_vector)
 return PhysNameArray;
 
-    function assignDests(       insVec: InstructionSlotArray;
+    function assignDests(       ia: BufferEntryArray;
+                                --insVec: InstructionSlotArray;
                                 newDests: PhysNameArray;
                                 constant IS_FP: boolean)
     return PhysNameArray;
@@ -93,7 +94,8 @@ end package;
 
 package body LogicRenaming is
 
-    function assignDests(       insVec: InstructionSlotArray;
+    function assignDests(       ia: BufferEntryArray;
+                                --insVec: InstructionSlotArray;
                                 newDests: PhysNameArray;
                                 constant IS_FP: boolean)
     return PhysNameArray is
@@ -103,16 +105,19 @@ package body LogicRenaming is
         variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
         variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
        	variable found: boolean := false;
+       	variable va: InstructionArgSpec := DEFAULT_ARG_SPEC;
     begin
         -- Assign dest registers
         for i in 0 to PIPE_WIDTH-1 loop
-            if insVec(i).ins.virtualArgSpec.intDestSel = '1' and not IS_FP then
+            va := --insVec(i).ins.virtualArgSpec;
+                  ia(i).argSpec;
+            if va.intDestSel = '1' and not IS_FP then
                 res(i) := newDests(countOnes(takeVecInt)); -- how many used before
-            elsif insVec(i).ins.virtualArgSpec.floatDestSel = '1' and IS_FP then
+            elsif va.floatDestSel = '1' and IS_FP then
                 res(i) := newDests(countOnes(takeVecFloat)); -- how many used before
             end if;
-            takeVecInt(i) := insVec(i).ins.virtualArgSpec.intDestSel;   
-            takeVecFloat(i) := insVec(i).ins.virtualArgSpec.floatDestSel;   
+            takeVecInt(i) := va.intDestSel;   
+            takeVecFloat(i) := va.floatDestSel;   
         end loop;
         return res;       
     end function;

@@ -72,7 +72,7 @@ architecture Behavioral of Core is
            sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
            : std_logic := '0';
 
-    signal TMP_frontDataSpMasked,
+    signal --TMP_frontDataSpMasked,
            renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ,
            dataOutROB: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
@@ -81,7 +81,7 @@ architecture Behavioral of Core is
 
     signal frontOutput: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 
-    signal renamedArgsInt, renamedArgsFloat, renamedArgsMerged: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+    signal renamedArgsInt, renamedArgsFloat, renamedArgsMerged, renamedArgsIntROB, renamedArgsFloatROB: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 
     signal bqPointer, bqPointerSeq, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
 
@@ -218,7 +218,10 @@ begin
         frontLastSendingIn => frontLastSending,
         frontData => frontOutput,
         
-        TMP_spMaskedDataOut => TMP_frontDataSpMasked,
+        --TMP_spMaskedDataOut => TMP_frontDataSpMasked,
+            branchMaskRe => branchMaskRe,
+            loadMaskRe => loadMaskRe,
+            storeMaskRe => storeMaskRe,
         
         nextAccepting => canSendRename,
 
@@ -236,7 +239,9 @@ begin
         lqPointer => lqPointer,
         bqPointerSeq => bqPointerSeq,
 
-        robDataLiving => dataOutROB,
+        --robDataLiving => dataOutROB,
+            commitArgInfoI => renamedArgsIntROB,
+            commitArgInfoF => renamedArgsFloatROB,
         sendingFromROB => robSending,
         
         newPhysDestsOut => newIntDests,
@@ -308,6 +313,9 @@ begin
 		nextAccepting => commitAccepting,
 		sendingOut => robSending, 
 		outputData => dataOutROB,
+		  outputArgInfoI => renamedArgsIntROB,
+		  outputArgInfoF => renamedArgsFloatROB,
+		
 		outputSpecial_N => specialOutROB_N		
 	);     
 
@@ -1113,9 +1121,9 @@ begin
      
     end block; -- TEMP_EXEC
 
-    branchMaskRe <= getBranchMask(TMP_frontDataSpMasked);
-    loadMaskRe <= getLoadMask(TMP_recodeMem(TMP_frontDataSpMasked));
-    storeMaskRe <= getStoreMask(TMP_recodeMem(TMP_frontDataSpMasked));
+--    branchMaskRe <= getBranchMask(TMP_frontDataSpMasked);
+--    loadMaskRe <= getLoadMask(TMP_recodeMem(TMP_frontDataSpMasked));
+--    storeMaskRe <= getStoreMask(TMP_recodeMem(TMP_frontDataSpMasked));
 
     branchMaskOO <= extractFullMask(renamedDataToBQ);
     loadMaskOO <= extractFullMask(renamedDataToLQ);

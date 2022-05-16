@@ -1468,10 +1468,7 @@ function getInsSlot(elem: BufferEntry) return InstructionSlot is
     variable res: InstructionSlot := DEFAULT_INS_SLOT;
 begin
     res.full := elem.full;
-
     res.ins.controlInfo.firstBr := elem.firstBr;
-
-    
     res.ins.classInfo.branchIns := elem.branchIns;
     res.ins.controlInfo.frontBranch := elem.frontBranch;
     res.ins.controlInfo.confirmedBranch := elem.confirmedBranch;
