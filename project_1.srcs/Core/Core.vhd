@@ -73,7 +73,7 @@ architecture Behavioral of Core is
            : std_logic := '0';
 
     signal --TMP_frontDataSpMasked,
-           renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ,
+           renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ,-- renamedDataToSQ, renamedDataToLQ,
            dataOutROB: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal branchMaskRe, loadMaskRe, storeMaskRe, branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO,
@@ -269,11 +269,7 @@ begin
     end process;
 
     canSendFront <= renameAccepting and not stopRename;
-    canSendRename <= not stopRename;  --  Could also be : queuesAccepting;
-
-    renamedDataToBQ <= setFullMask(renamedDataLivingRe, getBranchMask1(renamedDataLivingRe));
-    renamedDataToSQ <= setFullMask(renamedDataLivingReMem, getStoreMask1(renamedDataLivingRe));
-    renamedDataToLQ <= setFullMask(renamedDataLivingReMem, getLoadMask1(renamedDataLivingRe));    
+    canSendRename <= not stopRename;  --  Could also be : queuesAccepting;  
 
     renamedDataLivingMerged <= replaceDests(renamedDataLivingRe, renamedArgsMerged);
 
@@ -1121,15 +1117,24 @@ begin
      
     end block; -- TEMP_EXEC
 
---    branchMaskRe <= getBranchMask(TMP_frontDataSpMasked);
---    loadMaskRe <= getLoadMask(TMP_recodeMem(TMP_frontDataSpMasked));
---    storeMaskRe <= getStoreMask(TMP_recodeMem(TMP_frontDataSpMasked));
 
-    branchMaskOO <= extractFullMask(renamedDataToBQ);
-    loadMaskOO <= extractFullMask(renamedDataToLQ);
-    storeMaskOO <= extractFullMask(renamedDataToSQ);
-    systemStoreMaskOO <= getStoreSysMask(renamedDataToSQ);
-    systemLoadMaskOO <= getLoadSysMask(renamedDataToSQ);
+    QUEUE_MASKS: block
+        signal renamedDataToSQ, renamedDataToLQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);    
+    begin
+        renamedDataToBQ <= setFullMask(renamedDataLivingRe, getBranchMask1(renamedDataLivingRe));
+        renamedDataToSQ <= setFullMask(renamedDataLivingReMem, getStoreMask1(renamedDataLivingRe));
+        renamedDataToLQ <= setFullMask(renamedDataLivingReMem, getLoadMask1(renamedDataLivingRe));  
+
+        branchMaskOO <= --extractFullMask(renamedDataToBQ);
+                        getBranchMask1(renamedDataLivingRe);
+        loadMaskOO <= --extractFullMask(renamedDataToLQ);
+                        getLoadMask1(renamedDataLivingRe);
+        storeMaskOO <= --extractFullMask(renamedDataToSQ);
+                        getStoreMask1(renamedDataLivingRe);
+        
+        systemStoreMaskOO <= getStoreSysMask(renamedDataToSQ);
+        systemLoadMaskOO <= getLoadSysMask(renamedDataToSQ);
+    end block;
 
     commitMaskSQ <= work.LogicQueues.getCommittedMask(dataOutROB, false);
     commitMaskLQ <= work.LogicQueues.getCommittedMask(dataOutROB, true);
@@ -1210,13 +1215,13 @@ begin
         storeValuePtr => sqValueResult.dest,
         storeValueResult => sqValueResult,
     
-        compareAddressInput_N => memAddressInput_SQ,
+        compareAddressInput => memAddressInput_SQ,
         compareAddressInputOp => memAddressOp,
 		
         compareIndexInput => preIndexSQ,
         preCompareOp => preAddressOp,
             
-        selectedDataOutput_N => ctOutSQ,
+        selectedDataOutput => ctOutSQ,
 
 		committing => robSending,
         commitMask => commitMaskSQ,
@@ -1224,13 +1229,13 @@ begin
 
 		lateEventSignal => lateEventSignal,
 		execEventSignal => execEventSignalDelayed,
-		execCausing_N => execCausingDelayedSQ,
+		execCausing => execCausingDelayedSQ,
 		
 		nextAccepting => commitAccepting,
 
         committedEmpty => sbEmpty,
         committedSending => sbSending,
-        committedDataOut_N => ctOutSB
+        committedDataOut => ctOutSB
 	);
 
     LOAD_QUEUE: entity work.StoreQueue(Behavioral)
@@ -1258,13 +1263,13 @@ begin
 		storeValuePtr => (others => '0'),
         storeValueResult => DEFAULT_EXEC_RESULT,
 		
-		compareAddressInput_N => memAddressInput_LQ,
+		compareAddressInput => memAddressInput_LQ,
         compareAddressInputOp => memAddressOp,
 
         compareIndexInput => preIndexLQ,        
         preCompareOp => preAddressOp,
              
-        selectedDataOutput_N => ctOutLQ,
+        selectedDataOutput => ctOutLQ,
 
 		committing => robSending,
         commitMask => commitMaskLQ,
@@ -1272,7 +1277,7 @@ begin
 
 		lateEventSignal => lateEventSignal,
 		execEventSignal => execEventSignalDelayed,
-		execCausing_N => execCausingDelayedLQ,
+		execCausing => execCausingDelayedLQ,
 		
 		nextAccepting => commitAccepting,
 		
