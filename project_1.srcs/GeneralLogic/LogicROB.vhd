@@ -102,11 +102,8 @@ function getStaticOpInfoA(isa: InstructionSlotArray) return StaticOpInfoArray;
 function getDynamicOpInfo(isl: InstructionSlot) return DynamicOpInfo;
 function getDynamicOpInfoA(isa: InstructionSlotArray) return DynamicOpInfoArray;
 
-    function getOutputSlot_T(stat: StaticOpInfo; dyn: DynamicOpInfo) return InstructionSlot;   
-    function getInstructionSlotArray_T(sa: StaticOpInfoArray; da: DynamicOpInfoArray; sgi: StaticGroupInfo; dgi: DynamicGroupInfo) return InstructionSlotArray;
-    function getSpecialSlot_T(si: StaticGroupInfo; di: DynamicGroupInfo) return InstructionSlot;
-
-
+function getInstructionSlotArray(sa: StaticOpInfoArray; da: DynamicOpInfoArray; sgi: StaticGroupInfo; dgi: DynamicGroupInfo) return InstructionSlotArray;
+function getSpecialSlot(si: StaticGroupInfo; di: DynamicGroupInfo) return InstructionSlot;
 
 function serializeStaticInfo(info: StaticOpInfo) return std_logic_vector;
 function serializeStaticInfoA(ia: StaticOpInfoArray) return std_logic_vector;
@@ -118,12 +115,12 @@ function deserializeStaticInfoA(v: std_logic_vector) return StaticOpInfoArray;
 function deserializeStaticGroupInfo(v: std_logic_vector) return StaticGroupInfo;
 
 
-        function serializeOp(isl: InstructionSlot) return std_logic_vector;
-        function deserializeOp(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray; 
-        function serializeSpecialAction(isl: InstructionSlot) return std_logic_vector;
-        function deserializeSpecialAction(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray;    
-        function serializeOpGroup(insVec: InstructionSlotArray) return std_logic_vector;
-        function deserializeOpGroup(insVec: InstructionSlotArray; serialData: std_logic_vector) return InstructionSlotArray;
+function serializeOp(isl: InstructionSlot) return std_logic_vector;
+function deserializeOp(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray; 
+function serializeSpecialAction(isl: InstructionSlot) return std_logic_vector;
+function deserializeSpecialAction(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray;    
+function serializeOpGroup(insVec: InstructionSlotArray) return std_logic_vector;
+function deserializeOpGroup(insVec: InstructionSlotArray; serialData: std_logic_vector) return InstructionSlotArray;
 
 
 procedure writeStaticInput(signal content: inout StaticOpInfoArray2D; input: StaticOpInfoArray; ptr: SmallNumber);
@@ -222,58 +219,57 @@ begin
     return res;
 end function;
 
-    function getOutputSlot_T(stat: StaticOpInfo; dyn: DynamicOpInfo) return InstructionSlot is
-        variable res: InstructionSlot := DEFAULT_INS_SLOT;
-    begin
-        res.full := dyn.full;
-        
-        res.ins.controlInfo.full := dyn.full;
-        res.ins.controlInfo.killed := dyn.killed;
-        res.ins.controlInfo.causing := dyn.causing;
+function getOutputSlot(stat: StaticOpInfo; dyn: DynamicOpInfo) return InstructionSlot is
+    variable res: InstructionSlot := DEFAULT_INS_SLOT;
+begin
+    res.full := dyn.full;
+    
+    res.ins.controlInfo.full := dyn.full;
+    res.ins.controlInfo.killed := dyn.killed;
+    res.ins.controlInfo.causing := dyn.causing;
 
-        res.ins.controlInfo.newEvent := dyn.hasEvent;
-        res.ins.controlInfo.hasException := dyn.hasException;
-        res.ins.controlInfo.confirmedBranch := dyn.confirmedBranch;
-        res.ins.controlInfo.specialAction := dyn.specialAction; -- ???
-        res.ins.controlInfo.refetch := dyn.refetch;
+    res.ins.controlInfo.newEvent := dyn.hasEvent;
+    res.ins.controlInfo.hasException := dyn.hasException;
+    res.ins.controlInfo.confirmedBranch := dyn.confirmedBranch;
+    res.ins.controlInfo.specialAction := dyn.specialAction; -- ???
+    res.ins.controlInfo.refetch := dyn.refetch;
 
-        res.ins.virtualArgSpec.intDestSel := stat.virtualIntDestSel;
-        res.ins.virtualArgSpec.floatDestSel := stat.virtualFloatDestSel;
- 
-        res.ins.virtualArgSpec.dest(4 downto 0) := stat.virtualDest;    
-        res.ins.physicalArgSpec.dest := stat.physicalDest;
+    res.ins.virtualArgSpec.intDestSel := stat.virtualIntDestSel;
+    res.ins.virtualArgSpec.floatDestSel := stat.virtualFloatDestSel;
 
-        res.ins.classInfo.secCluster := stat.useSQ;
-        res.ins.classInfo.useLQ := stat.useLQ;
-        res.ins.classInfo.branchIns := stat.useBQ;
-                   
-        return res;
-    end function;   
+    res.ins.virtualArgSpec.dest(4 downto 0) := stat.virtualDest;    
+    res.ins.physicalArgSpec.dest := stat.physicalDest;
 
-    function getInstructionSlotArray_T(sa: StaticOpInfoArray; da: DynamicOpInfoArray; sgi: StaticGroupInfo; dgi: DynamicGroupInfo) return InstructionSlotArray is
-        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
-    begin
-        for i in res'range loop
-            res(i) := getOutputSlot_T(sa(i), da(i));
-        end loop; 
-        
-        res(0).ins.controlInfo.firstBr := sgi.useBQ;
-        
-        return res;
-    end function;
+    res.ins.classInfo.secCluster := stat.useSQ;
+    res.ins.classInfo.useLQ := stat.useLQ;
+    res.ins.classInfo.branchIns := stat.useBQ;
+               
+    return res;
+end function;   
+
+function getInstructionSlotArray(sa: StaticOpInfoArray; da: DynamicOpInfoArray; sgi: StaticGroupInfo; dgi: DynamicGroupInfo) return InstructionSlotArray is
+    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
+begin
+    for i in res'range loop
+        res(i) := getOutputSlot(sa(i), da(i));
+    end loop; 
+    
+    res(0).ins.controlInfo.firstBr := sgi.useBQ;
+    
+    return res;
+end function;
 
 
-    function getSpecialSlot_T(si: StaticGroupInfo; di: DynamicGroupInfo) return InstructionSlot is
-        variable res: InstructionSlot := DEFAULT_INS_SLOT;
-    begin
-        res.ins.specificOperation.subpipe := None;
-        res.ins.specificOperation.system := SysOp'val(slv2u(si.specialOp));
-        res.ins.specificOperation.bits := si.specialOp;
-        
-        return res;
-    end function;
+function getSpecialSlot(si: StaticGroupInfo; di: DynamicGroupInfo) return InstructionSlot is
+    variable res: InstructionSlot := DEFAULT_INS_SLOT;
+begin
+    res.ins.specificOperation.subpipe := None;
+    res.ins.specificOperation.system := SysOp'val(slv2u(si.specialOp));
+    res.ins.specificOperation.bits := si.specialOp;
+    
+    return res;
+end function;
 
-----------------------------------------------------------
 
 function serializeStaticInfo(info: StaticOpInfo) return std_logic_vector is
     variable res: Word := (others => '0');
@@ -528,13 +524,13 @@ procedure updateDynamicContentMemEvent(signal content: inout DynamicOpInfoArray2
     variable groupInd, opInd: natural;
     variable tagHigh,tagHighTrunc: SmallNumber;
 begin
-        tagHigh := getTagHighSN(tag);
-        tagHighTrunc := tagHigh and PTR_MASK_SN;
-        groupInd := slv2u(tagHighTrunc);
+    tagHigh := getTagHighSN(tag);
+    tagHighTrunc := tagHigh and PTR_MASK_SN;
+    groupInd := slv2u(tagHighTrunc);
     
-        if useCtrl = '1' then
-            updateDynamicGroupMemEvent(content, execInfo, tag, groupInd);
-        end if;        
+    if useCtrl = '1' then
+        updateDynamicGroupMemEvent(content, execInfo, tag, groupInd);
+    end if;        
 end procedure;
 
 function groupCompleted(insVec: InstructionSlotArray; da: DynamicOpInfoArray) return std_logic is
@@ -543,7 +539,7 @@ begin
 		if      insVec(i).full = '1' 
 		    and ((da(i).completed0 or not da(i).mainCluster) and (da(i).completed1 or not da(i).secCluster)) = '0'
 		then
-			return '0'; 
+			return '0';
 		end if;
 	end loop;
 	return '1';

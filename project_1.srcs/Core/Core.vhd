@@ -312,7 +312,7 @@ begin
 		  outputArgInfoI => renamedArgsIntROB,
 		  outputArgInfoF => renamedArgsFloatROB,
 		
-		outputSpecial_N => specialOutROB_N		
+		outputSpecial => specialOutROB_N		
 	);     
 
 
@@ -1169,13 +1169,13 @@ begin
 	    
 	    branchMaskRe => branchMaskRe,
 		dataIn => renamedDataToBQ,
-        dataInBr_N => bpData_N,
+        dataInBr => bpData_N,
 
-		storeValueInput_N => bqUpdate,
-        compareAddressQuickInput_N => bqCompareEarly,
+		storeValueInput => bqUpdate,
+        compareAddressQuickInput => bqCompareEarly,
         compareQuickPtr => bqCompareEarly.dest,
 
-        selectedDataOutput_N => bqSelected,
+        selectedDataOutput => bqSelected,
 
 		committing => robSending, -- When ROB is sending so is BQ if it has corresponding branches
         commitBr => dataOutROB(0).ins.controlInfo.firstBr,
@@ -1184,11 +1184,11 @@ begin
 
 		lateEventSignal => lateEventSignal,
 		execEventSignal => execEventSignalDelayed,
-		execCausing_N => DEFAULT_EXEC_RESULT,
+		execCausing => DEFAULT_EXEC_RESULT,
 		nextAccepting => commitAccepting,		
 		sendingSQOut => open,
 		
-		committedDataOut_N => bqTargetData_N
+		committedDataOut => bqTargetData_N
 	);
 
     STORE_QUEUE: entity work.StoreQueue(Behavioral)
