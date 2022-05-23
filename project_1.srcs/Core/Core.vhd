@@ -407,7 +407,7 @@ begin
                 FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING1(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
-                    ,NONSHIFT => true
+                --    ,NONSHIFT => true
             )
             port map(
                 clk => clk, reset => '0', en => '0',

@@ -205,6 +205,8 @@ function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vec
         selected: std_logic;
     end record;
     
+    constant DEFAULT_SLOT_CONTROL: SlotControl := (others => '0');
+    
     type SlotControlArray is array(natural range <>) of SlotControl;
     
     function getControlSignals(content: SchedulerInfoArray; events: EventState) return SlotControlArray;
