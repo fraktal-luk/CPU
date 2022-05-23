@@ -127,7 +127,6 @@ type slv2D is array(natural range <>, natural range <>) of std_logic;
 
 
 constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", "00000010", '0');
-type WakeupArray2D is array(natural range <>, natural range <>) of WakeupStruct;
 
 function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo; 
 function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo;
@@ -137,9 +136,6 @@ function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector;
 function getSchedEntrySlot(info: SchedulerInfo; full: std_logic) return SchedulerState;
 
 function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
-
-
-function TMP_getIns(st: SchedulerState) return InstructionState;
 
 function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) return SchedulerState;
 
@@ -194,8 +190,6 @@ function restoreRenameIndex(sia: SchedulerInfoArray) return SchedulerInfoArray;
 
 function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vector) return SchedulerInfo;
 
-
-    
     type SlotControl is record
         full: std_logic;
         issued: std_logic;
@@ -225,6 +219,18 @@ function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vec
     function getReadyFullVec(arr: SlotControlArray) return std_logic_vector;
     function getReadyLiveVec(arr: SlotControlArray) return std_logic_vector;
     function getSelectedVec(arr: SlotControlArray) return std_logic_vector;
+
+
+    function TMP_getNewLocs_Banked(fullMask: std_logic_vector) return slv2D;
+    function TMP_getNewAdrs_Banked(fullMask: std_logic_vector) return SmallNumberArray;
+    function TMP_getBankCounts(fullMask: std_logic_vector) return SmallNumberArray;
+    function TMP_accepting_Banked(counts: SmallNumberArray; constant LIMIT: natural) return std_logic;
+    function TMP_acceptingMore_Banked(counts: SmallNumberArray; constant LIMIT: natural) return std_logic;
+    function TMP_getBank(selMask: std_logic_vector) return natural;
+    function TMP_getBankAdr(selMask: std_logic_vector) return natural;
+    function TMP_updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D;
+    function TMP_getSelMask(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector;
+    function TMP_getSelMatrix(readyMask: std_logic_vector; ageMatrix: slv2D) return slv2D;
 
 end LogicIssue;
 
@@ -518,45 +524,6 @@ begin
 end function;
 
 
-function TMP_getIns(st: SchedulerState) return InstructionState is
-	variable res: InstructionState := DEFAULT_INS_STATE;
-	variable v0, v1: std_logic_vector(1 downto 0) := "00";
-	variable selected0, selected1: Mword := (others => '0');
-	variable ready: std_logic_vector(0 to 2) := (others=>'0');
-	variable locs: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
-	constant Z3: std_logic_vector(0 to 2) := (others => '0');
-	constant ZZ3: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
-	variable imm: Word := (others => '0');
-begin
-    res.tags.renameIndex := st.renameIndex;
-    res.tags.bqPointer := st.bqPointer;
-    res.tags.sqPointer := st.sqPointer;
-    res.tags.lqPointer := st.lqPointer;
-    res.tags.bqPointerSeq := st.bqPointerSeq;
-
-    res.specificOperation := st.operation;
-
-    res.physicalArgSpec.dest := st.argSpec.dest;
-    res.physicalArgSpec.intDestSel := st.argSpec.intDestSel;
-    res.physicalArgSpec.floatDestSel := st.argSpec.floatDestSel;
-    
-    res.physicalArgSpec.intArgSel := (others => '0');
-    res.physicalArgSpec.floatArgSel := (others => '0');
-        
-    res.physicalArgSpec.args := st.argSpec.args;
-
-    -- Clear unused fields       
-    if CLEAR_DEBUG_INFO then
-        res := clearAbstractInfo(res);
-    end if;
-    res.controlInfo.newEvent := '0';
-    res.controlInfo.hasInterrupt := '0';
-        
-	return res;
-end function;
-
-
-
 function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) return SchedulerState is
     variable res: SchedulerState := input;
 begin
@@ -671,33 +638,8 @@ begin
         res.args(1) := res.args(1) or regValues(1);
     end if;
 
-    res.stored(1) := '1';         
+    res.stored(1) := '1';
 
-    return res;
-end function;
-
-
-function moveEarlyStage(content: SchedulerInfoArray; insA, insD: integer) return SchedulerInfoArray is
-    variable res: SchedulerInfoArray(content'range) := content;
-    constant LEN: natural := content'length;
-    constant MAIN_LEN: natural := content'length - PIPE_WIDTH;
-begin
-    for k in 0 to 2 loop
-        if insA + k >= 0 and insA + k < MAIN_LEN then
-            if res(MAIN_LEN + k).dynamic.full = '1' then
-                res(insA + k) := res(MAIN_LEN + k);
-            end if;
-        end if;
-    end loop;
-    
-    if insD >= 0 and insD < MAIN_LEN then
-        if res(LEN-1).dynamic.full = '1' then
-            res(insD) := res(LEN-1);
-        end if;
-    end if;
-    
-    res(MAIN_LEN to LEN-1) := (others => DEFAULT_SCHEDULER_INFO);
-    
     return res;
 end function;
 
@@ -1312,5 +1254,194 @@ begin
     return res;
 end function;
 
+
+
+            function TMP_getNewLocs_Banked(fullMask: std_logic_vector) return slv2D is
+                constant QUEUE_SIZE_EXT: natural := fullMask'length;
+                variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
+                variable cnt: natural := 0;
+                constant N_BANKS: natural := 4;
+                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+            begin
+               for b in 0 to N_BANKS-1 loop
+                   for i in 0 to BANK_SIZE-1 loop
+                        if fullMask(i * N_BANKS + b) /= '1' then
+                            res(i * N_BANKS + b, b) := '1';
+                            exit;
+                        end if;
+                    end loop;
+                end loop;
+          
+                return res;
+            end function;
+
+            function TMP_getNewAdrs_Banked(fullMask: std_logic_vector) return SmallNumberArray is
+                constant QUEUE_SIZE_EXT: natural := fullMask'length;
+                variable res: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+                variable cnt: natural := 0;
+                constant N_BANKS: natural := 4;
+                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+            begin
+               for b in 0 to N_BANKS-1 loop
+                   for i in 0 to BANK_SIZE-1 loop
+                        if fullMask(i * N_BANKS + b) /= '1' then
+                            res(b) := i2slv(i, SMALL_NUMBER_SIZE);
+                            exit;
+                        end if;
+                    end loop;
+                end loop;
+          
+                return res;
+            end function;
+
+            function TMP_getBankCounts(fullMask: std_logic_vector) return SmallNumberArray is
+                constant QUEUE_SIZE_EXT: natural := fullMask'length;
+                variable res: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+                variable cnt: natural := 0;
+                constant N_BANKS: natural := 4;
+                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+            begin
+               for i in 0 to BANK_SIZE-1 loop
+                   for b in 0 to N_BANKS-1 loop
+                        if fullMask(i * N_BANKS + b) = '1' then
+                            res(b) := addInt(res(b), 1);
+                        end if;
+                    end loop;
+                end loop;            
+                return res;
+            end function;
+
+            function TMP_accepting_Banked(counts: SmallNumberArray; constant LIMIT: natural) return std_logic is
+                variable cnt: natural := 0;
+                constant N_BANKS: natural := counts'length;
+                --constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+            begin
+               for b in 0 to N_BANKS-1 loop
+                    if slv2u(counts(b)) > LIMIT - 1  then
+                        return '0';
+                    end if;
+                end loop;
+                return '1';
+            end function;
+
+            function TMP_acceptingMore_Banked(counts: SmallNumberArray; constant LIMIT: natural) return std_logic is
+                variable cnt: natural := 0;
+                constant N_BANKS: natural := counts'length;
+                --constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+            begin
+               for b in 0 to N_BANKS-1 loop
+                    if slv2u(counts(b)) > LIMIT - 2  then
+                        return '0';
+                    end if;
+                end loop;
+                return '1';
+            end function;
+    
+            function TMP_getBank(selMask: std_logic_vector) return natural is
+                constant QUEUE_SIZE_EXT: natural := selMask'length;
+                constant N_BANKS: natural := 4;
+                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+            begin
+                for i in 0 to N_BANKS-1 loop
+                    for j in 0 to BANK_SIZE-1 loop
+                        if selMask(i + N_BANKS*j) = '1' then
+                            return i;
+                        end if;
+                    end loop;
+                end loop;
+                
+                return 0;
+            end function;
+
+            function TMP_getBankAdr(selMask: std_logic_vector) return natural is
+                constant QUEUE_SIZE_EXT: natural := selMask'length;
+                constant N_BANKS: natural := 4;
+                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+            begin
+                for i in 0 to N_BANKS-1 loop
+                    for j in 0 to BANK_SIZE-1 loop
+                        if selMask(i + N_BANKS*j) = '1' then
+                            return j;
+                        end if;
+                    end loop;
+                end loop;
+                
+                return 0;
+            end function;
+
+        function TMP_updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D is
+            constant QUEUE_SIZE_EXT: natural := fullMask'length;
+            variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := ageMatrix;
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                -- insert current fullMask into proper row    
+                for j in 0 to QUEUE_SIZE_EXT-1 loop
+                    if insertionLocs(j, i) = '1' then
+                        -- Sorry, assigment doesn;t work for ranges in >= 2D
+                        for k in 0 to QUEUE_SIZE_EXT-1 loop
+                            res(j, k) := fullMask(k); -- Maybe setting to all ones would work too?
+                        end loop;
+                        
+                        -- Preceding in this group are also masked!
+                        for p in 0 to PIPE_WIDTH-1 loop
+                            if p = i then
+                                exit;
+                            end if;
+                            
+                            for k in 0 to QUEUE_SIZE_EXT-1 loop
+                                if insertionLocs(k, p) = '1' then
+                                    res(j, k) := '1';
+                                    exit;
+                                end if;
+                            end loop;
+                        end loop;
+                        
+                        -- Clear all dependencies on this new op
+                        for k in 0 to QUEUE_SIZE_EXT-1 loop
+                            res(k, j) := '0';
+                        end loop;
+                        
+                        exit;
+                    end if;
+                end loop;
+            end loop;
+            return res;
+        end function;
+
+    function TMP_getSelMask(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector is
+        constant QUEUE_SIZE_EXT: natural := readyMask'length;
+        variable res: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := --readyMask;--
+                                                                 (others => '0');
+        variable row: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
+    begin
+        for i in 0 to QUEUE_SIZE_EXT-1 loop
+            for j in 0 to QUEUE_SIZE_EXT-1 loop
+                row(j) := readyMask(j) and ageMatrix(i, j);
+            end loop;
+            row(i) := '0';
+
+            if isNonzero(row(0 to QUEUE_SIZE_EXT/2 - 1)) = '1' or isNonzero(row(QUEUE_SIZE_EXT/2 to QUEUE_SIZE_EXT-1)) = '1' then
+                res(i) := '0';
+            else
+                res(i) := readyMask(i);
+            end if;
+        end loop;
+             
+        return res;
+    end function;
+
+    function TMP_getSelMatrix(readyMask: std_logic_vector; ageMatrix: slv2D) return slv2D is
+        constant QUEUE_SIZE_EXT: natural := readyMask'length;
+        variable res: slv2D(0 to QUEUE_SIZE_EXT-1,0 to QUEUE_SIZE_EXT-1) := (others => (others => '0'));
+        variable si: SchedulerInfo;
+    begin
+        for i in 0 to QUEUE_SIZE_EXT-1 loop
+            for j in 0 to QUEUE_SIZE_EXT-1 loop
+                res(i, j) := readyMask(j) and ageMatrix(i, j);
+            end loop;
+        end loop;
+             
+        return res;
+    end function;
 
 end LogicIssue;
