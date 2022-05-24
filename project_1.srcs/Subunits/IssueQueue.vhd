@@ -60,67 +60,27 @@ architecture Behavioral of IssueQueue is
     constant N_BANKS: natural := 4;
     constant BANK_SIZE: natural := QUEUE_SIZE_EXT / N_BANKS;
 
-    signal TMP_inputAdrs: SmallNumberArray(0 to 3) := (others => (others => '0'));  -- address where to write for each bank (first free slot)   
-    signal TMP_inputSlots: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
-    signal TMP_bankCounts: SmallNumberArray(0 to 3) := (others => (others => '0'));
-
-    signal TMP_inputDirs: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0'); 
+    signal bankCounts: SmallNumberArray(0 to 3) := (others => (others => '0'));
+    -- For future development: selects bank for each input element. Becomes relevant when load balancing among banks is introduced
+    signal TMP_inputDirs: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     
     signal nFull, nFullNext, nIn, nOut, recoveryCounter: SmallNumber := (others => '0');
 
-    signal TMP_ageMatrix, TMP_ageMatrixNext, selMatrix: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := (others => (others => '0'));
-    signal TMP_insertionLocs, TMP_insertionLocs_Banked: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
-    
-    signal selBank, selBankAdr: natural := 0; 
+    signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
 
-    signal selectedBankValues: WordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-    signal selectedValue: Word := (others => '0');
-    
-
-    signal bank0, bank1, bank2, bank3: WordArray(0 to QUEUE_SIZE_EXT/4 - 1) := (others => (others => '0'));
-
-    signal queueContent, queueContentRR, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
+    signal ageMatrix, ageMatrixNext: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := (others => (others => '0'));
+    signal insertionLocs: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal fma: ForwardingMatchesArray(0 to QUEUE_SIZE_EXT - 1) := (others => DEFAULT_FORWARDING_MATCHES);
 
-    signal fullMask, trialMask, readyMaskLive, killMask, readyMaskAll, selMask, selMask1, selMask2, selMask3, selMask4: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
     signal controlSigs: SlotControlArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SLOT_CONTROL);
-
+    signal fullMask, trialMask, readyMaskLive, killMask, readyMaskAll, selMask, selMask1, selMask2, selMask3, selMask4: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
     signal anyReadyFull, anyReadyLive, sends, sendingKilled, isSent, isSent2, sentKilled, sentKilled1, sentKilled2, sentKilled3, sentKilled4, isEmpty, isFull, isAlmostFull: std_logic := '0';
     
     signal selectedSlot: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
     signal dispatchDataNew: SchedulerState := DEFAULT_SCHED_STATE;       
                               
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
-
-    function updateRenameIndex(content: SchedulerInfoArray) return SchedulerInfoArray is
-        variable res: SchedulerInfoArray(content'range) := content;
-        variable earlyStage: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content(QUEUE_SIZE_EXT - PIPE_WIDTH to QUEUE_SIZE_EXT-1);
-    begin
-        earlyStage := restoreRenameIndex(earlyStage);
-
-        res(QUEUE_SIZE_EXT - PIPE_WIDTH to QUEUE_SIZE_EXT-1) := earlyStage;
-        return res;
-    end function;
-
-    function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return SchedulerInfo is
-        variable res, a, b: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
-        variable maskedQueue: SchedulerInfoArray(inputElems'range) := (others => DEFAULT_SCHEDULER_INFO);
-    begin
-        for i in 0 to QUEUE_SIZE_EXT-1 loop
-            if selMask(i) = '1' then
-                maskedQueue(i) := inputElems(i);
-            end if;
-        end loop;
-    
-        for i in 0 to QUEUE_SIZE_EXT/2-1 loop
-            a := orSchedEntrySlot(a, maskedQueue(i));
-            b := orSchedEntrySlot(b, maskedQueue(i + QUEUE_SIZE_EXT/2));
-        end loop;
-        
-        res := orSchedEntrySlot(a, b);
-        return res;
-    end function;
 
 begin
     nFullNext <=        sub(i2slv(countOnes(fullMask), SMALL_NUMBER_SIZE), nOut) when slv2u(recoveryCounter) = 1
@@ -129,111 +89,84 @@ begin
     nIn <= i2slv(countOnes(extractFullMask(newArr)), SMALL_NUMBER_SIZE) when prevSendingOK = '1' else (others => '0'); 
     nOut <= i2slv(1, SMALL_NUMBER_SIZE) when (isSent and not sentKilled) = '1' else (others => '0');
 
-    MANAGEMENT: block
+    fma <= findForwardingMatchesArray(queueContent, fni);
+
+    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, false, false, DONT_MATCH1, FORWARDING_D, FORWARDING_D);
+    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, false, true, DONT_MATCH1, FORWARDING, FORWARDING1);
+
+    insertionLocs <= getNewLocsBanked(fullMask);
+
+    queueContentNext <= iqNext_NS(queueContentUpdated, newArr, prevSendingOK, sends, killMask, trialMask, selMask, readyRegFlags, insertionLocs, 0);
+    ageMatrixNext <= updateAgeMatrix(ageMatrix, insertionLocs, fullMask);
+
+
+    QUEUE_SYNCHRONOUS: process(clk)
     begin
-        TMP_inputAdrs <= TMP_getNewAdrs_Banked(fullMask);    
-        TMP_bankCounts <= TMP_getBankCounts(fullMask);
-    
-        QUEUE_SYNCHRONOUS: process(clk)
-        begin
-            if rising_edge(clk) then
-                queueContent <= queueContentNext;
-                TMP_ageMatrix <= TMP_ageMatrixNext;
+        if rising_edge(clk) then
+            queueContent <= queueContentNext;
+            ageMatrix <= ageMatrixNext;
 
-                selMask1 <= selMask;
-                selMask2 <= selMask1;
-                selMask3 <= selMask2;
-                selMask4 <= selMask3;
+            selMask1 <= selMask;
+            selMask2 <= selMask1;
+            selMask3 <= selMask2;
+            selMask4 <= selMask3;
 
-                sentKilled <= sendingKilled;
-                sentKilled1 <= sendingKilled;
-                sentKilled2 <= isNonzero(killMask and selMask1);
-                sentKilled3 <= isNonzero(killMask and selMask2);
-                sentKilled4 <= isNonzero(killMask and selMask3);                        
-                        
-                isSent <= sends;
-                isSent2 <= isSent;
-                
-                nFull <= nFullNext;
+            sentKilled <= sendingKilled;
+            sentKilled1 <= sendingKilled;
+            sentKilled2 <= isNonzero(killMask and selMask1);
+            sentKilled3 <= isNonzero(killMask and selMask2);
+            sentKilled4 <= isNonzero(killMask and selMask3);                        
                     
-                if events.lateEvent = '1' or events.execEvent = '1' then
-                    recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
-                elsif isNonzero(recoveryCounter) = '1' then
-                    recoveryCounter <= addInt(recoveryCounter, -1);
-                end if;
+            isSent <= sends;
+            isSent2 <= isSent;
+        end if;
+    end process;
+
+    controlSigs <= getControlSignals(queueContentUpdatedSel, events);               
+
+    -- Vector signals
+    killMask <= getKilledVec(controlSigs);
+    trialMask <= getTrialVec(controlSigs);
+    fullMask <= getFullVec(controlSigs);
+    readyMaskAll <= getReadyVec(controlSigs);
+    readyMaskLive <= getReadyLiveVec(controlSigs);
+    
+    -- Scalar signals
+    isEmpty <= not isNonzero(fullMask);
+    anyReadyLive <= isNonzero(readyMaskLive);
+    anyReadyFull <= isNonzero(readyMaskAll);
+    sends <= anyReadyFull and nextAccepting;
+    sendingKilled <= isNonzero(killMask and selMask);
+
+    bankCounts <= getBankCounts(fullMask);
+
+    -- Selection for issue
+    selMask <= getSelMask(readyMaskAll, ageMatrix);
+    selectedSlot <= queueSelect(queueContentUpdatedSel, selMask);  
+
+    COUNTERS_SYNCHRONOUS: process(clk)
+    begin
+        if rising_edge(clk) then               
+            nFull <= nFullNext;
                 
-                recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here    
-           
-                isFull <= cmpGtU(nFullNext, QUEUE_SIZE_EXT - PIPE_WIDTH);
-                isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE_EXT - 2*PIPE_WIDTH);
-                
-                if prevSendingOK = '1' and newArr(0).dynamic.full = '1' then
-                   bank0(slv2u(TMP_inputAdrs(0))) <= X"00" & newArr(0).static.lqPointer & newArr(0).static.sqPointer & newArr(0).static.bqPointer;
-                end if;
-                
-                if prevSendingOK = '1' and newArr(1).dynamic.full = '1' then
-                   bank1(slv2u(TMP_inputAdrs(1))) <= X"00" & newArr(1).static.lqPointer & newArr(1).static.sqPointer & newArr(1).static.bqPointer;
-                end if;
-                
-                if prevSendingOK = '1' and newArr(2).dynamic.full = '1' then
-                   bank2(slv2u(TMP_inputAdrs(2))) <= X"00" & newArr(2).static.lqPointer & newArr(2).static.sqPointer & newArr(2).static.bqPointer;
-                end if;
-                
-                if prevSendingOK = '1' and newArr(3).dynamic.full = '1' then
-                   bank3(slv2u(TMP_inputAdrs(3))) <= X"00" & newArr(3).static.lqPointer & newArr(3).static.sqPointer & newArr(3).static.bqPointer;
-                end if;
+            if events.lateEvent = '1' or events.execEvent = '1' then
+                recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
+            elsif isNonzero(recoveryCounter) = '1' then
+                recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
-        end process;
+            
+            recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here    
+       
+            isFull <= cmpGtU(nFullNext, QUEUE_SIZE_EXT - PIPE_WIDTH);
+            isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE_EXT - 2*PIPE_WIDTH);
+        end if;
+    end process;
 
-        selectedBankValues <= (bank0(selBankAdr), bank1(selBankAdr), bank2(selBankAdr), bank3(selBankAdr));
-        selectedValue <= selectedBankValues(selBank);
-        
-        fma <= findForwardingMatchesArray(queueContent, fni);
-
-        controlSigs <= getControlSignals(queueContentUpdatedSel, events);               
-    
-        -- Vector signals
-        killMask <= getKilledVec(controlSigs);
-        trialMask <= getTrialVec(controlSigs);
-        fullMask <= getFullVec(controlSigs);
-        readyMaskAll <= getReadyVec(controlSigs);
-        readyMaskLive <= getReadyLiveVec(controlSigs);
-        
-        -- Scalar signals
-        anyReadyLive <= isNonzero(readyMaskLive);
-        anyReadyFull <= isNonzero(readyMaskAll);
-        sends <= anyReadyFull and nextAccepting;
-        sendingKilled <= isNonzero(killMask and selMask);
-
-        selMask <= TMP_getSelMask(readyMaskAll, TMP_ageMatrix);
-        
-        selMatrix <= TMP_getSelMatrix(readyMaskAll, TMP_ageMatrix);
-        
-        isEmpty <= not isNonzero(fullMask);
-
-        TMP_ageMatrixNext <= TMP_updateAgeMatrix(TMP_ageMatrix, TMP_insertionLocs, fullMask);
-        
-        TMP_insertionLocs <= TMP_insertionLocs_Banked;
-        TMP_insertionLocs_Banked <= TMP_getNewLocs_Banked(fullMask);
-
-        queueContentRR <= queueContent;
-
-        queueContentUpdated <= updateSchedulerArray(queueContentRR, fni, fma, false, false, DONT_MATCH1, FORWARDING_D, FORWARDING_D);
-        queueContentUpdatedSel <= updateSchedulerArray(queueContentRR, fni, fma, false, true, DONT_MATCH1, FORWARDING, FORWARDING1);
-
-        queueContentNext <= iqNext_NS(queueContentUpdated, newArr, prevSendingOK, sends, killMask, trialMask, selMask, readyRegFlags, TMP_insertionLocs, 0);
-
-        selectedSlot <= queueSelect(queueContentUpdatedSel, selMask);
-        
-        selBank <= TMP_getBank(selMask);
-        selBankAdr <= TMP_getBankAdr(selMask);     
-    end block;
-    
     dispatchDataNew <= getSchedEntrySlot(selectedSlot, sends);
 
     schedulerOut <= dispatchDataNew;
-    acceptingOut <= TMP_accepting_Banked(TMP_bankCounts, BANK_SIZE);
-    acceptingMore <= TMP_acceptingMore_Banked(TMP_bankCounts, BANK_SIZE);
+    acceptingOut <= acceptingBanked(bankCounts, BANK_SIZE);
+    acceptingMore <= acceptingMoreBanked(bankCounts, BANK_SIZE);
 
     outputSignals <=   (sending => sends,
                         cancelled => sentKilled,

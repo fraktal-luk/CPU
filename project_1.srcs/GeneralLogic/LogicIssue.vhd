@@ -223,16 +223,15 @@ function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vec
     function getSelectedVec(arr: SlotControlArray) return std_logic_vector;
 
 
-    function TMP_getNewLocs_Banked(fullMask: std_logic_vector) return slv2D;
-    function TMP_getNewAdrs_Banked(fullMask: std_logic_vector) return SmallNumberArray;
-    function TMP_getBankCounts(fullMask: std_logic_vector) return SmallNumberArray;
-    function TMP_accepting_Banked(counts: SmallNumberArray; constant LIMIT: natural) return std_logic;
-    function TMP_acceptingMore_Banked(counts: SmallNumberArray; constant LIMIT: natural) return std_logic;
-    function TMP_getBank(selMask: std_logic_vector) return natural;
-    function TMP_getBankAdr(selMask: std_logic_vector) return natural;
-    function TMP_updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D;
-    function TMP_getSelMask(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector;
-    function TMP_getSelMatrix(readyMask: std_logic_vector; ageMatrix: slv2D) return slv2D;
+    function getNewLocsBanked(fullMask: std_logic_vector) return slv2D;
+    function getBankCounts(fullMask: std_logic_vector) return SmallNumberArray;
+    function acceptingBanked(counts: SmallNumberArray; constant LIMIT: natural) return std_logic;
+    function acceptingMoreBanked(counts: SmallNumberArray; constant LIMIT: natural) return std_logic;
+    function updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D;
+    function getSelMask(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector;
+
+    function updateRenameIndex(content: SchedulerInfoArray) return SchedulerInfoArray;
+    function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return SchedulerInfo;
 
 end LogicIssue;
 
@@ -375,277 +374,277 @@ package body LogicIssue is
         end loop;
         return res;
     end function;
-
-
-function extractFullMask(queueContent: SchedulerInfoArray) return std_logic_vector is
-    variable res: std_logic_vector(0 to queueContent'length-1) := (others => '0');
-begin
-    for i in res'range loop
-        res(i) := queueContent(i).dynamic.full;
-    end loop;
-    return res;
-end function;
-
-function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo is
-    variable res: StaticInfo;
-begin
-    res.operation := isl.ins.specificOperation;
-
-    res.branchIns := isl.ins.classInfo.branchIns;
-    res.bqPointer := isl.ins.tags.bqPointer;
-    res.sqPointer := isl.ins.tags.sqPointer;
-    res.lqPointer := isl.ins.tags.lqPointer;        
-        res.bqPointerSeq := isl.ins.tags.bqPointerSeq;        
     
-    res.immediate := isl.ins.constantArgs.immSel and bool2std(HAS_IMM);    
-    res.immValue := isl.ins.constantArgs.imm(15 downto 0);
     
-    if HAS_IMM and isl.ins.constantArgs.immSel = '1' then    
-        if IMM_AS_REG then    
-            if CLEAR_DEBUG_INFO then
-                res.immValue(PhysName'length-2 downto 0) := (others => '0');
-            end if;
-        end if;
-    end if;
-    
-    res.zero := ri.sourceConst;
-    
-    if not HAS_IMM then
-        res.immediate := '0';            
-    end if;        
-                   
-    return res;
-end function; 
-
-
-function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo is
-    variable res: DynamicInfo := DEFAULT_DYNAMIC_INFO;
-begin
-    res.full := isl.full;
-    res.active := res.full;
-    res.issued := '0';
-    res.trial := '0';
-
-    res.renameIndex := isl.ins.tags.renameIndex;
-
-    res.argSpec := isl.ins.physicalArgSpec;
-    res.argSpec.intArgSel := (others => '0');
-    res.argSpec.floatArgSel := (others => '0');
-
-    -- Possibility to implement late allocation or advanced renaming schemes - delayed selection of args
-    if false then
-        for i in 0 to 2 loop
-            if ri.sourcesNew(i) = '1' then
-                res.argSpec.args(i) := ri.physicalSourcesNew(i);
-            elsif ri.sourcesStable(i) = '1' then
-                res.argSpec.args(i) := ri.physicalSourcesStable(i);
-            else
-                res.argSpec.args(i) := ri.physicalSources(i);
-            end if;
+    function extractFullMask(queueContent: SchedulerInfoArray) return std_logic_vector is
+        variable res: std_logic_vector(0 to queueContent'length-1) := (others => '0');
+    begin
+        for i in res'range loop
+            res(i) := queueContent(i).dynamic.full;
         end loop;
-        
-    end if;
-
-    res.argSpec.dest := ri.physicalDest;
-    res.argSpec.intDestSel := ri.destSel and not ri.destSelFP;
-    res.argSpec.floatDestSel := ri.destSelFP;
-    res.argSpec.args(0) := ri.physicalSourcesNew(0);
-    res.argSpec.args(1) := ri.physicalSourcesNew(1);
-    res.argSpec.args(2) := ri.physicalSourcesNew(2);
-
-    res.stored := (others => '0');
-    res.missing := not stInfo.zero;                               
-    res.readyNow := (others => '0');
-    res.readyNext := (others => '0');
-    res.readyM2  := (others => '0');
-
-    res.argLocsPipe := (others => (others => '0'));
-    res.argSrc := (others => "00000010");
+        return res;
+    end function;
     
-    if HAS_IMM and isl.ins.constantArgs.immSel = '1' then
-        if IMM_AS_REG then
-            res.argSpec.args(1) := isl.ins.constantArgs.imm(PhysName'length-1 downto 0);
-            res.argSpec.args(1)(7) := '0';
+    function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo is
+        variable res: StaticInfo;
+    begin
+        res.operation := isl.ins.specificOperation;
+    
+        res.branchIns := isl.ins.classInfo.branchIns;
+        res.bqPointer := isl.ins.tags.bqPointer;
+        res.sqPointer := isl.ins.tags.sqPointer;
+        res.lqPointer := isl.ins.tags.lqPointer;        
+            res.bqPointerSeq := isl.ins.tags.bqPointerSeq;        
+        
+        res.immediate := isl.ins.constantArgs.immSel and bool2std(HAS_IMM);    
+        res.immValue := isl.ins.constantArgs.imm(15 downto 0);
+        
+        if HAS_IMM and isl.ins.constantArgs.immSel = '1' then    
+            if IMM_AS_REG then    
+                if CLEAR_DEBUG_INFO then
+                    res.immValue(PhysName'length-2 downto 0) := (others => '0');
+                end if;
+            end if;
         end if;
-    end if;
-                 
-    return res;
-end function; 
-
-
-function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray) return SchedulerInfoArray is
-    variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1);
-    variable slot: InstructionSlot := DEFAULT_INS_SLOT;
-begin
-    for i in res'range loop
-        slot := insVec(i);
-        slot.full := mask(i);
-        res(i).static := getIssueStaticInfo(slot, USE_IMM, ria(i));
-        res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, ria(i));
-    end loop;
-    return res;    
-end function;
-
-
-function getSchedEntrySlot(info: SchedulerInfo; full: std_logic) return SchedulerState is
-    variable res: SchedulerState := DEFAULT_SCHED_STATE;
-begin
-    res.full := full;
-
-    res.operation := info.static.operation;
-
-    res.branchIns := info.static.branchIns;
-    res.bqPointer := info.static.bqPointer;
-    res.sqPointer := info.static.sqPointer;
-    res.lqPointer := info.static.lqPointer;        
-    res.bqPointerSeq := info.static.bqPointerSeq;        
-    
-    res.immediate := info.static.immediate;    
-    res.immValue := info.static.immValue;
         
-    res.zero := info.static.zero;
-
-    res.issued := info.dynamic.issued;
+        res.zero := ri.sourceConst;
+        
+        if not HAS_IMM then
+            res.immediate := '0';            
+        end if;        
+                       
+        return res;
+    end function; 
     
-    res.renameIndex := info.dynamic.renameIndex;
-    res.argSpec := info.dynamic.argSpec;
     
-    res.stored := info.dynamic.stored;
-    res.readNew := (others => '0');
-
-    res.missing := info.dynamic.missing;
+    function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo is
+        variable res: DynamicInfo := DEFAULT_DYNAMIC_INFO;
+    begin
+        res.full := isl.full;
+        res.active := res.full;
+        res.issued := '0';
+        res.trial := '0';
     
-    res.readyNow := info.dynamic.readyNow;
-    res.readyNext := info.dynamic.readyNext;
-    res.readyM2  := info.dynamic.readyM2;
-
-    res.argLocsPipe := info.dynamic.argLocsPipe;
-    res.argSrc := info.dynamic.argSrc;
+        res.renameIndex := isl.ins.tags.renameIndex;
     
-    return res;
-end function;
-
-
-function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) return SchedulerState is
-    variable res: SchedulerState := input;
-begin
-    res.full := prevSending;
-    if prevSending = '0' or (input.argSpec.intDestSel = '0' and input.argSpec.floatDestSel = '0') then
-       res.argSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
-    end if;
-
-    return res;
-end function;
-
-function getDispatchArgValues_Is(input: SchedulerState; prevSending: std_logic) return SchedulerState is
-    variable res: SchedulerState := TMP_prepareDispatchSlot(input, prevSending);
-begin
-    if IMM_AS_REG then
-        res.immValue(PhysName'length-2 downto 0) := res.argSpec.args(1)(6 downto 0);
-    end if;
+        res.argSpec := isl.ins.physicalArgSpec;
+        res.argSpec.intArgSel := (others => '0');
+        res.argSpec.floatArgSel := (others => '0');
     
-    return res;
-end function;
-
-function updateDispatchArgs_Is(st: SchedulerState) return SchedulerState is
-    variable res: SchedulerState := st;
-begin
-    res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
-    res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
-
-    if res.argSrc(0)(1) /= '1' then
-        res.argSpec.args(0) := (others => '0');
-    end if;
-
-    if res.argSrc(1)(1) /= '1' or res.zero(1) = '1' then
-        res.argSpec.args(1) := (others => '0');
-    end if;
+        -- Possibility to implement late allocation or advanced renaming schemes - delayed selection of args
+        if false then
+            for i in 0 to 2 loop
+                if ri.sourcesNew(i) = '1' then
+                    res.argSpec.args(i) := ri.physicalSourcesNew(i);
+                elsif ri.sourcesStable(i) = '1' then
+                    res.argSpec.args(i) := ri.physicalSourcesStable(i);
+                else
+                    res.argSpec.args(i) := ri.physicalSources(i);
+                end if;
+            end loop;
+            
+        end if;
     
-    return res;
-
-end function;
-
-
-function getDispatchArgValues_RR(input: SchedulerState;
-                                 prevSending: std_logic;
-                                 fni: ForwardingInfo;
-                                 USE_IMM: boolean; REGS_ONLY: boolean)
-return SchedulerState is
-    variable res: SchedulerState := TMP_prepareDispatchSlot(input, prevSending);
-begin
-
-    if REGS_ONLY then
+        res.argSpec.dest := ri.physicalDest;
+        res.argSpec.intDestSel := ri.destSel and not ri.destSelFP;
+        res.argSpec.floatDestSel := ri.destSelFP;
+        res.argSpec.args(0) := ri.physicalSourcesNew(0);
+        res.argSpec.args(1) := ri.physicalSourcesNew(1);
+        res.argSpec.args(2) := ri.physicalSourcesNew(2);
+    
         res.stored := (others => '0');
-        return res;    
-    end if;
-
-    if res.zero(0) = '1' then
-        res.args(0) := (others => '0');
-        res.stored(0) := '1';
-    elsif res.argSrc(0)(1 downto 0) = "00" then
-        res.args(0) := fni.values0(slv2u(res.argLocsPipe(0)(1 downto 0)));
-        res.stored(0) := '1';
-    elsif res.argSrc(0)(1 downto 0) = "01" then
-        res.args(0) := fni.values1(slv2u(res.argLocsPipe(0)(1 downto 0)));
-        if res.argSrc(0)(1 downto 0) = "01" then -- becomes redundant
-            res.stored(0) := '1';
+        res.missing := not stInfo.zero;                               
+        res.readyNow := (others => '0');
+        res.readyNext := (others => '0');
+        res.readyM2  := (others => '0');
+    
+        res.argLocsPipe := (others => (others => '0'));
+        res.argSrc := (others => "00000010");
+        
+        if HAS_IMM and isl.ins.constantArgs.immSel = '1' then
+            if IMM_AS_REG then
+                res.argSpec.args(1) := isl.ins.constantArgs.imm(PhysName'length-1 downto 0);
+                res.argSpec.args(1)(7) := '0';
+            end if;
         end if;
-    else
-        res.args(0) := (others => '0');           
-    end if;
-
-    if res.zero(1) = '1' then
-        if USE_IMM then
-            res.args(1)(31 downto 16) := (others => res.immValue(15));
-            res.args(1)(15 downto 0) := res.immValue;
+                     
+        return res;
+    end function; 
+    
+    
+    function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray) return SchedulerInfoArray is
+        variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1);
+        variable slot: InstructionSlot := DEFAULT_INS_SLOT;
+    begin
+        for i in res'range loop
+            slot := insVec(i);
+            slot.full := mask(i);
+            res(i).static := getIssueStaticInfo(slot, USE_IMM, ria(i));
+            res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, ria(i));
+        end loop;
+        return res;    
+    end function;
+    
+    
+    function getSchedEntrySlot(info: SchedulerInfo; full: std_logic) return SchedulerState is
+        variable res: SchedulerState := DEFAULT_SCHED_STATE;
+    begin
+        res.full := full;
+    
+        res.operation := info.static.operation;
+    
+        res.branchIns := info.static.branchIns;
+        res.bqPointer := info.static.bqPointer;
+        res.sqPointer := info.static.sqPointer;
+        res.lqPointer := info.static.lqPointer;        
+        res.bqPointerSeq := info.static.bqPointerSeq;        
+        
+        res.immediate := info.static.immediate;    
+        res.immValue := info.static.immValue;
+            
+        res.zero := info.static.zero;
+    
+        res.issued := info.dynamic.issued;
+        
+        res.renameIndex := info.dynamic.renameIndex;
+        res.argSpec := info.dynamic.argSpec;
+        
+        res.stored := info.dynamic.stored;
+        res.readNew := (others => '0');
+    
+        res.missing := info.dynamic.missing;
+        
+        res.readyNow := info.dynamic.readyNow;
+        res.readyNext := info.dynamic.readyNext;
+        res.readyM2  := info.dynamic.readyM2;
+    
+        res.argLocsPipe := info.dynamic.argLocsPipe;
+        res.argSrc := info.dynamic.argSrc;
+        
+        return res;
+    end function;
+    
+    
+    function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) return SchedulerState is
+        variable res: SchedulerState := input;
+    begin
+        res.full := prevSending;
+        if prevSending = '0' or (input.argSpec.intDestSel = '0' and input.argSpec.floatDestSel = '0') then
+           res.argSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
+        end if;
+    
+        return res;
+    end function;
+    
+    function getDispatchArgValues_Is(input: SchedulerState; prevSending: std_logic) return SchedulerState is
+        variable res: SchedulerState := TMP_prepareDispatchSlot(input, prevSending);
+    begin
+        if IMM_AS_REG then
+            res.immValue(PhysName'length-2 downto 0) := res.argSpec.args(1)(6 downto 0);
+        end if;
+        
+        return res;
+    end function;
+    
+    function updateDispatchArgs_Is(st: SchedulerState) return SchedulerState is
+        variable res: SchedulerState := st;
+    begin
+        res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
+        res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
+    
+        if res.argSrc(0)(1) /= '1' then
+            res.argSpec.args(0) := (others => '0');
+        end if;
+    
+        if res.argSrc(1)(1) /= '1' or res.zero(1) = '1' then
+            res.argSpec.args(1) := (others => '0');
+        end if;
+        
+        return res;
+    
+    end function;
+    
+    
+    function getDispatchArgValues_RR(input: SchedulerState;
+                                     prevSending: std_logic;
+                                     fni: ForwardingInfo;
+                                     USE_IMM: boolean; REGS_ONLY: boolean)
+    return SchedulerState is
+        variable res: SchedulerState := TMP_prepareDispatchSlot(input, prevSending);
+    begin
+    
+        if REGS_ONLY then
+            res.stored := (others => '0');
+            return res;    
+        end if;
+    
+        if res.zero(0) = '1' then
+            res.args(0) := (others => '0');
+            res.stored(0) := '1';
+        elsif res.argSrc(0)(1 downto 0) = "00" then
+            res.args(0) := fni.values0(slv2u(res.argLocsPipe(0)(1 downto 0)));
+            res.stored(0) := '1';
+        elsif res.argSrc(0)(1 downto 0) = "01" then
+            res.args(0) := fni.values1(slv2u(res.argLocsPipe(0)(1 downto 0)));
+            if res.argSrc(0)(1 downto 0) = "01" then -- becomes redundant
+                res.stored(0) := '1';
+            end if;
+        else
+            res.args(0) := (others => '0');           
+        end if;
+    
+        if res.zero(1) = '1' then
+            if USE_IMM then
+                res.args(1)(31 downto 16) := (others => res.immValue(15));
+                res.args(1)(15 downto 0) := res.immValue;
+            else
+                res.args(1) := (others => '0');
+            end if;
+            res.stored(1) := '1';
+        elsif res.argSrc(1)(1 downto 0) = "00" then
+            res.args(1) := fni.values0(slv2u(res.argLocsPipe(1)(1 downto 0)));
+            res.stored(1) := '1';
+        elsif res.argSrc(1)(1 downto 0) = "01" then
+            res.args(1) := fni.values1(slv2u(res.argLocsPipe(1)(1 downto 0)));
+            res.stored(1) := '1';
         else
             res.args(1) := (others => '0');
         end if;
-        res.stored(1) := '1';
-    elsif res.argSrc(1)(1 downto 0) = "00" then
-        res.args(1) := fni.values0(slv2u(res.argLocsPipe(1)(1 downto 0)));
-        res.stored(1) := '1';
-    elsif res.argSrc(1)(1 downto 0) = "01" then
-        res.args(1) := fni.values1(slv2u(res.argLocsPipe(1)(1 downto 0)));
-        res.stored(1) := '1';
-    else
-        res.args(1) := (others => '0');
-    end if;
-    
-    return res;
-end function;
-
-
-function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean)
-return SchedulerState is
-    variable res: SchedulerState := st;
-begin
-    if REGS_ONLY then
-        res.args(0) := regValues(0);
-        res.args(1) := regValues(1);
+        
         return res;
-    end if;
-
-    if res.readNew(0) = '1' then
-        res.args(0) := vals(slv2u(res.argLocsPipe(0)(1 downto 0)));
-    else
-        res.args(0) := res.args(0) or regValues(0);
-    end if;
+    end function;
     
-    res.stored(0) := '1';
-
-    if res.readNew(1) = '1' then
-        res.args(1) := vals(slv2u(res.argLocsPipe(1)(1 downto 0)));
-    else
-        res.args(1) := res.args(1) or regValues(1);
-    end if;
-
-    res.stored(1) := '1';
-
-    return res;
-end function;
-
-
+    
+    function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean)
+    return SchedulerState is
+        variable res: SchedulerState := st;
+    begin
+        if REGS_ONLY then
+            res.args(0) := regValues(0);
+            res.args(1) := regValues(1);
+            return res;
+        end if;
+    
+        if res.readNew(0) = '1' then
+            res.args(0) := vals(slv2u(res.argLocsPipe(0)(1 downto 0)));
+        else
+            res.args(0) := res.args(0) or regValues(0);
+        end if;
+        
+        res.stored(0) := '1';
+    
+        if res.readNew(1) = '1' then
+            res.args(1) := vals(slv2u(res.argLocsPipe(1)(1 downto 0)));
+        else
+            res.args(1) := res.args(1) or regValues(1);
+        end if;
+    
+        res.stored(1) := '1';
+    
+        return res;
+    end function;
+    
+    
     function iqNext_N2(queueContent: SchedulerInfoArray;
                       inputData: SchedulerInfoArray;               
                       prevSending, sends: std_logic;
@@ -683,7 +682,7 @@ end function;
                     res(i).dynamic.active := '0';
                 end if;
             end loop;    
-
+    
             for i in 0 to LEN-1 loop
                 if killMask(i) = '1' then
                     res(i).dynamic.full := '0';
@@ -699,7 +698,7 @@ end function;
             end loop;
     
             fullMask := extractFullMask(res);
-
+    
         -- Scan full mask for first empty and first available slot
         -- First available is first after last full
         e1 := find1free(fullMaskBeforeKill(0 to MAIN_LEN-1));
@@ -708,7 +707,7 @@ end function;
         -- Shift (compact) content!
         shifted1(0 to MAIN_LEN-2) := res(1 to MAIN_LEN-1); 
         shifted2(0 to MAIN_LEN-3) := res(2 to MAIN_LEN-1); 
-
+    
         fullMaskSh1(0 to MAIN_LEN-2) := fullMaskBeforeKill(1 to MAIN_LEN-1); 
         fullMaskSh2(0 to MAIN_LEN-3) := fullMaskBeforeKill(2 to MAIN_LEN-1);
                
@@ -840,577 +839,522 @@ end function;
                 return res;
     end function;
     
-
+    
+    function iqNext_NS(queueContent: SchedulerInfoArray;
+                      inputData: SchedulerInfoArray;               
+                      prevSending, sends: std_logic;
+                      killMask, trialMask, selMask: std_logic_vector;
+                      rrf: std_logic_vector;
+                      insertionLocs: slv2D;
+                      TEST_MODE: natural
+                             )
+    return SchedulerInfoArray is
+        constant LEN: natural := queueContent'length;
+        constant MAIN_LEN: natural := queueContent'length - PIPE_WIDTH;
+        variable res: SchedulerInfoArray(queueContent'range) := queueContent;
+        variable newArr: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputData;                
+        variable oldFullMask, fullMask, activeMask, fullMaskNew: std_logic_vector(queueContent'range) := extractFullMask(queueContent);
+        variable cnt: natural := 0;
         
-            function iqNext_NS(queueContent: SchedulerInfoArray;
-                              inputData: SchedulerInfoArray;               
-                              prevSending, sends: std_logic;
-                              killMask, trialMask, selMask: std_logic_vector;
-                              rrf: std_logic_vector;
-                              insertionLocs: slv2D;
-                              TEST_MODE: natural
-                                     )
-            return SchedulerInfoArray is
-                constant LEN: natural := queueContent'length;
-                constant MAIN_LEN: natural := queueContent'length - PIPE_WIDTH;
-                variable res: SchedulerInfoArray(queueContent'range) := queueContent;
-                variable newArr: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputData;                
-                variable oldFullMask, fullMask, activeMask, fullMaskNew: std_logic_vector(queueContent'range) := extractFullMask(queueContent);
-                variable cnt: natural := 0;
-                
-                variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
-            begin
-                for i in 0 to LEN-1 loop
-                    if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME then
-                        res(i).dynamic.full := '0';
-                        res(i).dynamic.stageCtr := (others => '0');
-                    end if;
-                
-                    if queueContent(i).dynamic.issued = '1' then      
-                        res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1);
-                    end if;
-                    
-                    if (selMask(i) and sends) = '1' then
-                        res(i).dynamic.issued := '1';
-                        res(i).dynamic.active := '0';
-                        res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1); 
-                    end if;
-                    
-                        res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits
-                end loop;    
-    
-                for i in 0 to LEN-1 loop
-                    if killMask(i) = '1' then
-                        res(i).dynamic.full := '0';
-                        res(i).dynamic.active := '0';
-                        res(i).dynamic.stageCtr := (others => '0');
-                     end if;
-                     
-                     if trialMask(i) = '1' then
-                         res(i).dynamic.trial := '1';           
-                     else
-                         res(i).dynamic.trial := '0';
-                     end if;
-                     
-                end loop;
-    
-                for j in 0 to PIPE_WIDTH-1 loop
-                    rm(3*j to 3*j + 2) := (others => inputData(j).dynamic.full); 
-                end loop; 
-            
-                rrfFull := rm and rrf;
-                newArr := restoreRenameIndex(updateRR(inputData, rrfFull));
-            
-                if prevSending = '1' then                    
-                    for i in 0 to PIPE_WIDTH-1 loop
-                        for k in 0 to LEN-1 loop
-                            if insertionLocs(k, i) = '1' then
-                                res(k) := newArr(i);
-                                    res(k).dynamic.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
-                                exit;
-                            end if;
-                        end loop;
-                    end loop;
-                end if;
-                
-                return res;
-            end function;
-
-
-function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector is
-	variable res: std_logic_vector(list'range) := (others => '0');
-begin
-	for i in list'range loop
-		if tag(PHYS_REG_BITS-1 downto 0) = list(i)(PHYS_REG_BITS-1 downto 0) then
-			res(i) := '1';
-		end if;
-	end loop;
-	return res;
-end function;
-
-
-function updateArgInfo(ss: DynamicInfo; arg: natural; wakeups: WakeupStruct; selection: boolean)
-return DynamicInfo is
-    variable res: DynamicInfo := ss;
-    variable wakeupVec: std_logic_vector(0 to 2) := (others => '0');
-    variable wakeupPhases: SmallNumberArray(0 to 2) := (others => (others => '0'));  
-begin
-    if ss.missing(arg) = '1' then
-        res.argLocsPipe(arg) := wakeups.argLocsPipe;
-        res.missing(arg) := not wakeups.match; 
-        res.argSrc(arg) := wakeups.argSrc;        
-    else -- update loc
-        if not selection then
-            case res.argSrc(arg)(1 downto 0) is
-                when "11" =>
-                    res.argSrc(arg) := "00000000";
-                when "00" =>
-                    res.argSrc(arg) := "00000001";               
-                when others =>
-                    res.argSrc(arg) := "00000010";
-            end case;                
-        end if;
-    end if;
-
-    return res;
-end function;
-
-  
-function getWakeupStructStatic(arg: natural; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray; selection: boolean)
-return WakeupStruct is
-    variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
-    variable matchVec: std_logic_vector(0 to 2) := (others => '0');
-begin
-    for p in forwardingModes'range loop
-        case forwardingModes(p).stage is
-            when -3 =>
-                matchVec(p) := cmpM3(p);
-            when -2 =>
-                matchVec(p) := cmpM2(p);
-            when -1 =>
-                matchVec(p) := cmpM1(p);
-            when 0 =>
-                matchVec(p) := cmpR0(p);
-            when 1 =>
-                matchVec(p) := cmpR1(p);
-            when others =>
-                matchVec(p) := '0';
-        end case;
-
-        if matchVec(p) = '1' then
-            res.argLocsPipe(2 downto 0) := i2slv(p, 3);
-            res.argLocsPhase(2 downto 0) := i2slv(forwardingModes(p).stage + 1, 3);
-            if selection then
-                if forwardingModes(p).stage + 1 > 2 then
-                    res.argSrc(1 downto 0) := i2slv(2, 2);
-                else
-                    res.argSrc(1 downto 0) := i2slv(forwardingModes(p).stage + 1, 2);
-                end if;             
-            else
-                if forwardingModes(p).stage + 2 > 2 then
-                    res.argSrc(1 downto 0) := i2slv(2, 2);
-                else
-                    res.argSrc(1 downto 0) := i2slv(forwardingModes(p).stage + 2, 2);
-                end if;
+        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+    begin
+        for i in 0 to LEN-1 loop
+            if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME then
+                res(i).dynamic.full := '0';
+                res(i).dynamic.stageCtr := (others => '0');
             end if;
-        end if;
-    end loop;   
-    res.match := isNonzero(matchVec);
-    
-    return res;
-end function;
-
-function getWakeupStructDynamic(arg: natural; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray) return WakeupStruct is
-    variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
-    variable matchVec: std_logic_vector(0 to 2) := (others => '0');
-begin
-    
-    for p in forwardingModes'range loop
-        for q in -3 to 1 loop
-            if forwardingModes(p).stage <= q then
-                case q is
-                    when -3 =>
-                        matchVec(p) := cmpM3(p);
-                    when -2 =>
-                        matchVec(p) := cmpM2(p);
-                    when -1 =>
-                        matchVec(p) := cmpM1(p);
-                    when 0 =>
-                        matchVec(p) := cmpR0(p);
-                    when 1 =>
-                        matchVec(p) := cmpR1(p);
-                    when others =>
-                        matchVec(p) := '0';
-                end case;
-                
-                if matchVec(p) = '1' then
-                    res.argLocsPipe(2 downto 0) := i2slv(p, 3);
-                    
-                    if q + 2 > 2 then
-                        res.argSrc(1 downto 0) := i2slv(2, 2);
-                    else
-                        res.argSrc(1 downto 0) := i2slv(q + 2, 2);
-                    end if;
-                    exit;
-                end if;               
+        
+            if queueContent(i).dynamic.issued = '1' then      
+                res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1);
             end if;
+            
+            if (selMask(i) and sends) = '1' then
+                res(i).dynamic.issued := '1';
+                res(i).dynamic.active := '0';
+                res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1); 
+            end if;
+            
+                res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits
+        end loop;    
+    
+        for i in 0 to LEN-1 loop
+            if killMask(i) = '1' then
+                res(i).dynamic.full := '0';
+                res(i).dynamic.active := '0';
+                res(i).dynamic.stageCtr := (others => '0');
+             end if;
+             
+             if trialMask(i) = '1' then
+                 res(i).dynamic.trial := '1';           
+             else
+                 res(i).dynamic.trial := '0';
+             end if;
+             
         end loop;
-    end loop;
     
-    res.match := isNonzero(matchVec);
+        for j in 0 to PIPE_WIDTH-1 loop
+            rm(3*j to 3*j + 2) := (others => inputData(j).dynamic.full); 
+        end loop; 
     
-    return res;
-end function;
-
-
-function updateSchedulerState(state: SchedulerInfo;
-                                fni: ForwardingInfo;
-                                fm: ForwardingMatches;
-                                dynamic: boolean;
-                                selection: boolean;
-                                dontMatch1: boolean;
-                                forwardingModes0, forwardingModes1: ForwardingModeArray)
-return SchedulerInfo is
-	variable res: SchedulerInfo := state;
-	variable wakeups0, wakeups1: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
-begin
-    if not dynamic then
-        wakeups0 := getWakeupStructStatic(0, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes0, selection);
-        wakeups1 := getWakeupStructStatic(1, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes1, selection);
-    else
-        wakeups0 := getWakeupStructDynamic(0, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes0);
-        wakeups1 := getWakeupStructDynamic(1, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes1);
-    end if;
-
-    res.dynamic := updateArgInfo(res.dynamic, 0, wakeups0, selection);
+        rrfFull := rm and rrf;
+        newArr := restoreRenameIndex(updateRR(inputData, rrfFull));
     
-    if dontMatch1 then
-        res.dynamic.missing(1) := '0';
-    else
-        res.dynamic := updateArgInfo(res.dynamic, 1, wakeups1, selection);
-    end if;
-
-	return res;
-end function;
-
-function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
-                dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0, forwardingModes1: ForwardingModeArray)
-return SchedulerInfoArray is
-	variable res: SchedulerInfoArray(0 to schedArray'length-1);
-begin
-	for i in schedArray'range loop
-		res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, dontMatch1, forwardingModes0, forwardingModes1);
-	end loop;	
-	return res;
-end function;
-
-
-function findForwardingMatches(info: SchedulerInfo; fni: ForwardingInfo) return ForwardingMatches is
-    variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
-begin
-	res.a0cmp0 := findRegTag(info.dynamic.argSpec.args(0), fni.tags0);
-    res.a1cmp0 := findRegTag(info.dynamic.argSpec.args(1), fni.tags0);
-    res.a0cmp1 := findRegTag(info.dynamic.argSpec.args(0), fni.tags1);
-    res.a1cmp1 := findRegTag(info.dynamic.argSpec.args(1), fni.tags1);
-    res.a0cmpM1 := findRegTag(info.dynamic.argSpec.args(0), fni.nextTagsM1);
-    res.a1cmpM1 := findRegTag(info.dynamic.argSpec.args(1), fni.nextTagsM1);
-    res.a0cmpM2 := findRegTag(info.dynamic.argSpec.args(0), fni.nextTagsM2);
-    res.a1cmpM2 := findRegTag(info.dynamic.argSpec.args(1), fni.nextTagsM2); 
-    res.a0cmpM3 := findRegTag(info.dynamic.argSpec.args(0), fni.nextTagsM3);
-    res.a1cmpM3 := findRegTag(info.dynamic.argSpec.args(1), fni.nextTagsM3);    
-    return res;
-end function;
-
-function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo) return ForwardingMatchesArray is
-    variable res: ForwardingMatchesArray(schedArray'range) := (others => DEFAULT_FORWARDING_MATCHES);
-begin
-    for i in schedArray'range loop
-        res(i) := findForwardingMatches(schedArray(i), fni);
-    end loop;
-    return res;
-end function;
-
-
-function getIndex4(inSelVec: std_logic_vector) return std_logic_vector is
-    constant selVec: std_logic_vector(0 to 3) := inSelVec;
-    variable res: std_logic_vector(1 downto 0) := "11";
-begin
-    case selVec is
-        when "1000" | "1001" | "1010" | "1011" | "1100" | "1101" | "1110" | "1111" =>
-            res := "00";
-        when "0100" | "0101" | "0110" | "0111"  =>
-            res := "01";
-        when "0010" | "0011" =>
-            res := "10";                                    
-        when others =>
-            res := "11";
-    end case;
-
-    return res;
-end function;
-
-function select4(inElems: SchedulerInfoArray; index: std_logic_vector(1 downto 0)) return SchedulerInfo is
-    constant elems: SchedulerInfoArray(0 to 3) := inElems;
-begin
-    case index is
-        when "00" =>    
-            return elems(0);
-        when "01" =>
-            return elems(1);
-        when "10" =>
-            return elems(2);
-        when others =>
-            return elems(3);
-    end case;                
-end function;
-
-
-function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vector) return SchedulerInfo is
-    variable elems: SchedulerInfoArray(0 to 15) := (others => DEFAULT_SCHEDULER_INFO);
-    
-    variable selVec: std_logic_vector(0 to 15) := (others => '0');
-    variable selVec4: std_logic_vector(0 to 3) := (others => '0');
-    
-    variable indL0, indL1, indL2, indL3, indH: std_logic_vector(1 downto 0) := "11";
-    variable ch0, ch1, ch2, ch3: SchedulerInfo;
-    variable groupReady: std_logic_vector(0 to 3) := (others => '0');
-begin
-    elems(0 to inputElems'length-1) := inputElems;
-    selVec(0 to inputElems'length-1) := inputSelVec;
-
-    for i in 0 to 3 loop
-        selVec4 := selVec(4*i to 4*i + 3);
-        groupReady(i) := isNonzero(selVec4);
-    end loop;
-
-    indL0 := getIndex4(selVec(0 to 3));
-    indL1 := getIndex4(selVec(4 to 7));
-    indL2 := getIndex4(selVec(8 to 11));
-    indL3 := getIndex4(selVec(12 to 15));
-    
-    ch0 := select4(elems(0 to 3), indL0);
-    ch1 := select4(elems(4 to 7), indL1);
-    ch2 := select4(elems(8 to 11), indL2);
-    ch3 := select4(elems(12 to 15), indL3);
-
-    indH := getIndex4(groupReady);
-    
-    return select4((0 => ch0, 1 => ch1, 2 => ch2, 3 => ch3), indH);        
-end function;
-
-function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray is
-   variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := newContent;
-   variable rrf: std_logic_vector(0 to 2) := (others=>'0');      	   
-begin
-   for i in 0 to PIPE_WIDTH-1 loop
-       rrf := rr(3*i to 3*i + 2);
-       res(i).dynamic.missing := res(i).dynamic.missing and not rrf;
-   end loop;
-
-   return res;
-end function;
-
-function restoreRenameIndex(sia: SchedulerInfoArray) return SchedulerInfoArray is
-   variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := sia;
-begin
-   for i in 1 to PIPE_WIDTH-1 loop
-       res(i).dynamic.renameIndex := clearTagLow(res(0).dynamic.renameIndex) or i2slv(i, TAG_SIZE);
-   end loop;
-   return res;
-end function;
-
-function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo is
-    variable res: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
-begin
-
-    if a.static.operation.subpipe /= None then
-        res.static.operation.subpipe := a.static.operation.subpipe;  
-    else
-        res.static.operation.subpipe := b.static.operation.subpipe;
-    end if;
-    res.static.operation.bits := a.static.operation.bits or b.static.operation.bits;
-    res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
-    res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
-    res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
-
-    res.static.branchIns := a.static.branchIns or b.static.branchIns;
-    res.static.bqPointer := a.static.bqPointer or b.static.bqPointer;--: SmallNumber;
-    res.static.sqPointer := a.static.sqPointer or b.static.sqPointer;--: SmallNumber;
-    res.static.lqPointer := a.static.lqPointer or b.static.lqPointer;-- SmallNumber;        
-    res.static.bqPointerSeq := a.static.bqPointerSeq or b.static.bqPointerSeq;--: SmallNumber;
-    
-    res.static.immediate :=  a.static.immediate or b.static.immediate;
-    res.static.immValue :=  a.static.immValue or b.static.immValue;
-    res.static.zero :=  a.static.zero or b.static.zero;
-    
-
-    res.dynamic.full := a.dynamic.full or b.dynamic.full;
-    res.dynamic.active := a.dynamic.active or b.dynamic.active;
-    res.dynamic.issued := a.dynamic.issued or b.dynamic.issued;
-    res.dynamic.trial := a.dynamic.trial or b.dynamic.trial;
-    
-    res.dynamic.renameIndex := a.dynamic.renameIndex or b.dynamic.renameIndex;
-
-    --    
-    res.dynamic.argSpec.intDestSel := a.dynamic.argSpec.intDestSel or b.dynamic.argSpec.intDestSel;
-    res.dynamic.argSpec.floatDestSel := a.dynamic.argSpec.floatDestSel or b.dynamic.argSpec.floatDestSel;
-    res.dynamic.argSpec.dest := a.dynamic.argSpec.dest or b.dynamic.argSpec.dest;
-    res.dynamic.argSpec.intArgSel := a.dynamic.argSpec.intArgSel or b.dynamic.argSpec.intArgSel;
-    res.dynamic.argSpec.floatArgSel := a.dynamic.argSpec.floatArgSel or b.dynamic.argSpec.floatArgSel;
-    
-    for i in 0 to 2 loop
-        res.dynamic.argSpec.args(i) := a.dynamic.argSpec.args(i) or b.dynamic.argSpec.args(i);
-    end loop;
-    
-    res.dynamic.stored := a.dynamic.stored or b.dynamic.stored;
-    res.dynamic.missing := a.dynamic.missing or b.dynamic.missing;
-    res.dynamic.readyNow := a.dynamic.readyNow or b.dynamic.readyNow;
-    res.dynamic.readyNext := a.dynamic.readyNext or b.dynamic.readyNext;
-    res.dynamic.readyM2 := a.dynamic.readyM2 or b.dynamic.readyM2;
-    
-    for i in 0 to 2 loop
-        res.dynamic.argLocsPipe(i) := a.dynamic.argLocsPipe(i) or b.dynamic.argLocsPipe(i);
-        res.dynamic.argSrc(i) := a.dynamic.argSrc(i) or b.dynamic.argSrc(i);   
-    end loop;
-    
-    return res;
-end function;
-
-
-
-            function TMP_getNewLocs_Banked(fullMask: std_logic_vector) return slv2D is
-                constant QUEUE_SIZE_EXT: natural := fullMask'length;
-                variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
-                variable cnt: natural := 0;
-                constant N_BANKS: natural := 4;
-                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
-            begin
-               for b in 0 to N_BANKS-1 loop
-                   for i in 0 to BANK_SIZE-1 loop
-                        if fullMask(i * N_BANKS + b) /= '1' then
-                            res(i * N_BANKS + b, b) := '1';
-                            exit;
-                        end if;
-                    end loop;
-                end loop;
-          
-                return res;
-            end function;
-
-            function TMP_getNewAdrs_Banked(fullMask: std_logic_vector) return SmallNumberArray is
-                constant QUEUE_SIZE_EXT: natural := fullMask'length;
-                variable res: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-                variable cnt: natural := 0;
-                constant N_BANKS: natural := 4;
-                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
-            begin
-               for b in 0 to N_BANKS-1 loop
-                   for i in 0 to BANK_SIZE-1 loop
-                        if fullMask(i * N_BANKS + b) /= '1' then
-                            res(b) := i2slv(i, SMALL_NUMBER_SIZE);
-                            exit;
-                        end if;
-                    end loop;
-                end loop;
-          
-                return res;
-            end function;
-
-            function TMP_getBankCounts(fullMask: std_logic_vector) return SmallNumberArray is
-                constant QUEUE_SIZE_EXT: natural := fullMask'length;
-                variable res: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-                variable cnt: natural := 0;
-                constant N_BANKS: natural := 4;
-                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
-            begin
-               for i in 0 to BANK_SIZE-1 loop
-                   for b in 0 to N_BANKS-1 loop
-                        if fullMask(i * N_BANKS + b) = '1' then
-                            res(b) := addInt(res(b), 1);
-                        end if;
-                    end loop;
-                end loop;            
-                return res;
-            end function;
-
-            function TMP_accepting_Banked(counts: SmallNumberArray; constant LIMIT: natural) return std_logic is
-                variable cnt: natural := 0;
-                constant N_BANKS: natural := counts'length;
-                --constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
-            begin
-               for b in 0 to N_BANKS-1 loop
-                    if slv2u(counts(b)) > LIMIT - 1  then
-                        return '0';
-                    end if;
-                end loop;
-                return '1';
-            end function;
-
-            function TMP_acceptingMore_Banked(counts: SmallNumberArray; constant LIMIT: natural) return std_logic is
-                variable cnt: natural := 0;
-                constant N_BANKS: natural := counts'length;
-                --constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
-            begin
-               for b in 0 to N_BANKS-1 loop
-                    if slv2u(counts(b)) > LIMIT - 2  then
-                        return '0';
-                    end if;
-                end loop;
-                return '1';
-            end function;
-    
-            function TMP_getBank(selMask: std_logic_vector) return natural is
-                constant QUEUE_SIZE_EXT: natural := selMask'length;
-                constant N_BANKS: natural := 4;
-                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
-            begin
-                for i in 0 to N_BANKS-1 loop
-                    for j in 0 to BANK_SIZE-1 loop
-                        if selMask(i + N_BANKS*j) = '1' then
-                            return i;
-                        end if;
-                    end loop;
-                end loop;
-                
-                return 0;
-            end function;
-
-            function TMP_getBankAdr(selMask: std_logic_vector) return natural is
-                constant QUEUE_SIZE_EXT: natural := selMask'length;
-                constant N_BANKS: natural := 4;
-                constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
-            begin
-                for i in 0 to N_BANKS-1 loop
-                    for j in 0 to BANK_SIZE-1 loop
-                        if selMask(i + N_BANKS*j) = '1' then
-                            return j;
-                        end if;
-                    end loop;
-                end loop;
-                
-                return 0;
-            end function;
-
-        function TMP_updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D is
-            constant QUEUE_SIZE_EXT: natural := fullMask'length;
-            variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := ageMatrix;
-        begin
+        if prevSending = '1' then                    
             for i in 0 to PIPE_WIDTH-1 loop
-                -- insert current fullMask into proper row    
-                for j in 0 to QUEUE_SIZE_EXT-1 loop
-                    if insertionLocs(j, i) = '1' then
-                        -- Sorry, assigment doesn;t work for ranges in >= 2D
-                        for k in 0 to QUEUE_SIZE_EXT-1 loop
-                            res(j, k) := fullMask(k); -- Maybe setting to all ones would work too?
-                        end loop;
-                        
-                        -- Preceding in this group are also masked!
-                        for p in 0 to PIPE_WIDTH-1 loop
-                            if p = i then
-                                exit;
-                            end if;
-                            
-                            for k in 0 to QUEUE_SIZE_EXT-1 loop
-                                if insertionLocs(k, p) = '1' then
-                                    res(j, k) := '1';
-                                    exit;
-                                end if;
-                            end loop;
-                        end loop;
-                        
-                        -- Clear all dependencies on this new op
-                        for k in 0 to QUEUE_SIZE_EXT-1 loop
-                            res(k, j) := '0';
-                        end loop;
-                        
+                for k in 0 to LEN-1 loop
+                    if insertionLocs(k, i) = '1' then
+                        res(k) := newArr(i);
+                            res(k).dynamic.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
                         exit;
                     end if;
                 end loop;
             end loop;
-            return res;
-        end function;
-
-    function TMP_getSelMask(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector is
+        end if;
+        
+        return res;
+    end function;
+    
+    
+    function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector is
+        variable res: std_logic_vector(list'range) := (others => '0');
+    begin
+        for i in list'range loop
+            if tag(PHYS_REG_BITS-1 downto 0) = list(i)(PHYS_REG_BITS-1 downto 0) then
+                res(i) := '1';
+            end if;
+        end loop;
+        return res;
+    end function;
+    
+    
+    function updateArgInfo(ss: DynamicInfo; arg: natural; wakeups: WakeupStruct; selection: boolean)
+    return DynamicInfo is
+        variable res: DynamicInfo := ss;
+        variable wakeupVec: std_logic_vector(0 to 2) := (others => '0');
+        variable wakeupPhases: SmallNumberArray(0 to 2) := (others => (others => '0'));  
+    begin
+        if ss.missing(arg) = '1' then
+            res.argLocsPipe(arg) := wakeups.argLocsPipe;
+            res.missing(arg) := not wakeups.match; 
+            res.argSrc(arg) := wakeups.argSrc;        
+        else -- update loc
+            if not selection then
+                case res.argSrc(arg)(1 downto 0) is
+                    when "11" =>
+                        res.argSrc(arg) := "00000000";
+                    when "00" =>
+                        res.argSrc(arg) := "00000001";               
+                    when others =>
+                        res.argSrc(arg) := "00000010";
+                end case;                
+            end if;
+        end if;
+    
+        return res;
+    end function;
+    
+      
+    function getWakeupStructStatic(arg: natural; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray; selection: boolean)
+    return WakeupStruct is
+        variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+        variable matchVec: std_logic_vector(0 to 2) := (others => '0');
+    begin
+        for p in forwardingModes'range loop
+            case forwardingModes(p).stage is
+                when -3 =>
+                    matchVec(p) := cmpM3(p);
+                when -2 =>
+                    matchVec(p) := cmpM2(p);
+                when -1 =>
+                    matchVec(p) := cmpM1(p);
+                when 0 =>
+                    matchVec(p) := cmpR0(p);
+                when 1 =>
+                    matchVec(p) := cmpR1(p);
+                when others =>
+                    matchVec(p) := '0';
+            end case;
+    
+            if matchVec(p) = '1' then
+                res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+                res.argLocsPhase(2 downto 0) := i2slv(forwardingModes(p).stage + 1, 3);
+                if selection then
+                    if forwardingModes(p).stage + 1 > 2 then
+                        res.argSrc(1 downto 0) := i2slv(2, 2);
+                    else
+                        res.argSrc(1 downto 0) := i2slv(forwardingModes(p).stage + 1, 2);
+                    end if;             
+                else
+                    if forwardingModes(p).stage + 2 > 2 then
+                        res.argSrc(1 downto 0) := i2slv(2, 2);
+                    else
+                        res.argSrc(1 downto 0) := i2slv(forwardingModes(p).stage + 2, 2);
+                    end if;
+                end if;
+            end if;
+        end loop;   
+        res.match := isNonzero(matchVec);
+        
+        return res;
+    end function;
+    
+    function getWakeupStructDynamic(arg: natural; cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray) return WakeupStruct is
+        variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+        variable matchVec: std_logic_vector(0 to 2) := (others => '0');
+    begin
+        
+        for p in forwardingModes'range loop
+            for q in -3 to 1 loop
+                if forwardingModes(p).stage <= q then
+                    case q is
+                        when -3 =>
+                            matchVec(p) := cmpM3(p);
+                        when -2 =>
+                            matchVec(p) := cmpM2(p);
+                        when -1 =>
+                            matchVec(p) := cmpM1(p);
+                        when 0 =>
+                            matchVec(p) := cmpR0(p);
+                        when 1 =>
+                            matchVec(p) := cmpR1(p);
+                        when others =>
+                            matchVec(p) := '0';
+                    end case;
+                    
+                    if matchVec(p) = '1' then
+                        res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+                        
+                        if q + 2 > 2 then
+                            res.argSrc(1 downto 0) := i2slv(2, 2);
+                        else
+                            res.argSrc(1 downto 0) := i2slv(q + 2, 2);
+                        end if;
+                        exit;
+                    end if;               
+                end if;
+            end loop;
+        end loop;
+        
+        res.match := isNonzero(matchVec);
+        
+        return res;
+    end function;
+    
+    
+    function updateSchedulerState(state: SchedulerInfo;
+                                    fni: ForwardingInfo;
+                                    fm: ForwardingMatches;
+                                    dynamic: boolean;
+                                    selection: boolean;
+                                    dontMatch1: boolean;
+                                    forwardingModes0, forwardingModes1: ForwardingModeArray)
+    return SchedulerInfo is
+        variable res: SchedulerInfo := state;
+        variable wakeups0, wakeups1: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+    begin
+        if not dynamic then
+            wakeups0 := getWakeupStructStatic(0, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes0, selection);
+            wakeups1 := getWakeupStructStatic(1, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes1, selection);
+        else
+            wakeups0 := getWakeupStructDynamic(0, fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes0);
+            wakeups1 := getWakeupStructDynamic(1, fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes1);
+        end if;
+    
+        res.dynamic := updateArgInfo(res.dynamic, 0, wakeups0, selection);
+        
+        if dontMatch1 then
+            res.dynamic.missing(1) := '0';
+        else
+            res.dynamic := updateArgInfo(res.dynamic, 1, wakeups1, selection);
+        end if;
+    
+        return res;
+    end function;
+    
+    function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
+                    dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0, forwardingModes1: ForwardingModeArray)
+    return SchedulerInfoArray is
+        variable res: SchedulerInfoArray(0 to schedArray'length-1);
+    begin
+        for i in schedArray'range loop
+            res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, dontMatch1, forwardingModes0, forwardingModes1);
+        end loop;	
+        return res;
+    end function;
+    
+    
+    function findForwardingMatches(info: SchedulerInfo; fni: ForwardingInfo) return ForwardingMatches is
+        variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
+    begin
+        res.a0cmp0 := findRegTag(info.dynamic.argSpec.args(0), fni.tags0);
+        res.a1cmp0 := findRegTag(info.dynamic.argSpec.args(1), fni.tags0);
+        res.a0cmp1 := findRegTag(info.dynamic.argSpec.args(0), fni.tags1);
+        res.a1cmp1 := findRegTag(info.dynamic.argSpec.args(1), fni.tags1);
+        res.a0cmpM1 := findRegTag(info.dynamic.argSpec.args(0), fni.nextTagsM1);
+        res.a1cmpM1 := findRegTag(info.dynamic.argSpec.args(1), fni.nextTagsM1);
+        res.a0cmpM2 := findRegTag(info.dynamic.argSpec.args(0), fni.nextTagsM2);
+        res.a1cmpM2 := findRegTag(info.dynamic.argSpec.args(1), fni.nextTagsM2); 
+        res.a0cmpM3 := findRegTag(info.dynamic.argSpec.args(0), fni.nextTagsM3);
+        res.a1cmpM3 := findRegTag(info.dynamic.argSpec.args(1), fni.nextTagsM3);    
+        return res;
+    end function;
+    
+    function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo) return ForwardingMatchesArray is
+        variable res: ForwardingMatchesArray(schedArray'range) := (others => DEFAULT_FORWARDING_MATCHES);
+    begin
+        for i in schedArray'range loop
+            res(i) := findForwardingMatches(schedArray(i), fni);
+        end loop;
+        return res;
+    end function;
+    
+    
+    function getIndex4(inSelVec: std_logic_vector) return std_logic_vector is
+        constant selVec: std_logic_vector(0 to 3) := inSelVec;
+        variable res: std_logic_vector(1 downto 0) := "11";
+    begin
+        case selVec is
+            when "1000" | "1001" | "1010" | "1011" | "1100" | "1101" | "1110" | "1111" =>
+                res := "00";
+            when "0100" | "0101" | "0110" | "0111"  =>
+                res := "01";
+            when "0010" | "0011" =>
+                res := "10";                                    
+            when others =>
+                res := "11";
+        end case;
+    
+        return res;
+    end function;
+    
+    function select4(inElems: SchedulerInfoArray; index: std_logic_vector(1 downto 0)) return SchedulerInfo is
+        constant elems: SchedulerInfoArray(0 to 3) := inElems;
+    begin
+        case index is
+            when "00" =>    
+                return elems(0);
+            when "01" =>
+                return elems(1);
+            when "10" =>
+                return elems(2);
+            when others =>
+                return elems(3);
+        end case;                
+    end function;
+    
+    
+    function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vector) return SchedulerInfo is
+        variable elems: SchedulerInfoArray(0 to 15) := (others => DEFAULT_SCHEDULER_INFO);
+        
+        variable selVec: std_logic_vector(0 to 15) := (others => '0');
+        variable selVec4: std_logic_vector(0 to 3) := (others => '0');
+        
+        variable indL0, indL1, indL2, indL3, indH: std_logic_vector(1 downto 0) := "11";
+        variable ch0, ch1, ch2, ch3: SchedulerInfo;
+        variable groupReady: std_logic_vector(0 to 3) := (others => '0');
+    begin
+        elems(0 to inputElems'length-1) := inputElems;
+        selVec(0 to inputElems'length-1) := inputSelVec;
+    
+        for i in 0 to 3 loop
+            selVec4 := selVec(4*i to 4*i + 3);
+            groupReady(i) := isNonzero(selVec4);
+        end loop;
+    
+        indL0 := getIndex4(selVec(0 to 3));
+        indL1 := getIndex4(selVec(4 to 7));
+        indL2 := getIndex4(selVec(8 to 11));
+        indL3 := getIndex4(selVec(12 to 15));
+        
+        ch0 := select4(elems(0 to 3), indL0);
+        ch1 := select4(elems(4 to 7), indL1);
+        ch2 := select4(elems(8 to 11), indL2);
+        ch3 := select4(elems(12 to 15), indL3);
+    
+        indH := getIndex4(groupReady);
+        
+        return select4((0 => ch0, 1 => ch1, 2 => ch2, 3 => ch3), indH);        
+    end function;
+    
+    function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray is
+       variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := newContent;
+       variable rrf: std_logic_vector(0 to 2) := (others=>'0');      	   
+    begin
+       for i in 0 to PIPE_WIDTH-1 loop
+           rrf := rr(3*i to 3*i + 2);
+           res(i).dynamic.missing := res(i).dynamic.missing and not rrf;
+       end loop;
+    
+       return res;
+    end function;
+    
+    function restoreRenameIndex(sia: SchedulerInfoArray) return SchedulerInfoArray is
+       variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := sia;
+    begin
+       for i in 1 to PIPE_WIDTH-1 loop
+           res(i).dynamic.renameIndex := clearTagLow(res(0).dynamic.renameIndex) or i2slv(i, TAG_SIZE);
+       end loop;
+       return res;
+    end function;
+    
+    function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo is
+        variable res: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+    begin
+    
+        if a.static.operation.subpipe /= None then
+            res.static.operation.subpipe := a.static.operation.subpipe;  
+        else
+            res.static.operation.subpipe := b.static.operation.subpipe;
+        end if;
+        res.static.operation.bits := a.static.operation.bits or b.static.operation.bits;
+        res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
+        res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
+        res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
+    
+        res.static.branchIns := a.static.branchIns or b.static.branchIns;
+        res.static.bqPointer := a.static.bqPointer or b.static.bqPointer;--: SmallNumber;
+        res.static.sqPointer := a.static.sqPointer or b.static.sqPointer;--: SmallNumber;
+        res.static.lqPointer := a.static.lqPointer or b.static.lqPointer;-- SmallNumber;        
+        res.static.bqPointerSeq := a.static.bqPointerSeq or b.static.bqPointerSeq;--: SmallNumber;
+        
+        res.static.immediate :=  a.static.immediate or b.static.immediate;
+        res.static.immValue :=  a.static.immValue or b.static.immValue;
+        res.static.zero :=  a.static.zero or b.static.zero;
+        
+    
+        res.dynamic.full := a.dynamic.full or b.dynamic.full;
+        res.dynamic.active := a.dynamic.active or b.dynamic.active;
+        res.dynamic.issued := a.dynamic.issued or b.dynamic.issued;
+        res.dynamic.trial := a.dynamic.trial or b.dynamic.trial;
+        
+        res.dynamic.renameIndex := a.dynamic.renameIndex or b.dynamic.renameIndex;
+    
+        --    
+        res.dynamic.argSpec.intDestSel := a.dynamic.argSpec.intDestSel or b.dynamic.argSpec.intDestSel;
+        res.dynamic.argSpec.floatDestSel := a.dynamic.argSpec.floatDestSel or b.dynamic.argSpec.floatDestSel;
+        res.dynamic.argSpec.dest := a.dynamic.argSpec.dest or b.dynamic.argSpec.dest;
+        res.dynamic.argSpec.intArgSel := a.dynamic.argSpec.intArgSel or b.dynamic.argSpec.intArgSel;
+        res.dynamic.argSpec.floatArgSel := a.dynamic.argSpec.floatArgSel or b.dynamic.argSpec.floatArgSel;
+        
+        for i in 0 to 2 loop
+            res.dynamic.argSpec.args(i) := a.dynamic.argSpec.args(i) or b.dynamic.argSpec.args(i);
+        end loop;
+        
+        res.dynamic.stored := a.dynamic.stored or b.dynamic.stored;
+        res.dynamic.missing := a.dynamic.missing or b.dynamic.missing;
+        res.dynamic.readyNow := a.dynamic.readyNow or b.dynamic.readyNow;
+        res.dynamic.readyNext := a.dynamic.readyNext or b.dynamic.readyNext;
+        res.dynamic.readyM2 := a.dynamic.readyM2 or b.dynamic.readyM2;
+        
+        for i in 0 to 2 loop
+            res.dynamic.argLocsPipe(i) := a.dynamic.argLocsPipe(i) or b.dynamic.argLocsPipe(i);
+            res.dynamic.argSrc(i) := a.dynamic.argSrc(i) or b.dynamic.argSrc(i);   
+        end loop;
+        
+        return res;
+    end function;
+    
+    
+    function getNewLocsBanked(fullMask: std_logic_vector) return slv2D is
+        constant QUEUE_SIZE_EXT: natural := fullMask'length;
+        variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
+        variable cnt: natural := 0;
+        constant N_BANKS: natural := 4;
+        constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+    begin
+       for b in 0 to N_BANKS-1 loop
+           for i in 0 to BANK_SIZE-1 loop
+                if fullMask(i * N_BANKS + b) /= '1' then
+                    res(i * N_BANKS + b, b) := '1';
+                    exit;
+                end if;
+            end loop;
+        end loop;
+    
+        return res;
+    end function;
+    
+    function getBankCounts(fullMask: std_logic_vector) return SmallNumberArray is
+        constant QUEUE_SIZE_EXT: natural := fullMask'length;
+        variable res: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+        variable cnt: natural := 0;
+        constant N_BANKS: natural := 4;
+        constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+    begin
+       for i in 0 to BANK_SIZE-1 loop
+           for b in 0 to N_BANKS-1 loop
+                if fullMask(i * N_BANKS + b) = '1' then
+                    res(b) := addInt(res(b), 1);
+                end if;
+            end loop;
+        end loop;            
+        return res;
+    end function;
+    
+    function acceptingBanked(counts: SmallNumberArray; constant LIMIT: natural) return std_logic is
+        variable cnt: natural := 0;
+        constant N_BANKS: natural := counts'length;
+    begin
+       for b in 0 to N_BANKS-1 loop
+            if slv2u(counts(b)) > LIMIT - 1  then
+                return '0';
+            end if;
+        end loop;
+        return '1';
+    end function;
+    
+    function acceptingMoreBanked(counts: SmallNumberArray; constant LIMIT: natural) return std_logic is
+        variable cnt: natural := 0;
+        constant N_BANKS: natural := counts'length;
+    begin
+       for b in 0 to N_BANKS-1 loop
+            if slv2u(counts(b)) > LIMIT - 2  then
+                return '0';
+            end if;
+        end loop;
+        return '1';
+    end function;
+    
+    function updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D is
+        constant QUEUE_SIZE_EXT: natural := fullMask'length;
+        variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := ageMatrix;
+    begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            -- insert current fullMask into proper row    
+            for j in 0 to QUEUE_SIZE_EXT-1 loop
+                if insertionLocs(j, i) = '1' then
+                    -- Sorry, assigment doesn;t work for ranges in >= 2D
+                    for k in 0 to QUEUE_SIZE_EXT-1 loop
+                        res(j, k) := fullMask(k); -- Maybe setting to all ones would work too?
+                    end loop;
+                    
+                    -- Preceding in this group are also masked!
+                    for p in 0 to PIPE_WIDTH-1 loop
+                        if p = i then
+                            exit;
+                        end if;
+                        
+                        for k in 0 to QUEUE_SIZE_EXT-1 loop
+                            if insertionLocs(k, p) = '1' then
+                                res(j, k) := '1';
+                                exit;
+                            end if;
+                        end loop;
+                    end loop;
+                    
+                    -- Clear all dependencies on this new op
+                    for k in 0 to QUEUE_SIZE_EXT-1 loop
+                        res(k, j) := '0';
+                    end loop;
+                    
+                    exit;
+                end if;
+            end loop;
+        end loop;
+        return res;
+    end function;
+    
+    function getSelMask(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector is
         constant QUEUE_SIZE_EXT: natural := readyMask'length;
         variable res: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := --readyMask;--
                                                                  (others => '0');
@@ -1421,7 +1365,7 @@ end function;
                 row(j) := readyMask(j) and ageMatrix(i, j);
             end loop;
             row(i) := '0';
-
+    
             if isNonzero(row(0 to QUEUE_SIZE_EXT/2 - 1)) = '1' or isNonzero(row(QUEUE_SIZE_EXT/2 to QUEUE_SIZE_EXT-1)) = '1' then
                 res(i) := '0';
             else
@@ -1431,18 +1375,35 @@ end function;
              
         return res;
     end function;
-
-    function TMP_getSelMatrix(readyMask: std_logic_vector; ageMatrix: slv2D) return slv2D is
-        constant QUEUE_SIZE_EXT: natural := readyMask'length;
-        variable res: slv2D(0 to QUEUE_SIZE_EXT-1,0 to QUEUE_SIZE_EXT-1) := (others => (others => '0'));
-        variable si: SchedulerInfo;
+    
+    function updateRenameIndex(content: SchedulerInfoArray) return SchedulerInfoArray is
+        constant QUEUE_SIZE_EXT: natural := content'length;
+        variable res: SchedulerInfoArray(content'range) := content;
+        variable earlyStage: SchedulerInfoArray(0 to PIPE_WIDTH-1) := content(QUEUE_SIZE_EXT - PIPE_WIDTH to QUEUE_SIZE_EXT-1);
+    begin
+        earlyStage := restoreRenameIndex(earlyStage);
+    
+        res(QUEUE_SIZE_EXT - PIPE_WIDTH to QUEUE_SIZE_EXT-1) := earlyStage;
+        return res;
+    end function;
+    
+    function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return SchedulerInfo is
+        constant QUEUE_SIZE_EXT: natural := inputElems'length;
+        variable res, a, b: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+        variable maskedQueue: SchedulerInfoArray(inputElems'range) := (others => DEFAULT_SCHEDULER_INFO);
     begin
         for i in 0 to QUEUE_SIZE_EXT-1 loop
-            for j in 0 to QUEUE_SIZE_EXT-1 loop
-                res(i, j) := readyMask(j) and ageMatrix(i, j);
-            end loop;
+            if selMask(i) = '1' then
+                maskedQueue(i) := inputElems(i);
+            end if;
         end loop;
-             
+    
+        for i in 0 to QUEUE_SIZE_EXT/2-1 loop
+            a := orSchedEntrySlot(a, maskedQueue(i));
+            b := orSchedEntrySlot(b, maskedQueue(i + QUEUE_SIZE_EXT/2));
+        end loop;
+        
+        res := orSchedEntrySlot(a, b);
         return res;
     end function;
 
