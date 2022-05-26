@@ -63,6 +63,12 @@ package LogicQueues is
     function getCommittedEffectiveMaskBr(robData: InstructionSlotArray) return std_logic_vector;
     function getCommittedMaskBr(robData: InstructionSlotArray) return std_logic_vector;
 
+    function getCommittedEffectiveMask(robData: ControlPacketArray; isLQ: boolean) return std_logic_vector;
+    function getCommittedMask(robData: ControlPacketArray; isLQ: boolean) return std_logic_vector;
+
+    function getCommittedEffectiveMaskBr(robData: ControlPacketArray) return std_logic_vector;
+    function getCommittedMaskBr(robData: ControlPacketArray) return std_logic_vector;
+
     function shiftQueueContent(content: QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, prevSending, draining, compareInputFull: std_logic;
                                sqPtr: SmallNumber; op: SpecificOp; adr: Mword; constant QUEUE_PTR_SIZE: natural)
     return QueueEntryArray;
@@ -350,6 +356,79 @@ package body LogicQueues is
         end loop;
         return res;
      end function;
+
+
+
+-- scan: full and syncEvent; full and [usingQ]
+ function getCommittedEffectiveMask(robData: ControlPAcketArray; isLQ: boolean) return std_logic_vector is
+    variable res: std_logic_vector(robData'range) := (others => '0');
+ begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        if robData(i).controlInfo.full = '1' and hasSyncEvent(robData(i).controlInfo) = '1' then
+            exit;
+        end if;
+        
+        if isLQ then
+            res(i) := robData(i).controlInfo.full and robData(i).classInfo.useLQ;--'1';
+        else
+            res(i) := robData(i).controlInfo.full and robData(i).classInfo.secCluster;--'1';
+        end if;
+     
+    end loop;
+    return res;
+ end function;
+    
+    -- scan: newEvent and syncEvent; [usingQ] 
+    function getCommittedMask(robData: ControlPacketArray; isLQ: boolean) return std_logic_vector is
+        variable res: std_logic_vector(robData'range) := (others => '0');
+    begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        -- A redirected branch cuts a group in SQ, so it must stop there
+        if robData(i).controlInfo.newEvent = '1' and hasSyncEvent(robData(i).controlInfo) = '0' then
+            exit;
+        end if;
+    
+        -- Not only full, because exceptions clear following 'full' bits
+        if isLQ then
+            res(i) := robData(i).classInfo.useLQ;
+        else
+            res(i) := robData(i).classInfo.secCluster;
+        end if;
+    end loop;
+    return res;
+    end function;
+
+    -- scan: full and syncEvent; full and branch
+     function getCommittedEffectiveMaskBr(robData: ControlPacketArray) return std_logic_vector is
+        variable res: std_logic_vector(robData'range) := (others => '0');
+     begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            if robData(i).controlInfo.full = '1' and hasSyncEvent(robData(i).controlInfo) = '1' then
+                exit;
+            end if;
+
+            res(i) := robData(i).controlInfo.full and robData(i).classInfo.branchIns;
+        end loop;
+        return res;
+     end function;
+     
+     -- scan: newEvent and syncEvent; branch
+     function getCommittedMaskBr(robData: ControlPacketArray) return std_logic_vector is
+        variable res: std_logic_vector(robData'range) := (others => '0');
+     begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            -- A redirected branch cuts a group in SQ, so it must stop there
+            if robData(i).controlInfo.newEvent = '1' and hasSyncEvent(robData(i).controlInfo) = '0' then
+                exit;
+            end if;
+
+            -- Not only full, because exceptions clear following 'full' bits
+            res(i) := robData(i).classInfo.branchIns;
+        end loop;
+        return res;
+     end function;
+
+
 
     function shiftQueueContent(content: QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, prevSending, draining, compareInputFull: std_logic;
                                sqPtr: SmallNumber; op: SpecificOp; adr: Mword; constant QUEUE_PTR_SIZE: natural)

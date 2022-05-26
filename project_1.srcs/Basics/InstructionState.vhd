@@ -183,6 +183,7 @@ type InstructionStateArray is array(integer range <>) of InstructionState;
 
 type ControlPacket is record
     controlInfo: InstructionControlInfo;
+    classInfo: InstructionClassInfo;
     op: SpecificOp;
     tags: InstructionTags;
     tag: InsTag;
@@ -273,7 +274,9 @@ constant DEFAULT_INS_STATE: InstructionState := DEFAULT_INSTRUCTION_STATE;
 
 constant DEFAULT_CONTROL_PACKET: ControlPacket := (
     controlInfo => DEFAULT_CONTROL_INFO,
+        classInfo => DEFAULT_CLASS_INFO,
     op => DEFAULT_SPECIFIC_OP,
+    --branchIns => '0',
     tags => DEFAULT_INSTRUCTION_TAGS,
     tag => (others => '0'),
     ip => (others => '0'),

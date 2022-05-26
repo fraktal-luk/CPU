@@ -1442,6 +1442,7 @@ begin
     for i in res'range loop
         res(i).controlInfo := isa(i).ins.controlInfo;
         res(i).controlInfo.full := isa(i).full;
+        res(i).classInfo := isa(i).ins.classInfo;
         
         res(i).target := isa(i).ins.target;
     end loop;

@@ -72,9 +72,7 @@ architecture Behavioral of Core is
            sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
            : std_logic := '0';
 
-    signal --TMP_frontDataSpMasked,
-           renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ,-- renamedDataToSQ, renamedDataToLQ,
-           dataOutROB: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal branchMaskRe, loadMaskRe, storeMaskRe, branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO,
            commitMaskSQ, commitEffectiveMaskSQ, commitMaskLQ, commitEffectiveMaskLQ, branchCommitMask, branchCommitEffectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
@@ -108,7 +106,8 @@ architecture Behavioral of Core is
 
     signal pcData, branchResult, branchResultDelayed, bqSelected, ctOutLQ, ctOutSQ, ctOutSB, dataToBranch_N: ControlPacket := DEFAULT_CONTROL_PACKET;
 
-    signal bpData_N, robOut_N: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
+    signal bpData_N: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
+    signal robOut_N: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 
     signal dataFromDLQ: ExecResult := DEFAULT_EXEC_RESULT;
 
@@ -131,7 +130,6 @@ begin
     dataFromSB_N <= (ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), InsTag'(others => '0'),
                      zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
 
-    robOut_N <= convertROBData(dataOutROB);
 
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
 	generic map(DEBUG_FILE_PREFIX => DEBUG_FILE_PREFIX)
@@ -218,11 +216,10 @@ begin
         frontLastSendingIn => frontLastSending,
         frontData => frontOutput,
         
-        --TMP_spMaskedDataOut => TMP_frontDataSpMasked,
-            branchMaskRe => branchMaskRe,
-            loadMaskRe => loadMaskRe,
-            storeMaskRe => storeMaskRe,
-        
+        branchMaskRe => branchMaskRe,
+        loadMaskRe => loadMaskRe,
+        storeMaskRe => storeMaskRe,
+    
         nextAccepting => canSendRename,
 
         renamedDataLiving => renamedDataLivingRe,
@@ -239,9 +236,8 @@ begin
         lqPointer => lqPointer,
         bqPointerSeq => bqPointerSeq,
 
-        --robDataLiving => dataOutROB,
-            commitArgInfoI => renamedArgsIntROB,
-            commitArgInfoF => renamedArgsFloatROB,
+        commitArgInfoI => renamedArgsIntROB,
+        commitArgInfoF => renamedArgsFloatROB,
         sendingFromROB => robSending,
         
         newPhysDestsOut => newIntDests,
@@ -307,11 +303,12 @@ begin
 		acceptingMore => robAcceptingMore,
 		
 		nextAccepting => commitAccepting,
-		sendingOut => robSending, 
-		outputData => dataOutROB,
-		  outputArgInfoI => renamedArgsIntROB,
-		  outputArgInfoF => renamedArgsFloatROB,
 		
+		sendingOut => robSending, 
+        robOut => robOut_N,
+        outputArgInfoI => renamedArgsIntROB,
+        outputArgInfoF => renamedArgsFloatROB,
+
 		outputSpecial => specialOutROB_N		
 	);     
 
@@ -1000,7 +997,7 @@ begin
          allowIssueF0 <= not lockIssueF0;
 
          branchCtrl <= branchResult.controlInfo;
-        -- memoryCtrl <= slotM0_E2i(0).ins.controlInfo;
+
    
             execOutMain(0) <= subpipeI0_E0;
             execOutMain(2) <= subpipeM0_E2;
@@ -1125,24 +1122,23 @@ begin
         renamedDataToSQ <= setFullMask(renamedDataLivingReMem, getStoreMask1(renamedDataLivingRe));
         renamedDataToLQ <= setFullMask(renamedDataLivingReMem, getLoadMask1(renamedDataLivingRe));  
 
-        branchMaskOO <= --extractFullMask(renamedDataToBQ);
-                        getBranchMask1(renamedDataLivingRe);
-        loadMaskOO <= --extractFullMask(renamedDataToLQ);
-                        getLoadMask1(renamedDataLivingRe);
-        storeMaskOO <= --extractFullMask(renamedDataToSQ);
-                        getStoreMask1(renamedDataLivingRe);
+        branchMaskOO <= getBranchMask1(renamedDataLivingRe);
+        loadMaskOO <= getLoadMask1(renamedDataLivingRe);
+        storeMaskOO <= getStoreMask1(renamedDataLivingRe);
         
         systemStoreMaskOO <= getStoreSysMask(renamedDataToSQ);
         systemLoadMaskOO <= getLoadSysMask(renamedDataToSQ);
+        
+        
+        
+        commitMaskSQ <= work.LogicQueues.getCommittedMask(robOut_N, false);
+        commitMaskLQ <= work.LogicQueues.getCommittedMask(robOut_N, true);
+        commitEffectiveMaskSQ <= work.LogicQueues.getCommittedEffectiveMask(robOut_N, false);
+        commitEffectiveMaskLQ <= work.LogicQueues.getCommittedEffectiveMask(robOut_N, true);
+    
+        branchCommitMask <= work.LogicQueues.getCommittedMaskBr(robOut_N);
+        branchCommitEffectiveMask <= work.LogicQueues.getCommittedEffectiveMaskBr(robOut_N);
     end block;
-
-    commitMaskSQ <= work.LogicQueues.getCommittedMask(dataOutROB, false);
-    commitMaskLQ <= work.LogicQueues.getCommittedMask(dataOutROB, true);
-    commitEffectiveMaskSQ <= work.LogicQueues.getCommittedEffectiveMask(dataOutROB, false);
-    commitEffectiveMaskLQ <= work.LogicQueues.getCommittedEffectiveMask(dataOutROB, true);
-
-    branchCommitMask <= work.LogicQueues.getCommittedMaskBr(dataOutROB);
-    branchCommitEffectiveMask <= work.LogicQueues.getCommittedEffectiveMaskBr(dataOutROB);
 
     BRANCH_QUEUE: entity work.BranchQueue
 	generic map(
@@ -1178,7 +1174,8 @@ begin
         selectedDataOutput => bqSelected,
 
 		committing => robSending, -- When ROB is sending so is BQ if it has corresponding branches
-        commitBr => dataOutROB(0).ins.controlInfo.firstBr,
+        commitBr => --dataOutROB(0).ins.controlInfo.firstBr,
+                        robOut_N(0).controlInfo.firstBr,
         commitMask => branchCommitMask,
         commitEffectiveMask => branchCommitEffectiveMask,
 

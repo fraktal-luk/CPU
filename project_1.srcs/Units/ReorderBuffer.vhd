@@ -40,7 +40,9 @@ entity ReorderBuffer is
 		nextAccepting: in std_logic;
 		sendingOut: out std_logic; 
 		
-		outputData: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+		--outputData: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+        robOut: out ControlPacketArray(0 to PIPE_WIDTH-1);
+
 		outputArgInfoI: out RenameInfoArray(0 to PIPE_WIDTH-1);
 		outputArgInfoF: out RenameInfoArray(0 to PIPE_WIDTH-1);
 		outputSpecial: out SpecificOp
@@ -241,7 +243,10 @@ begin
 
     end block;
 
-    outputData <= setDestFlags(outputDataSig);
+--    outputData <= setDestFlags(outputDataSig);
+    
+    robOut <= convertROBData(outputDataSig);
+    
     outputArgInfoI <= getRenameInfoSC(setDestFlags(outputDataSig), false);
     outputArgInfoF <= getRenameInfoSC(setDestFlags(outputDataSig), true);                
     outputSpecial <= outputSpecialSig.ins.specificOperation;
