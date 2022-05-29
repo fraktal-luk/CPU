@@ -24,6 +24,48 @@ constant PHYS_NAME_NONE: PhysName := (others => '0');
 
 constant IQ_HOLD_TIME: natural := 3;
 
+
+type ArgumentState is record
+    used: std_logic;
+    reg: PhysName;
+    zero: std_logic;
+    imm: std_logic;
+    value: Hword;
+    
+    canFail: std_logic; -- maybe a counter is needed 
+
+    waiting: std_logic;
+    stored:  std_logic;
+
+   -- ready0: std_logic;
+   -- readyM1: std_logic;
+   -- readyM2:    std_logic;
+
+    srcPipe: SmallNumber;
+    srcStage: SmallNumber;    
+end record;
+
+constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
+    used => '0',
+    reg => (others => '0'),
+    zero => '0',
+    imm => '0',
+    value => (others => '0'),
+    canFail => '0',
+    waiting => '0',
+    stored => '0',
+  --  ready0 => '0',
+  --  readyM1 => '0',
+  --  readyM2 => '0',
+    srcPipe => (others => '0'),
+    srcStage => (others => '0')
+); 
+
+constant DEFAULT_ARG_STATE: ArgumentState := DEFAULT_ARGUMENT_STATE;
+
+type ArgumentStateArray is array(natural range <>) of ArgumentState;
+
+
 type StaticInfo is record
     operation: SpecificOp;
     
@@ -67,12 +109,14 @@ type DynamicInfo is record
     renameIndex: InsTag;
     argSpec: InstructionArgSpec;
 
-    missing: std_logic_vector(0 to 2);
-    stored:  std_logic_vector(0 to 2);
+        argStates: ArgumentStateArray(0 to 2);
 
-    readyNow: std_logic_vector(0 to 2);
-    readyNext: std_logic_vector(0 to 2);
-    readyM2:    std_logic_vector(0 to 2);
+    missing: std_logic_vector(0 to 2);
+ --   stored_u:  std_logic_vector(0 to 2);
+
+    --readyNow: std_logic_vector(0 to 2);
+    --readyNext: std_logic_vector(0 to 2);
+    --readyM2:    std_logic_vector(0 to 2);
 
     argLocsPipe: SmallNumberArray(0 to 2);
     argSrc: SmallNumberArray(0 to 2);
@@ -91,12 +135,13 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
 
     renameIndex => (others => '0'),
     argSpec => DEFAULT_ARG_SPEC,
+        argStates => (others => DEFAULT_ARG_STATE),
 
-    stored => (others => '0'),
+--    stored => (others => '0'),
     missing => (others => '0'),
-    readyNow => (others => '0'),
-    readyNext => (others => '0'),
-    readyM2 => (others => '0'),
+    --readyNow => (others => '0'),
+    --readyNext => (others => '0'),
+    --readyM2 => (others => '0'),
 
     argLocsPipe => (others => (others => '0')),
     argSrc => (others => (others => '0'))
@@ -451,12 +496,33 @@ package body LogicIssue is
         res.argSpec.args(0) := ri.physicalSourcesNew(0);
         res.argSpec.args(1) := ri.physicalSourcesNew(1);
         res.argSpec.args(2) := ri.physicalSourcesNew(2);
+        
+        for i in 0 to 2 loop
+            res.argStates(i).used := ri.sourceSel(i);
+            res.argStates(i).reg := ri.physicalSources(i);
+            res.argStates(i).zero := stInfo.zero(i);
+
+            if i = 1 then
+                res.argStates(i).imm := stInfo.immediate;
+                res.argStates(i).value := stInfo.immValue;
+            end if;
+            
+            res.argStates(i).canFail := '0';
+            res.argStates(i).waiting := not stInfo.zero(i);
+            res.argStates(i).stored := '0';
+--            res.argStates(i).ready0 := '0';
+--            res.argStates(i).readyM1 := '0';
+--            res.argStates(i).readyM2 := '0';
+            
+            res.argStates(i).srcPipe := (others => '0');
+            res.argStates(i).srcStage := "00000010";
+        end loop;
     
-        res.stored := (others => '0');
+--        res.stored := (others => '0');
         res.missing := not stInfo.zero;                               
-        res.readyNow := (others => '0');
-        res.readyNext := (others => '0');
-        res.readyM2  := (others => '0');
+--        res.readyNow := (others => '0');
+--        res.readyNext := (others => '0');
+--        res.readyM2  := (others => '0');
     
         res.argLocsPipe := (others => (others => '0'));
         res.argSrc := (others => "00000010");
@@ -509,14 +575,14 @@ package body LogicIssue is
         res.renameIndex := info.dynamic.renameIndex;
         res.argSpec := info.dynamic.argSpec;
         
-        res.stored := info.dynamic.stored;
+--        res.stored := info.dynamic.stored;
         res.readNew := (others => '0');
     
         res.missing := info.dynamic.missing;
         
-        res.readyNow := info.dynamic.readyNow;
-        res.readyNext := info.dynamic.readyNext;
-        res.readyM2  := info.dynamic.readyM2;
+--        res.readyNow := info.dynamic.readyNow;
+--        res.readyNext := info.dynamic.readyNext;
+--        res.readyM2  := info.dynamic.readyM2;
     
         res.argLocsPipe := info.dynamic.argLocsPipe;
         res.argSrc := info.dynamic.argSrc;
@@ -933,6 +999,7 @@ package body LogicIssue is
         variable wakeupVec: std_logic_vector(0 to 2) := (others => '0');
         variable wakeupPhases: SmallNumberArray(0 to 2) := (others => (others => '0'));  
     begin
+        -- old logic
         if ss.missing(arg) = '1' then
             res.argLocsPipe(arg) := wakeups.argLocsPipe;
             res.missing(arg) := not wakeups.match; 
@@ -949,7 +1016,25 @@ package body LogicIssue is
                 end case;                
             end if;
         end if;
-    
+        
+        -- new logic
+        if ss.argStates(arg).waiting = '1' then
+            res.argStates(arg).srcPipe := wakeups.argLocsPipe;
+            res.argStates(arg).waiting := not wakeups.match;
+            res.argStates(arg).srcStage := wakeups.argSrc;
+        else
+            if not selection then
+                case res.argStates(arg).srcStage is
+                    when "11" =>
+                        res.argStates(arg).srcStage := "00000000";
+                    when "00" =>
+                        res.argStates(arg).srcStage := "00000001";               
+                    when others =>
+                        res.argStates(arg).srcStage := "00000010";
+                end case;            
+            end if;
+        end if;
+        
         return res;
     end function;
     
@@ -1064,6 +1149,7 @@ package body LogicIssue is
         
         if dontMatch1 then
             res.dynamic.missing(1) := '0';
+                res.dynamic.argStates(1).waiting := '0';
         else
             res.dynamic := updateArgInfo(res.dynamic, 1, wakeups1, selection);
         end if;
@@ -1085,17 +1171,20 @@ package body LogicIssue is
     
     function findForwardingMatches(info: SchedulerInfo; fni: ForwardingInfo) return ForwardingMatches is
         variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
+            -- TODO: change to new arg states
+        constant arg0: PhysName := info.dynamic.argSpec.args(0);
+        constant arg1: PhysName := info.dynamic.argSpec.args(1);
     begin
-        res.a0cmp0 := findRegTag(info.dynamic.argSpec.args(0), fni.tags0);
-        res.a1cmp0 := findRegTag(info.dynamic.argSpec.args(1), fni.tags0);
-        res.a0cmp1 := findRegTag(info.dynamic.argSpec.args(0), fni.tags1);
-        res.a1cmp1 := findRegTag(info.dynamic.argSpec.args(1), fni.tags1);
-        res.a0cmpM1 := findRegTag(info.dynamic.argSpec.args(0), fni.nextTagsM1);
-        res.a1cmpM1 := findRegTag(info.dynamic.argSpec.args(1), fni.nextTagsM1);
-        res.a0cmpM2 := findRegTag(info.dynamic.argSpec.args(0), fni.nextTagsM2);
-        res.a1cmpM2 := findRegTag(info.dynamic.argSpec.args(1), fni.nextTagsM2); 
-        res.a0cmpM3 := findRegTag(info.dynamic.argSpec.args(0), fni.nextTagsM3);
-        res.a1cmpM3 := findRegTag(info.dynamic.argSpec.args(1), fni.nextTagsM3);    
+        res.a0cmp0 := findRegTag(arg0, fni.tags0);
+        res.a1cmp0 := findRegTag(arg1, fni.tags0);
+        res.a0cmp1 := findRegTag(arg0, fni.tags1);
+        res.a1cmp1 := findRegTag(arg1, fni.tags1);
+        res.a0cmpM1 := findRegTag(arg0, fni.nextTagsM1);
+        res.a1cmpM1 := findRegTag(arg1, fni.nextTagsM1);
+        res.a0cmpM2 := findRegTag(arg0, fni.nextTagsM2);
+        res.a1cmpM2 := findRegTag(arg1, fni.nextTagsM2); 
+        res.a0cmpM3 := findRegTag(arg0, fni.nextTagsM3);
+        res.a1cmpM3 := findRegTag(arg1, fni.nextTagsM3);    
         return res;
     end function;
     
@@ -1183,6 +1272,9 @@ package body LogicIssue is
        for i in 0 to PIPE_WIDTH-1 loop
            rrf := rr(3*i to 3*i + 2);
            res(i).dynamic.missing := res(i).dynamic.missing and not rrf;
+           for j in 0 to 2 loop
+                res(i).dynamic.argStates(j).waiting := res(i).dynamic.argStates(j).waiting and not rrf(j);
+           end loop;                
        end loop;
     
        return res;
@@ -1240,11 +1332,11 @@ package body LogicIssue is
             res.dynamic.argSpec.args(i) := a.dynamic.argSpec.args(i) or b.dynamic.argSpec.args(i);
         end loop;
         
-        res.dynamic.stored := a.dynamic.stored or b.dynamic.stored;
+--        res.dynamic.stored := a.dynamic.stored or b.dynamic.stored;
         res.dynamic.missing := a.dynamic.missing or b.dynamic.missing;
-        res.dynamic.readyNow := a.dynamic.readyNow or b.dynamic.readyNow;
-        res.dynamic.readyNext := a.dynamic.readyNext or b.dynamic.readyNext;
-        res.dynamic.readyM2 := a.dynamic.readyM2 or b.dynamic.readyM2;
+--        res.dynamic.readyNow := a.dynamic.readyNow or b.dynamic.readyNow;
+--        res.dynamic.readyNext := a.dynamic.readyNext or b.dynamic.readyNext;
+--        res.dynamic.readyM2 := a.dynamic.readyM2 or b.dynamic.readyM2;
         
         for i in 0 to 2 loop
             res.dynamic.argLocsPipe(i) := a.dynamic.argLocsPipe(i) or b.dynamic.argLocsPipe(i);

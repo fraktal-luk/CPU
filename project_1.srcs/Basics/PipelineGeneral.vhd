@@ -19,30 +19,16 @@ function p2i(p: SmallNumber; n: natural) return natural;
 type PhysicalSubpipe is (ALU, Mem, FP, StoreDataInt, StoreDataFloat);
 
 
-type ExecResult is record
-    full: std_logic;
-    tag: InsTag;
-    dest: PhysName;
-    value: Mword;
-end record;
-
-constant DEFAULT_EXEC_RESULT: ExecResult := ('0', tag => (others => '0'), dest => (others => '0'), value => (others => '0'));
-
-type ExecResultArray is array(integer range <>) of ExecResult;
-
 function makeExecResult(isl: SchedulerState) return ExecResult;
 
 
 type EventState is record
     lateEvent: std_logic;
     execEvent: std_logic;
-    --execCausing: InstructionState;
-    --preExecCausing: InstructionState;
     preExecTags: InstructionTags;
 end record;
 
-constant DEFAULT_EVENT_STATE: EventState := ('0', '0',-- DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE,
-                                                DEFAULT_INSTRUCTION_TAGS);
+constant DEFAULT_EVENT_STATE: EventState := ('0', '0', DEFAULT_INSTRUCTION_TAGS);
 
 type IssueQueueSignals is record
     sending: std_logic;
@@ -62,7 +48,11 @@ type ForwardingInfo is record
 	tags0: PhysNameArray(0 to 2);
 	tags1: PhysNameArray(0 to 2);
 	values0: MwordArray(0 to 2);
-	values1: MwordArray(0 to 2);	
+	values1: MwordArray(0 to 2);
+	failedM2: std_logic_vector(0 to 2);	
+	failedM1: std_logic_vector(0 to 2);	
+	failed0: std_logic_vector(0 to 2);	
+	failed1: std_logic_vector(0 to 2);	
 end record;
 
 type ForwardingMatches is record
@@ -91,7 +81,11 @@ constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
     tags0 => (others => (others => '0')),
     tags1 => (others => (others => '0')),
     values0 => (others => (others => '0')),
-    values1 => (others => (others => '0'))
+    values1 => (others => (others => '0')),
+    failedM2 => (others => '0'),
+    failedM1 => (others => '0'),
+    failed0 => (others => '0'),
+    failed1 => (others => '0')
 );
 
 constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
@@ -1562,6 +1556,10 @@ begin
          fni.tags1 :=      (0 => s0_R1.dest,                                                                             2 => s2_R1.dest,                             others => (others => '0'));
          fni.values0 :=    (0 => s0_R0.value,                             1 => s1_R0.value,                              2 => s2_R0.value,                            others => (others => '0'));
          fni.values1 :=    (0 => s0_R1.value,                                                                            2 => s2_R1.value,                            others => (others => '0'));                 
+         fni.failedM2 :=   (0 => s0_M2.failed,                                                                           2 => s2_M2.failed,                           others => '0');                 
+         fni.failedM1 :=   (0 => s0_M1.failed,                                                                           2 => s2_M1.failed,                           others => '0');                 
+         fni.failed0  :=   (0 => s0_R0.failed,                                                                           2 => s2_R0.failed,                           others => '0');                 
+         fni.failed1  :=   (0 => s0_R1.failed,                                                                           2 => s2_R1.failed,                           others => '0');                 
 
     return fni;
 end function;
@@ -1581,6 +1579,10 @@ begin
          fni.tags1 :=      (0 => s0_R1.dest,                                                                             2 => s2_R1.dest,                             others => (others => '0'));
          fni.values0 :=    (0 => s0_R0.value,                                                                            2 => s2_R0.value,                            others => (others => '0'));
          fni.values1 :=    (0 => s0_R1.value,                                                                            2 => s2_R1.value,                            others => (others => '0'));                 
+         fni.failedM2 :=   (0 => s0_M2.failed,                                                                           2 => s2_M2.failed,                           others => '0');                 
+         fni.failedM1 :=   (0 => s0_M1.failed,                                                                           2 => s2_M1.failed,                           others => '0');                 
+         fni.failed0  :=   (0 => s0_R0.failed,                                                                           2 => s2_R0.failed,                           others => '0');                 
+         fni.failed1  :=   (0 => s0_R1.failed,                                                                           2 => s2_R1.failed,                           others => '0');                 
 
     return fni;
 end function;

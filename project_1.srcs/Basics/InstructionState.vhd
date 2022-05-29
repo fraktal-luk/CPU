@@ -296,6 +296,17 @@ constant DEFAULT_INS_SLOT: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 -- NOTE: index can be negative to enable logical division into 2 different ranges 
 type InstructionSlotArray is array(integer range <>) of InstructionSlot;
 
+type ExecResult is record
+    full: std_logic;
+    failed: std_logic;
+    tag: InsTag;
+    dest: PhysName;
+    value: Mword;
+end record;
+
+constant DEFAULT_EXEC_RESULT: ExecResult := ('0', '0', tag => (others => '0'), dest => (others => '0'), value => (others => '0'));
+
+type ExecResultArray is array(integer range <>) of ExecResult;
 
 
 type BufferEntry is record

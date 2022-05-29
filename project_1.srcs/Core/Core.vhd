@@ -126,8 +126,8 @@ begin
 
     events <= (lateEventSignal, execEventSignal, dataToBranch_N.tags);
 
-    execEvent_N <= (execEventSignal, InsTag'(others => '0'), branchResult.tags.bqPointerSeq, branchResult.target);
-    dataFromSB_N <= (ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), InsTag'(others => '0'),
+    execEvent_N <= (execEventSignal, '0', InsTag'(others => '0'), branchResult.tags.bqPointerSeq, branchResult.target);
+    dataFromSB_N <= (ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'),
                      zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
 
 
