@@ -499,8 +499,9 @@ package body LogicIssue is
         
         for i in 0 to 2 loop
             res.argStates(i).used := ri.sourceSel(i);
-            res.argStates(i).reg := ri.physicalSources(i);
-            res.argStates(i).zero := stInfo.zero(i);
+            res.argStates(i).reg := ri.physicalSourcesNew(i);
+            res.argStates(i).zero := --stInfo.zero(i);
+                                    ri.sourceConst(i);
 
             if i = 1 then
                 res.argStates(i).imm := stInfo.immediate;
@@ -569,7 +570,7 @@ package body LogicIssue is
         res.immValue := info.static.immValue;
             
         res.zero := info.static.zero;
-    
+            
         res.issued := info.dynamic.issued;
         
         res.renameIndex := info.dynamic.renameIndex;
@@ -579,13 +580,27 @@ package body LogicIssue is
         res.readNew := (others => '0');
     
         res.missing := info.dynamic.missing;
+        res.argLocsPipe := info.dynamic.argLocsPipe;
+        res.argSrc := info.dynamic.argSrc;
+        
+            for k in 0 to 2 loop
+                 --   assert(res.zero(0) = info.dynamic.argStates(0).zero) report ;-- severity failure;
+                
+                
+--                if  info.dynamic.argStates(0).zero /= res.zero(0) then
+--                    --res.zero(k) := 'Z';-- info.dynamic.argStates(k).zero;
+--                          --  report integer'image( slv2u(info.dynamic.renameIndex));
+--                end if;
+                
+                
+                res.missing(k) := info.dynamic.argStates(k).waiting;
+                res.argLocsPipe(k) := info.dynamic.argStates(k).srcPipe;
+                res.argSrc(k) := info.dynamic.argStates(k).srcStage;
+            end loop;
         
 --        res.readyNow := info.dynamic.readyNow;
 --        res.readyNext := info.dynamic.readyNext;
 --        res.readyM2  := info.dynamic.readyM2;
-    
-        res.argLocsPipe := info.dynamic.argLocsPipe;
-        res.argSrc := info.dynamic.argSrc;
         
         return res;
     end function;
@@ -1024,7 +1039,7 @@ package body LogicIssue is
             res.argStates(arg).srcStage := wakeups.argSrc;
         else
             if not selection then
-                case res.argStates(arg).srcStage is
+                case res.argStates(arg).srcStage(1 downto 0) is
                     when "11" =>
                         res.argStates(arg).srcStage := "00000000";
                     when "00" =>
@@ -1172,8 +1187,10 @@ package body LogicIssue is
     function findForwardingMatches(info: SchedulerInfo; fni: ForwardingInfo) return ForwardingMatches is
         variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
             -- TODO: change to new arg states
-        constant arg0: PhysName := info.dynamic.argSpec.args(0);
-        constant arg1: PhysName := info.dynamic.argSpec.args(1);
+        constant arg0: PhysName := info.dynamic.--argSpec.args(0);
+                                                argStates(0).reg;
+        constant arg1: PhysName := info.dynamic.--argSpec.args(1);
+                                                argStates(1).reg;
     begin
         res.a0cmp0 := findRegTag(arg0, fni.tags0);
         res.a1cmp0 := findRegTag(arg1, fni.tags0);
@@ -1340,7 +1357,20 @@ package body LogicIssue is
         
         for i in 0 to 2 loop
             res.dynamic.argLocsPipe(i) := a.dynamic.argLocsPipe(i) or b.dynamic.argLocsPipe(i);
-            res.dynamic.argSrc(i) := a.dynamic.argSrc(i) or b.dynamic.argSrc(i);   
+            res.dynamic.argSrc(i) := a.dynamic.argSrc(i) or b.dynamic.argSrc(i);
+         
+                res.dynamic.argStates(i).used := a.dynamic.argStates(i).used or b.dynamic.argStates(i).used;
+                res.dynamic.argStates(i).reg := a.dynamic.argStates(i).reg or b.dynamic.argStates(i).reg;
+                res.dynamic.argStates(i).zero := a.dynamic.argStates(i).used or b.dynamic.argStates(i).zero;
+                res.dynamic.argStates(i).imm := a.dynamic.argStates(i).imm or b.dynamic.argStates(i).imm;
+                res.dynamic.argStates(i).value := a.dynamic.argStates(i).value or b.dynamic.argStates(i).value;
+
+                res.dynamic.argStates(i).canFail := a.dynamic.argStates(i).canFail or b.dynamic.argStates(i).canFail;
+                res.dynamic.argStates(i).waiting := a.dynamic.argStates(i).waiting or b.dynamic.argStates(i).waiting;
+                res.dynamic.argStates(i).stored := a.dynamic.argStates(i).stored or b.dynamic.argStates(i).stored;
+
+                res.dynamic.argStates(i).srcPipe := a.dynamic.argStates(i).srcPipe or b.dynamic.argStates(i).srcPipe;
+                res.dynamic.argStates(i).srcStage := a.dynamic.argStates(i).srcStage or b.dynamic.argStates(i).srcStage;
         end loop;
         
         return res;
