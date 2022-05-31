@@ -531,7 +531,7 @@ begin
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
                IQ_SIZE => IQ_SIZE_M0,
-               ALT_INPUT => false,
+               --ALT_INPUT => false,
                DONT_MATCH1 => true,
                FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
@@ -859,7 +859,7 @@ begin
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)
             generic map(
-                IQ_SIZE => IQ_SIZE_F0, IS_FP => true,
+                IQ_SIZE => IQ_SIZE_F0,-- IS_FP => true,
                 FORWARDING(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
                 FORWARDING1(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT_D(0 to 2)
