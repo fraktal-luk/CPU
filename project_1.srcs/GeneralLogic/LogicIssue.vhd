@@ -193,11 +193,14 @@ function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInf
                 dynamic: boolean;
                 selection: boolean;
                 dontMatch1: boolean;
-                forwardingModes0, forwardingModes1: ForwardingModeArray
+                forwardingModes0--, forwardingModes1
+                : ForwardingModeArray
             )
 return SchedulerInfoArray;
 
-function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo) return ForwardingMatchesArray;
+function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; rrf: std_logic_vector) return ForwardingMatchesArray;
+
+     function findForwardingMatchesArray_N(schedArray: SchedulerInfoArray; fni: ForwardingInfo; rrf: std_logic_vector; regInfo: RegisterStateArray2D) return ForwardingMatchesArray;
 
 function extractFullMask(queueContent: SchedulerInfoArray) return std_logic_vector;
 
@@ -774,8 +777,8 @@ package body LogicIssue is
         
         return res;
     end function;    
-      
-    function getWakeupStructStatic(cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray; selection: boolean)
+
+    function getWakeupStructStatic(fc: ForwardingComparisons; forwardingModes: ForwardingModeArray; selection: boolean)
     return WakeupStruct is
         variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
         variable matchVec: std_logic_vector(0 to 2) := (others => '0');
@@ -783,15 +786,15 @@ package body LogicIssue is
         for p in forwardingModes'range loop
             case forwardingModes(p).stage is
                 when -3 =>
-                    matchVec(p) := cmpM3(p);
+                    matchVec(p) := fc.cmpM3(p);
                 when -2 =>
-                    matchVec(p) := cmpM2(p);
+                    matchVec(p) := fc.cmpM2(p);
                 when -1 =>
-                    matchVec(p) := cmpM1(p);
+                    matchVec(p) := fc.cmpM1(p);
                 when 0 =>
-                    matchVec(p) := cmpR0(p);
+                    matchVec(p) := fc.cmp0(p);
                 when 1 =>
-                    matchVec(p) := cmpR1(p);
+                    matchVec(p) := fc.cmp1(p);
                 when others =>
                     matchVec(p) := '0';
             end case;
@@ -819,7 +822,7 @@ package body LogicIssue is
         return res;
     end function;
     
-    function getWakeupStructDynamic(cmpR1, cmpR0, cmpM1, cmpM2, cmpM3: std_logic_vector; forwardingModes: ForwardingModeArray) return WakeupStruct is
+    function getWakeupStructDynamic(fc: ForwardingComparisons; forwardingModes: ForwardingModeArray) return WakeupStruct is
         variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
         variable matchVec: std_logic_vector(0 to 2) := (others => '0');
     begin
@@ -829,15 +832,15 @@ package body LogicIssue is
                 if forwardingModes(p).stage <= q then
                     case q is
                         when -3 =>
-                            matchVec(p) := cmpM3(p);
+                            matchVec(p) := fc.cmpM3(p);
                         when -2 =>
-                            matchVec(p) := cmpM2(p);
+                            matchVec(p) := fc.cmpM2(p);
                         when -1 =>
-                            matchVec(p) := cmpM1(p);
+                            matchVec(p) := fc.cmpM1(p);
                         when 0 =>
-                            matchVec(p) := cmpR0(p);
+                            matchVec(p) := fc.cmp0(p);
                         when 1 =>
-                            matchVec(p) := cmpR1(p);
+                            matchVec(p) := fc.cmp1(p);
                         when others =>
                             matchVec(p) := '0';
                     end case;
@@ -874,11 +877,11 @@ package body LogicIssue is
         variable wakeups0, wakeups1: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
     begin
         if not dynamic then
-            wakeups0 := getWakeupStructStatic(fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes0, selection);
-            wakeups1 := getWakeupStructStatic(fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes1, selection);
+            wakeups0 := getWakeupStructStatic(fm.cmps(0), forwardingModes0, selection);
+            wakeups1 := getWakeupStructStatic(fm.cmps(1), forwardingModes0, selection);
         else
-            wakeups0 := getWakeupStructDynamic(fm.a0cmp1, fm.a0cmp0, fm.a0cmpM1, fm.a0cmpM2, fm.a0cmpM3, forwardingModes0);
-            wakeups1 := getWakeupStructDynamic(fm.a1cmp1, fm.a1cmp0, fm.a1cmpM1, fm.a1cmpM2, fm.a1cmpM3, forwardingModes1);
+            wakeups0 := getWakeupStructDynamic(fm.cmps(0), forwardingModes0);
+            wakeups1 := getWakeupStructDynamic(fm.cmps(1), forwardingModes0);
         end if;
     
         res.dynamic.argStates(0) := updateArgInfo(res.dynamic.argStates(0), wakeups0, selection);
@@ -893,44 +896,88 @@ package body LogicIssue is
     end function;
     
     function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
-                    dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0, forwardingModes1: ForwardingModeArray)
+                    dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0--, forwardingModes1
+                                                                                                : ForwardingModeArray)
     return SchedulerInfoArray is
         variable res: SchedulerInfoArray(0 to schedArray'length-1);
     begin
         for i in schedArray'range loop
-            res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, dontMatch1, forwardingModes0, forwardingModes1);
+            res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, dontMatch1, forwardingModes0, forwardingModes0);
         end loop;	
         return res;
     end function;
     
     
-    function findForwardingMatches(info: SchedulerInfo; fni: ForwardingInfo) return ForwardingMatches is
+    function findForwardingMatches(info: SchedulerInfo; fni: ForwardingInfo; readyRegs: std_logic_vector) return ForwardingMatches is
         variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
         constant arg0: PhysName := info.dynamic.argStates(0).reg;
         constant arg1: PhysName := info.dynamic.argStates(1).reg;
     begin
-        res.a0cmp0 := findRegTag(arg0, fni.tags0);
-        res.a1cmp0 := findRegTag(arg1, fni.tags0);
-        res.a0cmp1 := findRegTag(arg0, fni.tags1);
-        res.a1cmp1 := findRegTag(arg1, fni.tags1);
-        res.a0cmpM1 := findRegTag(arg0, fni.nextTagsM1);
-        res.a1cmpM1 := findRegTag(arg1, fni.nextTagsM1);
-        res.a0cmpM2 := findRegTag(arg0, fni.nextTagsM2);
-        res.a1cmpM2 := findRegTag(arg1, fni.nextTagsM2); 
-        res.a0cmpM3 := findRegTag(arg0, fni.nextTagsM3);
-        res.a1cmpM3 := findRegTag(arg1, fni.nextTagsM3);    
+        res.cmps(0).reg   := '0';
+        res.cmps(0).cmp1  := findRegTag(arg0, fni.tags1);
+        res.cmps(0).cmp0  := findRegTag(arg0, fni.tags0);        
+        res.cmps(0).cmpM1 := findRegTag(arg0, fni.nextTagsM1);
+        res.cmps(0).cmpM2 := findRegTag(arg0, fni.nextTagsM2);        
+        res.cmps(0).cmpM3 := findRegTag(arg0, fni.nextTagsM3);
+
+        res.cmps(1).reg   := '0';
+        res.cmps(1).cmp1  := findRegTag(arg1, fni.tags1);
+        res.cmps(1).cmp0  := findRegTag(arg1, fni.tags0);        
+        res.cmps(1).cmpM1 := findRegTag(arg1, fni.nextTagsM1);
+        res.cmps(1).cmpM2 := findRegTag(arg1, fni.nextTagsM2);        
+        res.cmps(1).cmpM3 := findRegTag(arg1, fni.nextTagsM3);
+
+        return res;
+    end function;
+
+    function findForwardingMatches_N(info: SchedulerInfo; fni: ForwardingInfo; regInfo: RegisterStateArray) return ForwardingMatches is
+        variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
+        constant arg0: PhysName := info.dynamic.argStates(0).reg;
+        constant arg1: PhysName := info.dynamic.argStates(1).reg;
+    begin
+        res.cmps(0).reg   := regInfo(0).ready;
+        res.cmps(0).cmp1  := findRegTag(arg0, fni.tags1);
+        res.cmps(0).cmp0  := findRegTag(arg0, fni.tags0);
+        res.cmps(0).cmpM1 := findRegTag(arg0, fni.nextTagsM1);
+        res.cmps(0).cmpM2 := findRegTag(arg0, fni.nextTagsM2);
+        res.cmps(0).cmpM3 := findRegTag(arg0, fni.nextTagsM3);
+
+        res.cmps(1).reg   := regInfo(1).ready;
+        res.cmps(1).cmp1  := findRegTag(arg1, fni.tags1);
+        res.cmps(1).cmp0  := findRegTag(arg1, fni.tags0);
+        res.cmps(1).cmpM1 := findRegTag(arg1, fni.nextTagsM1);
+        res.cmps(1).cmpM2 := findRegTag(arg1, fni.nextTagsM2);
+        res.cmps(1).cmpM3 := findRegTag(arg1, fni.nextTagsM3);
+
         return res;
     end function;
     
-    function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo) return ForwardingMatchesArray is
+    
+    function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; rrf: std_logic_vector) return ForwardingMatchesArray is
         variable res: ForwardingMatchesArray(schedArray'range) := (others => DEFAULT_FORWARDING_MATCHES);
+        
+        constant readyFlags: std_logic_vector(0 to 3*schedArray'length-1) := (others => '0');
+        variable readyFlagsSlice: std_logic_vector(0 to 2) := "000";
     begin
         for i in schedArray'range loop
-            res(i) := findForwardingMatches(schedArray(i), fni);
+            readyFlagsSlice := readyFlags(3*i to 3*i + 2);
+            res(i) := findForwardingMatches(schedArray(i), fni, readyFlagsSlice);
         end loop;
         return res;
     end function;
     
+        function findForwardingMatchesArray_N(schedArray: SchedulerInfoArray; fni: ForwardingInfo; rrf: std_logic_vector; regInfo: RegisterStateArray2D) return ForwardingMatchesArray is
+            variable res: ForwardingMatchesArray(schedArray'range) := (others => DEFAULT_FORWARDING_MATCHES);
+            
+            constant readyFlags: std_logic_vector(0 to 3*schedArray'length-1) := (others => '0');
+            variable readyFlagsSlice: std_logic_vector(0 to 2) := "000";
+        begin
+            for i in schedArray'range loop
+                readyFlagsSlice := readyFlags(3*i to 3*i + 2);
+                res(i) := findForwardingMatches_N(schedArray(i), fni, regInfo(i));
+            end loop;
+            return res;
+        end function;
     
     function getIndex4(inSelVec: std_logic_vector) return std_logic_vector is
         constant selVec: std_logic_vector(0 to 3) := inSelVec;
@@ -1001,7 +1048,7 @@ package body LogicIssue is
     
     function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray is
        variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := newContent;
-       variable rrf: std_logic_vector(0 to 2) := (others=>'0');      	   
+       variable rrf: std_logic_vector(0 to 2) := (others => '0');      	   
     begin
        for i in 0 to PIPE_WIDTH-1 loop
            rrf := rr(3*i to 3*i + 2);

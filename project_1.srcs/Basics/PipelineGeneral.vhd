@@ -41,6 +41,17 @@ type IssueQueueSignals is record
         killSel3: std_logic;
 end record;
 
+
+type RegisterState is record
+    ready: std_logic;
+end record;
+
+type RegisterStateArray is array(integer range <>) of RegisterState;
+
+type RegisterStateArray2D is array(integer range <>) of RegisterStateArray(0 to 2);
+
+
+
 type ForwardingInfo is record
 	nextTagsM3:	PhysNameArray(0 to 2);
 	nextTagsM2:	PhysNameArray(0 to 2);
@@ -54,6 +65,20 @@ type ForwardingInfo is record
 	failed0: std_logic_vector(0 to 2);	
 	failed1: std_logic_vector(0 to 2);	
 end record;
+
+
+type ForwardingComparisons is record
+    cmpM3: std_logic_vector(0 to 2);
+    cmpM2: std_logic_vector(0 to 2);
+    cmpM1: std_logic_vector(0 to 2);
+    cmp0: std_logic_vector(0 to 2);
+    cmp1: std_logic_vector(0 to 2);
+    reg:  std_logic;
+end record;
+
+constant DEFAULT_FORWARDING_COMPARISONS: ForwardingComparisons := (reg => '0', others => (others => '0'));
+
+type ForwardingComparisonsArray is array(natural range <>) of ForwardingComparisons;
 
 type ForwardingMatches is record
     -- src0
@@ -69,6 +94,8 @@ type ForwardingMatches is record
 	a1cmpM1: std_logic_vector(0 to 2);
 	a1cmp1: std_logic_vector(0 to 2);	    
 	a1cmp0: std_logic_vector(0 to 2);
+	
+	cmps: ForwardingComparisonsArray(0 to 1);
 end record;
 
 type ForwardingMatchesArray is array(integer range <>) of ForwardingMatches; 
@@ -89,6 +116,7 @@ constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
 );
 
 constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
+    cmps => (others => DEFAULT_FORWARDING_COMPARISONS),
     others => (others => '0')
 );
 
@@ -96,7 +124,7 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
     type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
     
     constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
-    
+
 
     type RenameInfo is record
         destSel: std_logic;
