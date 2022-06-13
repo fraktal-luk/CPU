@@ -16,7 +16,6 @@ use work.PipelineGeneral.all;
 use work.LogicROB.all;
 
 
-
 entity ReorderBuffer is
 	port(
 		clk: in std_logic;
@@ -41,38 +40,94 @@ entity ReorderBuffer is
 		nextAccepting: in std_logic;
 		sendingOut: out std_logic; 
 		
-		outputData: out InstructionSlotArray(0 to PIPE_WIDTH-1);
-		outputSpecial_N: out SpecificOp
+		--outputData: out InstructionSlotArray(0 to PIPE_WIDTH-1);
+        robOut: out ControlPacketArray(0 to PIPE_WIDTH-1);
+
+		outputArgInfoI: out RenameInfoArray(0 to PIPE_WIDTH-1);
+		outputArgInfoF: out RenameInfoArray(0 to PIPE_WIDTH-1);
+		outputSpecial: out SpecificOp
 	);	
 end ReorderBuffer;
 
 
 architecture Behavioral of ReorderBuffer is
-
     signal outputDataSig, outputDataSig_Pre: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
-    signal outputSpecialSig, inputSpecial_N: InstructionSlot := DEFAULT_INS_SLOT;
+    signal outputSpecialSig, inputSpecial: InstructionSlot := DEFAULT_INS_SLOT;
         
-	signal isSending, isEmpty, outputCompleted, outputCompleted_Pre, outputEmpty, execEvent, isFull, isAlmostFull: std_logic := '0';
-	--signal --startPtr,
-	  --      startPtrNext--, 
-	        --endPtr, endPtrNext--, causingPtr
-	    --       : SmallNumber := (others => '0');	
-	signal startPtrLong, startPtrLongNext, endPtrLong, endPtrLongNext, causingPtrLong: SmallNumber := (others => '0');	
+	signal isSending, isEmpty, outputCompleted, outputCompleted_Pre, outputEmpty, execEvent, isFull, isAlmostFull: std_logic := '0';	
+	signal startPtr, startPtrNext, endPtr, endPtrNext, causingPtr: SmallNumber := (others => '0');	
 
     signal ch0, ch1, ch2, ch3: std_logic := '0';
+    
+    
+    -- TMP: to remove
+    function getRenameInfoSC(insVec: InstructionSlotArray; constant IS_FP: boolean := false)
+    return RenameInfoArray is
+        variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+        variable va, pa: InstructionArgSpec := DEFAULT_ARG_SPEC;
+        variable ca: InstructionConstantArgs := DEFAULT_CONSTANT_ARGS;
+        variable depVec: DependencyVec;
+    begin
+
+        for i in 0 to PIPE_WIDTH-1 loop
+            va := insVec(i).ins.virtualArgSpec;
+            pa := insVec(i).ins.physicalArgSpec;
+            ca := insVec(i).ins.constantArgs;
+        
+            if IS_FP then        
+                res(i).destSel := va.floatDestSel;
+                res(i).destSelFP := va.floatDestSel;
+                
+                res(i).psel := pa.floatDestSel;
+            else
+                res(i).destSel := va.intDestSel;
+                res(i).psel := pa.intDestSel;
+            end if;
+            
+            
+            res(i).virtualDest := va.dest(4 downto 0);
+            res(i).physicalDest := pa.dest;
+
+            if IS_FP then
+                res(i).sourceSel := va.floatArgSel;
+            else
+                res(i).sourceSel := va.intArgSel;
+            end if;
+
+            for j in 0 to 2 loop
+                res(i).sourceConst(j) :=   (va.intArgSel(j) and not isNonzero(va.args(j)(4 downto 0))) -- int r0
+                                        or (not va.intArgSel(j) and not va.floatArgSel(j))             -- not used
+                                        or (bool2std(j = 1) and ca.immSel);                            -- imm
+            end loop;
+
+            res(i).deps := depVec(i);
+            res(i).physicalSourcesNew := res(i).physicalSources;
+                                
+            for j in 0 to 2 loop
+                res(i).sourcesNew(j) := isNonzero(res(i).deps(j));
+                for k in PIPE_WIDTH-1 downto 0 loop
+                    if res(i).deps(j)(k) = '1' then
+                        exit;
+                    end if;
+                end loop;
+            end loop;
+            
+            res(i).sourcesReady := (others => '0');
+        end loop;
+        return res;
+    end function;
 begin
-    inputSpecial_N.ins.specificOperation <= specialOp;
+    inputSpecial.ins.specificOperation <= specialOp;
 
 	execEvent <= branchControl.full and branchControl.newEvent;
 	
-	--causingPtr <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN;
-	causingPtrLong <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN_LONG;
+	causingPtr <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN_LONG;
 	
     NEW_DEV: block
-        signal staticInput, staticOutput, staticOutput_D_Pre: StaticOpInfoArray;
+        signal staticInput, staticOutput, staticOutput_Pre: StaticOpInfoArray;
         signal dynamicInput, dynamicOutput, dynamicOutput_Pre: DynamicOpInfoArray;
 
-        signal staticGroupInput, staticGroupOutput_D, staticGroupOutput_D_Pre: StaticGroupInfo;
+        signal staticGroupInput, staticGroupOutput, staticGroupOutput_Pre: StaticGroupInfo;
         signal dynamicGroupInput, dynamicGroupOutput, dynamicGroupOutput_Pre: DynamicGroupInfo;
         
         signal staticContent: StaticOpInfoArray2D := (others => (others => DEFAULT_STATIC_OP_INFO));
@@ -91,20 +146,20 @@ begin
         staticInput <= getStaticOpInfoA(inputData);
         dynamicInput <= getDynamicOpInfoA(inputData);
         
-        staticGroupInput <= getStaticGroupInfo(inputData, inputSpecial_N);
-        dynamicGroupInput <= getDynamicGroupInfo(inputData, inputSpecial_N);
+        staticGroupInput <= getStaticGroupInfo(inputData, inputSpecial);
+        dynamicGroupInput <= getDynamicGroupInfo(inputData, inputSpecial);
 
         -- Outputs
-        outputDataSig_Pre <= getInstructionSlotArray_T(staticOutput_D_Pre, dynamicOutput_Pre, staticGroupOutput_D_Pre, dynamicGroupOutput_Pre);
-        outputSpecialSig <= getSpecialSlot_T(staticGroupOutput_D, dynamicGroupOutput);
+        outputDataSig_Pre <= getInstructionSlotArray(staticOutput_Pre, dynamicOutput_Pre, staticGroupOutput_Pre, dynamicGroupOutput_Pre);
+        outputSpecialSig <= getSpecialSlot(staticGroupOutput, dynamicGroupOutput);
 
     	outputCompleted_Pre <= groupCompleted(outputDataSig_Pre, dynamicOutput_Pre);
 
-        dynamicOutput_Pre <= readDynamicOutput(dynamicContent, startPtrLongNext);
-        dynamicGroupOutput_Pre <= readDynamicGroupOutput(dynamicGroupContent, startPtrLongNext);
+        dynamicOutput_Pre <= readDynamicOutput(dynamicContent, startPtrNext);
+        dynamicGroupOutput_Pre <= readDynamicGroupOutput(dynamicGroupContent, startPtrNext);
         
-        staticOutput_D_Pre <= deserializeStaticInfoA(serialMemContent(p2i(startPtrLongNext, ROB_SIZE)));                    
-        staticGroupOutput_D_Pre <= deserializeStaticGroupInfo(serialMemContent(p2i(startPtrLongNext, ROB_SIZE)));
+        staticOutput_Pre <= deserializeStaticInfoA(serialMemContent(p2i(startPtrNext, ROB_SIZE)));                    
+        staticGroupOutput_Pre <= deserializeStaticGroupInfo(serialMemContent(p2i(startPtrNext, ROB_SIZE)));
 
 
         SYNCH: process (clk)
@@ -119,24 +174,24 @@ begin
 
                 -- Write inputs
                 if prevSending = '1' then                    
-                    writeStaticInput(staticContent, staticInput, endPtrLong);
-                    writeStaticGroupInput(staticGroupContent, staticGroupInput, endPtrLong);
+                    writeStaticInput(staticContent, staticInput, endPtr);
+                    writeStaticGroupInput(staticGroupContent, staticGroupInput, endPtr);
 
-                    writeDynamicInput(dynamicContent, dynamicInput, endPtrLong);
-                    writeDynamicGroupInput(dynamicGroupContent, dynamicGroupInput, endPtrLong);
+                    writeDynamicInput(dynamicContent, dynamicInput, endPtr);
+                    writeDynamicGroupInput(dynamicGroupContent, dynamicGroupInput, endPtr);
                     
-                    serialMemContent(p2i(endPtrLong, ROB_SIZE)) <= serialInput;
+                    serialMemContent(p2i(endPtr, ROB_SIZE)) <= serialInput;
                 end if;
                    
                 -- Read output
-                staticOutput <= readStaticOutput(staticContent, startPtrLongNext);
+                staticOutput <= readStaticOutput(staticContent, startPtrNext);
 
                 dynamicOutput <= dynamicOutput_Pre;
                 dynamicGroupOutput <= dynamicGroupOutput_Pre;
                 
-                serialOutput <= serialMemContent(p2i(startPtrLongNext, ROB_SIZE));
+                serialOutput <= serialMemContent(p2i(startPtrNext, ROB_SIZE));
                 
-                staticGroupOutput_D <= staticGroupOutput_D_Pre;
+                staticGroupOutput <= staticGroupOutput_Pre;
                   
                 outputDataSig <= outputDataSig_Pre;
                 outputCompleted <= outputCompleted_Pre;             
@@ -148,30 +203,25 @@ begin
     CTR_MANAGEMENT: block
         signal recoveryCounter, nFull, nFullNext, nIn, nOut: SmallNumber := (others => '0');
     begin    
-        startPtrLongNext <= startPtrLong when isSending = '0' else addIntTrunc(startPtrLong, 1, ROB_PTR_SIZE+1);
+        startPtrNext <= startPtr when isSending = '0' else addIntTrunc(startPtr, 1, ROB_PTR_SIZE+1);
         
-        endPtrLongNext <= startPtrLongNext when lateEventSignal = '1'
-                    else  addIntTrunc(causingPtrLong, 1, ROB_PTR_SIZE+1) when execEvent = '1'
-                    else  addIntTrunc(endPtrLong, 1, ROB_PTR_SIZE+1) when prevSending = '1'
-                    else  endPtrLong;
+        endPtrNext <= startPtrNext when lateEventSignal = '1'
+                    else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when execEvent = '1'
+                    else  addIntTrunc(endPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
+                    else  endPtr;
         
-        isEmpty <= getQueueEmpty(startPtrLong, endPtrLong, ROB_PTR_SIZE+1);
+        isEmpty <= getQueueEmpty(startPtr, endPtr, ROB_PTR_SIZE+1);
         -- nFull logic
         nIn <= i2slv(1, SMALL_NUMBER_SIZE) when prevSending = '1' else (others => '0');
         nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');
 
-        nFullNext <= getNumFull(startPtrLongNext, endPtrLongNext, ROB_PTR_SIZE);     
-       
---        startPtr <= startPtrLong and PTR_MASK_SN;
---        endPtr <= endPtrLong and PTR_MASK_SN;
---        startPtrNext <= startPtrLongNext and PTR_MASK_SN;
---        endPtrNext <= endPtrLongNext and PTR_MASK_SN;
+        nFullNext <= getNumFull(startPtrNext, endPtrNext, ROB_PTR_SIZE);
         
         MANAGEMENT: process (clk)
         begin
             if rising_edge(clk) then
-                startPtrLong <= startPtrLongNext;
-                endPtrLong <= endPtrLongNext;
+                startPtr <= startPtrNext;
+                endPtr <= endPtrNext;
 
                 nFull <= nFullNext;
     
@@ -179,7 +229,7 @@ begin
                 isAlmostFull <= cmpGtU(nFullNext, ROB_SIZE-2);
             	
             	-- TODO: check
-                outputEmpty <= bool2std(startPtrLongNext = endPtrLong) or lateEventSignal;
+                outputEmpty <= bool2std(startPtrNext = endPtr) or lateEventSignal;
                 
                 if lateEventSignal = '1' or execEvent = '1' then
                     recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
@@ -193,8 +243,13 @@ begin
 
     end block;
 
-    outputData <= outputDataSig;
-        outputSpecial_N <= outputSpecialSig.ins.specificOperation;
+--    outputData <= setDestFlags(outputDataSig);
+    
+    robOut <= convertROBData(outputDataSig);
+    
+    outputArgInfoI <= getRenameInfoSC(setDestFlags(outputDataSig), false);
+    outputArgInfoF <= getRenameInfoSC(setDestFlags(outputDataSig), true);                
+    outputSpecial <= outputSpecialSig.ins.specificOperation;
 
 	acceptingOut <= not isFull;
     acceptingMore <= not isAlmostFull;

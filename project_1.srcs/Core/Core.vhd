@@ -72,16 +72,14 @@ architecture Behavioral of Core is
            sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
            : std_logic := '0';
 
-    signal TMP_frontDataSpMasked,
-           renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ, renamedDataToSQ, renamedDataToLQ,
-           dataOutROB: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal branchMaskRe, loadMaskRe, storeMaskRe, branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO,
            commitMaskSQ, commitEffectiveMaskSQ, commitMaskLQ, commitEffectiveMaskLQ, branchCommitMask, branchCommitEffectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
     signal frontOutput: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 
-    signal renamedArgsInt, renamedArgsFloat, renamedArgsMerged: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+    signal renamedArgsInt, renamedArgsFloat, renamedArgsMerged, renamedArgsIntROB, renamedArgsFloatROB: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 
     signal bqPointer, bqPointerSeq, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
 
@@ -108,7 +106,8 @@ architecture Behavioral of Core is
 
     signal pcData, branchResult, branchResultDelayed, bqSelected, ctOutLQ, ctOutSQ, ctOutSB, dataToBranch_N: ControlPacket := DEFAULT_CONTROL_PACKET;
 
-    signal bpData_N, robOut_N: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
+    signal bpData_N: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
+    signal robOut_N: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 
     signal dataFromDLQ: ExecResult := DEFAULT_EXEC_RESULT;
 
@@ -127,11 +126,10 @@ begin
 
     events <= (lateEventSignal, execEventSignal, dataToBranch_N.tags);
 
-    execEvent_N <= (execEventSignal, InsTag'(others => '0'), branchResult.tags.bqPointerSeq, branchResult.target);
-    dataFromSB_N <= (ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), InsTag'(others => '0'),
+    execEvent_N <= (execEventSignal, '0', InsTag'(others => '0'), branchResult.tags.bqPointerSeq, branchResult.target);
+    dataFromSB_N <= (ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'),
                      zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
 
-    robOut_N <= convertROBData(dataOutROB);
 
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
 	generic map(DEBUG_FILE_PREFIX => DEBUG_FILE_PREFIX)
@@ -194,17 +192,17 @@ begin
     
         bpAccepting => bqAccepting,
         bpSending => bpSending,
-        bpData_N => bpData_N,
+        bpData => bpData_N,
     
         renameAccepting => canSendFront,
-        dataOut_N => frontOutput,
+        dataOut => frontOutput,
         lastSending => frontLastSending,
         
         frontEventSignal => frontEventSignal,
-        frontCausing_N => frontEvent_N,
+        frontCausing => frontEvent_N,
 
-        execCausing_N => execEvent_N,
-        lateCausing_N => lateEvent_N,
+        execCausing => execEvent_N,
+        lateCausing => lateEvent_N,
         
         execEventSignal => execEventSignal,
         lateEventSignal => lateEventSignal,
@@ -218,8 +216,10 @@ begin
         frontLastSendingIn => frontLastSending,
         frontData => frontOutput,
         
-        TMP_spMaskedDataOut => TMP_frontDataSpMasked,
-        
+        branchMaskRe => branchMaskRe,
+        loadMaskRe => loadMaskRe,
+        storeMaskRe => storeMaskRe,
+    
         nextAccepting => canSendRename,
 
         renamedDataLiving => renamedDataLivingRe,
@@ -236,7 +236,8 @@ begin
         lqPointer => lqPointer,
         bqPointerSeq => bqPointerSeq,
 
-        robDataLiving => dataOutROB,
+        commitArgInfoI => renamedArgsIntROB,
+        commitArgInfoF => renamedArgsFloatROB,
         sendingFromROB => robSending,
         
         newPhysDestsOut => newIntDests,
@@ -264,11 +265,7 @@ begin
     end process;
 
     canSendFront <= renameAccepting and not stopRename;
-    canSendRename <= not stopRename;  --  Could also be : queuesAccepting;
-
-    renamedDataToBQ <= setFullMask(renamedDataLivingRe, getBranchMask1(renamedDataLivingRe));
-    renamedDataToSQ <= setFullMask(renamedDataLivingReMem, getStoreMask1(renamedDataLivingRe));
-    renamedDataToLQ <= setFullMask(renamedDataLivingReMem, getLoadMask1(renamedDataLivingRe));    
+    canSendRename <= not stopRename;  --  Could also be : queuesAccepting;  
 
     renamedDataLivingMerged <= replaceDests(renamedDataLivingRe, renamedArgsMerged);
 
@@ -306,9 +303,13 @@ begin
 		acceptingMore => robAcceptingMore,
 		
 		nextAccepting => commitAccepting,
+		
 		sendingOut => robSending, 
-		outputData => dataOutROB,
-		outputSpecial_N => specialOutROB_N		
+        robOut => robOut_N,
+        outputArgInfoI => renamedArgsIntROB,
+        outputArgInfoF => renamedArgsFloatROB,
+
+		outputSpecial => specialOutROB_N		
 	);     
 
 
@@ -392,18 +393,21 @@ begin
         SUBPIPE_ALU: block
            signal dataToAlu: ExecResult := DEFAULT_EXEC_RESULT;
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
+
+           signal regInfo: RegisterStateArray2D(0 to PIPE_WIDTH-1) := (others => (others => (others => '0')));
         begin
-            fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni);        
+            fmaInt <= work.LogicIssue.findForwardingMatchesArray_N(schedInfoA, fni, readyRegFlagsInt, regInfo);
+
             schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeALU(renamedDataLivingRe)), aluMask, true, removeArg2(renamedArgsInt));
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, false, FORWARDING_MODES_INT_D, FORWARDING_MODES_INT_D);
-              
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, false, FORWARDING_MODES_INT_D);
+
             IQUEUE_I0: entity work.IssueQueue(Behavioral)
             generic map(
                 IQ_SIZE => IQ_SIZE_I0,
                 FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING1(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
-                    ,NONSHIFT => true
+                --    ,NONSHIFT => true
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -525,12 +529,12 @@ begin
            signal memLoadValue, memResult: Mword := (others => '0');                                                            
         begin
            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true, removeArg2(renamedArgsMerged));         
-           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D, FORWARDING_MODES_NONE);
+           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D);
 
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)--UnitIQ
            generic map(
                IQ_SIZE => IQ_SIZE_M0,
-               ALT_INPUT => false,
+               --ALT_INPUT => false,
                DONT_MATCH1 => true,
                FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
@@ -705,17 +709,18 @@ begin
         begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
             schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingReMem), intStoreMask, false, useStoreArg2(renamedArgsInt));
-            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, true, FORWARDING_MODES_SV_INT_D, FORWARDING_MODES_SV_INT_D);
+            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, true, FORWARDING_MODES_SV_INT_D);
 
             schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingReMem), fpStoreMask, false, useStoreArg2(renamedArgsFloat));
-            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, true, FORWARDING_MODES_SV_FLOAT_D, FORWARDING_MODES_SV_FLOAT_D);
+            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, true, FORWARDING_MODES_SV_FLOAT_D);
 
-            fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni);
-            fmaFloatSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoFloatA, fniFloat);
+            fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni, readyRegFlagsSV);
+            fmaFloatSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoFloatA, fniFloat, readyRegFlagsFloatSV);
         
             IQUEUE_SV: entity work.IssueQueue(Behavioral)
             generic map(
                 IQ_SIZE => IQ_SIZE_INT_SV,
+                DONT_MATCH1 => true,
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_INT_D(0 to 2)
             )
             port map(
@@ -783,6 +788,7 @@ begin
             IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)
             generic map(
                 IQ_SIZE => IQ_SIZE_FLOAT_SV, -- CAREFUL: not IS_FP because doesn't have destination
+                DONT_MATCH1 => true,
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_FLOAT_D(0 to 2)
             )
             port map(
@@ -851,14 +857,14 @@ begin
             signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
             signal sendingToRegReadF0: std_logic := '0';
         begin
-            fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat);
+            fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat, readyRegFlagsFloat);
 
             schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingRe), fpMask, false, renamedArgsFloat);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, false, FORWARDING_MODES_FLOAT_D, FORWARDING_MODES_FLOAT_D);
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, false, FORWARDING_MODES_FLOAT_D);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)
             generic map(
-                IQ_SIZE => IQ_SIZE_F0, IS_FP => true,
+                IQ_SIZE => IQ_SIZE_F0,-- IS_FP => true,
                 FORWARDING(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
                 FORWARDING1(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT_D(0 to 2)
@@ -996,7 +1002,7 @@ begin
          allowIssueF0 <= not lockIssueF0;
 
          branchCtrl <= branchResult.controlInfo;
-        -- memoryCtrl <= slotM0_E2i(0).ins.controlInfo;
+
    
             execOutMain(0) <= subpipeI0_E0;
             execOutMain(2) <= subpipeM0_E2;
@@ -1113,23 +1119,31 @@ begin
      
     end block; -- TEMP_EXEC
 
-    branchMaskRe <= getBranchMask(TMP_frontDataSpMasked);
-    loadMaskRe <= getLoadMask(TMP_recodeMem(TMP_frontDataSpMasked));
-    storeMaskRe <= getStoreMask(TMP_recodeMem(TMP_frontDataSpMasked));
 
-    branchMaskOO <= extractFullMask(renamedDataToBQ);
-    loadMaskOO <= extractFullMask(renamedDataToLQ);
-    storeMaskOO <= extractFullMask(renamedDataToSQ);
-    systemStoreMaskOO <= getStoreSysMask(renamedDataToSQ);
-    systemLoadMaskOO <= getLoadSysMask(renamedDataToSQ);
+    QUEUE_MASKS: block
+        signal renamedDataToSQ, renamedDataToLQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);    
+    begin
+        renamedDataToBQ <= setFullMask(renamedDataLivingRe, getBranchMask1(renamedDataLivingRe));
+        renamedDataToSQ <= setFullMask(renamedDataLivingReMem, getStoreMask1(renamedDataLivingRe));
+        renamedDataToLQ <= setFullMask(renamedDataLivingReMem, getLoadMask1(renamedDataLivingRe));  
 
-    commitMaskSQ <= work.LogicQueues.getCommittedMask(dataOutROB, false);
-    commitMaskLQ <= work.LogicQueues.getCommittedMask(dataOutROB, true);
-    commitEffectiveMaskSQ <= work.LogicQueues.getCommittedEffectiveMask(dataOutROB, false);
-    commitEffectiveMaskLQ <= work.LogicQueues.getCommittedEffectiveMask(dataOutROB, true);
-
-    branchCommitMask <= work.LogicQueues.getCommittedMaskBr(dataOutROB);
-    branchCommitEffectiveMask <= work.LogicQueues.getCommittedEffectiveMaskBr(dataOutROB);
+        branchMaskOO <= getBranchMask1(renamedDataLivingRe);
+        loadMaskOO <= getLoadMask1(renamedDataLivingRe);
+        storeMaskOO <= getStoreMask1(renamedDataLivingRe);
+        
+        systemStoreMaskOO <= getStoreSysMask(renamedDataToSQ);
+        systemLoadMaskOO <= getLoadSysMask(renamedDataToSQ);
+        
+        
+        
+        commitMaskSQ <= work.LogicQueues.getCommittedMask(robOut_N, false);
+        commitMaskLQ <= work.LogicQueues.getCommittedMask(robOut_N, true);
+        commitEffectiveMaskSQ <= work.LogicQueues.getCommittedEffectiveMask(robOut_N, false);
+        commitEffectiveMaskLQ <= work.LogicQueues.getCommittedEffectiveMask(robOut_N, true);
+    
+        branchCommitMask <= work.LogicQueues.getCommittedMaskBr(robOut_N);
+        branchCommitEffectiveMask <= work.LogicQueues.getCommittedEffectiveMaskBr(robOut_N);
+    end block;
 
     BRANCH_QUEUE: entity work.BranchQueue
 	generic map(
@@ -1156,26 +1170,27 @@ begin
 	    
 	    branchMaskRe => branchMaskRe,
 		dataIn => renamedDataToBQ,
-        dataInBr_N => bpData_N,
+        dataInBr => bpData_N,
 
-		storeValueInput_N => bqUpdate,
-        compareAddressQuickInput_N => bqCompareEarly,
+		storeValueInput => bqUpdate,
+        compareAddressQuickInput => bqCompareEarly,
         compareQuickPtr => bqCompareEarly.dest,
 
-        selectedDataOutput_N => bqSelected,
+        selectedDataOutput => bqSelected,
 
 		committing => robSending, -- When ROB is sending so is BQ if it has corresponding branches
-        commitBr => dataOutROB(0).ins.controlInfo.firstBr,
+        commitBr => --dataOutROB(0).ins.controlInfo.firstBr,
+                        robOut_N(0).controlInfo.firstBr,
         commitMask => branchCommitMask,
         commitEffectiveMask => branchCommitEffectiveMask,
 
 		lateEventSignal => lateEventSignal,
 		execEventSignal => execEventSignalDelayed,
-		execCausing_N => DEFAULT_EXEC_RESULT,
+		execCausing => DEFAULT_EXEC_RESULT,
 		nextAccepting => commitAccepting,		
 		sendingSQOut => open,
 		
-		committedDataOut_N => bqTargetData_N
+		committedDataOut => bqTargetData_N
 	);
 
     STORE_QUEUE: entity work.StoreQueue(Behavioral)
@@ -1202,13 +1217,13 @@ begin
         storeValuePtr => sqValueResult.dest,
         storeValueResult => sqValueResult,
     
-        compareAddressInput_N => memAddressInput_SQ,
+        compareAddressInput => memAddressInput_SQ,
         compareAddressInputOp => memAddressOp,
 		
         compareIndexInput => preIndexSQ,
         preCompareOp => preAddressOp,
             
-        selectedDataOutput_N => ctOutSQ,
+        selectedDataOutput => ctOutSQ,
 
 		committing => robSending,
         commitMask => commitMaskSQ,
@@ -1216,13 +1231,13 @@ begin
 
 		lateEventSignal => lateEventSignal,
 		execEventSignal => execEventSignalDelayed,
-		execCausing_N => execCausingDelayedSQ,
+		execCausing => execCausingDelayedSQ,
 		
 		nextAccepting => commitAccepting,
 
         committedEmpty => sbEmpty,
         committedSending => sbSending,
-        committedDataOut_N => ctOutSB
+        committedDataOut => ctOutSB
 	);
 
     LOAD_QUEUE: entity work.StoreQueue(Behavioral)
@@ -1250,13 +1265,13 @@ begin
 		storeValuePtr => (others => '0'),
         storeValueResult => DEFAULT_EXEC_RESULT,
 		
-		compareAddressInput_N => memAddressInput_LQ,
+		compareAddressInput => memAddressInput_LQ,
         compareAddressInputOp => memAddressOp,
 
         compareIndexInput => preIndexLQ,        
         preCompareOp => preAddressOp,
              
-        selectedDataOutput_N => ctOutLQ,
+        selectedDataOutput => ctOutLQ,
 
 		committing => robSending,
         commitMask => commitMaskLQ,
@@ -1264,7 +1279,7 @@ begin
 
 		lateEventSignal => lateEventSignal,
 		execEventSignal => execEventSignalDelayed,
-		execCausing_N => execCausingDelayedLQ,
+		execCausing => execCausingDelayedLQ,
 		
 		nextAccepting => commitAccepting,
 		

@@ -29,15 +29,13 @@ entity RegisterFreeList is
 		
 		sendingToReserve: in std_logic;
 		takeAllow: in std_logic;
-		--stageDataToReserve: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-		  reserveInfoA: in RenameInfoArray(0 to PIPE_WIDTH-1);
+		reserveInfoA: in RenameInfoArray(0 to PIPE_WIDTH-1);
 
 		newPhysDests: out PhysNameArray(0 to PIPE_WIDTH-1);
 		newPhysDestPointer: out SmallNumber;
 
 		sendingToRelease: in std_logic;
-		--stageDataToRelease: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-		  releaseInfoA: in RenameInfoArray(0 to PIPE_WIDTH-1);
+		releaseInfoA: in RenameInfoArray(0 to PIPE_WIDTH-1);
 
 		physStableDelayed: in PhysNameArray(0 to PIPE_WIDTH-1)
 	);
@@ -47,34 +45,22 @@ end RegisterFreeList;
 architecture Behavioral of RegisterFreeList is
 	constant FP_1: natural := getFp1(IS_FP);
 
-    signal freeListTakeSel, freeListTakeSel_C, freeListPutSel, stableUpdateSelDelayed, stableTakeUpdate, vsels, psels, overridden,
-             vsels_C, psels_C, overridden_C: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');    
+    signal freeListTakeSel, freeListPutSel, stableUpdateSelDelayed, stableTakeUpdate, vsels, psels, overridden: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');    
     signal freeListTakeAllow, freeListPutAllow, freeListRewind: std_logic := '0';
     signal newListPointer: SmallNumber := (others => '0');
     signal physCommitFreedDelayed, physCommitDestsDelayed, newPhysDestsSync, newPhysDestsAsync: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 	  
     signal recoveryCounter: SmallNumber := (others => '0');
-        signal ch0, ch1, ch2, ch3, ch4,ch5, ch6: std_logic := '0';  	
+    signal ch0, ch1, ch2, ch3, ch4,ch5, ch6: std_logic := '0';  	
 begin
---    vsels_C <= getVirtualFloatDestSels(stageDataToRelease) when IS_FP else getVirtualIntDestSels(stageDataToRelease);
---    psels_C <= getPhysicalFloatDestSels(stageDataToRelease) when IS_FP else getPhysicalIntDestSels(stageDataToRelease);
-
---    overridden_C <= findOverriddenDests(stageDataToRelease, IS_FP);
 
     vsels <= getVirtualFloatDestSels(releaseInfoA) when IS_FP else getVirtualIntDestSels(releaseInfoA);
-    psels <= --getPhysicalFloatDestSels(releaseInfoA) when IS_FP else getPhysicalIntDestSels(releaseInfoA);
-                getPsels(releaseInfoA);
+    psels <= getPsels(releaseInfoA);
 
     overridden <= findOverriddenDests(releaseInfoA, IS_FP);
 
-
-        ch0 <= bool2std(vsels_C = vsels);
-        ch1 <= bool2std(psels_C = psels);
-        ch2 <= bool2std(overridden_C = overridden);
-
     physCommitFreedDelayed <= selAndCompactPhysDests(physStableDelayed, physCommitDestsDelayed, stableUpdateSelDelayed, freeListPutSel);
-    physCommitDestsDelayed <= getPhysicalDests(--stageDataToRelease);
-                                                releaseInfoA);
+    physCommitDestsDelayed <= getPhysicalDests(releaseInfoA);
     
     stableUpdateSelDelayed <= psels and not overridden;  -- CAREFUL: excluding overridden dests
     stableTakeUpdate <= vsels; -- Those which commit any register that won't ever be rewound
@@ -90,11 +76,9 @@ begin
     freeListPutAllow <= sendingToRelease;
     freeListRewind <= rewind;
     
-    --    ch0 <= bool2std(freeListTakeSel = freeListTakeSel_C);
---    freeListTakeSel_C <= whichTakeReg(stageDataToReserve, IS_FP); -- CAREFUL: must agree with Sequencer signals
-        freeListTakeSel <= whichTakeReg(reserveInfoA, IS_FP); -- CAREFUL: must agree with Sequencer signals
-    -- Releasing a register every time any dest exists (but not always prev stable!)
-    freeListPutSel <= vsels;
+    freeListTakeSel <= whichTakeReg(reserveInfoA, IS_FP); -- CAREFUL: must agree with Sequencer signals
+
+    freeListPutSel <= vsels; -- Releasing a register every time any dest exists (but not always prev stable!)
     
     newPhysDests <= newPhysDestsAsync;
     newPhysDestPointer <= newListPointer;
@@ -130,11 +114,7 @@ begin
         listPtrTake <= sub(physPtrTake, numFront);
 
         effectivePhysPtrTake <= addInt(physPtrTake, 4) when (needTake and memRead) = '1' else physPtrTake;
-        
---        listPtrTakeNext <= causingTag when freeListRewind = '1'
---                    else   addInt(listPtrTake, countOnes(freeListTakeSel)) when freeListTakeAllow = '1'
---                    else   listPtrTake;
-        
+
         physPtrTakeNext <= causingTag(SMALL_NUMBER_SIZE-1 downto 2) & physPtrTake(1 downto 0) when freeListRewind = '1'
                     else   effectivePhysPtrTake;
 
@@ -159,7 +139,6 @@ begin
         SYNCHRONOUS: process(clk)
         begin
             if rising_edge(clk) then
-                --listPtrTake <= listPtrTakeNext;
                 physPtrTake <= physPtrTakeNext;
                 listPtrTakeStable <= listPtrTakeStableNext;
 
@@ -196,9 +175,7 @@ begin
               
 -------------
 -------------        
-        VIEW: if VIEW_ON generate
-            --use work.Viewing.all;
-            
+        VIEW: if VIEW_ON generate            
             signal vFree, vUsed: std_logic_vector(0 to N_PHYS-1) := (others => '0');
             signal newTaken, newPut: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
             
@@ -246,10 +223,8 @@ begin
         begin
             
             process(clk)
-
             begin
-                if rising_edge(clk) then
-                    
+                if rising_edge(clk) then      
                     -- Watch what is taken from the list, how it is rewinded, and what is put at the end
                     
                     -- There can be no 0 in the list!
@@ -271,9 +246,7 @@ begin
                 end if;
             end process;
             
-            numFree <= countOnes(vFree); -- CAREFUL (TODO?): for FP physical reg 0 is not used so number actually -1  
-
-     
+            numFree <= countOnes(vFree); -- CAREFUL (TODO?): for FP physical reg 0 is not used so number actually -1
         end generate;
         
     end block;

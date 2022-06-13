@@ -75,6 +75,43 @@ end LogicExec;
 
 
 package body LogicExec is
+function TMP_getIns(st: SchedulerState) return InstructionState is
+	variable res: InstructionState := DEFAULT_INS_STATE;
+	variable v0, v1: std_logic_vector(1 downto 0) := "00";
+	variable selected0, selected1: Mword := (others => '0');
+	variable ready: std_logic_vector(0 to 2) := (others=>'0');
+	variable locs: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
+	constant Z3: std_logic_vector(0 to 2) := (others => '0');
+	constant ZZ3: SmallNumberArray(0 to 2) := (others=>(others=>'0'));
+	variable imm: Word := (others => '0');
+begin
+    res.tags.renameIndex := st.renameIndex;
+    res.tags.bqPointer := st.bqPointer;
+    res.tags.sqPointer := st.sqPointer;
+    res.tags.lqPointer := st.lqPointer;
+    res.tags.bqPointerSeq := st.bqPointerSeq;
+
+    res.specificOperation := st.operation;
+
+    res.physicalArgSpec.dest := st.argSpec.dest;
+    res.physicalArgSpec.intDestSel := st.argSpec.intDestSel;
+    res.physicalArgSpec.floatDestSel := st.argSpec.floatDestSel;
+    
+    res.physicalArgSpec.intArgSel := (others => '0');
+    res.physicalArgSpec.floatArgSel := (others => '0');
+        
+    res.physicalArgSpec.args := st.argSpec.args;
+
+    -- Clear unused fields       
+    if CLEAR_DEBUG_INFO then
+        res := clearAbstractInfo(res);
+    end if;
+    res.controlInfo.newEvent := '0';
+    res.controlInfo.hasInterrupt := '0';
+        
+	return res;
+end function;
+
 
 	function passArg0(ins: InstructionState) return InstructionState is
 		variable res: InstructionState := ins;
@@ -114,14 +151,13 @@ package body LogicExec is
 	                                                               ctrl: InstructionControlInfo;
 	                                                               target, result: Mword;
 	                                                               ac: AluControl) return InstructionState is
-		variable res: InstructionState := --work.LogicIssue.TMP_getIns(st);--ins;
-		                                  DEFAULT_INS_STATE;
+		variable res: InstructionState := DEFAULT_INS_STATE;
 		variable branchTaken, targetMatch: std_logic := '0';
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
 		variable targetEqual: std_logic := '0';
 	begin
-	           res.controlInfo := work.LogicIssue.TMP_getIns(st).controlInfo;
-	           res.tags := work.LogicIssue.TMP_getIns(st).tags;
+	           res.controlInfo := TMP_getIns(st).controlInfo;
+	           res.tags := TMP_getIns(st).tags;
 
 	       res.controlInfo.full := sending;
 		-- Cases to handle
@@ -230,14 +266,13 @@ package body LogicExec is
 	                                                               ctrl: InstructionControlInfo;
 	                                                               target, result: Mword;
 	                                                               ac: AluControl) return ControlPacket is
-		variable res: ControlPacket := --work.LogicIssue.TMP_getIns(st);--ins;
-		                                  DEFAULT_CONTROL_PACKET;
+		variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 		variable branchTaken, targetMatch: std_logic := '0';
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
 		variable targetEqual: std_logic := '0';
 	begin
-	       res.controlInfo := work.LogicIssue.TMP_getIns(st).controlInfo;
-           res.tags := work.LogicIssue.TMP_getIns(st).tags;
+	       res.controlInfo := TMP_getIns(st).controlInfo;
+           res.tags := TMP_getIns(st).tags;
 
 	       res.controlInfo.full := sending;
 		-- Cases to handle
@@ -345,7 +380,7 @@ package body LogicExec is
 	                                           ac: AluControl)
 	--return InstructionState is
 	return ExecResult is
-		variable res: InstructionState := work.LogicIssue.TMP_getIns(st);-- ins;
+		variable res: InstructionState := TMP_getIns(st);-- ins;
 		variable res_N: ExecResult := DEFAULT_EXEC_RESULT;
 		variable result, linkAdr: Mword := (others => '0');
 		variable arg0, arg1, arg2: Mword := (others => '0');
@@ -552,8 +587,7 @@ package body LogicExec is
             
     function calcEffectiveAddress(st: SchedulerState; fromDLQ: std_logic; dlqData: ExecResult)
     return InstructionState is
-        variable res: InstructionState := --work.LogicIssue.TMP_getIns(st);--ins;
-                                            DEFAULT_INS_STATE;
+        variable res: InstructionState := DEFAULT_INS_STATE;
     begin
         res.specificOperation := st.operation;
     

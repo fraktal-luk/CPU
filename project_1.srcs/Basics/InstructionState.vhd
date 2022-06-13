@@ -161,7 +161,7 @@ type InstructionTags is record
     bqPointer: SmallNumber;
     sqPointer: SmallNumber;
     lqPointer: SmallNumber;
-        bqPointerSeq: SmallNumber;
+    bqPointerSeq: SmallNumber;
     commitCtr: Word;
 end record;
 
@@ -183,6 +183,7 @@ type InstructionStateArray is array(integer range <>) of InstructionState;
 
 type ControlPacket is record
     controlInfo: InstructionControlInfo;
+    classInfo: InstructionClassInfo;
     op: SpecificOp;
     tags: InstructionTags;
     tag: InsTag;
@@ -250,7 +251,7 @@ constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
     bqPointer => (others => '0'),
     sqPointer => (others => '0'),
     lqPointer => (others => '0'),
-        bqPointerSeq => (others => '0'),
+    bqPointerSeq => (others => '0'),
     commitCtr => (others => '0')
 );
 
@@ -273,7 +274,9 @@ constant DEFAULT_INS_STATE: InstructionState := DEFAULT_INSTRUCTION_STATE;
 
 constant DEFAULT_CONTROL_PACKET: ControlPacket := (
     controlInfo => DEFAULT_CONTROL_INFO,
+        classInfo => DEFAULT_CLASS_INFO,
     op => DEFAULT_SPECIFIC_OP,
+    --branchIns => '0',
     tags => DEFAULT_INSTRUCTION_TAGS,
     tag => (others => '0'),
     ip => (others => '0'),
@@ -293,21 +296,30 @@ constant DEFAULT_INS_SLOT: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 -- NOTE: index can be negative to enable logical division into 2 different ranges 
 type InstructionSlotArray is array(integer range <>) of InstructionSlot;
 
+type ExecResult is record
+    full: std_logic;
+    failed: std_logic;
+    tag: InsTag;
+    dest: PhysName;
+    value: Mword;
+end record;
+
+constant DEFAULT_EXEC_RESULT: ExecResult := ('0', '0', tag => (others => '0'), dest => (others => '0'), value => (others => '0'));
+
+type ExecResultArray is array(integer range <>) of ExecResult;
 
 
 type BufferEntry is record
     full: std_logic;
-    
     firstBr: std_logic; -- TEMP
-    
+
     -- NOTE: for compresion maybe can be just 2 bits:
     --       (br NT, br T, br T confirmed, special) is 4 possibilities     
     branchIns: std_logic;
     frontBranch: std_logic;
     confirmedBranch: std_logic;
     specialAction: std_logic;
-    
-    --immSel: std_logic;
+
     fpRename: std_logic;           
     mainCluster: std_logic;
     secCluster: std_logic;
@@ -331,24 +343,22 @@ type BufferEntryArray2D is array(0 to IBUFFER_SIZE-1, 0 to PIPE_WIDTH-1) of Buff
 
 
 type SchedulerState is record
-        full: std_logic;
-
+    full: std_logic;
 	issued: std_logic;
-        
     branchIns: std_logic;
-        
-    renameIndex: InsTag;    
+
+    renameIndex: InsTag;
     bqPointer: SmallNumber;
     sqPointer: SmallNumber;
-    lqPointer: SmallNumber;        
-    bqPointerSeq: SmallNumber;        
-        
+    lqPointer: SmallNumber;
+    bqPointerSeq: SmallNumber;
+
     operation: SpecificOp;
     argSpec: InstructionArgSpec;
 
-    immediate: std_logic;        
+    immediate: std_logic;
     immValue: Hword;
-        
+
     zero: std_logic_vector(0 to 2);
     readyNow: std_logic_vector(0 to 2);
     readyNext: std_logic_vector(0 to 2);
@@ -357,30 +367,28 @@ type SchedulerState is record
     stored:  std_logic_vector(0 to 2);
     readNew: std_logic_vector(0 to 2);
     args: MwordArray(0 to 2);
-    
+
     argLocsPipe: SmallNumberArray(0 to 2);
-    argSrc: SmallNumberArray(0 to 2);	
+    argSrc: SmallNumberArray(0 to 2);
 end record;
 
 constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
-            full => '0',        
-
+      full => '0',
       issued => '0',
-
       branchIns => '0',
-      
-      renameIndex => (others => '0'),    
+
+      renameIndex => (others => '0'),
       bqPointer => (others => '0'),
       sqPointer => (others => '0'),
-      lqPointer => (others => '0'),                    
-      bqPointerSeq => (others => '0'),                    
-            
-      operation => DEFAULT_SPECIFIC_OP,
-      argSpec => DEFAULT_ARG_SPEC,          
+      lqPointer => (others => '0'),
+      bqPointerSeq => (others => '0'),
 
-      immediate => '0',	                   
+      operation => DEFAULT_SPECIFIC_OP,
+      argSpec => DEFAULT_ARG_SPEC,
+
+      immediate => '0',
       immValue => (others => '0'),
-      
+
       zero => (others => '0'),
       readyNow => (others=>'0'),
       readyNext => (others=>'0'),
@@ -394,33 +402,19 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       );
 
 constant DEFAULT_SCHED_STATE: SchedulerState := DEFAULT_SCHEDULER_STATE;
-																				
---type SchedulerEntrySlot is record
---	--full: std_logic;
---	--ins: InstructionState;
---	state: SchedulerState;
---end record;
 
---constant DEFAULT_SCHEDULER_ENTRY_SLOT: SchedulerEntrySlot := (--full => '0',
---                                                              --ins => DEFAULT_INS_STATE,
---                                                              state => DEFAULT_SCHEDULER_STATE);
---constant DEFAULT_SCH_ENTRY_SLOT: SchedulerEntrySlot := (--full => '0',
---                                                        --ins => DEFAULT_INS_STATE,
---                                                        state => DEFAULT_SCHEDULER_STATE);
 
-    subtype SchedulerEntrySlot is SchedulerState;
-    constant DEFAULT_SCHEDULER_ENTRY_SLOT: SchedulerEntrySlot := DEFAULT_SCHEDULER_STATE;
-    constant DEFAULT_SCH_ENTRY_SLOT: SchedulerEntrySlot := DEFAULT_SCHEDULER_STATE;
+subtype SchedulerEntrySlot is SchedulerState;
+constant DEFAULT_SCHEDULER_ENTRY_SLOT: SchedulerEntrySlot := DEFAULT_SCHEDULER_STATE;
+constant DEFAULT_SCH_ENTRY_SLOT: SchedulerEntrySlot := DEFAULT_SCHEDULER_STATE;
 
 type SchedulerEntrySlotArray is array(integer range <>) of SchedulerEntrySlot;
 
 
-    
 subtype PipeStage is InstructionSlotArray(0 to PIPE_WIDTH-1);
 type PipeStageArray is array(natural range <>) of PipeStage;
 
 constant DEFAULT_PIPE_STAGE: PipeStage := (others => DEFAULT_INS_SLOT); 
-
 
 end InstructionState;
 

@@ -19,30 +19,16 @@ function p2i(p: SmallNumber; n: natural) return natural;
 type PhysicalSubpipe is (ALU, Mem, FP, StoreDataInt, StoreDataFloat);
 
 
-type ExecResult is record
-    full: std_logic;
-    tag: InsTag;
-    dest: PhysName;
-    value: Mword;
-end record;
-
-constant DEFAULT_EXEC_RESULT: ExecResult := ('0', tag => (others => '0'), dest => (others => '0'), value => (others => '0'));
-
-type ExecResultArray is array(integer range <>) of ExecResult;
-
 function makeExecResult(isl: SchedulerState) return ExecResult;
 
 
 type EventState is record
     lateEvent: std_logic;
     execEvent: std_logic;
-    --execCausing: InstructionState;
-    --preExecCausing: InstructionState;
     preExecTags: InstructionTags;
 end record;
 
-constant DEFAULT_EVENT_STATE: EventState := ('0', '0',-- DEFAULT_INSTRUCTION_STATE, DEFAULT_INSTRUCTION_STATE,
-                                                DEFAULT_INSTRUCTION_TAGS);
+constant DEFAULT_EVENT_STATE: EventState := ('0', '0', DEFAULT_INSTRUCTION_TAGS);
 
 type IssueQueueSignals is record
     sending: std_logic;
@@ -55,6 +41,17 @@ type IssueQueueSignals is record
         killSel3: std_logic;
 end record;
 
+
+type RegisterState is record
+    ready: std_logic;
+end record;
+
+type RegisterStateArray is array(integer range <>) of RegisterState;
+
+type RegisterStateArray2D is array(integer range <>) of RegisterStateArray(0 to 2);
+
+
+
 type ForwardingInfo is record
 	nextTagsM3:	PhysNameArray(0 to 2);
 	nextTagsM2:	PhysNameArray(0 to 2);
@@ -62,8 +59,26 @@ type ForwardingInfo is record
 	tags0: PhysNameArray(0 to 2);
 	tags1: PhysNameArray(0 to 2);
 	values0: MwordArray(0 to 2);
-	values1: MwordArray(0 to 2);	
+	values1: MwordArray(0 to 2);
+	failedM2: std_logic_vector(0 to 2);	
+	failedM1: std_logic_vector(0 to 2);	
+	failed0: std_logic_vector(0 to 2);	
+	failed1: std_logic_vector(0 to 2);	
 end record;
+
+
+type ForwardingComparisons is record
+    cmpM3: std_logic_vector(0 to 2);
+    cmpM2: std_logic_vector(0 to 2);
+    cmpM1: std_logic_vector(0 to 2);
+    cmp0: std_logic_vector(0 to 2);
+    cmp1: std_logic_vector(0 to 2);
+    reg:  std_logic;
+end record;
+
+constant DEFAULT_FORWARDING_COMPARISONS: ForwardingComparisons := (reg => '0', others => (others => '0'));
+
+type ForwardingComparisonsArray is array(natural range <>) of ForwardingComparisons;
 
 type ForwardingMatches is record
     -- src0
@@ -79,6 +94,8 @@ type ForwardingMatches is record
 	a1cmpM1: std_logic_vector(0 to 2);
 	a1cmp1: std_logic_vector(0 to 2);	    
 	a1cmp0: std_logic_vector(0 to 2);
+	
+	cmps: ForwardingComparisonsArray(0 to 1);
 end record;
 
 type ForwardingMatchesArray is array(integer range <>) of ForwardingMatches; 
@@ -91,10 +108,15 @@ constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
     tags0 => (others => (others => '0')),
     tags1 => (others => (others => '0')),
     values0 => (others => (others => '0')),
-    values1 => (others => (others => '0'))
+    values1 => (others => (others => '0')),
+    failedM2 => (others => '0'),
+    failedM1 => (others => '0'),
+    failed0 => (others => '0'),
+    failed1 => (others => '0')
 );
 
 constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
+    cmps => (others => DEFAULT_FORWARDING_COMPARISONS),
     others => (others => '0')
 );
 
@@ -102,7 +124,7 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
     type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
     
     constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
-    
+
 
     type RenameInfo is record
         destSel: std_logic;
@@ -297,6 +319,13 @@ function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray)
 function setPhysSources(insVec: InstructionSlotArray; newPhysSources: PhysNameArray; newestSelector, depVec: std_logic_vector) return InstructionSlotArray;
 
 function convertROBData(isa: InstructionSlotArray) return ControlPacketArray;
+
+function unfoldOp(op: SpecificOp) return SpecificOp;
+
+function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray;
+
+function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray;
+
 
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
                                 s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
@@ -1435,12 +1464,93 @@ begin
     for i in res'range loop
         res(i).controlInfo := isa(i).ins.controlInfo;
         res(i).controlInfo.full := isa(i).full;
+        res(i).classInfo := isa(i).ins.classInfo;
         
         res(i).target := isa(i).ins.target;
     end loop;
     return res;
 end function;
 
+function unfoldOp(op: SpecificOp) return SpecificOp is
+    variable res: SpecificOp := op;
+begin          
+    case op.subpipe is
+        when ALU =>
+            res.arith := ArithOp'val(slv2u(op.bits));     
+        when None =>
+            res.system := SysOp'val(slv2u(op.bits));
+        when FP =>
+            res.float := FpOp'val(slv2u(op.bits));
+        when others =>
+            res.memory := MemOp'val(slv2u(op.bits));
+    end case;
+    return res;
+end function;
+
+function getInsSlot(elem: BufferEntry) return InstructionSlot is
+    variable res: InstructionSlot := DEFAULT_INS_SLOT;
+begin
+    res.full := elem.full;
+    res.ins.controlInfo.firstBr := elem.firstBr;
+    res.ins.classInfo.branchIns := elem.branchIns;
+    res.ins.controlInfo.frontBranch := elem.frontBranch;
+    res.ins.controlInfo.confirmedBranch := elem.confirmedBranch;
+    res.ins.controlInfo.specialAction := elem.specialAction;
+
+    res.ins.classInfo.fpRename := elem.fpRename;           
+    res.ins.classInfo.mainCluster := elem.mainCluster;            
+    res.ins.classInfo.secCluster := elem.secCluster;            
+    res.ins.classInfo.useLQ := elem.useLQ;
+    
+    res.ins.specificOperation := unfoldOp(elem.specificOperation);
+    
+    res.ins.constantArgs := elem.constantArgs;
+    res.ins.virtualArgSpec := elem.argSpec; 
+    return res;
+end function;
+
+function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(elemVec'range);
+begin
+    for i in res'range loop
+        res(i) := getInsSlot(elemVec(i));
+    end loop;
+    return res;
+end function;
+
+function getEntry(isl: InstructionSlot) return BufferEntry is
+    variable res: BufferEntry;
+begin
+    res.full := isl.full;
+    
+    res.firstBr := isl.ins.controlInfo.firstBr;
+    
+    res.branchIns := isl.ins.classInfo.branchIns;
+    res.frontBranch := isl.ins.controlInfo.frontBranch;
+    res.confirmedBranch := isl.ins.controlInfo.confirmedBranch;
+    res.specialAction := isl.ins.controlInfo.specialAction;
+
+    res.fpRename := isl.ins.classInfo.fpRename;           
+    res.mainCluster := isl.ins.classInfo.mainCluster;            
+    res.secCluster := isl.ins.classInfo.secCluster;            
+    res.useLQ   := isl.ins.classInfo.useLQ;
+    
+    res.specificOperation := isl.ins.specificOperation;
+    
+    res.constantArgs := isl.ins.constantArgs;
+    res.argSpec := isl.ins.virtualArgSpec;
+    
+    return res;
+end function;
+
+function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray is
+    variable res: BufferEntryArray;
+begin
+    for i in res'range loop
+        res(i) := getEntry(insVec(i));
+    end loop;            
+    return res;
+end function;
 
     function setPhysSources(insVec: InstructionSlotArray;
                             newPhysSources: PhysNameArray;
@@ -1474,6 +1584,10 @@ begin
          fni.tags1 :=      (0 => s0_R1.dest,                                                                             2 => s2_R1.dest,                             others => (others => '0'));
          fni.values0 :=    (0 => s0_R0.value,                             1 => s1_R0.value,                              2 => s2_R0.value,                            others => (others => '0'));
          fni.values1 :=    (0 => s0_R1.value,                                                                            2 => s2_R1.value,                            others => (others => '0'));                 
+         fni.failedM2 :=   (0 => s0_M2.failed,                                                                           2 => s2_M2.failed,                           others => '0');                 
+         fni.failedM1 :=   (0 => s0_M1.failed,                                                                           2 => s2_M1.failed,                           others => '0');                 
+         fni.failed0  :=   (0 => s0_R0.failed,                                                                           2 => s2_R0.failed,                           others => '0');                 
+         fni.failed1  :=   (0 => s0_R1.failed,                                                                           2 => s2_R1.failed,                           others => '0');                 
 
     return fni;
 end function;
@@ -1493,6 +1607,10 @@ begin
          fni.tags1 :=      (0 => s0_R1.dest,                                                                             2 => s2_R1.dest,                             others => (others => '0'));
          fni.values0 :=    (0 => s0_R0.value,                                                                            2 => s2_R0.value,                            others => (others => '0'));
          fni.values1 :=    (0 => s0_R1.value,                                                                            2 => s2_R1.value,                            others => (others => '0'));                 
+         fni.failedM2 :=   (0 => s0_M2.failed,                                                                           2 => s2_M2.failed,                           others => '0');                 
+         fni.failedM1 :=   (0 => s0_M1.failed,                                                                           2 => s2_M1.failed,                           others => '0');                 
+         fni.failed0  :=   (0 => s0_R0.failed,                                                                           2 => s2_R0.failed,                           others => '0');                 
+         fni.failed1  :=   (0 => s0_R1.failed,                                                                           2 => s2_R1.failed,                           others => '0');                 
 
     return fni;
 end function;
