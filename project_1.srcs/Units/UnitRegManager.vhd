@@ -50,7 +50,6 @@ port(
     
     specialOut: out SpecificOp;
     
-    --robDataLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1);
     commitArgInfoI: in RenameInfoArray(0 to PIPE_WIDTH-1);
     commitArgInfoF: in RenameInfoArray(0 to PIPE_WIDTH-1);
     sendingFromROB: in std_logic;
@@ -68,8 +67,8 @@ end UnitRegManager;
 architecture Behavioral of UnitRegManager is
     signal stageDataRenameIn, renamedDataLivingPre, renamedBase, frontDataISL, TMP_spMaskedData: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, robSendingDelayed, frontLastSending, renamedSendingSig,
-                renameLockState, renameLockStateNext, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed, renameLockEndDelayedNext,     
-               renameFull,-- T_renameSending,
+               renameLockState, renameLockStateNext, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed, renameLockEndDelayedNext,     
+               renameFull,
                  ch0, ch1, ch2
                : std_logic := '0';
  
@@ -155,37 +154,6 @@ architecture Behavioral of UnitRegManager is
                 found := true;
             end if;
         end loop;
-        
-        if CLEAR_DEBUG_INFO then
-            for i in 0 to PIPE_WIDTH-1 loop
-				-- KEEP renameIndex + argSpec + specificOperation
-                   
-                res(i) := clearAbstractInfo(res(i));
-                
-                -- Reduce operation to raw bits (remove redundancy)
-                res(i).ins.specificOperation.arith := opAnd;
-                res(i).ins.specificOperation.memory := opLoad;
-                res(i).ins.specificOperation.float := opMove;
-                res(i).ins.specificOperation.system := opNone;
-                
-                res(i) := clearDbCounters(res(i));
-
-                if i > 0 then -- High bits are the same as in slot 0, low bits are constant equal to i
-                    res(i).ins.tags.renameIndex := (others => '0');
-                end if;
-                
-                -- TODO: this is unused anyway
-                res(i).ins.controlInfo.newEvent := '0';
-                res(i).ins.controlInfo.hasInterrupt := '0';
-                res(i).ins.controlInfo.refetch := '0';
-                res(i).ins.controlInfo.orderViolation := '0';
-                res(i).ins.controlInfo.tlbMiss := '0';
-                res(i).ins.controlInfo.sqMiss := '0';
-                if i /= 0 then -- TMP!
-                    res(i).ins.controlInfo.firstBr := '0';
-                end if;
-            end loop;           
-        end if;
 
         return res;
     end function;
@@ -297,12 +265,10 @@ architecture Behavioral of UnitRegManager is
     end function;
 
     function getRenameInfo( ia: BufferEntryArray;
-                            --insVec: InstructionSlotArray;
                             newPhysDests, newPhysSources, newPhysSourcesStable: PhysNameArray; newSourceSelector: std_logic_vector; constant IS_FP: boolean := false)
     return RenameInfoArray is
         variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
-        variable dests: PhysNameArray(0 to PIPE_WIDTH-1) := assignDests(ia, --insVec,
-                                                                             newPhysDests, IS_FP);
+        variable dests: PhysNameArray(0 to PIPE_WIDTH-1) := assignDests(ia, newPhysDests, IS_FP);
         variable va: InstructionArgSpec := DEFAULT_ARG_SPEC;
         variable ca: InstructionConstantArgs := DEFAULT_CONSTANT_ARGS;
         variable depVec: DependencyVec;
@@ -315,10 +281,8 @@ architecture Behavioral of UnitRegManager is
         end if;
         
         for i in 0 to PIPE_WIDTH-1 loop
-            va := --insVec(i).ins.virtualArgSpec;
-                    ia(i).argSpec;
-            ca := --insVec(i).ins.constantArgs;
-                    ia(i).constantArgs;
+            va := ia(i).argSpec;
+            ca := ia(i).constantArgs;
             
             if IS_FP then        
                 res(i).destSel := va.floatDestSel;
@@ -366,8 +330,7 @@ architecture Behavioral of UnitRegManager is
         return res;
     end function;
 
-    function getRenameInfoSC(  -- ia: BufferEntryArray;
-                                insVec: InstructionSlotArray; constant IS_FP: boolean := false)
+    function getRenameInfoSC(insVec: InstructionSlotArray; constant IS_FP: boolean := false)
     return RenameInfoArray is
         variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
         variable va, pa: InstructionArgSpec := DEFAULT_ARG_SPEC;
@@ -429,20 +392,11 @@ begin
 
     frontDataISL <= getInsSlotArray(frontData);
 
-    inputRenameInfoInt <= getRenameInfo(frontData,-- frontDataISL, 
-                                                     zeroDests, zeroSources, zeroSources, zeroSelector);
-    inputRenameInfoFloat <= getRenameInfo(frontData,-- frontDataISL,  
-                                                      zeroDests, zeroSources, zeroSources, zeroSelector, true);
+    inputRenameInfoInt <= getRenameInfo(frontData,   zeroDests, zeroSources, zeroSources, zeroSelector);
+    inputRenameInfoFloat <= getRenameInfo(frontData, zeroDests, zeroSources, zeroSources, zeroSelector, true);
 
-    resultRenameInfoInt <= getRenameInfo(frontData,-- frontDataISL,
-                                                     newIntDests, newIntSources, newIntSourcesAlt, newSourceSelectorInt);
-    resultRenameInfoFloat <= getRenameInfo(frontData,-- frontDataISL,
-                                                     newFloatDests, newFloatSources, newFloatSourcesAlt, newSourceSelectorFloat, true);
-
-    --inputCommitInfoInt <= --getRenameInfoSC(stageDataToCommitDelayed);
-    --                        commitArgInfoIntDelayed;
-    --inputCommitInfoFloat <= --getRenameInfoSC(stageDataToCommitDelayed, true);
-     --                       commitArgInfoFloatDelayed;
+    resultRenameInfoInt <= getRenameInfo(frontData,   newIntDests, newIntSources, newIntSourcesAlt, newSourceSelectorInt);
+    resultRenameInfoFloat <= getRenameInfo(frontData, newFloatDests, newFloatSources, newFloatSourcesAlt, newSourceSelectorFloat, true);
 
     frontLastSending <= frontLastSendingIn and not eventSig;
 
@@ -519,9 +473,8 @@ begin
                 renameLockState <= '0';
             end if;
          
---            stageDataToCommitDelayed <= stageDataToCommit;
-                commitArgInfoIntDelayed <= commitArgInfoI;
-                commitArgInfoFloatDelayed <= commitArgInfoF;
+            commitArgInfoIntDelayed <= commitArgInfoI;
+            commitArgInfoFloatDelayed <= commitArgInfoF;
             robSendingDelayed <= sendingFromROB;
             
             renameLockReleaseDelayed <= renameLockRelease;
@@ -537,9 +490,6 @@ begin
 
     renamedArgsInt <= storedRenameInfoInt;
     renamedArgsFloat <= storedRenameInfoFloat;
-
- --   stageDataToCommit <= --setDestFlags
- --                           (robDataLiving);
 
     INT_MAPPER: entity work.RegisterMapper
     port map(

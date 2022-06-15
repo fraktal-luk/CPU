@@ -126,8 +126,8 @@ begin
 
     events <= (lateEventSignal, execEventSignal, dataToBranch_N.tags);
 
-    execEvent_N <= (execEventSignal, '0', InsTag'(others => '0'), branchResult.tags.bqPointerSeq, branchResult.target);
-    dataFromSB_N <= (ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'),
+    execEvent_N <= (DEFAULT_DEBUG_INFO, execEventSignal, '0', InsTag'(others => '0'), branchResult.tags.bqPointerSeq, branchResult.target);
+    dataFromSB_N <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'),
                      zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
 
 
@@ -376,6 +376,8 @@ begin
         signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 
+            signal TMP_I0_Is_dep_M0_R0, TMP_I0_Is_dep_I0_RR, TMP_I0_Is_curse, TMP_I0_RR_curse: std_logic := '0';
+
                 signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';                
     begin
         newIntSources <= TMP_getPhysicalArgsNew(renamedArgsInt);
@@ -396,6 +398,11 @@ begin
 
            signal regInfo: RegisterStateArray2D(0 to PIPE_WIDTH-1) := (others => (others => (others => '0')));
         begin
+                TMP_I0_Is_dep_M0_R0 <= bool2std((slotIssueI0.argLocsPipe(0)(1 downto 0) = "10") and (slotIssueI0.argSrc(0)(1 downto 0) = "11"))
+                                    or bool2std((slotIssueI0.argLocsPipe(1)(1 downto 0) = "10") and (slotIssueI0.argSrc(1)(1 downto 0) = "11"));
+                TMP_I0_Is_dep_I0_RR <= bool2std((slotIssueI0.argLocsPipe(0)(1 downto 0) = "00") and (slotIssueI0.argSrc(0)(1 downto 0) = "00"))
+                                    or bool2std((slotIssueI0.argLocsPipe(1)(1 downto 0) = "00") and (slotIssueI0.argSrc(1)(1 downto 0) = "00"));
+
             fmaInt <= work.LogicIssue.findForwardingMatchesArray_N(schedInfoA, fni, readyRegFlagsInt, regInfo);
 
             schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeALU(renamedDataLivingRe)), aluMask, true, removeArg2(renamedArgsInt));

@@ -101,6 +101,29 @@ constant INITIAL_GROUP_TAG_INC: InsTag := i2slv(0, TAG_SIZE);
 
 type InsTagArray is array (integer range <>) of InsTag;
 
+
+type InstructionDebugInfo is record
+    cycle: Word;
+    index: Word;
+    seqNum: Word;
+    tag: InsTag;
+    adr: Mword;
+    bits: Word;
+    str: string(1 to 30);
+end record;
+
+constant DEFAULT_DEBUG_INFO: InstructionDebugInfo := (
+    cycle => (others => 'U'),
+    index => (others => 'U'),
+    seqNum => (others => 'U'),
+    tag => (others => 'U'),
+    adr => (others => 'U'),
+    bits => (others => 'U'),
+    str => (others => ' ')
+);
+
+
+
 type InstructionControlInfo is record
     full: std_logic;
 	newEvent: std_logic; -- True if any new event appears
@@ -166,6 +189,7 @@ type InstructionTags is record
 end record;
 
 type InstructionState is record
+        dbInfo: InstructionDebugInfo;
 	controlInfo: InstructionControlInfo;
 	ip: Mword;
 	bits: Word; -- instruction word
@@ -182,6 +206,8 @@ end record;
 type InstructionStateArray is array(integer range <>) of InstructionState;
 
 type ControlPacket is record
+        dbInfo: InstructionDebugInfo;
+
     controlInfo: InstructionControlInfo;
     classInfo: InstructionClassInfo;
     op: SpecificOp;
@@ -256,6 +282,7 @@ constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
 );
 
 constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
+        dbInfo => DEFAULT_DEBUG_INFO,
 	controlInfo => DEFAULT_CONTROL_INFO,
 	ip => (others => '0'),
 	bits => (others=>'0'),
@@ -273,6 +300,8 @@ constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
 constant DEFAULT_INS_STATE: InstructionState := DEFAULT_INSTRUCTION_STATE;
 
 constant DEFAULT_CONTROL_PACKET: ControlPacket := (
+    dbInfo => DEFAULT_DEBUG_INFO,
+
     controlInfo => DEFAULT_CONTROL_INFO,
         classInfo => DEFAULT_CLASS_INFO,
     op => DEFAULT_SPECIFIC_OP,
@@ -297,6 +326,7 @@ constant DEFAULT_INS_SLOT: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 type InstructionSlotArray is array(integer range <>) of InstructionSlot;
 
 type ExecResult is record
+        dbInfo: InstructionDebugInfo;
     full: std_logic;
     failed: std_logic;
     tag: InsTag;
@@ -304,12 +334,20 @@ type ExecResult is record
     value: Mword;
 end record;
 
-constant DEFAULT_EXEC_RESULT: ExecResult := ('0', '0', tag => (others => '0'), dest => (others => '0'), value => (others => '0'));
+constant DEFAULT_EXEC_RESULT: ExecResult := (
+    DEFAULT_DEBUG_INFO,
+    '0',
+    '0',
+    tag => (others => '0'),
+    dest => (others => '0'),
+    value => (others => '0')
+);
 
 type ExecResultArray is array(integer range <>) of ExecResult;
 
 
 type BufferEntry is record
+        dbInfo: InstructionDebugInfo;
     full: std_logic;
     firstBr: std_logic; -- TEMP
 
@@ -332,6 +370,7 @@ type BufferEntry is record
 end record;
 
 constant DEFAULT_BUFFER_ENTRY: BufferEntry := (
+        dbInfo => DEFAULT_DEBUG_INFO,
     specificOperation => sop(None, opNone),
     constantArgs => DEFAULT_CONSTANT_ARGS,
     argSpec => DEFAULT_ARG_SPEC,

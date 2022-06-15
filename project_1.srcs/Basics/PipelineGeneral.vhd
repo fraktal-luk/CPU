@@ -168,8 +168,6 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
 
     function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray;
 
-function adjustStage(content: InstructionSlotArray) return InstructionSlotArray;
-
 function compactMask(vec: std_logic_vector) return std_logic_vector; -- WARNING: only for 4 elements
 function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector;
 
@@ -185,6 +183,7 @@ function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
 
 function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector;
 function extractFullMask(cpa: ControlPacketArray) return std_logic_vector;
+function extractFullMask(ba: BufferEntryArray) return std_logic_vector;
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
@@ -324,9 +323,6 @@ function unfoldOp(op: SpecificOp) return SpecificOp;
 
 function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray;
 
-function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray;
-
-
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
                                 s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
                                 s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
@@ -377,41 +373,6 @@ end function;
             res(9 to 11) := ri(3).physicalSourcesNew;
             return res;
         end function;
-
-
-
--- TODO: move to LogicFront? 
-function adjustStage(content: InstructionSlotArray)
-return InstructionSlotArray is
-    constant LEN: positive := content'length;
-    variable res: InstructionSlotArray(0 to LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    variable contentExt: InstructionSlotArray(0 to 2*LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    variable fullMask: std_logic_vector(0 to LEN-1) := (others => '0');
-    variable nShift, j: integer := 0;
-begin
-    contentExt(0 to LEN-1) := content;
-    contentExt(LEN to 2*LEN-1) := (others => ('0', content(LEN-1).ins)); -- leave it instead of rotating
-    fullMask := extractFullMask(content);
-    nShift := getFirstOnePosition(fullMask);
-    if isNonzero(fullMask) = '0' then
-        nShift := 0;
-    end if; 
-    
-    for i in 0 to LEN-1 loop
-        res(i) := contentExt(nShift + i);
-        
-        if res(i).full = '0' then
-            res(i).ins.virtualArgSpec.intDestSel := '0';
-            res(i).ins.virtualArgSpec.floatDestSel := '0';
-        end if;          
-    end loop;
-      
-    -- TMP!
-    res(0).ins.controlInfo.firstBr := content(0).ins.controlInfo.firstBr;
-        
-    return res;
-end function;
-
 
 function clearRawInfo(ins: InstructionState) return InstructionState is
     variable res: InstructionState := ins;
@@ -656,6 +617,15 @@ function extractFullMask(cpa: ControlPacketArray) return std_logic_vector is
 begin
 	for i in res'range loop
 		res(i) := cpa(i).controlInfo.full;
+	end loop;
+	return res;
+end function;
+
+function extractFullMask(ba: BufferEntryArray) return std_logic_vector is
+	variable res: std_logic_vector(0 to ba'length-1) := (others => '0');
+begin
+	for i in res'range loop
+		res(i) := ba(i).full;
 	end loop;
 	return res;
 end function;
@@ -1491,6 +1461,8 @@ function getInsSlot(elem: BufferEntry) return InstructionSlot is
     variable res: InstructionSlot := DEFAULT_INS_SLOT;
 begin
     res.full := elem.full;
+        res.ins.dbInfo := elem.dbInfo;
+    
     res.ins.controlInfo.firstBr := elem.firstBr;
     res.ins.classInfo.branchIns := elem.branchIns;
     res.ins.controlInfo.frontBranch := elem.frontBranch;
@@ -1518,39 +1490,6 @@ begin
     return res;
 end function;
 
-function getEntry(isl: InstructionSlot) return BufferEntry is
-    variable res: BufferEntry;
-begin
-    res.full := isl.full;
-    
-    res.firstBr := isl.ins.controlInfo.firstBr;
-    
-    res.branchIns := isl.ins.classInfo.branchIns;
-    res.frontBranch := isl.ins.controlInfo.frontBranch;
-    res.confirmedBranch := isl.ins.controlInfo.confirmedBranch;
-    res.specialAction := isl.ins.controlInfo.specialAction;
-
-    res.fpRename := isl.ins.classInfo.fpRename;           
-    res.mainCluster := isl.ins.classInfo.mainCluster;            
-    res.secCluster := isl.ins.classInfo.secCluster;            
-    res.useLQ   := isl.ins.classInfo.useLQ;
-    
-    res.specificOperation := isl.ins.specificOperation;
-    
-    res.constantArgs := isl.ins.constantArgs;
-    res.argSpec := isl.ins.virtualArgSpec;
-    
-    return res;
-end function;
-
-function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray is
-    variable res: BufferEntryArray;
-begin
-    for i in res'range loop
-        res(i) := getEntry(insVec(i));
-    end loop;            
-    return res;
-end function;
 
     function setPhysSources(insVec: InstructionSlotArray;
                             newPhysSources: PhysNameArray;

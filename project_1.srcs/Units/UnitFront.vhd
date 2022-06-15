@@ -63,7 +63,7 @@ architecture Behavioral of UnitFront is
     signal bqDataSig, bqDataSigPre: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 
 	signal predictedAddress, frontTarget: Mword := (others => '0');
-	signal fetchCounter, fetchCounterNext: Word := (others => '0');
+	signal fetchCounter, fetchCounterNext, decodeCounter, decodeCounterNext: Word := (others => '0');
 
 	signal dataToIbuffer, ibufDataOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 begin
@@ -71,6 +71,7 @@ begin
     killAllOrFront <= killAll or frontBranchEvent;
 
     fetchCounterNext <= addInt(fetchCounter, PIPE_WIDTH) when pcEn = '1' else fetchCounter;
+    decodeCounterNext <= addInt(decodeCounter, countOnes(extractFullMask(dataToIbuffer))) when sendingToBuffer = '1' else decodeCounter;
 
 	fetchedLine0 <= iin;
 
@@ -80,7 +81,8 @@ begin
     begin
         if rising_edge(clk) then
             fetchCounter <= fetchCounterNext;
-
+            decodeCounter <= decodeCounterNext;
+            
             -- fetchedLine0: assigned async
             fetchedLine1 <= fetchedLine0;
 
@@ -109,6 +111,7 @@ begin
 
     stageDataInFetch0.ip <= pcDataIn.ip;
     stageDataInFetch0.target <= pcDataIn.target;
+        stageDataInFetch0.dbInfo <= pcDataIn.dbInfo;
 
     stageDataInFetch0.tags.fetchCtr <= fetchCounter when not CLEAR_DEBUG_INFO else (others => '0');  
     
@@ -142,15 +145,15 @@ begin
         signal earlyBranchMultiDataInA: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);	   
 	begin
         -- src for Ibuf and BT
-        earlyBranchMultiDataInA <= getFrontEventMulti(predictedAddress, stageDataOutFetch1.ip, stageDataOutFetch1.target, fetchedLine1);
+        earlyBranchMultiDataInA <= getFrontEventMulti(predictedAddress, stageDataOutFetch1.ip, stageDataOutFetch1.target, stageDataOutFetch1, fetchedLine1);
     
         earlyBranchIn_OLD <= getEarlyEvent(earlyBranchMultiDataInA, stageDataOutFetch1.target, predictedAddress, fetchStall);
             earlyBranchIn.controlInfo <= earlyBranchIn_OLD.controlInfo;
             earlyBranchIn.target <= earlyBranchIn_OLD.target;
 
         dataToIbuffer_OLD <= adjustStage(earlyBranchMultiDataInA);
-            dataToIbuffer <= getEntryArray(dataToIbuffer_OLD);
-            bqDataSigPre <= prepareForBQ(stageDataOutFetch1.ip, dataToIbuffer_OLD);
+            dataToIbuffer <= assignSeqNum(getEntryArray(dataToIbuffer_OLD), decodeCounter);
+            bqDataSigPre <= assignSeqNum(prepareForBQ(stageDataOutFetch1.ip, dataToIbuffer_OLD), decodeCounter);
     end block;
 
 	sendingToBranchTransfer <= sendingOutFetch1 and not fetchStall;

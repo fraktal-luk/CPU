@@ -23,14 +23,21 @@ package LogicFront is
 
 function decodeInstructionNew(inputState: InstructionState) return InstructionState;
 
-function getFrontEventMulti(predictedAddress, ip, target: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1))
+function getFrontEventMulti(predictedAddress, ip, target: Mword; ctrl: ControlPacket; fetchLine: WordArray(0 to FETCH_WIDTH-1))
 return InstructionSlotArray;
 
 function getEarlyEvent(earlyBranchMultiDataInA: InstructionSlotArray; target, predictedAddress: Mword; fetchStall: std_logic)
 return InstructionState;
-	
---function prepareForBQ(ip: Mword; insVec: InstructionSlotArray) return InstructionSlotArray;
+
 function prepareForBQ(ip: Mword; insVec: InstructionSlotArray) return ControlPacketArray;
+
+function adjustStage(content: InstructionSlotArray) return InstructionSlotArray;
+
+function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray;
+
+-- DEBUG
+function assignSeqNum(cpa: ControlPacketArray; seqNum: Word) return ControlPacketArray;
+function assignSeqNum(ba: BufferEntryArray; seqNum: Word) return BufferEntryArray;
 
 end LogicFront;
 
@@ -110,7 +117,7 @@ begin
 end function;
 
 
-function getFrontEventMulti(predictedAddress, ip, target: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1))
+function getFrontEventMulti(predictedAddress, ip, target: Mword; ctrl: ControlPacket; fetchLine: WordArray(0 to FETCH_WIDTH-1))
 return InstructionSlotArray is
 	variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	variable tempOffset, lastRes: Mword := (others => '0');
@@ -130,6 +137,9 @@ begin
 
         res(i).ins.bits := fetchLine(i);
 		res(i).ins := decodeInstructionNew(res(i).ins); -- Here decoding!
+
+            res(i).ins.dbInfo := ctrl.dbInfo;
+            -- TODO: assign seqNum...
 
         res(i).ins.ip := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);    -- !! Only for BQ, indirect   
         res(i).ins.result := ip;
@@ -153,8 +163,7 @@ begin
             uncondJump(i) := '1';
             regularJump := '1';				
             predictedTaken(i) := '1';       -- jump link is unconditional
-        elsif isJumpCond(fetchLine(i)) = '1'
-        then
+        elsif isJumpCond(fetchLine(i)) = '1' then
             regularJump := '1';				
             predictedTaken(i) := fetchLine(i)(20);		-- CAREFUL: temporary predicted taken iff backwards
         elsif isJumpLong(fetchLine(i)) = '1' then
@@ -205,20 +214,9 @@ begin
 
 	for i in 0 to FETCH_WIDTH-1 loop
 	   res(i).full := fullOut(i);
-
         if res(i).full = '1' and res(i).ins.classInfo.branchIns = '1' then
             res(0).ins.controlInfo.firstBr := '1'; -- TMP, indicating that group has a branch
-        end if;
-	   
-       if CLEAR_DEBUG_INFO then
-          res(i).ins.specificOperation.arith := opAnd;
-          res(i).ins.specificOperation.memory := opLoad;
-          res(i).ins.specificOperation.float := opMove;
-          res(i).ins.specificOperation.system := opNone;
-
-          res(i) := clearRawInfo(res(i));          
-          res(i).ins.tags := DEFAULT_INSTRUCTION_TAGS;        
-       end if;	   
+        end if;   
 	end loop;
 	return res;
 end function;
@@ -262,68 +260,82 @@ begin
 end function;
 
 
-
---       earlyInputSending <= prevSendingBr and dataInBr(0).ins.controlInfo.firstBr;
--- ....
---    for i in insVec'range loop
---        res.full(i) := insVec(i).full;
---        res.frontBranch(i) := insVec(i).ins.controlInfo.frontBranch;
---        res.confirmedBranch(i) := insVec(i).ins.controlInfo.confirmedBranch;
-
---        res.targets(i) := insVec(i).ins.target;
---        res.links(i) := insVec(i).ins.result;
---    end loop;
-
---    res.ip := insVec(0).ins.ip;
+function getEntry(isl: InstructionSlot) return BufferEntry is
+    variable res: BufferEntry;
+begin
+    res.full := isl.full;
     
---function prepareForBQ(ip: Mword; insVec: InstructionSlotArray) return InstructionSlotArray is
---	variable res, insVecSh: InstructionSlotArray(insVec'range) := insVec;
---	variable result, target: Mword;
---	variable branchMask: std_logic_vector(insVec'range) := (others => '0');
---	variable nSh: natural := 0;
---begin
---    -- insVec: USES (controlInfo, target, full, classInfo.branchIns) [ result is overwritten]
-
---    insVecSh := insVec;
---    branchMask := getBranchMask(insVec);
---    nSh := slv2u(ip(ALIGN_BITS-1 downto 2));
-
---    for i in 0 to PIPE_WIDTH-1 loop
---        if not TMP_PARAM_COMPRESS_RETURN then
---            if i + nSh >= PIPE_WIDTH-1 then
---                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ip(MWORD_SIZE-1 downto ALIGN_BITS), 1);
---                insVecSh(i).ins.result(ALIGN_BITS-1 downto 0) := (others => '0');
---            else
---                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := ip(MWORD_SIZE-1 downto ALIGN_BITS);      
---                insVecSh(i).ins.result(ALIGN_BITS-1 downto 2) := i2slv(i + nSh + 1, ALIGN_BITS-2);                           
---            end if;
---        else    
---            if i + nSh >= PIPE_WIDTH-1 then
---                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := i2slv(1, MWORD_SIZE-ALIGN_BITS);
---                insVecSh(i).ins.result(ALIGN_BITS-1 downto 0) := (others => '0');
---            else
---                insVecSh(i).ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := (others => '0');
---                insVecSh(i).ins.result(ALIGN_BITS-1 downto 2) := i2slv(i + nSh + 1, ALIGN_BITS-2);                           
---            end if;
---        end if;         
---    end loop;
-
---	for i in insVec'range loop
---	   res(i).full := branchMask(i) and insVec(i).full; -- TODO: getBranchMask already check for 'full' - remove it here?   
---       if CLEAR_DEBUG_INFO then -- Otherwise everything remains
---           res(i).ins := DEFAULT_INS_STATE;
---           res(i).ins.controlInfo := insVecSh(i).ins.controlInfo;
---           res(i).ins.target := insVecSh(i).ins.target;
---           res(i).ins.result := insVecSh(i).ins.result;
---	   end if;
---	end loop;
-
---    -- TMP!
---    res(0).ins.ip(MWORD_SIZE-1 downto ALIGN_BITS) := ip(MWORD_SIZE-1 downto ALIGN_BITS);
+    res.firstBr := isl.ins.controlInfo.firstBr;
     
---	return res;
---end function;
+    res.branchIns := isl.ins.classInfo.branchIns;
+    res.frontBranch := isl.ins.controlInfo.frontBranch;
+    res.confirmedBranch := isl.ins.controlInfo.confirmedBranch;
+    res.specialAction := isl.ins.controlInfo.specialAction;
 
+    res.fpRename := isl.ins.classInfo.fpRename;           
+    res.mainCluster := isl.ins.classInfo.mainCluster;            
+    res.secCluster := isl.ins.classInfo.secCluster;            
+    res.useLQ   := isl.ins.classInfo.useLQ;
+
+
+    res.specificOperation := isl.ins.specificOperation;
+    res.constantArgs := isl.ins.constantArgs;
+    res.argSpec := isl.ins.virtualArgSpec;
+    
+        res.dbInfo := isl.ins.dbInfo;
+          -- controlInfo        ]
+          -- classInfo          ] -> contained in ControlPacket
+          -- specificOperation  ]
+          -- constantArgs    ] -- depend on decoded format
+          -- virtualArgSpec  ]  
+    
+    return res;
+end function;
+
+function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray is
+    variable res: BufferEntryArray;
+begin
+    for i in res'range loop
+        res(i) := getEntry(insVec(i));
+    end loop;            
+    return res;
+end function;
+
+
+-- TODO: move to LogicFront? 
+function adjustStage(content: InstructionSlotArray)
+return InstructionSlotArray is
+    constant LEN: positive := content'length;
+    variable res: InstructionSlotArray(0 to LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    variable contentExt: InstructionSlotArray(0 to 2*LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    variable fullMask: std_logic_vector(0 to LEN-1) := (others => '0');
+    variable nShift, j: integer := 0;
+begin
+    contentExt(0 to LEN-1) := content;
+    contentExt(LEN to 2*LEN-1) := (others => ('0', content(LEN-1).ins)); -- leave it instead of rotating
+    fullMask := extractFullMask(content);
+    nShift := getFirstOnePosition(fullMask);
+    if isNonzero(fullMask) = '0' then
+        nShift := 0;
+        for i in 0 to LEN-1 loop
+            contentExt(i).full := '0';
+        end loop;
+    end if; 
+    
+    for i in 0 to LEN-1 loop
+        res(i) := contentExt(nShift + i);
+        
+        if res(i).full = '0' then
+            res(i).ins.virtualArgSpec.intDestSel := '0';
+            res(i).ins.virtualArgSpec.floatDestSel := '0';
+        end if;          
+    end loop;
+
+    -- TMP!
+    res(0).ins.controlInfo.firstBr := content(0).ins.controlInfo.firstBr;
+        
+    return res;
+end function;
 
 function prepareForBQ(ip: Mword; insVec: InstructionSlotArray) return ControlPacketArray is
 	variable insVecSh: InstructionSlotArray(insVec'range) := insVec;
@@ -359,13 +371,10 @@ begin
     end loop;
 
 	for i in insVec'range loop
---       if CLEAR_DEBUG_INFO then -- Otherwise everything remains
---           res(i).ins := DEFAULT_INS_STATE;
-           res(i).controlInfo := insVecSh(i).ins.controlInfo;
-	       res(i).controlInfo.full := branchMask(i) and insVec(i).full; -- TODO: getBranchMask already check for 'full' - remove it here?
-           res(i).target := insVecSh(i).ins.target;
-           res(i).nip := insVecSh(i).ins.result;
---	   end if;
+       res(i).controlInfo := insVecSh(i).ins.controlInfo;
+       res(i).controlInfo.full := branchMask(i) and insVec(i).full; -- TODO: getBranchMask already check for 'full' - remove it here?
+       res(i).target := insVecSh(i).ins.target;
+       res(i).nip := insVecSh(i).ins.result;
 	end loop;
 
     -- TMP!
@@ -373,5 +382,39 @@ begin
     
 	return res;
 end function;
+
+
+function assignSeqNum(cpa: ControlPacketArray; seqNum: Word) return ControlPacketArray is
+    variable res: ControlPacketArray(0 to cpa'length-1) := cpa;
+    variable sn: Word := seqNum;
+begin
+    for i in res'range loop
+        if res(i).controlInfo.full /= '1' then
+            res(i).dbInfo := DEFAULT_DEBUG_INFO;
+            next;
+        end if;
+
+        res(i).dbInfo.seqNum := sn;
+        sn := addInt(sn, 1);
+    end loop;
+    return res;
+end function;
+
+function assignSeqNum(ba: BufferEntryArray; seqNum: Word) return BufferEntryArray is
+    variable res: BufferEntryArray := ba;
+    variable sn: Word := seqNum;
+begin
+    for i in res'range loop
+        if res(i).full /= '1' then
+            res(i).dbInfo := DEFAULT_DEBUG_INFO;
+            next;
+        end if;
+    
+        res(i).dbInfo.seqNum := sn;
+        sn := addInt(sn, 1);
+    end loop;
+    return res;
+end function;
+
 
 end LogicFront;
