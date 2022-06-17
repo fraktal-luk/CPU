@@ -123,6 +123,8 @@ architecture Behavioral of UnitRegManager is
 
         -- Setting tags
         for i in 0 to PIPE_WIDTH-1 loop
+                res(i).ins.dbInfo.tag := renameGroupCtrNext or i2slv(i, TAG_SIZE);
+        
             res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
             res(i).ins.tags.renameCtr := addInt(renameCtr, i);
             res(i).ins.tags.intPointer := addInt(newIntDestPointer, countOnes(takeVecInt(0 to i)));

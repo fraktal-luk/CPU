@@ -83,7 +83,6 @@ architecture Behavioral of UnitSequencer is
     signal pcDataSig: ControlPacket := DEFAULT_CONTROL_PACKET;
     
     signal pcNew, pcCurrent, pcNext: Mword := (others => '0');        
-    --signal stageDataOutPC: InstructionState := DEFAULT_INSTRUCTION_STATE;
     signal sendingToPC, sendingOutPC, acceptingOutPC, sendingToLastEffective, running,
            eventOccurred, killPC, eventCommitted, intCommitted, intSuppressed, lateEventSending, dbtrapOn, restartPC,    
            sendingToLateCausing, committingEvent, sendingToCommit, sendingOutCommit, commitLocked,
@@ -94,8 +93,8 @@ architecture Behavioral of UnitSequencer is
 
     signal stageDataLastEffectiveInA, stageDataLateCausingIn: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 
-        signal  lastEffectiveCt, lateCausingCt: InstructionControlInfo := DEFAULT_CONTROL_INFO;
-        signal  lastEffectiveTarget, lateCausingIP, lateCausingResult, lateCausingTarget: Mword := (others => '0');
+    signal  lastEffectiveCt, lateCausingCt: InstructionControlInfo := DEFAULT_CONTROL_INFO;
+    signal  lastEffectiveTarget, lateCausingIP, lateCausingResult, lateCausingTarget: Mword := (others => '0');
 
     signal intTypeCommitted: std_logic_vector(0 to 1) := (others => '0');
      
@@ -114,6 +113,8 @@ architecture Behavioral of UnitSequencer is
     
     constant HAS_RESET_SEQ: std_logic := '0';
     constant HAS_EN_SEQ: std_logic := '0';
+
+          signal robDataCommitted: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 
       signal  ch0, ch1, ch2, ch3, ch4, ch5: std_logic := '0';
 begin
@@ -164,11 +165,6 @@ begin
     lateEventSending <= T_fullLateCausing;      
     
     pcNext <= getNextPC(pcCurrent, (others => '0'), '0');
-
---    stageDataOutPC.ip <= pcCurrent;
---    stageDataOutPC.target <= pcNext; -- CAREFUL: Attaching next address from line predictor. Correct?
-
-    ----------------------------------------------------------------------
     
     SYS_REGS: block
         signal sysStoreAllow: std_logic := '0';
@@ -252,7 +248,10 @@ begin
                               
            if sendingFromROB = '1' then
                specialOp <= robSpecial_N;
-           end if;           
+               
+                -- DEBUG
+                robDataCommitted <= assignCommitNumbers(robData_N, commitCtr);
+           end if;        
         end if;
     end process;        
     

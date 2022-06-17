@@ -18,16 +18,14 @@ package LogicSequence is
 function getNextPC(pc: Mword; jumpPC: Mword; jump: std_logic) return Mword;
 
 function getLatePCData(commitCausing: InstructionState;
-                        commitCt: InstructionControlInfo; commitTarget: Mword;
-                        int: std_logic; intType: std_logic_vector;
-								currentState, linkExc, linkInt, stateExc, stateInt: Mword; special: InstructionSlot;
-								                                                           specialOp: SpecificOp)
+                       commitCt: InstructionControlInfo; commitTarget: Mword; int: std_logic; intType: std_logic_vector;
+					   currentState, linkExc, linkInt, stateExc, stateInt: Mword; special: InstructionSlot; specialOp: SpecificOp)
 return InstructionState;
 
-function newPCData( commitEvent: std_logic; lateTarget: Mword;
-						  execEvent: std_logic; execTarget: Mword;	
-						  frontEvent: std_logic; frontTarget: Mword;
-						  pcNext: Mword)
+function newPCData(commitEvent: std_logic; lateTarget: Mword;
+                   execEvent: std_logic; execTarget: Mword;	
+                   frontEvent: std_logic; frontTarget: Mword;
+                   pcNext: Mword)
 return InstructionState;
 
 -- Unifies content of ROB slot with BQ, other queues etc. to restore full state at Commit
@@ -35,17 +33,16 @@ function recreateGroup(insVec: InstructionSlotArray; prevTarget: Mword; commitCt
 return InstructionSlotArray;
 
 function getNewEffective(sendingToCommit: std_logic;
-                          --  robDataLiving: InstructionSlotArray;
-                                robData_N: ControlPacketArray;
-                            bqTargetFull: std_logic;
-                            bqTarget, lastEffectiveTarget: Mword;
-						 --lateTargetIns: InstructionState;
+                         robData_N: ControlPacketArray; bqTargetFull: std_logic;
+                         bqTarget, lastEffectiveTarget: Mword;
 						 lateCt: InstructionControlInfo; lateTarget: Mword;
 						 evtPhase2: std_logic)
 return InstructionSlot;
 
 function anyEvent(insVec: InstructionSlotArray) return std_logic;
 function anyEvent(cpa: ControlPacketArray) return std_logic;
+
+function assignCommitNumbers(cpa: ControlPacketArray; ctr: Word) return ControlPacketArray;
 
 end LogicSequence;
 
@@ -66,19 +63,14 @@ begin
 end function;
 
 
-function getLatePCData(commitCausing: InstructionState;
-                        commitCt: InstructionControlInfo; commitTarget: Mword;
-                        int: std_logic; intType: std_logic_vector;
-								currentState, linkExc, linkInt, stateExc, stateInt: Mword; special: InstructionSlot;
-								                                                           specialOp: SpecificOp)
+function getLatePCData(commitCausing: InstructionState; commitCt: InstructionControlInfo; commitTarget: Mword; int: std_logic; intType: std_logic_vector;
+					currentState, linkExc, linkInt, stateExc, stateInt: Mword; special: InstructionSlot; specialOp: SpecificOp)
 return InstructionState is
-	variable res: InstructionState := --commitCausing;-- 
-	                                   DEFAULT_INSTRUCTION_STATE;-- content;
+	variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
 	variable newPC: Mword := (others=>'0');
 	constant MINUS_4: Mword := i2slv(-4, MWORD_SIZE);
 begin
-        res.controlInfo := --commitCausing.controlInfo;
-                            commitCt;
+    res.controlInfo := commitCt;
 
     res.controlInfo.hasInterrupt := int;
     if int = '1' then
@@ -200,11 +192,9 @@ end function;
 
 
 function getNewEffective(sendingToCommit: std_logic;
-                          --  robDataLiving: InstructionSlotArray;
-                                robData_N: ControlPacketArray;
-                            bqTargetFull: std_logic;
-                            bqTarget, lastEffectiveTarget: Mword;
-						 --lateTargetIns: InstructionState;
+                         robData_N: ControlPacketArray;
+                         bqTargetFull: std_logic;
+                         bqTarget, lastEffectiveTarget: Mword;
 						 lateCt: InstructionControlInfo; lateTarget: Mword;						 
 						 evtPhase2: std_logic)
 return InstructionSlot is
@@ -214,15 +204,13 @@ return InstructionSlot is
 	variable anyConfirmed: boolean := false;
 begin
     for i in PIPE_WIDTH-1 downto 0 loop
-        if --robDataLiving(i).full = '1' then
-            robData_N(i).controlInfo.full = '1' then
-            targetInc := i2slv(4*(i+1), MWORD_SIZE);  -- CAREFUL: only for 4b instructions
-            exit;
+        if robData_N(i).controlInfo.full = '1' then
+           targetInc := i2slv(4*(i+1), MWORD_SIZE);  -- CAREFUL: only for 4b instructions
+           exit;
         end if;
     end loop;
    
     for i in 0 to PIPE_WIDTH-1 loop 
-        --if robDataLiving(i).full = '1' and robDataLiving(i).ins.controlInfo.confirmedBranch = '1' then 
         if robData_N(i).controlInfo.full = '1' and robData_N(i).controlInfo.confirmedBranch = '1' then 
             anyConfirmed := true;
         end if;
@@ -230,37 +218,26 @@ begin
 	   
 	if evtPhase2 = '1' then
 	   res.full := '1';
-	   res.ins.controlInfo := lateCt;--lateTargetIns.controlInfo;
-	   res.ins.target := lateTarget;-- lateTargetIns.target;	   
-	   return res;--('1', lateTargetIns);
+	   res.ins.controlInfo := lateCt;
+	   res.ins.target := lateTarget;   
+	   return res;
 	end if;
 
+    lastEff.controlInfo := robData_N(0).controlInfo;
+    lastEff.target := robData_N(0).target;
 
---function getLastEffective(newContent: InstructionSlotArray) return InstructionState is
---    variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
---begin
-    --lastEff := robDataLiving(0).ins;
-        lastEff.controlInfo := robData_N(0).controlInfo;
-        lastEff.target := robData_N(0).target;
     for i in PIPE_WIDTH-1 downto 0 loop
-        if --robDataLiving(i).full = '1' then
-            robData_N(i).controlInfo.full = '1' then
-            --lastEff := robDataLiving(i).ins;
-                   lastEff.controlInfo := robData_N(i).controlInfo;
-                   lastEff.controlInfo.newEvent := hasSyncEvent(robData_N(i).controlInfo);
-                   lastEff.target := robData_N(i).target;
-            --lastEff.controlInfo.newEvent := hasSyncEvent(robDataLiving(i).ins.controlInfo); -- Announce that event is to happen now!
+        if robData_N(i).controlInfo.full = '1' then
+           lastEff.controlInfo := robData_N(i).controlInfo;
+           lastEff.controlInfo.newEvent := hasSyncEvent(robData_N(i).controlInfo);
+           lastEff.target := robData_N(i).target;
             exit;
         end if;
     end loop;
 
---    return res;
---end function;
-	
-    --res := (sendingToCommit, lastEff);--getLastEffective(robDataLiving));
-        res.full := sendingToCommit;
-        res.ins.controlInfo := lastEff.controlInfo;
-        res.ins.target := lastEff.target;
+    res.full := sendingToCommit;
+    res.ins.controlInfo := lastEff.controlInfo;
+    res.ins.target := lastEff.target;
 
     if bqTargetFull = '1' and anyConfirmed then -- TODO, CHECK: bqTargetData.full will always be '1' if anyConfirmed?
         res.ins.target := bqTarget;
@@ -268,21 +245,6 @@ begin
         res.ins.target := add(lastEffectiveTarget, targetInc);        
     end if;
     
---    if CLEAR_DEBUG_INFO then
---        res.ins.ip := (others => '0');
---        res.ins.bits := (others => '0');
---        res.ins.virtualArgSpec := DEFAULT_ARG_SPEC;
---        res.ins.physicalArgSpec := DEFAULT_ARG_SPEC;
-        
---        res.ins.classInfo := DEFAULT_CLASS_INFO;
---        res.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
-        
---        res.ins.specificOperation.arith := ArithOp'(opAnd);
---        res.ins.specificOperation.memory := MemOp'(opLoad);
---        res.ins.specificOperation.float := FpOp'(opMove);
-        
---        res.ins.tags := DEFAULT_INSTRUCTION_TAGS;
---    end if;    
 	return res;
 end function;
 
@@ -306,5 +268,19 @@ begin
     end loop;
     return '0'; 
 end function;
+
+-- DEBUG
+function assignCommitNumbers(cpa: ControlPacketArray; ctr: Word) return ControlPacketArray is
+    variable res: ControlPacketArray(0 to PIPE_WIDTH-1) := cpa;
+begin
+    for i in res'range loop
+        if cpa(i).controlInfo.full /= '1' then
+            res(i).dbInfo := DEFAULT_DEBUG_INFO;
+        else
+            res(i).dbInfo.commit := addInt(ctr, i);
+        end if;
+    end loop;
+    return res;
+end function; 
 
 end LogicSequence;

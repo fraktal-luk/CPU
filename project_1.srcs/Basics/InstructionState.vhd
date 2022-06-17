@@ -107,6 +107,7 @@ type InstructionDebugInfo is record
     index: Word;
     seqNum: Word;
     tag: InsTag;
+    commit: Word;
     adr: Mword;
     bits: Word;
     str: string(1 to 30);
@@ -117,6 +118,7 @@ constant DEFAULT_DEBUG_INFO: InstructionDebugInfo := (
     index => (others => 'U'),
     seqNum => (others => 'U'),
     tag => (others => 'U'),
+    commit => (others => 'U'),
     adr => (others => 'U'),
     bits => (others => 'U'),
     str => (others => ' ')
