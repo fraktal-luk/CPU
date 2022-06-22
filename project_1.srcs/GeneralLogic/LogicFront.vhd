@@ -141,7 +141,10 @@ begin
             res(i).ins.dbInfo := ctrl.dbInfo;
             -- TODO: assign seqNum...
 
-        res(i).ins.ip := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);    -- !! Only for BQ, indirect   
+        res(i).ins.ip := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);    -- !! Only for BQ, indirect 
+            res(i).ins.dbInfo.bits := fetchLine(i);
+            res(i).ins.dbInfo.adr := res(i).ins.ip;
+
         res(i).ins.result := ip;
         res(i).ins.result(ALIGN_BITS-1 downto 0) := i2slv((i+1)*4, ALIGN_BITS); -- !! Only for BQ/  CAREFUL: not for short ins
 	end loop;

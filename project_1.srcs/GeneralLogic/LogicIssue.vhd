@@ -59,6 +59,8 @@ type ArgumentStateArray is array(natural range <>) of ArgumentState;
 
 
 type StaticInfo is record
+        dbInfo: InstructionDebugInfo;
+
     operation: SpecificOp;
     
     branchIns: std_logic;
@@ -73,6 +75,8 @@ type StaticInfo is record
 end record;
 
 constant DEFAULT_STATIC_INFO: StaticInfo := (
+        dbInfo => DEFAULT_DEBUG_INFO,
+
     operation => DEFAULT_SPECIFIC_OP,
     branchIns => '0',
     
@@ -405,6 +409,8 @@ package body LogicIssue is
     function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo is
         variable res: StaticInfo;
     begin
+            res.dbInfo := isl.ins.dbInfo;
+            
         res.operation := isl.ins.specificOperation;
     
         res.branchIns := isl.ins.classInfo.branchIns;
@@ -737,6 +743,11 @@ package body LogicIssue is
             end loop;
         end if;
         
+            for i in 0 to LEN-1 loop
+                if res(i).dynamic.full /= '1' then
+                    res(i).static.dbInfo := DEFAULT_DEBUG_INFO;
+                end if;
+            end loop;
         return res;
     end function;
     
