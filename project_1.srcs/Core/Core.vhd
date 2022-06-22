@@ -333,12 +333,13 @@ begin
        signal slotM0_E0, slotM0_E1i,
               slotDummy: InstructionSlotArray(0 to 0) := (others => DEFAULT_INSTRUCTION_SLOT);                     
 
-       signal resultToIntWQ, resultToFloatWQ, resultToIntRF, resultToFloatRF: ExecResult := DEFAULT_EXEC_RESULT;
+       signal resultToIntWQ, resultToIntWQ_Early, resultToFloatWQ, resultToFloatWQ_Early, resultToIntRF, resultToIntRF_Early, resultToFloatRF, resultToFloatRF_Early: ExecResult := DEFAULT_EXEC_RESULT;
 
        signal regsSelI0,           regsSelM0, regsSelS0, regsSelFloatA, regsSelFloatC, regsSelFS0, regsSelF0: PhysNameArray(0 to 2) := (others => (others => '0'));
        signal regValsI0, regValsB, regValsM0, regValsS0, regValsE, regValsFloatA, regValsFloatB, regValsFloatC, regValsFS0, regValsF0: MwordArray(0 to 2) := (others => (others => '0'));
-       signal readyRegFlagsInt, readyRegFlagsInt_C, readyRegFlagsFloat, readyRegFlagsInt_T, readyRegFlagsFloat_T,
-                readyRegFlagsIntNext, readyRegFlagsIntNext_C, readyRegFlagsSV, readyRegFlagsFloatNext, readyRegFlagsFloatSV: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+       signal readyRegFlagsInt, readyRegFlagsInt_Early, readyRegFlagsInt_C, readyRegFlagsFloat, readyRegFlagsFloat_Early, readyRegFlagsInt_T, readyRegFlagsFloat_T,
+                readyRegFlagsIntNext, readyRegFlagsIntNext_Early, readyRegFlagsIntNext_C, readyRegFlagsSV, readyRegFlagsFloatNext, readyRegFlagsFloatNext_Early, readyRegFlagsFloatSV
+                : std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
         
        signal newIntSources, newFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
        
@@ -425,7 +426,8 @@ begin
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedA,
                 fni => fni,
-                readyRegFlags => readyRegFlagsInt,
+                readyRegFlags => --readyRegFlagsInt,
+                                    readyRegFlagsInt_Early,
                 nextAccepting => allowIssueI0,
                 events => events,
                 schedulerOut => slotSelI0,
@@ -554,7 +556,8 @@ begin
                prevSendingOK => renamedSending,
                newArr => schedInfoUpdatedA,
                fni => fni,
-               readyRegFlags => readyRegFlagsInt,
+               readyRegFlags => --readyRegFlagsInt,
+                                    readyRegFlagsInt_Early,
                nextAccepting => allowIssueM0,
                events => events,
                schedulerOut => slotSelM0,
@@ -707,7 +710,8 @@ begin
         end block;
 
         ------------------------
-        readyRegFlagsSV <= (readyRegFlagsInt(2), '0', '0', readyRegFlagsInt(5), '0', '0', readyRegFlagsInt(8), '0', '0', readyRegFlagsInt(11), '0', '0');
+        readyRegFlagsSV <= --(readyRegFlagsInt(2), '0', '0', readyRegFlagsInt(5), '0', '0', readyRegFlagsInt(8), '0', '0', readyRegFlagsInt(11), '0', '0');
+                            (readyRegFlagsInt_Early(2), '0', '0', readyRegFlagsInt_Early(5), '0', '0', readyRegFlagsInt_Early(8), '0', '0', readyRegFlagsInt_Early(11), '0', '0');
 
         SUBPIPES_STORE_VALUE: block
             signal fmaIntSV, fmaFloatSV: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
@@ -1041,7 +1045,9 @@ begin
          begin   
             if rising_edge(clk) then
                 resultToIntRF <= resultToIntWQ;
+                    resultToIntRF_Early <= resultToIntWQ_Early;
                 resultToFloatRF <= resultToFloatWQ;
+                    resultToFloatRF_Early <= resultToFloatWQ_Early;
             end if;
          end process;
             
@@ -1078,7 +1084,43 @@ begin
              readyRegFlagsNext => readyRegFlagsIntNext
          );
 
+             INT_READY_TABLE_EARLY: entity work.RegisterReadyTable(Behavioral)
+             generic map(
+                 WRITE_WIDTH => 1
+             )
+             port map(
+                 clk => clk, reset => '0', en => '0',
+
+                 sendingToReserve => frontLastSending,
+                 newPhysDests => newIntDests,
+                 newPhysSources => newIntSources,
+                 writingData_T(0) => resultToIntRF_Early,
+                 readyRegFlagsNext => readyRegFlagsIntNext_Early
+             );
+
+
          resultToFloatWQ <= subpipeM0_E2f when subpipeM0_E2f.full = '1' else subpipeF0_E2;
+         
+         
+         --         resultToIntWQ <= subpipeM0_E2i when subpipeM0_E2i.full = '1' else subpipeI0_E0;
+                                --     E2  E0
+                                --     E1  RR
+                                --     E0  Is
+                                --     RR
+                                --     Is
+
+            resultToIntWQ_Early <= subpipeM0_E0i when subpipeM0_E0i.full = '1' else
+                                                             ExecResult'(
+                                                                 dbInfo => DEFAULT_DEBUG_INFO,
+                                                                 full => slotIssueI0.full,
+                                                                 failed => '0',
+                                                                 tag => slotIssueI0.renameIndex,
+                                                                 dest => slotIssueI0.argSpec.dest,
+                                                                 value => (others => '0')
+                                                             );
+
+             resultToFloatWQ_Early <= subpipeM0_E0f when subpipeM0_E0f.full = '1' else subpipeF0_E0;
+
 
 		 FLOAT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(IS_FP => true, WIDTH => 4, WRITE_WIDTH => 1)
@@ -1113,6 +1155,20 @@ begin
              readyRegFlagsNext => readyRegFlagsFloatNext
          );
      
+             FLOAT_READY_TABLE_EARLY: entity work.RegisterReadyTable(Behavioral)
+             generic map(
+                 IS_FP => true, WRITE_WIDTH => 1
+             )
+             port map(
+                 clk => clk, reset => '0', en => '0', 
+                 
+                 sendingToReserve => frontLastSending,                 
+                 newPhysDests => newFloatDests,
+                 newPhysSources => newFloatSources,
+                 writingData_T(0) => resultToFloatRF_Early,
+                 readyRegFlagsNext => readyRegFlagsFloatNext_Early
+             );
+
          SRC_LATE_OVERRIDE: if true or TMP_PARAM_LATE_SRC_DEP_OVERRIDE generate
               readyRegFlagsInt_T <= updateArgStates(renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext);
                --         readyRegFlagsInt_C <= updateArgStates(renamedDataLivingRe_C, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext_C);
@@ -1120,6 +1176,7 @@ begin
          end generate;
          
          readyRegFlagsInt <= readyRegFlagsIntNext    ;-- and not groupDependencyFlags;
+                      readyRegFlagsInt_Early <= readyRegFlagsIntNext_Early    ;-- and not groupDependencyFlags;
          readyRegFlagsFloat <= readyRegFlagsFloatNext;-- and not groupDependencyFlags;
      
        sysRegSending <= sysRegRead;
