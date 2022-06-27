@@ -794,7 +794,8 @@ begin
             sendingToStoreWriteInt <= slotRegReadIntSV.full and not outSigsSVI.killSel2;
    
             ------------------------------------
-            readyRegFlagsFloatSV <= (readyRegFlagsFloat(2), '0', '0', readyRegFlagsFloat(5), '0', '0', readyRegFlagsFloat(8), '0', '0', readyRegFlagsFloat(11), '0', '0');
+            readyRegFlagsFloatSV <= --(readyRegFlagsFloat(2), '0', '0', readyRegFlagsFloat(5), '0', '0', readyRegFlagsFloat(8), '0', '0', readyRegFlagsFloat(11), '0', '0');
+                                    (readyRegFlagsFloat_Early(2), '0', '0', readyRegFlagsFloat_Early(5), '0', '0', readyRegFlagsFloat_Early(8), '0', '0', readyRegFlagsFloat_Early(11), '0', '0');
                       
             IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)
             generic map(
@@ -888,10 +889,11 @@ begin
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedA,
                 fni => fniFloat,
-                readyRegFlags => readyRegFlagsFloat,
+                readyRegFlags => --readyRegFlagsFloat,  
+                                    readyRegFlagsFloat_Early,
                 nextAccepting => allowIssueF0,
                 events => events,
-                schedulerOut => slotSelF0,              
+                schedulerOut => slotSelF0,
                 outputSignals => outSigsF0
             );
            
@@ -1178,6 +1180,7 @@ begin
          readyRegFlagsInt <= readyRegFlagsIntNext    ;-- and not groupDependencyFlags;
                       readyRegFlagsInt_Early <= readyRegFlagsIntNext_Early    ;-- and not groupDependencyFlags;
          readyRegFlagsFloat <= readyRegFlagsFloatNext;-- and not groupDependencyFlags;
+                      readyRegFlagsFloat_Early <= readyRegFlagsFloatNext_Early;-- and not groupDependencyFlags;
      
        sysRegSending <= sysRegRead;
      
