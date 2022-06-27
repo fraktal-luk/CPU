@@ -75,29 +75,29 @@ begin
     freeListTakeAllow <= takeAllow;
     freeListPutAllow <= sendingToRelease;
     freeListRewind <= rewind;
-    
+
     freeListTakeSel <= whichTakeReg(reserveInfoA, IS_FP); -- CAREFUL: must agree with Sequencer signals
 
     freeListPutSel <= vsels; -- Releasing a register every time any dest exists (but not always prev stable!)
-    
+
     newPhysDests <= newPhysDestsAsync;
     newPhysDestPointer <= newListPointer;
-    
+
     IMPL: block
         signal listContent: WordArray(0 to FREE_LIST_SIZE/4 - 1) := initFreeList32(IS_FP);
-        
+
         signal listPtrTake, listPtrTakeStable, listPtrTakeStableNext, causingTag: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
         signal listPtrPut, listPtrPutNext: SmallNumber := i2slv(N_PHYS - 32 - FP_1, SMALL_NUMBER_SIZE);
-        
+
         signal memOutput, memInput: Word := (others => '0');
-        
+
         signal listFront, listBack, listFrontNext, listBackNext: PhysNameArray(0 to 7) := (others => (others => '0'));
         signal physPtrTake, physPtrTakeNext, effectivePhysPtrTake: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
         signal physPtrPut, physPtrPutNext: SmallNumber := i2slv(N_PHYS - 32 - FP_1, SMALL_NUMBER_SIZE);
-    
+
         signal numFront, numBack, numBackReduced, numFrontNext, numBackNext, numToTake: SmallNumber := (others => '0');
         signal memRead, needTake, canWriteBack: std_logic := '0';
-        
+
         signal outputRegs: PhysNameArray(0 to 3) := (others => (others => '0'));
     begin
         causingTag <= listPtrTakeStable when lateEventSignal = '1' else causingPointer;
@@ -105,32 +105,21 @@ begin
         numToTake <= i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE) when freeListTakeAllow = '1' else (others => '0');
         needTake <= cmpLeS(numFront, addInt(numToTake, 4));
 
-        
         canWriteBack <= cmpGeS(numBack, 4);                
         memInput <= listBack(3) & listBack(2) & listBack(1) & listBack(0);
         outputRegs <= splitWord(memOutput);
 
-
         listPtrTake <= sub(physPtrTake, numFront);
 
         effectivePhysPtrTake <= addInt(physPtrTake, 4) when (needTake and memRead) = '1' else physPtrTake;
-
-        physPtrTakeNext <= causingTag(SMALL_NUMBER_SIZE-1 downto 2) & physPtrTake(1 downto 0) when freeListRewind = '1'
-                    else   effectivePhysPtrTake;
-
-        listPtrTakeStableNext <= addInt(listPtrTakeStable, countOnes(stableTakeUpdate)) when freeListPutAllow = '1'
-                         else    listPtrTakeStable;
-
-        listPtrPutNext <= addInt(listPtrPut, countOnes(freeListPutSel)) when freeListPutAllow = '1'
-                    else  listPtrPut;
-
-        physPtrPutNext <= addInt(physPtrPut, 4) when canWriteBack = '1'
-                    else  physPtrPut;
+        physPtrTakeNext <= causingTag(SMALL_NUMBER_SIZE-1 downto 2) & physPtrTake(1 downto 0) when freeListRewind = '1' else effectivePhysPtrTake;
+        listPtrTakeStableNext <= addInt(listPtrTakeStable, countOnes(stableTakeUpdate)) when freeListPutAllow = '1' else listPtrTakeStable;
+        listPtrPutNext <= addInt(listPtrPut, countOnes(freeListPutSel)) when freeListPutAllow = '1' else listPtrPut;
+        physPtrPutNext <= addInt(physPtrPut, 4) when canWriteBack = '1' else physPtrPut;
 
         numFrontNext <= getNumFrontNext(numFront, causingTag, freeListRewind, freeListTakeAllow, memRead, freeListTakeSel);
                 
-        numBackNext <= addIntTrunc(numBackReduced, countOnes(freeListPutSel), 3) when freeListPutAllow = '1'
-                  else numBackReduced;
+        numBackNext <= addIntTrunc(numBackReduced, countOnes(freeListPutSel), 3) when freeListPutAllow = '1' else numBackReduced;
         numBackReduced <= numBack and "00000011";
             
         listFrontNext <= moveFrontList(listFront, numFront, numToTake, outputRegs);
@@ -145,13 +134,11 @@ begin
                 listPtrPut <= listPtrPutNext;
                 physPtrPut <= physPtrPutNext;
 
-                
                 numFront <= numFrontNext;
                 numBack <= numBackNext;
                 
                 listFront <= listFrontNext;
                 listBack <= listBackNext;
-                    
 
                 memRead <= not freeListRewind;
                 memOutput <= listContent(slv2u(effectivePhysPtrTake(7 downto 2)));
@@ -159,8 +146,7 @@ begin
                 if canWriteBack = '1' then
                     listContent(slv2u(physPtrPut(7 downto 2))) <= memInput;
                 end if;                        
-                
-                
+    
                 -- CHECK: 3 cycles to restore?
                 if freeListRewind = '1' then
                     recoveryCounter <= i2slv(3, SMALL_NUMBER_SIZE);

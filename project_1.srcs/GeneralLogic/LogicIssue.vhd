@@ -24,6 +24,17 @@ constant PHYS_NAME_NONE: PhysName := (others => '0');
 
 constant IQ_HOLD_TIME: natural := 3;
 
+type DbDependency is record
+    producer: InsTag;
+    cyclesWaiting: integer;
+    cyclesReady: integer;
+end record;
+
+constant DEFAULT_DB_DEPENDENCY: DbDependency := (
+                                    producer => (others => 'U'),
+                                    cyclesWaiting => -1,
+                                    cyclesReady => -1
+                                    );
 
 type ArgumentState is record
     used: std_logic;
@@ -37,7 +48,9 @@ type ArgumentState is record
     waiting: std_logic;
     stored:  std_logic;
     srcPipe: SmallNumber;
-    srcStage: SmallNumber;    
+    srcStage: SmallNumber;
+    
+    dbDep: DbDependency;   
 end record;
 
 constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
@@ -50,7 +63,9 @@ constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
     waiting => '0',
     stored => '0',
     srcPipe => (others => '0'),
-    srcStage => (others => '0')
+    srcStage => (others => '0'),
+    
+    dbDep => DEFAULT_DB_DEPENDENCY
 ); 
 
 constant DEFAULT_ARG_STATE: ArgumentState := DEFAULT_ARGUMENT_STATE;
@@ -193,12 +208,11 @@ return SchedulerInfoArray;
 
 function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector;
 
-function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;-- fnm: ForwardingMap;
+function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
                 dynamic: boolean;
                 selection: boolean;
                 dontMatch1: boolean;
-                forwardingModes0--, forwardingModes1
-                : ForwardingModeArray
+                forwardingModes0: ForwardingModeArray
             )
 return SchedulerInfoArray;
 
@@ -916,8 +930,7 @@ package body LogicIssue is
     end function;
     
     function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
-                    dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0--, forwardingModes1
-                                                                                                : ForwardingModeArray)
+                    dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0: ForwardingModeArray)
     return SchedulerInfoArray is
         variable res: SchedulerInfoArray(0 to schedArray'length-1);
     begin
@@ -1104,10 +1117,10 @@ package body LogicIssue is
         res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
     
         res.static.branchIns := a.static.branchIns or b.static.branchIns;
-        res.static.bqPointer := a.static.bqPointer or b.static.bqPointer;--: SmallNumber;
-        res.static.sqPointer := a.static.sqPointer or b.static.sqPointer;--: SmallNumber;
-        res.static.lqPointer := a.static.lqPointer or b.static.lqPointer;-- SmallNumber;        
-        res.static.bqPointerSeq := a.static.bqPointerSeq or b.static.bqPointerSeq;--: SmallNumber;
+        res.static.bqPointer := a.static.bqPointer or b.static.bqPointer;
+        res.static.sqPointer := a.static.sqPointer or b.static.sqPointer;
+        res.static.lqPointer := a.static.lqPointer or b.static.lqPointer;   
+        res.static.bqPointerSeq := a.static.bqPointerSeq or b.static.bqPointerSeq;
         
         res.static.immediate :=  a.static.immediate or b.static.immediate;
         res.static.immValue :=  a.static.immValue or b.static.immValue;

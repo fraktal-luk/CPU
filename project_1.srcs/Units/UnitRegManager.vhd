@@ -56,7 +56,7 @@ port(
    
     commitGroupCtr: in InsTag;
   
-    execCausing_N: in ControlPacket;
+    execCausing: in ControlPacket;
     
     execEventSignal: in std_logic;
     lateEventSignal: in std_logic
@@ -82,19 +82,20 @@ architecture Behavioral of UnitRegManager is
 
     signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;    
       
-    function renameGroupBase(   ia: BufferEntryArray;
-                                insVec: InstructionSlotArray;
-                                newIntDests: PhysNameArray;
-                                newFloatDests: PhysNameArray;                                
-                                renameGroupCtrNext: InsTag;
-                                newIntDestPointer: SmallNumber;
-                                newFloatDestPointer: SmallNumber;
-                                bqPointer: SmallNumber;
-                                sqPointer: SmallNumber;
-                                lqPointer: SmallNumber;
-                                bqPointerSeq: SmallNumber;
-                                renameCtr: Word;                               
-                                dbtrap: std_logic)
+    function renameGroupBase(
+                            ia: BufferEntryArray;
+                            insVec: InstructionSlotArray;
+                            newIntDests: PhysNameArray;
+                            newFloatDests: PhysNameArray;                                
+                            renameGroupCtrNext: InsTag;
+                            newIntDestPointer: SmallNumber;
+                            newFloatDestPointer: SmallNumber;
+                            bqPointer: SmallNumber;
+                            sqPointer: SmallNumber;
+                            lqPointer: SmallNumber;
+                            bqPointerSeq: SmallNumber;
+                            renameCtr: Word;                               
+                            dbtrap: std_logic)
      return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
         variable reserveSelSig, takeVecInt, takeVecFloat, stores, loads, branches: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
@@ -305,7 +306,7 @@ architecture Behavioral of UnitRegManager is
             for j in 0 to 2 loop
                 res(i).sourceConst(j) :=   (va.intArgSel(j) and not isNonzero(va.args(j)(4 downto 0))) -- int r0
                                         or (not va.intArgSel(j) and not va.floatArgSel(j))             -- not used
-                                        or (bool2std(j = 1) and ca.immSel);                                                        -- imm
+                                        or (bool2std(j = 1) and ca.immSel);                            -- imm
 
                 res(i).virtualSources(j) := va.args(j)(4 downto 0);
                 
@@ -368,7 +369,7 @@ architecture Behavioral of UnitRegManager is
             for j in 0 to 2 loop
                 res(i).sourceConst(j) :=   (va.intArgSel(j) and not isNonzero(va.args(j)(4 downto 0))) -- int r0
                                         or (not va.intArgSel(j) and not va.floatArgSel(j))             -- not used
-                                        or (bool2std(j = 1) and ca.immSel);                                                        -- imm
+                                        or (bool2std(j = 1) and ca.immSel);                            -- imm
             end loop;
 
             res(i).deps := depVec(i);
@@ -424,7 +425,7 @@ begin
     renamedDataLiving <= restoreRenameIndex(renamedDataLivingPre);
 
     renameGroupCtrNext <=   commitGroupCtr when lateEventSignal = '1'
-                       else clearTagLow(execCausing_N.tags.renameIndex) when execEventSignal = '1'
+                       else clearTagLow(execCausing.tags.renameIndex) when execEventSignal = '1'
                        else addInt(renameGroupCtr, PIPE_WIDTH) when frontLastSending = '1'
                        else renameGroupCtr;
     
@@ -544,7 +545,7 @@ begin
         rewind => eventSig,
         execEventSignal => execEventSignal,
         lateEventSignal => lateEventSignal,
-        causingPointer => execCausing_N.tags.intPointer,
+        causingPointer => execCausing.tags.intPointer,
         
         sendingToReserve => frontLastSendingIn, 
         takeAllow => frontLastSendingIn,
@@ -569,7 +570,7 @@ begin
         rewind => eventSig,
         execEventSignal => execEventSignal,
         lateEventSignal => lateEventSignal,        
-        causingPointer => execCausing_N.tags.floatPointer,
+        causingPointer => execCausing.tags.floatPointer,
         
         sendingToReserve => frontLastSendingIn, 
         takeAllow => frontLastSendingIn,	-- FROM SEQ
