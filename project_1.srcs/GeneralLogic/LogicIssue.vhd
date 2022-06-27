@@ -836,11 +836,20 @@ package body LogicIssue is
     function getWakeupStructDynamic(fc: ForwardingComparisons; forwardingModes: ForwardingModeArray) return WakeupStruct is
         variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
         variable matchVec: std_logic_vector(0 to 2) := (others => '0');
+        variable latestStage: integer := 1;
     begin
-        
         for p in forwardingModes'range loop
+            
+                if forwardingModes(p).stage < 0 then
+                    latestStage := -1;
+                else
+                    latestStage := 1;
+                end if;
+            
             for q in -3 to 1 loop
-                if forwardingModes(p).stage <= q then
+                if      forwardingModes(p).stage <= q 
+                    and q <= latestStage    
+                then
                     case q is
                         when -3 =>
                             matchVec(p) := fc.cmpM3(p);
