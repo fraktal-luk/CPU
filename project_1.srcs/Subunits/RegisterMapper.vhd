@@ -46,21 +46,20 @@ end RegisterMapper;
 
 architecture Behavioral of RegisterMapper is
 	constant WIDTH: natural := PIPE_WIDTH;
-	
+
 	signal newestMap, newestMap_NoRewind, stableMap, newestMapNext, newestMapNext_NoRewind, stableMapNext: PhysNameArray(0 to 31) := initMap(IS_FP);
-    
+
     signal reserve, commit, psels: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     signal selectReserve, selectCommit: RegNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal selectNewest: RegNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
 
-    signal writeCommit: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+    signal writeCommit, readStable, readStable_T2: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 	signal readNewest, readNewest_NR, readNewest_T, readNewest_T2, readStableSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
-	signal readStable, readStable_T2, prevDests, prevDests_T2: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal readUseNewest: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
-    
+
     signal newSelectedA, stableSelectedA: RegMaskArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-    
+
     signal ch0, ch1,  cha, chb, chc, chd, che, chf: std_logic := '0';    
 begin
     newSelectedA <= getSelectedA(selectReserve, reserve, IS_FP);
@@ -106,16 +105,14 @@ begin
           if sendingToCommit = '1' then
               stableMap <= stableMapNext;
           end if;
-          
-          prevDests <= readStable;
-          prevDests_T2 <= readStable_T2;
 
 	   end if;
 	end process;
 
 	prevStablePhysDests <= readStable_T2;
+	                       --    readStable;
 	newPhysSources <= readNewest_T2;
-	                  
+	                  --     readNewest;
 	newPhysSources_NR <= readNewest_NR;
     newPhysSourcesAlt <= readStableSources;
     newPhysSourceSelector <= not readUseNewest;
@@ -154,6 +151,9 @@ begin
             signal newestProducers, stableProducers: InsTagArray(0 to 31) := (others => (others => 'U'));
     begin
 
+        compressedDests <= assignDests(reserveInfoA, newPhysDestsOrig, IS_FP);
+
+
         READ_NEWEST: for i in 0 to 3*PIPE_WIDTH-1 generate
            signal rowNum: natural := 0;
            signal colNum: natural := 0;
@@ -167,14 +167,14 @@ begin
             colNum <= slv2u(newestSelMap2b(slv2u(selectNewest(i))));
             index <= slv2u(iv);
     
-            readNewest_T2(i) <= mapMem0(slv2u(selectNewest(i)))  when index = 4
-                    else     mapMem1(slv2u(selectNewest(i)))  when index = 5
-                    else     mapMem2(slv2u(selectNewest(i)))  when index = 6
-                    else     mapMem3(slv2u(selectNewest(i)))  when index = 7
-                    else     mapMemS0(slv2u(selectNewest(i))) when index = 0
-                    else     mapMemS1(slv2u(selectNewest(i))) when index = 1
-                    else     mapMemS2(slv2u(selectNewest(i))) when index = 2
-                    else     mapMemS3(slv2u(selectNewest(i)));
+            readNewest_T2(i) <=  mapMem0(slv2u(selectNewest(i)))  when index = 4
+                        else     mapMem1(slv2u(selectNewest(i)))  when index = 5
+                        else     mapMem2(slv2u(selectNewest(i)))  when index = 6
+                        else     mapMem3(slv2u(selectNewest(i)))  when index = 7
+                        else     mapMemS0(slv2u(selectNewest(i))) when index = 0
+                        else     mapMemS1(slv2u(selectNewest(i))) when index = 1
+                        else     mapMemS2(slv2u(selectNewest(i))) when index = 2
+                        else     mapMemS3(slv2u(selectNewest(i)));
                       
             readUseNewest(i) <= useNewest(slv2u(selectNewest(i)));
         end generate;
@@ -192,37 +192,19 @@ begin
                               else     mapMemS2(slv2u(selectCommit(i))) when index = 2
                               else     mapMemS3(slv2u(selectCommit(i)));
         end generate;
-    
-        compressedDests <= assignDests(reserveInfoA, newPhysDestsOrig, IS_FP);
-    
-        mappingTablePtrNext <=          0 when mappingTablePtr = N_MAPPINGS-1       else     mappingTablePtr + 1;
-        mappingTableStablePtrNext <=    0 when mappingTableStablePtr = N_MAPPINGS-1 else     mappingTableStablePtr + 1;
-                                                                                               
+
+
         process (clk)
-            variable rsm: RegSelectMap := (others => (others => '0'));
         begin
-            if rising_edge(clk) then
-            
+            if rising_edge(clk) then       
                 if rewind = '1' then
-                    newestSelMap2b <= stableSelMap2b;
-                    mappingTablePtr <= mappingTableStablePtrNext;
-                    
+                    newestSelMap2b <= stableSelMap2b;                    
                     useNewest <= (others => '0');
                 elsif sendingToReserve = '1' then
-                    if isNonzero(reserve) = '1' then
-                        if mappingTablePtr = N_MAPPINGS-1 then
-                            mappingTablePtr <= 0;
-                        else
-                            mappingTablePtr <= mappingTablePtr + 1;
-                        end if;
-                    end if;
-                
                     for i in 0 to PIPE_WIDTH-1 loop
                         if reserve(i) = '1' then
                             useNewest(slv2u(selectReserve(i))) <= '1';
-                            newestSelMap2b(slv2u(selectReserve(i))) <= i2slv(i, 3);
-                            
-                            mappingTable(mappingTablePtrNext)(i) <= compressedDests(i);
+                            newestSelMap2b(slv2u(selectReserve(i))) <= i2slv(i, 3);                            
                             rowMap(slv2u(selectReserve(i))) <= i2slv(mappingTablePtrNext, SMALL_NUMBER_SIZE);
                         end if;
                     end loop;
@@ -245,15 +227,9 @@ begin
                 end if;
                 
                 if sendingToCommit = '1' then
-                    if isNonzero(commit) = '1' then
-                        mappingTableStablePtr <= mappingTableStablePtrNext;
-                    end if;
-                
                     for i in 0 to PIPE_WIDTH-1 loop
                         if commit(i) = '1' then
-                            stableSelMap2b(slv2u(selectCommit(i))) <= i2slv(i, 3);                            
-                            
-                            mappingTableStable(mappingTableStablePtrNext)(i) <= writeCommit(i);
+                            stableSelMap2b(slv2u(selectCommit(i))) <= i2slv(i, 3);                                                        
                             rowMapStable(slv2u(selectCommit(i))) <= i2slv(mappingTableStablePtrNext, SMALL_NUMBER_SIZE);
                         end if;
                     end loop;             
@@ -277,7 +253,44 @@ begin
     
             end if;
         end process;
-   
+
+
+    
+        mappingTablePtrNext <=          0 when mappingTablePtr = N_MAPPINGS-1       else     mappingTablePtr + 1;
+        mappingTableStablePtrNext <=    0 when mappingTableStablePtr = N_MAPPINGS-1 else     mappingTableStablePtr + 1;
+                                                                                               
+        process (clk)
+        begin
+            if rising_edge(clk) then            
+                if rewind = '1' then
+                    mappingTablePtr <= mappingTableStablePtrNext;                    
+                elsif sendingToReserve = '1' then
+                    if isNonzero(reserve) = '1' then
+                        mappingTablePtr <= mappingTablePtrNext;
+                    end if;
+                
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        if reserve(i) = '1' then
+                            mappingTable(mappingTablePtrNext)(i) <= compressedDests(i);
+                        end if;
+                    end loop;
+                end if;
+                
+                if sendingToCommit = '1' then
+                    if isNonzero(commit) = '1' then
+                        mappingTableStablePtr <= mappingTableStablePtrNext;
+                    end if;
+                
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        if commit(i) = '1' then
+                            mappingTableStable(mappingTableStablePtrNext)(i) <= writeCommit(i);
+                        end if;
+                    end loop;
+                end if;
+    
+            end if;
+        end process;
+
 --            vselReserve <= getVirtualIntDestSels(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
 --            pselReserve <= getPhysicalIntDestSels(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
 --            fullMaskReserve <= extractFullMask(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
