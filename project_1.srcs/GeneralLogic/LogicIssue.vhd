@@ -36,6 +36,8 @@ constant DEFAULT_DB_DEPENDENCY: DbDependency := (
                                     cyclesReady => -1
                                     );
 
+type DbDependencyArray is array(natural range <>) of DbDependency;
+
 type ArgumentState is record
     used: std_logic;
     reg: PhysName;
@@ -469,6 +471,10 @@ package body LogicIssue is
         res.dest := ri.physicalDest;
     
         for i in 0 to 2 loop
+                res.argStates(i).dbDep.producer := ri.dbDepTags(i);
+                res.argStates(i).dbDep.cyclesWaiting := 0;
+                res.argStates(i).dbDep.cyclesReady := 0;
+        
             res.argStates(i).used := ri.sourceSel(i);
             res.argStates(i).zero := ri.sourceConst(i);
 
@@ -538,8 +544,6 @@ package body LogicIssue is
         res.immValue := info.static.immValue;
             
         res.zero := info.static.zero;
-            
-        res.issued := info.dynamic.issued;
         
         res.renameIndex := info.dynamic.renameIndex;
 
@@ -557,7 +561,6 @@ package body LogicIssue is
         res.argSpec.dest := info.dynamic.dest;
 
         for k in 0 to 2 loop
-            res.missing(k) := info.dynamic.argStates(k).waiting;
             res.argLocsPipe(k) := info.dynamic.argStates(k).srcPipe;
             res.argSrc(k) := info.dynamic.argStates(k).srcStage;
         end loop;
@@ -615,21 +618,15 @@ package body LogicIssue is
     begin
     
         if REGS_ONLY then
-            res.stored := (others => '0');
             return res;    
         end if;
     
         if res.zero(0) = '1' then
             res.args(0) := (others => '0');
-            res.stored(0) := '1';
         elsif res.argSrc(0)(1 downto 0) = "00" then
             res.args(0) := fni.values0(slv2u(res.argLocsPipe(0)(1 downto 0)));
-            res.stored(0) := '1';
         elsif res.argSrc(0)(1 downto 0) = "01" then
             res.args(0) := fni.values1(slv2u(res.argLocsPipe(0)(1 downto 0)));
-            if res.argSrc(0)(1 downto 0) = "01" then -- becomes redundant
-                res.stored(0) := '1';
-            end if;
         else
             res.args(0) := (others => '0');           
         end if;
@@ -641,13 +638,10 @@ package body LogicIssue is
             else
                 res.args(1) := (others => '0');
             end if;
-            res.stored(1) := '1';
         elsif res.argSrc(1)(1 downto 0) = "00" then
             res.args(1) := fni.values0(slv2u(res.argLocsPipe(1)(1 downto 0)));
-            res.stored(1) := '1';
         elsif res.argSrc(1)(1 downto 0) = "01" then
             res.args(1) := fni.values1(slv2u(res.argLocsPipe(1)(1 downto 0)));
-            res.stored(1) := '1';
         else
             res.args(1) := (others => '0');
         end if;
@@ -671,16 +665,12 @@ package body LogicIssue is
         else
             res.args(0) := res.args(0) or regValues(0);
         end if;
-        
-        res.stored(0) := '1';
     
         if res.readNew(1) = '1' then
             res.args(1) := vals(slv2u(res.argLocsPipe(1)(1 downto 0)));
         else
             res.args(1) := res.args(1) or regValues(1);
         end if;
-    
-        res.stored(1) := '1';
     
         return res;
     end function;
@@ -757,11 +747,28 @@ package body LogicIssue is
             end loop;
         end if;
         
+        
+            for i in 0 to LEN-1 loop
+                for j in 0 to 2 loop
+                    if res(i).dynamic.issued = '1' then
+                        null;
+                    elsif res(i).dynamic.argStates(j).waiting = '1' then
+                        res(i).dynamic.argStates(j).dbDep.cyclesWaiting := res(i).dynamic.argStates(j).dbDep.cyclesWaiting + 1;
+                    else
+                        res(i).dynamic.argStates(j).dbDep.cyclesReady := res(i).dynamic.argStates(j).dbDep.cyclesReady + 1;
+                    end if;
+                end loop;
+            end loop;
+                
             for i in 0 to LEN-1 loop
                 if res(i).dynamic.full /= '1' then
                     res(i).static.dbInfo := DEFAULT_DEBUG_INFO;
+                    res(i).dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
+                    res(i).dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
+                    res(i).dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
                 end if;
             end loop;
+            
         return res;
     end function;
     

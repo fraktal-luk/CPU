@@ -37,7 +37,10 @@ entity RegisterMapper is
 		newPhysSources: out PhysNameArray(0 to 3*PIPE_WIDTH-1);		
 		newPhysSources_NR: out PhysNameArray(0 to 3*PIPE_WIDTH-1);		
 		newPhysSourcesAlt: out PhysNameArray(0 to 3*PIPE_WIDTH-1);
-		newPhysSourceSelector: out std_logic_vector(0 to 3*PIPE_WIDTH-1);		
+		newPhysSourceSelector: out std_logic_vector(0 to 3*PIPE_WIDTH-1);
+		  
+		  newProducers: out InsTagArray(0 to 3*PIPE_WIDTH-1);
+
 		prevStablePhysDests: out PhysNameArray(0 to PIPE_WIDTH-1)
 	);
 end RegisterMapper;
@@ -55,6 +58,8 @@ architecture Behavioral of RegisterMapper is
 
     signal writeCommit, readStable, readStable_T2: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 	signal readNewest, readNewest_NR, readNewest_T, readNewest_T2, readStableSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+
+    	signal readProducers: InsTagArray(0 to 3*PIPE_WIDTH-1) := (others => (others => 'U'));
 
     signal readUseNewest: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
@@ -166,7 +171,7 @@ begin
             rowNum <= slv2u(rowMap(slv2u(selectNewest(i))));
             colNum <= slv2u(newestSelMap2b(slv2u(selectNewest(i))));
             index <= slv2u(iv);
-    
+
             readNewest_T2(i) <=  mapMem0(slv2u(selectNewest(i)))  when index = 4
                         else     mapMem1(slv2u(selectNewest(i)))  when index = 5
                         else     mapMem2(slv2u(selectNewest(i)))  when index = 6
@@ -291,6 +296,45 @@ begin
             end if;
         end process;
 
+
+        WRITE_PRODUCER_TABLES: process (clk)
+            variable newestProducersUpdated: InsTagArray(0 to 31) := newestProducers;
+            variable stableProducersUpdated: InsTagArray(0 to 31) := stableProducers;
+        begin
+            if rising_edge(clk) then
+                if rewind = '1' then
+                    newestProducers <= (others => (others => 'U'));
+                elsif sendingToReserve = '1' then
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        if reserve(i) = '1' then
+                            newestProducersUpdated(slv2u(selectReserve(i))) := reserveInfoA(i).dbInfo.tag;
+                        end if;
+                    end loop;
+                end if;
+
+                if sendingToCommit = '1' then
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        if commit(i) = '1' then
+                            stableProducersUpdated(slv2u(selectCommit(i))) := commitInfoA(i).dbInfo.tag;
+                            
+                            -- if entry in newestMap is not overwritten up to its Commit, it becomes free of dependence on inflight ops
+                            if newestProducersUpdated(slv2u(selectCommit(i))) = stableProducersUpdated(slv2u(selectCommit(i))) then
+                                newestProducersUpdated(slv2u(selectCommit(i))) := (others => 'U');
+                            end if;
+                        end if;
+                    end loop;
+                end if;
+
+                newestProducers <= newestProducersUpdated;
+                stableProducers <= stableProducersUpdated;
+            end if;
+        end process;
+        
+        READ_PRODUCERS: for i in 0 to 3*PIPE_WIDTH-1 generate
+            readProducers(i) <= newestProducers(slv2u(selectNewest(i)));
+        end generate;
+        
+
 --            vselReserve <= getVirtualIntDestSels(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
 --            pselReserve <= getPhysicalIntDestSels(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
 --            fullMaskReserve <= extractFullMask(stageDataToReserve) when sendingToReserve = '1' else (others => '0');
@@ -319,6 +363,9 @@ begin
                    
                    kiVselCommit <= killedMaskCommit and vselCommit;
     end block;
+
+    newProducers <= readProducers;
+
 
     OBSERVE: if VIEW_ON generate
         constant N_BANKS_NEWEST: natural := 8;

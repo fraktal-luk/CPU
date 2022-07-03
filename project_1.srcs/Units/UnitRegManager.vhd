@@ -81,6 +81,8 @@ architecture Behavioral of UnitRegManager is
     signal newSourceSelectorInt, newSourceSelectorFloat, zeroSelector: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
 
     signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;    
+
+    	signal newProducersInt, newProducersFloat, zeroProducers: InsTagArray(0 to 3*PIPE_WIDTH-1) := (others => (others => 'U'));
       
     function renameGroupBase(
                             ia: BufferEntryArray;
@@ -267,8 +269,10 @@ architecture Behavioral of UnitRegManager is
         return res;
     end function;
 
-    function getRenameInfo( ia: BufferEntryArray;
-                            newPhysDests, newPhysSources, newPhysSourcesStable: PhysNameArray; newSourceSelector: std_logic_vector; constant IS_FP: boolean := false)
+    function getRenameInfo( ia: BufferEntryArray; isa: InstructionSlotArray;
+                            newPhysDests, newPhysSources, newPhysSourcesStable: PhysNameArray;
+                            newProducers: InsTagArray;
+                            newSourceSelector: std_logic_vector; constant IS_FP: boolean := false)
     return RenameInfoArray is
         variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
         variable dests: PhysNameArray(0 to PIPE_WIDTH-1) := assignDests(ia, newPhysDests, IS_FP);
@@ -284,6 +288,8 @@ architecture Behavioral of UnitRegManager is
         end if;
         
         for i in 0 to PIPE_WIDTH-1 loop
+                res(i).dbInfo := isa(i).ins.dbInfo;
+        
             va := ia(i).argSpec;
             ca := ia(i).constantArgs;
             
@@ -312,11 +318,13 @@ architecture Behavioral of UnitRegManager is
                 
                 res(i).physicalSources(j) := newPhysSources(3*i + j);
                 res(i).physicalSourcesStable(j) := newPhysSourcesStable(3*i + j);
+                
+                    res(i).dbDepTags(j) := newProducers(3*i + j);
             end loop;
 
             res(i).deps := depVec(i);
             res(i).physicalSourcesNew := res(i).physicalSources;
-                                
+
             for j in 0 to 2 loop
                 res(i).sourcesNew(j) := isNonzero(res(i).deps(j));
                 for k in PIPE_WIDTH-1 downto 0 loop
@@ -395,11 +403,11 @@ begin
 
     frontDataISL <= getInsSlotArray(frontData);
 
-    inputRenameInfoInt <= getRenameInfo(frontData,   zeroDests, zeroSources, zeroSources, zeroSelector);
-    inputRenameInfoFloat <= getRenameInfo(frontData, zeroDests, zeroSources, zeroSources, zeroSelector, true);
+    inputRenameInfoInt <= getRenameInfo(frontData,    renamedBase, zeroDests, zeroSources, zeroSources, zeroProducers, zeroSelector);
+    inputRenameInfoFloat <= getRenameInfo(frontData,  renamedBase, zeroDests, zeroSources, zeroSources, zeroProducers, zeroSelector, true);
 
-    resultRenameInfoInt <= getRenameInfo(frontData,   newIntDests, newIntSources, newIntSourcesAlt, newSourceSelectorInt);
-    resultRenameInfoFloat <= getRenameInfo(frontData, newFloatDests, newFloatSources, newFloatSourcesAlt, newSourceSelectorFloat, true);
+    resultRenameInfoInt <= getRenameInfo(frontData,   renamedBase, newIntDests, newIntSources, newIntSourcesAlt, newProducersInt, newSourceSelectorInt);
+    resultRenameInfoFloat <= getRenameInfo(frontData, renamedBase, newFloatDests, newFloatSources, newFloatSourcesAlt, newProducersFloat, newSourceSelectorFloat, true);
 
     frontLastSending <= frontLastSendingIn and not eventSig;
 
@@ -510,6 +518,9 @@ begin
         newPhysSources_NR => newIntSources_NR,
         newPhysSourcesAlt => newIntSourcesAlt,
         newPhysSourceSelector => newSourceSelectorInt,
+
+            newProducers => newProducersInt,
+
         prevStablePhysDests => physStableInt  -- FOR MAPPING (to FREE LIST)
     );
     
@@ -532,6 +543,9 @@ begin
         newPhysSources_NR => open,
         newPhysSourcesAlt => newFloatSourcesAlt,
         newPhysSourceSelector => newSourceSelectorFloat,
+        
+            newProducers => newProducersFloat,
+
         prevStablePhysDests => physStableFloat
     );
 
@@ -556,7 +570,6 @@ begin
     
         sendingToRelease => robSendingDelayed,
         releaseInfoA => commitArgInfoIntDelayed,
-
         physStableDelayed => physStableInt
     );
     

@@ -127,6 +127,10 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
 
 
     type RenameInfo is record
+            dbInfo: InstructionDebugInfo;
+    
+            dbDepTags: InsTagArray(0 to 2);
+    
         destSel: std_logic;
         destSelFP: std_logic;
             psel: std_logic;
@@ -141,12 +145,16 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
         deps: DependencySpec;
         sourcesStable: std_logic_vector(0 to 2); -- true if source is from stable map - always ready
         sourcesNew: std_logic_vector(0 to 2);   -- true if group dependency
-        sourcesReady: std_logic_vector(0 to 2); -- ready as read from ReadyTable based on NewestMap 
+        sourcesReady: std_logic_vector(0 to 2); -- ready as read from ReadyTable based on NewestMap
     end record;
 
     type RenameInfoArray is array(natural range <>) of RenameInfo;
 
     constant DEFAULT_RENAME_INFO: RenameInfo := (
+            dbInfo => DEFAULT_DEBUG_INFO, 
+            
+            dbDepTags => (others => (others => 'U')),
+                       
         destSel => '0',
         destSelFP => '0',
             psel => '0',
@@ -161,25 +169,14 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
         deps => (others => (others => '0')),
         sourcesStable => (others => '0'),
         sourcesNew => (others => '0'),
-        sourcesReady => (others => '0')        
+        sourcesReady => (others => '0')       
     );
 
     function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInfoArray;
 
     function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray;
 
-function compactMask(vec: std_logic_vector) return std_logic_vector; -- WARNING: only for 4 elements
 function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector;
-
--- general InstructionState handling 
-function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionState; -- UNUSED
-function setInstructionTarget(ins: InstructionState; target: Mword) return InstructionState; -- UNUSED
-function setInstructionResult(ins: InstructionState; result: Mword) return InstructionState;
---
--- dest handling
-function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray;
-function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray;
-function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot;
 
 function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector;
 function extractFullMask(cpa: ControlPacketArray) return std_logic_vector;
@@ -187,24 +184,10 @@ function extractFullMask(ba: BufferEntryArray) return std_logic_vector;
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
-function makeSlotArray(ia: InstructionStateArray; fm: std_logic_vector) return InstructionSlotArray;
-
 function compareIndBefore(tagA, tagB: SmallNumber; PTR_SIZE: natural) return std_logic;
-
--- UNUSED?
-function getKillMask(content: InstructionStateArray; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
-return std_logic_vector;
-
 
 -- TODO: deprecate?
 function getExceptionMask(insVec: InstructionSlotArray) return std_logic_vector;
-
-function getCausingMask(insVec: InstructionSlotArray) return std_logic_vector;
-function getKilledMask(insVec: InstructionSlotArray) return std_logic_vector;
-function getIgnoredMask(insVec: InstructionSlotArray) return std_logic_vector;
-
-function stageArrayNext(livingContent, newContent: InstructionSlotArray; full, sending, receiving, kill, keepDest: std_logic)
-return InstructionSlotArray;
 
 -- general op tag handling
 function getTagHigh(tag: std_logic_vector) return std_logic_vector;
@@ -284,28 +267,6 @@ function updateArgStatesFloat(riaInt, riaFloat: RenameInfoArray; readyRegFlags: 
 
 function replaceDests(insVec: InstructionSlotArray; ria: RenameInfoArray) return InstructionSlotArray;
 
-
-function clearRawInfo(ins: InstructionState) return InstructionState;      -- ip, bits; this is raw program data 
-function clearFollowInfo(ins: InstructionState) return InstructionState;  -- result, target; they are about what follows
-function clearAbstractInfo(ins: InstructionState) return InstructionState; -- ip, bits, result, target; because they are independent of implementation -> abstract
-
-function clearRawInfo(ia: InstructionStateArray) return InstructionStateArray;
-function clearFollowInfo(ia: InstructionStateArray) return InstructionStateArray;
-function clearAbstractInfo(ia: InstructionStateArray) return InstructionStateArray;
-
-function clearRawInfo(ins: InstructionSlot) return InstructionSlot;
-function clearFollowInfo(ins: InstructionSlot) return InstructionSlot;
-function clearAbstractInfo(ins: InstructionSlot) return InstructionSlot;
-
-function clearRawInfo(ia: InstructionSlotArray) return InstructionSlotArray;
-function clearFollowInfo(ia: InstructionSlotArray) return InstructionSlotArray;
-function clearAbstractInfo(ia: InstructionSlotArray) return InstructionSlotArray;
-
-function clearDbCounters(ins: InstructionState) return InstructionState;      -- ip, bits; this is raw program data 
-function clearDbCounters(isl: InstructionSlot) return InstructionSlot;
-
-function clearDbCausing(ins: InstructionState) return InstructionState;
-
 -- For setting dest sel flags in stages after ROB!
 function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray;
 
@@ -313,9 +274,6 @@ function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray;
 function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic;
 function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
 
-function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray; 
-
-function setPhysSources(insVec: InstructionSlotArray; newPhysSources: PhysNameArray; newestSelector, depVec: std_logic_vector) return InstructionSlotArray;
 
 function convertROBData(isa: InstructionSlotArray) return ControlPacketArray;
 
@@ -341,13 +299,12 @@ end package;
 
 package body PipelineGeneral is
 
-    function p2i(p: SmallNumber; n: natural) return natural is
-        --constant pIn: SmallNumber := p;
-        constant mask: SmallNumber := i2slv(n-1, SMALL_NUMBER_SIZE);
-        constant pT: SmallNumber := p and mask;
-    begin
-        return slv2u(pT);
-    end function;
+function p2i(p: SmallNumber; n: natural) return natural is
+    constant mask: SmallNumber := i2slv(n-1, SMALL_NUMBER_SIZE);
+    constant pT: SmallNumber := p and mask;
+begin
+    return slv2u(pT);
+end function;
 
 function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInfoArray is
     variable res: RenameInfoArray(intArgs'range) := intArgs;
@@ -364,162 +321,16 @@ begin
 end function;
 
 
-        function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray is
-            variable res: PhysNameArray(0 to 3*PIPE_WIDTH-1);
-        begin
-            res(0 to 2) := ri(0).physicalSourcesNew;-- & ri(1).physicalSourcesNew & ri(2).physicalSourcesNew & ri(3).physicalSourcesNew;
-            res(3 to 5) := ri(1).physicalSourcesNew;
-            res(6 to 8) := ri(2).physicalSourcesNew;
-            res(9 to 11) := ri(3).physicalSourcesNew;
-            return res;
-        end function;
+    function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray is
+        variable res: PhysNameArray(0 to 3*PIPE_WIDTH-1);
+    begin
+        res(0 to 2) := ri(0).physicalSourcesNew;-- & ri(1).physicalSourcesNew & ri(2).physicalSourcesNew & ri(3).physicalSourcesNew;
+        res(3 to 5) := ri(1).physicalSourcesNew;
+        res(6 to 8) := ri(2).physicalSourcesNew;
+        res(9 to 11) := ri(3).physicalSourcesNew;
+        return res;
+    end function;
 
-function clearRawInfo(ins: InstructionState) return InstructionState is
-    variable res: InstructionState := ins;
-begin
-    res.ip := (others => '0');
-    res.bits := (others => '0');
-    return res;
-end function;
-
-function clearFollowInfo(ins: InstructionState) return InstructionState is
-    variable res: InstructionState := ins;
-begin
-    res.target := (others => '0');
-    res.result := (others => '0');
-    return res;
-end function;
-
-function clearAbstractInfo(ins: InstructionState) return InstructionState is
-    variable res: InstructionState := ins;
-begin
-    res.ip := (others => '0');
-    res.bits := (others => '0');
-    res.target := (others => '0');
-    res.result := (others => '0');
-    return res;
-end function;
-
-function clearRawInfo(ia: InstructionStateArray) return InstructionStateArray is
-   variable res: InstructionStateArray(ia'range) := ia;
-begin
-    for i in ia'range loop
-        res(i) := clearRawInfo(res(i));
-    end loop;
-    return res;
-end function;
-
-function clearFollowInfo(ia: InstructionStateArray) return InstructionStateArray is
-   variable res: InstructionStateArray(ia'range) := ia;
-begin
-    for i in ia'range loop
-        res(i) := clearRawInfo(res(i));
-    end loop;
-    return res;
-end function;
-
-function clearAbstractInfo(ia: InstructionStateArray) return InstructionStateArray is
-   variable res: InstructionStateArray(ia'range) := ia;
-begin
-    for i in ia'range loop
-        res(i) := clearAbstractInfo(res(i));
-    end loop;
-    return res;
-end function;
-
-
-function clearDbCounters(ins: InstructionState) return InstructionState is
-    variable res: InstructionState := ins;
-begin
-    res.tags.fetchCtr := (others => '0');
-    res.tags.decodeCtr := (others => '0');
-    res.tags.renameCtr := (others => '0');
-    res.tags.commitCtr := (others => '0');    
-    return res;
-end function;
-
-function clearDbCounters(isl: InstructionSlot) return InstructionSlot is
-    variable res: InstructionSlot := isl;
-begin   
-    res.ins := clearDbCounters(res.ins);
-    return res;
-end function;
-
-
-function clearRawInfo(ins: InstructionSlot) return InstructionSlot is
-    variable res: InstructionSlot := ins;
-begin
-    res.ins.ip := (others => '0');
-    res.ins.bits := (others => '0');
-    return res;
-end function;
-
-function clearFollowInfo(ins: InstructionSlot) return InstructionSlot is
-    variable res: InstructionSlot := ins;
-begin
-    res.ins.target := (others => '0');
-    res.ins.result := (others => '0');
-    return res;
-end function;
-
-function clearAbstractInfo(ins: InstructionSlot) return InstructionSlot is
-    variable res: InstructionSlot := ins;
-begin
-    res.ins.ip := (others => '0');
-    res.ins.bits := (others => '0');
-    res.ins.target := (others => '0');
-    res.ins.result := (others => '0');
-    return res;
-end function;
-
-function clearRawInfo(ia: InstructionSlotArray) return InstructionSlotArray is
-   variable res: InstructionSlotArray(ia'range) := ia;
-begin
-    for i in ia'range loop
-        res(i) := clearRawInfo(res(i));
-    end loop;
-    return res;
-end function;
-
-function clearFollowInfo(ia: InstructionSlotArray) return InstructionSlotArray is
-   variable res: InstructionSlotArray(ia'range) := ia;
-begin
-    for i in ia'range loop
-        res(i) := clearRawInfo(res(i));
-    end loop;
-    return res;
-end function;
-
-function clearAbstractInfo(ia: InstructionSlotArray) return InstructionSlotArray is
-   variable res: InstructionSlotArray(ia'range) := ia;
-begin
-    for i in ia'range loop
-        res(i) := clearAbstractInfo(res(i));
-    end loop;
-    return res;
-end function;
-
------
-
-function compactMask(vec: std_logic_vector) return std_logic_vector is
-    variable res: std_logic_vector(0 to 3) := (others => '0');
-    variable vec4: std_logic_vector(0 to 3) := vec;
-begin
-    case vec4 is
-        when "0000" =>
-            res := "0000";
-        when "1111" =>
-            res := "1111";
-        when "1000" | "0100" | "0010" | "0001" =>
-            res := "1000";
-        when "0111" | "1011" | "1101" | "1110" =>
-            res := "1110";
-        when others =>
-            res := "1100";
-    end case;
-    
-    return res;
-end function;
 
 -- REFAC
 function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector is
@@ -555,28 +366,7 @@ begin
     end case;
     return res;
 end function;
- 
 
-function setInstructionIP(ins: InstructionState; ip: Mword) return InstructionState is
-	variable res: InstructionState := ins;
-begin
-	res.ip := ip;
-	return res;
-end function;
-
-function setInstructionTarget(ins: InstructionState; target: Mword) return InstructionState is
-	variable res: InstructionState := ins;
-begin
-	res.target := target;
-	return res;
-end function;
-
-function setInstructionResult(ins: InstructionState; result: Mword) return InstructionState is
-	variable res: InstructionState := ins;
-begin
-	res.result := result;
-	return res;
-end function;
 
 function getAddressIncrement(ins: InstructionState) return Mword is
 	variable res: Mword := (others => '0');
@@ -636,53 +426,6 @@ begin
     tC := sub(tagA, tagB);
     return tC(PTR_SIZE-1);
 end function; 
-
-function getKillMask(content: InstructionStateArray; causing: InstructionState; execEventSig: std_logic; lateEventSig: std_logic)
-return std_logic_vector is
-	variable res: std_logic_vector(0 to content'length-1);
-begin
-	for i in 0 to content'length-1 loop
-		res(i) := (compareTagBefore(causing.tags.renameIndex, content(i).tags.renameIndex) and execEventSig)
-		   or lateEventSig;
-	end loop;
-	return res;
-end function;
-
-
-function stageArrayNext(livingContent, newContent: InstructionSlotArray; full, sending, receiving, kill, keepDest: std_logic)
-return InstructionSlotArray is 
-    constant LEN: natural := livingContent'length;
-	variable res: InstructionSlotArray(0 to LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-begin
-	res := livingContent;
-	if kill = '1' then
-		for i in 0 to LEN-1 loop
-			res(i).full := '0';
-		end loop;
-	end if;
-		
-	if receiving = '1' then -- take full
-		res := newContent;
-	elsif sending = '1' or full = '0' then -- take empty
-		-- CAREFUL: clearing result tags for empty slots
-		for i in 0 to LEN-1 loop
-		    if keepDest = '0' then
-                if CLEAR_DEST_SEL_ON_EMPTY then
-                   res(i).ins.physicalArgSpec.intDestSel := '0';
-                   res(i).ins.virtualArgSpec.floatDestSel := '0';
-                end if;		    
-                res(i).ins.physicalArgSpec.dest := (others => '0');
-			end if;
-			res(i).ins.controlInfo.newEvent := '0';
-		end loop;
-
-		for i in 0 to LEN-1 loop
-			res(i).full := '0';
-		end loop;
-	end if;			
-			
-	return res;
-end function;
 
 
 function getTagHigh(tag: std_logic_vector) return std_logic_vector is
@@ -995,15 +738,6 @@ begin
     return res;
 end function;
 
-function makeSlotArray(ia: InstructionStateArray; fm: std_logic_vector) return InstructionSlotArray is
-    variable res: InstructionSlotArray(ia'range) := (others => DEFAULT_INS_SLOT);
-begin
-    for i in res'range loop
-        res(i) := (fm(i), ia(i));
-    end loop;
-    return res;
-end function;
-
 
 function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
@@ -1143,36 +877,6 @@ begin
     return res;
 end function;
 
-
-function clearFloatDest(insArr: InstructionSlotArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(insArr'range) := insArr;
-begin
-    for i in res'range loop
-        if res(i).ins.physicalArgSpec.floatDestSel = '1' then
-           res(i).ins.physicalArgSpec.dest := (others => '0');
-        end if;
-    end loop;
-    return res;
-end function;
-
-function clearIntDest(insArr: InstructionSlotArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(insArr'range) := insArr;
-begin
-    for i in res'range loop
-        if res(i).ins.physicalArgSpec.floatDestSel = '0' then
-           res(i).ins.physicalArgSpec.dest := (others => '0');
-        end if;
-    end loop;
-    return res;
-end function;
-
-function mergePhysDests(insS0, insS1: InstructionSlot) return InstructionSlot is
-    variable res: InstructionSlot := insS0;
-begin
-    res.ins.physicalArgSpec.dest := insS0.ins.physicalArgSpec.dest or insS1.ins.physicalArgSpec.dest;
-    return res;
-end function;
-        
         
 function replaceDests(insVec: InstructionSlotArray; ria: RenameInfoArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(insVec'range) := insVec;
@@ -1212,20 +916,6 @@ begin
            exit;
        end if;
    end loop;
-   
-   if CLEAR_DEBUG_INFO then
-       res.ins.classInfo := DEFAULT_CLASS_INFO;
-       
-       res.ins.ip := (others => '0');
-       res.ins.bits := (others => '0');       
-       res.ins.target := (others => '0');
-       res.ins.result := (others => '0');
-       
-       res.ins.tags := DEFAULT_INSTRUCTION_TAGS;
-       res.ins.constantArgs := DEFAULT_CONSTANT_ARGS;
-       res.ins.virtualArgSpec := DEFAULT_ARG_SPEC;
-       res.ins.physicalArgSpec := DEFAULT_ARG_SPEC;    
-   end if;
    
    return res;
 end function;    
@@ -1341,24 +1031,6 @@ begin
     return  ct.hasException or ct.specialAction or ct.dbtrap; 
 end function;
 
-function clearDbCausing(ins: InstructionState) return InstructionState is
-    variable res: InstructionState := ins;
-begin
-    if CLEAR_DEBUG_INFO then
-        res := DEFAULT_INS_STATE;
-        
-        res.tags.renameIndex := ins.tags.renameIndex;
-        res.tags.intPointer := ins.tags.intPointer;
-        res.tags.floatPointer := ins.tags.floatPointer;
-        res.tags.bqPointer := ins.tags.bqPointer;
-        res.tags.sqPointer := ins.tags.sqPointer;
-        res.tags.lqPointer := ins.tags.lqPointer;
-     
-        res.target := ins.target;
-    end if;
-    return res;
-end function;
-
 
 function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
@@ -1406,16 +1078,6 @@ begin
     result(QUEUE_PTR_SIZE) := xored(QUEUE_PTR_SIZE) and not isNonzero(xored(QUEUE_PTR_SIZE-1 downto 0));
     return result;      
 end function;
-
-function mergeFP(dataInt: InstructionSlotArray; dataFloat: InstructionSlotArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := dataInt;
-begin
-    for i in res'range loop
-        res(i).full := dataFloat(i).full;
-        res(i).ins.physicalArgSpec.args := dataFloat(i).ins.physicalArgSpec.args;
-    end loop;
-    return res;
-end function; 
 
 
 function makeExecResult(isl: SchedulerState) return ExecResult is
@@ -1490,23 +1152,6 @@ begin
     end loop;
     return res;
 end function;
-
-
-    function setPhysSources(insVec: InstructionSlotArray;
-                            newPhysSources: PhysNameArray;
-                            newestSelector, depVec: std_logic_vector)
-    return InstructionSlotArray is
-        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-    begin
-        -- Assign src registers
-        for i in 0 to PIPE_WIDTH-1 loop                    
-            res(i).ins.physicalArgSpec.args(0) := newPhysSources(3*i+0);
-            res(i).ins.physicalArgSpec.args(1) := newPhysSources(3*i+1);
-            res(i).ins.physicalArgSpec.args(2) := newPhysSources(3*i+2);                 
-        end loop;
-
-        return res;
-    end function;
 
 
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,

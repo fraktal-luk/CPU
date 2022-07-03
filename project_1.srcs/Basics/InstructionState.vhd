@@ -385,7 +385,6 @@ type BufferEntryArray2D is array(0 to IBUFFER_SIZE-1, 0 to PIPE_WIDTH-1) of Buff
 
 type SchedulerState is record
     full: std_logic;
-	issued: std_logic;
     branchIns: std_logic;
 
     renameIndex: InsTag;
@@ -401,11 +400,6 @@ type SchedulerState is record
     immValue: Hword;
 
     zero: std_logic_vector(0 to 2);
-    readyNow: std_logic_vector(0 to 2);
-    readyNext: std_logic_vector(0 to 2);
-    readyM2:    std_logic_vector(0 to 2);
-    missing: std_logic_vector(0 to 2);
-    stored:  std_logic_vector(0 to 2);
     readNew: std_logic_vector(0 to 2);
     args: MwordArray(0 to 2);
 
@@ -415,7 +409,6 @@ end record;
 
 constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       full => '0',
-      issued => '0',
       branchIns => '0',
 
       renameIndex => (others => '0'),
@@ -431,11 +424,6 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       immValue => (others => '0'),
 
       zero => (others => '0'),
-      readyNow => (others=>'0'),
-      readyNext => (others=>'0'),
-      readyM2 => (others => '0'),
-      missing => (others=>'0'),
-      stored => (others => '0'),
       readNew => (others => '0'),
       args => (others => (others=>'0')),
       argLocsPipe => (others => (others => '0')),

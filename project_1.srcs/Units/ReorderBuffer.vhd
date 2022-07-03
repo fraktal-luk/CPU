@@ -69,6 +69,8 @@ architecture Behavioral of ReorderBuffer is
     begin
 
         for i in 0 to PIPE_WIDTH-1 loop
+                res(i).dbInfo := insVec(i).ins.dbInfo;
+                
             va := insVec(i).ins.virtualArgSpec;
             pa := insVec(i).ins.physicalArgSpec;
             ca := insVec(i).ins.constantArgs;
