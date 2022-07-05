@@ -39,6 +39,13 @@ function anyEvent(cpa: ControlPacketArray) return std_logic;
 
 function assignCommitNumbers(cpa: ControlPacketArray; ctr: Word) return ControlPacketArray;
 
+
+-- Debug functions
+function DB_addCommit(dbi: InstructionDebugInfo; commit: Word) return InstructionDebugInfo;
+function DB_addIndex(dbi: InstructionDebugInfo; index: Word) return InstructionDebugInfo;
+function DB_incIndex(dbi: InstructionDebugInfo) return InstructionDebugInfo;
+function DB_addCycle(dbi: InstructionDebugInfo; cycle: Word) return InstructionDebugInfo;
+
 end LogicSequence;
 
 
@@ -233,12 +240,50 @@ function assignCommitNumbers(cpa: ControlPacketArray; ctr: Word) return ControlP
 begin
     for i in res'range loop
         if cpa(i).controlInfo.full /= '1' then
---            res(i).dbInfo := DEFAULT_DEBUG_INFO;
+            res(i).dbInfo := DEFAULT_DEBUG_INFO;
         else
---            res(i).dbInfo.commit := addInt(ctr, i);
+            res(i).dbInfo := DB_addCommit(res(i).dbInfo, addInt(ctr, i));
         end if;
     end loop;
     return res;
 end function; 
+
+-- Debug functions
+function DB_addCommit(dbi: InstructionDebugInfo; commit: Word) return InstructionDebugInfo is
+    variable res: InstructionDebugInfo := dbi;
+begin
+    -- pragma synthesis off
+    res.commit := commit;
+    -- pragma synthesis on
+    return res;
+end function;
+
+function DB_addIndex(dbi: InstructionDebugInfo; index: Word) return InstructionDebugInfo is
+    variable res: InstructionDebugInfo := dbi;
+begin
+    -- pragma synthesis off
+    res.index := index;
+    -- pragma synthesis on
+    return res;
+end function;
+
+function DB_incIndex(dbi: InstructionDebugInfo) return InstructionDebugInfo is
+    variable res: InstructionDebugInfo := dbi;
+begin
+    -- pragma synthesis off
+    res.index := addInt(res.index, 1);
+    -- pragma synthesis on
+    return res;
+end function;
+
+function DB_addCycle(dbi: InstructionDebugInfo; cycle: Word) return InstructionDebugInfo is
+    variable res: InstructionDebugInfo := dbi;
+begin
+    -- pragma synthesis off
+    res.cycle := cycle;
+    -- pragma synthesis on
+    return res;
+end function;
+
 
 end LogicSequence;

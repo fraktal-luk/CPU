@@ -39,6 +39,10 @@ function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray;
 function assignSeqNum(cpa: ControlPacketArray; seqNum: Word) return ControlPacketArray;
 function assignSeqNum(ba: BufferEntryArray; seqNum: Word) return BufferEntryArray;
 
+
+function DB_addBitsAndIp(dbi: InstructionDebugInfo; bits: Word; ip: Mword) return InstructionDebugInfo;
+function DB_addSeqNum(dbi: InstructionDebugInfo; sn: Word) return InstructionDebugInfo;
+
 end LogicFront;
 
 
@@ -116,7 +120,6 @@ begin
     return bool2std(w(31 downto 26) = opcode2slv(ext1)) and bool2std(w(15 downto 10) = opcont2slv(ext1, jzR) or w(15 downto 10) = opcont2slv(ext1, jzR));
 end function;
 
-
 function getFrontEventMulti(predictedAddress, ip, target: Mword; ctrl: ControlPacket; fetchLine: WordArray(0 to FETCH_WIDTH-1))
 return InstructionSlotArray is
 	variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -138,12 +141,10 @@ begin
         res(i).ins.bits := fetchLine(i);
 		res(i).ins := decodeInstructionNew(res(i).ins); -- Here decoding!
 
---            res(i).ins.dbInfo := ctrl.dbInfo;
-            -- TODO: assign seqNum...
-
         res(i).ins.ip := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);    -- !! Only for BQ, indirect 
-            res(i).ins.dbInfo.bits := fetchLine(i);
-            res(i).ins.dbInfo.adr := res(i).ins.ip;
+
+            res(i).ins.dbInfo := ctrl.dbInfo;
+            res(i).ins.dbInfo := DB_addBitsAndIp(res(i).ins.dbInfo, fetchLine(i), res(i).ins.ip);
 
         res(i).ins.result := ip;
         res(i).ins.result(ALIGN_BITS-1 downto 0) := i2slv((i+1)*4, ALIGN_BITS); -- !! Only for BQ/  CAREFUL: not for short ins
@@ -285,7 +286,7 @@ begin
     res.constantArgs := isl.ins.constantArgs;
     res.argSpec := isl.ins.virtualArgSpec;
     
---        res.dbInfo := isl.ins.dbInfo;
+        res.dbInfo := isl.ins.dbInfo;
           -- controlInfo        ]
           -- classInfo          ] -> contained in ControlPacket
           -- specificOperation  ]
@@ -393,11 +394,11 @@ function assignSeqNum(cpa: ControlPacketArray; seqNum: Word) return ControlPacke
 begin
     for i in res'range loop
         if res(i).controlInfo.full /= '1' then
---            res(i).dbInfo := DEFAULT_DEBUG_INFO;
+            res(i).dbInfo := DEFAULT_DEBUG_INFO;
             next;
         end if;
 
---        res(i).dbInfo.seqNum := sn;
+        res(i).dbInfo := DB_addSeqNum(res(i).dbInfo, sn);
         sn := addInt(sn, 1);
     end loop;
     return res;
@@ -409,15 +410,35 @@ function assignSeqNum(ba: BufferEntryArray; seqNum: Word) return BufferEntryArra
 begin
     for i in res'range loop
         if res(i).full /= '1' then
---            res(i).dbInfo := DEFAULT_DEBUG_INFO;
+            res(i).dbInfo := DEFAULT_DEBUG_INFO;
             next;
         end if;
     
---        res(i).dbInfo.seqNum := sn;
+        res(i).dbInfo := DB_addSeqNum(res(i).dbInfo, sn);        
         sn := addInt(sn, 1);
     end loop;
     return res;
 end function;
 
+
+-- Debug functions
+function DB_addBitsAndIp(dbi: InstructionDebugInfo; bits: Word; ip: Mword) return InstructionDebugInfo is
+    variable res: InstructionDebugInfo := dbi;
+begin
+    -- pragma synthesis off
+    res.bits := bits;
+    res.adr := ip;
+    -- pragma synthesis on
+    return res;
+end function;
+
+function DB_addSeqNum(dbi: InstructionDebugInfo; sn: Word) return InstructionDebugInfo is
+    variable res: InstructionDebugInfo := dbi;
+begin
+    -- pragma synthesis off
+    res.seqNum := sn;
+    -- pragma synthesis on
+    return res;
+end function;
 
 end LogicFront;

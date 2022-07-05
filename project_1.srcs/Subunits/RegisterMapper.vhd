@@ -300,6 +300,16 @@ begin
         WRITE_PRODUCER_TABLES: process (clk)
             variable newestProducersUpdated: InsTagArray(0 to 31) := newestProducers;
             variable stableProducersUpdated: InsTagArray(0 to 31) := stableProducers;
+            
+            -- Debug functions
+            function DB_getTag(dbi: InstructionDebugInfo) return InsTag is
+                variable res: InsTag := (others => '0');
+            begin
+                -- pragma synthesis off
+                res := dbi.tag;
+                -- pragma synthesis on
+                return res;
+            end function;
         begin
             if rising_edge(clk) then
                 if rewind = '1' then
@@ -307,7 +317,7 @@ begin
                 elsif sendingToReserve = '1' then
                     for i in 0 to PIPE_WIDTH-1 loop
                         if reserve(i) = '1' then
-                            newestProducersUpdated(slv2u(selectReserve(i))) := reserveInfoA(i).dbInfo.tag;
+                            newestProducersUpdated(slv2u(selectReserve(i))) := DB_getTag(reserveInfoA(i).dbInfo);
                         end if;
                     end loop;
                 end if;
@@ -315,7 +325,7 @@ begin
                 if sendingToCommit = '1' then
                     for i in 0 to PIPE_WIDTH-1 loop
                         if commit(i) = '1' then
-                            stableProducersUpdated(slv2u(selectCommit(i))) := commitInfoA(i).dbInfo.tag;
+                            stableProducersUpdated(slv2u(selectCommit(i))) := DB_getTag(commitInfoA(i).dbInfo);
                             
                             -- if entry in newestMap is not overwritten up to its Commit, it becomes free of dependence on inflight ops
                             if newestProducersUpdated(slv2u(selectCommit(i))) = stableProducersUpdated(slv2u(selectCommit(i))) then

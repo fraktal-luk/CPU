@@ -143,8 +143,7 @@ begin
             
             if (reset or restartPC) = '1' then
                 running <= '1';
-                pcDbInfo <= DEFAULT_DEBUG_INFO;
-                pcDbInfo.index <= (others => '0');
+                pcDbInfo <= DB_addIndex(DEFAULT_DEBUG_INFO, (others => '0'));
             elsif killPC = '1' then
                 running <= '0';
                 pcDbInfo <= DEFAULT_DEBUG_INFO;
@@ -154,8 +153,7 @@ begin
             
             if sendingToPC = '1' then
                 pcCurrent <= pcNew;
-                pcDbInfo.cycle <= cycleCtr;
-                pcDbInfo.index <= addInt(pcDbInfo.index, 1);
+                pcDbInfo <= DB_addCycle(DB_incIndex(pcDbInfo), cycleCtr);
             end if;
         end if;
     end process;
@@ -229,7 +227,7 @@ begin
     pcDataSig.ip <= pcCurrent;
     pcDataSig.target <= pcNext;
 
---    pcDataSig.dbInfo <= pcDbInfo;
+    pcDataSig.dbInfo <= pcDbInfo;
 
     pcDataOut <= pcDataSig;
     ----------

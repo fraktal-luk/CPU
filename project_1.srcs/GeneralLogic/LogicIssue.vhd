@@ -25,15 +25,23 @@ constant PHYS_NAME_NONE: PhysName := (others => '0');
 constant IQ_HOLD_TIME: natural := 3;
 
 type DbDependency is record
+    -- pragma synthesis off
     producer: InsTag;
     cyclesWaiting: integer;
     cyclesReady: integer;
+    -- pragma synthesis on
+    
+    dummy: DummyType;
 end record;
 
 constant DEFAULT_DB_DEPENDENCY: DbDependency := (
+                                    -- pragma synthesis off
                                     producer => (others => 'U'),
                                     cyclesWaiting => -1,
-                                    cyclesReady => -1
+                                    cyclesReady => -1,
+                                    -- pragma synthesis on
+
+                                    dummy => DUMMY_VALUE
                                     );
 
 type DbDependencyArray is array(natural range <>) of DbDependency;
@@ -52,7 +60,7 @@ type ArgumentState is record
     srcPipe: SmallNumber;
     srcStage: SmallNumber;
     
-    --dbDep: DbDependency;   
+    dbDep: DbDependency;   
 end record;
 
 constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
@@ -65,10 +73,9 @@ constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
     waiting => '0',
     stored => '0',
     srcPipe => (others => '0'),
-    srcStage => (others => '0')
---    ,
+    srcStage => (others => '0'),
     
---    dbDep => DEFAULT_DB_DEPENDENCY
+    dbDep => DEFAULT_DB_DEPENDENCY
 ); 
 
 constant DEFAULT_ARG_STATE: ArgumentState := DEFAULT_ARGUMENT_STATE;
@@ -77,7 +84,7 @@ type ArgumentStateArray is array(natural range <>) of ArgumentState;
 
 
 type StaticInfo is record
-    --    dbInfo: InstructionDebugInfo;
+        dbInfo: InstructionDebugInfo;
 
     operation: SpecificOp;
     
@@ -93,7 +100,7 @@ type StaticInfo is record
 end record;
 
 constant DEFAULT_STATIC_INFO: StaticInfo := (
-    --    dbInfo => DEFAULT_DEBUG_INFO,
+        dbInfo => DEFAULT_DEBUG_INFO,
 
     operation => DEFAULT_SPECIFIC_OP,
     branchIns => '0',
@@ -274,6 +281,12 @@ function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vec
     function updateRenameIndex(content: SchedulerInfoArray) return SchedulerInfoArray;
     function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return SchedulerInfo;
 
+
+    -- Debug functions
+    function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency;
+    function DB_incCyclesWaiting(dbd: DbDependency) return DbDependency;
+    function DB_incCyclesReady(dbd: DbDependency) return DbDependency;
+
 end LogicIssue;
 
 
@@ -426,7 +439,7 @@ package body LogicIssue is
     function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo is
         variable res: StaticInfo;
     begin
---            res.dbInfo := isl.ins.dbInfo;
+            res.dbInfo := isl.ins.dbInfo;
             
         res.operation := isl.ins.specificOperation;
     
@@ -455,8 +468,8 @@ package body LogicIssue is
                        
         return res;
     end function; 
-    
-    
+
+
     function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo is
         variable res: DynamicInfo := DEFAULT_DYNAMIC_INFO;
     begin
@@ -472,9 +485,8 @@ package body LogicIssue is
         res.dest := ri.physicalDest;
     
         for i in 0 to 2 loop
---                res.argStates(i).dbDep.producer := ri.dbDepTags(i);
---                res.argStates(i).dbDep.cyclesWaiting := 0;
---                res.argStates(i).dbDep.cyclesReady := 0;
+        
+                res.argStates(i).dbDep := DB_setProducer(res.argStates(i).dbDep, ri.dbDepTags(i));
         
             res.argStates(i).used := ri.sourceSel(i);
             res.argStates(i).zero := ri.sourceConst(i);
@@ -748,25 +760,25 @@ package body LogicIssue is
             end loop;
         end if;
         
-        
+   
             for i in 0 to LEN-1 loop
                 for j in 0 to 2 loop
                     if res(i).dynamic.issued = '1' then
                         null;
                     elsif res(i).dynamic.argStates(j).waiting = '1' then
---                        res(i).dynamic.argStates(j).dbDep.cyclesWaiting := res(i).dynamic.argStates(j).dbDep.cyclesWaiting + 1;
+                        res(i).dynamic.argStates(j).dbDep := DB_incCyclesWaiting(res(i).dynamic.argStates(j).dbDep);
                     else
---                        res(i).dynamic.argStates(j).dbDep.cyclesReady := res(i).dynamic.argStates(j).dbDep.cyclesReady + 1;
+                        res(i).dynamic.argStates(j).dbDep := DB_incCyclesReady(res(i).dynamic.argStates(j).dbDep);
                     end if;
                 end loop;
             end loop;
-                
+
             for i in 0 to LEN-1 loop
                 if res(i).dynamic.full /= '1' then
---                    res(i).static.dbInfo := DEFAULT_DEBUG_INFO;
---                    res(i).dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
---                    res(i).dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
---                    res(i).dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
+                    res(i).static.dbInfo := DEFAULT_DEBUG_INFO;
+                    res(i).dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
+                    res(i).dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
+                    res(i).dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
                 end if;
             end loop;
             
@@ -1313,6 +1325,37 @@ package body LogicIssue is
         end loop;
         
         res := orSchedEntrySlot(a, b);
+        return res;
+    end function;
+
+    
+    -- Debug functions
+    function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency is
+        variable res: DbDependency := dbd;
+    begin
+        -- pragma synthesis off
+        res.producer := tag;
+        res.cyclesWaiting := 0;
+        res.cyclesReady := 0;
+        -- pragma synthesis on
+        return res;
+    end function;
+
+    function DB_incCyclesWaiting(dbd: DbDependency) return DbDependency is
+        variable res: DbDependency := dbd;
+    begin
+        -- pragma synthesis off
+        res.cyclesWaiting := res.cyclesWaiting + 1;
+        -- pragma synthesis on
+        return res;
+    end function;
+
+    function DB_incCyclesReady(dbd: DbDependency) return DbDependency is
+        variable res: DbDependency := dbd;
+    begin
+        -- pragma synthesis off
+        res.cyclesReady := res.cyclesReady + 1;
+        -- pragma synthesis on
         return res;
     end function;
 

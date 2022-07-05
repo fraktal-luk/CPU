@@ -83,6 +83,19 @@ architecture Behavioral of UnitRegManager is
     signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;    
 
     	signal newProducersInt, newProducersFloat, zeroProducers: InsTagArray(0 to 3*PIPE_WIDTH-1) := (others => (others => 'U'));
+
+    ------------
+        -- Debug functions
+        function DB_addTag(dbi: InstructionDebugInfo; tag: InsTag) return InstructionDebugInfo is
+            variable res: InstructionDebugInfo := dbi;
+        begin
+            -- pragma synthesis off
+            res.tag := tag;
+            -- pragma synthesis on
+            return res;
+        end function;
+    ---------------
+
       
     function renameGroupBase(
                             ia: BufferEntryArray;
@@ -104,6 +117,7 @@ architecture Behavioral of UnitRegManager is
         variable nToTake: integer := 0;
         variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
         variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
+        variable tag: InsTag := renameGroupCtrNext;
        	variable found: boolean := false;
     begin
         stores := getStoreMask(TMP_recodeMem(insVec));
@@ -126,7 +140,8 @@ architecture Behavioral of UnitRegManager is
 
         -- Setting tags
         for i in 0 to PIPE_WIDTH-1 loop
-                res(i).ins.dbInfo.tag := renameGroupCtrNext or i2slv(i, TAG_SIZE);
+                tag := renameGroupCtrNext or i2slv(i, TAG_SIZE);
+                res(i).ins.dbInfo := DB_addTag(res(i).ins.dbInfo, tag);-- renameGroupCtrNext or i2slv(i, TAG_SIZE);
         
             res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
             res(i).ins.tags.renameCtr := addInt(renameCtr, i);
