@@ -229,7 +229,7 @@ begin
     pcDataSig.ip <= pcCurrent;
     pcDataSig.target <= pcNext;
 
-    pcDataSig.dbInfo <= pcDbInfo;
+--    pcDataSig.dbInfo <= pcDbInfo;
 
     pcDataOut <= pcDataSig;
     ----------

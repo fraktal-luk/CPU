@@ -52,7 +52,7 @@ type ArgumentState is record
     srcPipe: SmallNumber;
     srcStage: SmallNumber;
     
-    dbDep: DbDependency;   
+    --dbDep: DbDependency;   
 end record;
 
 constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
@@ -65,9 +65,10 @@ constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
     waiting => '0',
     stored => '0',
     srcPipe => (others => '0'),
-    srcStage => (others => '0'),
+    srcStage => (others => '0')
+--    ,
     
-    dbDep => DEFAULT_DB_DEPENDENCY
+--    dbDep => DEFAULT_DB_DEPENDENCY
 ); 
 
 constant DEFAULT_ARG_STATE: ArgumentState := DEFAULT_ARGUMENT_STATE;
@@ -76,7 +77,7 @@ type ArgumentStateArray is array(natural range <>) of ArgumentState;
 
 
 type StaticInfo is record
-        dbInfo: InstructionDebugInfo;
+    --    dbInfo: InstructionDebugInfo;
 
     operation: SpecificOp;
     
@@ -92,7 +93,7 @@ type StaticInfo is record
 end record;
 
 constant DEFAULT_STATIC_INFO: StaticInfo := (
-        dbInfo => DEFAULT_DEBUG_INFO,
+    --    dbInfo => DEFAULT_DEBUG_INFO,
 
     operation => DEFAULT_SPECIFIC_OP,
     branchIns => '0',
@@ -425,7 +426,7 @@ package body LogicIssue is
     function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo is
         variable res: StaticInfo;
     begin
-            res.dbInfo := isl.ins.dbInfo;
+--            res.dbInfo := isl.ins.dbInfo;
             
         res.operation := isl.ins.specificOperation;
     
@@ -471,9 +472,9 @@ package body LogicIssue is
         res.dest := ri.physicalDest;
     
         for i in 0 to 2 loop
-                res.argStates(i).dbDep.producer := ri.dbDepTags(i);
-                res.argStates(i).dbDep.cyclesWaiting := 0;
-                res.argStates(i).dbDep.cyclesReady := 0;
+--                res.argStates(i).dbDep.producer := ri.dbDepTags(i);
+--                res.argStates(i).dbDep.cyclesWaiting := 0;
+--                res.argStates(i).dbDep.cyclesReady := 0;
         
             res.argStates(i).used := ri.sourceSel(i);
             res.argStates(i).zero := ri.sourceConst(i);
@@ -753,19 +754,19 @@ package body LogicIssue is
                     if res(i).dynamic.issued = '1' then
                         null;
                     elsif res(i).dynamic.argStates(j).waiting = '1' then
-                        res(i).dynamic.argStates(j).dbDep.cyclesWaiting := res(i).dynamic.argStates(j).dbDep.cyclesWaiting + 1;
+--                        res(i).dynamic.argStates(j).dbDep.cyclesWaiting := res(i).dynamic.argStates(j).dbDep.cyclesWaiting + 1;
                     else
-                        res(i).dynamic.argStates(j).dbDep.cyclesReady := res(i).dynamic.argStates(j).dbDep.cyclesReady + 1;
+--                        res(i).dynamic.argStates(j).dbDep.cyclesReady := res(i).dynamic.argStates(j).dbDep.cyclesReady + 1;
                     end if;
                 end loop;
             end loop;
                 
             for i in 0 to LEN-1 loop
                 if res(i).dynamic.full /= '1' then
-                    res(i).static.dbInfo := DEFAULT_DEBUG_INFO;
-                    res(i).dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
-                    res(i).dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
-                    res(i).dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
+--                    res(i).static.dbInfo := DEFAULT_DEBUG_INFO;
+--                    res(i).dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
+--                    res(i).dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
+--                    res(i).dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
                 end if;
             end loop;
             

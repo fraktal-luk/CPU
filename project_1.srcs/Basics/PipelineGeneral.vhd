@@ -1094,7 +1094,7 @@ function convertROBData(isa: InstructionSlotArray) return ControlPacketArray is
     variable res: ControlPacketArray(isa'range) := (others => DEFAULT_CONTROL_PACKET);
 begin
     for i in res'range loop
-            res(i).dbInfo := isa(i).ins.dbInfo;
+--            res(i).dbInfo := isa(i).ins.dbInfo;
         res(i).controlInfo := isa(i).ins.controlInfo;
         res(i).controlInfo.full := isa(i).full;
         res(i).classInfo := isa(i).ins.classInfo;
@@ -1124,7 +1124,7 @@ function getInsSlot(elem: BufferEntry) return InstructionSlot is
     variable res: InstructionSlot := DEFAULT_INS_SLOT;
 begin
     res.full := elem.full;
-        res.ins.dbInfo := elem.dbInfo;
+--        res.ins.dbInfo := elem.dbInfo;
     
     res.ins.controlInfo.firstBr := elem.firstBr;
     res.ins.classInfo.branchIns := elem.branchIns;

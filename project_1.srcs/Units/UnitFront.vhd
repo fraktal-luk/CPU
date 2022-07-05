@@ -111,7 +111,7 @@ begin
 
     stageDataInFetch0.ip <= pcDataIn.ip;
     stageDataInFetch0.target <= pcDataIn.target;
-        stageDataInFetch0.dbInfo <= pcDataIn.dbInfo;
+--        stageDataInFetch0.dbInfo <= pcDataIn.dbInfo;
 
     stageDataInFetch0.tags.fetchCtr <= fetchCounter when not CLEAR_DEBUG_INFO else (others => '0');  
     

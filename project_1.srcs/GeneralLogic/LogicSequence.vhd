@@ -233,9 +233,9 @@ function assignCommitNumbers(cpa: ControlPacketArray; ctr: Word) return ControlP
 begin
     for i in res'range loop
         if cpa(i).controlInfo.full /= '1' then
-            res(i).dbInfo := DEFAULT_DEBUG_INFO;
+--            res(i).dbInfo := DEFAULT_DEBUG_INFO;
         else
-            res(i).dbInfo.commit := addInt(ctr, i);
+--            res(i).dbInfo.commit := addInt(ctr, i);
         end if;
     end loop;
     return res;

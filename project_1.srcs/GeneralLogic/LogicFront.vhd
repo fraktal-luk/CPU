@@ -138,7 +138,7 @@ begin
         res(i).ins.bits := fetchLine(i);
 		res(i).ins := decodeInstructionNew(res(i).ins); -- Here decoding!
 
-            res(i).ins.dbInfo := ctrl.dbInfo;
+--            res(i).ins.dbInfo := ctrl.dbInfo;
             -- TODO: assign seqNum...
 
         res(i).ins.ip := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);    -- !! Only for BQ, indirect 
@@ -285,7 +285,7 @@ begin
     res.constantArgs := isl.ins.constantArgs;
     res.argSpec := isl.ins.virtualArgSpec;
     
-        res.dbInfo := isl.ins.dbInfo;
+--        res.dbInfo := isl.ins.dbInfo;
           -- controlInfo        ]
           -- classInfo          ] -> contained in ControlPacket
           -- specificOperation  ]
@@ -393,11 +393,11 @@ function assignSeqNum(cpa: ControlPacketArray; seqNum: Word) return ControlPacke
 begin
     for i in res'range loop
         if res(i).controlInfo.full /= '1' then
-            res(i).dbInfo := DEFAULT_DEBUG_INFO;
+--            res(i).dbInfo := DEFAULT_DEBUG_INFO;
             next;
         end if;
 
-        res(i).dbInfo.seqNum := sn;
+--        res(i).dbInfo.seqNum := sn;
         sn := addInt(sn, 1);
     end loop;
     return res;
@@ -409,11 +409,11 @@ function assignSeqNum(ba: BufferEntryArray; seqNum: Word) return BufferEntryArra
 begin
     for i in res'range loop
         if res(i).full /= '1' then
-            res(i).dbInfo := DEFAULT_DEBUG_INFO;
+--            res(i).dbInfo := DEFAULT_DEBUG_INFO;
             next;
         end if;
     
-        res(i).dbInfo.seqNum := sn;
+--        res(i).dbInfo.seqNum := sn;
         sn := addInt(sn, 1);
     end loop;
     return res;

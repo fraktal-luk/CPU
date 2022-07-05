@@ -126,8 +126,10 @@ begin
 
     events <= (lateEventSignal, execEventSignal, dataToBranch.tags);
 
-    execEvent <= (DEFAULT_DEBUG_INFO, execEventSignal, '0', InsTag'(others => '0'), branchResult.tags.bqPointerSeq, branchResult.target);
-    dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'),
+    execEvent <= (--DEFAULT_DEBUG_INFO,
+                    execEventSignal, '0', InsTag'(others => '0'), branchResult.tags.bqPointerSeq, branchResult.target);
+    dataFromSB <= (--DEFAULT_DEBUG_INFO,
+                    ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'),
                      zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
 
 
@@ -1088,7 +1090,7 @@ begin
 
          resultToIntWQ_Early <= subpipeM0_E0i when subpipeM0_E0i.full = '1' else
                                                              ExecResult'(
-                                                                 dbInfo => DEFAULT_DEBUG_INFO,
+--                                                                 dbInfo => DEFAULT_DEBUG_INFO,
                                                                  full => slotIssueI0.full,
                                                                  failed => '0',
                                                                  tag => slotIssueI0.renameIndex,

@@ -208,7 +208,7 @@ end record;
 type InstructionStateArray is array(integer range <>) of InstructionState;
 
 type ControlPacket is record
-        dbInfo: InstructionDebugInfo;
+    --    dbInfo: InstructionDebugInfo;
 
     controlInfo: InstructionControlInfo;
     classInfo: InstructionClassInfo;
@@ -302,7 +302,7 @@ constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
 constant DEFAULT_INS_STATE: InstructionState := DEFAULT_INSTRUCTION_STATE;
 
 constant DEFAULT_CONTROL_PACKET: ControlPacket := (
-    dbInfo => DEFAULT_DEBUG_INFO,
+    --dbInfo => DEFAULT_DEBUG_INFO,
 
     controlInfo => DEFAULT_CONTROL_INFO,
         classInfo => DEFAULT_CLASS_INFO,
@@ -328,7 +328,7 @@ constant DEFAULT_INS_SLOT: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 type InstructionSlotArray is array(integer range <>) of InstructionSlot;
 
 type ExecResult is record
-        dbInfo: InstructionDebugInfo;
+    --    dbInfo: InstructionDebugInfo;
     full: std_logic;
     failed: std_logic;
     tag: InsTag;
@@ -337,7 +337,7 @@ type ExecResult is record
 end record;
 
 constant DEFAULT_EXEC_RESULT: ExecResult := (
-    DEFAULT_DEBUG_INFO,
+    --DEFAULT_DEBUG_INFO,
     '0',
     '0',
     tag => (others => '0'),
@@ -349,7 +349,7 @@ type ExecResultArray is array(integer range <>) of ExecResult;
 
 
 type BufferEntry is record
-        dbInfo: InstructionDebugInfo;
+    --    dbInfo: InstructionDebugInfo;
     full: std_logic;
     firstBr: std_logic; -- TEMP
 
@@ -372,7 +372,7 @@ type BufferEntry is record
 end record;
 
 constant DEFAULT_BUFFER_ENTRY: BufferEntry := (
-        dbInfo => DEFAULT_DEBUG_INFO,
+--        dbInfo => DEFAULT_DEBUG_INFO,
     specificOperation => sop(None, opNone),
     constantArgs => DEFAULT_CONSTANT_ARGS,
     argSpec => DEFAULT_ARG_SPEC,

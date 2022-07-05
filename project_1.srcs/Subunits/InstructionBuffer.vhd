@@ -98,7 +98,7 @@ begin
                 
                 for i in 0 to stageDataIn'length-1 loop
                    dataOut_DB(i) <= content(p2i(pStart, IBUFFER_SIZE), i);
-                        dataOut(i).dbInfo <= content(p2i(pStart, IBUFFER_SIZE), i).dbInfo;
+--                        dataOut(i).dbInfo <= content(p2i(pStart, IBUFFER_SIZE), i).dbInfo;
                 end loop;
             end if;
 
