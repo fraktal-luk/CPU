@@ -1310,6 +1310,58 @@ begin
         committedSending => open
 	);
 
+    TMP_LMQ: block
+        signal s0, s1, s2, s3, s4, s5, s6, s7, s8: std_logic := '0';
+    begin
+        LOAD_MISS_QUEUE: entity work.StoreQueue(MissQueue)
+        generic map(
+            QUEUE_SIZE => 8
+            )
+        port map(
+            clk => clk,
+            reset => '0',
+            en => '0',
+    
+            acceptingOut => open,
+            almostFull => open,
+    
+            prevSendingRe => s0,                
+            prevSending => s1,
+            
+            renameMask => (others => '0'),
+            inputMask => (others => '0'),
+            systemMask => (others => '0'),
+                
+            renamedPtr => open,
+    
+            storeValuePtr => (others => '0'),
+            storeValueResult => DEFAULT_EXEC_RESULT,
+            
+            compareAddressInput => DEFAULT_EXEC_RESULT,
+            compareAddressInputOp => DEFAULT_SPECIFIC_OP,
+    
+            compareIndexInput => (others => '0'),        
+            preCompareOp => DEFAULT_SPECIFIC_OP,
+                 
+            selectedDataOutput => open,
+    
+            committing => '0',
+            commitMask => (others => '0'),
+            commitEffectiveMask => (others => '0'),
+    
+            lateEventSignal => lateEventSignal,
+            execEventSignal => execEventSignalDelayed,
+            execCausing => execCausingDelayedLQ, -- TODO: verify
+            
+            nextAccepting => '0',
+            
+            committedEmpty => open,
+            committedSending => open            
+        );
+        
+    end block;
+
+
 	MEMORY_INTERFACE: block
 		signal sysStoreAddressW: Mword := (others => '0');
 	begin
