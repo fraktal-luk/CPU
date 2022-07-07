@@ -29,6 +29,8 @@ type StaticGroupInfo is record
 end record;
 
 type StaticOpInfo is record
+        dbInfo: InstructionDebugInfo;
+
     virtualIntDestSel:     std_logic;
     virtualFloatDestSel:   std_logic;
     virtualDest:    RegName;    
@@ -45,6 +47,7 @@ constant DEFAULT_STATIC_GROUP_INFO: StaticGroupInfo := (
 );
 
 constant DEFAULT_STATIC_OP_INFO: StaticOpInfo := (
+        dbInfo => DEFAULT_DEBUG_INFO,
     virtualDest => (others => '0'),
     physicalDest => (others => '0'),
     others => '0'
@@ -133,20 +136,32 @@ function readDynamicOutput(content: DynamicOpInfoArray2D; ptr: SmallNumber) retu
 function readStaticGroupOutput(content: StaticGroupInfoArray; ptr: SmallNumber) return StaticGroupInfo;
 function readDynamicGroupOutput(content: DynamicGroupInfoArray; ptr: SmallNumber) return DynamicGroupInfo;
 
-procedure updateDynamicContent(signal content: inout DynamicOpInfoArray2D; --execInfo: InstructionSlotArray;
-                                                                            execSigs: ExecResultArray; constant CLUSTER: natural);
+procedure updateDynamicContent(signal content: inout DynamicOpInfoArray2D; execSigs: ExecResultArray; constant CLUSTER: natural);
 procedure updateDynamicGroupBranch(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionControlInfo; tag: InsTag; ind: natural);
 procedure updateDynamicContentBranch(signal content: inout DynamicOpInfoArray2D; useCtrl: std_logic; execInfo: InstructionControlInfo; tag: InsTag);
 procedure updateDynamicGroupMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionControlInfo; tag: InsTag; ind: natural);
 procedure updateDynamicContentMemEvent(signal content: inout DynamicOpInfoArray2D; useCtrl: std_logic; execInfo: InstructionControlInfo; tag: InsTag);
 
 function groupCompleted(insVec: InstructionSlotArray; da: DynamicOpInfoArray) return std_logic;
-   
+
+-- DEBUG
+function setDbInfo(isa: InstructionSlotArray; dsa: StaticOpInfoArray) return InstructionSlotArray;
+
 end package;
 
 
 
 package body LogicROB is
+
+-- DEBUG
+function setDbInfo(isa: InstructionSlotArray; dsa: StaticOpInfoArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := isa;
+begin
+    for i in isa'range loop
+        res(i).ins.dbInfo := dsa(i).dbInfo;
+    end loop;        
+    return res;
+end function;
 
 function getStaticGroupInfo(isa: InstructionSlotArray; ssl: InstructionSlot) return StaticGroupInfo is
     variable res: StaticGroupInfo;
@@ -169,6 +184,8 @@ end function;
 function getStaticOpInfo(isl: InstructionSlot) return StaticOpInfo is
     variable res: StaticOpInfo;
 begin
+        res.dbInfo := isl.ins.dbInfo;
+
     res.virtualIntDestSel := isl.ins.virtualArgSpec.intDestSel;
     res.virtualFloatDestSel := isl.ins.virtualArgSpec.floatDestSel;     
     res.virtualDest := isl.ins.virtualArgSpec.dest(4 downto 0);    

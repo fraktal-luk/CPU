@@ -49,7 +49,7 @@ end InstructionBuffer;
 
 architecture Implem of InstructionBuffer is
    signal content: BufferEntryArray2D := (others => (others => DEFAULT_BUFFER_ENTRY));
-   signal dataOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
+   signal dataOut, dataOut_DB: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
    
    signal serialMemInput, serialMemOutput: std_logic_vector(MEM_WIDTH-1 downto 0) := (others => '0');
    signal serialMem: SerialMemory := (others=> (others => '0'));
@@ -84,13 +84,22 @@ begin
             dataOutFull <= (memReading or memBypassing or dataOutStalled) and not execEventSignal;
 
             if prevSending = '1' then
-                 serialMem(p2i(pEnd, IBUFFER_SIZE)) <= serialMemInput;                     
+                 serialMem(p2i(pEnd, IBUFFER_SIZE)) <= serialMemInput;
+                 
+                 for i in 0 to stageDataIn'length-1 loop
+                    content(p2i(pEnd, IBUFFER_SIZE), i) <= stageDataIn(i);
+                 end loop;                    
             end if;
             
             if memBypassing = '1' then
                 dataOut <= stageDataIn;
             elsif memReading = '1' then                        
                 dataOut <= deserializeEntryArray(serialMem(p2i(pStart, IBUFFER_SIZE)));
+                
+                for i in 0 to stageDataIn'length-1 loop
+                   dataOut_DB(i) <= content(p2i(pStart, IBUFFER_SIZE), i);
+                        dataOut(i).dbInfo <= content(p2i(pStart, IBUFFER_SIZE), i).dbInfo;
+                end loop;
             end if;
 
             pStart <= pStartNext;

@@ -40,7 +40,6 @@ entity ReorderBuffer is
 		nextAccepting: in std_logic;
 		sendingOut: out std_logic; 
 		
-		--outputData: out InstructionSlotArray(0 to PIPE_WIDTH-1);
         robOut: out ControlPacketArray(0 to PIPE_WIDTH-1);
 
 		outputArgInfoI: out RenameInfoArray(0 to PIPE_WIDTH-1);
@@ -70,6 +69,8 @@ architecture Behavioral of ReorderBuffer is
     begin
 
         for i in 0 to PIPE_WIDTH-1 loop
+                res(i).dbInfo := insVec(i).ins.dbInfo;
+                
             va := insVec(i).ins.virtualArgSpec;
             pa := insVec(i).ins.physicalArgSpec;
             ca := insVec(i).ins.constantArgs;
@@ -124,7 +125,7 @@ begin
 	causingPtr <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN_LONG;
 	
     NEW_DEV: block
-        signal staticInput, staticOutput, staticOutput_Pre: StaticOpInfoArray;
+        signal staticInput, staticOutput, staticOutput_Pre, staticOutput_PreDB: StaticOpInfoArray;
         signal dynamicInput, dynamicOutput, dynamicOutput_Pre: DynamicOpInfoArray;
 
         signal staticGroupInput, staticGroupOutput, staticGroupOutput_Pre: StaticGroupInfo;
@@ -161,6 +162,8 @@ begin
         staticOutput_Pre <= deserializeStaticInfoA(serialMemContent(p2i(startPtrNext, ROB_SIZE)));                    
         staticGroupOutput_Pre <= deserializeStaticGroupInfo(serialMemContent(p2i(startPtrNext, ROB_SIZE)));
 
+            staticOutput_PreDB <= readStaticOutput(staticContent, startPtrNext);
+
 
         SYNCH: process (clk)
         begin
@@ -184,7 +187,7 @@ begin
                 end if;
                    
                 -- Read output
-                staticOutput <= readStaticOutput(staticContent, startPtrNext);
+                staticOutput <= staticOutput_PreDB; --readStaticOutput(staticContent, startPtrNext); -- DB
 
                 dynamicOutput <= dynamicOutput_Pre;
                 dynamicGroupOutput <= dynamicGroupOutput_Pre;
@@ -193,7 +196,8 @@ begin
                 
                 staticGroupOutput <= staticGroupOutput_Pre;
                   
-                outputDataSig <= outputDataSig_Pre;
+                outputDataSig <= setDbInfo(outputDataSig_Pre, staticOutput_PreDB);
+                
                 outputCompleted <= outputCompleted_Pre;             
             end if;
         end process;
@@ -242,8 +246,6 @@ begin
         end process;
 
     end block;
-
---    outputData <= setDestFlags(outputDataSig);
     
     robOut <= convertROBData(outputDataSig);
     

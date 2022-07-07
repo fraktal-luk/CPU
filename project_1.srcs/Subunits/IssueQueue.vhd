@@ -21,14 +21,10 @@ use work.ForwardingNetwork.all;
 entity IssueQueue is
 	generic(
 		IQ_SIZE: natural := 12;
-		--IS_FP: boolean := false;
-		--ALT_INPUT: boolean := false;
 		DONT_MATCH1: boolean := false;
 		FORWARDING: ForwardingModeArray := (0 => (-100, false));  -- Can be used immediately
 		FORWARDING1: ForwardingModeArray := (0 => (-100, false));
 		FORWARDING_D: ForwardingModeArray := (0 => (-100, false)) -- Can be used with 1 cycle delay
-		--NONSHIFT: boolean := true --
-		                     -- false
 	);
 	port(
 		clk: in std_logic;

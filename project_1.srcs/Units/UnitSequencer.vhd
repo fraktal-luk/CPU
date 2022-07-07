@@ -19,7 +19,7 @@ use work.LogicRenaming.all;
 
 entity UnitSequencer is
     generic(
-        DEBUG_FILE_PREFIX: string
+        DEBUG_FILE_PREFIX: string -- UNUSED
     );
 	port(
     clk: in std_logic;
@@ -41,27 +41,24 @@ entity UnitSequencer is
     lateEventOut: out std_logic;    
     lateEventSetPC: out std_logic;
     
-    frontEvent_N: in ExecResult;
-    execEvent_N: in ExecResult;
-    lateEvent_N: out ExecResult;
+    frontEvent: in ExecResult;
+    execEvent: in ExecResult;
+    lateEvent: out ExecResult;
 
     -- Interface PC <-> front pipe
---    pcSending: out std_logic;        
---    pcDataLiving: out InstructionState;   -- !!!!
-        pcDataOut: out ControlPacket;
+    pcDataOut: out ControlPacket;
         
     -- Interface with ROB
     commitAccepting: out std_logic;
     
-    --robDataLiving: in InstructionSlotArray(0 to PIPE_WIDTH-1); -- !!!!
-        robData_N: in ControlPacketArray(0 to PIPE_WIDTH-1);
-    robSpecial_N: in SpecificOp;
+    robData: in ControlPacketArray(0 to PIPE_WIDTH-1);
+    robSpecial: in SpecificOp;
     
     sendingFromROB: in std_logic;
     
-    bqTargetData_N: in ExecResult;
+    bqTargetData: in ExecResult;
     
-    dataFromSB_N: in ExecResult;
+    dataFromSB: in ExecResult;
     
     sbEmpty: in std_logic;
     sbSending: in std_logic;       
@@ -84,31 +81,23 @@ architecture Behavioral of UnitSequencer is
 	signal resetSig, enSig: std_logic := '0';							
 
     signal pcDataSig: ControlPacket := DEFAULT_CONTROL_PACKET;
-    
+
     signal pcNew, pcCurrent, pcNext: Mword := (others => '0');        
-    signal stageDataOutPC: InstructionState := DEFAULT_INSTRUCTION_STATE;
     signal sendingToPC, sendingOutPC, acceptingOutPC, sendingToLastEffective, running,
            eventOccurred, killPC, eventCommitted, intCommitted, intSuppressed, lateEventSending, dbtrapOn, restartPC,    
-           sendingToLateCausing, committingEvent, sendingToCommit, sendingOutCommit, commitLocked,
-                T_fullPC, T_fullLastEffective, T_fullLateCausing: std_logic := '0';
+           sendingToLateCausing, committingEvent, sendingToCommit, sendingOutCommit, commitLocked, fullPC, fullLateCausing: std_logic := '0';
 
     signal commitGroupCtr, commitGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
     signal commitGroupCtrInc, commitGroupCtrIncNext: InsTag := INITIAL_GROUP_TAG_INC;
 
-    signal --stageDataLateCausingOut,
-            stageDataLastEffectiveInA,
-            --stageDataLastEffectiveOutA,
-            stageDataLateCausingIn
-            --special
-            :
-                        InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
+    signal stageDataLateCausingIn, stageDataLastEffectiveInA: ControlPacket := DEFAULT_CONTROL_PACKET;
 
-        signal  lastEffectiveCt, lateCausingCt: InstructionControlInfo := DEFAULT_CONTROL_INFO;
-        signal  lastEffectiveTarget, lateCausingIP, lateCausingResult, lateCausingTarget: Mword := (others => '0');
+    signal lastEffectiveCt, lateCausingCt: InstructionControlInfo := DEFAULT_CONTROL_INFO;
+    signal lastEffectiveTarget, lateCausingIP, lateCausingResult, lateCausingTarget: Mword := (others => '0');
 
     signal intTypeCommitted: std_logic_vector(0 to 1) := (others => '0');
      
-    signal commitCtr, commitCtrNext: Word := (others => '0');
+    signal commitCtr, commitCtrNext, cycleCtr: Word := (others => '0');
 
     signal sysRegArray: MwordArray(0 to 31) := (0 => (others => '1'), others => (others => '0'));    
     signal specialOp: SpecificOp := DEFAULT_SPECIFIC_OP;
@@ -118,9 +107,13 @@ architecture Behavioral of UnitSequencer is
     alias linkRegInt is sysRegArray(3);
     alias savedStateExc is sysRegArray(4);
     alias savedStateInt is sysRegArray(5);
-
+    
+    signal pcDbInfo, dbInfo_0, dbInfo_1, dbInfo_2: InstructionDebugInfo := DEFAULT_DEBUG_INFO;
+    
     constant HAS_RESET_SEQ: std_logic := '0';
     constant HAS_EN_SEQ: std_logic := '0';
+
+      signal robDataCommitted: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 
       signal  ch0, ch1, ch2, ch3, ch4, ch5: std_logic := '0';
 begin
@@ -133,14 +126,12 @@ begin
     lateEventOut <= lateEventSending;
     lateEventSetPC <= lateEventSending;
         
-    lateEvent_N.full <= lateEventSending;
-    lateEvent_N.value <= --stageDataLateCausingOut.ins.target;
-                            lateCausingTarget;
+    lateEvent.full <= lateEventSending;
+    lateEvent.value <= lateCausingTarget;
     
-    pcNew <= newPCData(lateEventSending,    --stageDataLateCausingOut.ins.target,
-                                                lateCausingTarget,
-                                            execEventSignal, execEvent_N.value,
-                                            frontEventSignal, frontEvent_N.value,
+    pcNew <= newPCData(lateEventSending,    lateCausingTarget,
+                                            execEventSignal, execEvent.value,
+                                            frontEventSignal, frontEvent.value,
                                             pcNext).ip;
 
     sendingToPC <= running or eventOccurred;
@@ -148,48 +139,44 @@ begin
     RUNNING_STATE: process(clk)
     begin
         if rising_edge(clk) then
+            cycleCtr <= addInt(cycleCtr, 1);
+            
             if (reset or restartPC) = '1' then
                 running <= '1';
+                pcDbInfo <= DB_addIndex(DEFAULT_DEBUG_INFO, (others => '0'));
             elsif killPC = '1' then
                 running <= '0';
+                pcDbInfo <= DEFAULT_DEBUG_INFO;
             end if;
-            
-            T_fullPC <= bool2std(sendingToPC = '1');
+
+            fullPC <= bool2std(sendingToPC = '1');
             
             if sendingToPC = '1' then
                 pcCurrent <= pcNew;
+                pcDbInfo <= DB_addCycle(DB_incIndex(pcDbInfo), cycleCtr);
             end if;
         end if;
     end process;
 
-    sendingOutPC <= T_fullPC and not (eventOccurred or lateEventSending);   
-    lateEventSending <= T_fullLateCausing;      
+    sendingOutPC <= fullPC and not (eventOccurred or lateEventSending);   
+    lateEventSending <= fullLateCausing;      
     
     pcNext <= getNextPC(pcCurrent, (others => '0'), '0');
-
-    stageDataOutPC.ip <= pcCurrent;
-    stageDataOutPC.target <= pcNext; -- CAREFUL: Attaching next address from line predictor. Correct?
-
-    ----------------------------------------------------------------------
     
     SYS_REGS: block
         signal sysStoreAllow: std_logic := '0';
-        signal sysStoreAddress: slv5 := (others => '0'); 
-        signal sysStoreValue: Mword := (others => '0'); 
+        signal sysStoreAddress: slv5 := (others => '0');
+        signal sysStoreValue: Mword := (others => '0');
         signal excInfoUpdate, intInfoUpdate: std_logic := '0';
     begin
-        sysStoreAllow <= dataFromSB_N.full;
-        sysStoreAddress <= dataFromSB_N.dest(4 downto 0);
-        sysStoreValue <= datafromSB_N.value;
+        sysStoreAllow <= dataFromSB.full;
+        sysStoreAddress <= dataFromSB.dest(4 downto 0);
+        sysStoreValue <= datafromSB.value;
     
         excInfoUpdate <= lateEventSending       -- TODO: what about dbtrap?
-                                        --and (stageDataLateCausingOut.ins.controlInfo.hasException or --(bool2std(special.ins.specificOperation.system = opCall)))
-                                        and (lateCausingCt.hasException or --(bool2std(special.ins.specificOperation.system = opCall)))
-                                                                                                     (bool2std(specialOp.system = opCall)))
-                                        --and not stageDataLateCausingOut.ins.controlInfo.hasInterrupt;
+                                        and (lateCausingCt.hasException or (bool2std(specialOp.system = opCall)))
                                         and not lateCausingCt.hasInterrupt;
-        intInfoUpdate <= lateEventSending and --stageDataLateCausingOut.ins.controlInfo.hasInterrupt;
-                                              lateCausingCt.hasInterrupt;
+        intInfoUpdate <= lateEventSending and lateCausingCt.hasInterrupt;
     
         CLOCKED: process(clk)
         begin                    
@@ -204,21 +191,18 @@ begin
     
                 -- Writing specialized fields on events
                 if lateEventSending = '1' then
-                    currentState <= --stageDataLateCausingOut.ins.result;
-                                    lateCausingResult;                  
+                    currentState <= lateCausingResult;                  
                 end if;
                 
                 -- NOTE: writing to link registers after sys reg writing gives priority to the former,
                 --            but committing a sysMtc shouldn't happen in parallel with any control event
                 if excInfoUpdate = '1' then
-                    linkRegExc <= --stageDataLateCausingOut.ins.ip;
-                                    lateCausingIP;
+                    linkRegExc <= lateCausingIP;
                     savedStateExc <= currentState;
                 end if;
                 
                 if intInfoUpdate = '1' then
-                    linkRegInt <= --stageDataLateCausingOut.ins.ip;
-                                    lateCausingIP;
+                    linkRegInt <= lateCausingIP;
                     savedStateInt <= currentState;
                 end if;
                 
@@ -239,14 +223,13 @@ begin
     end block;
     
     -- OUTPUT
---    pcDataLiving <= stageDataOutPC;
---    pcSending <= sendingOutPC;
-        
-        pcDataSig.controlInfo.full <= sendingOutPC;
-        pcDataSig.ip <= pcCurrent;
-        pcDataSig.target <= pcNext;
-        
-        pcDataOut <= pcDataSig;
+    pcDataSig.controlInfo.full <= sendingOutPC;
+    pcDataSig.ip <= pcCurrent;
+    pcDataSig.target <= pcNext;
+
+    pcDataSig.dbInfo <= pcDbInfo;
+
+    pcDataOut <= pcDataSig;
     ----------
 
 
@@ -259,17 +242,18 @@ begin
            commitGroupCtr <= commitGroupCtrNext;
            commitGroupCtrInc <= commitGroupCtrIncNext;
            commitCtr <= commitCtrNext;
-                                  
+                              
            if sendingFromROB = '1' then
-               --special.ins.specificOperation <= robSpecial_N;
-               specialOp <= robSpecial_N;
-           end if;           
+               specialOp <= robSpecial;
+               
+                -- DEBUG
+                robDataCommitted <= assignCommitNumbers(robData, commitCtr);
+           end if;        
         end if;
     end process;        
     
     sendingToCommit <= sendingFromROB;
-    --commitCtrNext <= addInt(commitCtr, countOnes(extractFullMask(robDataLiving))) when sendingToCommit = '1' else commitCtr;
-        commitCtrNext <= addInt(commitCtr, countOnes(extractFullMask(robData_N))) when sendingToCommit = '1' else commitCtr;
+    commitCtrNext <= addInt(commitCtr, countOnes(extractFullMask(robData))) when sendingToCommit = '1' else commitCtr;
 
     EVENT_HANDLING: block
     begin
@@ -280,20 +264,16 @@ begin
         --            When committing a taken branch -> fill with target from BQ output
         --            When committing normal op -> increment by length of the op
         --            The 'target' field will be used to update return address for exc/int                             
-       stageDataLastEffectiveInA <= getNewEffective(sendingToCommit,-- robDataLiving,-- bqTargetData,
-                                                            robData_N,
-                                                            bqTargetData_N.full,
-                                                            bqTargetData_N.value,
-                                                       --stageDataLastEffectiveOutA.ins.target,
-                                                            lastEffectiveTarget,
-                                                       --DEFAULT_INS_STATE,--stageDataLateCausingOut.ins, -- USES: whole, only when lateEventSending
-                                                       --stageDataLateCausingOut.ins.controlInfo, stageDataLateCausingOut.ins.target,
-                                                            lateCausingCt, lateCausingTarget,
-                                                       lateEventSending);                                                                                   
+        stageDataLastEffectiveInA <= getNewEffective(sendingToCommit,
+                                                        robData,
+                                                        bqTargetData.full,
+                                                        bqTargetData.value,
+                                                        lastEffectiveTarget,
+                                                        lateCausingCt, lateCausingTarget,
+                                                        lateEventSending);
+                                                        
         sendingToLastEffective <= sendingToCommit or lateEventSending;
-    
-        committingEvent <= sendingToCommit and anyEvent(--robDataLiving); -- ???
-                                                        robData_N);
+        committingEvent <= sendingToCommit and anyEvent(robData);
     
         EVENT_INCOMING: process(clk)
         begin
@@ -321,43 +301,34 @@ begin
                 if lateEventSending = '1' then
                     commitLocked <= '0';
                 end if;
-                
-                    if sendingToLastEffective = '1' then
-                        --stageDataLastEffectiveOutA <= stageDataLastEffectiveInA;
-                            lastEffectiveCt <= stageDataLastEffectiveInA.ins.controlInfo;
-                            lastEffectiveTarget <= stageDataLastEffectiveInA.ins.target;
-                    else
-                        --stageDataLastEffectiveOutA.full <= '0';
-                        --stageDataLastEffectiveOutA.ins.controlInfo.newEvent <= '0';
-                            lastEffectiveCt.full <= '0';
-                            lastEffectiveCt.newEvent <= '0';-- <= stageDataLastEffectiveInA.ins.controlInfo;
-                    end if;
 
-                    T_fullLateCausing <= sendingToLateCausing;
-                    if sendingToLateCausing = '1' then
-                        --stageDataLateCausingOut <= stageDataLateCausingIn;
-                           lateCausingCt <= stageDataLateCausingIn.ins.controlInfo;
-                           lateCausingIP <= stageDataLateCausingIn.ins.ip;
-                           lateCausingResult <= stageDataLateCausingIn.ins.result;
-                           lateCausingTarget <= stageDataLateCausingIn.ins.target;
-                    else
-                        --stageDataLateCausingOut.full <= '0';
-                        --stageDataLateCausingOut.ins.controlInfo.newEvent <= '0';
-                           lateCausingCt.full <= '0';
-                           lateCausingCt.newEvent <= '0'; 
-                    end if;
+                if sendingToLastEffective = '1' then
+                    lastEffectiveCt <= stageDataLastEffectiveInA.controlInfo;
+                    lastEffectiveTarget <= stageDataLastEffectiveInA.target;
+                else
+                    lastEffectiveCt.full <= '0';
+                    lastEffectiveCt.newEvent <= '0';
+                end if;
+
+                fullLateCausing <= sendingToLateCausing;
+                if sendingToLateCausing = '1' then
+                   lateCausingCt <= stageDataLateCausingIn.controlInfo;
+                   lateCausingIP <= stageDataLateCausingIn.ip;
+                   lateCausingResult <= stageDataLateCausingIn.nip;
+                   lateCausingTarget <= stageDataLateCausingIn.target;
+                else
+                   lateCausingCt.full <= '0';
+                   lateCausingCt.newEvent <= '0'; 
+                end if;
             end if;
         end process;
 
         sendingToLateCausing <= (eventCommitted or intCommitted) and sbEmpty;
 
-        stageDataLateCausingIn <= (sendingToLateCausing,
-                                                getLatePCData(DEFAULT_INSTRUCTION_STATE,--stageDataLastEffectiveOutA.ins, -- USES: seems whole; certain: .target, .ip, .controlInfo
-                                                                    --stageDataLastEffectiveOutA.ins.controlInfo, stageDataLastEffectiveOutA.ins.target,
-                                                                        lastEffectiveCt, lastEffectiveTarget,
-                                                                    intCommitted, intTypeCommitted, currentState,
-                                                                    linkRegExc, linkRegInt, savedStateExc, savedStateInt, DEFAULT_INS_SLOT,-- special,
-                                                                    specialOp)); 
+        stageDataLateCausingIn <= getLatePCData(lastEffectiveCt, lastEffectiveTarget,
+                                                intCommitted, intTypeCommitted, currentState,
+                                                linkRegExc, linkRegInt, savedStateExc, savedStateInt,-- DEFAULT_INS_SLOT,
+                                                specialOp);
     end block;
 
     intAllowOut <= not eventCommitted and not lateEventSending;
@@ -366,12 +337,10 @@ begin
     
     -- TODO: could be moved to RegisterManager because seems used only there 
     commitGroupCtrOut <= commitGroupCtr;
-    
-    
+   
     commitAccepting <= not commitLocked; -- Blocked while procesing event
                         
-    doneSig <= eventCommitted and --bool2std(special.ins.specificOperation.system = opSend);
-                                  bool2std(specialOp.system = opSend);
+    doneSig <= eventCommitted and bool2std(specialOp.system = opSend);
     failSig <= eventCommitted and bool2std(specialOp.system = opError); 
             
 end Behavioral;

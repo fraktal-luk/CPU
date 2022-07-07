@@ -24,6 +24,27 @@ constant PHYS_NAME_NONE: PhysName := (others => '0');
 
 constant IQ_HOLD_TIME: natural := 3;
 
+type DbDependency is record
+    -- pragma synthesis off
+    producer: InsTag;
+    cyclesWaiting: integer;
+    cyclesReady: integer;
+    -- pragma synthesis on
+    
+    dummy: DummyType;
+end record;
+
+constant DEFAULT_DB_DEPENDENCY: DbDependency := (
+                                    -- pragma synthesis off
+                                    producer => (others => 'U'),
+                                    cyclesWaiting => -1,
+                                    cyclesReady => -1,
+                                    -- pragma synthesis on
+
+                                    dummy => DUMMY_VALUE
+                                    );
+
+type DbDependencyArray is array(natural range <>) of DbDependency;
 
 type ArgumentState is record
     used: std_logic;
@@ -37,7 +58,9 @@ type ArgumentState is record
     waiting: std_logic;
     stored:  std_logic;
     srcPipe: SmallNumber;
-    srcStage: SmallNumber;    
+    srcStage: SmallNumber;
+    
+    dbDep: DbDependency;   
 end record;
 
 constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
@@ -50,7 +73,9 @@ constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
     waiting => '0',
     stored => '0',
     srcPipe => (others => '0'),
-    srcStage => (others => '0')
+    srcStage => (others => '0'),
+    
+    dbDep => DEFAULT_DB_DEPENDENCY
 ); 
 
 constant DEFAULT_ARG_STATE: ArgumentState := DEFAULT_ARGUMENT_STATE;
@@ -59,6 +84,8 @@ type ArgumentStateArray is array(natural range <>) of ArgumentState;
 
 
 type StaticInfo is record
+        dbInfo: InstructionDebugInfo;
+
     operation: SpecificOp;
     
     branchIns: std_logic;
@@ -73,6 +100,8 @@ type StaticInfo is record
 end record;
 
 constant DEFAULT_STATIC_INFO: StaticInfo := (
+        dbInfo => DEFAULT_DEBUG_INFO,
+
     operation => DEFAULT_SPECIFIC_OP,
     branchIns => '0',
     
@@ -189,12 +218,11 @@ return SchedulerInfoArray;
 
 function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector;
 
-function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;-- fnm: ForwardingMap;
+function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
                 dynamic: boolean;
                 selection: boolean;
                 dontMatch1: boolean;
-                forwardingModes0--, forwardingModes1
-                : ForwardingModeArray
+                forwardingModes0: ForwardingModeArray
             )
 return SchedulerInfoArray;
 
@@ -252,6 +280,12 @@ function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vec
 
     function updateRenameIndex(content: SchedulerInfoArray) return SchedulerInfoArray;
     function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return SchedulerInfo;
+
+
+    -- Debug functions
+    function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency;
+    function DB_incCyclesWaiting(dbd: DbDependency) return DbDependency;
+    function DB_incCyclesReady(dbd: DbDependency) return DbDependency;
 
 end LogicIssue;
 
@@ -405,6 +439,8 @@ package body LogicIssue is
     function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo is
         variable res: StaticInfo;
     begin
+            res.dbInfo := isl.ins.dbInfo;
+            
         res.operation := isl.ins.specificOperation;
     
         res.branchIns := isl.ins.classInfo.branchIns;
@@ -432,8 +468,8 @@ package body LogicIssue is
                        
         return res;
     end function; 
-    
-    
+
+
     function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo is
         variable res: DynamicInfo := DEFAULT_DYNAMIC_INFO;
     begin
@@ -449,6 +485,9 @@ package body LogicIssue is
         res.dest := ri.physicalDest;
     
         for i in 0 to 2 loop
+        
+                res.argStates(i).dbDep := DB_setProducer(res.argStates(i).dbDep, ri.dbDepTags(i));
+        
             res.argStates(i).used := ri.sourceSel(i);
             res.argStates(i).zero := ri.sourceConst(i);
 
@@ -518,8 +557,6 @@ package body LogicIssue is
         res.immValue := info.static.immValue;
             
         res.zero := info.static.zero;
-            
-        res.issued := info.dynamic.issued;
         
         res.renameIndex := info.dynamic.renameIndex;
 
@@ -537,7 +574,6 @@ package body LogicIssue is
         res.argSpec.dest := info.dynamic.dest;
 
         for k in 0 to 2 loop
-            res.missing(k) := info.dynamic.argStates(k).waiting;
             res.argLocsPipe(k) := info.dynamic.argStates(k).srcPipe;
             res.argSrc(k) := info.dynamic.argStates(k).srcStage;
         end loop;
@@ -595,21 +631,15 @@ package body LogicIssue is
     begin
     
         if REGS_ONLY then
-            res.stored := (others => '0');
             return res;    
         end if;
     
         if res.zero(0) = '1' then
             res.args(0) := (others => '0');
-            res.stored(0) := '1';
         elsif res.argSrc(0)(1 downto 0) = "00" then
             res.args(0) := fni.values0(slv2u(res.argLocsPipe(0)(1 downto 0)));
-            res.stored(0) := '1';
         elsif res.argSrc(0)(1 downto 0) = "01" then
             res.args(0) := fni.values1(slv2u(res.argLocsPipe(0)(1 downto 0)));
-            if res.argSrc(0)(1 downto 0) = "01" then -- becomes redundant
-                res.stored(0) := '1';
-            end if;
         else
             res.args(0) := (others => '0');           
         end if;
@@ -621,13 +651,10 @@ package body LogicIssue is
             else
                 res.args(1) := (others => '0');
             end if;
-            res.stored(1) := '1';
         elsif res.argSrc(1)(1 downto 0) = "00" then
             res.args(1) := fni.values0(slv2u(res.argLocsPipe(1)(1 downto 0)));
-            res.stored(1) := '1';
         elsif res.argSrc(1)(1 downto 0) = "01" then
             res.args(1) := fni.values1(slv2u(res.argLocsPipe(1)(1 downto 0)));
-            res.stored(1) := '1';
         else
             res.args(1) := (others => '0');
         end if;
@@ -651,16 +678,12 @@ package body LogicIssue is
         else
             res.args(0) := res.args(0) or regValues(0);
         end if;
-        
-        res.stored(0) := '1';
     
         if res.readNew(1) = '1' then
             res.args(1) := vals(slv2u(res.argLocsPipe(1)(1 downto 0)));
         else
             res.args(1) := res.args(1) or regValues(1);
         end if;
-    
-        res.stored(1) := '1';
     
         return res;
     end function;
@@ -737,6 +760,28 @@ package body LogicIssue is
             end loop;
         end if;
         
+   
+            for i in 0 to LEN-1 loop
+                for j in 0 to 2 loop
+                    if res(i).dynamic.issued = '1' then
+                        null;
+                    elsif res(i).dynamic.argStates(j).waiting = '1' then
+                        res(i).dynamic.argStates(j).dbDep := DB_incCyclesWaiting(res(i).dynamic.argStates(j).dbDep);
+                    else
+                        res(i).dynamic.argStates(j).dbDep := DB_incCyclesReady(res(i).dynamic.argStates(j).dbDep);
+                    end if;
+                end loop;
+            end loop;
+
+            for i in 0 to LEN-1 loop
+                if res(i).dynamic.full /= '1' then
+                    res(i).static.dbInfo := DEFAULT_DEBUG_INFO;
+                    res(i).dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
+                    res(i).dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
+                    res(i).dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
+                end if;
+            end loop;
+            
         return res;
     end function;
     
@@ -825,11 +870,20 @@ package body LogicIssue is
     function getWakeupStructDynamic(fc: ForwardingComparisons; forwardingModes: ForwardingModeArray) return WakeupStruct is
         variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
         variable matchVec: std_logic_vector(0 to 2) := (others => '0');
+        variable latestStage: integer := 1;
     begin
-        
         for p in forwardingModes'range loop
+            
+                if forwardingModes(p).stage < 0 then
+                    latestStage := -1;
+                else
+                    latestStage := 1;
+                end if;
+            
             for q in -3 to 1 loop
-                if forwardingModes(p).stage <= q then
+                if      forwardingModes(p).stage <= q 
+                    and q <= latestStage    
+                then
                     case q is
                         when -3 =>
                             matchVec(p) := fc.cmpM3(p);
@@ -896,8 +950,7 @@ package body LogicIssue is
     end function;
     
     function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
-                    dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0--, forwardingModes1
-                                                                                                : ForwardingModeArray)
+                    dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0: ForwardingModeArray)
     return SchedulerInfoArray is
         variable res: SchedulerInfoArray(0 to schedArray'length-1);
     begin
@@ -1084,10 +1137,10 @@ package body LogicIssue is
         res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
     
         res.static.branchIns := a.static.branchIns or b.static.branchIns;
-        res.static.bqPointer := a.static.bqPointer or b.static.bqPointer;--: SmallNumber;
-        res.static.sqPointer := a.static.sqPointer or b.static.sqPointer;--: SmallNumber;
-        res.static.lqPointer := a.static.lqPointer or b.static.lqPointer;-- SmallNumber;        
-        res.static.bqPointerSeq := a.static.bqPointerSeq or b.static.bqPointerSeq;--: SmallNumber;
+        res.static.bqPointer := a.static.bqPointer or b.static.bqPointer;
+        res.static.sqPointer := a.static.sqPointer or b.static.sqPointer;
+        res.static.lqPointer := a.static.lqPointer or b.static.lqPointer;   
+        res.static.bqPointerSeq := a.static.bqPointerSeq or b.static.bqPointerSeq;
         
         res.static.immediate :=  a.static.immediate or b.static.immediate;
         res.static.immValue :=  a.static.immValue or b.static.immValue;
@@ -1272,6 +1325,37 @@ package body LogicIssue is
         end loop;
         
         res := orSchedEntrySlot(a, b);
+        return res;
+    end function;
+
+    
+    -- Debug functions
+    function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency is
+        variable res: DbDependency := dbd;
+    begin
+        -- pragma synthesis off
+        res.producer := tag;
+        res.cyclesWaiting := 0;
+        res.cyclesReady := 0;
+        -- pragma synthesis on
+        return res;
+    end function;
+
+    function DB_incCyclesWaiting(dbd: DbDependency) return DbDependency is
+        variable res: DbDependency := dbd;
+    begin
+        -- pragma synthesis off
+        res.cyclesWaiting := res.cyclesWaiting + 1;
+        -- pragma synthesis on
+        return res;
+    end function;
+
+    function DB_incCyclesReady(dbd: DbDependency) return DbDependency is
+        variable res: DbDependency := dbd;
+    begin
+        -- pragma synthesis off
+        res.cyclesReady := res.cyclesReady + 1;
+        -- pragma synthesis on
         return res;
     end function;
 
