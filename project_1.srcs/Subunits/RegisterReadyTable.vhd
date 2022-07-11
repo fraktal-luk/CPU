@@ -24,16 +24,11 @@ entity RegisterReadyTable is
 		en: in std_logic;
 
 		sendingToReserve: in std_logic;
-		--stageDataToReserve: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 
 		newPhysDests: in PhysNameArray(0 to PIPE_WIDTH-1);
-	       newPhysSources: in PhysNameArray(0 to 3*PIPE_WIDTH-1);
-	
-		--stageDataReserved: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+	    newPhysSources: in PhysNameArray(0 to 3*PIPE_WIDTH-1);
 
-		--writingMask: in std_logic_vector(0 to WRITE_WIDTH-1);
-		--writingData: in InstructionStateArray(0 to WRITE_WIDTH-1);
-		  writingData_T: in ExecResultArray(0 to WRITE_WIDTH-1);
+		writingData_T: in ExecResultArray(0 to WRITE_WIDTH-1);
 		
 		readyRegFlagsNext: out std_logic_vector(0 to 3*PIPE_WIDTH-1)
 	);
@@ -47,9 +42,6 @@ architecture Behavioral of RegisterReadyTable is
     
     signal altMask: std_logic_vector(0 to WRITE_WIDTH-1) := (others => '0');
     signal altDests: PhysNameArray(0 to WRITE_WIDTH-1) := (others => (others => '0'));
-
-    --    signal altMask_T: std_logic_vector(0 to WRITE_WIDTH-1) := (others => '0');
-    --    signal altDests_T: PhysNameArray(0 to WRITE_WIDTH-1) := (others => (others => '0'));
 
     subtype MatchVec is std_logic_vector(0 to 15);
     type MatchMat is array(0 to 3) of matchVec;
@@ -185,16 +177,10 @@ begin
 
     readyTableClearAllow <= sendingToReserve; -- for ready table
     readyTableClearSel <= (others => '1'); -- No need to prevent free yet-unallocated regs from clearing!	
-    
-    --altMask_T(0) <= writingMask(0) and ((writingData(0).physicalArgSpec.floatDestSel and bool2std(IS_FP)) or ( writingData(0).physicalArgSpec.intDestSel and not bool2std(IS_FP)));
-    --altDests_T(0) <= writingData(0).physicalArgSpec.dest;-- <= getArrayPhysicalDests(writingData);
 
-            altMask(0) <= writingData_T(0).full;
-            altDests(0) <= writingData_T(0).dest;
-            
-      --          ch0 <= bool2std(altMask_T = altMask) or not isNonzero(altDests_T(0));
-      --          ch1 <= bool2std(altDests_T = altDests);
-    
+    altMask(0) <= writingData_T(0).full;
+    altDests(0) <= writingData_T(0).dest;
+
     IMPL: block
         signal content: std_logic_vector(0 to N_PHYSICAL_REGS-1) := initList(IS_FP);--(0 to 31 => '1', others => '0');
     begin
@@ -206,7 +192,6 @@ begin
             end if;
         end process;
         
-        readyRegFlagsNext <= --extractReadyRegBits(content, stageDataReserved);				
-                                extractReadyRegBits(content, newPhysSources);				
+        readyRegFlagsNext <= extractReadyRegBits(content, newPhysSources);				
     end block;
 end Behavioral;

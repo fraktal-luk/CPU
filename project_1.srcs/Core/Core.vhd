@@ -102,7 +102,10 @@ architecture Behavioral of Core is
 
     signal bqUpdate, bqCompareEarly, sqValueResult, memAddressInputSQ, memAddressInputLQ,
            frontEvent, execEvent, execResultDelayed, lateEvent, bqTargetData, dataFromSB,
-           execCausingDelayedSQ, execCausingDelayedLQ: ExecResult := DEFAULT_EXEC_RESULT;
+           execCausingDelayedSQ, execCausingDelayedLQ,
+           
+               missedMemResult
+           : ExecResult := DEFAULT_EXEC_RESULT;
 
     signal pcData, branchResult, branchResultDelayed, bqSelected, ctOutLQ, ctOutSQ, ctOutSB, dataToBranch: ControlPacket := DEFAULT_CONTROL_PACKET;
 
@@ -700,14 +703,20 @@ begin
             subpipeM0_E1f_u.dest <= subpipeM0_E1f.dest;
             subpipeM0_E1f_u.value <= memResult;         
 
-           -- TEMP mem interface    
-		   dread <= subpipeM0_E0.full;
-           dadr <= subpipeM0_E0.value;
-           sysRegReadSel <= subpipeM0_E0.value(4 downto 0);
-           sysRegRead <= subpipeM0_E0.full;
-           
-           memLoadReady <= dvalid;              
-           memLoadValue <= din;      
+                    missedMemResult.full <= subpipeM0_E1.full and (memoryCtrl.dataMiss or memoryCtrl.sqMiss);
+                    missedMemResult.tag <= subpipeM0_E1.tag;
+                    missedMemResult.dest <= subpipeM0_E1.dest;
+                    missedMemResult.value <= memResult;
+
+
+            -- TEMP mem interface    
+            dread <= subpipeM0_E0.full;
+            dadr <= subpipeM0_E0.value;
+            sysRegReadSel <= subpipeM0_E0.value(4 downto 0);
+            sysRegRead <= subpipeM0_E0.full;
+            
+            memLoadReady <= dvalid;              
+            memLoadValue <= din;      
         end block;
 
         ------------------------
@@ -1337,7 +1346,7 @@ begin
             storeValuePtr => (others => '0'),
             storeValueResult => DEFAULT_EXEC_RESULT,
             
-            compareAddressInput => DEFAULT_EXEC_RESULT,
+            compareAddressInput => missedMemResult,
             compareAddressInputOp => DEFAULT_SPECIFIC_OP,
     
             compareIndexInput => (others => '0'),        
