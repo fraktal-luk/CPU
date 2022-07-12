@@ -60,7 +60,9 @@ entity StoreQueue is
 
 		committedEmpty: out std_logic;
 		committedSending: out std_logic;
-		committedDataOut: out ControlPacket
+		committedDataOut: out ControlPacket;
+		
+		  dbState: in DbCoreState
 	);
 end StoreQueue;
 

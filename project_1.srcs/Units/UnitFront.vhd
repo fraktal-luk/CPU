@@ -43,7 +43,9 @@ entity UnitFront is
 		
 		execEventSignal: in std_logic;
 		lateEventSignal: in std_logic;
-		lateEventSetPC: in std_logic		
+		lateEventSetPC: in std_logic;
+		
+		  dbState: in DbCoreState		
 	);
 end UnitFront;
 

@@ -22,14 +22,6 @@ type PhysicalSubpipe is (ALU, Mem, FP, StoreDataInt, StoreDataFloat);
 function makeExecResult(isl: SchedulerState) return ExecResult;
 
 
-type EventState is record
-    lateEvent: std_logic;
-    execEvent: std_logic;
-    preExecTags: InstructionTags;
-end record;
-
-constant DEFAULT_EVENT_STATE: EventState := ('0', '0', DEFAULT_INSTRUCTION_TAGS);
-
 type IssueQueueSignals is record
     sending: std_logic;
     cancelled: std_logic;

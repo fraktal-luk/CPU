@@ -65,7 +65,9 @@ entity BranchQueue is
 		
 		committedEmpty: out std_logic;
         committedSending: out std_logic;
-        committedDataOut: out ExecResult
+        committedDataOut: out ExecResult;
+        
+            dbState: in DbCoreState
 	);
 end BranchQueue;
 

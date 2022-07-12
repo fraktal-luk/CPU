@@ -59,7 +59,9 @@ port(
     execCausing: in ControlPacket;
     
     execEventSignal: in std_logic;
-    lateEventSignal: in std_logic
+    lateEventSignal: in std_logic;
+    
+        dbState: in DbCoreState
 );
 end UnitRegManager;
 

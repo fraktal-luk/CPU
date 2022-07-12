@@ -14,6 +14,8 @@ use work.InstructionState.all;
 use work.PipelineGeneral.all;
 use work.ForwardingNetwork.all;
 
+use work.DebugUtils.all;
+
 
 entity Core is
     generic(
@@ -69,7 +71,7 @@ architecture Behavioral of Core is
            issueQueuesAccepting, issueQueuesAcceptingMore, renameSendingBr, stopRename,
            queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
            robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
-           mqReady, mqSending,
+           mqReady, mqSending, memoryMissed,
            sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
            : std_logic := '0';
 
@@ -93,8 +95,6 @@ architecture Behavioral of Core is
 
     signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
 
-    signal cycleCounter: Word := (others => '0');
-
     signal events: EventState := DEFAULT_EVENT_STATE;
 
     signal specialOp, preAddressOp, specialOutROB, memAddressOp: SpecificOp := DEFAULT_SPECIFIC_OP;
@@ -105,10 +105,12 @@ architecture Behavioral of Core is
            frontEvent, execEvent, execResultDelayed, lateEvent, bqTargetData, dataFromSB,
            execCausingDelayedSQ, execCausingDelayedLQ,
            
-               missedMemResult, mqReexecResult
+               missedMemResult, mqReexecResult,
+               
+               resultToM0_E0, resultToM0_E0i, resultToM0_E0f
            : ExecResult := DEFAULT_EXEC_RESULT;
 
-    signal pcData, branchResult, branchResultDelayed, bqSelected, ctOutLQ, ctOutSQ, ctOutSB, dataToBranch: ControlPacket := DEFAULT_CONTROL_PACKET;
+    signal pcData, branchResult, branchResultDelayed, bqSelected, ctOutLQ, ctOutSQ, ctOutSB, dataToBranch, mqReexecControl, controlToM0_E0: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal bpData: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
     signal robOut: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
@@ -116,19 +118,16 @@ architecture Behavioral of Core is
     signal dataFromDLQ: ExecResult := DEFAULT_EXEC_RESULT;
 
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
+    
+            constant CONNECT_MQ: boolean := false;
+            
+        signal dbState: DbCoreState := DEFAULT_DB_STATE;
 begin
-
-    MONITOR: process (clk)
-    begin
-        if rising_edge(clk) then
-            cycleCounter <= addInt(cycleCounter, 1);
-        end if;
-    end process;
 
     intSignal <= int0 or int1;
     intType <= (int0, int1);
 
-    events <= (lateEventSignal, execEventSignal, dataToBranch.tags);
+    events <= (lateEventSignal, execEventSignal, dataToBranch.tags, execEvent, lateEvent);
 
     execEvent <= (DEFAULT_DEBUG_INFO, execEventSignal, '0', InsTag'(others => '0'), branchResult.tags.bqPointerSeq, branchResult.target);
     dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'),
@@ -185,6 +184,9 @@ begin
     iadr <= pcData.ip;
     iadrvalid <= pcData.controlInfo.full;
        
+       
+       --    events <= (lateEventSignal, execEventSignal, dataToBranch.tags, execEvent, lateEvent);
+
 	UNIT_FRONT: entity work.UnitFront(Behavioral)
     port map(
         clk => clk, reset => '0', en => '0',
@@ -210,7 +212,9 @@ begin
         
         execEventSignal => execEventSignal,
         lateEventSignal => lateEventSignal,
-        lateEventSetPC => lateEventSetPC
+        lateEventSetPC => lateEventSetPC,
+            
+            dbState => dbState
     );    
             
     REGISTER_MANAGER: entity work.UnitRegManager(Behavioral)
@@ -254,7 +258,9 @@ begin
         execCausing => branchResult,
         
         execEventSignal => execEventSignal,
-        lateEventSignal => lateEventSignal
+        lateEventSignal => lateEventSignal,
+        
+            dbState => dbState
     );
 
     STOP_RENAME: process (clk)
@@ -313,7 +319,9 @@ begin
         outputArgInfoI => renamedArgsIntROB,
         outputArgInfoF => renamedArgsFloatROB,
 
-		outputSpecial => specialOutROB		
+		outputSpecial => specialOutROB,
+		
+		  dbState => dbState	
 	);     
 
 
@@ -398,7 +406,7 @@ begin
         branchMask <= getBranchMask1((renamedDataLivingRe));
         
         SUBPIPE_ALU: block
-           signal dataToAlu: ExecResult := DEFAULT_EXEC_RESULT;
+           signal dataToAlu: ExecResult := DEFAULT_EXEC_RESULT;           
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
 
            signal regInfo: RegisterStateArray2D(0 to PIPE_WIDTH-1) := (others => (others => (others => '0')));
@@ -433,7 +441,9 @@ begin
                 nextAccepting => allowIssueI0,
                 events => events,
                 schedulerOut => slotSelI0,
-                outputSignals => outSigsI0
+                outputSignals => outSigsI0,
+                
+                    dbState => dbState
             );
 
             TMP_ISSUE_I0: block
@@ -536,7 +546,8 @@ begin
             
         SUBPIPE_MEM: block
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1); 
-           signal effectiveAddress, memLoadValue, memResult: Mword := (others => '0');                                                            
+           signal effectiveAddress, memLoadValue, memResult: Mword := (others => '0');
+           signal controlM0_RR: ControlPacket := DEFAULT_CONTROL_PACKET;                                                           
         begin
            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true, removeArg2(renamedArgsMerged));         
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D);
@@ -560,7 +571,9 @@ begin
                nextAccepting => allowIssueM0,
                events => events,
                schedulerOut => slotSelM0,
-               outputSignals => outSigsM0
+               outputSignals => outSigsM0,
+               
+                    dbState => dbState
            );
 
             TMP_ISSUE_M0: block
@@ -613,28 +626,52 @@ begin
             subpipeM0_RR.tag <= slotRegReadM0.renameIndex;
             subpipeM0_RR.dest <= slotRegReadM0.argSpec.dest;
 
-            subpipeM0_RRi.full <= (slotRegReadM0.full and not outSigsM0.killSel2) and slotRegReadM0.argSpec.intDestSel   and not lateEventSignal;
-            subpipeM0_RRi.tag <= slotRegReadM0.renameIndex;
-            subpipeM0_RRi.dest <= slotRegReadM0.argSpec.dest when slotRegReadM0.argSpec.intDestSel = '1' else (others => '0');
-            subpipeM0_RRi.value <= subpipeM0_RR_u.value;
 
-            subpipeM0_RRf.full <= (slotRegReadM0.full and not outSigsM0.killSel2) and slotRegReadM0.argSpec.floatDestSel  and not lateEventSignal;
-            subpipeM0_RRf.tag <= slotRegReadM0.renameIndex;
-            subpipeM0_RRf.dest <= slotRegReadM0.argSpec.dest when slotRegReadM0.argSpec.floatDestSel = '1' else (others => '0');
-            subpipeM0_RRf.value <= subpipeM0_RR_u.value;
+                TMP_DEST_FLAGS: block
+                    signal intSel, floatSel, insertMQ: std_logic := '0';
+                begin
+                    ---- !! Injection here
+                    intSel <= not mqReexecControl.classInfo.useFP when insertMQ = '1' else slotRegReadM0.argSpec.intDestSel;
+                    floatSel <= mqReexecControl.classInfo.useFP when insertMQ = '1' else slotRegReadM0.argSpec.floatDestSel;
+                    resultToM0_E0 <= mqReexecResult when insertMQ = '1' else subpipeM0_RR_u;
+                    controlToM0_E0 <= mqReexecControl when insertMQ = '1' else controlM0_RR;
+                    ---------------------
 
 
-            subpipeM0_RR_u.full <= sendingToAgu;
-            subpipeM0_RR_u.tag <= subpipeM0_RR.tag;
-            subpipeM0_RR_u.dest <= subpipeM0_RR.dest;
-            subpipeM0_RR_u.value <= effectiveAddress;
+                        insertMQ <=  mqSending and bool2std(CONNECT_MQ);
+
+                    resultToM0_E0i.full <= resultToM0_E0.full and intSel;
+                    resultToM0_E0i.tag <= resultToM0_E0.tag;
+                    resultToM0_E0i.dest <= resultToM0_E0.dest when intSel = '1' else (others => '0');
+                    resultToM0_E0i.value <= resultToM0_E0.value;
+        
+                    resultToM0_E0f.full <= resultToM0_E0.full and floatSel;
+                    resultToM0_E0f.tag <= resultToM0_E0.tag;
+                    resultToM0_E0f.dest <= resultToM0_E0.dest when floatSel = '1' else (others => '0');
+                    resultToM0_E0f.value <= resultToM0_E0.value;                   
+                end block;
+
+
+                subpipeM0_RR_u.full <= sendingToAgu;
+                subpipeM0_RR_u.tag <= subpipeM0_RR.tag;
+                subpipeM0_RR_u.dest <= subpipeM0_RR.dest;
+                subpipeM0_RR_u.value <= effectiveAddress;
+
+
+                controlM0_RR.op <= slotRegReadM0.operation;
+
+                controlM0_RR.tags.renameIndex <= slotRegReadM0.renameIndex;
+                controlM0_RR.tags.bqPointer <= slotRegReadM0.bqPointer;
+                controlM0_RR.tags.bqPointerSeq <= slotRegReadM0.bqPointerSeq;
+                controlM0_RR.tags.sqPointer <= slotRegReadM0.sqPointer;
+                controlM0_RR.tags.lqPointer <= slotRegReadM0.lqPointer;
 
             process (clk)
             begin
                 if rising_edge(clk) then
-                    subpipeM0_E0 <= subpipeM0_RR_u;
-                    subpipeM0_E0i <= subpipeM0_RRi;
-                    subpipeM0_E0f <= subpipeM0_RRf;
+                    subpipeM0_E0 <= resultToM0_E0;
+                    subpipeM0_E0i <= resultToM0_E0i;
+                    subpipeM0_E0f <= resultToM0_E0f;
 
                     subpipeM0_E1 <= subpipeM0_E0;
                     subpipeM0_E1i <= subpipeM0_E0i;
@@ -648,14 +685,9 @@ begin
                     
                     
                     slotM0_E0(0).full <= sendingToAgu;
-                    slotM0_E0(0).ins.specificOperation <= slotRegReadM0.operation;
-                    slotM0_E0(0).ins.result <= effectiveAddress;
-
-                    slotM0_E0(0).ins.tags.renameIndex <= slotRegReadM0.renameIndex;
-                    slotM0_E0(0).ins.tags.bqPointer <= slotRegReadM0.bqPointer;
-                    slotM0_E0(0).ins.tags.bqPointerSeq <= slotRegReadM0.bqPointerSeq;
-                    slotM0_E0(0).ins.tags.sqPointer <= slotRegReadM0.sqPointer;
-                    slotM0_E0(0).ins.tags.lqPointer <= slotRegReadM0.lqPointer;
+                    slotM0_E0(0).ins.result <= resultToM0_E0.value;
+                    slotM0_E0(0).ins.specificOperation <= controlToM0_E0.op;
+                    slotM0_E0(0).ins.tags <= controlToM0_E0.tags;
 
                     slotM0_E1i(0).ins.specificOperation <= slotM0_E0(0).ins.specificOperation;               
                     slotM0_E1i(0).ins.result <= slotM0_E0(0).ins.result;
@@ -664,7 +696,7 @@ begin
                 end if;
             end process;
 
-            sendingToAgu <= ((slotRegReadM0.full and not outSigsM0.killSel2) or sendingFromDLQ) and not lateEventSignal;
+            sendingToAgu <= slotRegReadM0.full and not outSigsM0.killSel2 and not lateEventSignal;
             effectiveAddress <= calcEffectiveAddress(slotRegReadM0, sendingFromDLQ, dataFromDLQ);
 
             memAddressInputSQ.full <= slotM0_E0(0).full;
@@ -689,22 +721,29 @@ begin
                                                 '1', memLoadReady, sysRegSending,
                                                 ctOutSQ, ctOutLQ);
 
-            subpipeM0_E1_u.full <= subpipeM0_E1.full;
+            -- TODO: apply here memoryMissed to deactivate missing ops 
+            subpipeM0_E1_u.full <= subpipeM0_E1.full --
+                                                     and not (memoryMissed and bool2std(CONNECT_MQ));
             subpipeM0_E1_u.tag <= subpipeM0_E1.tag;
             subpipeM0_E1_u.dest <= subpipeM0_E1.dest;
             subpipeM0_E1_u.value <= memResult;
             
-            subpipeM0_E1i_u.full <= subpipeM0_E1i.full;
+            subpipeM0_E1i_u.full <= subpipeM0_E1i.full -- 
+                                                        and not (memoryMissed and bool2std(CONNECT_MQ));
             subpipeM0_E1i_u.tag <= subpipeM0_E1i.tag;
             subpipeM0_E1i_u.dest <= subpipeM0_E1i.dest;
             subpipeM0_E1i_u.value <= memResult;
                                         
-            subpipeM0_E1f_u.full <= subpipeM0_E1f.full;
+            subpipeM0_E1f_u.full <= subpipeM0_E1f.full -- 
+                                                        and not (MemoryMissed and bool2std(CONNECT_MQ));
             subpipeM0_E1f_u.tag <= subpipeM0_E1f.tag;
             subpipeM0_E1f_u.dest <= subpipeM0_E1f.dest;
-            subpipeM0_E1f_u.value <= memResult;         
+            subpipeM0_E1f_u.value <= memResult;
 
-                    missedMemResult.full <= subpipeM0_E1.full and (memoryCtrl.dataMiss or memoryCtrl.sqMiss);
+
+                    memoryMissed <= memoryCtrl.dataMiss or memoryCtrl.sqMiss;
+
+                    missedMemResult.full <= subpipeM0_E1.full and memoryMissed;
                     missedMemResult.tag <= subpipeM0_E1.tag;
                     missedMemResult.dest <= subpipeM0_E1.dest;
                     missedMemResult.value <= memResult;
@@ -756,7 +795,9 @@ begin
                 nextAccepting => allowIssueStoreDataInt,
                 events => events,
                 schedulerOut => slotSelIntSV,
-                outputSignals => outSigsSVI
+                outputSignals => outSigsSVI,
+                
+                    dbState => dbState
             );
 
 
@@ -824,7 +865,9 @@ begin
                 nextAccepting => allowIssueStoreDataFP,
                 events => events,
                 schedulerOut => slotSelFloatSV,              
-                outputSignals => outSigsSVF
+                outputSignals => outSigsSVF,
+                
+                    dbState => dbState
             );       
 
             TMP_ISSUE_SVF: block
@@ -901,7 +944,9 @@ begin
                 nextAccepting => allowIssueF0,
                 events => events,
                 schedulerOut => slotSelF0,
-                outputSignals => outSigsF0
+                outputSignals => outSigsF0,
+                
+                    dbState => dbState
             );
            
 
@@ -1225,7 +1270,9 @@ begin
 		nextAccepting => commitAccepting,		
 		sendingSQOut => open,
 		
-		committedDataOut => bqTargetData
+		committedDataOut => bqTargetData,
+		
+		  dbState => dbState
 	);
 
     STORE_QUEUE: entity work.StoreQueue(Behavioral)
@@ -1272,7 +1319,9 @@ begin
 
         committedEmpty => sbEmpty,
         committedSending => sbSending,
-        committedDataOut => ctOutSB
+        committedDataOut => ctOutSB,
+        
+            dbState => dbState
 	);
 
     LOAD_QUEUE: entity work.StoreQueue(Behavioral)
@@ -1319,7 +1368,9 @@ begin
 		nextAccepting => commitAccepting,
 		
         committedEmpty => open,
-        committedSending => open
+        committedSending => open,
+        
+            dbState => dbState
 	);
 
     TMP_LMQ: block
@@ -1330,6 +1381,10 @@ begin
                 mqReexecResult.full <= mqReexecResultRR.controlInfo.full;
                 mqReexecResult.tag <= mqReexecResultRR.tag;
                 mqReexecResult.value <= mqReexecResultRR.target;
+                
+                mqReexecControl <= mqReexecResultRR;
+                
+                mqSending <= mqReexecControl.controlInfo.full;
 
             mqReady <= s8;
     
@@ -1384,7 +1439,9 @@ begin
             nextAccepting => '0',
             
             committedEmpty => open,
-            committedSending => s8            
+            committedSending => s8,
+            
+                dbState => dbState        
         );
         
     end block;
@@ -1396,6 +1453,19 @@ begin
 		doutadr <= ctOutSB.target;
 		dwrite <= sbSending and ctOutSB.controlInfo.full and isStoreMemOp(ctOutSB.op);
 		dout <= ctOutSQ.nip;
+	end block;
+	
+	DEBUG_HANDLING: block
+        signal cycleCount: natural := 0;
+    begin
+    
+        MONITOR: process (clk)
+        begin
+            if rising_edge(clk) then
+                cycleCount <= cycleCount + 1;
+            end if;
+        end process;
+    
 	end block;
 	
 end Behavioral;

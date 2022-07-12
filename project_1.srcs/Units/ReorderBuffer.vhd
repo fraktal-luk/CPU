@@ -44,7 +44,9 @@ entity ReorderBuffer is
 
 		outputArgInfoI: out RenameInfoArray(0 to PIPE_WIDTH-1);
 		outputArgInfoF: out RenameInfoArray(0 to PIPE_WIDTH-1);
-		outputSpecial: out SpecificOp
+		outputSpecial: out SpecificOp;
+		
+		  dbState: in DbCoreState
 	);	
 end ReorderBuffer;
 

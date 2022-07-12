@@ -45,7 +45,9 @@ entity IssueQueue is
 		acceptingOut: out std_logic;
 		
 		schedulerOut: out SchedulerEntrySlot;
-        outputSignals: out IssueQueueSignals		
+        outputSignals: out IssueQueueSignals;
+        
+            dbState: in DbCoreState		
 	);
 end IssueQueue;
 

@@ -453,6 +453,31 @@ type PipeStageArray is array(natural range <>) of PipeStage;
 
 constant DEFAULT_PIPE_STAGE: PipeStage := (others => DEFAULT_INS_SLOT); 
 
+
+type EventState is record
+    lateEvent: std_logic;
+    execEvent: std_logic;
+    preExecTags: InstructionTags;
+        execCausing: ExecResult;
+        lateCausing: ExecResult;
+        --frontCausing: ControlPacket;
+end record;
+
+constant DEFAULT_EVENT_STATE: EventState := (
+    '0',
+    '0',
+    DEFAULT_INSTRUCTION_TAGS,
+    DEFAULT_EXEC_RESULT,
+    DEFAULT_EXEC_RESULT
+    );
+
+type DbCoreState is record
+    dummy: DummyType;
+    dbSignal: std_logic;
+end record;
+
+constant DEFAULT_DB_STATE: DbCoreState := (dummy => DUMMY_VALUE, dbSignal => '0');
+
 end InstructionState;
 
 
