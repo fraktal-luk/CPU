@@ -69,6 +69,7 @@ architecture Behavioral of Core is
            issueQueuesAccepting, issueQueuesAcceptingMore, renameSendingBr, stopRename,
            queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
            robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
+           mqReady, mqSending,
            sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
            : std_logic := '0';
 
@@ -104,7 +105,7 @@ architecture Behavioral of Core is
            frontEvent, execEvent, execResultDelayed, lateEvent, bqTargetData, dataFromSB,
            execCausingDelayedSQ, execCausingDelayedLQ,
            
-               missedMemResult
+               missedMemResult, mqReexecResult
            : ExecResult := DEFAULT_EXEC_RESULT;
 
     signal pcData, branchResult, branchResultDelayed, bqSelected, ctOutLQ, ctOutSQ, ctOutSB, dataToBranch: ControlPacket := DEFAULT_CONTROL_PACKET;
@@ -1013,8 +1014,10 @@ begin
          lockIssueI0 <= memSubpipeSent;
          allowIssueI0 <= not lockIssueI0;
 
-         -- TODO: issue locking for F0 subpipe - avoid WB collisions with FP load!
-         lockIssueM0 <= fp0subpipeSelected;
+         -- Issue locking: 
+         --     if F0 issued, to avoid WB collisions with FP load
+         --     if MQ intends to reexecute
+         lockIssueM0 <= fp0subpipeSelected or mqReady;
          allowIssueM0 <= not lockIssueM0;
 
          lockIssueF0 <= '0';
@@ -1321,7 +1324,23 @@ begin
 
     TMP_LMQ: block
         signal s0, s1, s2, s3, s4, s5, s6, s7, s8: std_logic := '0';
+        
+        signal mqReexecResultRR, mqReexecResultE0, mqReexecResultE1: ControlPacket := DEFAULT_CONTROL_PACKET;
     begin
+                mqReexecResult.full <= mqReexecResultRR.controlInfo.full;
+                mqReexecResult.tag <= mqReexecResultRR.tag;
+                mqReexecResult.value <= mqReexecResultRR.target;
+
+            mqReady <= s8;
+    
+            process (clk)
+            begin
+                if rising_edge(clk) then
+                    mqReexecResultE0 <= mqReexecResultRR;
+                    mqReexecResultE1 <= mqReexecResultE0;
+                end if;
+            end process;
+    
         LOAD_MISS_QUEUE: entity work.StoreQueue(MissQueue)
         generic map(
             QUEUE_SIZE => 8
@@ -1352,7 +1371,7 @@ begin
             compareIndexInput => (others => '0'),        
             preCompareOp => DEFAULT_SPECIFIC_OP,
                  
-            selectedDataOutput => open,
+            selectedDataOutput => mqReexecResultRR,
     
             committing => '0',
             commitMask => (others => '0'),
@@ -1365,7 +1384,7 @@ begin
             nextAccepting => '0',
             
             committedEmpty => open,
-            committedSending => open            
+            committedSending => s8            
         );
         
     end block;
