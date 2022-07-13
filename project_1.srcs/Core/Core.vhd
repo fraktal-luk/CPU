@@ -1456,16 +1456,39 @@ begin
 	end block;
 	
 	DEBUG_HANDLING: block
-        signal cycleCount: natural := 0;
+        signal cycleCount, watchdogCount: natural := 0;
+        signal stallDetected, stallDetectedPrev, stallAction: std_logic := '0';
     begin
+    
     
         MONITOR: process (clk)
         begin
             if rising_edge(clk) then
                 cycleCount <= cycleCount + 1;
+                
+                if std2bool(robSending or renamedSending) then
+                    watchdogCount <= 0;
+                else
+                    watchdogCount <= watchdogCount + 1;
+                end if;
+                
+                stallDetectedPrev <= stallDetected;
+                if watchdogCount > 50 then                    
+                    if stallDetected /= '1'then
+                        report "" severity error;
+                        report "" severity error;
+                        report "Stall!" severity error;                    
+                    end if;
+                    
+                    stallDetected <= '1';
+                end if;
+
+
             end if;
         end process;
-    
+        
+        dbState.dbSignal <= stallDetected and not stallDetectedPrev;
+        
 	end block;
 	
 end Behavioral;

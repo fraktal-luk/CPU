@@ -29,7 +29,7 @@ type StaticGroupInfo is record
 end record;
 
 type StaticOpInfo is record
-        dbInfo: InstructionDebugInfo;
+--        dbInfo: InstructionDebugInfo;
 
     virtualIntDestSel:     std_logic;
     virtualFloatDestSel:   std_logic;
@@ -47,7 +47,7 @@ constant DEFAULT_STATIC_GROUP_INFO: StaticGroupInfo := (
 );
 
 constant DEFAULT_STATIC_OP_INFO: StaticOpInfo := (
-        dbInfo => DEFAULT_DEBUG_INFO,
+--        dbInfo => DEFAULT_DEBUG_INFO,
     virtualDest => (others => '0'),
     physicalDest => (others => '0'),
     others => '0'
@@ -58,6 +58,8 @@ type DynamicGroupInfo is record
 end record;
 
 type DynamicOpInfo is record
+        dbInfo: InstructionDebugInfo;
+
     full:       std_logic;
     killed:     std_logic;
     causing:    std_logic;
@@ -78,6 +80,7 @@ constant DEFAULT_DYNAMIC_GROUP_INFO: DynamicGroupInfo := (
 );
 
 constant DEFAULT_DYNAMIC_OP_INFO: DynamicOpInfo := (
+        dbInfo => DEFAULT_DEBUG_INFO,
     others => '0'
 );
 
@@ -153,12 +156,12 @@ end package;
 
 package body LogicROB is
 
--- DEBUG
+-- DEBUG (REMOVE)
 function setDbInfo(isa: InstructionSlotArray; dsa: StaticOpInfoArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := isa;
 begin
     for i in isa'range loop
-        res(i).ins.dbInfo := dsa(i).dbInfo;
+--        res(i).ins.dbInfo := dsa(i).dbInfo;
     end loop;        
     return res;
 end function;
@@ -184,7 +187,7 @@ end function;
 function getStaticOpInfo(isl: InstructionSlot) return StaticOpInfo is
     variable res: StaticOpInfo;
 begin
-        res.dbInfo := isl.ins.dbInfo;
+--        res.dbInfo := isl.ins.dbInfo;
 
     res.virtualIntDestSel := isl.ins.virtualArgSpec.intDestSel;
     res.virtualFloatDestSel := isl.ins.virtualArgSpec.floatDestSel;     
@@ -211,6 +214,8 @@ end function;
 function getDynamicOpInfo(isl: InstructionSlot) return DynamicOpInfo is
     variable res: DynamicOpInfo;
 begin
+        res.dbInfo := isl.ins.dbInfo;
+
     res.full := isl.full;
     res.killed := '0';
     res.causing := '0';
@@ -239,6 +244,8 @@ end function;
 function getOutputSlot(stat: StaticOpInfo; dyn: DynamicOpInfo) return InstructionSlot is
     variable res: InstructionSlot := DEFAULT_INS_SLOT;
 begin
+        res.ins.dbInfo := dyn.dbInfo;
+
     res.full := dyn.full;
     
     res.ins.controlInfo.full := dyn.full;

@@ -58,8 +58,19 @@ architecture Behavioral of ReorderBuffer is
 	signal isSending, isEmpty, outputCompleted, outputCompleted_Pre, outputEmpty, execEvent, isFull, isAlmostFull: std_logic := '0';	
 	signal startPtr, startPtrNext, endPtr, endPtrNext, causingPtr: SmallNumber := (others => '0');	
 
+    -- Static content arrays - not changing throughout lifetime
+    signal staticContent: StaticOpInfoArray2D := (others => (others => DEFAULT_STATIC_OP_INFO));
+    signal staticGroupContent: StaticGroupInfoArray := (others => DEFAULT_STATIC_GROUP_INFO);
+    signal serialMemContent: SerialMem := (others => (others => '0'));                         
+
+    -- Dynamic content arrays - may change anytime
+    signal dynamicContent: DynamicOpInfoArray2D := (others => (others => DEFAULT_DYNAMIC_OP_INFO));
+    signal dynamicGroupContent: DynamicGroupInfoArray := (others => DEFAULT_DYNAMIC_GROUP_INFO);
+    -- 
+
+
     signal ch0, ch1, ch2, ch3: std_logic := '0';
-    
+
     
     -- TMP: to remove
     function getRenameInfoSC(insVec: InstructionSlotArray; constant IS_FP: boolean := false)
@@ -133,14 +144,7 @@ begin
         signal staticGroupInput, staticGroupOutput, staticGroupOutput_Pre: StaticGroupInfo;
         signal dynamicGroupInput, dynamicGroupOutput, dynamicGroupOutput_Pre: DynamicGroupInfo;
         
-        signal staticContent: StaticOpInfoArray2D := (others => (others => DEFAULT_STATIC_OP_INFO));
-        signal dynamicContent: DynamicOpInfoArray2D := (others => (others => DEFAULT_DYNAMIC_OP_INFO));
-
-        signal staticGroupContent: StaticGroupInfoArray := (others => DEFAULT_STATIC_GROUP_INFO);
-        signal dynamicGroupContent: DynamicGroupInfoArray := (others => DEFAULT_DYNAMIC_GROUP_INFO);
-        
         signal serialInput, serialOutput: std_logic_vector(TMP_SERIAL_MEM_WIDTH-1 downto 0) := (others=> '0');
-        signal serialMemContent: SerialMem := (others => (others => '0'));                         
     begin
     
         -- Inputs
@@ -187,7 +191,7 @@ begin
                     
                     serialMemContent(p2i(endPtr, ROB_SIZE)) <= serialInput;
                 end if;
-                   
+
                 -- Read output
                 staticOutput <= staticOutput_PreDB; --readStaticOutput(staticContent, startPtrNext); -- DB
 
@@ -260,5 +264,67 @@ begin
 	
     isSending <= outputCompleted and nextAccepting and not outputEmpty;  
 	sendingOut <= isSending;
+
+    -- pragma synthesis off
+    DEBUG_HANDLING: process (clk)
+        use std.textio.all;
+        use work.Assembler.all;
+
+        function getDynamicContentString(dyn: DynamicOpInfo) return string is
+            variable res: line;
+        begin
+            if dyn.full = '1' then
+                write(res, natural'image(slv2u(dyn.dbInfo.tag)));
+                write(res, string'(": "));
+                write(res, std_logic'image(dyn.completed0));
+                write(res, std_logic'image(dyn.completed1));
+                write(res, string'(" "));
+                if dyn.hasEvent = '1' then
+                    write(res, string'("E : "));
+                else
+                    write(res, string'("  : "));
+                end if;
+                
+                write(res, disasmWord(dyn.dbInfo.bits));
+                
+                return res.all;
+            else
+                return "-------------------------------------";
+            end if;
+        end function;
+    
+        procedure printContent is
+           file outFile: text open write_mode is "rob_content.txt";
+           variable preRow, currentLine: line := null;
+        begin
+            for i in 0 to ROB_SIZE-1 loop
+                if p2i(startPtr, ROB_SIZE) = i then
+                    preRow := "start ";
+                elsif p2i(endPtr, ROB_SIZE) = i then
+                    preRow := "end   ";
+                else
+                    preRow := "      ";
+                end if;
+                
+                currentLine := null;
+                write(currentLine, preRow.all & natural'image(i) & "  ");
+                for j in 0 to PIPE_WIDTH-1 loop
+                    write(currentLine, getDynamicContentString(dynamicContent(i, j)) & ",   ");
+                end loop;
+
+                writeline(outFile, currentLine);
+            end loop;
+        end procedure;
+        
+    begin
+        
+        if rising_edge(clk) then
+            if dbState.dbSignal = '1' then
+                report "ROB reporting ";
+                printContent;
+            end if;
+        end if;
+    end process;
+    -- pragma synthesis on
 
 end Behavioral;
