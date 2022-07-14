@@ -339,7 +339,7 @@ package body LogicExec is
         variable res: InstructionControlInfo := DEFAULT_CONTROL_INFO;
         constant sysOp: boolean := (isLoadSysOp(op) or isStoreSysOp(op)) = '1';
         constant memForwarded: boolean := std2bool(ctSQ.controlInfo.full);
-        constant memFail: boolean := std2bool(not memLoadReady);
+        constant memFail: boolean := std2bool(not memLoadReady and isLoadMemOp(op));
     begin
         -- mfc/mtc?
         -- tlb/access error?

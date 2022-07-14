@@ -741,7 +741,7 @@ begin
             subpipeM0_E1f_u.value <= memResult;
 
 
-                    memoryMissed <= memoryCtrl.dataMiss or memoryCtrl.sqMiss;
+                    memoryMissed <= memoryCtrlPre.dataMiss or memoryCtrlPre.sqMiss;
 
                     missedMemResult.full <= subpipeM0_E1.full and memoryMissed;
                     missedMemResult.tag <= subpipeM0_E1.tag;
@@ -1455,13 +1455,19 @@ begin
 		dout <= ctOutSQ.nip;
 	end block;
 	
+	-- pragma synthesis off
 	DEBUG_HANDLING: block
+	    use std.textio.all;
+	
         signal cycleCount, watchdogCount: natural := 0;
         signal stallDetected, stallDetectedPrev, stallAction: std_logic := '0';
+        
+        file eventLog: text open write_mode is "event_log.txt";
     begin
     
     
         MONITOR: process (clk)
+            variable currentLine: line := null;
         begin
             if rising_edge(clk) then
                 cycleCount <= cycleCount + 1;
@@ -1483,6 +1489,22 @@ begin
                     stallDetected <= '1';
                 end if;
 
+                
+                currentLine := null;
+                -- Event tracking
+                if lateEventSignal = '1' then
+                    write(currentLine, natural'image(cycleCount));
+                    write(currentLine, string'(": late"));
+                    writeline(eventLog, currentLine);
+                elsif execEventSignal = '1' then
+                    write(currentLine, natural'image(cycleCount));
+                    write(currentLine, string'(": exec"));
+                    writeline(eventLog, currentLine);              
+                elsif frontEventSignal = '1' then
+                    write(currentLine, natural'image(cycleCount));
+                    write(currentLine, string'(": front"));
+                    writeline(eventLog, currentLine);     
+                end if;
 
             end if;
         end process;
@@ -1490,5 +1512,6 @@ begin
         dbState.dbSignal <= stallDetected and not stallDetectedPrev;
         
 	end block;
-	
+	-- pragma synthesis on
+
 end Behavioral;

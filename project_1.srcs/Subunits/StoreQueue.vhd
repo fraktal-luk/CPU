@@ -316,4 +316,77 @@ begin
 	committedEmpty <= bool2std(pStart = pDrainPrev);
 	committedSending <= isDrainingPrev;
 
+
+    -- pragma synthesis off
+    DEBUG_HANDLING: process (clk)
+        use std.textio.all;
+        use work.Assembler.all;
+
+        function getNamePrefix return string is
+        begin
+            if IS_LOAD_QUEUE then
+                return "l";
+            else
+                return "s";
+            end if;
+        end function;
+
+        constant NAME_PREFIX: string(1 to 1) := getNamePrefix;
+
+        function getDynamicContentString(elem: QueueEntry) return string is
+            variable res: line;
+        begin
+            if true then --elem.full = '1' then
+                --write(res, natural'image(slv2u(elem.dbInfo.tag)));
+                write(res, string'(": "));
+                write(res, std_logic'image(elem.completedA));
+                write(res, std_logic'image(elem.completedV));
+                write(res, string'(" "));
+--                if elem.hasEvent = '1' then
+--                    write(res, string'("E : "));
+--                else
+--                    write(res, string'("  : "));
+--                end if;
+                
+                --write(res, disasmWord(dyn.dbInfo.bits));
+                
+                return res.all;
+            else
+                return "-------------------------------------";
+            end if;
+        end function;
+    
+        procedure printContent is
+           file outFile: text open write_mode is NAME_PREFIX & "q_content.txt";
+           variable preRow, currentLine: line := null;
+        begin
+            for i in 0 to ROB_SIZE-1 loop
+                if p2i(pStart, QUEUE_SIZE) = i then
+                    preRow := "start ";
+                elsif p2i(pTagged, QUEUE_SIZE) = i then
+                    preRow := "end   ";
+                else
+                    preRow := "      ";
+                end if;
+                
+                currentLine := null;
+                write(currentLine, preRow.all & natural'image(i) & "  ");
+                --for j in 0 to PIPE_WIDTH-1 loop
+                    write(currentLine, getDynamicContentString(queueContent(i)) & ",   ");
+                --end loop;
+
+                writeline(outFile, currentLine);
+            end loop;
+        end procedure;
+        
+    begin        
+        if rising_edge(clk) then
+            if dbState.dbSignal = '1' then
+                report "LSQ reporting ";
+                printContent;
+            end if;
+        end if;
+    end process;
+    -- pragma synthesis on
+    
 end Behavioral;

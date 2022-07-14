@@ -277,7 +277,11 @@ begin
                 write(res, natural'image(slv2u(dyn.dbInfo.tag)));
                 write(res, string'(": "));
                 write(res, std_logic'image(dyn.completed0));
-                write(res, std_logic'image(dyn.completed1));
+                if dyn.secCluster = '1' then
+                    write(res, std_logic'image(dyn.completed1));
+                else
+                    write(res, string'("'-'"));
+                end if;
                 write(res, string'(" "));
                 if dyn.hasEvent = '1' then
                     write(res, string'("E : "));
