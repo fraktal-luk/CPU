@@ -203,22 +203,22 @@ begin
     
     res.full := full;
     
-    res.ins.ip := trgs(lowPtr);
+    res.ins.ip_D := trgs(lowPtr);
     -- !!! this doesn't work for register branches
     if not TMP_PARAM_COMPRESS_RETURN then
-       res.ins.result := ress(lowPtr);
+       res.ins.result_D := ress(lowPtr);
     else  
        resLow(ALIGN_BITS downto 0) :=  ress(lowPtr)(ALIGN_BITS downto 0);
     
        if resLow(ALIGN_BITS) = '1' then
-           res.ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ipBase(MWORD_SIZE-1 downto ALIGN_BITS), 1);
+           res.ins.result_D(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ipBase(MWORD_SIZE-1 downto ALIGN_BITS), 1);
        else
-           res.ins.result(MWORD_SIZE-1 downto ALIGN_BITS) := ipBase(MWORD_SIZE-1 downto ALIGN_BITS);                   
+           res.ins.result_D(MWORD_SIZE-1 downto ALIGN_BITS) := ipBase(MWORD_SIZE-1 downto ALIGN_BITS);                   
        end if;              
-       res.ins.result(ALIGN_BITS-1 downto 0) := resLow(ALIGN_BITS-1 downto 0);
+       res.ins.result_D(ALIGN_BITS-1 downto 0) := resLow(ALIGN_BITS-1 downto 0);
     end if;
                         
-    res.ins.target := trgs(lowPtr);
+    res.ins.target_D := trgs(lowPtr);
    
     if lowPtr = 0 then
         res.ins.tags.intPointer := intBase;

@@ -200,8 +200,8 @@ package body LogicQueues is
         res.controlInfo.newEvent := elem.hasEvent;
         res.controlInfo.firstBr := elem.first;
         res.controlInfo.sqMiss := not elem.completedV;   
-        res.target := adr;
-        res.result := value;    
+        res.target_D := adr;
+        res.result_D := value;    
         return res;
     end function;
 

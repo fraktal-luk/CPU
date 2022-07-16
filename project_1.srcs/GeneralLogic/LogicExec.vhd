@@ -302,9 +302,9 @@ package body LogicExec is
        variable res: InstructionState := DEFAULT_INS_STATE;--ins;
 	begin
         if st.operation.float = opOr then 
-           res.result := st.args(0) or st.args(1);
+           res.result_D := st.args(0) or st.args(1);
         elsif st.operation.float = opMove then
-           res.result := st.args(0);
+           res.result_D := st.args(0);
         else
            
 		end if;

@@ -242,9 +242,9 @@ begin
     -- E. out
     selectedDataOutput.controlInfo <= selectedDataSlot.ins.controlInfo;
     selectedDataOutput.tags <= selectedDataSlot.ins.tags;
-    selectedDataOutput.ip <= selectedDataSlot.ins.ip;
-    selectedDataOutput.target <= selectedDataSlot.ins.target;
-    selectedDataOutput.nip <= selectedDataSlot.ins.result;
+    selectedDataOutput.ip <= selectedDataSlot.ins.ip_D;
+    selectedDataOutput.target <= selectedDataSlot.ins.target_D;
+    selectedDataOutput.nip <= selectedDataSlot.ins.result_D;
     
     -- C. out
     sendingSQOut <= committingBr;

@@ -132,7 +132,7 @@ begin
     pcNew <= newPCData(lateEventSending,    lateCausingTarget,
                                             execEventSignal, execEvent.value,
                                             frontEventSignal, frontEvent.value,
-                                            pcNext).ip;
+                                            pcNext).ip_D;
 
     sendingToPC <= running or eventOccurred;
  

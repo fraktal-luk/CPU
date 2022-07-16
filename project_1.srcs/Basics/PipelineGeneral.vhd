@@ -1091,7 +1091,7 @@ begin
         res(i).controlInfo.full := isa(i).full;
         res(i).classInfo := isa(i).ins.classInfo;
         
-        res(i).target := isa(i).ins.target;
+        res(i).target := isa(i).ins.target_D;
     end loop;
     return res;
 end function;

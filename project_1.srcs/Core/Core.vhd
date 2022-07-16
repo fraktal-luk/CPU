@@ -685,12 +685,12 @@ begin
                     
                     
                     slotM0_E0(0).full <= sendingToAgu;
-                    slotM0_E0(0).ins.result <= resultToM0_E0.value;
+                    slotM0_E0(0).ins.result_D <= resultToM0_E0.value;
                     slotM0_E0(0).ins.specificOperation <= controlToM0_E0.op;
                     slotM0_E0(0).ins.tags <= controlToM0_E0.tags;
 
                     slotM0_E1i(0).ins.specificOperation <= slotM0_E0(0).ins.specificOperation;               
-                    slotM0_E1i(0).ins.result <= slotM0_E0(0).ins.result;
+                    slotM0_E1i(0).ins.result_D <= slotM0_E0(0).ins.result_D;
                 
                     memoryCtrl <= memoryCtrlPre;
                 end if;
@@ -702,12 +702,12 @@ begin
             memAddressInputSQ.full <= slotM0_E0(0).full;
             memAddressInputSQ.tag <= slotM0_E0(0).ins.tags.renameIndex;
             memAddressInputSQ.dest <= slotM0_E0(0).ins.tags.sqPointer;
-            memAddressInputSQ.value <= slotM0_E0(0).ins.result;
+            memAddressInputSQ.value <= slotM0_E0(0).ins.result_D;
 
             memAddressInputLQ.full <= slotM0_E0(0).full;
             memAddressInputLQ.tag <= slotM0_E0(0).ins.tags.renameIndex;
             memAddressInputLQ.dest <= slotM0_E0(0).ins.tags.lqPointer;
-            memAddressInputLQ.value <= slotM0_E0(0).ins.result;
+            memAddressInputLQ.value <= slotM0_E0(0).ins.result_D;
 
             memAddressOp <= slotM0_E0(0).ins.specificOperation;
 
@@ -717,7 +717,7 @@ begin
                                                   ctOutSQ, ctOutLQ).value;
 
             memoryCtrlPre <= getLSResultData(   slotM0_E1i(0).ins.specificOperation,
-                                                slotM0_E1i(0).ins.result,
+                                                slotM0_E1i(0).ins.result_D,
                                                 '1', memLoadReady, sysRegSending,
                                                 ctOutSQ, ctOutLQ);
 
@@ -993,7 +993,7 @@ begin
             subpipeF0_RRu.full <= slotRegReadF0.full and not outSigsF0.killSel2;
             subpipeF0_RRu.tag <= slotRegReadF0.renameIndex;
             subpipeF0_RRu.dest <= slotRegReadF0.argSpec.dest;
-            subpipeF0_RRu.value <= executeFpu(slotRegReadF0).result;
+            subpipeF0_RRu.value <= executeFpu(slotRegReadF0).result_D;
 
             process (clk)
             begin

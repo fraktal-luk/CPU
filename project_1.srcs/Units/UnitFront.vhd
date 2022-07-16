@@ -65,14 +65,15 @@ architecture Behavioral of UnitFront is
     signal bqDataSig, bqDataSigPre: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 
 	signal predictedAddress, frontTarget: Mword := (others => '0');
-	signal fetchCounter, fetchCounterNext, decodeCounter, decodeCounterNext: Word := (others => '0');
+	signal --fetchCounter, fetchCounterNext,
+	       decodeCounter, decodeCounterNext: Word := (others => '0');
 
 	signal dataToIbuffer, ibufDataOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 begin
 	killAll <= execEventSignal or lateEventSignal;
     killAllOrFront <= killAll or frontBranchEvent;
 
-    fetchCounterNext <= addInt(fetchCounter, PIPE_WIDTH) when pcEn = '1' else fetchCounter;
+    --fetchCounterNext <= addInt(fetchCounter, PIPE_WIDTH) when pcEn = '1' else fetchCounter;
     decodeCounterNext <= addInt(decodeCounter, countOnes(extractFullMask(dataToIbuffer))) when sendingToBuffer = '1' else decodeCounter;
 
 	fetchedLine0 <= iin;
@@ -82,7 +83,7 @@ begin
     process(clk)
     begin
         if rising_edge(clk) then
-            fetchCounter <= fetchCounterNext;
+            --fetchCounter <= fetchCounterNext;
             decodeCounter <= decodeCounterNext;
             
             -- fetchedLine0: assigned async
@@ -115,7 +116,7 @@ begin
     stageDataInFetch0.target <= pcDataIn.target;
         stageDataInFetch0.dbInfo <= pcDataIn.dbInfo;
 
-    stageDataInFetch0.tags.fetchCtr <= fetchCounter when not CLEAR_DEBUG_INFO else (others => '0');  
+--    stageDataInFetch0.tags.fetchCtr <= fetchCounter when not CLEAR_DEBUG_INFO else (others => '0');  
     
     sendingOutFetch0 <= full0 and not killAllOrFront;
     sendingOutFetch1 <= full1 and not killAllOrFront;
@@ -151,7 +152,7 @@ begin
     
         earlyBranchIn_OLD <= getEarlyEvent(earlyBranchMultiDataInA, stageDataOutFetch1.target, predictedAddress, fetchStall);
             earlyBranchIn.controlInfo <= earlyBranchIn_OLD.controlInfo;
-            earlyBranchIn.target <= earlyBranchIn_OLD.target;
+            earlyBranchIn.target <= earlyBranchIn_OLD.target_D;
 
         dataToIbuffer_OLD <= adjustStage(earlyBranchMultiDataInA);
             dataToIbuffer <= assignSeqNum(getEntryArray(dataToIbuffer_OLD), decodeCounter);

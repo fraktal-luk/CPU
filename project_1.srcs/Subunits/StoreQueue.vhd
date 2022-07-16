@@ -301,14 +301,14 @@ begin
         selectedOutputSig.controlInfo.firstBr <= selectedOutput.controlInfo.firstBr;
         selectedOutputSig.controlInfo.sqMiss <= selectedOutput.controlInfo.sqMiss;
         selectedOutputSig.op <= selectedOutput.specificOperation;
-        selectedOutputSig.target <= selectedOutput.target;
-        selectedOutputSig.nip <= selectedOutput.result;
+        selectedOutputSig.target <= selectedOutput.target_D;
+        selectedOutputSig.nip <= selectedOutput.result_D;
         
         committedOutputSig.controlInfo.full <= isDrainingPrev and allowDrain;
 
         committedOutputSig.op <= drainOutput.specificOperation;
-        committedOutputSig.target <= drainOutput.target;
-        committedOutputSig.nip <= drainOutput.result;
+        committedOutputSig.target <= drainOutput.target_D;
+        committedOutputSig.nip <= drainOutput.result_D;
     end generate;
 
 	-- D. output (ctrl)
