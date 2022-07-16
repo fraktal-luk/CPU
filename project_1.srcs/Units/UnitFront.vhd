@@ -150,9 +150,10 @@ begin
         -- src for Ibuf and BT
         earlyBranchMultiDataInA <= getFrontEventMulti(predictedAddress, stageDataOutFetch1.ip, stageDataOutFetch1.target, stageDataOutFetch1, fetchedLine1);
     
-        earlyBranchIn_OLD <= getEarlyEvent(earlyBranchMultiDataInA, stageDataOutFetch1.target, predictedAddress, fetchStall);
-            earlyBranchIn.controlInfo <= earlyBranchIn_OLD.controlInfo;
-            earlyBranchIn.target <= earlyBranchIn_OLD.target_D;
+        --earlyBranchIn_OLD <= getEarlyEvent(earlyBranchMultiDataInA, stageDataOutFetch1.target, predictedAddress, fetchStall);
+        earlyBranchIn <= getEarlyEvent(earlyBranchMultiDataInA, stageDataOutFetch1.target, predictedAddress, fetchStall);
+         --   earlyBranchIn.controlInfo <= earlyBranchIn_OLD.controlInfo;
+         --   earlyBranchIn.target <= earlyBranchIn_OLD.target_D;
 
         dataToIbuffer_OLD <= adjustStage(earlyBranchMultiDataInA);
             dataToIbuffer <= assignSeqNum(getEntryArray(dataToIbuffer_OLD), decodeCounter);

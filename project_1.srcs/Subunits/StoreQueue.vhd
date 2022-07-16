@@ -85,7 +85,8 @@ architecture Behavioral of StoreQueue is
     signal isFull, isAlmostFull, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDrainingPrev, isSelected: std_logic := '0';
     signal memEmpty: std_logic := '1'; -- CAREFUL! Starts with '1'
 
-    signal drainOutput, selectedOutput: InstructionState := DEFAULT_INS_STATE;
+    --signal drainOutput, selectedOutput: InstructionState := DEFAULT_INS_STATE;
+    signal drainOutput_N, selectedOutput_N: ControlPacket := DEFAULT_CONTROL_PACKET;
     signal drainValue, selectedValue, drainAddress, selectedAddress, selectionAddress: Mword := (others => '0');
 
     signal selectedEntry, drainEntry: QueueEntry := DEFAULT_QUEUE_ENTRY;
@@ -179,10 +180,12 @@ begin
         end process;
         
         -- E. out
-        selectedOutput <= getDrainOutput(selectedEntry, selectedAddress, selectedValue);    
+        --selectedOutput <= getDrainOutput(selectedEntry, selectedAddress, selectedValue);    
+        selectedOutput_N <= getDrainOutput_N(selectedEntry, selectedAddress, selectedValue);    
         
         -- D. out
-        drainOutput <= getDrainOutput(drainEntry, drainAddress, drainValue);   
+        --drainOutput <= getDrainOutput(drainEntry, drainAddress, drainValue);   
+        drainOutput_N <= getDrainOutput_N(drainEntry, drainAddress, drainValue);   
     end block;
 
     pStartEffectiveNext <= addTruncZ(pStartEffective, nCommittedEffective, QUEUE_PTR_SIZE+1) when committing = '1'
@@ -297,18 +300,25 @@ begin
 
     WHEN_SQ: if not IS_LOAD_QUEUE generate
         selectedOutputSig.controlInfo.full <= isSelected;
-        selectedOutputSig.controlInfo.newEvent <= selectedOutput.controlInfo.newEvent;
-        selectedOutputSig.controlInfo.firstBr <= selectedOutput.controlInfo.firstBr;
-        selectedOutputSig.controlInfo.sqMiss <= selectedOutput.controlInfo.sqMiss;
-        selectedOutputSig.op <= selectedOutput.specificOperation;
-        selectedOutputSig.target <= selectedOutput.target_D;
-        selectedOutputSig.nip <= selectedOutput.result_D;
+        selectedOutputSig.controlInfo.newEvent <= selectedOutput_N.controlInfo.newEvent;
+        selectedOutputSig.controlInfo.firstBr <= selectedOutput_N.controlInfo.firstBr;
+        selectedOutputSig.controlInfo.sqMiss <= selectedOutput_N.controlInfo.sqMiss;
         
-        committedOutputSig.controlInfo.full <= isDrainingPrev and allowDrain;
+        selectedOutputSig.op <= --selectedOutput.specificOperation;
+                                selectedOutput_N.op;
+        selectedOutputSig.target <= --selectedOutput.target_D;
+                                    selectedOutput_N.target;
+        selectedOutputSig.nip <= --selectedOutput.result_D;
+                                 selectedOutput_N.nip;
 
-        committedOutputSig.op <= drainOutput.specificOperation;
-        committedOutputSig.target <= drainOutput.target_D;
-        committedOutputSig.nip <= drainOutput.result_D;
+        committedOutputSig.controlInfo.full <= isDrainingPrev and allowDrain;
+        
+        committedOutputSig.op <= --drainOutput.specificOperation;
+                                    drainOutput_N.op;
+        committedOutputSig.target <= --drainOutput.target_D;
+                                    drainOutput_N.target;
+        committedOutputSig.nip <= --drainOutput.result_D;
+                                    drainOutput_N.nip;
     end generate;
 
 	-- D. output (ctrl)

@@ -77,7 +77,8 @@ architecture Behavioral of BranchQueue is
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
     constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;
 
-	signal selectedDataSlot, selectedDataSlotPre: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
+	--signal selectedDataSlot, selectedDataSlotPre: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;	
+	signal selectedDataSlot_N, selectedDataSlotPre_N: ControlPacket := DEFAULT_CONTROL_PACKET;	
 
 	signal pStart, pStartNext, pEnd, pEndNext, pTagged, pTaggedNext, pRenamed, pRenamedNext, pSelect, pSelectPrev, pCausing, pCausingPrev,
            pRenamedSeq, pRenamedSeqNext, pStartSeq, pStartSeqNext, pFlushSeq: SmallNumber := (others => '0');
@@ -145,7 +146,8 @@ begin
                end if;
                
                -- Read Exec: all arrays
-               selectedDataSlot <= selectedDataSlotPre;             
+               --selectedDataSlot <= selectedDataSlotPre;             
+               selectedDataSlot_N <= selectedDataSlotPre_N;             
            end if;
        end process;
     
@@ -155,7 +157,8 @@ begin
        earlySelected <= deserializeEarlyInfo(earlySerialSelected);
        lateSelected <= deserializeLateInfo(lateSerialSelected);
     
-       selectedDataSlotPre <= getMatchedSlot(compareAddressQuickInput.full, compareAddressQuickInput.tag, earlySelected, lateSelected);
+       --selectedDataSlotPre <= getMatchedSlot(compareAddressQuickInput.full, compareAddressQuickInput.tag, earlySelected, lateSelected);
+       selectedDataSlotPre_N <= getMatchedSlot_N(compareAddressQuickInput.full, compareAddressQuickInput.tag, earlySelected, lateSelected);
     end block;
 
     pSelect <= compareQuickPtr;
@@ -240,11 +243,13 @@ begin
     acceptingBr <= accepting;       
     
     -- E. out
-    selectedDataOutput.controlInfo <= selectedDataSlot.ins.controlInfo;
-    selectedDataOutput.tags <= selectedDataSlot.ins.tags;
-    selectedDataOutput.ip <= selectedDataSlot.ins.ip_D;
-    selectedDataOutput.target <= selectedDataSlot.ins.target_D;
-    selectedDataOutput.nip <= selectedDataSlot.ins.result_D;
+--    selectedDataOutput.controlInfo <= selectedDataSlot.ins.controlInfo;
+--    selectedDataOutput.tags <= selectedDataSlot.ins.tags;
+--    selectedDataOutput.ip <= selectedDataSlot.ins.ip_D;
+--    selectedDataOutput.target <= selectedDataSlot.ins.target_D;
+--    selectedDataOutput.nip <= selectedDataSlot.ins.result_D;
+    
+        selectedDataOutput <= selectedDataSlot_N;
     
     -- C. out
     sendingSQOut <= committingBr;

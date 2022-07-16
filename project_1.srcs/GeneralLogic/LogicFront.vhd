@@ -21,13 +21,13 @@ use work.DecodingDev.all;
 
 package LogicFront is
 
-function decodeInstructionNew(inputState: InstructionState) return InstructionState;
+function decodeInstructionNew(bits: Word) return InstructionState;
 
 function getFrontEventMulti(predictedAddress, ip, target: Mword; ctrl: ControlPacket; fetchLine: WordArray(0 to FETCH_WIDTH-1))
 return InstructionSlotArray;
 
 function getEarlyEvent(earlyBranchMultiDataInA: InstructionSlotArray; target, predictedAddress: Mword; fetchStall: std_logic)
-return InstructionState;
+return ControlPacket;
 
 function prepareForBQ(ip: Mword; insVec: InstructionSlotArray) return ControlPacketArray;
 
@@ -49,11 +49,11 @@ end LogicFront;
 
 package body LogicFront is
 
-function decodeInstructionNew(inputState: InstructionState) return InstructionState is
-	variable res: InstructionState := inputState;
+function decodeInstructionNew(bits: Word) return InstructionState is
+	variable res: InstructionState := DEFAULT_INS_STATE;
     variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
 begin
-  	decodedIns := decodeFromWordNew(inputState.bits_D);
+  	decodedIns := decodeFromWordNew(bits);
 	
 	res.specificOperation := decodedIns.specificOperation;
 	res.constantArgs := decodedIns.constantArgs;
@@ -138,8 +138,8 @@ begin
 			full(i) := '0';
 		end if;
 
+		res(i).ins := decodeInstructionNew(fetchLine(i)); -- Here decoding!
         res(i).ins.bits_D := fetchLine(i);
-		res(i).ins := decodeInstructionNew(res(i).ins); -- Here decoding!
 
         res(i).ins.ip_D := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);    -- !! Only for BQ, indirect 
 
@@ -226,20 +226,20 @@ begin
 end function;
 
 
-function findEarlyTakenJump(target: Mword; insVec: InstructionSlotArray) return InstructionState is
-	variable res: InstructionState := DEFAULT_INS_STATE;
+function findEarlyTakenJump(target: Mword; insVec: InstructionSlotArray) return ControlPacket is
+	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 begin
-    res.target_D := target;
+    res.target := target;
 
 	for i in 0 to PIPE_WIDTH-1 loop
 		if insVec(i).full = '1' and insVec(i).ins.controlInfo.frontBranch = '1' then
 		    if not CLEAR_DEBUG_INFO then
-		       res := insVec(i).ins; 
+		    --   res := insVec(i).ins; 
 		    end if;
 
 		    res.controlInfo.newEvent := insVec(i).ins.controlInfo.newEvent; -- CAREFUL: event only if needs redirection, but break group at any taken jump 
             res.controlInfo.frontBranch := '1';
-            res.target_D := insVec(i).ins.target_D; -- Correcting target within subsequent fetch line is still needed even if no redirection!
+            res.target := insVec(i).ins.target_D; -- Correcting target within subsequent fetch line is still needed even if no redirection!
             exit;
 		end if;
 	end loop;
@@ -249,11 +249,11 @@ end function;
 
 
 function getEarlyEvent(earlyBranchMultiDataInA: InstructionSlotArray; target, predictedAddress: Mword; fetchStall: std_logic)
-return InstructionState is
-    variable res: InstructionState := DEFAULT_INS_STATE;
+return ControlPacket is
+	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 begin
     if fetchStall = '1' then -- Need refetching
-        res.target_D := predictedAddress;
+        res.target := predictedAddress;
         res.controlInfo.newEvent := '1';
         res.controlInfo.refetch := '1';
     else
