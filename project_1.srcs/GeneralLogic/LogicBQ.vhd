@@ -269,17 +269,17 @@ begin
     
     res.ip := trgs(lowPtr);
     -- !!! this doesn't work for register branches
-    if not TMP_PARAM_COMPRESS_RETURN then
+    if true then
        res.nip := ress(lowPtr);
     else  
-       resLow(ALIGN_BITS downto 0) :=  ress(lowPtr)(ALIGN_BITS downto 0);
+--       resLow(ALIGN_BITS downto 0) :=  ress(lowPtr)(ALIGN_BITS downto 0);
     
-       if resLow(ALIGN_BITS) = '1' then
-           res.nip(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ipBase(MWORD_SIZE-1 downto ALIGN_BITS), 1);
-       else
-           res.nip(MWORD_SIZE-1 downto ALIGN_BITS) := ipBase(MWORD_SIZE-1 downto ALIGN_BITS);                   
-       end if;              
-       res.nip(ALIGN_BITS-1 downto 0) := resLow(ALIGN_BITS-1 downto 0);
+--       if resLow(ALIGN_BITS) = '1' then
+--           res.nip(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ipBase(MWORD_SIZE-1 downto ALIGN_BITS), 1);
+--       else
+--           res.nip(MWORD_SIZE-1 downto ALIGN_BITS) := ipBase(MWORD_SIZE-1 downto ALIGN_BITS);                   
+--       end if;              
+--       res.nip(ALIGN_BITS-1 downto 0) := resLow(ALIGN_BITS-1 downto 0);
     end if;
 
     res.target := trgs(lowPtr);

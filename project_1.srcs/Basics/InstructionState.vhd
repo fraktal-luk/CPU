@@ -202,16 +202,16 @@ end record;
 type InstructionState is record
         dbInfo: InstructionDebugInfo;
 	controlInfo: InstructionControlInfo;
-	ip_D: Mword;
-	bits_D: Word; -- instruction word
+	--ip_D: Mword;
+	--bits_D: Word; -- instruction word
 	tags: InstructionTags;
 	specificOperation: SpecificOp;
 	classInfo: InstructionClassInfo;
 	constantArgs: InstructionConstantArgs;
 	virtualArgSpec: InstructionArgSpec;
 	physicalArgSpec: InstructionArgSpec;
-	result_D: Mword;
-	target_D: Mword;
+	--result_D: Mword;
+	--target_D: Mword;
 end record;
 
 type InstructionStateArray is array(integer range <>) of InstructionState;
@@ -295,17 +295,17 @@ constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
 constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
         dbInfo => DEFAULT_DEBUG_INFO,
 	controlInfo => DEFAULT_CONTROL_INFO,
-	ip_D => (others => '0'),
-	bits_D => (others=>'0'),
+--	ip_D => (others => '0'),
+--	bits_D => (others=>'0'),
 	
 	specificOperation => DEFAULT_SPECIFIC_OP,
 	tags => DEFAULT_INSTRUCTION_TAGS,
 	classInfo => DEFAULT_CLASS_INFO,
 	constantArgs => DEFAULT_CONSTANT_ARGS,
 	virtualArgSpec => DEFAULT_ARG_SPEC,
-	physicalArgSpec => DEFAULT_ARG_SPEC,
-	result_D => (others => '0'),
-	target_D => (others => '0')
+	physicalArgSpec => DEFAULT_ARG_SPEC --,
+--	result_D => (others => '0'),
+--	target_D => (others => '0')
 );
 
 constant DEFAULT_INS_STATE: InstructionState := DEFAULT_INSTRUCTION_STATE;

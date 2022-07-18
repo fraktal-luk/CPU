@@ -47,7 +47,7 @@ package LogicExec is
 	                                           ac: AluControl)
 	                                           return ExecResult;
 
-	function executeFpu(st: SchedulerState) return InstructionState;
+	function executeFpu(st: SchedulerState) return Mword;
 
     function calcEffectiveAddress(st: SchedulerState; fromDLQ: std_logic; dlqData: ExecResult)
     return Mword;        
@@ -298,13 +298,14 @@ package body LogicExec is
     end function;
 
 	
-	function executeFpu(st: SchedulerState) return InstructionState is
-       variable res: InstructionState := DEFAULT_INS_STATE;--ins;
+	function executeFpu(st: SchedulerState) return Mword is
+       --variable res: InstructionState := DEFAULT_INS_STATE;--ins;
+       variable res: Mword := (others => '0');
 	begin
         if st.operation.float = opOr then 
-           res.result_D := st.args(0) or st.args(1);
+           res := st.args(0) or st.args(1);
         elsif st.operation.float = opMove then
-           res.result_D := st.args(0);
+           res := st.args(0);
         else
            
 		end if;

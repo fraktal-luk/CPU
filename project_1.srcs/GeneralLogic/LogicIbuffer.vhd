@@ -106,7 +106,7 @@ end function;
 
 
 function deserializeEntry(d: Dword) return BufferEntry is
-    variable res: BufferEntry;
+    variable res: BufferEntry := DEFAULT_BUFFER_ENTRY;
     
     constant controlByte: Byte := d(15 downto 8);
     constant opByte: Byte := d(7 downto 0);
@@ -115,8 +115,8 @@ function deserializeEntry(d: Dword) return BufferEntry is
 begin
     
     res.branchIns := controlByte(7);
-    res.frontBranch := controlByte(6);
-    res.confirmedBranch := controlByte(5);
+    --res.frontBranch := controlByte(6);
+    --res.confirmedBranch := controlByte(5);
     res.specialAction := controlByte(4);
     res.fpRename := controlByte(3);
     res.mainCluster := controlByte(2);

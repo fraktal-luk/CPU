@@ -547,7 +547,8 @@ begin
         SUBPIPE_MEM: block
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1); 
            signal effectiveAddress, memLoadValue, memResult: Mword := (others => '0');
-           signal controlM0_RR: ControlPacket := DEFAULT_CONTROL_PACKET;                                                           
+           signal controlM0_RR: ControlPacket := DEFAULT_CONTROL_PACKET;
+           signal resultM0_E0, resultM0_E1: Mword := (others => '0');
         begin
            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true, removeArg2(renamedArgsMerged));         
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D);
@@ -685,13 +686,15 @@ begin
                     
                     
                     slotM0_E0(0).full <= sendingToAgu;
-                    slotM0_E0(0).ins.result_D <= resultToM0_E0.value;
+                    --slotM0_E0(0).ins.result_D <= resultToM0_E0.value;
+                    resultM0_E0 <= resultToM0_E0.value;
                     slotM0_E0(0).ins.specificOperation <= controlToM0_E0.op;
                     slotM0_E0(0).ins.tags <= controlToM0_E0.tags;
 
                     slotM0_E1i(0).ins.specificOperation <= slotM0_E0(0).ins.specificOperation;               
-                    slotM0_E1i(0).ins.result_D <= slotM0_E0(0).ins.result_D;
-                
+                    --slotM0_E1i(0).ins.result_D <= --slotM0_E0(0).ins.result_D;
+                    --                              resultM0_E0;
+                    resultM0_E1 <= resultM0_E0;                
                     memoryCtrl <= memoryCtrlPre;
                 end if;
             end process;
@@ -702,12 +705,14 @@ begin
             memAddressInputSQ.full <= slotM0_E0(0).full;
             memAddressInputSQ.tag <= slotM0_E0(0).ins.tags.renameIndex;
             memAddressInputSQ.dest <= slotM0_E0(0).ins.tags.sqPointer;
-            memAddressInputSQ.value <= slotM0_E0(0).ins.result_D;
+            memAddressInputSQ.value <= --slotM0_E0(0).ins.result_D;
+                                       resultM0_E0;
 
             memAddressInputLQ.full <= slotM0_E0(0).full;
             memAddressInputLQ.tag <= slotM0_E0(0).ins.tags.renameIndex;
             memAddressInputLQ.dest <= slotM0_E0(0).ins.tags.lqPointer;
-            memAddressInputLQ.value <= slotM0_E0(0).ins.result_D;
+            memAddressInputLQ.value <= --slotM0_E0(0).ins.result_D;
+                                       resultM0_E0;
 
             memAddressOp <= slotM0_E0(0).ins.specificOperation;
 
@@ -717,7 +722,8 @@ begin
                                                   ctOutSQ, ctOutLQ).value;
 
             memoryCtrlPre <= getLSResultData(   slotM0_E1i(0).ins.specificOperation,
-                                                slotM0_E1i(0).ins.result_D,
+                                                --slotM0_E1i(0).ins.result_D,
+                                                    resultM0_E1,
                                                 '1', memLoadReady, sysRegSending,
                                                 ctOutSQ, ctOutLQ);
 
@@ -993,7 +999,7 @@ begin
             subpipeF0_RRu.full <= slotRegReadF0.full and not outSigsF0.killSel2;
             subpipeF0_RRu.tag <= slotRegReadF0.renameIndex;
             subpipeF0_RRu.dest <= slotRegReadF0.argSpec.dest;
-            subpipeF0_RRu.value <= executeFpu(slotRegReadF0).result_D;
+            subpipeF0_RRu.value <= executeFpu(slotRegReadF0);
 
             process (clk)
             begin

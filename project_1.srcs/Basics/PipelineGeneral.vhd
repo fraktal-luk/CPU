@@ -1091,7 +1091,7 @@ begin
         res(i).controlInfo.full := isa(i).full;
         res(i).classInfo := isa(i).ins.classInfo;
         
-        res(i).target := isa(i).ins.target_D;
+        --res(i).target := isa(i).ins.target_D;
     end loop;
     return res;
 end function;
@@ -1120,8 +1120,8 @@ begin
     
     res.ins.controlInfo.firstBr := elem.firstBr;
     res.ins.classInfo.branchIns := elem.branchIns;
-    res.ins.controlInfo.frontBranch := elem.frontBranch;
-    res.ins.controlInfo.confirmedBranch := elem.confirmedBranch;
+    --res.ins.controlInfo.frontBranch := elem.frontBranch;
+    --res.ins.controlInfo.confirmedBranch := elem.confirmedBranch;
     res.ins.controlInfo.specialAction := elem.specialAction;
 
     res.ins.classInfo.fpRename := elem.fpRename;           
