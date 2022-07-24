@@ -111,7 +111,8 @@ architecture Behavioral of Core is
                resultToM0_E0, resultToM0_E0i, resultToM0_E0f
            : ExecResult := DEFAULT_EXEC_RESULT;
 
-    signal pcData, branchResult, branchResultDelayed, bqSelected, ctOutLQ, ctOutSQ, ctOutSB, dataToBranch, mqReexecControl, controlToM0_E0: ControlPacket := DEFAULT_CONTROL_PACKET;
+    signal pcData, branchResult, branchResultDelayed, bqSelected, ctOutLQ, ctOutSQ, ctOutSB, dataToBranch, mqReexecControl, controlToM0_E0,
+                missedMemCtrl: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal bpData: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
     signal robOut: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
@@ -738,7 +739,7 @@ begin
             subpipeM0_E1i_u.value <= memResult;
                                         
             subpipeM0_E1f_u.full <= subpipeM0_E1f.full -- 
-                                                        and not (MemoryMissed and bool2std(CONNECT_MQ));
+                                                        and not (memoryMissed and bool2std(CONNECT_MQ));
             subpipeM0_E1f_u.tag <= subpipeM0_E1f.tag;
             subpipeM0_E1f_u.dest <= subpipeM0_E1f.dest;
             subpipeM0_E1f_u.value <= memResult;
@@ -753,9 +754,29 @@ begin
                     -- Needed also:
                     -- address
                     -- operation
-                    -- dest (+ int/FP selection)
                     -- possibly SQ tag of producing store (if forwarding found)
                     -- miss type (data miss, TLB miss, SQ data miss)
+                TMP_MQ_INPUT: block
+                    signal mqOtherData: ControlPacket := DEFAULT_CONTROL_PACKET;
+                    signal eaDelayed: Mword := (others => '0');
+                begin
+                    process (clk)
+                    begin
+                        if rising_edge(clk) then
+                            eaDelayed <= effectiveAddress;
+                        end if;
+                    end process;
+                    
+                    mqOtherData.ip <= eaDelayed;
+                    mqOtherData.op <= slotM0_E1i(0).ins.specificOperation;
+                    mqOtherData.classInfo.useFP <= subpipeM0_E1f.full;
+                    mqOtherData.controlInfo.tlbMiss <= memoryCtrl.tlbMiss;
+                    mqOtherData.controlInfo.dataMiss <= memoryCtrl.dataMiss;
+                    mqOtherData.controlInfo.sqMiss <= memoryCtrl.sqMiss;
+
+                    missedMemCtrl <= mqOtherData;
+
+                end block;
 
             -- TEMP mem interface    
             dread <= subpipeM0_E0.full;
@@ -1310,6 +1331,7 @@ begin
     
         compareAddressInput => memAddressInputSQ,
         compareAddressInputOp => memAddressOp,
+                compareAddressCtrl => DEFAULT_CONTROL_PACKET,
 		
         compareIndexInput => preIndexSQ,
         preCompareOp => preAddressOp,
@@ -1360,6 +1382,7 @@ begin
 		
 		compareAddressInput => memAddressInputLQ,
         compareAddressInputOp => memAddressOp,
+                compareAddressCtrl => DEFAULT_CONTROL_PACKET,
 
         compareIndexInput => preIndexLQ,        
         preCompareOp => preAddressOp,
@@ -1431,11 +1454,13 @@ begin
             
             compareAddressInput => missedMemResult,
             compareAddressInputOp => DEFAULT_SPECIFIC_OP,
-    
+                compareAddressCtrl => missedMemCtrl,
+
             compareIndexInput => (others => '0'),        
             preCompareOp => DEFAULT_SPECIFIC_OP,
                  
             selectedDataOutput => mqReexecResultRR,
+                selectedDataResult => open,
     
             committing => '0',
             commitMask => (others => '0'),

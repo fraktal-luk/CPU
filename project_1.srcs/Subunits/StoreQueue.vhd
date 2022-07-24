@@ -42,11 +42,13 @@ entity StoreQueue is
 
 		compareAddressInput: in ExecResult;
 		compareAddressInputOp: in SpecificOp;
+		  compareAddressCtrl: in ControlPacket;
 		
         compareIndexInput: in SmallNumber;
         preCompareOp: in SpecificOp;
 
         selectedDataOutput: out ControlPacket;
+            selectedDataResult: out ExecResult;
 
 		committing: in std_logic;
         commitMask: in std_logic_vector(0 to PIPE_WIDTH-1);

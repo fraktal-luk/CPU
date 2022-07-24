@@ -9,10 +9,33 @@ architecture MissQueue of StoreQueue is
         ready: std_logic;
         tag: InsTag;
         
+        dest: PhysName;
+        adr: Mword;
+        sqTag: SmallNumber;
+        op: SpecificOp;
+        
+        fp: std_logic;
+        tlbMiss: std_logic;
+        dataMiss: std_logic;
+        sqMiss: std_logic;
+        
             TMP_cnt: SmallNumber;
     end record;
     
-    constant DEFAULT_MQ_ENTRY: MQ_Entry := (full => '0', ready => '0', tag => (others => '0'), TMP_cnt => (others => '0'));
+    constant DEFAULT_MQ_ENTRY: MQ_Entry := (
+        full => '0',
+        ready => '0',
+        tag => (others => '0'),
+        dest => (others => '0'),
+        adr => (others => '0'),
+        sqTag => (others => '0'),
+        op => DEFAULT_SPECIFIC_OP,
+        fp => '0',
+        tlbMiss => '0',
+        dataMiss => '0',
+        sqMiss => '0',
+        
+        TMP_cnt => (others => '0'));
     
     type MQ_EntryArray is array(integer range <>) of MQ_Entry;
     
@@ -21,7 +44,8 @@ architecture MissQueue of StoreQueue is
     signal outEntrySig: MQ_Entry := DEFAULT_MQ_ENTRY;
 
     signal queueContent: MQ_EntryArray(0 to MQ_SIZE-1) := (others => DEFAULT_MQ_ENTRY);
-    signal fullMask, fullMaskNew, killMask, selectMask, selectMask1, selectMask2, selectMask3, inputFullMask, outputFullMask, readyMask: std_logic_vector(0 to MQ_SIZE-1) := (others => '0'); 
+    signal fullMask, fullMaskNew, killMask, selectMask, selectMask1, selectMask2, selectMask3, inputFullMask,
+            outputFullMask, outputFullMask1, outputFullMask2, outputFullMask3, readyMask: std_logic_vector(0 to MQ_SIZE-1) := (others => '0'); 
     
         signal firstOnePosI: integer := -1;
         signal queueIndex, queueIndexNext, queueIndexNew, firstOnePos, firstOnePos1, firstOnePos2, firstOnePos3: natural := 0;
@@ -143,6 +167,9 @@ begin
                 selectMask2 <= selectMask1;
                 selectMask3 <= selectMask2;
 
+                outputFullMask1 <= outputFullMask;
+                outputFullMask2 <= outputFullMask1;
+                outputFullMask3 <= outputFullMask2;
                                 
                 for i in 0 to MQ_SIZE-1 loop
                     queueContent(i).TMP_cnt <= addInt(queueContent(i).TMP_cnt, 1);
@@ -157,7 +184,7 @@ begin
               --  selMask <= getFirstOne(readyMask);
 
                 for i in 0 to MQ_SIZE-1 loop                    
-                    queueContent(i).full <= (fullMask(i) and not killMask(i) and not outputFullMask(i)) or inputFullMask(i);
+                    queueContent(i).full <= (fullMask(i) and not killMask(i) and not outputFullMask3(i)) or inputFullMask(i);
 
                 end loop;
 
@@ -165,6 +192,16 @@ begin
                 queueContent(queueIndexNew).full <= '1';
                 queueContent(queueIndexNew).tag <= compareAddressInput.tag;
                 queueContent(queueIndexNew).ready <= '0';
+                
+                queueContent(queueIndexNew).dest <= compareAddressInput.dest;
+                queueContent(queueIndexNew).adr <= compareAddressCtrl.ip;
+                queueContent(queueIndexNew).sqTag <= (others => 'U');
+                
+                queueContent(queueIndexNew).fp <= compareAddressCtrl.classInfo.useFP;
+                queueContent(queueIndexNew).tlbMiss <= compareAddressCtrl.controlInfo.tlbMiss;
+                queueContent(queueIndexNew).dataMiss <= compareAddressCtrl.controlInfo.dataMiss;
+                queueContent(queueIndexNew).sqMiss <= compareAddressCtrl.controlInfo.sqMiss;
+                
                 queueContent(queueIndexNew).TMP_cnt <= (others => '0');
 
             end if;
@@ -184,7 +221,14 @@ begin
         selectedDataOutput.controlInfo.full <= sending3 and outEntrySig.full and not lateEventSignal;
         selectedDataOutput.tag <= outEntrySig.tag;
         --selectedDataOutput.value <= outEntrySig.target;
-
+        selectedDataResult.dest <= outEntrySig.dest;
+        
+        selectedDataOutput.target <= outEntrySig.adr;
+        selectedDataOutput.classInfo.useFP <= outEntrySig.fp;
+        selectedDataOutput.controlInfo.tlbMiss <= outEntrySig.tlbMiss;
+        selectedDataOutput.controlInfo.dataMiss <= outEntrySig.dataMiss;
+        selectedDataOutput.controlInfo.sqMiss <= outEntrySig.sqMiss;
+        
 
         committedSending <= sending1; -- Indication to block normal mem issue
 end MissQueue;
