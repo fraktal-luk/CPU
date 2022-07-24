@@ -186,9 +186,6 @@ type InstructionArgSpec is record
 end record;
 
 type InstructionTags is record
-    --fetchCtr: Word;	-- Ctr is never reset!
-    --decodeCtr: Word; -- Ctr is never reset!
-    --renameCtr: Word;
     renameIndex: InsTag;	-- group + group position
     intPointer: SmallNumber;
     floatPointer: SmallNumber;
@@ -196,29 +193,23 @@ type InstructionTags is record
     sqPointer: SmallNumber;
     lqPointer: SmallNumber;
     bqPointerSeq: SmallNumber;
-    --commitCtr: Word;
 end record;
 
 type InstructionState is record
         dbInfo: InstructionDebugInfo;
 	controlInfo: InstructionControlInfo;
-	--ip_D: Mword;
-	--bits_D: Word; -- instruction word
 	tags: InstructionTags;
 	specificOperation: SpecificOp;
 	classInfo: InstructionClassInfo;
 	constantArgs: InstructionConstantArgs;
 	virtualArgSpec: InstructionArgSpec;
 	physicalArgSpec: InstructionArgSpec;
-	--result_D: Mword;
-	--target_D: Mword;
 end record;
 
 type InstructionStateArray is array(integer range <>) of InstructionState;
 
 type ControlPacket is record
         dbInfo: InstructionDebugInfo;
-
     controlInfo: InstructionControlInfo;
     classInfo: InstructionClassInfo;
     op: SpecificOp;
@@ -279,9 +270,6 @@ constant DEFAULT_ARG_SPEC: InstructionArgSpec := (
 );
 
 constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
---    fetchCtr => (others => '0'),
---    decodeCtr => (others => '0'),
---    renameCtr => (others => '0'),
     renameIndex => (others => '0'),
     intPointer => (others => '0'),
     floatPointer => (others => '0'),
@@ -289,23 +277,17 @@ constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
     sqPointer => (others => '0'),
     lqPointer => (others => '0'),
     bqPointerSeq => (others => '0')
---    commitCtr => (others => '0')
 );
 
 constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
         dbInfo => DEFAULT_DEBUG_INFO,
-	controlInfo => DEFAULT_CONTROL_INFO,
---	ip_D => (others => '0'),
---	bits_D => (others=>'0'),
-	
+	controlInfo => DEFAULT_CONTROL_INFO,	
 	specificOperation => DEFAULT_SPECIFIC_OP,
 	tags => DEFAULT_INSTRUCTION_TAGS,
 	classInfo => DEFAULT_CLASS_INFO,
 	constantArgs => DEFAULT_CONSTANT_ARGS,
 	virtualArgSpec => DEFAULT_ARG_SPEC,
-	physicalArgSpec => DEFAULT_ARG_SPEC --,
---	result_D => (others => '0'),
---	target_D => (others => '0')
+	physicalArgSpec => DEFAULT_ARG_SPEC
 );
 
 constant DEFAULT_INS_STATE: InstructionState := DEFAULT_INSTRUCTION_STATE;

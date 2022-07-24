@@ -75,7 +75,8 @@ architecture Behavioral of Core is
            sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
            : std_logic := '0';
 
-    signal renamedDataLivingReMem, renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal renamedDataLivingRe, 
+            renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal branchMaskRe, loadMaskRe, storeMaskRe, branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO,
            commitMaskSQ, commitEffectiveMaskSQ, commitMaskLQ, commitEffectiveMaskLQ, branchCommitMask, branchCommitEffectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
@@ -184,8 +185,6 @@ begin
     iadr <= pcData.ip;
     iadrvalid <= pcData.controlInfo.full;
        
-       
-       --    events <= (lateEventSignal, execEventSignal, dataToBranch.tags, execEvent, lateEvent);
 
 	UNIT_FRONT: entity work.UnitFront(Behavioral)
     port map(
@@ -288,8 +287,6 @@ begin
     queuesAccepting <= lsbrAccepting and issueQueuesAccepting;
     queuesAcceptingMore <= lsbrAcceptingMore and issueQueuesAcceptingMore;
 
-    renamedDataLivingReMem <= TMP_recodeMem(renamedDataLivingRe);
-   
     renamedArgsMerged <= mergeRenameInfoFP(renamedArgsInt, renamedArgsFloat);
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
@@ -550,7 +547,7 @@ begin
            signal controlM0_RR: ControlPacket := DEFAULT_CONTROL_PACKET;
            signal resultM0_E0, resultM0_E1: Mword := (others => '0');
         begin
-           schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingReMem), memMask, true, removeArg2(renamedArgsMerged));         
+           schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingRe), memMask, true, removeArg2(renamedArgsMerged));         
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D);
 
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)
@@ -752,8 +749,13 @@ begin
                     missedMemResult.full <= subpipeM0_E1.full and memoryMissed;
                     missedMemResult.tag <= subpipeM0_E1.tag;
                     missedMemResult.dest <= subpipeM0_E1.dest;
-                    missedMemResult.value <= memResult;
-
+                    missedMemResult.value <= memResult; -- probably not needed here
+                    -- Needed also:
+                    -- address
+                    -- operation
+                    -- dest (+ int/FP selection)
+                    -- possibly SQ tag of producing store (if forwarding found)
+                    -- miss type (data miss, TLB miss, SQ data miss)
 
             -- TEMP mem interface    
             dread <= subpipeM0_E0.full;
@@ -774,10 +776,10 @@ begin
             signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoFloatA, schedInfoUpdatedFloatA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
         begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
-            schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingReMem), intStoreMask, false, useStoreArg2(renamedArgsInt));
+            schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingRe), intStoreMask, false, useStoreArg2(renamedArgsInt));
             schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, true, FORWARDING_MODES_SV_INT_D);
 
-            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingReMem), fpStoreMask, false, useStoreArg2(renamedArgsFloat));
+            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingRe), fpStoreMask, false, useStoreArg2(renamedArgsFloat));
             schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, true, FORWARDING_MODES_SV_FLOAT_D);
 
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni, readyRegFlagsSV);
@@ -1209,19 +1211,20 @@ begin
 
 
     QUEUE_MASKS: block
-        signal renamedDataToSQ, renamedDataToLQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);    
+        --signal renamedDataToSQ, renamedDataToLQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);    
     begin
         renamedDataToBQ <= setFullMask(renamedDataLivingRe, getBranchMask1(renamedDataLivingRe));
-        renamedDataToSQ <= setFullMask(renamedDataLivingReMem, getStoreMask1(renamedDataLivingRe));
-        renamedDataToLQ <= setFullMask(renamedDataLivingReMem, getLoadMask1(renamedDataLivingRe));  
+        --renamedDataToSQ <= setFullMask(renamedDataLivingReMem, getStoreMask1(renamedDataLivingRe));
+        --renamedDataToLQ <= setFullMask(renamedDataLivingReMem, getLoadMask1(renamedDataLivingRe));  
 
         branchMaskOO <= getBranchMask1(renamedDataLivingRe);
         loadMaskOO <= getLoadMask1(renamedDataLivingRe);
         storeMaskOO <= getStoreMask1(renamedDataLivingRe);
         
-        systemStoreMaskOO <= getStoreSysMask(renamedDataToSQ);
-        systemLoadMaskOO <= getLoadSysMask(renamedDataToSQ);
-        
+        systemStoreMaskOO <= getStoreSysMask(--renamedDataToSQ);
+                                                renamedDataLivingRe);
+        systemLoadMaskOO <= getLoadSysMask(--renamedDataToSQ);
+                                                renamedDataLivingRe);
      
         commitMaskSQ <= work.LogicQueues.getCommittedMask(robOut, false);
         commitMaskLQ <= work.LogicQueues.getCommittedMask(robOut, true);

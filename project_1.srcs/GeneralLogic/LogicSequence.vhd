@@ -34,7 +34,6 @@ function getNewEffective(sendingToCommit: std_logic;
 						 evtPhase2: std_logic)
 return ControlPacket;
 
---function anyEvent(insVec: InstructionSlotArray) return std_logic;
 function anyEvent(cpa: ControlPacketArray) return std_logic;
 
 function assignCommitNumbers(cpa: ControlPacketArray; ctr: Word) return ControlPacketArray;
@@ -68,17 +67,14 @@ end function;
 function getLatePCData(commitCt: InstructionControlInfo; commitTarget: Mword; int: std_logic; intType: std_logic_vector;
 					   currentState, linkExc, linkInt, stateExc, stateInt: Mword; specialOp: SpecificOp)
 return ControlPacket is
-	--variable res_O: InstructionState := DEFAULT_INSTRUCTION_STATE;
 	variable ct: InstructionControlInfo := DEFAULT_CONTROL_INFO;
 	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 	variable target, state: Mword := (others=>'0');
 	constant MINUS_4: Mword := i2slv(-4, MWORD_SIZE);
 begin
-    --res_O.controlInfo := commitCt;
-        ct := commitCt;
+    ct := commitCt;
+    ct.hasInterrupt := int;
 
-    --res_O.controlInfo.hasInterrupt := int;
-        ct.hasInterrupt := int;
     if int = '1' then
         if intType = "01" then
             target := X"00000280";
@@ -100,7 +96,8 @@ begin
             target := commitTarget;
         elsif specialOp.system = opReplay       
             or commitCt.refetch = '1' then
-            target := add(commitTarget, MINUS_4); -- CAREFUL: wouldn't work if branch or short
+            target := --add(commitTarget, MINUS_4); -- CAREFUL: wouldn't work if branch or short
+                        addInt(commitTarget, -4);
         elsif specialOp.system = opHalt then
             target := commitTarget; -- ???
         elsif specialOp.system = opRetI then
@@ -115,15 +112,10 @@ begin
             target := CALL_BASE; -- TEMP			    
         end if;
     end if;		
-   
-    --res_O.target_D := target;
-    --target := commitTarget;
-    
-    --res_O.tags := DEFAULT_INSTRUCTION_TAGS;
-    
-    res.controlInfo := ct;--res_O.controlInfo;
-    res.ip := commitTarget;--target;
-    res.target := target; --res_O.target_D;
+
+    res.controlInfo := ct;
+    res.ip := commitTarget;
+    res.target := target;
     res.nip := state;
 
 	return res;
@@ -155,11 +147,9 @@ function getNewEffective(sendingToCommit: std_logic;
 						 lateCt: InstructionControlInfo; lateTarget: Mword;						 
 						 evtPhase2: std_logic)
 return ControlPacket is
-	--variable res_O: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 	variable ct_O: InstructionControlInfo := DEFAULT_CONTROL_INFO;
 	variable target_O: Mword := (others => '0');
 	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-	--variable lastEff: InstructionState := DEFAULT_INS_STATE;
 	variable targetInc: Mword := (others => '0');
 	variable anyConfirmed: boolean := false;
 begin
@@ -177,26 +167,16 @@ begin
     end loop;
 	   
 	if evtPhase2 = '1' then
-	   --res_O.full := '1';
-	   --res_O.ins.controlInfo := lateCt;
-	   --res_O.ins.target_D := lateTarget;   
-	   
-	   res.controlInfo := lateCt;--res_O.ins.controlInfo;
-	   res.target := lateTarget;--res_O.ins.target_D;
+	   res.controlInfo := lateCt;
+	   res.target := lateTarget;
 	   return res;
 	end if;
 
-    --lastEff.controlInfo := robData(0).controlInfo;
-    --lastEff.target_D := robData(0).target;
     ct_O := robData(0).controlInfo;
     target_O := robData(0).target;
 
     for i in PIPE_WIDTH-1 downto 0 loop
         if robData(i).controlInfo.full = '1' then
-           --lastEff.controlInfo := robData(i).controlInfo;
-           --lastEff.controlInfo.newEvent := hasSyncEvent(robData(i).controlInfo);
-           --lastEff.target_D := robData(i).target;
-           
            ct_O := robData(i).controlInfo;
            ct_O.newEvent := hasSyncEvent(robData(i).controlInfo);
            target_O := robData(i).target;
@@ -204,37 +184,18 @@ begin
         end if;
     end loop;
 
-    --res_O.full := sendingToCommit;
-    --res_O.ins.controlInfo := lastEff.controlInfo;
-    --res_O.ins.target_D := lastEff.target_D;
-    
-
     if bqTargetFull = '1' and anyConfirmed then -- TODO, CHECK: bqTargetData.full will always be '1' if anyConfirmed?
-      --  res_O.ins.target_D := bqTarget;
         target_O := bqTarget;
     else
-       -- res_O.ins.target_D := add(lastEffectiveTarget, targetInc);
         target_O := add(lastEffectiveTarget, targetInc);      
     end if;
 
-    res.controlInfo := --res_O.ins.controlInfo;
-                        ct_O;
-    res.target := --res_O.ins.target_D;
-                    target_O;
+    res.controlInfo := ct_O;
+    res.target := target_O;
     
 	return res;
 end function;
 
-
---function anyEvent(insVec: InstructionSlotArray) return std_logic is
---begin
---    for i in 0 to PIPE_WIDTH-1 loop
---        if (insVec(i).ins.controlInfo.full = '1') and hasSyncEvent(insVec(i).ins.controlInfo) = '1' then
---            return '1';
---        end if;            
---    end loop;
---    return '0'; 
---end function;
 
 function anyEvent(cpa: ControlPacketArray) return std_logic is
 begin

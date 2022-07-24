@@ -67,7 +67,8 @@ end UnitRegManager;
 
 
 architecture Behavioral of UnitRegManager is
-    signal stageDataRenameIn, renamedDataLivingPre, renamedBase, frontDataISL, TMP_spMaskedData: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal stageDataRenameIn, renamedDataLivingPre, renamedBase, frontDataISL --, TMP_spMaskedData
+    : InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, robSendingDelayed, frontLastSending, renamedSendingSig,
                renameLockState, renameLockStateNext, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed, renameLockEndDelayedNext,     
                renameFull,
@@ -84,6 +85,7 @@ architecture Behavioral of UnitRegManager is
 
     signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;    
 
+        -- DEBUG
     	signal newProducersInt, newProducersFloat, zeroProducers: InsTagArray(0 to 3*PIPE_WIDTH-1) := (others => (others => 'U'));
 
     ------------
@@ -122,8 +124,8 @@ architecture Behavioral of UnitRegManager is
         variable tag: InsTag := renameGroupCtrNext;
        	variable found: boolean := false;
     begin
-        stores := getStoreMask(TMP_recodeMem(insVec));
-        loads := getLoadMask(TMP_recodeMem(insVec));
+        stores := getStoreMask(insVec);
+        loads := getLoadMask(insVec);
         branches := getBranchMask(insVec);
         
         -- Assign dest registers
@@ -146,7 +148,6 @@ architecture Behavioral of UnitRegManager is
                 res(i).ins.dbInfo := DB_addTag(res(i).ins.dbInfo, tag);-- renameGroupCtrNext or i2slv(i, TAG_SIZE);
         
             res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
-            --res(i).ins.tags.renameCtr := addInt(renameCtr, i);
             res(i).ins.tags.intPointer := addInt(newIntDestPointer, countOnes(takeVecInt(0 to i)));
                                                                          -- Don't increment pointer on ops which use no destination!
             res(i).ins.tags.floatPointer := addInt(newFloatDestPointer, countOnes(takeVecFloat(0 to i)));
@@ -418,7 +419,7 @@ architecture Behavioral of UnitRegManager is
                       commitArgInfoIntDelayed, commitArgInfoFloatDelayed: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 begin
 
-    frontDataISL <= getInsSlotArray(frontData);
+    frontDataISL <= TMP_recodeMem(getInsSlotArray(frontData));
 
     inputRenameInfoInt <= getRenameInfo(frontData,    renamedBase, zeroDests, zeroSources, zeroSources, zeroProducers, zeroSelector);
     inputRenameInfoFloat <= getRenameInfo(frontData,  renamedBase, zeroDests, zeroSources, zeroSources, zeroProducers, zeroSelector, true);
@@ -445,7 +446,7 @@ begin
                                     '0' --dbtrapOn
                                     );
 
-    stageDataRenameIn <= classifyForDispatch(TMP_recodeMem(renamedBase));
+    stageDataRenameIn <= classifyForDispatch((renamedBase));
 
     renamedDataLiving <= restoreRenameIndex(renamedDataLivingPre);
 
@@ -622,14 +623,10 @@ begin
     renameAccepting <= not renameLockState;
  
     renamedSending <= renamedSendingSig;   
-    
-    renamingBr <= frontLastSending and frontDataISL(0).ins.controlInfo.firstBr;
-         
-         TMP_MASKED_OUT: for i in 0 to PIPE_WIDTH-1 generate
-            TMP_spMaskedData(i) <= (renamedBase(i).full, frontDataISL(i).ins);
-         end generate;
 
-    branchMaskRe <= getBranchMask(TMP_spMaskedData);
-    loadMaskRe <= getLoadMask(TMP_recodeMem(TMP_spMaskedData));
-    storeMaskRe <= getStoreMask(TMP_recodeMem(TMP_spMaskedData));
+    renamingBr <= frontLastSending and frontDataISL(0).ins.controlInfo.firstBr;
+
+    branchMaskRe <= getBranchMask(renamedBase);
+    loadMaskRe <= getLoadMask(renamedBase);
+    storeMaskRe <= getStoreMask(renamedBase);
 end Behavioral;

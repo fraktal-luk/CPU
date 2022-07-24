@@ -581,9 +581,11 @@ end function;
 
 function getStoreSysMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+	variable sm1: std_logic_vector(0 to PIPE_WIDTH-1) := getStoreMask1(insVec);
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 	  insVec(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
+		if 	  sm1(i) = '1' --insVec(i).full = '1'
+		       and insVec(i).ins.specificOperation.subpipe = Mem 
 		      and (insVec(i).ins.specificOperation.memory = opStoreSys)		
 		then
 			res(i) := '1';
@@ -595,9 +597,11 @@ end function;
 
 function getLoadSysMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+	variable lm1: std_logic_vector(0 to PIPE_WIDTH-1) := getLoadMask1(insVec);
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 	  insVec(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
+		if 	  lm1(i) = '1' -- insVec(i).full = '1' 
+		      and insVec(i).ins.specificOperation.subpipe = Mem 
 		      and (insVec(i).ins.specificOperation.memory = opLoadSys)		
 		then
 			res(i) := '1';

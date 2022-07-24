@@ -15,8 +15,6 @@ use work.InstructionState.all;
 
 package DecodingDev is
 
-function decodeFromWordNew(w: word) return InstructionState;
-
 procedure decodeFromWord(w: in Word; classInfo: out InstructionClassInfo; op: out SpecificOp; constantArgs: out InstructionConstantArgs; argSpec: out InstructionArgSpec);
 
 end package;
@@ -194,126 +192,6 @@ end function;
 function checkOp1(op0, opRef0, op1: slv6; table: Dword) return std_logic is
 begin
     return bool2std(op0 = opRef0) and table(slv2u(op1));
-end function;
-
-
-function decodeFromWordNew(w: word) return InstructionState is
-    variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
-    variable specificOperation: SpecificOp := DEFAULT_SPECIFIC_OP;
-    
-    constant op0: slv6 := w(31 downto 26);
-    constant op1: slv6 := w(15 downto 10);
-    constant op2: slv5 := w(4 downto 0);
-    
-    constant qa: slv5 := w(25 downto 21);
-    constant qb: slv5 := w(20 downto 16);
-    constant qc: slv5 := w(9 downto 5);
-    constant qd: slv5 := w(4 downto 0);
-    
-    variable    hasOp1, hasOp2,
-                isBranch, isStore, isLoad, hasImm26, hasImm21, hasImm16, hasImm10, hasFpDest, hasIntDest,
-                src2a, src0a,
-                intSrc0, intSrc1, intSrc2,
-                fpSrc0, fpSrc1, fpSrc2: boolean := false;                
-begin
-    isBranch := std2bool(    checkOp0(op0, OP0_JUMP)
-                          or checkOp1(op0, "000000", op1, OP1_INT_ARITH_BRANCH));
-    hasImm26 := std2bool(checkOp0(op0, OP0_IMM26));
-    
-    hasImm21 := std2bool(checkOp0(op0, OP0_IMM21));
-
-    hasImm16 := std2bool(checkOp0(op0, OP0_IMM16));
-    
-    hasImm10 := std2bool(checkOp0(op0, OP0_IMM10));
-
-    hasFpDest := std2bool(checkOp0(op0, OP0_FLOAT_DEST) or checkOp1(op0, "000011", op1, OP1_FLOAT_MEM_LOAD));
-
-    hasIntDest := std2bool(
-                           checkOp0(op0, OP0_INT_DEST)
-                        or checkOp1(op0, "000010", op1, OP1_INT_MEM_LOAD)
-                        or checkOp1(op0, "000100", op1, OP1_SYS_MEM_LOAD)
-                        );
-    
-    src2a := std2bool(checkOp0(op0, OP0_2A) or checkOp1(op0, "000100", op1, OP1_SYS_MEM_STORE));                
-    
-    src0a := std2bool(checkOp0(op0, OP0_0A));
-    
-    intSrc0 := std2bool(checkOp0(op0, OP0_INT_SRC0));
-            
-    intSrc1 := std2bool(checkOp0(op0, OP0_INT_SRC1));
-    
-    intSrc2 := std2bool(    checkOp0(op0, OP0_INT_SRC2)
-                         or checkOp1(op0, "000010", op1, OP1_INT_MEM_STORE)
-                         or checkOp1(op0, "000100", op1, OP1_SYS_MEM_STORE));
-
-    fpSrc0  := std2bool(checkOp0(op0, OP0_FLOAT_ARITH));
-    fpSrc1  := std2bool(checkOp1(op0, "000001", op1, OP1_FLOAT_ARITH_SRC1));
-                      
-    fpSrc2 := std2bool(    checkOp0(op0, OP0_FLOAT_SRC2)
-                       or checkOp1(op0, "000001", op1, OP1_FLOAT_ARITH_SRC2));    
-
-    isStore := std2bool(    checkOp0(op0, OP0_STORE)
-                         or checkOp1(op0, "000010", op1, OP1_INT_MEM_STORE)
-                         or checkOp1(op0, "000011", op1, OP1_FLOAT_MEM_STORE)
-                         or checkOp1(op0, "000100", op1, OP1_SYS_MEM_STORE));
-
-    isLoad := std2bool(    checkOp0(op0, OP0_LOAD)
-                         or checkOp1(op0, "000010", op1, OP1_INT_MEM_LOAD)
-                         or checkOp1(op0, "000011", op1, OP1_FLOAT_MEM_LOAD)
-                         or checkOp1(op0, "000100", op1, OP1_SYS_MEM_LOAD));
-     
-    res.specificOperation := decodeOperation(op0, op1, op2);
-    
-    res.classInfo.branchIns := bool2std(isBranch);
-    
-    res.classInfo.mainCluster := bool2std(op0 /= "000111"); -- !!
-    res.classInfo.secCluster := bool2std(isStore);
-    res.classInfo.useLQ := bool2std(isLoad);
-    
-    res.classInfo.fpRename := bool2std(hasFpDest or fpSrc0 or fpSrc1 or fpSrc2);
-    
-    -- assign register definitions
-    res.virtualArgSpec.dest := "000" & qa;
-    if hasIntDest and isNonzero(res.virtualArgSpec.dest) = '1' then
-        res.virtualArgSpec.intDestSel := '1';
-    elsif hasFpDest then
-        res.virtualArgSpec.floatDestSel := '1';
-    else -- When none selected, set 0
-        --res.virtualArgSpec.dest := (others => '0');
-    end if;
-    
-    if src0a then
-       res.virtualArgSpec.args(0) := "000" & qa;
-    else
-       res.virtualArgSpec.args(0) := "000" & qb;
-    end if;
-
-    res.virtualArgSpec.intArgSel := (bool2std(intSrc0), bool2std(intSrc1), bool2std(intSrc2));
-    res.virtualArgSpec.floatArgSel := (bool2std(fpSrc0), bool2std(fpSrc1), bool2std(fpSrc2));
-
-    if hasImm16 or hasImm10 or hasImm26 or hasImm21 then
-        res.virtualArgSpec.args(1) := (others => '0');
-    else
-        res.virtualArgSpec.args(1) := "000" & qc;
-    end if;
-
-    if src2a then
-       res.virtualArgSpec.args(2) := "000" & qa;
-    else
-       res.virtualArgSpec.args(2) := (others => '0');
-    end if;
-    
-    -- process immediate
-    res.constantArgs.immSel := bool2std(hasImm16 or hasImm10 or hasImm26 or hasImm21);    
-    res.constantArgs.imm := w;
-    
-    if hasImm16 then
-        res.constantArgs.imm(31 downto 16) := (others => w(15));
-    else
-        res.constantArgs.imm(31 downto 10) := (others => w(9));
-    end if;
-    
-    return res;
 end function;
 
 
