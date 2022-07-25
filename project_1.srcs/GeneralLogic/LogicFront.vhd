@@ -499,6 +499,8 @@ begin
     -- pragma synthesis off
     res.bits := bits;
     res.adr := ip;
+        res.str := work.Assembler.disasmWord(bits)(res.str'range);
+
     -- pragma synthesis on
     return res;
 end function;
