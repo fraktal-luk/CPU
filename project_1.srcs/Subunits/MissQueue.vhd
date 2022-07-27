@@ -216,9 +216,9 @@ begin
     
     sending <= canSend and isNonzero(selectMask);
     
-    outEntrySig <= queueContent(firstOnePos3);
+    outEntrySig <= queueContent(firstOnePos2);
 
-        selectedDataOutput.controlInfo.full <= sending3 and outEntrySig.full and not lateEventSignal;
+        selectedDataOutput.controlInfo.full <= sending2 and outEntrySig.full and not lateEventSignal;
         selectedDataOutput.tag <= outEntrySig.tag;
         --selectedDataOutput.value <= outEntrySig.target;
         selectedDataResult.dest <= outEntrySig.dest;

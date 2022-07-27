@@ -100,18 +100,19 @@ architecture Behavioral of Core is
 
     signal specialOp, preAddressOp, specialOutROB, memAddressOp: SpecificOp := DEFAULT_SPECIFIC_OP;
 
-    signal branchCtrl, memoryCtrl, memoryCtrlPre: InstructionControlInfo := DEFAULT_CONTROL_INFO;
+    signal branchCtrl, memoryCtrlE2, memoryCtrlPre: InstructionControlInfo := DEFAULT_CONTROL_INFO;
 
     signal bqUpdate, bqCompareEarly, sqValueResult, memAddressInputSQ, memAddressInputLQ,
            frontEvent, execEvent, execResultDelayed, lateEvent, bqTargetData, dataFromSB,
            execCausingDelayedSQ, execCausingDelayedLQ,
            
-               missedMemResult, mqReexecResult,
+               missedMemResult, mqReexecIssue, mqReexecRegRead,
                
+               mqReexecResultIssue, mqReexecResultRegRead,
                resultToM0_E0, resultToM0_E0i, resultToM0_E0f
            : ExecResult := DEFAULT_EXEC_RESULT;
 
-    signal pcData, branchResult, branchResultDelayed, bqSelected, ctOutLQ, ctOutSQ, ctOutSB, dataToBranch, mqReexecControl, controlToM0_E0,
+    signal pcData, branchResult, branchResultDelayed, bqSelected, ctOutLQ, ctOutSQ, ctOutSB, dataToBranch, mqReexecControlIssue, mqReexecControlRegRead, controlToM0_E0,
                 missedMemCtrl: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal bpData: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
@@ -300,7 +301,7 @@ begin
 		execSigsSec => execOutSec,
 
 		branchControl => branchCtrl,
-		memoryControl => memoryCtrl,
+		memoryControl => memoryCtrlE2,
 
 		specialOp => specialOp,
 			
@@ -340,7 +341,7 @@ begin
                         : SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
 
        -- Exec and later delay stages
-       signal slotM0_E0, slotM0_E1i,
+       signal slotM0_E0,-- slotM0_E1i,
               slotDummy: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;                     
 
        signal resultToIntWQ, resultToIntWQ_Early, resultToFloatWQ, resultToFloatWQ_Early, resultToIntRF, resultToIntRF_Early, resultToFloatRF, resultToFloatRF_Early: ExecResult := DEFAULT_EXEC_RESULT;
@@ -547,6 +548,9 @@ begin
            signal memLoadValue, memResult: Mword := (others => '0');
            signal controlM0_RR: ControlPacket := DEFAULT_CONTROL_PACKET;
            signal resultM0_E0, resultM0_E1: Mword := (others => '0');
+           --signal slotOpE1: SpecificOp := DEFAULT_SPECIFIC_OP;
+           signal ctrlIssue, ctrlRegRead, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
+           signal slotRegReadM0iq, slotRegReadM0mq: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
         begin
            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingRe), memMask, true, removeArg2(renamedArgsMerged));         
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D);
@@ -586,7 +590,8 @@ begin
                 sendingToRegReadM0 <= slotIssueM0.full and not outSigsM0.cancelled;
                 inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueM0, sendingToRegReadM0, fni, true, false);
                 -- Reg
-                slotRegReadM0 <= updateDispatchArgs_RR(argStateR, fni.values0, regValsM0, false);
+                slotRegReadM0iq <= updateDispatchArgs_RR(argStateR, fni.values0, regValsM0, false);
+                slotRegReadM0 <= slotRegReadM0iq;
 
                 process (clk)
                 begin
@@ -633,18 +638,20 @@ begin
                 controlM0_RR.tags.sqPointer <= slotRegReadM0.sqPointer;
                 controlM0_RR.tags.lqPointer <= slotRegReadM0.lqPointer;
 
+                    ctrlRegRead <= controlM0_RR;
+
                 TMP_DEST_FLAGS: block
-                    signal intSel, floatSel, insertMQ: std_logic := '0';
+                    signal intSel, floatSel, mqInsertIssue, mqInsertRegRead: std_logic := '0';
                 begin
                     ---- !! Injection here
-                    intSel <= not mqReexecControl.classInfo.useFP when insertMQ = '1' else slotRegReadM0.argSpec.intDestSel;
-                    floatSel <= mqReexecControl.classInfo.useFP when insertMQ = '1' else slotRegReadM0.argSpec.floatDestSel;
-                    resultToM0_E0 <= mqReexecResult when insertMQ = '1' else subpipeM0_RR_u;
-                    controlToM0_E0 <= mqReexecControl when insertMQ = '1' else controlM0_RR;        -- op, tags
+                    intSel <= not mqReexecControlRegRead.classInfo.useFP when mqInsertRegRead = '1' else slotRegReadM0.argSpec.intDestSel;
+                    floatSel <= mqReexecControlRegRead.classInfo.useFP when mqInsertRegRead = '1' else slotRegReadM0.argSpec.floatDestSel;
+                    resultToM0_E0 <= mqReexecRegRead when mqInsertRegRead = '1' else subpipeM0_RR_u;
+                    controlToM0_E0 <= mqReexecControlRegRead when mqInsertRegRead = '1' else controlM0_RR;        -- op, tags
                     ---------------------
 
-
-                        insertMQ <=  mqRegReadSending and bool2std(CONNECT_MQ);
+                        mqInsertIssue <=  mqIssueSending and bool2std(CONNECT_MQ);
+                        mqInsertRegRead <=  mqRegReadSending and bool2std(CONNECT_MQ);
 
                     resultToM0_E0i.full <= resultToM0_E0.full and intSel;                                   -- I/F
                     resultToM0_E0i.tag <= resultToM0_E0.tag;                                                -- OK
@@ -657,19 +664,37 @@ begin
                     resultToM0_E0f.value <= resultToM0_E0.value;                                            -- OK
                 end block;
 
+                    slotRegReadM0mq.full <= mqIssueSending and bool2std(CONNECT_MQ);
+                    slotRegReadM0mq.operation <= mqReexecControlIssue.op;
+                    slotRegReadM0mq.renameIndex <= mqReexecControlIssue.tags.renameIndex;
+                    slotRegReadM0mq.lqPointer <= mqReexecControlIssue.tags.lqPointer;
+                    slotRegReadM0mq.sqPointer <= mqReexecControlIssue.tags.sqPointer;
+                    
+                    -- adr
+                    --slotRegReadM0mq.result <= mqReexecControlIssue.target;
+                    
+                    slotRegReadM0mq.argSpec.dest <= mqReexecResultIssue.dest;
+                    slotRegReadM0mq.argSpec.intDestSel <= not mqReexecControlIssue.classInfo.useFP and isNonzero(mqReexecResultIssue.dest);
+                    slotRegReadM0mq.argSpec.floatDestSel <= mqReexecControlIssue.classInfo.useFP; 
+
+                    -- info that it is an MQ op
+                    
+
             process (clk)
             begin
                 if rising_edge(clk) then
+                    ctrlE0 <= controlToM0_E0;
                     subpipeM0_E0 <= resultToM0_E0;  -- mem out interface
                     subpipeM0_E0i <= resultToM0_E0i; -- common: tag, value; different: full, dest
                     subpipeM0_E0f <= resultToM0_E0f; -- common: tag, value; different: full, dest
 
+                    ctrlE1 <= ctrlE0;
                     subpipeM0_E1 <= subpipeM0_E0;
                     subpipeM0_E1i <= subpipeM0_E0i;
                     subpipeM0_E1f <= subpipeM0_E0f;
 
                     -- Here we integrate mem read result
-
+                    ctrlE2 <= ctrlE1u; -- TODO: update status based on hit/miss 
                     subpipeM0_E2 <= subpipeM0_E1_u;         -- injection of mem miss to 'full'
                     subpipeM0_E2i <= subpipeM0_E1i_u;
                     subpipeM0_E2f <= subpipeM0_E1f_u;
@@ -677,36 +702,48 @@ begin
                     
                     slotM0_E0.full <= subpipeM0_RR_u.full;
                     resultM0_E0 <= resultToM0_E0.value;
-                    slotM0_E0.ins.specificOperation <= controlToM0_E0.op;
-                    slotM0_E0.ins.tags <= controlToM0_E0.tags;
+                    --slotM0_E0.ins.specificOperation <= controlToM0_E0.op;
+                    --slotM0_E0.ins.tags <= controlToM0_E0.tags;
 
-                    slotM0_E1i.ins.specificOperation <= slotM0_E0.ins.specificOperation;
-                    resultM0_E1 <= resultM0_E0;                
-                    memoryCtrl <= memoryCtrlPre;
+--                    slotM0_E1i.ins.specificOperation <= slotM0_E0.ins.specificOperation;
+                    --slotOpE1 <= slotM0_E0.ins.specificOperation;
+                    resultM0_E1 <= resultM0_E0;
+                                   
+                    --memoryCtrlE2 <= memoryCtrlPre;
                 end if;
             end process;
 
+                memoryCtrlE2 <= ctrlE2.controlInfo;
+
             memAddressInputSQ.full <= slotM0_E0.full;
-            memAddressInputSQ.tag <= slotM0_E0.ins.tags.renameIndex;
-            memAddressInputSQ.dest <= slotM0_E0.ins.tags.sqPointer;
+            memAddressInputSQ.tag <= --slotM0_E0.ins.tags.renameIndex;
+                                                    ctrlE0.tags.renameIndex;
+            memAddressInputSQ.dest <= --slotM0_E0.ins.tags.sqPointer;
+                                                    ctrlE0.tags.sqPointer;
             memAddressInputSQ.value <= resultM0_E0;
 
             memAddressInputLQ.full <= slotM0_E0.full;
-            memAddressInputLQ.tag <= slotM0_E0.ins.tags.renameIndex;
-            memAddressInputLQ.dest <= slotM0_E0.ins.tags.lqPointer;
+            memAddressInputLQ.tag <= --slotM0_E0.ins.tags.renameIndex;
+                                        ctrlE0.tags.renameIndex;
+            memAddressInputLQ.dest <= --slotM0_E0.ins.tags.lqPointer;
+                                        ctrlE0.tags.lqPointer;
             memAddressInputLQ.value <= resultM0_E0;
 
-            memAddressOp <= slotM0_E0.ins.specificOperation;
+            memAddressOp <= --slotM0_E0.ins.specificOperation;
+                            ctrlE0.op;
 
-            memResult <= getLSResultData_result(  slotM0_E1i.ins.specificOperation,
+            memResult <= getLSResultData_result(  ctrlE1.op,--slotOpE1, --slotM0_E1i.ins.specificOperation,
                                                   memLoadReady, memLoadValue,
                                                   sysRegSending, sysRegReadValue,
                                                   ctOutSQ, ctOutLQ).value;
 
-            memoryCtrlPre <= getLSResultData(   slotM0_E1i.ins.specificOperation,
+            memoryCtrlPre <= getLSResultData(   ctrlE1.op,--slotOpE1, --slotM0_E1i.ins.specificOperation,
                                                 resultM0_E1,
                                                 '1', memLoadReady, sysRegSending,
                                                 ctOutSQ, ctOutLQ);
+                ctrlE1u.tags <= ctrlE1.tags;
+                ctrlE1u.op <= ctrlE1.op;
+                ctrlE1u.controlInfo <= memoryCtrlPre;
 
             -- TODO: apply here memoryMissed to deactivate missing ops 
             subpipeM0_E1_u.full <= subpipeM0_E1.full --
@@ -728,7 +765,8 @@ begin
             subpipeM0_E1f_u.value <= memResult;         -- same
 
 
-                    memoryMissed <= memoryCtrlPre.dataMiss or memoryCtrlPre.sqMiss;
+                    memoryMissed <= --memoryCtrlPre.dataMiss or memoryCtrlPre.sqMiss;
+                                    ctrlE1u.controlInfo.dataMiss or ctrlE1u.controlInfo.sqMiss;
 
                     missedMemResult.full <= subpipeM0_E1.full and memoryMissed;
                     missedMemResult.tag <= subpipeM0_E1.tag;
@@ -751,11 +789,11 @@ begin
                     end process;
                     
                     mqOtherData.ip <= eaDelayed;
-                    mqOtherData.op <= slotM0_E1i.ins.specificOperation;
+                    mqOtherData.op <= ctrlE1.op;--slotOpE1; --slotM0_E1i.ins.specificOperation;
                     mqOtherData.classInfo.useFP <= subpipeM0_E1f.full;
-                    mqOtherData.controlInfo.tlbMiss <= memoryCtrl.tlbMiss;
-                    mqOtherData.controlInfo.dataMiss <= memoryCtrl.dataMiss;
-                    mqOtherData.controlInfo.sqMiss <= memoryCtrl.sqMiss;
+                    mqOtherData.controlInfo.tlbMiss <= ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
+                    mqOtherData.controlInfo.dataMiss <= ctrlE1u.controlInfo.dataMiss;
+                    mqOtherData.controlInfo.sqMiss <= ctrlE1u.controlInfo.sqMiss;
 
                     missedMemCtrl <= mqOtherData;
 
@@ -1386,25 +1424,34 @@ begin
     TMP_LMQ: block
         signal s0, s1, s2, s3, s4, s5, s6, s7, s8: std_logic := '0';
         
-        signal mqReexecResultIssue, mqReexecResultRR, mqReexecResultE0, mqReexecResultE1: ControlPacket := DEFAULT_CONTROL_PACKET;
+        signal mqReexecCtrlIssue, mqReexecCtrlRR, mqReexecCtrlE0, mqReexecCtrlE1: ControlPacket := DEFAULT_CONTROL_PACKET;
+        signal mqReexecResIssue, mqReexecResRR, mqReexecResE0, mqReexecResE1: ExecResult := DEFAULT_EXEC_RESULT;
     begin
-                mqReexecResult.full <= mqReexecResultRR.controlInfo.full;
-                mqReexecResult.tag <= mqReexecResultRR.tag;
-                mqReexecResult.value <= mqReexecResultRR.target;
+                mqReexecRegRead.full <= mqReexecCtrlRR.controlInfo.full;
+                mqReexecRegRead.tag <= mqReexecCtrlRR.tag;
+                mqReexecRegRead.value <= mqReexecCtrlRR.target;
                 
-                mqReexecControl <= mqReexecResultRR;
+                mqReexecControlIssue <= mqReexecCtrlIssue;
+                mqReexecControlRegRead <= mqReexecCtrlRR;
+
+                mqReexecResultIssue <= mqReexecResIssue;
+                mqReexecResultRegRead <= mqReexecResRR;
                 
-                mqRegReadSending <= mqReexecControl.controlInfo.full;
+                mqIssueSending <= mqReexecControlIssue.controlInfo.full;
+                mqRegReadSending <= mqReexecControlRegRead.controlInfo.full;
 
             mqReady <= s8;
     
             process (clk)
             begin
                 if rising_edge(clk) then
-                    --mqReexecResultRR <= mqReexecResultIssue;
-                
-                    mqReexecResultE0 <= mqReexecResultRR;
-                    mqReexecResultE1 <= mqReexecResultE0;
+                    mqReexecCtrlRR <= mqReexecCtrlIssue;
+                    mqReexecCtrlE0 <= mqReexecCtrlRR;
+                    mqReexecCtrlE1 <= mqReexecCtrlE0;
+                    
+                    mqReexecResRR <= mqReexecResIssue;
+                    mqReexecResE0 <= mqReexecResRR;
+                    mqReexecResE1 <= mqReexecResE0;
                 end if;
             end process;
     
@@ -1439,8 +1486,9 @@ begin
             compareIndexInput => (others => '0'),        
             preCompareOp => DEFAULT_SPECIFIC_OP,
                  
-            selectedDataOutput => mqReexecResultRR,
-                selectedDataResult => open,
+            selectedDataOutput => --mqReexecResultRR,
+                                    mqReexecCtrlIssue,
+                selectedDataResult => mqReexecResIssue,
     
             committing => '0',
             commitMask => (others => '0'),
