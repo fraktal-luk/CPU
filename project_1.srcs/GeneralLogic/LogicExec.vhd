@@ -319,7 +319,7 @@ package body LogicExec is
         variable res: Mword := (others => '0');
     begin
         if fromDLQ = '1' then
-            --res := dlqData;
+            res := st.args(1);
         elsif st.full = '1'then
             res := add(st.args(0), st.args(1));
         else

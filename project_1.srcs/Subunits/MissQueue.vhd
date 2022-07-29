@@ -7,7 +7,11 @@ architecture MissQueue of StoreQueue is
     type MQ_Entry is record
         full: std_logic;
         ready: std_logic;
+        active: std_logic;
+        
         tag: InsTag;
+        lqPointer: SmallNumber;
+        sqPointer: SmallNumber;
         
         dest: PhysName;
         adr: Mword;
@@ -25,7 +29,10 @@ architecture MissQueue of StoreQueue is
     constant DEFAULT_MQ_ENTRY: MQ_Entry := (
         full => '0',
         ready => '0',
+        active => '0',
         tag => (others => '0'),
+        lqPointer => (others => '0'),
+        sqPointer => (others => '0'),
         dest => (others => '0'),
         adr => (others => '0'),
         sqTag => (others => '0'),
@@ -111,7 +118,7 @@ architecture MissQueue of StoreQueue is
         variable res: std_logic_vector(0 to content'length-1) := (others => '0');
     begin
         for i in 0 to content'length - 1 loop
-            if content(i).full = '1' and content(i).ready = '1' then
+            if content(i).full = '1' and content(i).active = '1' and content(i).ready = '1' then
                 res(i) := '1';
             end if;
         end loop;
@@ -185,17 +192,23 @@ begin
 
                 for i in 0 to MQ_SIZE-1 loop                    
                     queueContent(i).full <= (fullMask(i) and not killMask(i) and not outputFullMask3(i)) or inputFullMask(i);
-
+                    if (canSend and selectMask(i)) = '1' then
+                        queueContent(i).active <= '0';
+                    end if; 
                 end loop;
 
             if TMP_prevSending = '1' then
                 queueContent(queueIndexNew).full <= '1';
-                queueContent(queueIndexNew).tag <= compareAddressInput.tag;
                 queueContent(queueIndexNew).ready <= '0';
-                
+                queueContent(queueIndexNew).active <= '1';                
+                queueContent(queueIndexNew).tag <= compareAddressInput.tag;
+
                 queueContent(queueIndexNew).dest <= compareAddressInput.dest;
                 queueContent(queueIndexNew).adr <= compareAddressCtrl.ip;
                 queueContent(queueIndexNew).sqTag <= (others => 'U');
+                
+                queueContent(queueIndexNew).lqPointer <= compareAddressCtrl.tags.lqPointer;
+                queueContent(queueIndexNew).sqPointer <= compareAddressCtrl.tags.sqPointer;
                 
                 queueContent(queueIndexNew).fp <= compareAddressCtrl.classInfo.useFP;
                 queueContent(queueIndexNew).tlbMiss <= compareAddressCtrl.controlInfo.tlbMiss;
@@ -228,7 +241,9 @@ begin
         selectedDataOutput.controlInfo.tlbMiss <= outEntrySig.tlbMiss;
         selectedDataOutput.controlInfo.dataMiss <= outEntrySig.dataMiss;
         selectedDataOutput.controlInfo.sqMiss <= outEntrySig.sqMiss;
-        
+        selectedDataOutput.tags.renameIndex <= outEntrySig.tag;
+        selectedDataOutput.tags.lqPointer <= outEntrySig.lqPointer;
+        selectedDataOutput.tags.sqPointer <= outEntrySig.sqPointer;
 
         committedSending <= sending1; -- Indication to block normal mem issue
 end MissQueue;

@@ -591,7 +591,6 @@ begin
                 inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueM0, sendingToRegReadM0, fni, true, false);
                 -- Reg
                 slotRegReadM0iq <= updateDispatchArgs_RR(argStateR, fni.values0, regValsM0, false);
-                slotRegReadM0 <= slotRegReadM0iq;
 
                 process (clk)
                 begin
@@ -620,6 +619,10 @@ begin
                 
             end block;
 
+           slotRegReadM0 <= slotRegReadM0mq when (mqIssueSending and bool2std(CONNECT_MQ)) = '1' else slotRegReadM0iq;
+
+
+
             preIndexSQ <= slotRegReadM0.sqPointer;
             preIndexLQ <= slotRegReadM0.lqPointer;
             preAddressOp <= slotRegReadM0.operation;
@@ -629,7 +632,7 @@ begin
                 subpipeM0_RR_u.full <= slotRegReadM0.full and not outSigsM0.killSel2 and not lateEventSignal;
                 subpipeM0_RR_u.tag <= slotRegReadM0.renameIndex;
                 subpipeM0_RR_u.dest <= slotRegReadM0.argSpec.dest;
-                subpipeM0_RR_u.value <= calcEffectiveAddress(slotRegReadM0, sendingFromDLQ, dataFromDLQ);
+                subpipeM0_RR_u.value <= calcEffectiveAddress(slotRegReadM0, mqRegReadSending and bool2std(CONNECT_MQ), dataFromDLQ);
 
                 controlM0_RR.op <= slotRegReadM0.operation;
                 controlM0_RR.tags.renameIndex <= slotRegReadM0.renameIndex;
@@ -651,7 +654,7 @@ begin
                     ---------------------
 
                         mqInsertIssue <=  mqIssueSending and bool2std(CONNECT_MQ);
-                        mqInsertRegRead <=  mqRegReadSending and bool2std(CONNECT_MQ);
+                        --mqInsertRegRead <=  mqRegReadSending and bool2std(CONNECT_MQ);
 
                     resultToM0_E0i.full <= resultToM0_E0.full and intSel;                                   -- I/F
                     resultToM0_E0i.tag <= resultToM0_E0.tag;                                                -- OK
@@ -671,7 +674,7 @@ begin
                     slotRegReadM0mq.sqPointer <= mqReexecControlIssue.tags.sqPointer;
                     
                     -- adr
-                    --slotRegReadM0mq.result <= mqReexecControlIssue.target;
+                    slotRegReadM0mq.args(1) <= mqReexecControlIssue.target;
                     
                     slotRegReadM0mq.argSpec.dest <= mqReexecResultIssue.dest;
                     slotRegReadM0mq.argSpec.intDestSel <= not mqReexecControlIssue.classInfo.useFP and isNonzero(mqReexecResultIssue.dest);
@@ -708,7 +711,7 @@ begin
 --                    slotM0_E1i.ins.specificOperation <= slotM0_E0.ins.specificOperation;
                     --slotOpE1 <= slotM0_E0.ins.specificOperation;
                     resultM0_E1 <= resultM0_E0;
-                                   
+
                     --memoryCtrlE2 <= memoryCtrlPre;
                 end if;
             end process;
@@ -790,6 +793,7 @@ begin
                     
                     mqOtherData.ip <= eaDelayed;
                     mqOtherData.op <= ctrlE1.op;--slotOpE1; --slotM0_E1i.ins.specificOperation;
+                    mqOtherData.tags <= ctrlE1u.tags;
                     mqOtherData.classInfo.useFP <= subpipeM0_E1f.full;
                     mqOtherData.controlInfo.tlbMiss <= ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
                     mqOtherData.controlInfo.dataMiss <= ctrlE1u.controlInfo.dataMiss;
