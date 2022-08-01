@@ -389,6 +389,8 @@ type SchedulerState is record
     immediate: std_logic;
     immValue: Hword;
 
+        poisoned: std_logic;
+
     zero: std_logic_vector(0 to 2);
     readNew: std_logic_vector(0 to 2);
     args: MwordArray(0 to 2);
@@ -412,6 +414,8 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
 
       immediate => '0',
       immValue => (others => '0'),
+
+        poisoned => '0',
 
       zero => (others => '0'),
       readNew => (others => '0'),

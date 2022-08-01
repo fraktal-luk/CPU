@@ -41,6 +41,9 @@ entity IssueQueue is
 		fni: in ForwardingInfo;
 		readyRegFlags: in std_logic_vector(0 to 3*PIPE_WIDTH-1);
 
+            memFail: in std_logic;
+            memDepFail: in std_logic;
+
 		acceptingMore: out std_logic;
 		acceptingOut: out std_logic;
 		
@@ -72,14 +75,41 @@ architecture Behavioral of IssueQueue is
     signal fma: ForwardingMatchesArray(0 to QUEUE_SIZE_EXT - 1) := (others => DEFAULT_FORWARDING_MATCHES);
 
     signal controlSigs: SlotControlArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SLOT_CONTROL);
-    signal fullMask, trialMask, readyMaskLive, killMask, readyMaskAll, selMask, selMask1, selMask2, selMask3, selMask4: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
+    signal fullMask, trialMask, readyMaskLive, killMask, readyMaskAll, selMask, selMask1, selMask2, selMask3, selMask4,
+            depMemE1_0, depMemE1_1, depAluRR_0, depAluRR_1
+        : std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
     signal anyReadyFull, anyReadyLive, sends, sendingKilled, isSent, isSent2, sentKilled, sentKilled1, sentKilled2, sentKilled3, sentKilled4, isEmpty, isFull, isAlmostFull: std_logic := '0';
     
     signal selectedSlot: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
     signal dispatchDataNew: SchedulerState := DEFAULT_SCHED_STATE;       
-                              
+
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
 
+        function TMP_depMemE1(content: SchedulerInfoArray; arg: natural) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+            variable st: ArgumentState := DEFAULT_ARGUMENT_STATE;
+        begin
+            for i in res'range loop
+                st := content(i).dynamic.argStates(arg);
+                if content(i).dynamic.full = '1' and st.used = '1' and st.srcPipe(1 downto 0) = "10" and st.srcStage(1 downto 0) = "11" then
+                    res(i) := '1';
+                end if;
+            end loop;
+            return res;
+        end function;
+
+        function TMP_depAluRR(content: SchedulerInfoArray; arg: natural) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+            variable st: ArgumentState := DEFAULT_ARGUMENT_STATE;
+        begin
+            for i in res'range loop
+                st := content(i).dynamic.argStates(arg);
+                if content(i).dynamic.full = '1' and st.used = '1' and st.srcPipe(1 downto 0) = "00" and st.srcStage(1 downto 0) = "00" then
+                    res(i) := '1';
+                end if;
+            end loop;
+            return res;
+        end function;
 begin
     nFullNext <=        sub(i2slv(countOnes(fullMask), SMALL_NUMBER_SIZE), nOut) when slv2u(recoveryCounter) = 1
                   else  add(nFull, sub(nIn, nOut));
@@ -89,8 +119,8 @@ begin
 
     fma <= findForwardingMatchesArray(queueContent, fni, "000");
 
-    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, false, false, DONT_MATCH1, FORWARDING_D);
-    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, false, true, DONT_MATCH1, FORWARDING);
+    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, false, false, DONT_MATCH1, FORWARDING_D, memFail, memDepFail);
+    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, false, true, DONT_MATCH1, FORWARDING, memFail, memDepFail);
 
     insertionLocs <= getNewLocsBanked(fullMask);
 

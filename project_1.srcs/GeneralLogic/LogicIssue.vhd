@@ -55,6 +55,9 @@ type ArgumentState is record
     
     canFail: std_logic; -- maybe a counter is needed 
 
+        activeCounter: SmallNumber;
+        failed: std_logic;
+
     waiting: std_logic;
     stored:  std_logic;
     srcPipe: SmallNumber;
@@ -70,6 +73,10 @@ constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
     imm => '0',
     value => (others => '0'),
     canFail => '0',
+    
+        activeCounter => (others => '0'),
+        failed => '0',
+        
     waiting => '0',
     stored => '0',
     srcPipe => (others => '0'),
@@ -124,6 +131,8 @@ type DynamicInfo is record
     issued: std_logic;
     trial: std_logic;
 
+        poisoned: std_logic;
+
     pulledBack: std_logic;
     stageCtr: SmallNumber;
 
@@ -144,6 +153,8 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     issued => '0',
     trial => '0',
         
+        poisoned => '0',
+
     pulledBack => '0',
     stageCtr => (others => '0'),
 
@@ -222,7 +233,8 @@ function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInf
                 dynamic: boolean;
                 selection: boolean;
                 dontMatch1: boolean;
-                forwardingModes0: ForwardingModeArray
+                forwardingModes0: ForwardingModeArray;
+                memFail, memDepFail: std_logic := '0'
             )
 return SchedulerInfoArray;
 
@@ -557,6 +569,8 @@ package body LogicIssue is
         res.immediate := info.static.immediate;    
         res.immValue := info.static.immValue;
             
+            res.poisoned := info.dynamic.poisoned;
+            
         res.zero := info.static.zero;
         
         res.renameIndex := info.dynamic.renameIndex;
@@ -807,9 +821,12 @@ package body LogicIssue is
         if argState.waiting = '1' then
             res.srcPipe := wakeups.argLocsPipe;
             res.waiting := not wakeups.match;
+                res.activeCounter := (others => '0');
             res.srcStage := wakeups.argSrc;
         else
             if not selection then
+                    res.activeCounter := addInt(res.activeCounter, 1);
+            
                 case argState.srcStage(1 downto 0) is
                     when "11" =>
                         res.srcStage := "00000000";
@@ -862,7 +879,7 @@ package body LogicIssue is
                     end if;
                 end if;
             end if;
-        end loop;   
+        end loop;
         res.match := isNonzero(matchVec);
         
         return res;
@@ -926,10 +943,14 @@ package body LogicIssue is
                                     dynamic: boolean;
                                     selection: boolean;
                                     dontMatch1: boolean;
-                                    forwardingModes0, forwardingModes1: ForwardingModeArray)
+                                    forwardingModes0, forwardingModes1: ForwardingModeArray;
+                                    memFail, memDepFail: std_logic
+                                    )
     return SchedulerInfo is
         variable res: SchedulerInfo := state;
         variable wakeups0, wakeups1: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+        
+            variable a0dep, a1dep: std_logic := '0';
     begin
         if not dynamic then
             wakeups0 := getWakeupStructStatic(fm.cmps(0), forwardingModes0, selection);
@@ -938,7 +959,35 @@ package body LogicIssue is
             wakeups0 := getWakeupStructDynamic(fm.cmps(0), forwardingModes0);
             wakeups1 := getWakeupStructDynamic(fm.cmps(1), forwardingModes0);
         end if;
-    
+
+            -- Apply poison
+              -- dependency on M0 E1
+            a0dep := bool2std(state.dynamic.argStates(0).srcPipe(1 downto 0) = "10" and state.dynamic.argStates(0).activeCounter = X"01") and not state.dynamic.argStates(0).zero and not state.dynamic.argStates(0).waiting;
+            a1dep := bool2std(state.dynamic.argStates(1).srcPipe(1 downto 0) = "10" and state.dynamic.argStates(1).activeCounter = X"01") and not state.dynamic.argStates(1).zero and not state.dynamic.argStates(1).waiting;
+
+            if (a0dep or a1dep) = '1'
+            then
+                if memFail = '1' then
+                    res.dynamic.poisoned := '1';
+                    
+                        res.dynamic.argStates(0).waiting := a0dep;
+                        res.dynamic.argStates(1).waiting := a1dep;
+                end if;
+            end if;
+
+              -- dependency on I0 RR - means being woken up now by I0 Issue stage if it is dependent on M0 E1 and fail detected
+            --a0dep := bool2std(state.dynamic.argStates(0).srcPipe(1 downto 0) = "00" and state.dynamic.argStates(0).activeCounter = X"00") and not state.dynamic.argStates(0).zero and not state.dynamic.argStates(0).waiting;
+            --a1dep := bool2std(state.dynamic.argStates(1).srcPipe(1 downto 0) = "00" and state.dynamic.argStates(1).activeCounter = X"00") and not state.dynamic.argStates(1).zero and not state.dynamic.argStates(1).waiting;
+                a0dep := wakeups0.match and bool2std(wakeups0.argLocsPipe(1 downto 0) = "00");
+                a1dep := wakeups1.match and bool2std(wakeups1.argLocsPipe(1 downto 0) = "00");
+
+            if (a0dep or a1dep) = '1'
+            then
+                if memDepFail = '1' then
+                    res.dynamic.poisoned := '1';
+                end if;
+            end if;
+
         res.dynamic.argStates(0) := updateArgInfo(res.dynamic.argStates(0), wakeups0, selection);
         
         if dontMatch1 then
@@ -946,17 +995,22 @@ package body LogicIssue is
         else
             res.dynamic.argStates(1) := updateArgInfo(res.dynamic.argStates(1), wakeups1, selection);
         end if;
+
+
+            
+
     
         return res;
     end function;
     
     function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
-                    dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0: ForwardingModeArray)
+                    dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0: ForwardingModeArray;
+                    memFail, memDepFail: std_logic := '0')
     return SchedulerInfoArray is
         variable res: SchedulerInfoArray(0 to schedArray'length-1);
     begin
         for i in schedArray'range loop
-            res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, dontMatch1, forwardingModes0, forwardingModes0);
+            res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, dontMatch1, forwardingModes0, forwardingModes0, memFail, memDepFail);
         end loop;	
         return res;
     end function;
@@ -1152,6 +1206,8 @@ package body LogicIssue is
         res.dynamic.active := a.dynamic.active or b.dynamic.active;
         res.dynamic.issued := a.dynamic.issued or b.dynamic.issued;
         res.dynamic.trial := a.dynamic.trial or b.dynamic.trial;
+
+        res.dynamic.poisoned := a.dynamic.poisoned or b.dynamic.poisoned;
         
         res.dynamic.renameIndex := a.dynamic.renameIndex or b.dynamic.renameIndex;
 

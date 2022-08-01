@@ -122,7 +122,7 @@ architecture Behavioral of Core is
 
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
     
-            constant CONNECT_MQ: boolean := false;
+            constant CONNECT_MQ: boolean := true;--false;
             
         signal dbState: DbCoreState := DEFAULT_DB_STATE;
 begin
@@ -358,7 +358,8 @@ begin
        signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, allowIssueStoreDataFP, allowIssueStageStoreDataFP,
               memSubpipeSent, fp0subpipeSelected, lockIssueI0, allowIssueI0, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady, intWriteConflict,
               storeValueCollision1, storeValueCollision2, cancelledSVI1,
-              sendingToStoreWrite, sendingToStoreWriteInt, sendingToStoreWriteFloat: std_logic := '0';
+              sendingToStoreWrite, sendingToStoreWriteInt, sendingToStoreWriteFloat,
+              memFail, memDepFail, prevMemDepFail, aluSquashRR: std_logic := '0';
 
        signal sendingFromDLQ, sendingBranchRR, sendingToRegReadI0, sendingToRegReadM0: std_logic := '0';  -- MOVE to subpipes     
 
@@ -388,7 +389,8 @@ begin
         signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 
-            signal TMP_I0_Is_dep_M0_R0, TMP_I0_Is_dep_I0_RR, TMP_I0_Is_curse, TMP_I0_RR_curse: std_logic := '0';
+            signal TMP_I0_Is_dep_M0_E1, TMP_I0_Is_dep_I0_RR, TMP_I0_Is_curse, TMP_I0_RR_curse,
+                   TMP_M0_Is_dep_M0_E1, TMP_M0_Is_dep_I0_RR, TMP_M0_Is_curse: std_logic := '0';
 
             signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';                
     begin
@@ -404,16 +406,43 @@ begin
         lqMask <= getLoadMask1((renamedDataLivingRe));
         branchMask <= getBranchMask1((renamedDataLivingRe));
         
+            memFail <= subpipeM0_E1_u.failed;
+            memDepFail <= (TMP_I0_Is_dep_M0_E1 and memFail); 
+
+
+                TMP_I0_Is_dep_M0_E1 <= bool2std((slotIssueI0.argLocsPipe(0)(1 downto 0) = "10") and (slotIssueI0.argSrc(0)(1 downto 0) = "11"))
+                                    or bool2std((slotIssueI0.argLocsPipe(1)(1 downto 0) = "10") and (slotIssueI0.argSrc(1)(1 downto 0) = "11"));
+                TMP_I0_Is_dep_I0_RR <= bool2std((slotIssueI0.argLocsPipe(0)(1 downto 0) = "00") and (slotIssueI0.argSrc(0)(1 downto 0) = "11"))
+                                    or bool2std((slotIssueI0.argLocsPipe(1)(1 downto 0) = "00") and (slotIssueI0.argSrc(1)(1 downto 0) = "11"));
+                
+                TMP_I0_Is_curse <=  (TMP_I0_Is_dep_M0_E1 and memFail)
+                                 or (TMP_I0_Is_dep_I0_RR and TMP_I0_RR_curse);
+
+                process (clk)
+                begin
+                    if rising_edge(clk) then
+                        TMP_I0_RR_curse <= TMP_I0_Is_curse;
+                        
+                        prevMemDepFail <= memDepFail;
+                    end if;
+                end process;
+
+                TMP_M0_Is_dep_M0_E1 <= bool2std((slotIssueM0.argLocsPipe(0)(1 downto 0) = "10") and (slotIssueM0.argSrc(0)(1 downto 0) = "11"))
+                                    or bool2std((slotIssueM0.argLocsPipe(1)(1 downto 0) = "10") and (slotIssueM0.argSrc(1)(1 downto 0) = "11"));                
+                TMP_M0_Is_dep_I0_RR <= bool2std((slotIssueM0.argLocsPipe(0)(1 downto 0) = "00") and (slotIssueM0.argSrc(0)(1 downto 0) = "11"))
+                                    or bool2std((slotIssueM0.argLocsPipe(1)(1 downto 0) = "00") and (slotIssueM0.argSrc(1)(1 downto 0) = "11"));
+                
+                TMP_M0_Is_curse <=  (TMP_M0_Is_dep_M0_E1 and memFail)
+                                 or (TMP_M0_Is_dep_I0_RR and TMP_I0_RR_curse);
+
         SUBPIPE_ALU: block
            signal dataToAlu: ExecResult := DEFAULT_EXEC_RESULT;           
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
 
            signal regInfo: RegisterStateArray2D(0 to PIPE_WIDTH-1) := (others => (others => (others => '0')));
         begin
-                TMP_I0_Is_dep_M0_R0 <= bool2std((slotIssueI0.argLocsPipe(0)(1 downto 0) = "10") and (slotIssueI0.argSrc(0)(1 downto 0) = "11"))
-                                    or bool2std((slotIssueI0.argLocsPipe(1)(1 downto 0) = "10") and (slotIssueI0.argSrc(1)(1 downto 0) = "11"));
-                TMP_I0_Is_dep_I0_RR <= bool2std((slotIssueI0.argLocsPipe(0)(1 downto 0) = "00") and (slotIssueI0.argSrc(0)(1 downto 0) = "00"))
-                                    or bool2std((slotIssueI0.argLocsPipe(1)(1 downto 0) = "00") and (slotIssueI0.argSrc(1)(1 downto 0) = "00"));
+
+                
 
             fmaInt <= work.LogicIssue.findForwardingMatchesArray_N(schedInfoA, fni, readyRegFlagsInt_Early, regInfo);
 
@@ -437,6 +466,8 @@ begin
                 newArr => schedInfoUpdatedA,
                 fni => fni,
                 readyRegFlags => readyRegFlagsInt_Early,
+                    memFail => memFail,
+                    memDepFail => prevMemDepFail,
                 nextAccepting => allowIssueI0,
                 events => events,
                 schedulerOut => slotSelI0,
@@ -571,6 +602,8 @@ begin
                newArr => schedInfoUpdatedA,
                fni => fni,
                readyRegFlags => readyRegFlagsInt_Early,
+                    memFail => memFail,
+                    memDepFail => prevMemDepFail,
                nextAccepting => allowIssueM0,
                events => events,
                schedulerOut => slotSelM0,
@@ -751,6 +784,8 @@ begin
             -- TODO: apply here memoryMissed to deactivate missing ops 
             subpipeM0_E1_u.full <= subpipeM0_E1.full --
                                                      and not (memoryMissed and bool2std(CONNECT_MQ));
+            subpipeM0_E1_u.failed <= subpipeM0_E1.full --
+                                                     and (memoryMissed and bool2std(CONNECT_MQ));                                                     
             subpipeM0_E1_u.tag <= subpipeM0_E1.tag;     -- OK
             subpipeM0_E1_u.dest <= subpipeM0_E1.dest;   -- OK
             subpipeM0_E1_u.value <= memResult;          -- same
@@ -846,6 +881,8 @@ begin
                 newArr => schedInfoUpdatedIntA,
                 fni => fni,     
                 readyRegFlags => readyRegFlagsSV,
+                    memFail => memFail,
+                    memDepFail => prevMemDepFail,
                 nextAccepting => allowIssueStoreDataInt,
                 events => events,
                 schedulerOut => slotSelIntSV,
@@ -916,6 +953,8 @@ begin
                 newArr => schedInfoUpdatedFloatA,
                 fni => fniFloat,      
                 readyRegFlags => readyRegFlagsFloatSV,
+                     memFail => memFail,
+                     memDepFail => prevMemDepFail,
                 nextAccepting => allowIssueStoreDataFP,
                 events => events,
                 schedulerOut => slotSelFloatSV,              
@@ -995,6 +1034,8 @@ begin
                 newArr => schedInfoUpdatedA,
                 fni => fniFloat,
                 readyRegFlags => readyRegFlagsFloat_Early,
+                    memFail => memFail,
+                    memDepFail => prevMemDepFail,
                 nextAccepting => allowIssueF0,
                 events => events,
                 schedulerOut => slotSelF0,

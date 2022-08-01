@@ -150,7 +150,7 @@ begin
 
             firstOnePosI <= getFirstOnePosition(selectMask);
             
-            firstOnePos <= 0 when firstOnePosI = -1 else firstOnePos;
+            firstOnePos <= 0 when firstOnePosI = -1 else firstOnePosI;
 
         READY_MASL: for i in 0 to MQ_SIZE-1 generate
             fullMask(i) <= queueContent(i).full;
@@ -219,7 +219,6 @@ begin
 
             end if;
 
-                        
             if sending3 = '1' then
                 queueContent(firstOnePos3) <= DEFAULT_MQ_ENTRY;
             end if;
