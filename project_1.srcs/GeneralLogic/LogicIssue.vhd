@@ -223,6 +223,7 @@ function iqNext_NS(queueContent: SchedulerInfoArray;
                   killMask, trialMask, selMask: std_logic_vector;
                   rrf: std_logic_vector;
                   insertionLocs: slv2D;
+                    memFail, memDepFail: std_logic;
                   TEST_MODE: natural)
 return SchedulerInfoArray;
 
@@ -710,6 +711,7 @@ package body LogicIssue is
                       killMask, trialMask, selMask: std_logic_vector;
                       rrf: std_logic_vector;
                       insertionLocs: slv2D;
+                        memFail, memDepFail: std_logic;
                       TEST_MODE: natural
                              )
     return SchedulerInfoArray is
@@ -728,7 +730,12 @@ package body LogicIssue is
                 res(i).dynamic.stageCtr := (others => '0');
             end if;
         
-            if queueContent(i).dynamic.issued = '1' then      
+        
+            if memFail = '1' and queueContent(i).dynamic.full = '1' and queueContent(i).dynamic.issued = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "01" then
+                res(i).dynamic.issued := '0';
+                res(i).dynamic.active := '1';
+                res(i).dynamic.stageCtr := (others => '0');
+            elsif queueContent(i).dynamic.issued = '1' then      
                 res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1);
             end if;
             

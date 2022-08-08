@@ -20,6 +20,7 @@ use work.ForwardingNetwork.all;
 
 entity IssueQueue is
 	generic(
+	    NAME: string;
 		IQ_SIZE: natural := 12;
 		DONT_MATCH1: boolean := false;
 		FORWARDING: ForwardingModeArray := (0 => (-100, false));  -- Can be used immediately
@@ -124,7 +125,9 @@ begin
 
     insertionLocs <= getNewLocsBanked(fullMask);
 
-    queueContentNext <= iqNext_NS(queueContentUpdated, newArr, prevSendingOK, sends, killMask, trialMask, selMask, readyRegFlags, insertionLocs, 0);
+    queueContentNext <= iqNext_NS(queueContentUpdated, newArr, prevSendingOK, sends, killMask, trialMask, selMask, readyRegFlags, insertionLocs,
+                                        memFail, memDepFail,
+                                        0);
     ageMatrixNext <= updateAgeMatrix(ageMatrix, insertionLocs, fullMask);
 
 
@@ -205,5 +208,71 @@ begin
                         killSel2 => sentKilled2,
                         killSel3 => sentKilled3
                         );
+
+    -- pragma synthesis off
+    DEBUG_HANDLING: process (clk)
+        use std.textio.all;
+        use work.Assembler.all;
+
+--        function getDynamicContentString(dyn: DynamicOpInfo) return string is
+--            variable res: line;
+--        begin
+--            if dyn.full = '1' then
+--                write(res, natural'image(slv2u(dyn.dbInfo.tag)));
+--                write(res, string'(": "));
+--                write(res, std_logic'image(dyn.completed0));
+--                if dyn.secCluster = '1' then
+--                    write(res, std_logic'image(dyn.completed1));
+--                else
+--                    write(res, string'("'-'"));
+--                end if;
+--                write(res, string'(" "));
+--                if dyn.hasEvent = '1' then
+--                    write(res, string'("E : "));
+--                else
+--                    write(res, string'("  : "));
+--                end if;
+                
+--                write(res, disasmWord(dyn.dbInfo.bits));
+                
+--                return res.all;
+--            else
+--                return "-------------------------------------";
+--            end if;
+--        end function;
+    
+        procedure printContent is
+           file outFile: text open write_mode is "issue_queue" & NAME & ".txt";
+           variable preRow, currentLine: line := null;
+        begin
+            for i in 0 to IQ_SIZE-1 loop
+                currentLine := null;
+                write(currentLine, natural'image(i) & ":  ");
+                if queueContent(i).dynamic.full /= '1' then
+                    writeline(outFile, currentLine);
+                    next;
+                end if;
+
+                write(currentLine, natural'image(slv2u(queueContent(i).dynamic.renameIndex)));
+                write(currentLine, string'(", "));
+                write(currentLine, std_logic'image(queueContent(i).dynamic.issued));
+                write(currentLine, string'(", "));
+                write(currentLine, std_logic'image(queueContent(i).dynamic.argStates(0).waiting));
+                write(currentLine, std_logic'image(queueContent(i).dynamic.argStates(1).waiting));
+                
+                writeline(outFile, currentLine);
+            end loop;
+        end procedure;
+        
+    begin
+        
+        if rising_edge(clk) then
+            if dbState.dbSignal = '1' then
+                report "IQ reporting ";
+                --printContent;
+            end if;
+        end if;
+    end process;
+    -- pragma synthesis on
 
 end Behavioral;

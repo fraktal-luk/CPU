@@ -11,10 +11,6 @@ $R4
 $R5
 	jl r6, $L6
 $R6
-	jl r7, $L7
-$R7
-	jl r8, $L8
-$R8	
 
 	sub_r r10, r2, r1
 	add_i r10, r10, -4
@@ -38,14 +34,7 @@ $R8
 	sub_r r10, r6, r5
 	add_i r10, r10, -4
 	jnz_i r10, $error
-	
-	sub_r r10, r7, r6
-	add_i r10, r10, -4
-	jnz_i r10, $error
 
-	sub_r r10, r8, r7
-	add_i r10, r10, -4
-	jnz_i r10, $error
 
 $check	
 	sys call			
@@ -64,7 +53,5 @@ $L5
 	ja $R5
 $L6
 	ja $R6
-$L7	
-	ja $R7
-$L8
-	ja $R8
+
+	sys error

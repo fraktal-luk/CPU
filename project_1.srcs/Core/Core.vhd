@@ -344,7 +344,8 @@ begin
        signal slotM0_E0,-- slotM0_E1i,
               slotDummy: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;                     
 
-       signal resultToIntWQ, resultToIntWQ_Early, resultToFloatWQ, resultToFloatWQ_Early, resultToIntRF, resultToIntRF_Early, resultToFloatRF, resultToFloatRF_Early: ExecResult := DEFAULT_EXEC_RESULT;
+       signal resultToIntWQ, resultToIntWQ_Early, resultToFloatWQ, resultToFloatWQ_Early, resultToIntRF, resultToIntRF_Early, resultToIntRF_EarlyEffective,
+                resultToFloatRF, resultToFloatRF_Early: ExecResult := DEFAULT_EXEC_RESULT;
 
        signal regsSelI0,           regsSelM0, regsSelS0, regsSelFloatA, regsSelFloatC, regsSelFS0, regsSelF0: PhysNameArray(0 to 2) := (others => (others => '0'));
        signal regValsI0, regValsB, regValsM0, regValsS0, regValsE, regValsFloatA, regValsFloatB, regValsFloatC, regValsFS0, regValsF0: MwordArray(0 to 2) := (others => (others => '0'));
@@ -451,6 +452,7 @@ begin
 
             IQUEUE_I0: entity work.IssueQueue(Behavioral)
             generic map(
+                NAME => "I0",
                 IQ_SIZE => IQ_SIZE_I0,
                 FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING1(0 to 2) => FORWARDING_MODES_INT(0 to 2),
@@ -588,6 +590,7 @@ begin
 
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)
            generic map(
+               NAME => "M0",
                IQ_SIZE => IQ_SIZE_M0,
                DONT_MATCH1 => true,
                FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
@@ -817,16 +820,17 @@ begin
                     -- miss type (data miss, TLB miss, SQ data miss)
                 TMP_MQ_INPUT: block
                     signal mqOtherData: ControlPacket := DEFAULT_CONTROL_PACKET;
-                    signal eaDelayed: Mword := (others => '0');
+                    signal eaDelayed, eaDelayed1: Mword := (others => '0');
                 begin
                     process (clk)
                     begin
                         if rising_edge(clk) then
                             eaDelayed <= subpipeM0_RR_u.value;
+                            eaDelayed1 <= eaDelayed;
                         end if;
                     end process;
                     
-                    mqOtherData.ip <= eaDelayed;
+                    mqOtherData.ip <= eaDelayed1;
                     mqOtherData.op <= ctrlE1.op;--slotOpE1; --slotM0_E1i.ins.specificOperation;
                     mqOtherData.tags <= ctrlE1u.tags;
                     mqOtherData.classInfo.useFP <= subpipeM0_E1f.full;
@@ -868,6 +872,7 @@ begin
         
             IQUEUE_SV: entity work.IssueQueue(Behavioral)
             generic map(
+                NAME => "SVI",
                 IQ_SIZE => IQ_SIZE_INT_SV,
                 DONT_MATCH1 => true,
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_INT_D(0 to 2)
@@ -940,6 +945,7 @@ begin
                       
             IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)
             generic map(
+                NAME => "SVF",
                 IQ_SIZE => IQ_SIZE_FLOAT_SV, -- CAREFUL: not IS_FP because doesn't have destination
                 DONT_MATCH1 => true,
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_FLOAT_D(0 to 2)
@@ -1020,6 +1026,7 @@ begin
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)
             generic map(
+                NAME => "F0",
                 IQ_SIZE => IQ_SIZE_F0,
                 FORWARDING(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
                 FORWARDING1(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
@@ -1203,6 +1210,15 @@ begin
             end if;
          end process;
             
+            --resultToIntRF_EarlyEffective <= resultToIntRF_Early;
+            resultToIntRF_EarlyEffective.dbInfo <= resultToIntRF_Early.dbInfo;
+            resultToIntRF_EarlyEffective.full <= resultToIntRF_Early.full and not subpipeM0_E1_u.failed;
+            resultToIntRF_EarlyEffective.failed <= subpipeM0_E2.failed; -- ??
+            resultToIntRF_EarlyEffective.tag <= resultToIntRF_Early.tag;
+            resultToIntRF_EarlyEffective.dest <= resultToIntRF_Early.dest;
+            resultToIntRF_EarlyEffective.value <= resultToIntRF_Early.value;
+
+            
 		 INT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(WIDTH => 4, WRITE_WIDTH => 1)
          port map(
@@ -1232,7 +1248,7 @@ begin
              sendingToReserve => frontLastSending,
              newPhysDests => newIntDests,
              newPhysSources => newIntSources,
-             writingData_T(0) => resultToIntRF_Early,
+             writingData_T(0) => resultToIntRF_EarlyEffective,
              readyRegFlagsNext => readyRegFlagsIntNext_Early
          );
 
@@ -1241,7 +1257,7 @@ begin
          resultToIntWQ_Early <= subpipeM0_E0i when subpipeM0_E0i.full = '1' else
                                                              ExecResult'(
                                                                  dbInfo => DEFAULT_DEBUG_INFO,
-                                                                 full => slotIssueI0.full,
+                                                                 full => slotIssueI0.full and not TMP_I0_Is_curse,
                                                                  failed => '0',
                                                                  tag => slotIssueI0.renameIndex,
                                                                  dest => slotIssueI0.argSpec.dest,
@@ -1559,7 +1575,7 @@ begin
 	begin
 		doutadr <= ctOutSB.target;
 		dwrite <= sbSending and ctOutSB.controlInfo.full and isStoreMemOp(ctOutSB.op);
-		dout <= ctOutSQ.nip;
+		dout <= ctOutSB.nip;
 	end block;
 	
 	-- pragma synthesis off

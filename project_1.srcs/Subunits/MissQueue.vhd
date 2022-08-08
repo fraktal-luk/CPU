@@ -210,6 +210,8 @@ begin
                 queueContent(queueIndexNew).lqPointer <= compareAddressCtrl.tags.lqPointer;
                 queueContent(queueIndexNew).sqPointer <= compareAddressCtrl.tags.sqPointer;
                 
+                queueContent(queueIndexNew).op <= compareAddressCtrl.op;
+
                 queueContent(queueIndexNew).fp <= compareAddressCtrl.classInfo.useFP;
                 queueContent(queueIndexNew).tlbMiss <= compareAddressCtrl.controlInfo.tlbMiss;
                 queueContent(queueIndexNew).dataMiss <= compareAddressCtrl.controlInfo.dataMiss;
@@ -236,6 +238,7 @@ begin
         selectedDataResult.dest <= outEntrySig.dest;
         
         selectedDataOutput.target <= outEntrySig.adr;
+        selectedDataOutput.op <= outEntrySig.op;
         selectedDataOutput.classInfo.useFP <= outEntrySig.fp;
         selectedDataOutput.controlInfo.tlbMiss <= outEntrySig.tlbMiss;
         selectedDataOutput.controlInfo.dataMiss <= outEntrySig.dataMiss;
