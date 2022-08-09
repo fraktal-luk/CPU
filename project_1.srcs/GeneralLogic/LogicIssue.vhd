@@ -845,6 +845,8 @@ package body LogicIssue is
             end if;
         end if;
         
+            res.activeCounter(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0');
+        
         return res;
     end function;    
 
@@ -974,7 +976,7 @@ package body LogicIssue is
 
             if (a0dep or a1dep) = '1'
             then
-                if memFail = '1' then
+                if memFail = '1' then --and not selection then
                     res.dynamic.poisoned := '1';
                     
                         res.dynamic.argStates(0).waiting := a0dep;
@@ -985,14 +987,20 @@ package body LogicIssue is
               -- dependency on I0 RR - means being woken up now by I0 Issue stage if it is dependent on M0 E1 and fail detected
             --a0dep := bool2std(state.dynamic.argStates(0).srcPipe(1 downto 0) = "00" and state.dynamic.argStates(0).activeCounter = X"00") and not state.dynamic.argStates(0).zero and not state.dynamic.argStates(0).waiting;
             --a1dep := bool2std(state.dynamic.argStates(1).srcPipe(1 downto 0) = "00" and state.dynamic.argStates(1).activeCounter = X"00") and not state.dynamic.argStates(1).zero and not state.dynamic.argStates(1).waiting;
-                a0dep := wakeups0.match and bool2std(wakeups0.argLocsPipe(1 downto 0) = "00");
-                a1dep := wakeups1.match and bool2std(wakeups1.argLocsPipe(1 downto 0) = "00");
+--                a0dep := wakeups0.match and bool2std(wakeups0.argLocsPipe(1 downto 0) = "00");
+--                a1dep := wakeups1.match and bool2std(wakeups1.argLocsPipe(1 downto 0) = "00");
 
-            if (a0dep or a1dep) = '1'
-            then
-                if memDepFail = '1' then
-                    res.dynamic.poisoned := '1';
-                end if;
+--            if (a0dep or a1dep) = '1'
+--            then
+--                if memDepFail = '1' then
+--                    res.dynamic.poisoned := '1';
+--                end if;
+--            end if;
+            
+            -- When mem fail detected, wakeups are not allowed because dependence of failed op may be signalling
+            if memFail = '1' and not selection then
+                wakeups0.match := '0';
+                wakeups1.match := '0';
             end if;
 
         res.dynamic.argStates(0) := updateArgInfo(res.dynamic.argStates(0), wakeups0, selection);

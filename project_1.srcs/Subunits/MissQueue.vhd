@@ -51,12 +51,16 @@ architecture MissQueue of StoreQueue is
     signal outEntrySig: MQ_Entry := DEFAULT_MQ_ENTRY;
 
     signal queueContent: MQ_EntryArray(0 to MQ_SIZE-1) := (others => DEFAULT_MQ_ENTRY);
+    
+    signal addresses, tags, renameTags: MwordArray(0 to MQ_SIZE-1) := (others => (others => '0'));
+    
     signal fullMask, fullMaskNew, killMask, selectMask, selectMask1, selectMask2, selectMask3, inputFullMask,
             outputFullMask, outputFullMask1, outputFullMask2, outputFullMask3, readyMask: std_logic_vector(0 to MQ_SIZE-1) := (others => '0'); 
     
         signal firstOnePosI: integer := -1;
         signal queueIndex, queueIndexNext, queueIndexNew, firstOnePos, firstOnePos1, firstOnePos2, firstOnePos3: natural := 0;
     
+    signal adrInWord, adrOutWord, tagInWord, tagOutWord, renameTagOutWord: Mword := (others => '0');
     
     function TMP_getNextIndex(index: natural; size: natural) return natural is
         variable res: natural := index;
@@ -127,6 +131,8 @@ architecture MissQueue of StoreQueue is
         return res;
     end function;
 
+    
+    signal ch0, ch1, ch2, ch3: std_logic := '0'; 
 begin
     
     canSend <= '1';
@@ -185,6 +191,8 @@ begin
                         if slv2u(queueContent(i).TMP_cnt) >= 20 + slv2u(queueContent(i).tag(7 downto 3)) then
                             queueContent(i).ready <= '1';
                         end if; 
+                     
+                     --queueContent(i).TMP_cnt(SMALL_NUMBER_SIZE-1 downto 5) <= (others => '0');
                         
                 end loop;
 
@@ -219,6 +227,9 @@ begin
                 
                 queueContent(queueIndexNew).TMP_cnt <= (others => '0');
 
+                    addresses(queueIndexNew) <= compareAddressCtrl.ip;
+                    tags(queueIndexNew) <= tagInWord;
+                    renameTags(queueIndexNew)(TAG_SIZE-1 downto 0) <= compareAddressCtrl.tag;
             end if;
 
             if sending3 = '1' then
@@ -228,24 +239,39 @@ begin
         end if;
     end process;    
     
+                tagInWord <= compareAddressCtrl.tags.lqPointer & compareAddressCtrl.tags.sqPointer & compareAddressInput.dest & X"00";
+    
     sending <= canSend and isNonzero(selectMask);
     
     outEntrySig <= queueContent(firstOnePos2);
+         adrOutWord <= addresses(firstOnePos2);
+         tagOutWord <= tags(firstOnePos2);
+         renameTagOutWord <= renameTags(firstOnePos2);
+
+            ch0 <= bool2std(adrOutWord = outEntrySig.adr);
+            ch1 <= bool2std(tagOutWord(31 downto 24) = outEntrySig.lqPointer);
+            ch2 <= bool2std(tagOutWord(23 downto 16) = outEntrySig.sqPointer);
+            ch3 <= bool2std(tagOutWord(15 downto 8) = outEntrySig.dest);
 
         selectedDataOutput.controlInfo.full <= sending2 and outEntrySig.full and not lateEventSignal;
-        selectedDataOutput.tag <= outEntrySig.tag;
+        selectedDataOutput.tag <= --outEntrySig.tag;
+                                    renameTagOutWord(TAG_SIZE-1 downto 0);
         --selectedDataOutput.value <= outEntrySig.target;
-        selectedDataResult.dest <= outEntrySig.dest;
+        selectedDataResult.dest <= --outEntrySig.dest;
+                                    tagOutWord(15 downto 8);
         
-        selectedDataOutput.target <= outEntrySig.adr;
+        selectedDataOutput.target <= --outEntrySig.adr;
+                                     adrOutWord;
         selectedDataOutput.op <= outEntrySig.op;
         selectedDataOutput.classInfo.useFP <= outEntrySig.fp;
         selectedDataOutput.controlInfo.tlbMiss <= outEntrySig.tlbMiss;
         selectedDataOutput.controlInfo.dataMiss <= outEntrySig.dataMiss;
         selectedDataOutput.controlInfo.sqMiss <= outEntrySig.sqMiss;
         selectedDataOutput.tags.renameIndex <= outEntrySig.tag;
-        selectedDataOutput.tags.lqPointer <= outEntrySig.lqPointer;
-        selectedDataOutput.tags.sqPointer <= outEntrySig.sqPointer;
+        selectedDataOutput.tags.lqPointer <= --outEntrySig.lqPointer;
+                                             tagOutWord(31 downto 24);   
+        selectedDataOutput.tags.sqPointer <= --outEntrySig.sqPointer;
+                                             tagOutWord(23 downto 16);
 
         committedSending <= sending1; -- Indication to block normal mem issue
 end MissQueue;

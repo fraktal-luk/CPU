@@ -200,7 +200,7 @@ begin
     acceptingMore <= acceptingMoreBanked(bankCounts, BANK_SIZE);
 
     outputSignals <=   (sending => sends,
-                        cancelled => sentKilled,
+                        cancelled => sentKilled or memFail,
                         ready => anyReadyLive,
                         empty => isEmpty,
                         killSel => sendingKilled,

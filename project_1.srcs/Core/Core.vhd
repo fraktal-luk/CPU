@@ -356,7 +356,7 @@ begin
        signal newIntSources, newFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
        
        -- Issue control 
-       signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, allowIssueStoreDataFP, allowIssueStageStoreDataFP,
+       signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, lockIssueSVI, lockIssueSVF, allowIssueStoreDataFP, allowIssueStageStoreDataFP,
               memSubpipeSent, fp0subpipeSelected, lockIssueI0, allowIssueI0, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady, intWriteConflict,
               storeValueCollision1, storeValueCollision2, cancelledSVI1,
               sendingToStoreWrite, sendingToStoreWriteInt, sendingToStoreWriteFloat,
@@ -1129,8 +1129,11 @@ begin
 
          storeValueCollision1 <= (issuedStoreDataInt and issuedStoreDataFP);
 
-         allowIssueStoreDataInt <= not storeValueCollision1;
-         allowIssueStoreDataFP <= not storeValueCollision1;
+            lockIssueSVI <= storeValueCollision1 or memFail;
+            lockIssueSVF <= storeValueCollision1 or memFail;
+
+         allowIssueStoreDataInt <= not lockIssueSVI;
+         allowIssueStoreDataFP <= not lockIssueSVF;
 
          -------------------------------------------
          TMP_EXEC_D0: process (clk)
@@ -1158,17 +1161,21 @@ begin
              end if;
          end process;
 
-         lockIssueI0 <= memSubpipeSent;
+         lockIssueI0 <= memSubpipeSent or memFail;
          allowIssueI0 <= not lockIssueI0;
 
          -- Issue locking: 
          --     if F0 issued, to avoid WB collisions with FP load
          --     if MQ intends to reexecute
-         lockIssueM0 <= fp0subpipeSelected or mqReady;
+         lockIssueM0 <= fp0subpipeSelected or mqReady or memFail;
          allowIssueM0 <= not lockIssueM0;
 
-         lockIssueF0 <= '0';
+
+
+         lockIssueF0 <= '0' or memFail;
          allowIssueF0 <= not lockIssueF0;
+
+
 
          branchCtrl <= branchResult.controlInfo;
 
