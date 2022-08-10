@@ -55,8 +55,8 @@ type ArgumentState is record
     
     canFail: std_logic; -- maybe a counter is needed 
 
-        activeCounter: SmallNumber;
-        failed: std_logic;
+    activeCounter: SmallNumber;
+    failed: std_logic;
 
     waiting: std_logic;
     stored:  std_logic;
@@ -74,9 +74,9 @@ constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
     value => (others => '0'),
     canFail => '0',
     
-        activeCounter => (others => '0'),
-        failed => '0',
-        
+    activeCounter => (others => '0'),
+    failed => '0',
+    
     waiting => '0',
     stored => '0',
     srcPipe => (others => '0'),
@@ -91,7 +91,7 @@ type ArgumentStateArray is array(natural range <>) of ArgumentState;
 
 
 type StaticInfo is record
-        dbInfo: InstructionDebugInfo;
+    dbInfo: InstructionDebugInfo;
 
     operation: SpecificOp;
     
@@ -107,7 +107,7 @@ type StaticInfo is record
 end record;
 
 constant DEFAULT_STATIC_INFO: StaticInfo := (
-        dbInfo => DEFAULT_DEBUG_INFO,
+    dbInfo => DEFAULT_DEBUG_INFO,
 
     operation => DEFAULT_SPECIFIC_OP,
     branchIns => '0',
@@ -131,7 +131,7 @@ type DynamicInfo is record
     issued: std_logic;
     trial: std_logic;
 
-        poisoned: std_logic;
+    poisoned: std_logic;
 
     pulledBack: std_logic;
     stageCtr: SmallNumber;
@@ -153,7 +153,7 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     issued => '0',
     trial => '0',
         
-        poisoned => '0',
+    poisoned => '0',
 
     pulledBack => '0',
     stageCtr => (others => '0'),
@@ -453,7 +453,7 @@ package body LogicIssue is
     function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo is
         variable res: StaticInfo;
     begin
-            res.dbInfo := isl.ins.dbInfo;
+        res.dbInfo := isl.ins.dbInfo;
             
         res.operation := isl.ins.specificOperation;
     
@@ -499,8 +499,7 @@ package body LogicIssue is
         res.dest := ri.physicalDest;
     
         for i in 0 to 2 loop
-        
-                res.argStates(i).dbDep := DB_setProducer(res.argStates(i).dbDep, ri.dbDepTags(i));
+            res.argStates(i).dbDep := DB_setProducer(res.argStates(i).dbDep, ri.dbDepTags(i));
         
             res.argStates(i).used := ri.sourceSel(i);
             res.argStates(i).zero := ri.sourceConst(i);
@@ -711,7 +710,7 @@ package body LogicIssue is
                       killMask, trialMask, selMask: std_logic_vector;
                       rrf: std_logic_vector;
                       insertionLocs: slv2D;
-                        memFail, memDepFail: std_logic;
+                      memFail, memDepFail: std_logic;
                       TEST_MODE: natural
                              )
     return SchedulerInfoArray is
@@ -781,28 +780,27 @@ package body LogicIssue is
                 end loop;
             end loop;
         end if;
-        
-   
-            for i in 0 to LEN-1 loop
-                for j in 0 to 2 loop
-                    if res(i).dynamic.issued = '1' then
-                        null;
-                    elsif res(i).dynamic.argStates(j).waiting = '1' then
-                        res(i).dynamic.argStates(j).dbDep := DB_incCyclesWaiting(res(i).dynamic.argStates(j).dbDep);
-                    else
-                        res(i).dynamic.argStates(j).dbDep := DB_incCyclesReady(res(i).dynamic.argStates(j).dbDep);
-                    end if;
-                end loop;
-            end loop;
 
-            for i in 0 to LEN-1 loop
-                if res(i).dynamic.full /= '1' then
-                    res(i).static.dbInfo := DEFAULT_DEBUG_INFO;
-                    res(i).dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
-                    res(i).dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
-                    res(i).dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
+        for i in 0 to LEN-1 loop
+            for j in 0 to 2 loop
+                if res(i).dynamic.issued = '1' then
+                    null;
+                elsif res(i).dynamic.argStates(j).waiting = '1' then
+                    res(i).dynamic.argStates(j).dbDep := DB_incCyclesWaiting(res(i).dynamic.argStates(j).dbDep);
+                else
+                    res(i).dynamic.argStates(j).dbDep := DB_incCyclesReady(res(i).dynamic.argStates(j).dbDep);
                 end if;
             end loop;
+        end loop;
+
+        for i in 0 to LEN-1 loop
+            if res(i).dynamic.full /= '1' then
+                res(i).static.dbInfo := DEFAULT_DEBUG_INFO;
+                res(i).dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
+                res(i).dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
+                res(i).dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
+            end if;
+        end loop;
             
         return res;
     end function;
@@ -957,9 +955,8 @@ package body LogicIssue is
                                     )
     return SchedulerInfo is
         variable res: SchedulerInfo := state;
-        variable wakeups0, wakeups1: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
-        
-            variable a0dep, a1dep: std_logic := '0';
+        variable wakeups0, wakeups1: WakeupStruct := DEFAULT_WAKEUP_STRUCT;    
+        variable a0dep, a1dep: std_logic := '0';
     begin
         if not dynamic then
             wakeups0 := getWakeupStructStatic(fm.cmps(0), forwardingModes0, selection);
@@ -976,28 +973,13 @@ package body LogicIssue is
 
             if (a0dep or a1dep) = '1'
             then
-                if memFail = '1' 
-                            and not selection
-                         then
+                if memFail = '1' and not selection then
                     res.dynamic.poisoned := '1';
-                    
-                        res.dynamic.argStates(0).waiting := a0dep;
-                        res.dynamic.argStates(1).waiting := a1dep;
+
+                    res.dynamic.argStates(0).waiting := a0dep;
+                    res.dynamic.argStates(1).waiting := a1dep;
                 end if;
             end if;
-
-              -- dependency on I0 RR - means being woken up now by I0 Issue stage if it is dependent on M0 E1 and fail detected
-            --a0dep := bool2std(state.dynamic.argStates(0).srcPipe(1 downto 0) = "00" and state.dynamic.argStates(0).activeCounter = X"00") and not state.dynamic.argStates(0).zero and not state.dynamic.argStates(0).waiting;
-            --a1dep := bool2std(state.dynamic.argStates(1).srcPipe(1 downto 0) = "00" and state.dynamic.argStates(1).activeCounter = X"00") and not state.dynamic.argStates(1).zero and not state.dynamic.argStates(1).waiting;
---                a0dep := wakeups0.match and bool2std(wakeups0.argLocsPipe(1 downto 0) = "00");
---                a1dep := wakeups1.match and bool2std(wakeups1.argLocsPipe(1 downto 0) = "00");
-
---            if (a0dep or a1dep) = '1'
---            then
---                if memDepFail = '1' then
---                    res.dynamic.poisoned := '1';
---                end if;
---            end if;
             
             -- When mem fail detected, wakeups are not allowed because dependence of failed op may be signalling
             if memFail = '1' and not selection then
@@ -1013,10 +995,6 @@ package body LogicIssue is
             res.dynamic.argStates(1) := updateArgInfo(res.dynamic.argStates(1), wakeups1, selection);
         end if;
 
-
-            
-
-    
         return res;
     end function;
     
