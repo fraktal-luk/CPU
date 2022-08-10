@@ -976,7 +976,9 @@ package body LogicIssue is
 
             if (a0dep or a1dep) = '1'
             then
-                if memFail = '1' then --and not selection then
+                if memFail = '1' 
+                            and not selection
+                         then
                     res.dynamic.poisoned := '1';
                     
                         res.dynamic.argStates(0).waiting := a0dep;
