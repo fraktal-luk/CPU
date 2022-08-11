@@ -42,8 +42,8 @@ entity IssueQueue is
 		fni: in ForwardingInfo;
 		readyRegFlags: in std_logic_vector(0 to 3*PIPE_WIDTH-1);
 
-            memFail: in std_logic;
-            memDepFail: in std_logic;
+        memFail: in std_logic;
+        memDepFail: in std_logic; -- UNUSED (inside functions)
 
 		acceptingMore: out std_logic;
 		acceptingOut: out std_logic;
@@ -51,7 +51,7 @@ entity IssueQueue is
 		schedulerOut: out SchedulerEntrySlot;
         outputSignals: out IssueQueueSignals;
         
-            dbState: in DbCoreState		
+        dbState: in DbCoreState		
 	);
 end IssueQueue;
 
@@ -120,14 +120,12 @@ begin
 
     fma <= findForwardingMatchesArray(queueContent, fni, "000");
 
-    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, false, false, DONT_MATCH1, FORWARDING_D, memFail, memDepFail);
-    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, false, true, DONT_MATCH1, FORWARDING, memFail, memDepFail);
+    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, false, false, DONT_MATCH1, FORWARDING_D, memFail);
+    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, false, true, DONT_MATCH1, FORWARDING, memFail);
 
     insertionLocs <= getNewLocsBanked(fullMask);
 
-    queueContentNext <= iqNext_NS(queueContentUpdated, newArr, prevSendingOK, sends, killMask, trialMask, selMask, readyRegFlags, insertionLocs,
-                                        memFail, memDepFail,
-                                        0);
+    queueContentNext <= iqNext_NS(queueContentUpdated, newArr, prevSendingOK, sends, killMask, trialMask, selMask, readyRegFlags, insertionLocs, memFail);
     ageMatrixNext <= updateAgeMatrix(ageMatrix, insertionLocs, fullMask);
 
 

@@ -96,10 +96,13 @@ type StaticInfo is record
     operation: SpecificOp;
     
     branchIns: std_logic;
+    
     bqPointer: SmallNumber;
     sqPointer: SmallNumber;
     lqPointer: SmallNumber;        
     bqPointerSeq: SmallNumber;
+    
+        tags: InstructionTags;
     
     immediate: std_logic;    
     immValue: Hword;
@@ -116,6 +119,8 @@ constant DEFAULT_STATIC_INFO: StaticInfo := (
     sqPointer => (others => '0'),
     lqPointer => (others => '0'),  
     bqPointerSeq => (others => '0'),  
+    
+        tags => DEFAULT_INSTRUCTION_TAGS,
     
     immediate => '0',
     immValue => (others => '0'),
@@ -223,8 +228,7 @@ function iqNext_NS(queueContent: SchedulerInfoArray;
                   killMask, trialMask, selMask: std_logic_vector;
                   rrf: std_logic_vector;
                   insertionLocs: slv2D;
-                    memFail, memDepFail: std_logic;
-                  TEST_MODE: natural)
+                  memFail: std_logic)
 return SchedulerInfoArray;
 
 
@@ -235,7 +239,7 @@ function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInf
                 selection: boolean;
                 dontMatch1: boolean;
                 forwardingModes0: ForwardingModeArray;
-                memFail, memDepFail: std_logic := '0'
+                memFail: std_logic := '0'
             )
 return SchedulerInfoArray;
 
@@ -463,6 +467,8 @@ package body LogicIssue is
         res.lqPointer := isl.ins.tags.lqPointer;        
         res.bqPointerSeq := isl.ins.tags.bqPointerSeq;        
         
+            res.tags := isl.ins.tags;
+        
         res.immediate := isl.ins.constantArgs.immSel and bool2std(HAS_IMM);    
         res.immValue := isl.ins.constantArgs.imm(15 downto 0);
         
@@ -561,10 +567,12 @@ package body LogicIssue is
         res.operation := info.static.operation;
     
         res.branchIns := info.static.branchIns;
-        res.bqPointer := info.static.bqPointer;
-        res.sqPointer := info.static.sqPointer;
-        res.lqPointer := info.static.lqPointer;        
-        res.bqPointerSeq := info.static.bqPointerSeq;        
+        --res.bqPointer := info.static.bqPointer;
+        --res.sqPointer := info.static.sqPointer;
+        --res.lqPointer := info.static.lqPointer;        
+        --res.bqPointerSeq := info.static.bqPointerSeq;        
+        
+            res.tags := info.static.tags;
         
         res.immediate := info.static.immediate;    
         res.immValue := info.static.immValue;
@@ -592,7 +600,7 @@ package body LogicIssue is
             res.argLocsPipe(k) := info.dynamic.argStates(k).srcPipe;
             res.argSrc(k) := info.dynamic.argStates(k).srcStage;
         end loop;
- 
+
         return res;
     end function;
     
@@ -710,9 +718,7 @@ package body LogicIssue is
                       killMask, trialMask, selMask: std_logic_vector;
                       rrf: std_logic_vector;
                       insertionLocs: slv2D;
-                      memFail, memDepFail: std_logic;
-                      TEST_MODE: natural
-                             )
+                      memFail: std_logic)
     return SchedulerInfoArray is
         constant LEN: natural := queueContent'length;
         constant MAIN_LEN: natural := queueContent'length - PIPE_WIDTH;
@@ -951,7 +957,7 @@ package body LogicIssue is
                                     selection: boolean;
                                     dontMatch1: boolean;
                                     forwardingModes0, forwardingModes1: ForwardingModeArray;
-                                    memFail, memDepFail: std_logic
+                                    memFail: std_logic
                                     )
     return SchedulerInfo is
         variable res: SchedulerInfo := state;
@@ -1000,12 +1006,12 @@ package body LogicIssue is
     
     function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
                     dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0: ForwardingModeArray;
-                    memFail, memDepFail: std_logic := '0')
+                    memFail: std_logic := '0')
     return SchedulerInfoArray is
         variable res: SchedulerInfoArray(0 to schedArray'length-1);
     begin
         for i in schedArray'range loop
-            res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, dontMatch1, forwardingModes0, forwardingModes0, memFail, memDepFail);
+            res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, dontMatch1, forwardingModes0, forwardingModes0, memFail);
         end loop;	
         return res;
     end function;
@@ -1192,6 +1198,12 @@ package body LogicIssue is
         res.static.lqPointer := a.static.lqPointer or b.static.lqPointer;   
         res.static.bqPointerSeq := a.static.bqPointerSeq or b.static.bqPointerSeq;
         
+            res.static.tags.renameIndex := a.static.tags.renameIndex or b.static.tags.renameIndex;
+            res.static.tags.bqPointer := a.static.tags.bqPointer or b.static.tags.bqPointer;
+            res.static.tags.sqPointer := a.static.sqPointer or b.static.tags.sqPointer;
+            res.static.tags.lqPointer := a.static.lqPointer or b.static.tags.lqPointer;   
+            res.static.tags.bqPointerSeq := a.static.bqPointerSeq or b.static.tags.bqPointerSeq;
+            
         res.static.immediate :=  a.static.immediate or b.static.immediate;
         res.static.immValue :=  a.static.immValue or b.static.immValue;
         res.static.zero :=  a.static.zero or b.static.zero;
