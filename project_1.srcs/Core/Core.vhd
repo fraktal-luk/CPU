@@ -623,7 +623,8 @@ begin
             mqReexecRegRead.value <= mqReexecCtrlRR.target;            
 
             TMP_DEST_FLAGS: block
-                signal intSel, floatSel, mqInsertIssue, mqInsertRegRead: std_logic := '0';
+                signal intSel, floatSel,-- mqInsertIssue,
+                                mqInsertRegRead: std_logic := '0';
             begin
                 ---- !! Injection here
                 intSel <= not mqReexecCtrlRR.classInfo.useFP when mqInsertRegRead = '1' else slotRegReadM0.argSpec.intDestSel;
@@ -632,7 +633,7 @@ begin
                 controlToM0_E0 <= mqReexecCtrlRR when mqInsertRegRead = '1' else controlM0_RR;        -- op, tags
                 ---------------------
 
-                mqInsertIssue <=  mqIssueSending and bool2std(CONNECT_MQ);
+                --mqInsertIssue <=  mqIssueSending and bool2std(CONNECT_MQ);
 
                 resultToM0_E0i.full <= resultToM0_E0.full and intSel;                                   -- I/F
                 resultToM0_E0i.tag <= resultToM0_E0.tag;                                                -- OK
@@ -646,7 +647,7 @@ begin
             end block;
 
 
-            slotRegReadM0 <= slotRegReadM0mq when (mqIssueSending and bool2std(CONNECT_MQ)) = '1' else slotRegReadM0iq;
+            slotRegReadM0 <= slotRegReadM0mq when (mqRegReadSending and bool2std(CONNECT_MQ)) = '1' else slotRegReadM0iq;
 
             preIndexSQ <= slotRegReadM0.tags.sqPointer;
             preIndexLQ <= slotRegReadM0.tags.lqPointer;  
@@ -658,17 +659,17 @@ begin
             controlM0_RR.op <= slotRegReadM0.operation;
             controlM0_RR.tags <= slotRegReadM0.tags;
 
-            slotRegReadM0mq.full <= mqIssueSending and bool2std(CONNECT_MQ);
-            slotRegReadM0mq.operation <= mqReexecCtrlIssue.op;
-            slotRegReadM0mq.renameIndex <= mqReexecCtrlIssue.tags.renameIndex;
-            slotRegReadM0mq.tags <= mqReexecCtrlIssue.tags;
+            slotRegReadM0mq.full <= mqRegReadSending and bool2std(CONNECT_MQ);
+            slotRegReadM0mq.operation <= mqReexecCtrlRR.op;
+            slotRegReadM0mq.renameIndex <= mqReexecCtrlRR.tags.renameIndex;
+            slotRegReadM0mq.tags <= mqReexecCtrlRR.tags;
             
             -- adr
-            slotRegReadM0mq.args(1) <= mqReexecCtrlIssue.target;
+            slotRegReadM0mq.args(1) <= mqReexecCtrlRR.target;
             
-            slotRegReadM0mq.argSpec.dest <= mqReexecResIssue.dest;
-            slotRegReadM0mq.argSpec.intDestSel <= not mqReexecCtrlIssue.classInfo.useFP and isNonzero(mqReexecResIssue.dest);
-            slotRegReadM0mq.argSpec.floatDestSel <= mqReexecCtrlIssue.classInfo.useFP; 
+            slotRegReadM0mq.argSpec.dest <= mqReexecResRR.dest;
+            slotRegReadM0mq.argSpec.intDestSel <= not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
+            slotRegReadM0mq.argSpec.floatDestSel <= mqReexecCtrlRR.classInfo.useFP; 
 
             -- info that it is an MQ op
 
