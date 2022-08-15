@@ -623,8 +623,7 @@ begin
             mqReexecRegRead.value <= mqReexecCtrlRR.target;            
 
             TMP_DEST_FLAGS: block
-                signal intSel, floatSel,-- mqInsertIssue,
-                                mqInsertRegRead: std_logic := '0';
+                signal intSel, floatSel, mqInsertRegRead: std_logic := '0';
             begin
                 ---- !! Injection here
                 intSel <= not mqReexecCtrlRR.classInfo.useFP when mqInsertRegRead = '1' else slotRegReadM0.argSpec.intDestSel;
@@ -633,17 +632,19 @@ begin
                 controlToM0_E0 <= mqReexecCtrlRR when mqInsertRegRead = '1' else controlM0_RR;        -- op, tags
                 ---------------------
 
-                --mqInsertIssue <=  mqIssueSending and bool2std(CONNECT_MQ);
+--                resultToM0_E0i.full <= resultToM0_E0.full and intSel;                                   -- I/F
+--                resultToM0_E0i.tag <= resultToM0_E0.tag;                                                -- OK
+--                resultToM0_E0i.dest <= resultToM0_E0.dest when intSel = '1' else (others => '0');       -- I/F
+--                resultToM0_E0i.value <= resultToM0_E0.value;                                            -- OK
 
-                resultToM0_E0i.full <= resultToM0_E0.full and intSel;                                   -- I/F
-                resultToM0_E0i.tag <= resultToM0_E0.tag;                                                -- OK
-                resultToM0_E0i.dest <= resultToM0_E0.dest when intSel = '1' else (others => '0');       -- I/F
-                resultToM0_E0i.value <= resultToM0_E0.value;                                            -- OK
+                    resultToM0_E0i <= updateMemDest(resultToM0_E0, intSel);
 
-                resultToM0_E0f.full <= resultToM0_E0.full and floatSel;                                 -- I/F
-                resultToM0_E0f.tag <= resultToM0_E0.tag;                                                -- OK
-                resultToM0_E0f.dest <= resultToM0_E0.dest when floatSel = '1' else (others => '0');     -- I/F
-                resultToM0_E0f.value <= resultToM0_E0.value;                                            -- OK
+--                resultToM0_E0f.full <= resultToM0_E0.full and floatSel;                                 -- I/F
+--                resultToM0_E0f.tag <= resultToM0_E0.tag;                                                -- OK
+--                resultToM0_E0f.dest <= resultToM0_E0.dest when floatSel = '1' else (others => '0');     -- I/F
+--                resultToM0_E0f.value <= resultToM0_E0.value;                                            -- OK
+                
+                   resultToM0_E0f <= updateMemDest(resultToM0_E0, floatSel);
             end block;
 
 
@@ -722,29 +723,12 @@ begin
             ctrlE1u.op <= ctrlE1.op;
             ctrlE1u.controlInfo <= memoryCtrlPre;
 
-            -- TODO: apply here memoryMissed to deactivate missing ops 
-            subpipeM0_E1_u.full <= subpipeM0_E1.full --
-                                                     and not (memoryMissed and bool2std(CONNECT_MQ));
-            subpipeM0_E1_u.failed <= subpipeM0_E1.full --
-                                                     and (memoryMissed and bool2std(CONNECT_MQ));                                                     
-            subpipeM0_E1_u.tag <= subpipeM0_E1.tag;     -- OK
-            subpipeM0_E1_u.dest <= subpipeM0_E1.dest;   -- OK
-            subpipeM0_E1_u.value <= memResult;          -- same
-            
-            subpipeM0_E1i_u.full <= subpipeM0_E1i.full -- 
-                                                        and not (memoryMissed and bool2std(CONNECT_MQ));
-            subpipeM0_E1i_u.tag <= subpipeM0_E1i.tag;   -- OK
-            subpipeM0_E1i_u.dest <= subpipeM0_E1i.dest; -- OK
-            subpipeM0_E1i_u.value <= memResult;         -- same
-                                        
-            subpipeM0_E1f_u.full <= subpipeM0_E1f.full -- 
-                                                        and not (memoryMissed and bool2std(CONNECT_MQ));
-            subpipeM0_E1f_u.tag <= subpipeM0_E1f.tag;   -- OK
-            subpipeM0_E1f_u.dest <= subpipeM0_E1f.dest; -- OK
-            subpipeM0_E1f_u.value <= memResult;         -- same
-
-
             memoryMissed <= ctrlE1u.controlInfo.dataMiss or ctrlE1u.controlInfo.sqMiss;
+
+            subpipeM0_E1_u <= setMemFail(subpipeM0_E1, (memoryMissed and bool2std(CONNECT_MQ)), memResult);     
+            subpipeM0_E1i_u <= setMemFail(subpipeM0_E1i, (memoryMissed and bool2std(CONNECT_MQ)), memResult);
+            subpipeM0_E1f_u <= setMemFail(subpipeM0_E1f, (memoryMissed and bool2std(CONNECT_MQ)), memResult);
+
 
             missedMemResult.full <= subpipeM0_E1.full and memoryMissed;
             missedMemResult.tag <= subpipeM0_E1.tag;
@@ -1401,76 +1385,64 @@ begin
         dbState => dbState
 	);
 
-    TMP_LMQ: block        
-        signal mqReexecCtrlE0, mqReexecCtrlE1: ControlPacket := DEFAULT_CONTROL_PACKET;
-        signal mqReexecResE0, mqReexecResE1: ExecResult := DEFAULT_EXEC_RESULT;
+
+    process (clk)
     begin
+        if rising_edge(clk) then
+            mqReexecCtrlRR <= mqReexecCtrlIssue;
+            mqReexecResRR <= mqReexecResIssue;
+        end if;
+    end process;
 
-        process (clk)
-        begin
-            if rising_edge(clk) then
-                mqReexecCtrlRR <= mqReexecCtrlIssue;
-                mqReexecCtrlE0 <= mqReexecCtrlRR;
-                mqReexecCtrlE1 <= mqReexecCtrlE0;
-                
-                mqReexecResRR <= mqReexecResIssue;
-                mqReexecResE0 <= mqReexecResRR;
-                mqReexecResE1 <= mqReexecResE0;
-            end if;
-        end process;
-    
-        LOAD_MISS_QUEUE: entity work.StoreQueue(MissQueue)
-        generic map(
-            QUEUE_SIZE => 8
-            )
-        port map(
-            clk => clk,
-            reset => '0',
-            en => '0',
-    
-            acceptingOut => open,
-            almostFull => open,
-    
-            prevSendingRe => '0',                
-            prevSending => '0',
-            
-            renameMask => (others => '0'),
-            inputMask => (others => '0'),
-            systemMask => (others => '0'),
-                
-            renamedPtr => open,
-    
-            storeValuePtr => (others => '0'),
-            storeValueResult => DEFAULT_EXEC_RESULT,
-            
-            compareAddressInput => missedMemResult,
-            compareAddressInputOp => DEFAULT_SPECIFIC_OP,
-            compareAddressCtrl => missedMemCtrl,
+    LOAD_MISS_QUEUE: entity work.StoreQueue(MissQueue)
+    generic map(
+        QUEUE_SIZE => 8
+        )
+    port map(
+        clk => clk,
+        reset => '0',
+        en => '0',
 
-            compareIndexInput => (others => '0'),        
-            preCompareOp => DEFAULT_SPECIFIC_OP,
-                 
-            selectedDataOutput => mqReexecCtrlIssue,
-            selectedDataResult => mqReexecResIssue,
-    
-            committing => '0',
-            commitMask => (others => '0'),
-            commitEffectiveMask => (others => '0'),
-    
-            lateEventSignal => lateEventSignal,
-            execEventSignal => execEventSignalE1,
-            execCausing => execCausingDelayedLQ, -- TODO: verify
-            
-            nextAccepting => '0',
-            
-            committedEmpty => open,
-            committedSending => mqReady,
-            
-            dbState => dbState        
-        );
+        acceptingOut => open,
+        almostFull => open,
+
+        prevSendingRe => '0',                
+        prevSending => '0',
         
-    end block;
+        renameMask => (others => '0'),
+        inputMask => (others => '0'),
+        systemMask => (others => '0'),
+            
+        renamedPtr => open,
 
+        storeValuePtr => (others => '0'),
+        storeValueResult => DEFAULT_EXEC_RESULT,
+        
+        compareAddressInput => missedMemResult,
+        compareAddressInputOp => DEFAULT_SPECIFIC_OP,
+        compareAddressCtrl => missedMemCtrl,
+
+        compareIndexInput => (others => '0'),        
+        preCompareOp => DEFAULT_SPECIFIC_OP,
+             
+        selectedDataOutput => mqReexecCtrlIssue,
+        selectedDataResult => mqReexecResIssue,
+
+        committing => '0',
+        commitMask => (others => '0'),
+        commitEffectiveMask => (others => '0'),
+
+        lateEventSignal => lateEventSignal,
+        execEventSignal => execEventSignalE1,
+        execCausing => execCausingDelayedLQ, -- TODO: verify
+        
+        nextAccepting => '0',
+        
+        committedEmpty => open,
+        committedSending => mqReady,
+        
+        dbState => dbState        
+    );
 
 	MEMORY_INTERFACE: block
 		signal sysStoreAddressW: Mword := (others => '0');

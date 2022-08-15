@@ -273,6 +273,10 @@ function unfoldOp(op: SpecificOp) return SpecificOp;
 
 function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray;
 
+function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult;
+function updateMemDest(er: ExecResult; used: std_logic) return ExecResult;
+
+
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
                                 s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
                                 s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
@@ -1149,6 +1153,24 @@ begin
     return res;
 end function;
 
+function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult is
+    variable res: ExecResult := er;
+begin
+    res.full := er.full and not fail;
+    res.failed := er.full and fail;
+    res.value := memResult;
+    return res;
+end function;
+
+function updateMemDest(er: ExecResult; used: std_logic) return ExecResult is
+    variable res: ExecResult := er;
+begin
+    res.full := er.full and used;
+    if used /= '1' then
+        res.dest := (others => '0');
+    end if;
+    return res;
+end function;
 
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
                                 s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
