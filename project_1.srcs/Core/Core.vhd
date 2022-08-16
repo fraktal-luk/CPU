@@ -63,6 +63,7 @@ end Core;
 architecture Behavioral of Core is
 
     signal frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
+           acceptingMQ, almostFullMQ,
            frontEventSignal, bqAccepting, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ,
            canSendFront, canSendRename,
            execEventSignalE0, execEventSignalE1, lateEventSignal, lateEventSetPC,
@@ -1071,7 +1072,7 @@ begin
          -- Issue locking: 
          --     if F0 issued, to avoid WB collisions with FP load
          --     if MQ intends to reexecute
-         lockIssueM0 <= fp0subpipeSelected or mqReady or memFail;
+         lockIssueM0 <= fp0subpipeSelected or mqReady or memFail  or almostFullMQ;
          allowIssueM0 <= not lockIssueM0;
 
          lockIssueF0 <= '0' or memFail;
@@ -1405,8 +1406,8 @@ begin
         reset => '0',
         en => '0',
 
-        acceptingOut => open,
-        almostFull => open,
+        acceptingOut => acceptingMQ,
+        almostFull => almostFullMQ,
 
         prevSendingRe => '0',                
         prevSending => '0',
