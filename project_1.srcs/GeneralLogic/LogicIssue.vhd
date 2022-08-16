@@ -239,7 +239,7 @@ function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInf
                 selection: boolean;
                 dontMatch1: boolean;
                 forwardingModes0: ForwardingModeArray;
-                memFail: std_logic := '0'
+                memFail: std_logic; constant ignoreMemFail: boolean
             )
 return SchedulerInfoArray;
 
@@ -957,7 +957,8 @@ package body LogicIssue is
                                     selection: boolean;
                                     dontMatch1: boolean;
                                     forwardingModes0, forwardingModes1: ForwardingModeArray;
-                                    memFail: std_logic
+                                    memFail: std_logic;
+                                    constant ignoreMemFail: boolean
                                     )
     return SchedulerInfo is
         variable res: SchedulerInfo := state;
@@ -979,16 +980,16 @@ package body LogicIssue is
 
             if (a0dep or a1dep) = '1'
             then
-                if memFail = '1' and not selection then
+                if memFail = '1' and not ignoreMemFail and not selection then
                     res.dynamic.poisoned := '1';
 
                     res.dynamic.argStates(0).waiting := a0dep;
                     res.dynamic.argStates(1).waiting := a1dep;
                 end if;
             end if;
-            
+
             -- When mem fail detected, wakeups are not allowed because dependence of failed op may be signalling
-            if memFail = '1' and not selection then
+            if memFail = '1' and not ignoreMemFail and not selection then
                 wakeups0.match := '0';
                 wakeups1.match := '0';
             end if;
@@ -1006,12 +1007,13 @@ package body LogicIssue is
     
     function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
                     dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0: ForwardingModeArray;
-                    memFail: std_logic := '0')
+                    memFail: std_logic; constant ignoreMemFail: boolean
+)
     return SchedulerInfoArray is
         variable res: SchedulerInfoArray(0 to schedArray'length-1);
     begin
         for i in schedArray'range loop
-            res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, dontMatch1, forwardingModes0, forwardingModes0, memFail);
+            res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, dontMatch1, forwardingModes0, forwardingModes0, memFail, ignoreMemFail);
         end loop;	
         return res;
     end function;

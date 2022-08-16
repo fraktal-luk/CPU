@@ -25,7 +25,8 @@ entity IssueQueue is
 		DONT_MATCH1: boolean := false;
 		FORWARDING: ForwardingModeArray := (0 => (-100, false));  -- Can be used immediately
 		FORWARDING1: ForwardingModeArray := (0 => (-100, false));
-		FORWARDING_D: ForwardingModeArray := (0 => (-100, false)) -- Can be used with 1 cycle delay
+		FORWARDING_D: ForwardingModeArray := (0 => (-100, false)); -- Can be used with 1 cycle delay
+		IGNORE_MEM_FAIL: boolean := false
 	);
 	port(
 		clk: in std_logic;
@@ -120,8 +121,8 @@ begin
 
     fma <= findForwardingMatchesArray(queueContent, fni, "000");
 
-    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, false, false, DONT_MATCH1, FORWARDING_D, memFail);
-    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, false, true, DONT_MATCH1, FORWARDING, memFail);
+    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, false, false, DONT_MATCH1, FORWARDING_D, memFail, IGNORE_MEM_FAIL);
+    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, false, true, DONT_MATCH1, FORWARDING, memFail, IGNORE_MEM_FAIL);
 
     insertionLocs <= getNewLocsBanked(fullMask);
 
