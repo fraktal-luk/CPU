@@ -76,7 +76,7 @@ architecture Behavioral of StoreQueue is
 
 	signal addressMatchMask, newerLQ, newerRegLQ, newerNextLQ, olderNextSQ, olderRegSQ, olderSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
-	signal adrPtr, pSelect, pStart, pStartNext, pDrain, pDrainNext, pDrainPrev,
+	signal adrPtr, pSelect, pSelectPrev, pStart, pStartNext, pDrain, pDrainNext, pDrainPrev,
            pTagged, pTaggedNext, pFlush, pRenamed, pRenamedNext, pStartEffective, pStartEffectiveNext,
 	       nFull, nFullNext, nIn, nInRe, nOut, nCommitted, nCommittedEffective, recoveryCounter: SmallNumber := (others => '0');
 
@@ -173,7 +173,9 @@ begin
                 selectedEntry <= queueContent(p2i(pSelect, QUEUE_SIZE));
                 selectedValue <= storeValues(p2i(pSelect, QUEUE_SIZE));
                 selectedAddress <= addresses(p2i(pSelect, QUEUE_SIZE));
-                                
+                
+                pSelectPrev <= pSelect;
+
                 -- D. outputs
                 drainEntry <= queueContent(p2i(pDrain, QUEUE_SIZE));
                 drainValue <= storeValues(p2i(pDrain, QUEUE_SIZE));
@@ -295,6 +297,12 @@ begin
 
     -- E. output
     selectedDataOutput <= selectedOutputSig;
+
+        selectedDataResult.full <= '0';
+        selectedDataResult.failed <= '0';
+        selectedDataResult.dest <= pSelectPrev;
+        selectedDataResult.tag <= (others => '0');
+        selectedDataResult.value <= (others => '0');
 
     WHEN_LQ: if IS_LOAD_QUEUE generate
         selectedOutputSig.controlInfo.full <= isSelected;           

@@ -162,6 +162,10 @@ begin
 
     outputFullMask3 <= maskFromIndex(selPtr3, MQ_SIZE) when selValid3 = '1' else (others => '0');
 
+        -- Wakeup for dependents on SQ:
+        -- CAREFUL: compare SQ pointers ignoring the high bit of StoreData sqPointer (used for ordering, not indexing the content!)
+        
+
     READY_MASL: for i in 0 to MQ_SIZE-1 generate
         fullMask(i) <= queueContent(i).full;
         readyMask(i) <= queueContent(i).ready;
@@ -190,8 +194,12 @@ begin
                 queueContent(i).TMP_cnt <= addInt(queueContent(i).TMP_cnt, 1);
                 -- dummy setting to ready after some varying time
                 if slv2u(queueContent(i).TMP_cnt) >= 20 + slv2u(queueContent(i).tag(7 downto 3)) then
-                    queueContent(i).ready <= '1';
-                end if; 
+                    --queueContent(i).ready <= '1';
+                end if;
+                
+                    if queueContent(i).sqMiss = '1' and queueContent(i).sqTag(2 downto 0) = storeValueResult.dest(2 downto 0) then
+                        queueContent(i).ready <= '1';
+                    end if;
             end loop;
 
             for i in 0 to MQ_SIZE-1 loop                    
@@ -209,7 +217,7 @@ begin
 
                 queueContent(p2i(writePtr, MQ_SIZE)).dest <= compareAddressInput.dest;
                 queueContent(p2i(writePtr, MQ_SIZE)).adr <= compareAddressCtrl.ip;
-                queueContent(p2i(writePtr, MQ_SIZE)).sqTag <= (others => 'U');
+                queueContent(p2i(writePtr, MQ_SIZE)).sqTag <= compareAddressCtrl.target(SMALL_NUMBER_SIZE-1 downto 0);
                 
                 queueContent(p2i(writePtr, MQ_SIZE)).lqPointer <= compareAddressCtrl.tags.lqPointer;
                 queueContent(p2i(writePtr, MQ_SIZE)).sqPointer <= compareAddressCtrl.tags.sqPointer;

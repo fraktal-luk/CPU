@@ -105,7 +105,8 @@ architecture Behavioral of Core is
     signal memAddressInputSQ, memAddressInputLQ, bqCompareEarly, bqUpdate, sqValueResult, 
            frontEvent, execEvent, lateEvent, execCausingDelayedSQ, execCausingDelayedLQ,
            bqTargetData,
-           dataFromSB, 
+           resOutSQ,
+           dataFromSB,
            mqReexecRegRead,
            missedMemResult
            : ExecResult := DEFAULT_EXEC_RESULT;
@@ -739,6 +740,7 @@ begin
             missedMemCtrl.ip <= subpipeM0_E1.value;
             missedMemCtrl.op <= ctrlE1.op;
             missedMemCtrl.tags <= ctrlE1u.tags;
+                missedMemCtrl.target(SMALL_NUMBER_SIZE-1 downto 0) <= resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
             missedMemCtrl.classInfo.useFP <= subpipeM0_E1f.full;
             missedMemCtrl.controlInfo.tlbMiss <= ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
             missedMemCtrl.controlInfo.dataMiss <= ctrlE1u.controlInfo.dataMiss;
@@ -1320,6 +1322,7 @@ begin
         preCompareOp => preAddressOp,
             
         selectedDataOutput => ctOutSQ,
+            selectedDataResult => resOutSQ,
 
 		committing => robSending,
         commitMask => commitMaskSQ,
@@ -1419,8 +1422,8 @@ begin
         renamedPtr => open,
 
         storeValuePtr => (others => '0'),
-        storeValueResult => DEFAULT_EXEC_RESULT,
-        
+        storeValueResult => sqValueResult,
+
         compareAddressInput => missedMemResult,
         compareAddressInputOp => DEFAULT_SPECIFIC_OP,
         compareAddressCtrl => missedMemCtrl,
