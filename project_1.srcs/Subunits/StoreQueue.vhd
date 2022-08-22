@@ -41,11 +41,11 @@ entity StoreQueue is
 		storeValueResult: in ExecResult;
 
 		compareAddressInput: in ExecResult;
-		compareAddressInputOp: in SpecificOp;
 		  compareAddressCtrl: in ControlPacket;
 		
         compareIndexInput: in SmallNumber;
         preCompareOp: in SpecificOp;
+           compareAddressEarlyInput: in ExecResult;
 
         selectedDataOutput: out ControlPacket;
             selectedDataResult: out ExecResult;
@@ -96,6 +96,8 @@ architecture Behavioral of StoreQueue is
     signal updateResult: ExecResult := DEFAULT_EXEC_RESULT;
 
     signal selectedOutputSig, committedOutputSig: ControlPacket := DEFAULT_CONTROL_PACKET;
+
+	alias compareAddressInputOp is compareAddressCtrl.op;
 
     signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
 

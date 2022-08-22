@@ -212,33 +212,49 @@ begin
     DEBUG_HANDLING: process (clk)
         use std.textio.all;
         use work.Assembler.all;
+                
+        
+--            used: std_logic;
+--            reg: PhysName;
+--            zero: std_logic;
+--            imm: std_logic;
+--            value: Hword;
+            
+--            canFail: std_logic; -- maybe a counter is needed 
+        
+--            activeCounter: SmallNumber;
+--            failed: std_logic;
+        
+--            waiting: std_logic;
+--            stored:  std_logic;
+--            srcPipe: SmallNumber;
+--            srcStage: SmallNumber;
+            
+--            dbDep: DbDependency;
 
---        function getDynamicContentString(dyn: DynamicOpInfo) return string is
---            variable res: line;
---        begin
---            if dyn.full = '1' then
---                write(res, natural'image(slv2u(dyn.dbInfo.tag)));
---                write(res, string'(": "));
---                write(res, std_logic'image(dyn.completed0));
---                if dyn.secCluster = '1' then
---                    write(res, std_logic'image(dyn.completed1));
---                else
---                    write(res, string'("'-'"));
---                end if;
---                write(res, string'(" "));
---                if dyn.hasEvent = '1' then
---                    write(res, string'("E : "));
---                else
---                    write(res, string'("  : "));
---                end if;
-                
---                write(res, disasmWord(dyn.dbInfo.bits));
-                
---                return res.all;
---            else
---                return "-------------------------------------";
+        function getArgString(argState: ArgumentState) return string is
+            variable immValue: Hword := argState.value;
+        begin
+--            if argState.used /= '1' then
+--                return "{none}";
 --            end if;
---        end function;
+
+            if argState.imm = '1' then
+                if IMM_AS_REG then
+                    immValue(PhysName'length-2 downto 0) := argState.reg(6 downto 0);
+                end if;
+                return "{#" & integer'image(slv2u(immValue)) & "}";
+            elsif argState.zero = '1' then
+                return "{zero}";
+            else
+                if argState.waiting = '1' then
+                    return "{" & natural'image(slv2u(argState.reg)) & " [0]}";
+                else
+                    return "{" & natural'image(slv2u(argState.reg)) & " [1]}";                
+                end if;
+            end if;
+            
+        end function;
     
         procedure printContent is
            file outFile: text open write_mode is "issue_queue" & NAME & ".txt";
@@ -256,9 +272,16 @@ begin
                 write(currentLine, string'(", "));
                 write(currentLine, std_logic'image(queueContent(i).dynamic.issued));
                 write(currentLine, string'(", "));
-                write(currentLine, std_logic'image(queueContent(i).dynamic.argStates(0).waiting));
-                write(currentLine, std_logic'image(queueContent(i).dynamic.argStates(1).waiting));
+--                write(currentLine, std_logic'image(queueContent(i).dynamic.argStates(0).waiting));
+--                write(currentLine, std_logic'image(queueContent(i).dynamic.argStates(1).waiting));
                 
+                write(currentLine, getArgString(queueContent(i).dynamic.argStates(0)));
+                write(currentLine, string'(", "));
+                write(currentLine, getArgString(queueContent(i).dynamic.argStates(1)));
+                
+                write(currentLine, string'(" // "));
+                
+                write(currentLine, disasmWord(queueContent(i).static.dbInfo.bits));
                 writeline(outFile, currentLine);
             end loop;
         end procedure;
@@ -268,7 +291,7 @@ begin
         if rising_edge(clk) then
             if dbState.dbSignal = '1' then
                 report "IQ reporting ";
-                --printContent;
+                printContent;
             end if;
         end if;
     end process;

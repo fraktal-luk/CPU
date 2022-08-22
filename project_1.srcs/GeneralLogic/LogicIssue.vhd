@@ -102,7 +102,7 @@ type StaticInfo is record
     lqPointer: SmallNumber;        
     bqPointerSeq: SmallNumber;
     
-        tags: InstructionTags;
+    tags: InstructionTags;
     
     immediate: std_logic;    
     immValue: Hword;
@@ -120,7 +120,7 @@ constant DEFAULT_STATIC_INFO: StaticInfo := (
     lqPointer => (others => '0'),  
     bqPointerSeq => (others => '0'),  
     
-        tags => DEFAULT_INSTRUCTION_TAGS,
+    tags => DEFAULT_INSTRUCTION_TAGS,
     
     immediate => '0',
     immValue => (others => '0'),
@@ -188,7 +188,6 @@ type SchedulerInfoArray is array(natural range <>) of SchedulerInfo;
 
 type WakeupStruct is record
     argLocsPipe: SmallNumber;
-    argLocsPhase: SmallNumber;
     argSrc: SmallNumber;
     match:   std_logic;         
 end record;
@@ -196,7 +195,7 @@ end record;
 type slv2D is array(natural range <>, natural range <>) of std_logic;
 
 
-constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", "00000010", '0');
+constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0');
 
 function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo; 
 function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo;
@@ -467,7 +466,7 @@ package body LogicIssue is
         res.lqPointer := isl.ins.tags.lqPointer;        
         res.bqPointerSeq := isl.ins.tags.bqPointerSeq;        
         
-            res.tags := isl.ins.tags;
+        res.tags := isl.ins.tags;
         
         res.immediate := isl.ins.constantArgs.immSel and bool2std(HAS_IMM);    
         res.immValue := isl.ins.constantArgs.imm(15 downto 0);
@@ -567,17 +566,13 @@ package body LogicIssue is
         res.operation := info.static.operation;
     
         res.branchIns := info.static.branchIns;
-        --res.bqPointer := info.static.bqPointer;
-        --res.sqPointer := info.static.sqPointer;
-        --res.lqPointer := info.static.lqPointer;        
-        --res.bqPointerSeq := info.static.bqPointerSeq;        
-        
-            res.tags := info.static.tags;
+
+        res.tags := info.static.tags;
         
         res.immediate := info.static.immediate;    
         res.immValue := info.static.immValue;
             
-            res.poisoned := info.dynamic.poisoned;
+        res.poisoned := info.dynamic.poisoned;
             
         res.zero := info.static.zero;
         
@@ -721,60 +716,60 @@ package body LogicIssue is
                       memFail: std_logic)
     return SchedulerInfoArray is
         constant LEN: natural := queueContent'length;
-        constant MAIN_LEN: natural := queueContent'length - PIPE_WIDTH;
         variable res: SchedulerInfoArray(queueContent'range) := queueContent;
         variable newArr: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputData;                
-        variable oldFullMask, fullMask, activeMask, fullMaskNew: std_logic_vector(queueContent'range) := extractFullMask(queueContent);
-        variable cnt: natural := 0;
-        
         variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
     begin
         for i in 0 to LEN-1 loop
+            -- Remove after successful issue
             if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME then
                 res(i).dynamic.full := '0';
+                res(i).dynamic.issued := '0';
+                res(i).dynamic.active := '0';
                 res(i).dynamic.stageCtr := (others => '0');
             end if;
-        
-        
-            if memFail = '1' and queueContent(i).dynamic.full = '1' and queueContent(i).dynamic.issued = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "01" then
+
+            -- pull back because mem miss
+            if memFail = '1' --and queueContent(i).dynamic.full = '1'
+                             and queueContent(i).dynamic.issued = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "01" then
                 res(i).dynamic.issued := '0';
                 res(i).dynamic.active := '1';
                 res(i).dynamic.stageCtr := (others => '0');
+            -- waiting to confirm issue success
             elsif queueContent(i).dynamic.issued = '1' then      
                 res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1);
             end if;
-            
+
+            -- set issued
             if (selMask(i) and sends) = '1' then
                 res(i).dynamic.issued := '1';
                 res(i).dynamic.active := '0';
                 res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1); 
             end if;
-            
-            res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits
-        end loop;    
-    
-        for i in 0 to LEN-1 loop
-            if killMask(i) = '1' then
+
+            -- flush on event
+            if killMask(i) = '1' then -- the same as at removing successfully issued?
                 res(i).dynamic.full := '0';
+                res(i).dynamic.issued := '0';
                 res(i).dynamic.active := '0';
                 res(i).dynamic.stageCtr := (others => '0');
              end if;
-             
-             if trialMask(i) = '1' then
-                 res(i).dynamic.trial := '1';           
-             else
-                 res(i).dynamic.trial := '0';
-             end if;
-             
+
+             -- set age comparison for possible subsequent flush
+             res(i).dynamic.trial := trialMask(i);           
+
+             res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
         end loop;
-    
+
+
+        -- Insert new elements
         for j in 0 to PIPE_WIDTH-1 loop
             rm(3*j to 3*j + 2) := (others => inputData(j).dynamic.full); 
         end loop;
-    
+
         rrfFull := rm and rrf;
         newArr := restoreRenameIndex(updateRR(inputData, rrfFull));
-    
+
         if prevSending = '1' then                    
             for i in 0 to PIPE_WIDTH-1 loop
                 for k in 0 to LEN-1 loop
@@ -786,7 +781,9 @@ package body LogicIssue is
                 end loop;
             end loop;
         end if;
-
+        
+        
+        -- Handle DB info
         for i in 0 to LEN-1 loop
             for j in 0 to 2 loop
                 if res(i).dynamic.issued = '1' then
@@ -831,124 +828,115 @@ package body LogicIssue is
     begin
         if argState.waiting = '1' then
             res.srcPipe := wakeups.argLocsPipe;
-            res.waiting := not wakeups.match;
-                res.activeCounter := (others => '0');
             res.srcStage := wakeups.argSrc;
-        else
-            if not selection then
-                    res.activeCounter := addInt(res.activeCounter, 1);
-            
-                case argState.srcStage(1 downto 0) is
-                    when "11" =>
-                        res.srcStage := "00000000";
-                    when "00" =>
-                        res.srcStage := "00000001";               
-                    when others =>
-                        res.srcStage := "00000010";
-                end case;            
-            end if;
+            res.waiting := not wakeups.match;
+            res.activeCounter := (others => '0');
+        elsif not selection then
+            res.activeCounter := addInt(res.activeCounter, 1);
+
+            case argState.srcStage(1 downto 0) is
+                when "11" =>
+                    res.srcStage := "00000000";
+                when "00" =>
+                    res.srcStage := "00000001";               
+                when others =>
+                    res.srcStage := "00000010";
+            end case;
         end if;
-        
-            res.activeCounter(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0');
+
+        res.activeCounter(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0');
         
         return res;
     end function;    
+
+        function setMatch(matchVec: std_logic_vector; p: natural; stage: integer; fc: ForwardingComparisons) return std_logic_vector is
+            variable res: std_logic_vector(matchVec'range) := matchVec;
+        begin
+            case stage is
+                when -3 =>
+                    res(p) := fc.cmpM3(p);
+                when -2 =>
+                    res(p) := fc.cmpM2(p);
+                when -1 =>
+                    res(p) := fc.cmpM1(p);
+                when 0 =>
+                    res(p) := fc.cmp0(p);
+                when 1 =>
+                    res(p) := fc.cmp1(p);
+                when others =>
+                    res(p) := '0';
+            end case;            
+            return res;
+        end function;
+
+        function tmpMin(a, b: integer) return integer is
+        begin
+            if b < a then
+                return b;
+            else
+                return a;
+            end if;
+        end function;
 
     function getWakeupStructStatic(fc: ForwardingComparisons; forwardingModes: ForwardingModeArray; selection: boolean)
     return WakeupStruct is
         variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
         variable matchVec: std_logic_vector(0 to 2) := (others => '0');
+        variable srcStage: natural := 2;
     begin
         for p in forwardingModes'range loop
-            case forwardingModes(p).stage is
-                when -3 =>
-                    matchVec(p) := fc.cmpM3(p);
-                when -2 =>
-                    matchVec(p) := fc.cmpM2(p);
-                when -1 =>
-                    matchVec(p) := fc.cmpM1(p);
-                when 0 =>
-                    matchVec(p) := fc.cmp0(p);
-                when 1 =>
-                    matchVec(p) := fc.cmp1(p);
-                when others =>
-                    matchVec(p) := '0';
-            end case;
-    
+            matchVec := setMatch(matchVec, p, forwardingModes(p).stage, fc);
             if matchVec(p) = '1' then
                 res.argLocsPipe(2 downto 0) := i2slv(p, 3);
-                res.argLocsPhase(2 downto 0) := i2slv(forwardingModes(p).stage + 1, 3);
                 if selection then
-                    if forwardingModes(p).stage + 1 > 2 then
-                        res.argSrc(1 downto 0) := i2slv(2, 2);
-                    else
-                        res.argSrc(1 downto 0) := i2slv(forwardingModes(p).stage + 1, 2);
-                    end if;             
+                    srcStage := tmpMin(forwardingModes(p).stage + 1, 2);
                 else
-                    if forwardingModes(p).stage + 2 > 2 then
-                        res.argSrc(1 downto 0) := i2slv(2, 2);
-                    else
-                        res.argSrc(1 downto 0) := i2slv(forwardingModes(p).stage + 2, 2);
-                    end if;
+                    srcStage := tmpMin(forwardingModes(p).stage + 2, 2);
                 end if;
+                res.argSrc(1 downto 0) := i2slv(srcStage, 2);
             end if;
         end loop;
         res.match := isNonzero(matchVec);
-        
+
         return res;
     end function;
-    
+
     function getWakeupStructDynamic(fc: ForwardingComparisons; forwardingModes: ForwardingModeArray) return WakeupStruct is
         variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
         variable matchVec: std_logic_vector(0 to 2) := (others => '0');
         variable latestStage: integer := 1;
+        variable srcStage: natural := 2;
     begin
         for p in forwardingModes'range loop
-            
                 if forwardingModes(p).stage < 0 then
                     latestStage := -1;
                 else
                     latestStage := 1;
                 end if;
-            
+
             for q in -3 to 1 loop
-                if      forwardingModes(p).stage <= q 
-                    and q <= latestStage    
-                then
-                    case q is
-                        when -3 =>
-                            matchVec(p) := fc.cmpM3(p);
-                        when -2 =>
-                            matchVec(p) := fc.cmpM2(p);
-                        when -1 =>
-                            matchVec(p) := fc.cmpM1(p);
-                        when 0 =>
-                            matchVec(p) := fc.cmp0(p);
-                        when 1 =>
-                            matchVec(p) := fc.cmp1(p);
-                        when others =>
-                            matchVec(p) := '0';
-                    end case;
-                    
+                if forwardingModes(p).stage <= q and q <= latestStage then
+                    matchVec := setMatch(matchVec, p, q, fc);   
                     if matchVec(p) = '1' then
                         res.argLocsPipe(2 downto 0) := i2slv(p, 3);
-                        
-                        if q + 2 > 2 then
-                            res.argSrc(1 downto 0) := i2slv(2, 2);
-                        else
-                            res.argSrc(1 downto 0) := i2slv(q + 2, 2);
-                        end if;
+                        srcStage := tmpMin(q + 2, 2);
+                        res.argSrc(1 downto 0) := i2slv(srcStage, 2);
+
                         exit;
                     end if;               
                 end if;
             end loop;
         end loop;
-        
         res.match := isNonzero(matchVec);
-        
+
         return res;
     end function;
     
+    
+        function dependsOnMemHit(state: ArgumentState) return std_logic is
+        begin
+            return bool2std(state.srcPipe(1 downto 0) = "10" and state.activeCounter = X"01") and not state.zero and not state.waiting;
+        end function;
     
     function updateSchedulerState(state: SchedulerInfo;
                                     fni: ForwardingInfo;
@@ -973,26 +961,21 @@ package body LogicIssue is
             wakeups1 := getWakeupStructDynamic(fm.cmps(1), forwardingModes0);
         end if;
 
-            -- Apply poison
-              -- dependency on M0 E1
-            a0dep := bool2std(state.dynamic.argStates(0).srcPipe(1 downto 0) = "10" and state.dynamic.argStates(0).activeCounter = X"01") and not state.dynamic.argStates(0).zero and not state.dynamic.argStates(0).waiting;
-            a1dep := bool2std(state.dynamic.argStates(1).srcPipe(1 downto 0) = "10" and state.dynamic.argStates(1).activeCounter = X"01") and not state.dynamic.argStates(1).zero and not state.dynamic.argStates(1).waiting;
+        -- Apply poison if dependency on M0 E1
+        if memFail = '1' and not ignoreMemFail and not selection then
+            a0dep := dependsOnMemHit(state.dynamic.argStates(0));
+            a1dep := dependsOnMemHit(state.dynamic.argStates(1));
 
-            if (a0dep or a1dep) = '1'
-            then
-                if memFail = '1' and not ignoreMemFail and not selection then
-                    res.dynamic.poisoned := '1';
-
-                    res.dynamic.argStates(0).waiting := a0dep;
-                    res.dynamic.argStates(1).waiting := a1dep;
-                end if;
+            if (a0dep or a1dep) = '1' then
+                res.dynamic.poisoned := '1';
+                res.dynamic.argStates(0).waiting := a0dep;
+                res.dynamic.argStates(1).waiting := a1dep;
             end if;
 
             -- When mem fail detected, wakeups are not allowed because dependence of failed op may be signalling
-            if memFail = '1' and not ignoreMemFail and not selection then
-                wakeups0.match := '0';
-                wakeups1.match := '0';
-            end if;
+            wakeups0.match := '0';
+            wakeups1.match := '0';
+        end if;
 
         res.dynamic.argStates(0) := updateArgInfo(res.dynamic.argStates(0), wakeups0, selection);
         
@@ -1007,8 +990,7 @@ package body LogicIssue is
     
     function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
                     dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0: ForwardingModeArray;
-                    memFail: std_logic; constant ignoreMemFail: boolean
-)
+                    memFail: std_logic; constant ignoreMemFail: boolean)
     return SchedulerInfoArray is
         variable res: SchedulerInfoArray(0 to schedArray'length-1);
     begin

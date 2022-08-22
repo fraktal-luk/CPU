@@ -102,19 +102,22 @@ architecture Behavioral of Core is
 
     signal branchCtrl, memoryCtrlE2, memoryCtrlPre: InstructionControlInfo := DEFAULT_CONTROL_INFO;
 
-    signal memAddressInputSQ, memAddressInputLQ, bqCompareEarly, bqUpdate, sqValueResult, 
+    signal memAddressInputSQ, memAddressInputLQ, bqCompareEarly, bqUpdate, sqValueResult, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
            frontEvent, execEvent, lateEvent, execCausingDelayedSQ, execCausingDelayedLQ,
            bqTargetData,
            resOutSQ,
            dataFromSB,
            mqReexecRegRead,
-           missedMemResult
+           missedMemResult,
+           missedMemResultE1,
+           missedMemResultE2
            : ExecResult := DEFAULT_EXEC_RESULT;
 
         signal mqReexecCtrlIssue, mqReexecCtrlRR: ControlPacket := DEFAULT_CONTROL_PACKET;
         signal mqReexecResIssue, mqReexecResRR: ExecResult := DEFAULT_EXEC_RESULT;
 
-    signal pcData, dataToBranch, bqSelected, branchResultE0, branchResultE1, missedMemCtrl, ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
+    signal pcData, dataToBranch, bqSelected, branchResultE0, branchResultE1,
+               memCtrlRR, memCtrlE0, missedMemCtrl, missedMemCtrlE1, missedMemCtrlE2, ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal bpData: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
     signal robOut: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
@@ -355,8 +358,7 @@ begin
        -- Issue control 
        signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, lockIssueSVI, lockIssueSVF, allowIssueStoreDataFP, allowIssueStageStoreDataFP,
               memSubpipeSent, fp0subpipeSelected, lockIssueI0, allowIssueI0, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady, intWriteConflict,
-              storeValueCollision1, storeValueCollision2, cancelledSVI1,
-              sendingToStoreWrite, sendingToStoreWriteInt, sendingToStoreWriteFloat,
+              storeValueCollision1, storeValueCollision2, cancelledSVI1, sendingToStoreWrite, sendingToStoreWriteInt, sendingToStoreWriteFloat,
               memFail, memDepFail, prevMemDepFail, aluSquashRR: std_logic := '0';
 
        signal sendingBranchRR, sendingToRegReadI0, sendingToRegReadM0: std_logic := '0';  -- MOVE to subpipes     
@@ -365,11 +367,8 @@ begin
        
        signal outSigsI0, outSigsM0, outSigsSVI, outSigsSVF, outSigsF0: IssueQueueSignals := (others => '0');
        
-       signal subpipeI0_Issue, subpipeI0_RegRead, subpipeI0_E0,                                          subpipeI0_D0,
-                                   --subpipeI0_RegRead_u,
-                                   --subpipeI0_RegRead_b,-- subpipeI0_E0_b,
-
-              subpipeM0_Issue, subpipeM0_RegRead, subpipeM0_E0,    subpipeM0_E1,    subpipeM0_E2,
+       signal subpipeI0_Issue, subpipeI0_RegRead, subpipeI0_E0,                                    subpipeI0_D0,
+              subpipeM0_Issue, subpipeM0_RegRead, subpipeM0_E0,  subpipeM0_E1,    subpipeM0_E2,
                                  subpipeM0_RR_u,
                                    subpipeM0_RRi, subpipeM0_E0i, subpipeM0_E1i,   subpipeM0_E2i,   subpipeM0_D0i, subpipeM0_D1i,
                                    subpipeM0_RRf, subpipeM0_E0f, subpipeM0_E1f,   subpipeM0_E2f,   subpipeM0_D0f, subpipeM0_D1f,
@@ -484,17 +483,6 @@ begin
             end block;
 
             dataToAlu <= executeAlu(slotRegReadI0.full and not outSigsI0.killSel2, slotRegReadI0, bqSelected.nip, dataToBranch.controlInfo, unfoldedAluOp);
-          
---            subpipeI0_RegRead_u.full <= slotRegReadI0.full and not outSigsI0.killSel2;
---            subpipeI0_RegRead_u.tag <= subpipeI0_RegRead.tag;
---            subpipeI0_RegRead_u.dest <= subpipeI0_RegRead.dest;
---            subpipeI0_RegRead_u.value <= dataToAlu.value;
-
---                ch0 <= bool2std(subpipeI0_RegRead_u = dataToAlu);
---            subpipeI0_RegRead_b.full <= dataToBranch.controlInfo.full;
---            subpipeI0_RegRead_b.tag <= subpipeI0_RegRead.tag;
---            --subpipeI0_RegRead_b.dest <= subpipeI0_RegRead.dest;
---            subpipeI0_RegRead_b.value <= dataToBranch.nip;
 
             dataToBranch <= basicBranch(slotRegReadI0.full and not outSigsI0.killSel2 and not lateEventSignal and slotRegReadI0.branchIns,
                                         slotRegReadI0,
@@ -507,9 +495,7 @@ begin
             process (clk)
             begin
                 if rising_edge(clk) then
-                    subpipeI0_E0 <= --subpipeI0_RegRead_u;
-                                    dataToAlu;
-                    --subpipeI0_E0_b <= subpipeI0_RegRead_b;
+                    subpipeI0_E0 <= dataToAlu;
                     branchResultE0 <= dataToBranch;
                 end if;
             end process;
@@ -634,19 +620,8 @@ begin
                 controlToM0_E0 <= mqReexecCtrlRR when mqInsertRegRead = '1' else controlM0_RR;        -- op, tags
                 ---------------------
 
---                resultToM0_E0i.full <= resultToM0_E0.full and intSel;                                   -- I/F
---                resultToM0_E0i.tag <= resultToM0_E0.tag;                                                -- OK
---                resultToM0_E0i.dest <= resultToM0_E0.dest when intSel = '1' else (others => '0');       -- I/F
---                resultToM0_E0i.value <= resultToM0_E0.value;                                            -- OK
-
-                    resultToM0_E0i <= updateMemDest(resultToM0_E0, intSel);
-
---                resultToM0_E0f.full <= resultToM0_E0.full and floatSel;                                 -- I/F
---                resultToM0_E0f.tag <= resultToM0_E0.tag;                                                -- OK
---                resultToM0_E0f.dest <= resultToM0_E0.dest when floatSel = '1' else (others => '0');     -- I/F
---                resultToM0_E0f.value <= resultToM0_E0.value;                                            -- OK
-                
-                   resultToM0_E0f <= updateMemDest(resultToM0_E0, floatSel);
+                resultToM0_E0i <= updateMemDest(resultToM0_E0, intSel);
+                resultToM0_E0f <= updateMemDest(resultToM0_E0, floatSel);
             end block;
 
 
@@ -740,12 +715,16 @@ begin
             missedMemCtrl.ip <= subpipeM0_E1.value;
             missedMemCtrl.op <= ctrlE1.op;
             missedMemCtrl.tags <= ctrlE1u.tags;
-                missedMemCtrl.target(SMALL_NUMBER_SIZE-1 downto 0) <= resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
+            missedMemCtrl.target(SMALL_NUMBER_SIZE-1 downto 0) <= resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
             missedMemCtrl.classInfo.useFP <= subpipeM0_E1f.full;
             missedMemCtrl.controlInfo.tlbMiss <= ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
             missedMemCtrl.controlInfo.dataMiss <= ctrlE1u.controlInfo.dataMiss;
             missedMemCtrl.controlInfo.sqMiss <= ctrlE1u.controlInfo.sqMiss;
 
+                missedMemResultE1 <= missedMemResult;
+                missedMemCtrlE1 <= missedMemCtrl;
+
+                memCtrlE0 <= ctrlE0;
 
             -- TEMP mem interface    
             dread <= subpipeM0_E0.full;
@@ -1019,6 +998,8 @@ begin
          sqValueResult.tag <= stateExecStoreValue.renameIndex;
          sqValueResult.dest <= stateExecStoreValue.tags.sqPointer;
          sqValueResult.value <= stateExecStoreValue.args(0);
+         
+         sqValueResultRR <= sqValueResult;
          
          -- StoreData issue control:
          -- When Int and FP store data issue at the same time, the port conflict is resolved thus:
@@ -1315,12 +1296,12 @@ begin
         storeValueResult => sqValueResult,
     
         compareAddressInput => memAddressInputSQ,
-        compareAddressInputOp => memAddressOp,
-        compareAddressCtrl => DEFAULT_CONTROL_PACKET,
+        compareAddressCtrl => memCtrlE0,
 		
         compareIndexInput => preIndexSQ,
         preCompareOp => preAddressOp,
-            
+            compareAddressEarlyInput => DEFAULT_EXEC_RESULT,
+
         selectedDataOutput => ctOutSQ,
             selectedDataResult => resOutSQ,
 
@@ -1367,12 +1348,12 @@ begin
         storeValueResult => DEFAULT_EXEC_RESULT,
 		
 		compareAddressInput => memAddressInputLQ,
-        compareAddressInputOp => memAddressOp,
-        compareAddressCtrl => DEFAULT_CONTROL_PACKET,
+        compareAddressCtrl => memCtrlE0,
 
         compareIndexInput => preIndexLQ,        
         preCompareOp => preAddressOp,
-             
+            compareAddressEarlyInput => DEFAULT_EXEC_RESULT,
+
         selectedDataOutput => ctOutLQ,
 
 		committing => robSending,
@@ -1395,6 +1376,16 @@ begin
     process (clk)
     begin
         if rising_edge(clk) then
+            -- delayed Store Data op
+            sqValueResultE2 <= sqValueResultE1;
+            sqValueResultE1 <= sqValueResultE0;
+            sqValueResultE0 <= sqValueResultRR;
+        
+            -- MQ inputs
+            missedMemResultE2 <= missedMemResultE1;
+            missedMemCtrlE2 <= missedMemCtrlE1;
+        
+            -- MQ outputs
             mqReexecCtrlRR <= mqReexecCtrlIssue;
             mqReexecResRR <= mqReexecResIssue;
         end if;
@@ -1425,11 +1416,11 @@ begin
         storeValueResult => sqValueResult,
 
         compareAddressInput => missedMemResult,
-        compareAddressInputOp => DEFAULT_SPECIFIC_OP,
         compareAddressCtrl => missedMemCtrl,
 
         compareIndexInput => (others => '0'),        
         preCompareOp => DEFAULT_SPECIFIC_OP,
+            compareAddressEarlyInput => DEFAULT_EXEC_RESULT,
              
         selectedDataOutput => mqReexecCtrlIssue,
         selectedDataResult => mqReexecResIssue,
@@ -1476,13 +1467,13 @@ begin
                 cycleCount <= cycleCount + 1;
                 
                 if std2bool(robSending or renamedSending) then
-                    watchdogCount <= 0;
+                    --watchdogCount <= 0;
                 else
                     watchdogCount <= watchdogCount + 1;
                 end if;
                 
                 stallDetectedPrev <= stallDetected;
-                if watchdogCount > 50 then                    
+                if watchdogCount > 50 + 157 then                
                     if stallDetected /= '1'then
                         report "" severity error;
                         report "" severity error;
