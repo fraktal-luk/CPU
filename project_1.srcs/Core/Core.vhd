@@ -103,6 +103,8 @@ architecture Behavioral of Core is
     signal branchCtrl, memoryCtrlE2, memoryCtrlPre: InstructionControlInfo := DEFAULT_CONTROL_INFO;
 
     signal memAddressInputSQ, memAddressInputLQ, bqCompareEarly, bqUpdate, sqValueResult, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
+            memAddressInputEarlySQ, memAddressInputEarlyLQ, memAddressInputEarlyMQ,
+    
            frontEvent, execEvent, lateEvent, execCausingDelayedSQ, execCausingDelayedLQ,
            bqTargetData,
            resOutSQ,
@@ -630,6 +632,8 @@ begin
             preIndexSQ <= slotRegReadM0.tags.sqPointer;
             preIndexLQ <= slotRegReadM0.tags.lqPointer;  
             preAddressOp <= slotRegReadM0.operation;
+
+                memAddressInputEarlyMQ <= resultToM0_E0; -- for allocation of MQ slot
 
             subpipeM0_RR_u <= calcEffectiveAddress_2(slotRegReadM0.full and not outSigsM0.killSel2 and not lateEventSignal,
                                                      slotRegReadM0, mqRegReadSending and bool2std(CONNECT_MQ), dataFromDLQ);
@@ -1420,7 +1424,7 @@ begin
 
         compareIndexInput => (others => '0'),        
         preCompareOp => DEFAULT_SPECIFIC_OP,
-            compareAddressEarlyInput => DEFAULT_EXEC_RESULT,
+            compareAddressEarlyInput => memAddressInputEarlyMQ,
              
         selectedDataOutput => mqReexecCtrlIssue,
         selectedDataResult => mqReexecResIssue,
