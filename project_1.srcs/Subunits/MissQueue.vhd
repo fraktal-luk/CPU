@@ -191,6 +191,8 @@ begin
        nFull <= i2slv(countOnes(fullMask), SMALL_NUMBER_SIZE); 
            nFull_N <= i2slv(countOnes(fullMask_N), SMALL_NUMBER_SIZE); 
 
+        queueContent <= queueContent_N;
+
     process (clk)
 
     begin
@@ -209,55 +211,55 @@ begin
             sending3 <= sending2;
 
             for i in 0 to MQ_SIZE-1 loop
-                queueContent(i).TMP_cnt <= addInt(queueContent(i).TMP_cnt, 1);
-                    queueContent_N(i).TMP_cnt <= addIntTrunc(queueContent_N(i).TMP_cnt, 1, 2);
+                --queueContent(i).TMP_cnt <= addInt(queueContent(i).TMP_cnt, 1);
+                    queueContent_N(i).TMP_cnt <= addIntTrunc(queueContent_N(i).TMP_cnt, 1, 3);
                 
-                if queueContent(i).sqMiss = '1' and queueContent(i).sqTag(2 downto 0) = storeValueResult.dest(2 downto 0) then
-                    queueContent(i).ready <= '1';
+                if queueContent_N(i).sqMiss = '1' and queueContent_N(i).sqTag(2 downto 0) = storeValueResult.dest(2 downto 0) then
+                    queueContent_N(i).ready <= '1';
                 end if;
             end loop;
 
             for i in 0 to MQ_SIZE-1 loop                    
-                queueContent(i).full <= (fullMask(i) and not killMask(i) and not outputFullMask3(i)) or inputFullMask(i);
+               -- queueContent(i).full <= (fullMask(i) and not killMask(i) and not outputFullMask3(i)) or inputFullMask(i);
                         queueContent_N(i).full <= (fullMask_N(i) and not killMask_N(i) and not outputFullMask3(i)) or inputFullMask_N(i);
 
                 if (canSend and selectMask(i)) = '1' then
-                    queueContent(i).active <= '0';
+                    queueContent_N(i).active <= '0';
                 end if; 
             end loop;
 
             if TMP_prevSending = '1' then
-                queueContent(p2i(writePtr, MQ_SIZE)).full <= '1';
-                queueContent(p2i(writePtr, MQ_SIZE)).ready <= '0';
-                queueContent(p2i(writePtr, MQ_SIZE)).active <= '1';                
-                queueContent(p2i(writePtr, MQ_SIZE)).tag <= compareAddressInput.tag;
+--                queueContent(p2i(writePtr, MQ_SIZE)).full <= '1';
+--                queueContent(p2i(writePtr, MQ_SIZE)).ready <= '0';
+--                queueContent(p2i(writePtr, MQ_SIZE)).active <= '1';                
+--                queueContent(p2i(writePtr, MQ_SIZE)).tag <= compareAddressInput.tag;
 
-                queueContent(p2i(writePtr, MQ_SIZE)).dest <= compareAddressInput.dest;
-                queueContent(p2i(writePtr, MQ_SIZE)).adr <= compareAddressCtrl.ip;
-                queueContent(p2i(writePtr, MQ_SIZE)).sqTag <= compareAddressCtrl.target(SMALL_NUMBER_SIZE-1 downto 0);
+--                queueContent(p2i(writePtr, MQ_SIZE)).dest <= compareAddressInput.dest;
+--                queueContent(p2i(writePtr, MQ_SIZE)).adr <= compareAddressCtrl.ip;
+--                queueContent(p2i(writePtr, MQ_SIZE)).sqTag <= compareAddressCtrl.target(SMALL_NUMBER_SIZE-1 downto 0);
                 
-                queueContent(p2i(writePtr, MQ_SIZE)).lqPointer <= compareAddressCtrl.tags.lqPointer;
-                queueContent(p2i(writePtr, MQ_SIZE)).sqPointer <= compareAddressCtrl.tags.sqPointer;
+--                queueContent(p2i(writePtr, MQ_SIZE)).lqPointer <= compareAddressCtrl.tags.lqPointer;
+--                queueContent(p2i(writePtr, MQ_SIZE)).sqPointer <= compareAddressCtrl.tags.sqPointer;
                 
-                queueContent(p2i(writePtr, MQ_SIZE)).op <= compareAddressCtrl.op;
+--                queueContent(p2i(writePtr, MQ_SIZE)).op <= compareAddressCtrl.op;
 
-                queueContent(p2i(writePtr, MQ_SIZE)).fp <= compareAddressCtrl.classInfo.useFP;
-                queueContent(p2i(writePtr, MQ_SIZE)).tlbMiss <= compareAddressCtrl.controlInfo.tlbMiss;
-                queueContent(p2i(writePtr, MQ_SIZE)).dataMiss <= compareAddressCtrl.controlInfo.dataMiss;
-                queueContent(p2i(writePtr, MQ_SIZE)).sqMiss <= compareAddressCtrl.controlInfo.sqMiss;
+--                queueContent(p2i(writePtr, MQ_SIZE)).fp <= compareAddressCtrl.classInfo.useFP;
+--                queueContent(p2i(writePtr, MQ_SIZE)).tlbMiss <= compareAddressCtrl.controlInfo.tlbMiss;
+--                queueContent(p2i(writePtr, MQ_SIZE)).dataMiss <= compareAddressCtrl.controlInfo.dataMiss;
+--                queueContent(p2i(writePtr, MQ_SIZE)).sqMiss <= compareAddressCtrl.controlInfo.sqMiss;
                 
-                queueContent(p2i(writePtr, MQ_SIZE)).TMP_cnt <= (others => '0');
+--                queueContent(p2i(writePtr, MQ_SIZE)).TMP_cnt <= (others => '0');
 
-                addresses(p2i(writePtr, MQ_SIZE)) <= compareAddressCtrl.ip;
-                tags(p2i(writePtr, MQ_SIZE)) <= tagInWord;
-                renameTags(p2i(writePtr, MQ_SIZE))(TAG_SIZE-1 downto 0) <= compareAddressCtrl.tag;
+--                addresses(p2i(writePtr, MQ_SIZE)) <= compareAddressCtrl.ip;
+--                tags(p2i(writePtr, MQ_SIZE)) <= tagInWord;
+--                renameTags(p2i(writePtr, MQ_SIZE))(TAG_SIZE-1 downto 0) <= compareAddressCtrl.tag;
 
             end if;
 
                     if prevSendingEarly = '1' then
                         queueContent_N(p2i(writePtr_N, MQ_SIZE)).full <= '1';
                         queueContent_N(p2i(writePtr_N, MQ_SIZE)).ready <= '0';
-                        queueContent_N(p2i(writePtr_N, MQ_SIZE)).active <= '1';              
+                        queueContent_N(p2i(writePtr_N, MQ_SIZE)).active <= '0';--'1';              
                         queueContent_N(p2i(writePtr_N, MQ_SIZE)).tag <= compareAddressEarlyInput.tag;
         
                         
@@ -265,7 +267,7 @@ begin
                     end if;
 
                     for i in 0 to MQ_SIZE-1 loop
-                        if queueContent_N(i).full = '1' and queueContent_N(i).active /= '1' and queueContent_N(i).TMP_cnt = X"01" then
+                        if queueContent_N(i).full = '1' and queueContent_N(i).active /= '1' and queueContent_N(i).ready /= '1' and queueContent_N(i).TMP_cnt = X"02" then
                             -- if TMP_prevSending => confirm full, fill other info from compareAddressInput, compareAddressCtrl
                             -- if not TMP_prevSending => clear
                             if TMP_prevSending = '1' then
@@ -284,6 +286,11 @@ begin
                                 queueContent_N(i).tlbMiss <= compareAddressCtrl.controlInfo.tlbMiss;
                                 queueContent_N(i).dataMiss <= compareAddressCtrl.controlInfo.dataMiss;
                                 queueContent_N(i).sqMiss <= compareAddressCtrl.controlInfo.sqMiss;
+                                
+                                addresses(i) <= compareAddressCtrl.ip;
+                                tags(i) <= tagInWord;
+                                renameTags(i)(TAG_SIZE-1 downto 0) <= compareAddressCtrl.tag;
+
                             else
                                 queueContent_N(i).full <= '0';    
                                 queueContent_N(i).active <= '0';    
@@ -293,7 +300,7 @@ begin
 
 
             if sending3 = '1' then
-                queueContent(p2i(selPtr3, MQ_SIZE)) <= DEFAULT_MQ_ENTRY;
+                queueContent_N(p2i(selPtr3, MQ_SIZE)) <= DEFAULT_MQ_ENTRY;
             end if;
 
 
@@ -309,8 +316,8 @@ begin
             recoveryCounter(7 downto 2) <= (others => '0');        
         end if;
         
-        isFull <= cmpGtU(nFullNext, MQ_SIZE-2);
-        isAlmostFull <= cmpGtU(nFullNext, MQ_SIZE-5);
+        isFull <= cmpGtU(nFull, MQ_SIZE-2);
+        isAlmostFull <= cmpGtU(nFull, MQ_SIZE-5);
     end process;
     
         accepting <= not isFull;

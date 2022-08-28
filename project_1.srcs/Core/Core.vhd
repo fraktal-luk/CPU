@@ -1417,10 +1417,10 @@ begin
         renamedPtr => open,
 
         storeValuePtr => (others => '0'),
-        storeValueResult => sqValueResult,
+        storeValueResult => sqValueResultE2,
 
-        compareAddressInput => missedMemResult,
-        compareAddressCtrl => missedMemCtrl,
+        compareAddressInput => missedMemResultE2,
+        compareAddressCtrl => missedMemCtrlE2,
 
         compareIndexInput => (others => '0'),        
         preCompareOp => DEFAULT_SPECIFIC_OP,
