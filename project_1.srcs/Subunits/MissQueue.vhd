@@ -178,7 +178,7 @@ begin
 
         -- Wakeup for dependents on SQ:
         -- CAREFUL: compare SQ pointers ignoring the high bit of StoreData sqPointer (used for ordering, not indexing the content!)
-        
+
 
     READY_MASL: for i in 0 to MQ_SIZE-1 generate
         fullMask(i) <= queueContent(i).full;
@@ -210,7 +210,7 @@ begin
 
             for i in 0 to MQ_SIZE-1 loop
                 queueContent(i).TMP_cnt <= addInt(queueContent(i).TMP_cnt, 1);
-                    queueContent_N(i).TMP_cnt <= addInt(queueContent_N(i).TMP_cnt, 1);
+                    queueContent_N(i).TMP_cnt <= addIntTrunc(queueContent_N(i).TMP_cnt, 1, 2);
                 
                 if queueContent(i).sqMiss = '1' and queueContent(i).sqTag(2 downto 0) = storeValueResult.dest(2 downto 0) then
                     queueContent(i).ready <= '1';
@@ -248,45 +248,57 @@ begin
                 
                 queueContent(p2i(writePtr, MQ_SIZE)).TMP_cnt <= (others => '0');
 
-
                 addresses(p2i(writePtr, MQ_SIZE)) <= compareAddressCtrl.ip;
                 tags(p2i(writePtr, MQ_SIZE)) <= tagInWord;
                 renameTags(p2i(writePtr, MQ_SIZE))(TAG_SIZE-1 downto 0) <= compareAddressCtrl.tag;
+
             end if;
 
                     if prevSendingEarly = '1' then
                         queueContent_N(p2i(writePtr_N, MQ_SIZE)).full <= '1';
                         queueContent_N(p2i(writePtr_N, MQ_SIZE)).ready <= '0';
-                        queueContent_N(p2i(writePtr_N, MQ_SIZE)).active <= '1';                
+                        queueContent_N(p2i(writePtr_N, MQ_SIZE)).active <= '1';              
                         queueContent_N(p2i(writePtr_N, MQ_SIZE)).tag <= compareAddressEarlyInput.tag;
         
-                        queueContent_N(p2i(writePtr_N, MQ_SIZE)).dest <= compareAddressEarlyInput.dest;
                         
                         queueContent_N(p2i(writePtr_N, MQ_SIZE)).TMP_cnt <= (others => '0');
-                    end if;    
-                    
-                    if TMP_prevSending = '1' then
-                        queueContent_N(p2i(writePtr, MQ_SIZE)).adr <= compareAddressCtrl.ip;
-                        queueContent_N(p2i(writePtr, MQ_SIZE)).sqTag <= compareAddressCtrl.target(SMALL_NUMBER_SIZE-1 downto 0);
-                        
-                        queueContent_N(p2i(writePtr, MQ_SIZE)).lqPointer <= compareAddressCtrl.tags.lqPointer;
-                        queueContent_N(p2i(writePtr, MQ_SIZE)).sqPointer <= compareAddressCtrl.tags.sqPointer;
-                        
-                        queueContent_N(p2i(writePtr, MQ_SIZE)).op <= compareAddressCtrl.op;
-        
-                        queueContent_N(p2i(writePtr, MQ_SIZE)).fp <= compareAddressCtrl.classInfo.useFP;
-                        queueContent_N(p2i(writePtr, MQ_SIZE)).tlbMiss <= compareAddressCtrl.controlInfo.tlbMiss;
-                        queueContent_N(p2i(writePtr, MQ_SIZE)).dataMiss <= compareAddressCtrl.controlInfo.dataMiss;
-                        queueContent_N(p2i(writePtr, MQ_SIZE)).sqMiss <= compareAddressCtrl.controlInfo.sqMiss;     
                     end if;
+
+                    for i in 0 to MQ_SIZE-1 loop
+                        if queueContent_N(i).full = '1' and queueContent_N(i).active /= '1' and queueContent_N(i).TMP_cnt = X"01" then
+                            -- if TMP_prevSending => confirm full, fill other info from compareAddressInput, compareAddressCtrl
+                            -- if not TMP_prevSending => clear
+                            if TMP_prevSending = '1' then
+                                queueContent_N(i).active <= '1';
+                                queueContent_N(i).adr <= compareAddressCtrl.ip;
+                                queueContent_N(i).sqTag <= compareAddressCtrl.target(SMALL_NUMBER_SIZE-1 downto 0);
+
+                                queueContent_N(i).dest <= compareAddressInput.dest;
+
+                                queueContent_N(i).lqPointer <= compareAddressCtrl.tags.lqPointer;
+                                queueContent_N(i).sqPointer <= compareAddressCtrl.tags.sqPointer;
+                                
+                                queueContent_N(i).op <= compareAddressCtrl.op;
+                
+                                queueContent_N(i).fp <= compareAddressCtrl.classInfo.useFP;
+                                queueContent_N(i).tlbMiss <= compareAddressCtrl.controlInfo.tlbMiss;
+                                queueContent_N(i).dataMiss <= compareAddressCtrl.controlInfo.dataMiss;
+                                queueContent_N(i).sqMiss <= compareAddressCtrl.controlInfo.sqMiss;
+                            else
+                                queueContent_N(i).full <= '0';    
+                                queueContent_N(i).active <= '0';    
+                            end if;
+                        end if;
+                    end loop;
+
 
             if sending3 = '1' then
                 queueContent(p2i(selPtr3, MQ_SIZE)) <= DEFAULT_MQ_ENTRY;
             end if;
 
 
-            nFull <= nFullNext;
-                nFull_N <= nFullNext_N;
+            --nFull <= nFullNext;
+            --    nFull_N <= nFullNext_N;
 
             if lateEventSignal = '1' or execEventSignal = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
