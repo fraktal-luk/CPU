@@ -41,14 +41,14 @@ entity StoreQueue is
 		storeValueResult: in ExecResult;
 
 		compareAddressInput: in ExecResult;
-		  compareAddressCtrl: in ControlPacket;
+		compareAddressCtrl: in ControlPacket;
 		
         compareIndexInput: in SmallNumber;
         preCompareOp: in SpecificOp;
-           compareAddressEarlyInput: in ExecResult;
+        compareAddressEarlyInput: in ExecResult;
 
         selectedDataOutput: out ControlPacket;
-            selectedDataResult: out ExecResult;
+        selectedDataResult: out ExecResult;
 
 		committing: in std_logic;
         commitMask: in std_logic_vector(0 to PIPE_WIDTH-1);
@@ -64,7 +64,7 @@ entity StoreQueue is
 		committedSending: out std_logic;
 		committedDataOut: out ControlPacket;
 		
-		  dbState: in DbCoreState
+		dbState: in DbCoreState
 	);
 end StoreQueue;
 
@@ -85,9 +85,8 @@ architecture Behavioral of StoreQueue is
     signal queueContent, queueContentShifting, queueContentShiftingNext: QueueEntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_QUEUE_ENTRY);
 
     signal isFull, isAlmostFull, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDrainingPrev, isSelected: std_logic := '0';
-    signal memEmpty: std_logic := '1'; -- CAREFUL! Starts with '1'
+    signal memEmpty: std_logic := '1'; -- CAREFUL! Starts as '1'
 
-    --signal drainOutput, selectedOutput: InstructionState := DEFAULT_INS_STATE;
     signal drainOutput_N, selectedOutput_N: ControlPacket := DEFAULT_CONTROL_PACKET;
     signal drainValue, selectedValue, drainAddress, selectedAddress, selectionAddress: Mword := (others => '0');
 
@@ -163,7 +162,7 @@ begin
                 end if;
           
               end if;
-              
+
               if rising_edge(clk) then
                 -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
                 if not IS_LOAD_QUEUE then
@@ -186,11 +185,9 @@ begin
         end process;
         
         -- E. out
-        --selectedOutput <= getDrainOutput(selectedEntry, selectedAddress, selectedValue);    
         selectedOutput_N <= getDrainOutput_N(selectedEntry, selectedAddress, selectedValue);    
         
         -- D. out
-        --drainOutput <= getDrainOutput(drainEntry, drainAddress, drainValue);   
         drainOutput_N <= getDrainOutput_N(drainEntry, drainAddress, drainValue);   
     end block;
 
@@ -300,11 +297,11 @@ begin
     -- E. output
     selectedDataOutput <= selectedOutputSig;
 
-        selectedDataResult.full <= '0';
-        selectedDataResult.failed <= '0';
-        selectedDataResult.dest <= pSelectPrev;
-        selectedDataResult.tag <= (others => '0');
-        selectedDataResult.value <= (others => '0');
+    selectedDataResult.full <= '0';
+    selectedDataResult.failed <= '0';
+    selectedDataResult.dest <= pSelectPrev;
+    selectedDataResult.tag <= (others => '0');
+    selectedDataResult.value <= (others => '0');
 
     WHEN_LQ: if IS_LOAD_QUEUE generate
         selectedOutputSig.controlInfo.full <= isSelected;           
@@ -316,21 +313,15 @@ begin
         selectedOutputSig.controlInfo.firstBr <= selectedOutput_N.controlInfo.firstBr;
         selectedOutputSig.controlInfo.sqMiss <= selectedOutput_N.controlInfo.sqMiss;
         
-        selectedOutputSig.op <= --selectedOutput.specificOperation;
-                                selectedOutput_N.op;
-        selectedOutputSig.target <= --selectedOutput.target_D;
-                                    selectedOutput_N.target;
-        selectedOutputSig.nip <= --selectedOutput.result_D;
-                                 selectedOutput_N.nip;
+        selectedOutputSig.op <= selectedOutput_N.op;
+        selectedOutputSig.target <= selectedOutput_N.target;
+        selectedOutputSig.nip <= selectedOutput_N.nip;
 
         committedOutputSig.controlInfo.full <= isDrainingPrev and allowDrain;
         
-        committedOutputSig.op <= --drainOutput.specificOperation;
-                                    drainOutput_N.op;
-        committedOutputSig.target <= --drainOutput.target_D;
-                                    drainOutput_N.target;
-        committedOutputSig.nip <= --drainOutput.result_D;
-                                    drainOutput_N.nip;
+        committedOutputSig.op <= drainOutput_N.op;
+        committedOutputSig.target <= drainOutput_N.target;
+        committedOutputSig.nip <= drainOutput_N.nip;
     end generate;
 
 	-- D. output (ctrl)

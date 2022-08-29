@@ -103,16 +103,13 @@ architecture Behavioral of Core is
     signal branchCtrl, memoryCtrlE2, memoryCtrlPre: InstructionControlInfo := DEFAULT_CONTROL_INFO;
 
     signal memAddressInputSQ, memAddressInputLQ, bqCompareEarly, bqUpdate, sqValueResult, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
-            memAddressInputEarlySQ, memAddressInputEarlyLQ, memAddressInputEarlyMQ,
-    
+           memAddressInputEarlySQ, memAddressInputEarlyLQ, memAddressInputEarlyMQ,
            frontEvent, execEvent, lateEvent, execCausingDelayedSQ, execCausingDelayedLQ,
            bqTargetData,
            resOutSQ,
            dataFromSB,
            mqReexecRegRead,
-           missedMemResult,
-           missedMemResultE1,
-           missedMemResultE2
+           missedMemResult, missedMemResultE1, missedMemResultE2
            : ExecResult := DEFAULT_EXEC_RESULT;
 
         signal mqReexecCtrlIssue, mqReexecCtrlRR: ControlPacket := DEFAULT_CONTROL_PACKET;
@@ -1304,10 +1301,10 @@ begin
 		
         compareIndexInput => preIndexSQ,
         preCompareOp => preAddressOp,
-            compareAddressEarlyInput => DEFAULT_EXEC_RESULT,
+        compareAddressEarlyInput => DEFAULT_EXEC_RESULT,
 
         selectedDataOutput => ctOutSQ,
-            selectedDataResult => resOutSQ,
+        selectedDataResult => resOutSQ,
 
 		committing => robSending,
         commitMask => commitMaskSQ,
@@ -1356,7 +1353,7 @@ begin
 
         compareIndexInput => preIndexLQ,        
         preCompareOp => preAddressOp,
-            compareAddressEarlyInput => DEFAULT_EXEC_RESULT,
+        compareAddressEarlyInput => DEFAULT_EXEC_RESULT,
 
         selectedDataOutput => ctOutLQ,
 
@@ -1424,7 +1421,7 @@ begin
 
         compareIndexInput => (others => '0'),        
         preCompareOp => DEFAULT_SPECIFIC_OP,
-            compareAddressEarlyInput => memAddressInputEarlyMQ,
+        compareAddressEarlyInput => memAddressInputEarlyMQ,
              
         selectedDataOutput => mqReexecCtrlIssue,
         selectedDataResult => mqReexecResIssue,
@@ -1462,7 +1459,6 @@ begin
         
         file eventLog: text open write_mode is "event_log.txt";
     begin
-    
     
         MONITOR: process (clk)
             variable currentLine: line := null;

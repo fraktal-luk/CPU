@@ -212,33 +212,10 @@ begin
     DEBUG_HANDLING: process (clk)
         use std.textio.all;
         use work.Assembler.all;
-                
-        
---            used: std_logic;
---            reg: PhysName;
---            zero: std_logic;
---            imm: std_logic;
---            value: Hword;
-            
---            canFail: std_logic; -- maybe a counter is needed 
-        
---            activeCounter: SmallNumber;
---            failed: std_logic;
-        
---            waiting: std_logic;
---            stored:  std_logic;
---            srcPipe: SmallNumber;
---            srcStage: SmallNumber;
-            
---            dbDep: DbDependency;
 
         function getArgString(argState: ArgumentState) return string is
             variable immValue: Hword := argState.value;
         begin
---            if argState.used /= '1' then
---                return "{none}";
---            end if;
-
             if argState.imm = '1' then
                 if IMM_AS_REG then
                     immValue(PhysName'length-2 downto 0) := argState.reg(6 downto 0);
@@ -272,9 +249,7 @@ begin
                 write(currentLine, string'(", "));
                 write(currentLine, std_logic'image(queueContent(i).dynamic.issued));
                 write(currentLine, string'(", "));
---                write(currentLine, std_logic'image(queueContent(i).dynamic.argStates(0).waiting));
---                write(currentLine, std_logic'image(queueContent(i).dynamic.argStates(1).waiting));
-                
+
                 write(currentLine, getArgString(queueContent(i).dynamic.argStates(0)));
                 write(currentLine, string'(", "));
                 write(currentLine, getArgString(queueContent(i).dynamic.argStates(1)));

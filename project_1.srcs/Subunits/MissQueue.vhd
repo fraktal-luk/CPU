@@ -22,7 +22,7 @@ architecture MissQueue of StoreQueue is
         dataMiss: std_logic;
         sqMiss: std_logic;
         
-            TMP_cnt: SmallNumber;
+        TMP_cnt: SmallNumber;
     end record;
     
     constant DEFAULT_MQ_ENTRY: MQ_Entry := (
@@ -49,20 +49,13 @@ architecture MissQueue of StoreQueue is
 
     signal outEntrySig: MQ_Entry := DEFAULT_MQ_ENTRY;
 
-    signal queueContent: MQ_EntryArray(0 to MQ_SIZE-1) := (others => DEFAULT_MQ_ENTRY);
-    --    signal queueContent_N: MQ_EntryArray(0 to MQ_SIZE-1) := (others => DEFAULT_MQ_ENTRY);
-    
+    signal queueContent: MQ_EntryArray(0 to MQ_SIZE-1) := (others => DEFAULT_MQ_ENTRY);    
     signal addresses, tags, renameTags: MwordArray(0 to MQ_SIZE-1) := (others => (others => '0'));
     
     signal fullMask, killMask, selectMask, inputFullMask, readyMask, outputFullMask3: std_logic_vector(0 to MQ_SIZE-1) := (others => '0'); 
-    --signal fullMask_N, killMask_N, inputFullMask_N, readyMask_N: std_logic_vector(0 to MQ_SIZE-1) := (others => '0'); 
+    signal writePtr, selPtr0, selPtr1, selPtr2, selPtr3, nFull, nFullNext, nIn, nInRe, nOut, nCommitted, nCommittedEffective, recoveryCounter: SmallNumber := (others => '0');
 
-    signal writePtr, selPtr0, selPtr1, selPtr2, selPtr3,
-	       nFull, nFullNext, nIn, nInRe, nOut, nCommitted, nCommittedEffective, recoveryCounter: SmallNumber := (others => '0');
-
-        --signal writePtr_N, selPtr0_N, selPtr1_N, selPtr2_N, selPtr3_N, nFull_N, nFullNext_N, nIn_N, nInRe_N, nOut_N, nCommitted_N, nCommittedEffective_N: SmallNumber := (others => '0');
-
-    signal           selValid0, selValid1, selValid2, selValid3: std_logic := '0';
+    signal selValid0, selValid1, selValid2, selValid3: std_logic := '0';
 
     signal adrInWord, adrOutWord, tagInWord, tagOutWord, renameTagOutWord: Mword := (others => '0');
     
@@ -154,11 +147,6 @@ begin
     killMask <= getKillMask(queueContent, execEventSignal, lateEventSignal, execCausing.tag);
     inputFullMask <= maskFromIndex(writePtr, MQ_SIZE) when TMP_prevSending = '1' else (others => '0');
 
-       -- writePtr_N <= writePtr;-- i2slv(TMP_getNewIndex(fullMask_N), SMALL_NUMBER_SIZE);
-        --killMask_N <= killMask; -- getKillMask(queueContent_N, execEventSignal, lateEventSignal, execCausing.tag);
-        --inputFullMask_N <= inputFullMask;-- maskFromIndex(writePtr_N, MQ_SIZE) when prevSendingEarly = '1' else (others => '0');
-
-
     -- completion and subsequent removal from queue is triggered by:
     --      L1 fill in case of Cache miss ops
     --      SQ value fill in case of missed SQ forwarding 
@@ -172,22 +160,13 @@ begin
 
     outputFullMask3 <= maskFromIndex(selPtr3, MQ_SIZE) when selValid3 = '1' else (others => '0');
 
-        -- Wakeup for dependents on SQ:
-        -- CAREFUL: compare SQ pointers ignoring the high bit of StoreData sqPointer (used for ordering, not indexing the content!)
-
 
     READY_MASL: for i in 0 to MQ_SIZE-1 generate
         fullMask(i) <= queueContent(i).full;
         readyMask(i) <= queueContent(i).ready;
-        
-        --    fullMask_N(i) <= queueContent_N(i).full;
-        --    readyMask_N(i) <= queueContent_N(i).ready;
     end generate;
 
-       nFull <= i2slv(countOnes(fullMask), SMALL_NUMBER_SIZE); 
-      --     nFull_N <= i2slv(countOnes(fullMask_N), SMALL_NUMBER_SIZE); 
-
-     --   queueContent <= queueContent_N;
+    nFull <= i2slv(countOnes(fullMask), SMALL_NUMBER_SIZE); 
 
     process (clk)
 
@@ -207,22 +186,22 @@ begin
             sending3 <= sending2;
 
             for i in 0 to MQ_SIZE-1 loop
-                queueContent(i).TMP_cnt <= addIntTrunc(queueContent(i).TMP_cnt, 1, 3);
-                
+
+                -- Wakeup for dependents on SQ:
+                -- CAREFUL: compare SQ pointers ignoring the high bit of StoreData sqPointer (used for ordering, not indexing the content!)    
                 if queueContent(i).sqMiss = '1' and queueContent(i).sqTag(2 downto 0) = storeValueResult.dest(2 downto 0) then
                     queueContent(i).ready <= '1';
                 end if;
-            end loop;
-
-            for i in 0 to MQ_SIZE-1 loop                    
-                queueContent(i).full <= (fullMask(i) and not killMask(i) and not outputFullMask3(i)) or inputFullMask(i);
 
                 if (canSend and selectMask(i)) = '1' then
                     queueContent(i).active <= '0';
-                end if; 
-            end loop;
+                end if;
+                
+                -- CAREFUL: can't be reordered after "Update late part" because 'full' signals would be incorrect
+                queueContent(i).full <= (fullMask(i) and not killMask(i) and not outputFullMask3(i)) or inputFullMask(i);
+                queueContent(i).TMP_cnt <= addIntTrunc(queueContent(i).TMP_cnt, 1, 3);
 
-            for i in 0 to MQ_SIZE-1 loop
+                -- Update late part of slot or free it if no miss
                 if queueContent(i).full = '1' and queueContent(i).active /= '1' and queueContent(i).ready /= '1' and queueContent(i).TMP_cnt = X"02" then
                     -- if TMP_prevSending => confirm full, fill other info from compareAddressInput, compareAddressCtrl
                     -- if not TMP_prevSending => clear
@@ -259,8 +238,7 @@ begin
                 queueContent(p2i(writePtr, MQ_SIZE)).ready <= '0';
                 queueContent(p2i(writePtr, MQ_SIZE)).active <= '0';--'1';              
                 queueContent(p2i(writePtr, MQ_SIZE)).tag <= compareAddressEarlyInput.tag;
-
-                
+   
                 queueContent(p2i(writePtr, MQ_SIZE)).TMP_cnt <= (others => '0');
             end if;
 
@@ -282,7 +260,7 @@ begin
         isAlmostFull <= cmpGtU(nFull, MQ_SIZE-5);
     end process;
     
-        accepting <= not isFull;
+    accepting <= not isFull;
     
     tagInWord <= compareAddressCtrl.tags.lqPointer & compareAddressCtrl.tags.sqPointer & compareAddressInput.dest & X"00";
     
