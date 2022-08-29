@@ -109,19 +109,19 @@ architecture Behavioral of Core is
            resOutSQ,
            dataFromSB,
            mqReexecRegRead,
-           missedMemResult, missedMemResultE1, missedMemResultE2
+           --missedMemResult,
+           missedMemResultE1, missedMemResultE2
            : ExecResult := DEFAULT_EXEC_RESULT;
 
         signal mqReexecCtrlIssue, mqReexecCtrlRR: ControlPacket := DEFAULT_CONTROL_PACKET;
         signal mqReexecResIssue, mqReexecResRR: ExecResult := DEFAULT_EXEC_RESULT;
 
     signal pcData, dataToBranch, bqSelected, branchResultE0, branchResultE1,
-               memCtrlRR, memCtrlE0, missedMemCtrl, missedMemCtrlE1, missedMemCtrlE2, ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
+               memCtrlRR, memCtrlE0, --missedMemCtrl,
+                                        missedMemCtrlE1, missedMemCtrlE2, ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal bpData: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
     signal robOut: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
-
-    signal dataFromDLQ: ExecResult := DEFAULT_EXEC_RESULT;
 
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
             
@@ -452,39 +452,22 @@ begin
 
             TMP_ISSUE_I0: block
                 use work.LogicIssue.all;
-                signal --inputDataWithArgsI, inputDataWithArgsR,
-                       argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                --inputDataWithArgsI <= getDispatchArgValues_Is(slotSelI0, outSigsI0.sending);
                 -- Reg
                 slotIssueI0 <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
                 sendingToRegReadI0 <= slotIssueI0.full and not outSigsI0.cancelled;
-                --inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueI0, sendingToRegReadI0, fni, true, false);
                 -- Reg
                 slotRegReadI0 <= updateDispatchArgs_RR(argStateR, fni.values0, regValsI0, false);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        if true then -- nextAccepting
-                            argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelI0, outSigsI0.sending), events);
-                        end if;
+                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelI0, outSigsI0.sending), events);
 
---                        if events.lateEvent = '1' then
---                            argStateI.full <= '0';
---                        end if;
-
-                        if true then -- nextAccepting
-                            argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueI0, sendingToRegReadI0, fni, true, false), events);
-                            
-                            unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.operation.arith);
-                        end if;
-
-                        if events.lateEvent = '1' then
-                            --argStateR.full <= '0';
-                        end if;
-
+                        argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueI0, sendingToRegReadI0, fni, true, false), events);
+                        unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.operation.arith);
                     end if;
                 end process;
 
@@ -496,10 +479,7 @@ begin
 
             dataToBranch <= basicBranch(slotRegReadI0.full and not outSigsI0.killSel2 and not lateEventSignal and slotRegReadI0.branchIns,
                                         slotRegReadI0,
-                                        bqSelected.tags,
-                                        bqSelected.controlInfo,
-                                        bqSelected.target,
-                                        bqSelected.nip,                            
+                                        bqSelected.tags, bqSelected.controlInfo, bqSelected.target, bqSelected.nip,                            
                                         unfoldedAluOp);
 
             process (clk)
@@ -575,37 +555,20 @@ begin
 
             TMP_ISSUE_M0: block
                 use work.LogicIssue.all;
-                signal --inputDataWithArgsI, inputDataWithArgsR,
-                       argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                --inputDataWithArgsI <= getDispatchArgValues_Is(slotSelM0, outSigsM0.sending);
                 -- Reg
                 slotIssueM0 <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
                 sendingToRegReadM0 <= (slotIssueM0.full and not outSigsM0.cancelled) or mqIssueSending;
-                --inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueM0, sendingToRegReadM0, fni, true, false);
                 -- Reg
                 slotRegReadM0iq <= updateDispatchArgs_RR(argStateR, fni.values0, regValsM0, false);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        if true then -- nextAccepting
-                            argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelM0, outSigsM0.sending), events);
-                        end if;
-                        
-                        if events.lateEvent = '1' then
-                            --argStateI.full <= '0';
-                        end if;
-
-                        if true then -- nextAccepting
-                            argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueM0, sendingToRegReadM0, fni, true, false), events);
-                        end if;
-                        
-                        if events.lateEvent = '1' then
-                            --argStateR.full <= '0';
-                        end if;
-                                
+                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelM0, outSigsM0.sending), events);
+                        argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueM0, sendingToRegReadM0, fni, true, false), events);
                     end if;
                 end process;
 
@@ -645,22 +608,54 @@ begin
                 memAddressInputEarlyMQ <= resultToM0_E0; -- for allocation of MQ slot
 
             subpipeM0_RR_u <= calcEffectiveAddress_2(slotRegReadM0.full and not outSigsM0.killSel2 and not lateEventSignal,
-                                                     slotRegReadM0, mqRegReadSending and bool2std(CONNECT_MQ), dataFromDLQ);
+                                                     slotRegReadM0, mqRegReadSending and bool2std(CONNECT_MQ), DEFAULT_EXEC_RESULT);
 
             controlM0_RR.op <= slotRegReadM0.operation;
             controlM0_RR.tags <= slotRegReadM0.tags;
 
-            slotRegReadM0mq.full <= mqRegReadSending and bool2std(CONNECT_MQ);
-            slotRegReadM0mq.operation <= mqReexecCtrlRR.op;
-            slotRegReadM0mq.renameIndex <= mqReexecCtrlRR.tags.renameIndex;
-            slotRegReadM0mq.tags <= mqReexecCtrlRR.tags;
+            TMP_MQ_RR_ASSIGN: block
+                function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState is
+                    variable res: SchedulerState := DEFAULT_SCHED_STATE;
+                begin
+                    res.full := mqRegReadSending and bool2std(CONNECT_MQ);
+                    res.operation := mqReexecCtrlRR.op;
+                    res.renameIndex := mqReexecCtrlRR.tags.renameIndex;
+                    res.tags := mqReexecCtrlRR.tags;
+                    
+                    -- adr
+                    res.args(1) := mqReexecCtrlRR.target;
+                    
+                    res.argSpec.dest := mqReexecResRR.dest;
+                    res.argSpec.intDestSel := not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
+                    res.argSpec.floatDestSel := mqReexecCtrlRR.classInfo.useFP;
+
+                    return res;
+                end function;
+                
+                --signal xy: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+            begin
+                    --xy
+                    slotRegReadM0mq <= TMP_slotRegReadM0mq(mqReexecCtrlRR, mqReexecResRR, mqRegReadSending);
             
-            -- adr
-            slotRegReadM0mq.args(1) <= mqReexecCtrlRR.target;
+                     --   ch0 <= bool2std(xy = slotRegReadM0mq);
             
-            slotRegReadM0mq.argSpec.dest <= mqReexecResRR.dest;
-            slotRegReadM0mq.argSpec.intDestSel <= not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
-            slotRegReadM0mq.argSpec.floatDestSel <= mqReexecCtrlRR.classInfo.useFP; 
+--                    --  mqReexecCtrlRR: ControlPacket
+--                slotRegReadM0mq.full <= mqRegReadSending and bool2std(CONNECT_MQ);
+--                slotRegReadM0mq.operation <= mqReexecCtrlRR.op;
+--                slotRegReadM0mq.renameIndex <= mqReexecCtrlRR.tags.renameIndex;
+--                slotRegReadM0mq.tags <= mqReexecCtrlRR.tags;
+                
+--                -- adr
+--                slotRegReadM0mq.args(1) <= mqReexecCtrlRR.target;
+                
+--                slotRegReadM0mq.argSpec.dest <= mqReexecResRR.dest;
+--                slotRegReadM0mq.argSpec.intDestSel <= not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
+--                slotRegReadM0mq.argSpec.floatDestSel <= mqReexecCtrlRR.classInfo.useFP;
+                
+                               
+            end block;
+
+
 
             -- info that it is an MQ op
 
@@ -720,22 +715,39 @@ begin
             subpipeM0_E1f_u <= setMemFail(subpipeM0_E1f, (memoryMissed and bool2std(CONNECT_MQ)), memResult);
 
 
-            missedMemResult.full <= subpipeM0_E1.full and memoryMissed;
-            missedMemResult.tag <= subpipeM0_E1.tag;
-            missedMemResult.dest <= subpipeM0_E1.dest;
-            missedMemResult.value <= memResult; -- probably not needed here
+            TMP_MEM_ASSIGN: block
+                function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult is
+                    variable res: ExecResult := er;
+                begin
+                    res.full := res.full and memoryMissed;
+                    res.value := memResult;
+                    return res;
+                end function;
+                                
+                function TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f: ExecResult;
+                                           ctrlE1, ctrlE1u: ControlPacket;
+                                           resOutSQ: ExecResult)
+                return ControlPacket is
+                    variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+                begin
+                    res.ip := subpipeM0_E1.value;
+                    res.op := ctrlE1.op;
+                    res.tags := ctrlE1u.tags;
+                    res.target(SMALL_NUMBER_SIZE-1 downto 0) := resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
+                    res.classInfo.useFP := subpipeM0_E1f.full;
+                    res.controlInfo.tlbMiss := ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
+                    res.controlInfo.dataMiss := ctrlE1u.controlInfo.dataMiss;
+                    res.controlInfo.sqMiss := ctrlE1u.controlInfo.sqMiss;                    
+                    return res;
+                end function;
 
-            missedMemCtrl.ip <= subpipeM0_E1.value;
-            missedMemCtrl.op <= ctrlE1.op;
-            missedMemCtrl.tags <= ctrlE1u.tags;
-            missedMemCtrl.target(SMALL_NUMBER_SIZE-1 downto 0) <= resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
-            missedMemCtrl.classInfo.useFP <= subpipeM0_E1f.full;
-            missedMemCtrl.controlInfo.tlbMiss <= ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
-            missedMemCtrl.controlInfo.dataMiss <= ctrlE1u.controlInfo.dataMiss;
-            missedMemCtrl.controlInfo.sqMiss <= ctrlE1u.controlInfo.sqMiss;
+            begin
+                missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1, memoryMissed, memResult);                
+                missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f, ctrlE1, ctrlE1u, resOutSQ);
+            end block;
 
-                missedMemResultE1 <= missedMemResult;
-                missedMemCtrlE1 <= missedMemCtrl;
+                --missedMemResultE1 <= missedMemResult;
+                --missedMemCtrlE1 <= missedMemCtrl;
 
                 memCtrlE0 <= ctrlE0;
 
@@ -797,19 +809,14 @@ begin
 
             TMP_ISSUE_SVI: block
                 use work.LogicIssue.all;
-                signal --inputDataWithArgsI, inputDataWithArgsR,
-                       argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
 
                 cancelledSVI1 <= outSigsSVI.cancelled or (storeValueCollision2 and outSigsSVI.killSel2); -- If stalled, it stayed here but kill sig moved to next stage
-
-                --inputDataWithArgsI <= getDispatchArgValues_Is(slotSelIntSV, outSigsSVI.sending);
                 -- Reg
                 slotIssueIntSV <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
                 sendingToRegReadIntSV <= slotIssueIntSV.full and not cancelledSVI1;
-          
-                --inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueIntSV, sendingToRegReadIntSV, fni, false, true);
                 -- Reg
                 slotRegReadIntSV <= updateDispatchArgs_RR(argStateR, fni.values0, regValsS0, true);
     
@@ -827,11 +834,7 @@ begin
                         if true then -- nextAccepting
                             argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueIntSV, sendingToRegReadIntSV, fni, false, true), events);
                         end if;
-                        
-                        if events.lateEvent = '1' then
-                            --argStateR.full <= '0';
-                        end if;
-                                
+ 
                     end if;
                 end process;
 
@@ -871,38 +874,20 @@ begin
 
             TMP_ISSUE_SVF: block
                 use work.LogicIssue.all;
-                signal --inputDataWithArgsI, inputDataWithArgsR,
-                       argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-            
-                --inputDataWithArgsI <= getDispatchArgValues_Is(slotSelFloatSV, outSigsSVF.sending);
                 -- Reg
                 slotIssueFloatSV <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
                 sendingToRegReadFloatSV <= slotIssueFloatSV.full and not outSigsSVF.cancelled;
-                --inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueFloatSV, sendingToRegReadFloatSV, fniFloat, false, true);
                 -- Reg
                 slotRegReadFloatSV <= updateDispatchArgs_RR(argStateR, fniFloat.values0, regValsFS0, true);
     
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        if true then -- nextAccepting
-                            argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelFloatSV, outSigsSVF.sending), events);
-                        end if;
-                        
-                        if events.lateEvent = '1' then
-                            --argStateI.full <= '0';
-                        end if;
-    
-                        if true then -- nextAccepting
-                            argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueFloatSV, sendingToRegReadFloatSV, fniFloat, false, true), events);
-                        end if;
-                        
-                        if events.lateEvent = '1' then
-                            --argStateR.full <= '0';
-                        end if;
-                                
+                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelFloatSV, outSigsSVF.sending), events);
+                        argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueFloatSV, sendingToRegReadFloatSV, fniFloat, false, true), events);
                     end if;
                 end process;
 
@@ -955,37 +940,20 @@ begin
 
             TMP_ISSUE_F0: block
                 use work.LogicIssue.all;
-                signal --inputDataWithArgsI, inputDataWithArgsR,
-                       argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin    
-                --inputDataWithArgsI <= getDispatchArgValues_Is(slotSelF0, outSigsF0.sending);
                 -- Reg
                 slotIssueF0 <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
                 sendingToRegReadF0 <= slotIssueF0.full and not outSigsF0.cancelled;
-                --inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueF0, sendingToRegReadF0, fniFloat, false, false);
                 -- Reg
                 slotRegReadF0 <= updateDispatchArgs_RR(argStateR, fniFloat.values0, regValsF0, false);
     
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        if true then -- nextAccepting
-                            argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelF0, outSigsF0.sending), events);
-                        end if;
-                        
-                        if events.lateEvent = '1' then
-                            --argStateI.full <= '0';
-                        end if;
-    
-                        if true then -- nextAccepting
-                            argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueF0, sendingToRegReadF0, fniFloat, false, false), events);
-                        end if;
-                        
-                        if events.lateEvent = '1' then
-                            --argStateR.full <= '0';
-                        end if;
-                                
+                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelF0, outSigsF0.sending), events);
+                        argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueF0, sendingToRegReadF0, fniFloat, false, false), events); 
                     end if;
                 end process;
     
