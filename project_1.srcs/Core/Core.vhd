@@ -385,7 +385,17 @@ begin
         signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 
-            signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';                
+        function TMP_clearFull(ss: SchedulerState; evts: EventState) return SchedulerState is
+            variable res: SchedulerState := ss;
+        begin
+            if evts.lateEvent = '1' then
+                res.full := '0';
+            end if;
+            
+            return res;
+        end function;
+
+            signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';              
     begin
         newIntSources <= TMP_getPhysicalArgsNew(renamedArgsInt);
         newFloatSources <= TMP_getPhysicalArgsNew(renamedArgsFloat);
@@ -442,14 +452,15 @@ begin
 
             TMP_ISSUE_I0: block
                 use work.LogicIssue.all;
-                signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal --inputDataWithArgsI, inputDataWithArgsR,
+                       argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelI0, outSigsI0.sending);
+                --inputDataWithArgsI <= getDispatchArgValues_Is(slotSelI0, outSigsI0.sending);
                 -- Reg
                 slotIssueI0 <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
                 sendingToRegReadI0 <= slotIssueI0.full and not outSigsI0.cancelled;
-                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueI0, sendingToRegReadI0, fni, true, false);
+                --inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueI0, sendingToRegReadI0, fni, true, false);
                 -- Reg
                 slotRegReadI0 <= updateDispatchArgs_RR(argStateR, fni.values0, regValsI0, false);
 
@@ -457,21 +468,21 @@ begin
                 begin
                     if rising_edge(clk) then
                         if true then -- nextAccepting
-                            argStateI <= inputDataWithArgsI;
+                            argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelI0, outSigsI0.sending), events);
                         end if;
 
-                        if events.lateEvent = '1' then
-                            argStateI.full <= '0';
-                        end if;
+--                        if events.lateEvent = '1' then
+--                            argStateI.full <= '0';
+--                        end if;
 
                         if true then -- nextAccepting
-                            argStateR <= inputDataWithArgsR;
+                            argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueI0, sendingToRegReadI0, fni, true, false), events);
                             
                             unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.operation.arith);
                         end if;
 
                         if events.lateEvent = '1' then
-                            argStateR.full <= '0';
+                            --argStateR.full <= '0';
                         end if;
 
                     end if;
@@ -564,14 +575,15 @@ begin
 
             TMP_ISSUE_M0: block
                 use work.LogicIssue.all;
-                signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal --inputDataWithArgsI, inputDataWithArgsR,
+                       argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelM0, outSigsM0.sending);
+                --inputDataWithArgsI <= getDispatchArgValues_Is(slotSelM0, outSigsM0.sending);
                 -- Reg
                 slotIssueM0 <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
                 sendingToRegReadM0 <= (slotIssueM0.full and not outSigsM0.cancelled) or mqIssueSending;
-                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueM0, sendingToRegReadM0, fni, true, false);
+                --inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueM0, sendingToRegReadM0, fni, true, false);
                 -- Reg
                 slotRegReadM0iq <= updateDispatchArgs_RR(argStateR, fni.values0, regValsM0, false);
 
@@ -579,19 +591,19 @@ begin
                 begin
                     if rising_edge(clk) then
                         if true then -- nextAccepting
-                            argStateI <= inputDataWithArgsI;
+                            argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelM0, outSigsM0.sending), events);
                         end if;
                         
                         if events.lateEvent = '1' then
-                            argStateI.full <= '0';
+                            --argStateI.full <= '0';
                         end if;
 
                         if true then -- nextAccepting
-                            argStateR <= inputDataWithArgsR;
+                            argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueM0, sendingToRegReadM0, fni, true, false), events);
                         end if;
                         
                         if events.lateEvent = '1' then
-                            argStateR.full <= '0';
+                            --argStateR.full <= '0';
                         end if;
                                 
                     end if;
@@ -785,18 +797,19 @@ begin
 
             TMP_ISSUE_SVI: block
                 use work.LogicIssue.all;
-                signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal --inputDataWithArgsI, inputDataWithArgsR,
+                       argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
 
                 cancelledSVI1 <= outSigsSVI.cancelled or (storeValueCollision2 and outSigsSVI.killSel2); -- If stalled, it stayed here but kill sig moved to next stage
 
-                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelIntSV, outSigsSVI.sending);
+                --inputDataWithArgsI <= getDispatchArgValues_Is(slotSelIntSV, outSigsSVI.sending);
                 -- Reg
                 slotIssueIntSV <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
                 sendingToRegReadIntSV <= slotIssueIntSV.full and not cancelledSVI1;
           
-                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueIntSV, sendingToRegReadIntSV, fni, false, true);
+                --inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueIntSV, sendingToRegReadIntSV, fni, false, true);
                 -- Reg
                 slotRegReadIntSV <= updateDispatchArgs_RR(argStateR, fni.values0, regValsS0, true);
     
@@ -804,7 +817,7 @@ begin
                 begin
                     if rising_edge(clk) then
                         if allowIssueStoreDataInt = '1' then -- nextAccepting
-                            argStateI <= inputDataWithArgsI;
+                            argStateI <= getDispatchArgValues_Is(slotSelIntSV, outSigsSVI.sending);
                         end if;
                         
                         if events.lateEvent = '1' then
@@ -812,11 +825,11 @@ begin
                         end if;
     
                         if true then -- nextAccepting
-                            argStateR <= inputDataWithArgsR;
+                            argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueIntSV, sendingToRegReadIntSV, fni, false, true), events);
                         end if;
                         
                         if events.lateEvent = '1' then
-                            argStateR.full <= '0';
+                            --argStateR.full <= '0';
                         end if;
                                 
                     end if;
@@ -858,15 +871,16 @@ begin
 
             TMP_ISSUE_SVF: block
                 use work.LogicIssue.all;
-                signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal --inputDataWithArgsI, inputDataWithArgsR,
+                       argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
             
-                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelFloatSV, outSigsSVF.sending);
+                --inputDataWithArgsI <= getDispatchArgValues_Is(slotSelFloatSV, outSigsSVF.sending);
                 -- Reg
                 slotIssueFloatSV <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
                 sendingToRegReadFloatSV <= slotIssueFloatSV.full and not outSigsSVF.cancelled;
-                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueFloatSV, sendingToRegReadFloatSV, fniFloat, false, true);
+                --inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueFloatSV, sendingToRegReadFloatSV, fniFloat, false, true);
                 -- Reg
                 slotRegReadFloatSV <= updateDispatchArgs_RR(argStateR, fniFloat.values0, regValsFS0, true);
     
@@ -874,19 +888,19 @@ begin
                 begin
                     if rising_edge(clk) then
                         if true then -- nextAccepting
-                            argStateI <= inputDataWithArgsI;
+                            argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelFloatSV, outSigsSVF.sending), events);
                         end if;
                         
                         if events.lateEvent = '1' then
-                            argStateI.full <= '0';
+                            --argStateI.full <= '0';
                         end if;
     
                         if true then -- nextAccepting
-                            argStateR <= inputDataWithArgsR;
+                            argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueFloatSV, sendingToRegReadFloatSV, fniFloat, false, true), events);
                         end if;
                         
                         if events.lateEvent = '1' then
-                            argStateR.full <= '0';
+                            --argStateR.full <= '0';
                         end if;
                                 
                     end if;
@@ -941,14 +955,15 @@ begin
 
             TMP_ISSUE_F0: block
                 use work.LogicIssue.all;
-                signal inputDataWithArgsI, inputDataWithArgsR, argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal --inputDataWithArgsI, inputDataWithArgsR,
+                       argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin    
-                inputDataWithArgsI <= getDispatchArgValues_Is(slotSelF0, outSigsF0.sending);
+                --inputDataWithArgsI <= getDispatchArgValues_Is(slotSelF0, outSigsF0.sending);
                 -- Reg
                 slotIssueF0 <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
                 sendingToRegReadF0 <= slotIssueF0.full and not outSigsF0.cancelled;
-                inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueF0, sendingToRegReadF0, fniFloat, false, false);
+                --inputDataWithArgsR <= getDispatchArgValues_RR(slotIssueF0, sendingToRegReadF0, fniFloat, false, false);
                 -- Reg
                 slotRegReadF0 <= updateDispatchArgs_RR(argStateR, fniFloat.values0, regValsF0, false);
     
@@ -956,19 +971,19 @@ begin
                 begin
                     if rising_edge(clk) then
                         if true then -- nextAccepting
-                            argStateI <= inputDataWithArgsI;
+                            argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelF0, outSigsF0.sending), events);
                         end if;
                         
                         if events.lateEvent = '1' then
-                            argStateI.full <= '0';
+                            --argStateI.full <= '0';
                         end if;
     
                         if true then -- nextAccepting
-                            argStateR <= inputDataWithArgsR;
+                            argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueF0, sendingToRegReadF0, fniFloat, false, false), events);
                         end if;
                         
                         if events.lateEvent = '1' then
-                            argStateR.full <= '0';
+                            --argStateR.full <= '0';
                         end if;
                                 
                     end if;
