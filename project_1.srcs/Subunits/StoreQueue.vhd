@@ -355,23 +355,27 @@ begin
 
         constant NAME_PREFIX: string(1 to 1) := getNamePrefix;
 
-        function getDynamicContentString(elem: QueueEntry) return string is
+        function getDynamicContentString(elem: QueueEntry; adr: Mword; value: Mword) return string is
             variable res: line;
         begin
             if true then --elem.full = '1' then
-                --write(res, natural'image(slv2u(elem.dbInfo.tag)));
                 write(res, string'(": "));
                 write(res, std_logic'image(elem.completedA));
                 write(res, std_logic'image(elem.completedV));
-                write(res, string'(" "));
---                if elem.hasEvent = '1' then
---                    write(res, string'("E : "));
---                else
---                    write(res, string'("  : "));
---                end if;
+                write(res, string'(" @"));
                 
-                --write(res, disasmWord(dyn.dbInfo.bits));
+                if elem.completedA = '1' then
+                    write(res, natural'image(slv2u(adr)));
+                else
+                    write(res, string'("????????"));
+                end if;
+                write(res, string'(": "));
                 
+                if elem.completedV = '1' then
+                    write(res, natural'image(slv2u(value)));
+                else
+                    write(res, string'("????????"));
+                end if;                
                 return res.all;
             else
                 return "-------------------------------------";
@@ -393,15 +397,13 @@ begin
                 
                 currentLine := null;
                 write(currentLine, preRow.all & natural'image(i) & "  ");
-                --for j in 0 to PIPE_WIDTH-1 loop
-                    write(currentLine, getDynamicContentString(queueContent(i)) & ",   ");
-                --end loop;
+                write(currentLine, getDynamicContentString(queueContent(i), addresses(i), storeValues(i)) & ",   ");
 
                 writeline(outFile, currentLine);
             end loop;
         end procedure;
         
-    begin        
+    begin
         if rising_edge(clk) then
             if dbState.dbSignal = '1' then
                 report "LSQ reporting ";
