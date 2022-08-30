@@ -44,7 +44,7 @@ entity StoreQueue is
 		
         --compareIndexInput: in SmallNumber;
         --preCompareOp: in SpecificOp;
-        compareAddressEarlyInput: in ExecResult;
+        --compareAddressEarlyInput: in ExecResult;
             compareAddressEarlyInput_Ctrl: in ControlPacket;
 
         selectedDataOutput: out ControlPacket;
@@ -106,7 +106,8 @@ begin
     NEW_DEV: block   
     begin   
         -- Ptr for random access updating
-        adrPtr <= compareAddressInput.dest;
+        adrPtr <= compareAddressCtrl.tags.lqPointer when IS_LOAD_QUEUE
+             else compareAddressCtrl.tags.sqPointer;-- compareAddressInput.dest;
     
         -- Read ptr determinded by address matching - SQ only??
         pSelect <=  addTruncZ( findNewestMatchIndex(olderSQ, (others => '0'), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE);
@@ -133,7 +134,7 @@ begin
 
         updateResult.full <= compareAddressInput.full and isLoadOp(compareAddressInputOp) when IS_LOAD_QUEUE
                         else compareAddressInput.full and isStoreOp(compareAddressInputOp);
-        updateResult.dest <= compareAddressInput.dest;
+        updateResult.dest <= adrPtr;--compareAddressInput.dest;
         updateResult.value <= compareAddressInput.value;
 
         process (clk)

@@ -135,7 +135,8 @@ architecture MissQueue of StoreQueue is
     signal ch0, ch1, ch2, ch3: std_logic := '0'; 
 begin
 
-        prevSendingEarly <= compareAddressEarlyInput.full;
+        prevSendingEarly <= --compareAddressEarlyInput.full;
+                            compareAddressEarlyInput_Ctrl.controlInfo.full;
 
     canSend <= '1';
 
@@ -236,8 +237,8 @@ begin
                 queueContent(p2i(writePtr, QUEUE_SIZE)).full <= '1';
                 queueContent(p2i(writePtr, QUEUE_SIZE)).ready <= '0';
                 queueContent(p2i(writePtr, QUEUE_SIZE)).active <= '0';--'1';              
-                queueContent(p2i(writePtr, QUEUE_SIZE)).tag <= compareAddressEarlyInput.tag;
-   
+                queueContent(p2i(writePtr, QUEUE_SIZE)).tag <= --compareAddressEarlyInput.tag;
+                                                               compareAddressEarlyInput_Ctrl.tags.renameIndex;
                 queueContent(p2i(writePtr, QUEUE_SIZE)).TMP_cnt <= (others => '0');
             end if;
 

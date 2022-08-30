@@ -46,7 +46,7 @@ entity BranchQueue is
 
 		storeValueInput: in ExecResult;
         compareAddressQuickInput: in ExecResult;
-        compareQuickPtr: in SmallNumber;
+        --compareQuickPtr: in SmallNumber;
 
         selectedDataOutput: out ControlPacket; -- result, target, control info, tags
 
@@ -161,7 +161,7 @@ begin
        selectedDataSlotPre_N <= getMatchedSlot_N(compareAddressQuickInput.full, compareAddressQuickInput.tag, earlySelected, lateSelected);
     end block;
 
-    pSelect <= compareQuickPtr;
+    pSelect <= compareAddressQuickInput.dest;
 
     pStartNext <= addIntTrunc(pStart, 1, QUEUE_PTR_SIZE+1) when committingBr = '1' else pStart;
 

@@ -85,7 +85,8 @@ architecture Behavioral of Core is
 
     signal renamedArgsInt, renamedArgsFloat, renamedArgsMerged, renamedArgsIntROB, renamedArgsFloatROB: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 
-    signal bqPointer, bqPointerSeq, lqPointer, sqPointer, preIndexSQ, preIndexLQ: SmallNumber := (others => '0');
+    signal bqPointer, bqPointerSeq, lqPointer, sqPointer --, preIndexSQ, preIndexLQ
+                            : SmallNumber := (others => '0');
 
     signal commitGroupCtr: InsTag := (others => '0'); -- TODO: check if can be internal to RegManager (inc on commit signal)
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -98,12 +99,14 @@ architecture Behavioral of Core is
 
     signal events: EventState := DEFAULT_EVENT_STATE;
 
-    signal specialOp, preAddressOp, specialOutROB, memAddressOp: SpecificOp := DEFAULT_SPECIFIC_OP;
+    signal specialOp,-- preAddressOp,
+            specialOutROB: SpecificOp := DEFAULT_SPECIFIC_OP;
 
     signal branchCtrl, memoryCtrlE2, memoryCtrlPre: InstructionControlInfo := DEFAULT_CONTROL_INFO;
 
-    signal memAddressInputSQ, memAddressInputLQ, bqCompareEarly, bqUpdate, sqValueResult, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
-           memAddressInputEarlySQ, memAddressInputEarlyLQ, memAddressInputEarlyMQ,
+    signal memAddressInput,-- memAddressInputLQ,
+           bqCompareEarly, bqUpdate, sqValueResult, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
+           memAddressInputEarlySQ, memAddressInputEarlyLQ,-- memAddressInputEarlyMQ,
            frontEvent, execEvent, lateEvent, execCausingDelayedSQ, execCausingDelayedLQ,
            bqTargetData,
            resOutSQ,
@@ -578,7 +581,7 @@ begin
             mqIssueSending <= mqReexecCtrlIssue.controlInfo.full;
 
             mqRegReadSending <= mqReexecCtrlRR.controlInfo.full;
-            mqReexecRegRead.full <= mqReexecCtrlRR.controlInfo.full;
+            mqReexecRegRead.full <= mqRegReadSending;
             mqReexecRegRead.tag <= mqReexecCtrlRR.tag;
             mqReexecRegRead.value <= mqReexecCtrlRR.target;            
 
@@ -596,28 +599,20 @@ begin
                 resultToM0_E0f <= updateMemDest(resultToM0_E0, floatSel);
             end block;
 
-
             slotRegReadM0 <= slotRegReadM0mq when mqRegReadSending = '1' else slotRegReadM0iq;
 
-            preIndexSQ <= slotRegReadM0.tags.sqPointer;
-            preIndexLQ <= slotRegReadM0.tags.lqPointer;  
-            preAddressOp <= slotRegReadM0.operation;
+            subpipeM0_RR_u <= calcEffectiveAddress_2(slotRegReadM0.full and not outSigsM0.killSel2 and not lateEventSignal, slotRegReadM0, mqRegReadSending, DEFAULT_EXEC_RESULT);
 
-            memAddressInputEarlyMQ <= resultToM0_E0; -- for allocation of MQ slot
-
-                memAddressInputEarlyMQ_Ctrl <= controlToM0_E0;
-
-            subpipeM0_RR_u <= calcEffectiveAddress_2(slotRegReadM0.full and not outSigsM0.killSel2 and not lateEventSignal,
-                                                     slotRegReadM0, mqRegReadSending, DEFAULT_EXEC_RESULT);
-
+            controlM0_RR.controlInfo.full <= slotRegReadM0.full;
             controlM0_RR.op <= slotRegReadM0.operation;
             controlM0_RR.tags <= slotRegReadM0.tags;
 
             memCtrlRR <= controlM0_RR;
+            memAddressInputEarlyMQ_Ctrl <= controlToM0_E0;
 
             slotRegReadM0mq <= TMP_slotRegReadM0mq(mqReexecCtrlRR, mqReexecResRR, mqRegReadSending);
 
-            -- info that it is an MQ op
+            memAddressInput <= subpipeM0_E0;
 
             process (clk)
             begin
@@ -642,18 +637,6 @@ begin
             end process;
 
             memoryCtrlE2 <= ctrlE2.controlInfo;
-
-            memAddressInputSQ.full <= subpipeM0_E0.full;
-            memAddressInputSQ.tag <= ctrlE0.tags.renameIndex;
-            memAddressInputSQ.dest <= ctrlE0.tags.sqPointer;
-            memAddressInputSQ.value <= subpipeM0_E0.value;
-
-            memAddressInputLQ.full <= subpipeM0_E0.full;
-            memAddressInputLQ.tag <= ctrlE0.tags.renameIndex;
-            memAddressInputLQ.dest <= ctrlE0.tags.lqPointer;
-            memAddressInputLQ.value <= subpipeM0_E0.value;
-
-            memAddressOp <= ctrlE0.op;
 
             memResult <= getLSResultData_result(  ctrlE1.op,
                                                   memLoadReady, memLoadValue,
@@ -1164,7 +1147,6 @@ begin
 
 		storeValueInput => bqUpdate,
         compareAddressQuickInput => bqCompareEarly,
-        compareQuickPtr => bqCompareEarly.dest,
 
         selectedDataOutput => bqSelected,
 
@@ -1205,16 +1187,12 @@ begin
            
         renamedPtr => sqPointer,
             
-        --storeValuePtr => sqValueResult.dest,
         storeValueResult => sqValueResult,
     
-        compareAddressInput => memAddressInputSQ,
+        compareAddressInput => memAddressInput,
         compareAddressCtrl => memCtrlE0,
 		
-        --compareIndexInput => preIndexSQ,
-        --preCompareOp => preAddressOp,
-        compareAddressEarlyInput => DEFAULT_EXEC_RESULT,
-            compareAddressEarlyInput_Ctrl => memCtrlRR,
+        compareAddressEarlyInput_Ctrl => memCtrlRR,
 
         selectedDataOutput => ctOutSQ,
         selectedDataResult => resOutSQ,
@@ -1258,16 +1236,12 @@ begin
             
         renamedPtr => lqPointer,
 
-		--storeValuePtr => (others => '0'),
         storeValueResult => DEFAULT_EXEC_RESULT,
 		
-		compareAddressInput => memAddressInputLQ,
+		compareAddressInput => memAddressInput,
         compareAddressCtrl => memCtrlE0,
 
-        --compareIndexInput => preIndexLQ,        
-        --preCompareOp => preAddressOp,
-        compareAddressEarlyInput => DEFAULT_EXEC_RESULT,
-            compareAddressEarlyInput_Ctrl => memCtrlRR,
+        compareAddressEarlyInput_Ctrl => memCtrlRR,
 
         selectedDataOutput => ctOutLQ,
 
@@ -1320,24 +1294,20 @@ begin
 
         prevSendingRe => '0',                
         prevSending => '0',
-        
+
         renameMask => (others => '0'),
         inputMask => (others => '0'),
         systemMask => (others => '0'),
-            
+
         renamedPtr => open,
 
-        --storeValuePtr => (others => '0'),
         storeValueResult => sqValueResultE2,
 
         compareAddressInput => missedMemResultE2,
         compareAddressCtrl => missedMemCtrlE2,
 
-        --compareIndexInput => (others => '0'),        
-        --preCompareOp => DEFAULT_SPECIFIC_OP,
-        compareAddressEarlyInput => memAddressInputEarlyMQ, -- only 'tag' and 'full'
-            compareAddressEarlyInput_Ctrl => memAddressInputEarlyMQ_Ctrl, -- only 'tag' and 'full'
-             
+        compareAddressEarlyInput_Ctrl => memAddressInputEarlyMQ_Ctrl, -- only 'tag' and 'full'
+
         selectedDataOutput => mqReexecCtrlIssue,
         selectedDataResult => mqReexecResIssue,
 
@@ -1348,12 +1318,12 @@ begin
         lateEventSignal => lateEventSignal,
         execEventSignal => execEventSignalE1,
         execCausing => execCausingDelayedLQ, -- TODO: verify
-        
+
         nextAccepting => '0',
-        
+
         committedEmpty => open,
         committedSending => mqReady,
-        
+
         dbState => dbState        
     );
 
