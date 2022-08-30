@@ -51,7 +51,9 @@ package LogicQueues is
     function addressHighMatching(a, b: Mword) return std_logic;
     
     function getWhichMemOp(content: QueueEntryArray) return std_logic_vector;
-    function getDrainOutput(elem: QueueEntry; adr, value: Mword) return InstructionState;
+
+--    function getDrainOutput(elem: QueueEntry; adr, value: Mword) return InstructionState;
+    function getDrainOutput_N(elem: QueueEntry; adr, value: Mword) return ControlPacket;
     
     function cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
     function cmpIndexAfter(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
@@ -188,20 +190,37 @@ package body LogicQueues is
         return res;
     end function;
 
-    function getDrainOutput(elem: QueueEntry; adr, value: Mword) return InstructionState is
-        variable res: InstructionState := DEFAULT_INS_STATE;
+--    function getDrainOutput(elem: QueueEntry; adr, value: Mword) return InstructionState is
+--        variable res: InstructionState := DEFAULT_INS_STATE;
+--    begin
+--        if elem.isSysOp = '1' then
+--            res.specificOperation := sop(None, opStoreSys);
+--        else
+--            res.specificOperation := sop(None, opStore);                        
+--        end if;
+
+--        res.controlInfo.newEvent := elem.hasEvent;
+--        res.controlInfo.firstBr := elem.first;
+--        res.controlInfo.sqMiss := not elem.completedV;   
+--        res.target_D := adr;
+--        res.result_D := value;    
+--        return res;
+--    end function;
+
+    function getDrainOutput_N(elem: QueueEntry; adr, value: Mword) return ControlPacket is
+        variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
     begin
         if elem.isSysOp = '1' then
-            res.specificOperation := sop(None, opStoreSys);
+            res.op := sop(None, opStoreSys);
         else
-            res.specificOperation := sop(None, opStore);                        
+            res.op := sop(None, opStore);                        
         end if;
 
         res.controlInfo.newEvent := elem.hasEvent;
         res.controlInfo.firstBr := elem.first;
         res.controlInfo.sqMiss := not elem.completedV;   
         res.target := adr;
-        res.result := value;    
+        res.nip := value;    
         return res;
     end function;
 

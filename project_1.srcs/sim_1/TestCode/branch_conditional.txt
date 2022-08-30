@@ -48,36 +48,6 @@ $L5
 	jnz_i r8, $error
 	jnz_i r8, $error
 	jnz_i r8, $error
-
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-	
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-	
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
 	
 	jnz_i r8, $error	
 	jnz_i r8, $error	

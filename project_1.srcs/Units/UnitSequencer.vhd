@@ -129,10 +129,10 @@ begin
     lateEvent.full <= lateEventSending;
     lateEvent.value <= lateCausingTarget;
     
-    pcNew <= newPCData(lateEventSending,    lateCausingTarget,
-                                            execEventSignal, execEvent.value,
-                                            frontEventSignal, frontEvent.value,
-                                            pcNext).ip;
+    pcNew <= newPCData( lateEventSending,    lateCausingTarget,
+                        execEventSignal, execEvent.value,
+                        frontEventSignal, frontEvent.value,
+                        pcNext);
 
     sendingToPC <= running or eventOccurred;
  

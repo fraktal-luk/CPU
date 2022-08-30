@@ -43,14 +43,17 @@ package LogicExec is
                          target, result: Mword;
                          ac: AluControl) return ControlPacket;
 
-	function executeAlu(st: SchedulerState; link: Mword; ctrl: InstructionControlInfo;
+	function executeAlu(full: std_logic; st: SchedulerState; link: Mword; ctrl: InstructionControlInfo;
 	                                           ac: AluControl)
 	                                           return ExecResult;
 
-	function executeFpu(st: SchedulerState) return InstructionState;
+	function executeFpu(st: SchedulerState) return Mword;
 
     function calcEffectiveAddress(st: SchedulerState; fromDLQ: std_logic; dlqData: ExecResult)
     return Mword;        
+
+    function calcEffectiveAddress_2(full: std_logic; st: SchedulerState; fromDLQ: std_logic; dlqData: ExecResult)
+    return ExecResult;
 
     function getLSResultData(op: SpecificOp;
                              result: Mword;
@@ -105,18 +108,14 @@ package body LogicExec is
 	function basicBranch(sending: std_logic; st: SchedulerState; tags: InstructionTags; --tags: UNUSED
 	                     ctrl: InstructionControlInfo;
 	                     target, result: Mword;
-	                     ac: AluControl) return ControlPacket is
+	                     ac: AluControl)
+	return ControlPacket is
 		variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 		variable branchTaken, targetMatch: std_logic := '0';
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
 		variable targetEqual: std_logic := '0';
 	begin
-
-        res.tags.renameIndex := st.renameIndex;
-        res.tags.bqPointer := st.bqPointer;
-        res.tags.sqPointer := st.sqPointer;
-        res.tags.lqPointer := st.lqPointer;
-        res.tags.bqPointerSeq := st.bqPointerSeq;
+        res.tags := st.tags;
 
         res.controlInfo.full := sending;
 		-- Cases to handle
@@ -183,7 +182,7 @@ package body LogicExec is
 		return res;
 	end function;
 
-	function executeAlu(st: SchedulerState; link: Mword; ctrl: InstructionControlInfo; ac: AluControl)
+	function executeAlu(full: std_logic; st: SchedulerState; link: Mword; ctrl: InstructionControlInfo; ac: AluControl)
 	return ExecResult is
 		variable res: ExecResult := DEFAULT_EXEC_RESULT;
 		variable result: Mword := (others => '0');
@@ -251,7 +250,9 @@ package body LogicExec is
             end if;
 		end if;
 		
-		res.full := st.full;
+		res.full := full;
+		res.tag := st.renameIndex;
+		res.dest := st.argSpec.dest;
 		res.value := result;
 		return res;
 	end function;
@@ -298,13 +299,14 @@ package body LogicExec is
     end function;
 
 	
-	function executeFpu(st: SchedulerState) return InstructionState is
-       variable res: InstructionState := DEFAULT_INS_STATE;--ins;
+	function executeFpu(st: SchedulerState) return Mword is
+       --variable res: InstructionState := DEFAULT_INS_STATE;--ins;
+       variable res: Mword := (others => '0');
 	begin
         if st.operation.float = opOr then 
-           res.result := st.args(0) or st.args(1);
+           res := st.args(0) or st.args(1);
         elsif st.operation.float = opMove then
-           res.result := st.args(0);
+           res := st.args(0);
         else
            
 		end if;
@@ -318,7 +320,7 @@ package body LogicExec is
         variable res: Mword := (others => '0');
     begin
         if fromDLQ = '1' then
-            --res := dlqData;
+            res := st.args(1);
         elsif st.full = '1'then
             res := add(st.args(0), st.args(1));
         else
@@ -328,6 +330,27 @@ package body LogicExec is
         return res;
     end function;
 
+
+    function calcEffectiveAddress_2(full: std_logic; st: SchedulerState; fromDLQ: std_logic; dlqData: ExecResult)
+    return ExecResult is
+        variable res: ExecResult := DEFAULT_EXEC_RESULT;
+        variable adr: Mword := (others => '0'); 
+    begin
+        if fromDLQ = '1' then
+            adr := st.args(1);
+        elsif st.full = '1'then
+            adr := add(st.args(0), st.args(1));
+        else
+            adr := (others => '0');
+        end if;
+
+        res.full := full;
+        res.tag := st.renameIndex;
+        res.dest := st.argSpec.dest;        
+        res.value := adr;
+        
+        return res;
+    end function;
     
     function getLSResultData( op: SpecificOp;
                               result: Mword;
@@ -339,7 +362,7 @@ package body LogicExec is
         variable res: InstructionControlInfo := DEFAULT_CONTROL_INFO;
         constant sysOp: boolean := (isLoadSysOp(op) or isStoreSysOp(op)) = '1';
         constant memForwarded: boolean := std2bool(ctSQ.controlInfo.full);
-        constant memFail: boolean := std2bool(not memLoadReady);
+        constant memFail: boolean := std2bool(not memLoadReady and isLoadMemOp(op));
     begin
         -- mfc/mtc?
         -- tlb/access error?

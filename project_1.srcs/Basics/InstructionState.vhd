@@ -186,9 +186,6 @@ type InstructionArgSpec is record
 end record;
 
 type InstructionTags is record
-    fetchCtr: Word;	-- Ctr is never reset!
-    decodeCtr: Word; -- Ctr is never reset!
-    renameCtr: Word;
     renameIndex: InsTag;	-- group + group position
     intPointer: SmallNumber;
     floatPointer: SmallNumber;
@@ -196,29 +193,23 @@ type InstructionTags is record
     sqPointer: SmallNumber;
     lqPointer: SmallNumber;
     bqPointerSeq: SmallNumber;
-    commitCtr: Word;
 end record;
 
 type InstructionState is record
         dbInfo: InstructionDebugInfo;
 	controlInfo: InstructionControlInfo;
-	ip: Mword;
-	bits: Word; -- instruction word
 	tags: InstructionTags;
 	specificOperation: SpecificOp;
 	classInfo: InstructionClassInfo;
 	constantArgs: InstructionConstantArgs;
 	virtualArgSpec: InstructionArgSpec;
 	physicalArgSpec: InstructionArgSpec;
-	result: Mword;
-	target: Mword;
 end record;
 
 type InstructionStateArray is array(integer range <>) of InstructionState;
 
 type ControlPacket is record
         dbInfo: InstructionDebugInfo;
-
     controlInfo: InstructionControlInfo;
     classInfo: InstructionClassInfo;
     op: SpecificOp;
@@ -279,33 +270,24 @@ constant DEFAULT_ARG_SPEC: InstructionArgSpec := (
 );
 
 constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
-    fetchCtr => (others => '0'),
-    decodeCtr => (others => '0'),
-    renameCtr => (others => '0'),
     renameIndex => (others => '0'),
     intPointer => (others => '0'),
     floatPointer => (others => '0'),
     bqPointer => (others => '0'),
     sqPointer => (others => '0'),
     lqPointer => (others => '0'),
-    bqPointerSeq => (others => '0'),
-    commitCtr => (others => '0')
+    bqPointerSeq => (others => '0')
 );
 
 constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
         dbInfo => DEFAULT_DEBUG_INFO,
-	controlInfo => DEFAULT_CONTROL_INFO,
-	ip => (others => '0'),
-	bits => (others=>'0'),
-	
+	controlInfo => DEFAULT_CONTROL_INFO,	
 	specificOperation => DEFAULT_SPECIFIC_OP,
 	tags => DEFAULT_INSTRUCTION_TAGS,
 	classInfo => DEFAULT_CLASS_INFO,
 	constantArgs => DEFAULT_CONSTANT_ARGS,
 	virtualArgSpec => DEFAULT_ARG_SPEC,
-	physicalArgSpec => DEFAULT_ARG_SPEC,
-	result => (others => '0'),
-	target => (others => '0')
+	physicalArgSpec => DEFAULT_ARG_SPEC
 );
 
 constant DEFAULT_INS_STATE: InstructionState := DEFAULT_INSTRUCTION_STATE;
@@ -396,16 +378,20 @@ type SchedulerState is record
     branchIns: std_logic;
 
     renameIndex: InsTag;
-    bqPointer: SmallNumber;
-    sqPointer: SmallNumber;
-    lqPointer: SmallNumber;
-    bqPointerSeq: SmallNumber;
+    --bqPointer: SmallNumber;
+    --sqPointer: SmallNumber;
+    --lqPointer: SmallNumber;
+    --bqPointerSeq: SmallNumber;
+
+        tags: InstructionTags;
 
     operation: SpecificOp;
     argSpec: InstructionArgSpec;
 
     immediate: std_logic;
     immValue: Hword;
+
+        poisoned: std_logic;
 
     zero: std_logic_vector(0 to 2);
     readNew: std_logic_vector(0 to 2);
@@ -420,16 +406,20 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       branchIns => '0',
 
       renameIndex => (others => '0'),
-      bqPointer => (others => '0'),
-      sqPointer => (others => '0'),
-      lqPointer => (others => '0'),
-      bqPointerSeq => (others => '0'),
+    --  bqPointer => (others => '0'),
+    --  sqPointer => (others => '0'),
+    --  lqPointer => (others => '0'),
+    --  bqPointerSeq => (others => '0'),
+
+            tags => DEFAULT_INSTRUCTION_TAGS,
 
       operation => DEFAULT_SPECIFIC_OP,
       argSpec => DEFAULT_ARG_SPEC,
 
       immediate => '0',
       immValue => (others => '0'),
+
+        poisoned => '0',
 
       zero => (others => '0'),
       readNew => (others => '0'),
@@ -452,6 +442,31 @@ subtype PipeStage is InstructionSlotArray(0 to PIPE_WIDTH-1);
 type PipeStageArray is array(natural range <>) of PipeStage;
 
 constant DEFAULT_PIPE_STAGE: PipeStage := (others => DEFAULT_INS_SLOT); 
+
+
+type EventState is record
+    lateEvent: std_logic;
+    execEvent: std_logic;
+    preExecTags: InstructionTags;
+        execCausing: ExecResult;
+        lateCausing: ExecResult;
+        --frontCausing: ControlPacket;
+end record;
+
+constant DEFAULT_EVENT_STATE: EventState := (
+    '0',
+    '0',
+    DEFAULT_INSTRUCTION_TAGS,
+    DEFAULT_EXEC_RESULT,
+    DEFAULT_EXEC_RESULT
+    );
+
+type DbCoreState is record
+    dummy: DummyType;
+    dbSignal: std_logic;
+end record;
+
+constant DEFAULT_DB_STATE: DbCoreState := (dummy => DUMMY_VALUE, dbSignal => '0');
 
 end InstructionState;
 

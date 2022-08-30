@@ -41,12 +41,14 @@ entity StoreQueue is
 		storeValueResult: in ExecResult;
 
 		compareAddressInput: in ExecResult;
-		compareAddressInputOp: in SpecificOp;
+		compareAddressCtrl: in ControlPacket;
 		
         compareIndexInput: in SmallNumber;
         preCompareOp: in SpecificOp;
+        compareAddressEarlyInput: in ExecResult;
 
         selectedDataOutput: out ControlPacket;
+        selectedDataResult: out ExecResult;
 
 		committing: in std_logic;
         commitMask: in std_logic_vector(0 to PIPE_WIDTH-1);
@@ -60,7 +62,9 @@ entity StoreQueue is
 
 		committedEmpty: out std_logic;
 		committedSending: out std_logic;
-		committedDataOut: out ControlPacket
+		committedDataOut: out ControlPacket;
+		
+		dbState: in DbCoreState
 	);
 end StoreQueue;
 
@@ -72,7 +76,7 @@ architecture Behavioral of StoreQueue is
 
 	signal addressMatchMask, newerLQ, newerRegLQ, newerNextLQ, olderNextSQ, olderRegSQ, olderSQ: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
-	signal adrPtr, pSelect, pStart, pStartNext, pDrain, pDrainNext, pDrainPrev,
+	signal adrPtr, pSelect, pSelectPrev, pStart, pStartNext, pDrain, pDrainNext, pDrainPrev,
            pTagged, pTaggedNext, pFlush, pRenamed, pRenamedNext, pStartEffective, pStartEffectiveNext,
 	       nFull, nFullNext, nIn, nInRe, nOut, nCommitted, nCommittedEffective, recoveryCounter: SmallNumber := (others => '0');
 
@@ -81,9 +85,9 @@ architecture Behavioral of StoreQueue is
     signal queueContent, queueContentShifting, queueContentShiftingNext: QueueEntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_QUEUE_ENTRY);
 
     signal isFull, isAlmostFull, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDrainingPrev, isSelected: std_logic := '0';
-    signal memEmpty: std_logic := '1'; -- CAREFUL! Starts with '1'
+    signal memEmpty: std_logic := '1'; -- CAREFUL! Starts as '1'
 
-    signal drainOutput, selectedOutput: InstructionState := DEFAULT_INS_STATE;
+    signal drainOutput_N, selectedOutput_N: ControlPacket := DEFAULT_CONTROL_PACKET;
     signal drainValue, selectedValue, drainAddress, selectedAddress, selectionAddress: Mword := (others => '0');
 
     signal selectedEntry, drainEntry: QueueEntry := DEFAULT_QUEUE_ENTRY;
@@ -91,6 +95,8 @@ architecture Behavioral of StoreQueue is
     signal updateResult: ExecResult := DEFAULT_EXEC_RESULT;
 
     signal selectedOutputSig, committedOutputSig: ControlPacket := DEFAULT_CONTROL_PACKET;
+
+	alias compareAddressInputOp is compareAddressCtrl.op;
 
     signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
 
@@ -156,7 +162,7 @@ begin
                 end if;
           
               end if;
-              
+
               if rising_edge(clk) then
                 -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
                 if not IS_LOAD_QUEUE then
@@ -168,7 +174,9 @@ begin
                 selectedEntry <= queueContent(p2i(pSelect, QUEUE_SIZE));
                 selectedValue <= storeValues(p2i(pSelect, QUEUE_SIZE));
                 selectedAddress <= addresses(p2i(pSelect, QUEUE_SIZE));
-                                
+                
+                pSelectPrev <= pSelect;
+
                 -- D. outputs
                 drainEntry <= queueContent(p2i(pDrain, QUEUE_SIZE));
                 drainValue <= storeValues(p2i(pDrain, QUEUE_SIZE));
@@ -177,10 +185,10 @@ begin
         end process;
         
         -- E. out
-        selectedOutput <= getDrainOutput(selectedEntry, selectedAddress, selectedValue);    
+        selectedOutput_N <= getDrainOutput_N(selectedEntry, selectedAddress, selectedValue);    
         
         -- D. out
-        drainOutput <= getDrainOutput(drainEntry, drainAddress, drainValue);   
+        drainOutput_N <= getDrainOutput_N(drainEntry, drainAddress, drainValue);   
     end block;
 
     pStartEffectiveNext <= addTruncZ(pStartEffective, nCommittedEffective, QUEUE_PTR_SIZE+1) when committing = '1'
@@ -289,24 +297,31 @@ begin
     -- E. output
     selectedDataOutput <= selectedOutputSig;
 
+    selectedDataResult.full <= '0';
+    selectedDataResult.failed <= '0';
+    selectedDataResult.dest <= pSelectPrev;
+    selectedDataResult.tag <= (others => '0');
+    selectedDataResult.value <= (others => '0');
+
     WHEN_LQ: if IS_LOAD_QUEUE generate
         selectedOutputSig.controlInfo.full <= isSelected;           
     end generate;
 
     WHEN_SQ: if not IS_LOAD_QUEUE generate
         selectedOutputSig.controlInfo.full <= isSelected;
-        selectedOutputSig.controlInfo.newEvent <= selectedOutput.controlInfo.newEvent;
-        selectedOutputSig.controlInfo.firstBr <= selectedOutput.controlInfo.firstBr;
-        selectedOutputSig.controlInfo.sqMiss <= selectedOutput.controlInfo.sqMiss;
-        selectedOutputSig.op <= selectedOutput.specificOperation;
-        selectedOutputSig.target <= selectedOutput.target;
-        selectedOutputSig.nip <= selectedOutput.result;
+        selectedOutputSig.controlInfo.newEvent <= selectedOutput_N.controlInfo.newEvent;
+        selectedOutputSig.controlInfo.firstBr <= selectedOutput_N.controlInfo.firstBr;
+        selectedOutputSig.controlInfo.sqMiss <= selectedOutput_N.controlInfo.sqMiss;
         
-        committedOutputSig.controlInfo.full <= isDrainingPrev and allowDrain;
+        selectedOutputSig.op <= selectedOutput_N.op;
+        selectedOutputSig.target <= selectedOutput_N.target;
+        selectedOutputSig.nip <= selectedOutput_N.nip;
 
-        committedOutputSig.op <= drainOutput.specificOperation;
-        committedOutputSig.target <= drainOutput.target;
-        committedOutputSig.nip <= drainOutput.result;
+        committedOutputSig.controlInfo.full <= isDrainingPrev and allowDrain;
+        
+        committedOutputSig.op <= drainOutput_N.op;
+        committedOutputSig.target <= drainOutput_N.target;
+        committedOutputSig.nip <= drainOutput_N.nip;
     end generate;
 
 	-- D. output (ctrl)
@@ -314,4 +329,84 @@ begin
 	committedEmpty <= bool2std(pStart = pDrainPrev);
 	committedSending <= isDrainingPrev;
 
+
+    -- pragma synthesis off
+    
+    DEBUG_HANDLING: if DB_ENABLE generate
+        process (clk)
+            use std.textio.all;
+            use work.Assembler.all;
+    
+            function getNamePrefix return string is
+            begin
+                if IS_LOAD_QUEUE then
+                    return "l";
+                else
+                    return "s";
+                end if;
+            end function;
+    
+            constant NAME_PREFIX: string(1 to 1) := getNamePrefix;
+    
+            function getDynamicContentString(elem: QueueEntry; adr: Mword; value: Mword) return string is
+                variable res: line;
+            begin
+                if true then --elem.full = '1' then
+                    write(res, string'(": "));
+                    write(res, std_logic'image(elem.completedA));
+                    write(res, std_logic'image(elem.completedV));
+                    write(res, string'(" @"));
+                    
+                    if elem.completedA = '1' then
+                        write(res, natural'image(slv2u(adr)));
+                    else
+                        write(res, string'("????????"));
+                    end if;
+                    write(res, string'(": "));
+                    
+                    if elem.completedV = '1' then
+                        write(res, natural'image(slv2u(value)));
+                    else
+                        write(res, string'("????????"));
+                    end if;                
+                    return res.all;
+                else
+                    return "-------------------------------------";
+                end if;
+            end function;
+        
+            procedure printContent is
+               file outFile: text open write_mode is NAME_PREFIX & "q_content.txt";
+               variable preRow, currentLine: line := null;
+            begin
+                for i in 0 to ROB_SIZE-1 loop
+                    if p2i(pStart, QUEUE_SIZE) = i then
+                        preRow := "start ";
+                    elsif p2i(pTagged, QUEUE_SIZE) = i then
+                        preRow := "end   ";
+                    else
+                        preRow := "      ";
+                    end if;
+                    
+                    currentLine := null;
+                    write(currentLine, preRow.all & natural'image(i) & "  ");
+                    write(currentLine, getDynamicContentString(queueContent(i), addresses(i), storeValues(i)) & ",   ");
+    
+                    writeline(outFile, currentLine);
+                end loop;
+            end procedure;
+            
+        begin
+            if rising_edge(clk) then
+                if DB_LOG_EVENTS then
+                    if dbState.dbSignal = '1' then
+                        report "LSQ reporting ";
+                        printContent;
+                    end if;         
+                end if;
+            end if;
+        end process;
+    end generate;
+    -- pragma synthesis on
+    
 end Behavioral;

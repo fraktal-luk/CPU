@@ -43,7 +43,9 @@ entity UnitFront is
 		
 		execEventSignal: in std_logic;
 		lateEventSignal: in std_logic;
-		lateEventSetPC: in std_logic		
+		lateEventSetPC: in std_logic;
+		
+		  dbState: in DbCoreState		
 	);
 end UnitFront;
 
@@ -57,20 +59,18 @@ architecture Behavioral of UnitFront is
 	
 	signal sendingOutFetch0, sendingOutFetch1, sendingOutBuffer, bufferAccepting, earlyBranchSending, sendingToBranchTransfer,
            pcEn, frontBranchEvent, killAll, killAllOrFront, sendingToEarlyBranch, sendingToBQ, sendingToBuffer, fetchStall, full0, full1, fullBr, fullBt,
-	                                                                                                      ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0';	
-
+	                                                                                                      ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0';
     signal cpFetch0, cpFetch1, earlyBranchIn, earlyBranchOut, stageDataInFetch0, stageDataOutFetch0, stageDataOutFetch1: ControlPacket := DEFAULT_CONTROL_PACKET;
     signal bqDataSig, bqDataSigPre: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 
 	signal predictedAddress, frontTarget: Mword := (others => '0');
-	signal fetchCounter, fetchCounterNext, decodeCounter, decodeCounterNext: Word := (others => '0');
+	signal decodeCounter, decodeCounterNext: Word := (others => '0');
 
 	signal dataToIbuffer, ibufDataOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 begin
 	killAll <= execEventSignal or lateEventSignal;
     killAllOrFront <= killAll or frontBranchEvent;
 
-    fetchCounterNext <= addInt(fetchCounter, PIPE_WIDTH) when pcEn = '1' else fetchCounter;
     decodeCounterNext <= addInt(decodeCounter, countOnes(extractFullMask(dataToIbuffer))) when sendingToBuffer = '1' else decodeCounter;
 
 	fetchedLine0 <= iin;
@@ -80,7 +80,6 @@ begin
     process(clk)
     begin
         if rising_edge(clk) then
-            fetchCounter <= fetchCounterNext;
             decodeCounter <= decodeCounterNext;
             
             -- fetchedLine0: assigned async
@@ -113,8 +112,6 @@ begin
     stageDataInFetch0.target <= pcDataIn.target;
         stageDataInFetch0.dbInfo <= pcDataIn.dbInfo;
 
-    stageDataInFetch0.tags.fetchCtr <= fetchCounter when not CLEAR_DEBUG_INFO else (others => '0');  
-    
     sendingOutFetch0 <= full0 and not killAllOrFront;
     sendingOutFetch1 <= full1 and not killAllOrFront;
     earlyBranchSending <= fullBr and not killAll;
@@ -140,20 +137,29 @@ begin
 	sendingToBuffer <= sendingOutFetch1 and not fetchStall;
 	
 	LEGACY: block
-		signal earlyBranchIn_OLD: InstructionState := DEFAULT_INSTRUCTION_STATE;
-        signal dataToIbuffer_OLD: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-        signal earlyBranchMultiDataInA: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);	   
+	    signal partMask, decodedFullMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        signal dataToIbuffer_OLD: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+        signal earlyBranchMultiDataInA_IB, decodedGroup: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+        signal toBQ, data_C, data_CA: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);	   
 	begin
-        -- src for Ibuf and BT
-        earlyBranchMultiDataInA <= getFrontEventMulti(predictedAddress, stageDataOutFetch1.ip, stageDataOutFetch1.target, stageDataOutFetch1, fetchedLine1);
-    
-        earlyBranchIn_OLD <= getEarlyEvent(earlyBranchMultiDataInA, stageDataOutFetch1.target, predictedAddress, fetchStall);
-            earlyBranchIn.controlInfo <= earlyBranchIn_OLD.controlInfo;
-            earlyBranchIn.target <= earlyBranchIn_OLD.target;
+	    partMask <= partialMask(predictedAddress);
+        decodedGroup <= decodeGroup(stageDataOutFetch1, fetchedLine1, stageDataOutFetch1.ip, partMask);
+	
+        data_C <= getFrontEventMulti(predictedAddress, stageDataOutFetch1.ip, stageDataOutFetch1.target, stageDataOutFetch1, fetchedLine1, partMask, decodedGroup);
 
-        dataToIbuffer_OLD <= adjustStage(earlyBranchMultiDataInA);
-            dataToIbuffer <= assignSeqNum(getEntryArray(dataToIbuffer_OLD), decodeCounter);
-            bqDataSigPre <= assignSeqNum(prepareForBQ(stageDataOutFetch1.ip, dataToIbuffer_OLD), decodeCounter);
+        decodedFullMask <= extractFullMask(data_C);
+
+        earlyBranchIn <= getEarlyEvent(data_C, stageDataOutFetch1.target, predictedAddress, fetchStall);
+
+        earlyBranchMultiDataInA_IB <= setFullMask(decodedGroup, decodedFullMask);
+        
+        dataToIbuffer_OLD <= adjustStage(earlyBranchMultiDataInA_IB);
+        dataToIbuffer <= assignSeqNum(getEntryArray(dataToIbuffer_OLD), decodeCounter);
+
+        data_CA <= adjustStage(data_C);
+
+        toBQ <= prepareForBQ(stageDataOutFetch1.ip, data_CA);
+        bqDataSigPre <= assignSeqNum(toBQ, decodeCounter);
     end block;
 
 	sendingToBranchTransfer <= sendingOutFetch1 and not fetchStall;

@@ -15,7 +15,7 @@ use work.InstructionState.all;
 
 package DecodingDev is
 
-function decodeFromWordNew(w: word) return InstructionState;
+procedure decodeFromWord(w: in Word; classInfo: out InstructionClassInfo; op: out SpecificOp; constantArgs: out InstructionConstantArgs; argSpec: out InstructionArgSpec);
 
 end package;
 
@@ -195,7 +195,7 @@ begin
 end function;
 
 
-function decodeFromWordNew(w: word) return InstructionState is
+procedure decodeFromWord(w: in Word; classInfo: out InstructionClassInfo; op: out SpecificOp; constantArgs: out InstructionConstantArgs; argSpec: out InstructionArgSpec) is
     variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
     variable specificOperation: SpecificOp := DEFAULT_SPECIFIC_OP;
     
@@ -311,8 +311,10 @@ begin
         res.constantArgs.imm(31 downto 10) := (others => w(9));
     end if;
     
-    return res;
-end function;
-
+    classInfo := res.classInfo;
+    op := res.specificOperation;
+    constantArgs := res.constantArgs;
+    argSpec := res.virtualArgSpec;
+end procedure;
 
 end package body;

@@ -22,14 +22,6 @@ type PhysicalSubpipe is (ALU, Mem, FP, StoreDataInt, StoreDataFloat);
 function makeExecResult(isl: SchedulerState) return ExecResult;
 
 
-type EventState is record
-    lateEvent: std_logic;
-    execEvent: std_logic;
-    preExecTags: InstructionTags;
-end record;
-
-constant DEFAULT_EVENT_STATE: EventState := ('0', '0', DEFAULT_INSTRUCTION_TAGS);
-
 type IssueQueueSignals is record
     sending: std_logic;
     cancelled: std_logic;
@@ -280,6 +272,19 @@ function convertROBData(isa: InstructionSlotArray) return ControlPacketArray;
 function unfoldOp(op: SpecificOp) return SpecificOp;
 
 function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray;
+
+function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult;
+function updateMemDest(er: ExecResult; used: std_logic) return ExecResult;
+
+                function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState;
+                
+                function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult;
+                                
+                function TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f: ExecResult;
+                                           ctrlE1, ctrlE1u: ControlPacket;
+                                           resOutSQ: ExecResult)
+                return ControlPacket;
+
 
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
                                 s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
@@ -589,9 +594,11 @@ end function;
 
 function getStoreSysMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+	variable sm1: std_logic_vector(0 to PIPE_WIDTH-1) := getStoreMask1(insVec);
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 	  insVec(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
+		if 	  sm1(i) = '1' --insVec(i).full = '1'
+		       and insVec(i).ins.specificOperation.subpipe = Mem 
 		      and (insVec(i).ins.specificOperation.memory = opStoreSys)		
 		then
 			res(i) := '1';
@@ -603,9 +610,11 @@ end function;
 
 function getLoadSysMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+	variable lm1: std_logic_vector(0 to PIPE_WIDTH-1) := getLoadMask1(insVec);
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if 	  insVec(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
+		if 	  lm1(i) = '1' -- insVec(i).full = '1' 
+		      and insVec(i).ins.specificOperation.subpipe = Mem 
 		      and (insVec(i).ins.specificOperation.memory = opLoadSys)		
 		then
 			res(i) := '1';
@@ -1099,7 +1108,7 @@ begin
         res(i).controlInfo.full := isa(i).full;
         res(i).classInfo := isa(i).ins.classInfo;
         
-        res(i).target := isa(i).ins.target;
+        --res(i).target := isa(i).ins.target_D;
     end loop;
     return res;
 end function;
@@ -1128,8 +1137,8 @@ begin
     
     res.ins.controlInfo.firstBr := elem.firstBr;
     res.ins.classInfo.branchIns := elem.branchIns;
-    res.ins.controlInfo.frontBranch := elem.frontBranch;
-    res.ins.controlInfo.confirmedBranch := elem.confirmedBranch;
+    --res.ins.controlInfo.frontBranch := elem.frontBranch;
+    --res.ins.controlInfo.confirmedBranch := elem.confirmedBranch;
     res.ins.controlInfo.specialAction := elem.specialAction;
 
     res.ins.classInfo.fpRename := elem.fpRename;           
@@ -1152,6 +1161,68 @@ begin
     end loop;
     return res;
 end function;
+
+function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult is
+    variable res: ExecResult := er;
+begin
+    res.full := er.full and not fail;
+    res.failed := er.full and fail;
+    res.value := memResult;
+    return res;
+end function;
+
+function updateMemDest(er: ExecResult; used: std_logic) return ExecResult is
+    variable res: ExecResult := er;
+begin
+    res.full := er.full and used;
+    if used /= '1' then
+        res.dest := (others => '0');
+    end if;
+    return res;
+end function;
+
+                function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState is
+                    variable res: SchedulerState := DEFAULT_SCHED_STATE;
+                begin
+                    res.full := mqRegReadSending;
+                    res.operation := mqReexecCtrlRR.op;
+                    res.renameIndex := mqReexecCtrlRR.tags.renameIndex;
+                    res.tags := mqReexecCtrlRR.tags;
+                    
+                    -- adr
+                    res.args(1) := mqReexecCtrlRR.target;
+                    
+                    res.argSpec.dest := mqReexecResRR.dest;
+                    res.argSpec.intDestSel := not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
+                    res.argSpec.floatDestSel := mqReexecCtrlRR.classInfo.useFP;
+
+                    return res;
+                end function;
+
+                function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult is
+                    variable res: ExecResult := er;
+                begin
+                    res.full := res.full and memoryMissed;
+                    res.value := memResult;
+                    return res;
+                end function;
+                                
+                function TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f: ExecResult;
+                                           ctrlE1, ctrlE1u: ControlPacket;
+                                           resOutSQ: ExecResult)
+                return ControlPacket is
+                    variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+                begin
+                    res.ip := subpipeM0_E1.value;
+                    res.op := ctrlE1.op;
+                    res.tags := ctrlE1u.tags;
+                    res.target(SMALL_NUMBER_SIZE-1 downto 0) := resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
+                    res.classInfo.useFP := subpipeM0_E1f.full;
+                    res.controlInfo.tlbMiss := ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
+                    res.controlInfo.dataMiss := ctrlE1u.controlInfo.dataMiss;
+                    res.controlInfo.sqMiss := ctrlE1u.controlInfo.sqMiss;                    
+                    return res;
+                end function;
 
 
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
