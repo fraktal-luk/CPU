@@ -331,77 +331,82 @@ begin
 
 
     -- pragma synthesis off
-    DEBUG_HANDLING: process (clk)
-        use std.textio.all;
-        use work.Assembler.all;
-
-        function getNamePrefix return string is
-        begin
-            if IS_LOAD_QUEUE then
-                return "l";
-            else
-                return "s";
-            end if;
-        end function;
-
-        constant NAME_PREFIX: string(1 to 1) := getNamePrefix;
-
-        function getDynamicContentString(elem: QueueEntry; adr: Mword; value: Mword) return string is
-            variable res: line;
-        begin
-            if true then --elem.full = '1' then
-                write(res, string'(": "));
-                write(res, std_logic'image(elem.completedA));
-                write(res, std_logic'image(elem.completedV));
-                write(res, string'(" @"));
-                
-                if elem.completedA = '1' then
-                    write(res, natural'image(slv2u(adr)));
-                else
-                    write(res, string'("????????"));
-                end if;
-                write(res, string'(": "));
-                
-                if elem.completedV = '1' then
-                    write(res, natural'image(slv2u(value)));
-                else
-                    write(res, string'("????????"));
-                end if;                
-                return res.all;
-            else
-                return "-------------------------------------";
-            end if;
-        end function;
     
-        procedure printContent is
-           file outFile: text open write_mode is NAME_PREFIX & "q_content.txt";
-           variable preRow, currentLine: line := null;
-        begin
-            for i in 0 to ROB_SIZE-1 loop
-                if p2i(pStart, QUEUE_SIZE) = i then
-                    preRow := "start ";
-                elsif p2i(pTagged, QUEUE_SIZE) = i then
-                    preRow := "end   ";
+    DEBUG_HANDLING: if DB_ENABLE generate
+        process (clk)
+            use std.textio.all;
+            use work.Assembler.all;
+    
+            function getNamePrefix return string is
+            begin
+                if IS_LOAD_QUEUE then
+                    return "l";
                 else
-                    preRow := "      ";
+                    return "s";
                 end if;
-                
-                currentLine := null;
-                write(currentLine, preRow.all & natural'image(i) & "  ");
-                write(currentLine, getDynamicContentString(queueContent(i), addresses(i), storeValues(i)) & ",   ");
-
-                writeline(outFile, currentLine);
-            end loop;
-        end procedure;
+            end function;
+    
+            constant NAME_PREFIX: string(1 to 1) := getNamePrefix;
+    
+            function getDynamicContentString(elem: QueueEntry; adr: Mword; value: Mword) return string is
+                variable res: line;
+            begin
+                if true then --elem.full = '1' then
+                    write(res, string'(": "));
+                    write(res, std_logic'image(elem.completedA));
+                    write(res, std_logic'image(elem.completedV));
+                    write(res, string'(" @"));
+                    
+                    if elem.completedA = '1' then
+                        write(res, natural'image(slv2u(adr)));
+                    else
+                        write(res, string'("????????"));
+                    end if;
+                    write(res, string'(": "));
+                    
+                    if elem.completedV = '1' then
+                        write(res, natural'image(slv2u(value)));
+                    else
+                        write(res, string'("????????"));
+                    end if;                
+                    return res.all;
+                else
+                    return "-------------------------------------";
+                end if;
+            end function;
         
-    begin
-        if rising_edge(clk) then
-            if dbState.dbSignal = '1' then
-                report "LSQ reporting ";
-                printContent;
+            procedure printContent is
+               file outFile: text open write_mode is NAME_PREFIX & "q_content.txt";
+               variable preRow, currentLine: line := null;
+            begin
+                for i in 0 to ROB_SIZE-1 loop
+                    if p2i(pStart, QUEUE_SIZE) = i then
+                        preRow := "start ";
+                    elsif p2i(pTagged, QUEUE_SIZE) = i then
+                        preRow := "end   ";
+                    else
+                        preRow := "      ";
+                    end if;
+                    
+                    currentLine := null;
+                    write(currentLine, preRow.all & natural'image(i) & "  ");
+                    write(currentLine, getDynamicContentString(queueContent(i), addresses(i), storeValues(i)) & ",   ");
+    
+                    writeline(outFile, currentLine);
+                end loop;
+            end procedure;
+            
+        begin
+            if rising_edge(clk) then
+                if DB_LOG_EVENTS then
+                    if dbState.dbSignal = '1' then
+                        report "LSQ reporting ";
+                        printContent;
+                    end if;         
+                end if;
             end if;
-        end if;
-    end process;
+        end process;
+    end generate;
     -- pragma synthesis on
     
 end Behavioral;

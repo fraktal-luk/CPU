@@ -109,7 +109,6 @@ architecture Behavioral of Core is
            resOutSQ,
            dataFromSB,
            mqReexecRegRead,
-           --missedMemResult,
            missedMemResultE1, missedMemResultE2
            : ExecResult := DEFAULT_EXEC_RESULT;
 
@@ -117,8 +116,7 @@ architecture Behavioral of Core is
         signal mqReexecResIssue, mqReexecResRR: ExecResult := DEFAULT_EXEC_RESULT;
 
     signal pcData, dataToBranch, bqSelected, branchResultE0, branchResultE1,
-               memCtrlRR, memCtrlE0, --missedMemCtrl,
-                                        missedMemCtrlE1, missedMemCtrlE2, ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
+               memCtrlRR, memCtrlE0, missedMemCtrlE1, missedMemCtrlE2, ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal bpData: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
     signal robOut: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
@@ -127,7 +125,7 @@ architecture Behavioral of Core is
             
     signal dbState: DbCoreState := DEFAULT_DB_STATE;
     
-        constant CONNECT_MQ: boolean := true;--false;
+    --    constant CONNECT_MQ: boolean := true;--false;
 begin
 
     intSignal <= int0 or int1;
@@ -599,63 +597,21 @@ begin
             end block;
 
 
-            slotRegReadM0 <= slotRegReadM0mq when (mqRegReadSending and bool2std(CONNECT_MQ)) = '1' else slotRegReadM0iq;
+            slotRegReadM0 <= slotRegReadM0mq when mqRegReadSending = '1' else slotRegReadM0iq;
 
             preIndexSQ <= slotRegReadM0.tags.sqPointer;
             preIndexLQ <= slotRegReadM0.tags.lqPointer;  
             preAddressOp <= slotRegReadM0.operation;
 
-                memAddressInputEarlyMQ <= resultToM0_E0; -- for allocation of MQ slot
+            memAddressInputEarlyMQ <= resultToM0_E0; -- for allocation of MQ slot
 
             subpipeM0_RR_u <= calcEffectiveAddress_2(slotRegReadM0.full and not outSigsM0.killSel2 and not lateEventSignal,
-                                                     slotRegReadM0, mqRegReadSending and bool2std(CONNECT_MQ), DEFAULT_EXEC_RESULT);
+                                                     slotRegReadM0, mqRegReadSending, DEFAULT_EXEC_RESULT);
 
             controlM0_RR.op <= slotRegReadM0.operation;
             controlM0_RR.tags <= slotRegReadM0.tags;
 
-            TMP_MQ_RR_ASSIGN: block
-                function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState is
-                    variable res: SchedulerState := DEFAULT_SCHED_STATE;
-                begin
-                    res.full := mqRegReadSending and bool2std(CONNECT_MQ);
-                    res.operation := mqReexecCtrlRR.op;
-                    res.renameIndex := mqReexecCtrlRR.tags.renameIndex;
-                    res.tags := mqReexecCtrlRR.tags;
-                    
-                    -- adr
-                    res.args(1) := mqReexecCtrlRR.target;
-                    
-                    res.argSpec.dest := mqReexecResRR.dest;
-                    res.argSpec.intDestSel := not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
-                    res.argSpec.floatDestSel := mqReexecCtrlRR.classInfo.useFP;
-
-                    return res;
-                end function;
-                
-                --signal xy: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
-            begin
-                    --xy
-                    slotRegReadM0mq <= TMP_slotRegReadM0mq(mqReexecCtrlRR, mqReexecResRR, mqRegReadSending);
-            
-                     --   ch0 <= bool2std(xy = slotRegReadM0mq);
-            
---                    --  mqReexecCtrlRR: ControlPacket
---                slotRegReadM0mq.full <= mqRegReadSending and bool2std(CONNECT_MQ);
---                slotRegReadM0mq.operation <= mqReexecCtrlRR.op;
---                slotRegReadM0mq.renameIndex <= mqReexecCtrlRR.tags.renameIndex;
---                slotRegReadM0mq.tags <= mqReexecCtrlRR.tags;
-                
---                -- adr
---                slotRegReadM0mq.args(1) <= mqReexecCtrlRR.target;
-                
---                slotRegReadM0mq.argSpec.dest <= mqReexecResRR.dest;
---                slotRegReadM0mq.argSpec.intDestSel <= not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
---                slotRegReadM0mq.argSpec.floatDestSel <= mqReexecCtrlRR.classInfo.useFP;
-                
-                               
-            end block;
-
-
+            slotRegReadM0mq <= TMP_slotRegReadM0mq(mqReexecCtrlRR, mqReexecResRR, mqRegReadSending);
 
             -- info that it is an MQ op
 
@@ -710,46 +666,15 @@ begin
 
             memoryMissed <= ctrlE1u.controlInfo.dataMiss or ctrlE1u.controlInfo.sqMiss;
 
-            subpipeM0_E1_u <= setMemFail(subpipeM0_E1, (memoryMissed and bool2std(CONNECT_MQ)), memResult);     
-            subpipeM0_E1i_u <= setMemFail(subpipeM0_E1i, (memoryMissed and bool2std(CONNECT_MQ)), memResult);
-            subpipeM0_E1f_u <= setMemFail(subpipeM0_E1f, (memoryMissed and bool2std(CONNECT_MQ)), memResult);
+            subpipeM0_E1_u <= setMemFail(subpipeM0_E1, memoryMissed, memResult);     
+            subpipeM0_E1i_u <= setMemFail(subpipeM0_E1i, memoryMissed, memResult);
+            subpipeM0_E1f_u <= setMemFail(subpipeM0_E1f, memoryMissed, memResult);
 
 
-            TMP_MEM_ASSIGN: block
-                function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult is
-                    variable res: ExecResult := er;
-                begin
-                    res.full := res.full and memoryMissed;
-                    res.value := memResult;
-                    return res;
-                end function;
-                                
-                function TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f: ExecResult;
-                                           ctrlE1, ctrlE1u: ControlPacket;
-                                           resOutSQ: ExecResult)
-                return ControlPacket is
-                    variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-                begin
-                    res.ip := subpipeM0_E1.value;
-                    res.op := ctrlE1.op;
-                    res.tags := ctrlE1u.tags;
-                    res.target(SMALL_NUMBER_SIZE-1 downto 0) := resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
-                    res.classInfo.useFP := subpipeM0_E1f.full;
-                    res.controlInfo.tlbMiss := ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
-                    res.controlInfo.dataMiss := ctrlE1u.controlInfo.dataMiss;
-                    res.controlInfo.sqMiss := ctrlE1u.controlInfo.sqMiss;                    
-                    return res;
-                end function;
+            missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1, memoryMissed, memResult);                
+            missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f, ctrlE1, ctrlE1u, resOutSQ);
 
-            begin
-                missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1, memoryMissed, memResult);                
-                missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f, ctrlE1, ctrlE1u, resOutSQ);
-            end block;
-
-                --missedMemResultE1 <= missedMemResult;
-                --missedMemCtrlE1 <= missedMemCtrl;
-
-                memCtrlE0 <= ctrlE0;
+            memCtrlE0 <= ctrlE0;
 
             -- TEMP mem interface    
             dread <= subpipeM0_E0.full;
@@ -1434,61 +1359,58 @@ begin
 	end block;
 
 	-- pragma synthesis off
-	DEBUG_HANDLING: block
+	DEBUG_HANDLING: if DB_ENABLE generate
 	    use std.textio.all;
 	
         signal cycleCount, watchdogCount: natural := 0;
         signal stallDetected, stallDetectedPrev, stallAction: std_logic := '0';
         
         file eventLog: text open write_mode is "event_log.txt";
+        
+        procedure logEvent(file eventLog: text; lateEventSignal, execEventSignalE0, frontEventSignal, stallDetected: std_logic; cycleCount: natural) is
+            variable currentLine: line := null;
+        begin
+            -- Event tracking
+            if stallDetected = '1' then
+                write(currentLine, natural'image(cycleCount));
+                write(currentLine, string'(": Stall!"));                
+            elsif lateEventSignal = '1' then
+                write(currentLine, natural'image(cycleCount));
+                write(currentLine, string'(": Late"));
+            elsif execEventSignalE0 = '1' then
+                write(currentLine, natural'image(cycleCount));
+                write(currentLine, string'(": Exec"));
+            elsif frontEventSignal = '1' then
+                write(currentLine, natural'image(cycleCount));
+                write(currentLine, string'(": Front"));
+            end if;
+            writeline(eventLog, currentLine);     
+        end procedure;
     begin
     
         MONITOR: process (clk)
-            variable currentLine: line := null;
         begin
             if rising_edge(clk) then
                 cycleCount <= cycleCount + 1;
                 
                 if std2bool(robSending or renamedSending) then
-                    --watchdogCount <= 0;
+                    watchdogCount <= 0;
                 else
                     watchdogCount <= watchdogCount + 1;
                 end if;
                 
-                stallDetectedPrev <= stallDetected;
-                if watchdogCount > 50 + 157 then                
-                    if stallDetected /= '1'then
-                        report "" severity error;
-                        report "" severity error;
-                        report "Stall!" severity error;                    
-                    end if;
-                    
-                    stallDetected <= '1';
-                end if;
+                stallDetected <= bool2std(watchdogCount = 50);                
 
-                
-                currentLine := null;
-                -- Event tracking
-                if lateEventSignal = '1' then
-                    write(currentLine, natural'image(cycleCount));
-                    write(currentLine, string'(": late"));
-                    writeline(eventLog, currentLine);
-                elsif execEventSignalE0 = '1' then
-                    write(currentLine, natural'image(cycleCount));
-                    write(currentLine, string'(": exec"));
-                    writeline(eventLog, currentLine);              
-                elsif frontEventSignal = '1' then
-                    write(currentLine, natural'image(cycleCount));
-                    write(currentLine, string'(": front"));
-                    writeline(eventLog, currentLine);     
-                end if;
-
+                if DB_LOG_EVENTS then
+                    logEvent(eventLog, lateEventSignal, execEventSignalE0, frontEventSignal, stallDetected,
+                                cycleCount);
+                 end if;
             end if;
         end process;
         
-        dbState.dbSignal <= stallDetected and not stallDetectedPrev;
+        dbState.dbSignal <= stallDetected;
         
-	end block;
+	end generate;
 	-- pragma synthesis on
 
 end Behavioral;

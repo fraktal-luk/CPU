@@ -276,6 +276,15 @@ function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray;
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult;
 function updateMemDest(er: ExecResult; used: std_logic) return ExecResult;
 
+                function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState;
+                
+                function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult;
+                                
+                function TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f: ExecResult;
+                                           ctrlE1, ctrlE1u: ControlPacket;
+                                           resOutSQ: ExecResult)
+                return ControlPacket;
+
 
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
                                 s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
@@ -1171,6 +1180,50 @@ begin
     end if;
     return res;
 end function;
+
+                function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState is
+                    variable res: SchedulerState := DEFAULT_SCHED_STATE;
+                begin
+                    res.full := mqRegReadSending;
+                    res.operation := mqReexecCtrlRR.op;
+                    res.renameIndex := mqReexecCtrlRR.tags.renameIndex;
+                    res.tags := mqReexecCtrlRR.tags;
+                    
+                    -- adr
+                    res.args(1) := mqReexecCtrlRR.target;
+                    
+                    res.argSpec.dest := mqReexecResRR.dest;
+                    res.argSpec.intDestSel := not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
+                    res.argSpec.floatDestSel := mqReexecCtrlRR.classInfo.useFP;
+
+                    return res;
+                end function;
+
+                function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult is
+                    variable res: ExecResult := er;
+                begin
+                    res.full := res.full and memoryMissed;
+                    res.value := memResult;
+                    return res;
+                end function;
+                                
+                function TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f: ExecResult;
+                                           ctrlE1, ctrlE1u: ControlPacket;
+                                           resOutSQ: ExecResult)
+                return ControlPacket is
+                    variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+                begin
+                    res.ip := subpipeM0_E1.value;
+                    res.op := ctrlE1.op;
+                    res.tags := ctrlE1u.tags;
+                    res.target(SMALL_NUMBER_SIZE-1 downto 0) := resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
+                    res.classInfo.useFP := subpipeM0_E1f.full;
+                    res.controlInfo.tlbMiss := ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
+                    res.controlInfo.dataMiss := ctrlE1u.controlInfo.dataMiss;
+                    res.controlInfo.sqMiss := ctrlE1u.controlInfo.sqMiss;                    
+                    return res;
+                end function;
+
 
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
                                 s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
