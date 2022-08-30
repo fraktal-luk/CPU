@@ -1,8 +1,6 @@
 
 architecture MissQueue of StoreQueue is
 
-    constant MQ_SIZE: natural := 8;
-
     type MQ_Entry is record
         full: std_logic;
         ready: std_logic;
@@ -49,10 +47,10 @@ architecture MissQueue of StoreQueue is
 
     signal outEntrySig: MQ_Entry := DEFAULT_MQ_ENTRY;
 
-    signal queueContent: MQ_EntryArray(0 to MQ_SIZE-1) := (others => DEFAULT_MQ_ENTRY);    
-    signal addresses, tags, renameTags: MwordArray(0 to MQ_SIZE-1) := (others => (others => '0'));
+    signal queueContent: MQ_EntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_MQ_ENTRY);    
+    signal addresses, tags, renameTags: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
     
-    signal fullMask, killMask, selectMask, inputFullMask, readyMask, outputFullMask3: std_logic_vector(0 to MQ_SIZE-1) := (others => '0'); 
+    signal fullMask, killMask, selectMask, inputFullMask, readyMask, outputFullMask3: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0'); 
     signal writePtr, selPtr0, selPtr1, selPtr2, selPtr3, nFull, nFullNext, nIn, nInRe, nOut, nCommitted, nCommittedEffective, recoveryCounter: SmallNumber := (others => '0');
 
     signal selValid0, selValid1, selValid2, selValid3: std_logic := '0';
@@ -145,7 +143,7 @@ begin
 
     writePtr <= i2slv(TMP_getNewIndex(fullMask), SMALL_NUMBER_SIZE);
     killMask <= getKillMask(queueContent, execEventSignal, lateEventSignal, execCausing.tag);
-    inputFullMask <= maskFromIndex(writePtr, MQ_SIZE) when TMP_prevSending = '1' else (others => '0');
+    inputFullMask <= maskFromIndex(writePtr, QUEUE_SIZE) when TMP_prevSending = '1' else (others => '0');
 
     -- completion and subsequent removal from queue is triggered by:
     --      L1 fill in case of Cache miss ops
@@ -158,10 +156,10 @@ begin
     selPtr0 <= TMP_firstOnePtr(selectMask);
     selValid0 <= sending;
 
-    outputFullMask3 <= maskFromIndex(selPtr3, MQ_SIZE) when selValid3 = '1' else (others => '0');
+    outputFullMask3 <= maskFromIndex(selPtr3, QUEUE_SIZE) when selValid3 = '1' else (others => '0');
 
 
-    READY_MASL: for i in 0 to MQ_SIZE-1 generate
+    READY_MASL: for i in 0 to QUEUE_SIZE-1 generate
         fullMask(i) <= queueContent(i).full;
         readyMask(i) <= queueContent(i).ready;
     end generate;
@@ -185,7 +183,7 @@ begin
             sending2 <= sending1;
             sending3 <= sending2;
 
-            for i in 0 to MQ_SIZE-1 loop
+            for i in 0 to QUEUE_SIZE-1 loop
 
                 -- Wakeup for dependents on SQ:
                 -- CAREFUL: compare SQ pointers ignoring the high bit of StoreData sqPointer (used for ordering, not indexing the content!)    
@@ -223,7 +221,8 @@ begin
                         queueContent(i).sqMiss <= compareAddressCtrl.controlInfo.sqMiss;
                         
                         addresses(i) <= compareAddressCtrl.ip;
-                        tags(i) <= tagInWord;
+                        tags(i) <= tagInWord; -- CAREFUL: tag is duplicated (this used for output, other accessible for comparisons when kill signal). 
+                                              --          Impact on efficiencynot known (redundant memory but don't need output mux for FF data) 
                         renameTags(i)(TAG_SIZE-1 downto 0) <= compareAddressCtrl.tag;
 
                     else
@@ -234,17 +233,17 @@ begin
             end loop;
 
             if prevSendingEarly = '1' then
-                queueContent(p2i(writePtr, MQ_SIZE)).full <= '1';
-                queueContent(p2i(writePtr, MQ_SIZE)).ready <= '0';
-                queueContent(p2i(writePtr, MQ_SIZE)).active <= '0';--'1';              
-                queueContent(p2i(writePtr, MQ_SIZE)).tag <= compareAddressEarlyInput.tag;
+                queueContent(p2i(writePtr, QUEUE_SIZE)).full <= '1';
+                queueContent(p2i(writePtr, QUEUE_SIZE)).ready <= '0';
+                queueContent(p2i(writePtr, QUEUE_SIZE)).active <= '0';--'1';              
+                queueContent(p2i(writePtr, QUEUE_SIZE)).tag <= compareAddressEarlyInput.tag;
    
-                queueContent(p2i(writePtr, MQ_SIZE)).TMP_cnt <= (others => '0');
+                queueContent(p2i(writePtr, QUEUE_SIZE)).TMP_cnt <= (others => '0');
             end if;
 
 
             if sending3 = '1' then
-                queueContent(p2i(selPtr3, MQ_SIZE)) <= DEFAULT_MQ_ENTRY;
+                queueContent(p2i(selPtr3, QUEUE_SIZE)) <= DEFAULT_MQ_ENTRY;
             end if;
 
             if lateEventSignal = '1' or execEventSignal = '1' then
@@ -256,18 +255,18 @@ begin
             recoveryCounter(7 downto 2) <= (others => '0');        
         end if;
         
-        isFull <= cmpGtU(nFull, MQ_SIZE-2);
-        isAlmostFull <= cmpGtU(nFull, MQ_SIZE-5);
+        isFull <= cmpGtU(nFull, QUEUE_SIZE-2);
+        isAlmostFull <= cmpGtU(nFull, QUEUE_SIZE-5);
     end process;
     
     accepting <= not isFull;
     
     tagInWord <= compareAddressCtrl.tags.lqPointer & compareAddressCtrl.tags.sqPointer & compareAddressInput.dest & X"00";
     
-    outEntrySig <= queueContent(p2i(selPtr2, MQ_SIZE));
-    adrOutWord <= addresses(p2i(selPtr2, MQ_SIZE));
-    tagOutWord <= tags(p2i(selPtr2, MQ_SIZE));
-    renameTagOutWord <= renameTags(p2i(selPtr2, MQ_SIZE));
+    outEntrySig <= queueContent(p2i(selPtr2, QUEUE_SIZE));
+    adrOutWord <= addresses(p2i(selPtr2, QUEUE_SIZE));
+    tagOutWord <= tags(p2i(selPtr2, QUEUE_SIZE));
+    renameTagOutWord <= renameTags(p2i(selPtr2, QUEUE_SIZE));
 
     selectedDataOutput.controlInfo.full <= sending2 and outEntrySig.full and not lateEventSignal;
     selectedDataOutput.tag <= renameTagOutWord(TAG_SIZE-1 downto 0);

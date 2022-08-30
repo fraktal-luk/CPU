@@ -56,24 +56,17 @@ constant IQ_SIZE_FLOAT_SV: natural := 12;
 constant BQ_SIZE: natural := 8;
 constant SQ_SIZE: natural := 8;
 constant LQ_SIZE: natural := 8;
+constant MQ_SIZE: natural := 8;
 
-constant BQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
+constant BQ_PTR_MASK: SmallNumber := i2slv(BQ_SIZE-1, SMALL_NUMBER_SIZE);
 constant SQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
-constant LQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
+constant LQ_PTR_MASK: SmallNumber := i2slv(LQ_SIZE-1, SMALL_NUMBER_SIZE);
+constant MQ_PTR_MASK: SmallNumber := i2slv(MQ_SIZE-1, SMALL_NUMBER_SIZE);
 
 constant BQ_PTR_SIZE: natural := countOnes(BQ_PTR_MASK);
 constant SQ_PTR_SIZE: natural := countOnes(SQ_PTR_MASK);
 constant LQ_PTR_SIZE: natural := countOnes(LQ_PTR_MASK);
-
-    constant TMP_PARAM_COMPRESS_RETURN: boolean := false;
-    
-    constant TMP_PARAM_NEW_DECODE: boolean := true;
-    
-    constant TMP_PARAM_I0_DELAY: boolean := true;
-    constant TMP_PARAM_M0_DELAY: boolean := true;
-    
-    constant TMP_PARAM_LATE_SRC_DEP_OVERRIDE: boolean := false;
-    constant TMP_PARAM_LATE_SRC_STABLE_OVERRIDE: boolean := false;
+constant MQ_PTR_SIZE: natural := countOnes(MQ_PTR_MASK);
 
 end CoreConfig;
 

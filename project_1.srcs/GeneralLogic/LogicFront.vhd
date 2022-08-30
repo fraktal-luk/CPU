@@ -103,38 +103,22 @@ end function;
 
 function isJumpLink(w: Word) return std_logic is
 begin
-    if TMP_PARAM_NEW_DECODE then
-        return bool2std(w(31 downto 26) = "001001");
-    end if;
-
-    return bool2std(w(31 downto 26) = opcode2slv(jl));
+    return bool2std(w(31 downto 26) = "001001");
 end function;
 
 function isJumpCond(w: Word) return std_logic is
 begin
-    if TMP_PARAM_NEW_DECODE then
-        return bool2std(w(31 downto 26) = "001010" or w(31 downto 26) = "001011");
-    end if;
-
-    return bool2std(w(31 downto 26) = opcode2slv(jz)) or bool2std(w(31 downto 26) = opcode2slv(jnz));
+    return bool2std(w(31 downto 26) = "001010" or w(31 downto 26) = "001011");
 end function;
 
 function isJumpLong(w: Word) return std_logic is
 begin
-    if TMP_PARAM_NEW_DECODE then
-        return bool2std(w(31 downto 26) = "001000");
-    end if;
-
-    return bool2std(w(31 downto 26) = opcode2slv(j));
+    return bool2std(w(31 downto 26) = "001000");
 end function;
 
 function isJumpReg(w: Word) return std_logic is
 begin
-    if TMP_PARAM_NEW_DECODE then
-        return bool2std(w(31 downto 26) = "000000" and w(15 downto 10) = "000010" and (w(4 downto 0) = "00000" or w(4 downto 0) = "00001"));
-    end if;
-    
-    return bool2std(w(31 downto 26) = opcode2slv(ext1)) and bool2std(w(15 downto 10) = opcont2slv(ext1, jzR) or w(15 downto 10) = opcont2slv(ext1, jzR));
+    return bool2std(w(31 downto 26) = "000000" and w(15 downto 10) = "000010" and (w(4 downto 0) = "00000" or w(4 downto 0) = "00001"));
 end function;
 
 

@@ -37,15 +37,15 @@ entity StoreQueue is
 
         renamedPtr: out SmallNumber;
 
-		storeValuePtr: in SmallNumber;
 		storeValueResult: in ExecResult;
 
 		compareAddressInput: in ExecResult;
 		compareAddressCtrl: in ControlPacket;
 		
-        compareIndexInput: in SmallNumber;
-        preCompareOp: in SpecificOp;
+        --compareIndexInput: in SmallNumber;
+        --preCompareOp: in SpecificOp;
         compareAddressEarlyInput: in ExecResult;
+            compareAddressEarlyInput_Ctrl: in ControlPacket;
 
         selectedDataOutput: out ControlPacket;
         selectedDataResult: out ExecResult;
@@ -97,6 +97,7 @@ architecture Behavioral of StoreQueue is
     signal selectedOutputSig, committedOutputSig: ControlPacket := DEFAULT_CONTROL_PACKET;
 
 	alias compareAddressInputOp is compareAddressCtrl.op;
+	alias storeValuePtr is storeValueResult.dest;
 
     signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
 
@@ -115,8 +116,8 @@ begin
         begin
             addressMatchMask <= getAddressMatching(queueContent, compareAddressInput.value) and getAddressCompleted(queueContent);       
                    -- TODO: could/should be pStartNext?
-            newerNextLQ <= cmpIndexAfter(pStart, pTagged, compareIndexInput, QUEUE_SIZE, PTR_MASK_SN) and getWhichMemOp(queueContent) --memOpMask
-                                                                             when isStoreMemOp(preCompareOp) = '1' else (others => '0');
+            newerNextLQ <= cmpIndexAfter(pStart, pTagged, compareAddressEarlyInput_Ctrl.tags.lqPointer, QUEUE_SIZE, PTR_MASK_SN) and getWhichMemOp(queueContent) --memOpMask
+                                                                             when isStoreMemOp(compareAddressEarlyInput_Ctrl.op) = '1' else (others => '0');
             newerLQ <=     newerRegLQ and addressMatchMask;
         end generate;
 
@@ -125,8 +126,8 @@ begin
         begin
             addressMatchMask <= getAddressMatching(queueContentShifting, compareAddressInput.value) and getAddressCompleted(queueContentShifting);
     
-            olderNextSQ <= cmpIndexBefore((others => '0'), nFull, subTruncZ(compareIndexInput, pDrainPrev, QUEUE_SIZE), QUEUE_SIZE, PTR_MASK_SN) -- TODO: nFull is not correct 
-                                                                             when isLoadMemOp(preCompareOp) = '1' else (others => '0');
+            olderNextSQ <= cmpIndexBefore((others => '0'), nFull, subTruncZ(compareAddressEarlyInput_Ctrl.tags.sqPointer, pDrainPrev, QUEUE_SIZE), QUEUE_SIZE, PTR_MASK_SN) -- TODO: nFull is not correct 
+                                                                             when isLoadMemOp(compareAddressEarlyInput_Ctrl.op) = '1' else (others => '0');
             olderSQ <=   olderRegSQ and addressMatchMask;
         end generate;
 
