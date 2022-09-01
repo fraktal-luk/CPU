@@ -30,7 +30,7 @@ type Opcode0 is (none, jumpLong, jumpLink, jumpZ, jumpNZ, intAlu, floatOp, intMe
 type Opcode1 is (none,
                  
                  -- intAlu
-                 intLogic, intArith, jumpReg,
+                 intLogic, intArith, jumpReg, intMul,
                  
                  -- intAluImm
                  intShiftLogical, intShiftArith, intRotate,
@@ -64,7 +64,9 @@ type Opcode2 is (none,
 
                 intAnd, intOr, intXor,
                 
-                intAdd, intSub, 
+                intAdd, intSub,  
+                
+                intMul, intMulHU, intMulHS,
                 
                 
                 floatMove,
@@ -262,9 +264,8 @@ type Operation is (none,
                     jump,
                     
                     intAnd, intOr, intXor,
-                    
-                    
                     intAdd, intSub,
+                    intMul, intMulHU, intMulHS,
                     
                     intShiftLogical, intShiftArith, intRotate,
                     
@@ -446,6 +447,7 @@ constant TableIntAlu: OpcodeTable1 := (
     0 => (intLogic, none, intRR, undef),
     1 => (intArith, none, intRR, undef),
     2 => (jumpReg, none, intRR, undef),
+    3 => (intMul,  none, intRR, undef),
     
     others => (none, none, none, undef)
 );
@@ -529,6 +531,12 @@ constant TableJumpReg: OpcodeTable2 := (
     others => (none, none, undef)
 );
 
+constant TableIntMul: OpcodeTable2 := (
+    0 => (intMul,   intMul,  mul),
+    1 => (intMulHU, intMulHU, mulh_u),
+    2 => (intMulHS, intMulHS,  mulh_s),
+    others => (none, none, undef)
+);
 
 constant TableFloatMove: OpcodeTable2 := (
     0 => (floatMove, floatMove, mov_f),
@@ -553,6 +561,8 @@ constant Tables2: TableArray1 := (
     intLogic => TableIntLogic,
     intArith => TableIntArith,
     jumpReg => TableJumpReg,
+    intMul => TableIntMul,
+    
     floatMove => TableFloatMove,
     
     others => EmptyTable2

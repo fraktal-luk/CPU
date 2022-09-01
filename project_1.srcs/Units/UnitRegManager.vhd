@@ -251,8 +251,16 @@ architecture Behavioral of UnitRegManager is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
     begin
         for i in 0 to PIPE_WIDTH-1 loop
-            if insVec(i).ins.specificOperation.subpipe = ALU then
-                res(i).ins.classInfo.useAlu := '1';
+            if (insVec(i).ins.specificOperation.subpipe = ALU) then
+            
+                if      insVec(i).ins.specificOperation.arith = opMul
+                     or insVec(i).ins.specificOperation.arith = opMulhU
+                     or insVec(i).ins.specificOperation.arith = opMulhS
+                then
+                     res(i).ins.classInfo.useMul := '1';
+                else
+                    res(i).ins.classInfo.useAlu := '1';
+                end if;
             elsif insVec(i).ins.specificOperation.subpipe = FP then
                 res(i).ins.classInfo.useFP := '1';
             elsif insVec(i).ins.specificOperation.subpipe = Mem then
