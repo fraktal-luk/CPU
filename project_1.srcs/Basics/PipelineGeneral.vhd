@@ -238,6 +238,7 @@ function getMemMask(insVec: InstructionSlotArray) return std_logic_vector;
         function getIntStoreMask1(insVec: InstructionSlotArray) return std_logic_vector;       
         function getFloatStoreMask1(insVec: InstructionSlotArray) return std_logic_vector;
         function getAluMask1(insVec: InstructionSlotArray) return std_logic_vector;
+        function getMulMask1(insVec: InstructionSlotArray) return std_logic_vector;
         function getFpMask1(insVec: InstructionSlotArray) return std_logic_vector;
         function getMemMask1(insVec: InstructionSlotArray) return std_logic_vector;
 
@@ -245,6 +246,7 @@ function getMemMask(insVec: InstructionSlotArray) return std_logic_vector;
 function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
+function TMP_recodeMul(insVec: InstructionSlotArray) return InstructionSlotArray;
 
 function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray;
 function prepareForStoreValueFloatIQ(insVecFloat: InstructionSlotArray) return InstructionSlotArray;
@@ -715,6 +717,16 @@ end function;
             
             return res;
         end function;
+
+        function getMulMask1(insVec: InstructionSlotArray) return std_logic_vector is
+            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                res(i) := insVec(i).ins.classInfo.useMul;
+            end loop;
+            
+            return res;
+        end function;
         
         function getFpMask1(insVec: InstructionSlotArray) return std_logic_vector is
             variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
@@ -962,6 +974,16 @@ begin
     return res;
 end function;
 
+function TMP_recodeMul(insVec: InstructionSlotArray) return InstructionSlotArray is
+    variable res: InstructionSlotArray(insVec'range) := insVec;
+begin
+    for i in res'range loop     
+        res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
+        res(i).ins.virtualArgSpec.floatDestSel := '0';          
+        res(i).ins.physicalArgSpec.floatDestSel := '0';          
+    end loop;  
+    return res;
+end function;
 
 function isBranchIns(ins: InstructionState) return std_logic is
 begin

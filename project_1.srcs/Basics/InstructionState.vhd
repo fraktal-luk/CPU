@@ -166,6 +166,7 @@ type InstructionClassInfo is record
 	storeInt: std_logic;
 	storeFP: std_logic;
 	useAlu: std_logic;
+	useMul: std_logic;
 	useMem: std_logic;
 	useFP: std_logic;
 end record;
@@ -253,6 +254,7 @@ constant DEFAULT_CLASS_INFO: InstructionClassInfo := (
     storeInt => '0',
     storeFP => '0',
     useAlu => '0',
+    useMul => '0',
     useMem => '0',
     useFP => '0'
 );

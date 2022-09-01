@@ -47,6 +47,8 @@ package LogicExec is
 	                                           ac: AluControl)
 	                                           return ExecResult;
 
+	function executeMulE0(full: std_logic; st: SchedulerState; link: Mword) return ExecResult;
+	
 	function executeFpu(st: SchedulerState) return Mword;
 
     function calcEffectiveAddress(st: SchedulerState; fromDLQ: std_logic; dlqData: ExecResult)
@@ -297,6 +299,32 @@ package body LogicExec is
         
         return ac;
     end function;
+
+
+
+	function executeMulE0(full: std_logic; st: SchedulerState; link: Mword) return ExecResult is
+		variable res: ExecResult := DEFAULT_EXEC_RESULT;
+		variable result: Mword := (others => '0');
+		variable arg0, arg1, arg2: Mword := (others => '0');
+		variable argAddSub: Mword := (others => '0');
+		variable carryIn: std_logic := '0';
+		variable resultExt: std_logic_vector(MWORD_SIZE downto 0) := (others => '0');
+		variable resultExt0, resultExt1: Word := (others => '0');
+		variable ov, carry, cl, cm0, cm1: std_logic := '0';
+	    variable shiftInput, rotated, shiftOutput: Dword := (others => '0');
+	begin
+		arg0 := st.args(0);
+		arg1 := st.args(1);
+		arg2 := st.args(2);
+
+        result := arg0 xor arg1;
+		
+		res.full := full;
+		res.tag := st.renameIndex;
+		res.dest := st.argSpec.dest;
+		res.value := result;
+		return res;
+	end function;
 
 	
 	function executeFpu(st: SchedulerState) return Mword is

@@ -381,7 +381,7 @@ begin
                 : ExecResult := DEFAULT_EXEC_RESULT;
                 
         signal unfoldedAluOp: work.LogicExec.AluControl := work.LogicExec.DEFAULT_ALU_CONTROL;     
-        signal aluMask, memMask, fpMask, intStoreMask, fpStoreMask, branchMask, sqMask, lqMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        signal aluMask, mulMask, memMask, fpMask, intStoreMask, fpStoreMask, branchMask, sqMask, lqMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
         signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 
@@ -401,6 +401,7 @@ begin
         newFloatSources <= TMP_getPhysicalArgsNew(renamedArgsFloat);
     
         aluMask <= getAluMask1(renamedDataLivingRe);
+        mulMask <= getMulMask1(renamedDataLivingRe);
         memMask <= getMemMask1(renamedDataLivingRe);
         fpMask <= getFpMask1(renamedDataLivingRe);
         intStoreMask <= getIntStoreMask1((renamedDataLivingRe));
@@ -518,14 +519,16 @@ begin
         
                 MUL_BLOCK: if true generate
                     SUBPIPE_MUL: block
-                       signal dataToMul: ExecResult := DEFAULT_EXEC_RESULT;           
+                       signal dataToMul, dataMulE0, dataMulE1, dataMulE2: ExecResult := DEFAULT_EXEC_RESULT;           
                        signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
-            
+
+                       signal controlI1_RR, controlToI1_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
+
                        signal regInfo: RegisterStateArray2D(0 to PIPE_WIDTH-1) := (others => (others => (others => '0')));
                     begin
                         fmaInt <= work.LogicIssue.findForwardingMatchesArray_N(schedInfoA, fni, readyRegFlagsInt_Early, regInfo);
             
-                        schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeALU(renamedDataLivingRe)), aluMask, true, removeArg2(renamedArgsInt));
+                        schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeMul(renamedDataLivingRe)), mulMask, true, removeArg2(renamedArgsInt));
                         schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, false, FORWARDING_MODES_INT_D, memFail, false);
             
                         IQUEUE_I1: entity work.IssueQueue(Behavioral)
@@ -579,13 +582,27 @@ begin
                             subpipeI1_Issue <= makeExecResult(slotIssueI1);
                             subpipeI1_RegRead <= makeExecResult(slotRegReadI1);
                         end block;
+
+                            controlI1_RR.controlInfo.full <= slotRegReadI1.full;
+                            controlI1_RR.op <= slotRegReadI1.operation;
+                            controlI1_RR.tags <= slotRegReadI1.tags;
+
+                            dataToMul <= executeMulE0(slotRegReadI1.full and not outSigsI1.killSel2, slotRegReadI1, bqSelected.nip);
             
-                        --dataToMul <= executeAlu(slotRegReadI1.full and not outSigsI1.killSel2, slotRegReadI1, bqSelected.nip, dataToBranch.controlInfo, unfoldedAluOp);
-            
+                            subpipeI1_E0 <= dataMulE0;
+                            subpipeI1_E1 <= dataMulE1;
+                            subpipeI1_E2 <= dataMulE2;
+
                         process (clk)
                         begin
                             if rising_edge(clk) then
-                                subpipeI1_E0 <= dataToMul;
+                                dataMulE0 <= dataToMul;
+                                dataMulE1 <= dataMulE0;
+                                dataMulE2 <= dataMulE1;
+
+                                ctrlE0 <= controlI1_RR;
+                                ctrlE1 <= ctrlE0;
+                                ctrlE2 <= ctrlE1;
                             end if;
                         end process;
         
@@ -1000,6 +1017,7 @@ begin
          begin
             if rising_edge(clk) then
                  subpipeI0_D0 <= subpipeI0_E0;
+                 subpipeI1_D0 <= subpipeI1_E2;
 
                  subpipeM0_D0i <= subpipeM0_E2i;
                  subpipeM0_D0f <= subpipeM0_E2f;
@@ -1036,6 +1054,7 @@ begin
          branchCtrl <= branchResultE0.controlInfo;
 
          execOutMain(0) <= subpipeI0_E0;
+            --execOutMain(1) <= subpipeI1_E2;
          execOutMain(2) <= subpipeM0_E2;
          execOutMain(3) <= subpipeF0_E2;
         
