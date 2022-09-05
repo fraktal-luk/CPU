@@ -106,7 +106,7 @@ begin
         elsif specialOp.system = opRetE then 
             state := stateExc;
             target := linkExc;
-        elsif specialOp.system = opError then
+        elsif specialOp.system = opError or specialOp.system = opUndef then
             target := EXC_BASE;
         elsif specialOp.system = opCall then
             target := CALL_BASE; -- TEMP			    

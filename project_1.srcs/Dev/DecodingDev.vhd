@@ -98,6 +98,16 @@ begin
             else 
                 isUndef := true;
             end if;
+        elsif op1 = "000011" then
+            if op2 = "00000" then
+                aluOp := opMul;
+            elsif op2 = "00001" then
+                aluOp := opMulHU;
+            elsif op2 = "00010" then
+                aluOp := opMulHS;
+            else 
+                isUndef := true;
+            end if;
          else
             isUndef := true;
         end if;

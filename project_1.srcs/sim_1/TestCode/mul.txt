@@ -1,0 +1,21 @@
+$start
+	or_r  r0, r0, r0 
+	or_r  r0, r0, r0 
+	or_r  r0, r0, r0 
+	or_r  r0, r0, r0 
+
+	mult r0, r0,r0 ; mul	      r0, r1, r2
+	or_r r0, r0, r0 ;mulh_u	  r0, r4, r5
+	or_r r0, r0, r0 ;mulh_s	  r0, r6, r7
+	or_r r0, r0, r0 ;or_r  	  r0, r0, r0
+
+	or_r  r0, r0, r0 
+	or_r  r0, r0, r0 
+	or_r  r0, r0, r0 
+	or_r  r0, r0, r0 
+
+	sys call
+$error
+    sys error
+
+

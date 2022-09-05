@@ -2,6 +2,7 @@ a_tmp_sf1
 a_tmp_sf2
 a_tmp_sf3
 shifts
+mul
 loop2
 branches
 branches2

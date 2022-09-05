@@ -1042,6 +1042,8 @@ begin
          lockIssueI0 <= memSubpipeSent or memFail;
          allowIssueI0 <= not lockIssueI0;
 
+         allowIssueI1 <= not lockIssueI1;
+
          -- Issue locking: 
          --     if F0 issued, to avoid WB collisions with FP load
          --     if MQ intends to reexecute
@@ -1054,7 +1056,7 @@ begin
          branchCtrl <= branchResultE0.controlInfo;
 
          execOutMain(0) <= subpipeI0_E0;
-            --execOutMain(1) <= subpipeI1_E2;
+            execOutMain(1) <= subpipeI1_E2;
          execOutMain(2) <= subpipeM0_E2;
          execOutMain(3) <= subpipeF0_E2;
         

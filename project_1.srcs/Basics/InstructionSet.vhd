@@ -200,11 +200,11 @@ constant FormatList: FormatAssignments(undef to sys_send) :=
     rot_i => intImm10,
     rot_r => int2R,
     
-    mul => Int2R,
+    mult => Int2R,
     mulh_s => Int2R,
     mulh_u => Int2R,
-    div_u => Int2R,
     div_s => Int2R,
+    div_u => Int2R,
     
     mov_f => Float1R,
     or_f => Float2R,    -- Float operations
@@ -532,7 +532,7 @@ constant TableJumpReg: OpcodeTable2 := (
 );
 
 constant TableIntMul: OpcodeTable2 := (
-    0 => (intMul,   intMul,  mul),
+    0 => (intMul,   intMul,  mult),
     1 => (intMulHU, intMulHU, mulh_u),
     2 => (intMulHS, intMulHS,  mulh_s),
     others => (none, none, undef)

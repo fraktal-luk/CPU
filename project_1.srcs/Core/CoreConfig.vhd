@@ -13,7 +13,7 @@ constant CLEAR_DEBUG_INFO: boolean := true;
 constant VIEW_ON: boolean := false;
 
 constant DB_ENABLE: boolean := true;
-constant DB_LOG_EVENTS: boolean := false;
+constant DB_LOG_EVENTS: boolean := true;
 
 
    constant DEBUG_LOG_COMMITTED: boolean := false;
