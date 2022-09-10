@@ -355,7 +355,7 @@ begin
        
        -- Issue control 
        signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, lockIssueSVI, lockIssueSVF, allowIssueStoreDataFP, allowIssueStageStoreDataFP,
-              memSubpipeSent, fp0subpipeSelected, lockIssueI0, allowIssueI0, lockIssueI1, allowIssueI1, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady, intWriteConflict,
+              memSubpipeSent, mulSubpipeSent, mulSubpipeAtE0, fp0subpipeSelected, mulSubpipeSelected, lockIssueI0, allowIssueI0, lockIssueI1, allowIssueI1, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady, intWriteConflict,
               storeValueCollision1, storeValueCollision2, cancelledSVI1, sendingToStoreWrite, sendingToStoreWriteInt, sendingToStoreWriteFloat,
               memFail, memDepFail, prevMemDepFail, aluSquashRR: std_logic := '0';
 
@@ -366,7 +366,7 @@ begin
        signal outSigsI0, outSigsI1, outSigsM0, outSigsSVI, outSigsSVF, outSigsF0: IssueQueueSignals := (others => '0');
        
        signal subpipeI0_Issue, subpipeI0_RegRead, subpipeI0_E0,                                    subpipeI0_D0,
-              subpipeI1_Issue, subpipeI1_RegRead, subpipeI1_E0,  subpipeI1_E1,    subpipeI1_E2,    subpipeI1_D0,
+              subpipeI1_Issue, subpipeI1_RegRead, subpipeI1_E0,  subpipeI1_E1,    subpipeI1_E2,    subpipeI1_D0,  subpipeI1_D1,
               subpipeM0_Issue, subpipeM0_RegRead, subpipeM0_E0,  subpipeM0_E1,    subpipeM0_E2,
                                  subpipeM0_RR_u,
                                    subpipeM0_RRi, subpipeM0_E0i, subpipeM0_E1i,   subpipeM0_E2i,   subpipeM0_D0i, subpipeM0_D1i,
@@ -374,12 +374,12 @@ begin
                                                                             subpipeM0_E1_u,
                                                                             subpipeM0_E1i_u,
                                                                             subpipeM0_E1f_u,
-                                                                                      
+
               subpipeF0_Issue, subpipeF0_RegRead, subpipeF0_E0,    subpipeF0_E1,      subpipeF0_E2,      subpipeF0_D0,
                                            subpipeF0_RRu,
               subpipe_DUMMY
                 : ExecResult := DEFAULT_EXEC_RESULT;
-                
+
         signal unfoldedAluOp: work.LogicExec.AluControl := work.LogicExec.DEFAULT_ALU_CONTROL;     
         signal aluMask, mulMask, memMask, fpMask, intStoreMask, fpStoreMask, branchMask, sqMask, lqMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
         signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
@@ -609,8 +609,8 @@ begin
                     end block;
                 end generate;
 
-         
-            
+
+
         SUBPIPE_MEM: block
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1); 
            signal memLoadValue, memResult: Mword := (others => '0');
@@ -999,7 +999,7 @@ begin
             if rising_edge(clk) then
                 issuedStoreDataInt <= outSigsSVI.sending;
                 issuedStoreDataFP <= outSigsSVF.sending;
-                
+
                 storeValueCollision2 <= storeValueCollision1;
             end if;
          end process;
@@ -1017,7 +1017,9 @@ begin
          begin
             if rising_edge(clk) then
                  subpipeI0_D0 <= subpipeI0_E0;
+                 
                  subpipeI1_D0 <= subpipeI1_E2;
+                 subpipeI1_D1 <= subpipeI1_D0;
 
                  subpipeM0_D0i <= subpipeM0_E2i;
                  subpipeM0_D0f <= subpipeM0_E2f;
@@ -1026,28 +1028,25 @@ begin
                  subpipeF0_D0 <= subpipeF0_E2;
              end if;
          end process;
+                
+            memSubpipeSent <= slotRegReadM0.full;-- sendingToRegReadM0;
+            mulSubpipeSent <= slotRegReadI1.full;-- sendingToRegReadM0;
+            mulSubpipeAtE0   <= subpipeI1_E0.full;
 
-         intWriteConflict <= subpipeI0_E0.full and subpipeM0_E2i.full;
+            mulSubpipeSelected <= slotIssueI1.full;
+            fp0subpipeSelected <= slotIssueF0.full;
 
-         SCHED_BLOCK: process(clk)
-         begin
-             if rising_edge(clk) then
-                 assert intWriteConflict = '0' report "Int write queue conflict!" severity error;
-
-                 memSubpipeSent <= sendingToRegReadM0;
-                 fp0subpipeSelected <= outSigsF0.sending;
-             end if;
-         end process;
-
-         lockIssueI0 <= memSubpipeSent or memFail;
+         lockIssueI0 <= memSubpipeSent or memFail
+                            or mulSubpipeSent;
          allowIssueI0 <= not lockIssueI0;
 
          allowIssueI1 <= not lockIssueI1;
 
-         -- Issue locking: 
+         -- Issue locking:
          --     if F0 issued, to avoid WB collisions with FP load
          --     if MQ intends to reexecute
-         lockIssueM0 <= fp0subpipeSelected or mqReady or memFail  or almostFullMQ;
+         lockIssueM0 <= fp0subpipeSelected or mqReady or memFail  or almostFullMQ
+                                        or mulSubpipeAtE0; --CAREFUL: this if mul sends result to write queue after D0, 1 cycle later than Mem pipe
          allowIssueM0 <= not lockIssueM0;
 
          lockIssueF0 <= '0' or memFail;
@@ -1064,10 +1063,10 @@ begin
 
 
          fni <= buildForwardingNetwork(DEFAULT_EXEC_RESULT, subpipeI0_Issue,     subpipeI0_RegRead,   subpipeI0_E0,        subpipeI0_D0,
-                                       DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT,
+                                       DEFAULT_EXEC_RESULT, subpipeI1_E1,        subpipeI1_E2,        subpipeI1_D0,        DEFAULT_EXEC_RESULT,
                                        subpipeM0_RegRead,   subpipeM0_E0i,       subpipeM0_E1i,       subpipeM0_E2i,       subpipeM0_D0i                     
                                       );
-    
+
          fniFloat <= buildForwardingNetworkFP(subpipeF0_RegRead,   subpipeF0_E0,        subpipeF0_E1,        subpipeF0_E2,        subpipeF0_D0,
                                               DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT,
                                               subpipeM0_E0f,       subpipeM0_E1f,       subpipeM0_E2f,       subpipeM0_D0f,       subpipeM0_D1f                                        
@@ -1082,11 +1081,19 @@ begin
          
          regsSelF0 <= work.LogicRenaming.getPhysicalArgs(slotIssueF0);
 
+         resultToIntWQ <= subpipeM0_E2i when subpipeM0_E2i.full = '1'
+                   --else subpipeI1_D0 when subpipeI1_D0.full = '1'
+                     else subpipeI0_E0;
 
-         resultToIntWQ <= subpipeM0_E2i when subpipeM0_E2i.full = '1' else subpipeI0_E0;
+         intWriteConflict <= (subpipeM0_E2i.full and subpipeI0_E0.full)
+                          or (subpipeM0_E2i.full and subpipeI1_D0.full)
+                          or (subpipeI1_D0.full and subpipeI0_E0.full);
+
          TMP_WQ: process (clk)
-         begin   
+         begin
             if rising_edge(clk) then
+                assert intWriteConflict = '0' report "Int write queue conflict!" severity error;
+            
                 resultToIntRF <= resultToIntWQ;
                 resultToIntRF_Early <= resultToIntWQ_Early;
                 resultToFloatRF <= resultToFloatWQ;

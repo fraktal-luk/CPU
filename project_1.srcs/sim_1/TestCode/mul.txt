@@ -4,9 +4,9 @@ $start
 	or_r  r0, r0, r0 
 	or_r  r0, r0, r0 
 
-	mult r0, r0,r0 ; mul	      r0, r1, r2
-	or_r r0, r0, r0 ;mulh_u	  r0, r4, r5
-	or_r r0, r0, r0 ;mulh_s	  r0, r6, r7
+	mult     r3, r0, r0 ; mul	      r0, r1, r2
+	mulh_u	 r1, r4, r5
+	mulh_s	 r2, r6, r7
 	or_r r0, r0, r0 ;or_r  	  r0, r0, r0
 
 	or_r  r0, r0, r0 
