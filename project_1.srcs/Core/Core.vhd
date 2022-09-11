@@ -1037,7 +1037,7 @@ begin
             fp0subpipeSelected <= slotIssueF0.full;
 
          lockIssueI0 <= memSubpipeSent or memFail
-                            or mulSubpipeSent;
+                            or mulSubpipeAtE0;
          allowIssueI0 <= not lockIssueI0;
 
          allowIssueI1 <= not lockIssueI1;
@@ -1058,12 +1058,12 @@ begin
             execOutMain(1) <= subpipeI1_E2;
          execOutMain(2) <= subpipeM0_E2;
          execOutMain(3) <= subpipeF0_E2;
-        
+
          execOutSec(2) <= sqValueResult;
 
 
          fni <= buildForwardingNetwork(DEFAULT_EXEC_RESULT, subpipeI0_Issue,     subpipeI0_RegRead,   subpipeI0_E0,        subpipeI0_D0,
-                                       DEFAULT_EXEC_RESULT, subpipeI1_E1,        subpipeI1_E2,        subpipeI1_D0,        DEFAULT_EXEC_RESULT,
+                                       DEFAULT_EXEC_RESULT, subpipeI1_E1,        subpipeI1_E2,        subpipeI1_D0,        subpipeI1_D1,
                                        subpipeM0_RegRead,   subpipeM0_E0i,       subpipeM0_E1i,       subpipeM0_E2i,       subpipeM0_D0i                     
                                       );
 
@@ -1078,16 +1078,33 @@ begin
          -- TEMP!
          regsSelS0 <= work.LogicRenaming.getPhysicalArgs(slotIssueIntSV);
          regsSelFS0 <= work.LogicRenaming.getPhysicalArgs(slotIssueFloatSV);
-         
+
          regsSelF0 <= work.LogicRenaming.getPhysicalArgs(slotIssueF0);
 
+
+
          resultToIntWQ <= subpipeM0_E2i when subpipeM0_E2i.full = '1'
-                   --else subpipeI1_D0 when subpipeI1_D0.full = '1'
-                     else subpipeI0_E0;
+                    else subpipeI1_D0 when subpipeI1_D0.full = '1'
+                    else subpipeI0_E0;
 
          intWriteConflict <= (subpipeM0_E2i.full and subpipeI0_E0.full)
-                          or (subpipeM0_E2i.full and subpipeI1_D0.full)
-                          or (subpipeI1_D0.full and subpipeI0_E0.full);
+                         or (subpipeM0_E2i.full and subpipeI1_D0.full)
+                         or (subpipeI1_D0.full and subpipeI0_E0.full);
+
+         resultToIntWQ_Early <= subpipeM0_E0i when subpipeM0_E0i.full = '1' 
+                           else subpipeI1_E1  when subpipeI1_E1.full = '1'  
+                           else ExecResult'(
+                                             dbInfo => DEFAULT_DEBUG_INFO,
+                                             full => slotIssueI0.full and not memFail,
+                                             failed => '0',
+                                             tag => slotIssueI0.renameIndex,
+                                             dest => slotIssueI0.argSpec.dest,
+                                             value => (others => '0')
+                                         );
+
+         resultToFloatWQ <= subpipeM0_E2f when subpipeM0_E2f.full = '1' else subpipeF0_E2;
+         resultToFloatWQ_Early <= subpipeM0_E0f when subpipeM0_E0f.full = '1' else subpipeF0_E0;
+
 
          TMP_WQ: process (clk)
          begin
@@ -1108,7 +1125,7 @@ begin
          resultToIntRF_EarlyEffective.dest <= resultToIntRF_Early.dest;
          resultToIntRF_EarlyEffective.value <= resultToIntRF_Early.value;
 
-            
+
 		 INT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(WIDTH => 4, WRITE_WIDTH => 1)
          port map(
@@ -1141,20 +1158,6 @@ begin
              writingData_T(0) => resultToIntRF_EarlyEffective,
              readyRegFlagsNext => readyRegFlagsIntNext_Early
          );
-
-         resultToFloatWQ <= subpipeM0_E2f when subpipeM0_E2f.full = '1' else subpipeF0_E2;
-
-         resultToIntWQ_Early <= subpipeM0_E0i when subpipeM0_E0i.full = '1' else
-                                                             ExecResult'(
-                                                                 dbInfo => DEFAULT_DEBUG_INFO,
-                                                                 full => slotIssueI0.full and not memFail,
-                                                                 failed => '0',
-                                                                 tag => slotIssueI0.renameIndex,
-                                                                 dest => slotIssueI0.argSpec.dest,
-                                                                 value => (others => '0')
-                                                             );
-
-         resultToFloatWQ_Early <= subpipeM0_E0f when subpipeM0_E0f.full = '1' else subpipeF0_E0;
 
 		 FLOAT_REG_FILE: entity work.RegFile(Behavioral)
          generic map(IS_FP => true, WIDTH => 4, WRITE_WIDTH => 1)
@@ -1199,7 +1202,7 @@ begin
        readyRegFlagsFloat_Early <= readyRegFlagsFloatNext_Early;
 
        sysRegSending <= sysRegRead;
-     
+
     end block; -- TEMP_EXEC
 
 

@@ -30,29 +30,29 @@ end record;
 type ForwardingModeArray is array (natural range <>) of ForwardingMode;
 
 
--- 1 per arg. const if unused
-type WakeupModes is record
-    stage: IntArray(0 to 2);
-    fast:  std_logic_vector(0 to 2);
-    const: std_logic_vector(0 to 2);
-end record;
+---- 1 per arg. const if unused
+--type WakeupModes is record
+--    stage: IntArray(0 to 2);
+--    fast:  std_logic_vector(0 to 2);
+--    const: std_logic_vector(0 to 2);
+--end record;
 
-type WakeupModesArray is array(0 to 2) of WakeupModes;
+--type WakeupModesArray is array(0 to 2) of WakeupModes;
 
-constant DEFAULT_WAKEUP_MODES: WakeupModes := ((others => -5), (others => '0'), (others => '1'));
+--constant DEFAULT_WAKEUP_MODES: WakeupModes := ((others => -5), (others => '0'), (others => '1'));
 
 
-constant WAKEUP_MODES_INT_FULL: WakeupModes :=(
-    (-2, -100, -3),
-    ('1', '0', '0'), -- fast on I0
-    ('0', '1', '0')  -- I1 unused
-);
+--constant WAKEUP_MODES_INT_FULL: WakeupModes :=(
+--    (-2, -100, -3),
+--    ('1', '0', '0'), -- fast on I0
+--    ('0', '1', '0')  -- I1 unused
+--);
 
-constant WAKEUP_MODES_ARRAY_I0: WakeupModesArray := (
-    0 => WAKEUP_MODES_INT_FULL,
-    1 => WAKEUP_MODES_INT_FULL,
-    2 => DEFAULT_WAKEUP_MODES
-);
+--constant WAKEUP_MODES_ARRAY_I0: WakeupModesArray := (
+--    0 => WAKEUP_MODES_INT_FULL,
+--    1 => WAKEUP_MODES_INT_FULL,
+--    2 => DEFAULT_WAKEUP_MODES
+--);
 
 
 
@@ -76,7 +76,7 @@ constant FORWARDING_MODES_INT: ForwardingModeArray(0 to 2) := (
 );
 
 constant FORWARDING_MODES_INT_D: ForwardingModeArray(0 to 2) := (
-    (-2, false), (-100, false), (-3, false)
+    (-2, false), (-2, false), (-3, false)
 );
 
 
@@ -96,7 +96,7 @@ constant FORWARDING_MODES_FLOAT_D: ForwardingModeArray(0 to 2) := (
 
 
 constant FORWARDING_MODES_SV_INT_D: ForwardingModeArray(0 to 2) := (
-    (0, true), (-100, false), (0, true) 
+    (0, true), (0, false), (0, true) 
 );
 
 constant FORWARDING_MODES_SV_FLOAT_D: ForwardingModeArray(0 to 2) := (
