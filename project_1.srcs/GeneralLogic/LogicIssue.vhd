@@ -730,13 +730,12 @@ package body LogicIssue is
             end if;
 
             -- pull back because mem miss
-            if memFail = '1' --and queueContent(i).dynamic.full = '1'
-                             and queueContent(i).dynamic.issued = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "01" then
+            if memFail = '1' and queueContent(i).dynamic.issued = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "01" then
                 res(i).dynamic.issued := '0';
                 res(i).dynamic.active := '1';
                 res(i).dynamic.stageCtr := (others => '0');
             -- waiting to confirm issue success
-            elsif queueContent(i).dynamic.issued = '1' then      
+            elsif queueContent(i).dynamic.issued = '1' then
                 res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1);
             end if;
 
@@ -781,8 +780,7 @@ package body LogicIssue is
                 end loop;
             end loop;
         end if;
-        
-        
+
         -- Handle DB info
         for i in 0 to LEN-1 loop
             for j in 0 to 2 loop
@@ -804,7 +802,7 @@ package body LogicIssue is
                 res(i).dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
             end if;
         end loop;
-            
+
         return res;
     end function;
     

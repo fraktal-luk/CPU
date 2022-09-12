@@ -27,10 +27,10 @@ type IssueQueueSignals is record
     cancelled: std_logic;
     ready: std_logic;
     empty: std_logic;
-        killSel: std_logic;
-        killSel1: std_logic;
-        killSel2: std_logic;
-        killSel3: std_logic;
+    killSel: std_logic;
+    killSel1: std_logic;
+    killSel2: std_logic;
+    killSel3: std_logic;
 end record;
 
 
@@ -331,7 +331,7 @@ end function;
     function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray is
         variable res: PhysNameArray(0 to 3*PIPE_WIDTH-1);
     begin
-        res(0 to 2) := ri(0).physicalSourcesNew;-- & ri(1).physicalSourcesNew & ri(2).physicalSourcesNew & ri(3).physicalSourcesNew;
+        res(0 to 2) := ri(0).physicalSourcesNew;
         res(3 to 5) := ri(1).physicalSourcesNew;
         res(6 to 8) := ri(2).physicalSourcesNew;
         res(9 to 11) := ri(3).physicalSourcesNew;
@@ -1128,9 +1128,7 @@ begin
             res(i).dbInfo := isa(i).ins.dbInfo;
         res(i).controlInfo := isa(i).ins.controlInfo;
         res(i).controlInfo.full := isa(i).full;
-        res(i).classInfo := isa(i).ins.classInfo;
-        
-        --res(i).target := isa(i).ins.target_D;
+        res(i).classInfo := isa(i).ins.classInfo;        
     end loop;
     return res;
 end function;

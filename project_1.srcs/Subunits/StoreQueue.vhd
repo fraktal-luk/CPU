@@ -41,11 +41,8 @@ entity StoreQueue is
 
 		compareAddressInput: in ExecResult;
 		compareAddressCtrl: in ControlPacket;
-		
-        --compareIndexInput: in SmallNumber;
-        --preCompareOp: in SpecificOp;
-        --compareAddressEarlyInput: in ExecResult;
-            compareAddressEarlyInput_Ctrl: in ControlPacket;
+
+        compareAddressEarlyInput_Ctrl: in ControlPacket;
 
         selectedDataOutput: out ControlPacket;
         selectedDataResult: out ExecResult;
@@ -87,7 +84,7 @@ architecture Behavioral of StoreQueue is
     signal isFull, isAlmostFull, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDrainingPrev, isSelected: std_logic := '0';
     signal memEmpty: std_logic := '1'; -- CAREFUL! Starts as '1'
 
-    signal drainOutput_N, selectedOutput_N: ControlPacket := DEFAULT_CONTROL_PACKET;
+    signal drainOutput, selectedOutput: ControlPacket := DEFAULT_CONTROL_PACKET;
     signal drainValue, selectedValue, drainAddress, selectedAddress, selectionAddress: Mword := (others => '0');
 
     signal selectedEntry, drainEntry: QueueEntry := DEFAULT_QUEUE_ENTRY;
@@ -107,7 +104,7 @@ begin
     begin   
         -- Ptr for random access updating
         adrPtr <= compareAddressCtrl.tags.lqPointer when IS_LOAD_QUEUE
-             else compareAddressCtrl.tags.sqPointer;-- compareAddressInput.dest;
+             else compareAddressCtrl.tags.sqPointer;
     
         -- Read ptr determinded by address matching - SQ only??
         pSelect <=  addTruncZ( findNewestMatchIndex(olderSQ, (others => '0'), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE);
@@ -134,7 +131,7 @@ begin
 
         updateResult.full <= compareAddressInput.full and isLoadOp(compareAddressInputOp) when IS_LOAD_QUEUE
                         else compareAddressInput.full and isStoreOp(compareAddressInputOp);
-        updateResult.dest <= adrPtr;--compareAddressInput.dest;
+        updateResult.dest <= adrPtr;
         updateResult.value <= compareAddressInput.value;
 
         process (clk)
@@ -187,10 +184,10 @@ begin
         end process;
         
         -- E. out
-        selectedOutput_N <= getDrainOutput_N(selectedEntry, selectedAddress, selectedValue);    
+        selectedOutput <= getDrainOutput(selectedEntry, selectedAddress, selectedValue);    
         
         -- D. out
-        drainOutput_N <= getDrainOutput_N(drainEntry, drainAddress, drainValue);   
+        drainOutput <= getDrainOutput(drainEntry, drainAddress, drainValue);   
     end block;
 
     pStartEffectiveNext <= addTruncZ(pStartEffective, nCommittedEffective, QUEUE_PTR_SIZE+1) when committing = '1'
@@ -311,19 +308,19 @@ begin
 
     WHEN_SQ: if not IS_LOAD_QUEUE generate
         selectedOutputSig.controlInfo.full <= isSelected;
-        selectedOutputSig.controlInfo.newEvent <= selectedOutput_N.controlInfo.newEvent;
-        selectedOutputSig.controlInfo.firstBr <= selectedOutput_N.controlInfo.firstBr;
-        selectedOutputSig.controlInfo.sqMiss <= selectedOutput_N.controlInfo.sqMiss;
+        selectedOutputSig.controlInfo.newEvent <= selectedOutput.controlInfo.newEvent;
+        selectedOutputSig.controlInfo.firstBr <= selectedOutput.controlInfo.firstBr;
+        selectedOutputSig.controlInfo.sqMiss <= selectedOutput.controlInfo.sqMiss;
         
-        selectedOutputSig.op <= selectedOutput_N.op;
-        selectedOutputSig.target <= selectedOutput_N.target;
-        selectedOutputSig.nip <= selectedOutput_N.nip;
+        selectedOutputSig.op <= selectedOutput.op;
+        selectedOutputSig.target <= selectedOutput.target;
+        selectedOutputSig.nip <= selectedOutput.nip;
 
         committedOutputSig.controlInfo.full <= isDrainingPrev and allowDrain;
         
-        committedOutputSig.op <= drainOutput_N.op;
-        committedOutputSig.target <= drainOutput_N.target;
-        committedOutputSig.nip <= drainOutput_N.nip;
+        committedOutputSig.op <= drainOutput.op;
+        committedOutputSig.target <= drainOutput.target;
+        committedOutputSig.nip <= drainOutput.nip;
     end generate;
 
 	-- D. output (ctrl)
