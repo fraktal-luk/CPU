@@ -78,7 +78,7 @@ architecture Behavioral of Core is
 
     signal renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-    signal branchMaskRe, loadMaskRe, storeMaskRe, branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO,
+    signal aluMaskRe, branchMaskRe, loadMaskRe, storeMaskRe, branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO,
            commitMaskSQ, commitEffectiveMaskSQ, commitMaskLQ, commitEffectiveMaskLQ, branchCommitMask, branchCommitEffectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
     signal frontOutput: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
@@ -126,6 +126,7 @@ architecture Behavioral of Core is
             
     signal dbState: DbCoreState := DEFAULT_DB_STATE;
     
+        signal freedMaskI0, usedMaskI0: std_logic_vector(0 to IQ_SIZE_I0-1) := (others => '0');
     --    constant CONNECT_MQ: boolean := true;--false;
 begin
 
@@ -227,6 +228,7 @@ begin
         frontLastSendingIn => frontLastSending,
         frontData => frontOutput,
         
+        aluMaskRe => aluMaskRe,
         branchMaskRe => branchMaskRe,
         loadMaskRe => loadMaskRe,
         storeMaskRe => storeMaskRe,
@@ -324,6 +326,26 @@ begin
 		
 		dbState => dbState	
 	);     
+
+            TMP_ALU_ALLOC: if true generate
+                ALLOC: entity work.QueueAllocator
+                generic map(
+                    QUEUE_SIZE => 12, BANK_SIZE => 3
+                )
+                port map(
+                    clk => clk, evt => events,
+
+                    inReady => frontLastSending,
+                    inMask => aluMaskRe,
+                    inGroup => frontOutput,
+
+                    outReady => open,
+                    outGroup => open,
+
+                    iqUsed => usedMaskI0,
+                    iqFreed => freedMaskI0
+                );
+            end generate;
 
 
     TEMP_EXEC: block
@@ -447,7 +469,10 @@ begin
                 events => events,
                 schedulerOut => slotSelI0,
                 outputSignals => outSigsI0,
-
+                
+                    freedMask => freedMaskI0,
+                    usedMask => usedMaskI0,
+                    
                 dbState => dbState
             );
 

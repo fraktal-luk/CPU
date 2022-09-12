@@ -1,0 +1,37 @@
+	ldi_i  r1, r0, 0
+	ldi_i  r1, r1, 0
+	ldi_i  r1, r1, 0
+	ldi_i  r1, r1, 0
+
+	ldi_i  r1, r0, 0
+	ldi_i  r1, r1, 0
+	ldi_i  r1, r1, 0
+	ldi_i  r1, r1, 0
+
+	ldi_i  r1, r1, 0
+	jz_i  r0, 8
+	or_r  r0, r0, r0
+	or_r  r0, r0, r0
+
+	or_r  r0, r0, r0
+	or_r  r0, r0, r0
+	or_r  r0, r0, r0
+	or_r  r0, r0, r0
+
+	or_r  r0, r0, r0
+	jz_i  r0, 4
+	or_r  r0, r0, r0
+	or_r  r0, r0, r0
+	
+	or_r  r0, r0, r0
+	or_r  r0, r0, r0
+	or_r  r0, r0, r0
+	or_r  r0, r0, r0
+	
+	
+	sys call
+$error
+    sys error
+
+
+ 

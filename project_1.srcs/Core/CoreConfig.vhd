@@ -27,6 +27,9 @@ constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');
 
 constant FETCH_WIDTH: positive := PIPE_WIDTH; 
 
+constant RENAME_WIDTH: natural := PIPE_WIDTH;
+alias RENAME_W is RENAME_WIDTH;
+
 constant IBUFFER_SIZE: positive := 4;
 constant ROB_SIZE: positive := 8; 
 

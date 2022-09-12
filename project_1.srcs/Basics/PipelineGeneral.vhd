@@ -14,6 +14,9 @@ use work.InstructionState.all;
 
 package PipelineGeneral is
 
+function sn(n: integer) return SmallNumber;
+
+
 function p2i(p: SmallNumber; n: natural) return natural;
 
 type PhysicalSubpipe is (ALU, Mem, FP, StoreDataInt, StoreDataFloat);
@@ -305,6 +308,11 @@ end package;
 
 
 package body PipelineGeneral is
+
+function sn(n: integer) return SmallNumber is
+begin
+    return i2slv(n, SMALL_NUMBER_SIZE);
+end function;
 
 function p2i(p: SmallNumber; n: natural) return natural is
     constant mask: SmallNumber := i2slv(n-1, SMALL_NUMBER_SIZE);

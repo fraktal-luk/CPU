@@ -25,6 +25,7 @@ port(
     frontLastSendingIn: in std_logic;
     frontData: in BufferEntryArray;
     
+    aluMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
     branchMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
     storeMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
     loadMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
@@ -634,6 +635,7 @@ begin
 
     renamingBr <= frontLastSending and frontDataISL(0).ins.controlInfo.firstBr;
 
+    aluMaskRe <= getAluMask(renamedBase);
     branchMaskRe <= getBranchMask(renamedBase);
     loadMaskRe <= getLoadMask(renamedBase);
     storeMaskRe <= getStoreMask(renamedBase);

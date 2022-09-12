@@ -52,6 +52,9 @@ entity IssueQueue is
 		schedulerOut: out SchedulerEntrySlot;
         outputSignals: out IssueQueueSignals;
         
+            freedMask: out std_logic_vector(0 to IQ_SIZE-1);
+            usedMask: out std_logic_vector(0 to IQ_SIZE-1);
+        
         dbState: in DbCoreState		
 	);
 end IssueQueue;
@@ -207,6 +210,9 @@ begin
                         killSel2 => sentKilled2,
                         killSel3 => sentKilled3
                         );
+
+        freedMask <= selMask3; -- TMP!
+        usedMask <= fullMask;
 
     -- pragma synthesis off
     DEBUG_HANDLING: if DB_ENABLE generate
