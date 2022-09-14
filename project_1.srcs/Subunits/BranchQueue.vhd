@@ -127,12 +127,12 @@ begin
                if earlyInputSending = '1' then                   
                    earlySerialMem(p2i(pEnd, QUEUE_SIZE)) <= earlySerialInput;
                end if;
-    
+
                -- Write late data
                if lateInputSending = '1' then
                    lateSerialMem(p2i(pTagged, QUEUE_SIZE)) <= lateSerialInput;                 
                end if;
-    
+
                -- Write target array
                if storeValueInput.full = '1' then
                    targetArray(p2i(pCausing, QUEUE_SIZE)) <= storeValueInput.value;

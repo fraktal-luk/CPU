@@ -1,14 +1,9 @@
 	ldi_i  r1, r0, 0
-	ldi_i  r1, r1, 0
-	ldi_i  r1, r1, 0
-	ldi_i  r1, r1, 0
+	ldi_i  r2, r1, 0
+	ldi_i  r3, r2, 0
+	ldi_i  r4, r3, 0
 
-	ldi_i  r1, r0, 0
-	ldi_i  r1, r1, 0
-	ldi_i  r1, r1, 0
-	ldi_i  r1, r1, 0
-
-	ldi_i  r1, r1, 0
+	ldi_i  r9, r8, 0
 	jz_i  r0, 8
 	or_r  r0, r0, r0
 	or_r  r0, r0, r0

@@ -102,11 +102,11 @@ begin
     res.sqPtr := insVec(0).ins.tags.sqPointer;
     res.lqPtr := insVec(0).ins.tags.lqPointer;
     
-    for i in 0 to insVec'length - 2 loop
-        res.usingInt(i) := insVec(i+1).ins.physicalArgSpec.intDestSel;
-        res.usingFloat(i) := insVec(i+1).ins.physicalArgSpec.floatDestSel;
-        res.usingSQ(i) := insVec(i+1).ins.classInfo.secCluster;
-        res.usingLQ(i) := insVec(i+1).ins.classInfo.useLQ;
+    for i in 1 to insVec'length - 1 loop
+        res.usingInt(i-1) := insVec(i).ins.tags.intPointer(0) xor insVec(i-1).ins.tags.intPointer(0);
+        res.usingFloat(i-1) := insVec(i).ins.tags.floatPointer(0) xor insVec(i-1).ins.tags.floatPointer(0);
+        res.usingSQ(i-1) := insVec(i).ins.tags.sqPointer(0) xor insVec(i-1).ins.tags.sqPointer(0);
+        res.usingLQ(i-1) := insVec(i).ins.tags.lqPointer(0) xor insVec(i-1).ins.tags.lqPointer(0);
     end loop;
     return res;
 end function;
