@@ -26,7 +26,8 @@ entity IssueQueue is
 		FORWARDING: ForwardingModeArray := (0 => (-100, false));  -- Can be used immediately
 		FORWARDING1: ForwardingModeArray := (0 => (-100, false));
 		FORWARDING_D: ForwardingModeArray := (0 => (-100, false)); -- Can be used with 1 cycle delay
-		IGNORE_MEM_FAIL: boolean := false
+		IGNORE_MEM_FAIL: boolean := false;
+		  TMP_USE_ALLOC: boolean := false
 	);
 	port(
 		clk: in std_logic;
@@ -35,6 +36,7 @@ entity IssueQueue is
 		
 		prevSendingOK: in std_logic;
 		newArr: in SchedulerInfoArray(0 to PIPE_WIDTH-1);
+            TMP_newTags: in SmallNumberArray(0 to RENAME_W-1);
 
 		nextAccepting: in std_logic;
 
@@ -75,7 +77,7 @@ architecture Behavioral of IssueQueue is
     signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
 
     signal ageMatrix, ageMatrixNext: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := (others => (others => '0'));
-    signal insertionLocs: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
+    signal insertionLocs, insertionLocs_N, insertionLocs_O: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal fma: ForwardingMatchesArray(0 to QUEUE_SIZE_EXT - 1) := (others => DEFAULT_FORWARDING_MATCHES);
 
@@ -83,7 +85,8 @@ architecture Behavioral of IssueQueue is
     signal fullMask, trialMask, readyMaskLive, killMask, readyMaskAll, selMask, selMask1, selMask2, selMask3, selMask4,
             depMemE1_0, depMemE1_1, depAluRR_0, depAluRR_1
         : std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
-    signal anyReadyFull, anyReadyLive, sends, sendingKilled, isSent, isSent2, sentKilled, sentKilled1, sentKilled2, sentKilled3, sentKilled4, isEmpty, isFull, isAlmostFull: std_logic := '0';
+    signal anyReadyFull, anyReadyLive, sends, sendingKilled, maybeSent, maybeSent2, maybeSent3, maybeSent4,
+                    isSent, isSent2, isSent3, isSent4, sentKilled, sentKilled1, sentKilled2, sentKilled3, sentKilled4, isEmpty, isFull, isAlmostFull: std_logic := '0';
     
     signal selectedSlot: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
     signal dispatchDataNew: SchedulerState := DEFAULT_SCHED_STATE;       
@@ -115,6 +118,7 @@ architecture Behavioral of IssueQueue is
             end loop;
             return res;
         end function;
+
 begin
     nFullNext <=        sub(i2slv(countOnes(fullMask), SMALL_NUMBER_SIZE), nOut) when slv2u(recoveryCounter) = 1
                   else  add(nFull, sub(nIn, nOut));
@@ -127,7 +131,10 @@ begin
     queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, false, false, DONT_MATCH1, FORWARDING_D, memFail, IGNORE_MEM_FAIL);
     queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, false, true, DONT_MATCH1, FORWARDING, memFail, IGNORE_MEM_FAIL);
 
-    insertionLocs <= getNewLocsBanked(fullMask);
+    insertionLocs_O <=  getNewLocsBanked(fullMask);
+    insertionLocs_N <= getNewLocs_N(fullMask, TMP_newTags, newArr);
+
+        insertionLocs <= insertionLocs_N when TMP_USE_ALLOC else insertionLocs_O;
 
     queueContentNext <= iqNext_NS(queueContentUpdated, newArr, prevSendingOK, sends, killMask, trialMask, selMask, readyRegFlags, insertionLocs, memFail);
     ageMatrixNext <= updateAgeMatrix(ageMatrix, insertionLocs, fullMask);
@@ -149,9 +156,16 @@ begin
             sentKilled2 <= isNonzero(killMask and selMask1);
             sentKilled3 <= isNonzero(killMask and selMask2);
             sentKilled4 <= isNonzero(killMask and selMask3);                        
-                    
+
             isSent <= sends;
             isSent2 <= isSent;
+            isSent3 <= isSent2;
+            isSent4 <= isSent3;
+
+            maybeSent <= anyReadyFull;
+            maybeSent2 <= maybeSent;
+            maybeSent3 <= maybeSent2;
+            maybeSent4 <= maybeSent3;
         end if;
     end process;
 
@@ -211,7 +225,8 @@ begin
                         killSel3 => sentKilled3
                         );
 
-        freedMask <= selMask3; -- TMP!
+        freedMask <= --selMask3 when isSent3 = '1' else (others => '0'); -- TMP!
+                        getFreedVec(controlSigs);
         usedMask <= fullMask;
 
     -- pragma synthesis off

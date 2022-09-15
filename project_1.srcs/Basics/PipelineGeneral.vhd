@@ -664,7 +664,7 @@ function getMemMask(insVec: InstructionSlotArray) return std_logic_vector is
 begin
 	return getSubpipeMask(insVec, Mem);
 end function;
-        
+
         function getBranchMask1(insVec: InstructionSlotArray) return std_logic_vector is
             variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
         begin

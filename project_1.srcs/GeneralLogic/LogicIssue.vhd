@@ -134,6 +134,8 @@ type DynamicInfo is record
     active: std_logic;
 
     issued: std_logic;
+    freed: std_logic;
+    
     trial: std_logic;
 
     poisoned: std_logic;
@@ -156,6 +158,8 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     active => '0',
 
     issued => '0',
+    freed => '0',
+    
     trial => '0',
         
     poisoned => '0',
@@ -256,7 +260,9 @@ function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vec
 
     type SlotControl is record
         full: std_logic;
+        active: std_logic;
         issued: std_logic;
+        freed: std_logic;
         killed: std_logic;
             killed_T: std_logic;
         trial: std_logic;
@@ -276,6 +282,9 @@ function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vec
     function getControlSignals(content: SchedulerInfoArray; events: EventState) return SlotControlArray;
     function getFullVec(arr: SlotControlArray) return std_logic_vector;
     function getLivingVec(arr: SlotControlArray) return std_logic_vector;
+    function getActiveVec(arr: SlotControlArray) return std_logic_vector;
+    function getIssuedVec(arr: SlotControlArray) return std_logic_vector;
+    function getFreedVec(arr: SlotControlArray) return std_logic_vector;
     function getKilledVec(arr: SlotControlArray) return std_logic_vector;
         function getKilledVec_T(arr: SlotControlArray) return std_logic_vector;
     function getTrialVec(arr: SlotControlArray) return std_logic_vector;
@@ -293,6 +302,8 @@ function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vec
     function acceptingMoreBanked(counts: SmallNumberArray; constant LIMIT: natural) return std_logic;
     function updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D;
     function getSelMask(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector;
+
+        function getNewLocs_N(fullMask: std_logic_vector; tags: SmallNumberArray; newArr: SchedulerInfoArray) return slv2D;
 
     function updateRenameIndex(content: SchedulerInfoArray) return SchedulerInfoArray;
     function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return SchedulerInfo;
@@ -315,7 +326,9 @@ package body LogicIssue is
     begin
         for i in res'range loop        
             res(i).full := content(i).dynamic.full;
+            res(i).active := content(i).dynamic.active;
             res(i).issued := content(i).dynamic.issued;
+            res(i).freed := content(i).dynamic.freed;
             
             res(i).trial := compareTagBefore(events.preExecTags.renameIndex, content(i).dynamic.renameIndex);
             res(i).trial_T := compareIndBefore(events.preExecTags.bqPointerSeq, content(i).static.bqPointerSeq, 6); -- TODO: temp value of PTR_SIZE!
@@ -361,6 +374,34 @@ package body LogicIssue is
         end loop;
         return res;
     end function;
+
+    function getActiveVec(arr: SlotControlArray) return std_logic_vector is
+        variable res: std_logic_vector(arr'range) := (others => '0');
+    begin
+        for i in res'range loop
+            res(i) := arr(i).active;
+        end loop;
+        return res;
+    end function;
+    
+    function getIssuedVec(arr: SlotControlArray) return std_logic_vector is
+        variable res: std_logic_vector(arr'range) := (others => '0');
+    begin
+        for i in res'range loop
+            res(i) := arr(i).issued;
+        end loop;
+        return res;
+    end function;
+    
+    function getFreedVec(arr: SlotControlArray) return std_logic_vector is
+        variable res: std_logic_vector(arr'range) := (others => '0');
+    begin
+        for i in res'range loop
+            res(i) := arr(i).freed;
+        end loop;
+        return res;
+    end function;
+
 
     function getKilledVec(arr: SlotControlArray) return std_logic_vector is
         variable res: std_logic_vector(arr'range) := (others => '0');
@@ -721,10 +762,13 @@ package body LogicIssue is
         variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
     begin
         for i in 0 to LEN-1 loop
+            res(i).dynamic.freed := '0'; -- This is set for 1 cycle when freeing
+
             -- Remove after successful issue
             if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME then
                 res(i).dynamic.full := '0';
                 res(i).dynamic.issued := '0';
+                res(i).dynamic.freed := '1';
                 res(i).dynamic.active := '0';
                 res(i).dynamic.stageCtr := (others => '0');
             end if;
@@ -1238,10 +1282,10 @@ package body LogicIssue is
                 end if;
             end loop;
         end loop;
-    
+
         return res;
     end function;
-    
+
     function getBankCounts(fullMask: std_logic_vector) return SmallNumberArray is
         constant QUEUE_SIZE_EXT: natural := fullMask'length;
         variable res: SmallNumberArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -1342,7 +1386,25 @@ package body LogicIssue is
              
         return res;
     end function;
-    
+
+        function getNewLocs_N(fullMask: std_logic_vector; tags: SmallNumberArray; newArr: SchedulerInfoArray) return slv2D is
+            constant QUEUE_SIZE_EXT: natural := fullMask'length;
+            variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
+            variable cnt: natural := 0;
+            constant N_BANKS: natural := 4;
+            constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+        begin
+           for b in 0 to N_BANKS-1 loop
+            --if fullMask(i * N_BANKS + b) /= '1' then
+                res(slv2u(tags(b)) * N_BANKS + b, b) := newArr(b).dynamic.full;
+            --    exit;
+            --end if;
+            end loop;
+
+            return res;
+        end function;
+
+
     function updateRenameIndex(content: SchedulerInfoArray) return SchedulerInfoArray is
         constant QUEUE_SIZE_EXT: natural := content'length;
         variable res: SchedulerInfoArray(content'range) := content;

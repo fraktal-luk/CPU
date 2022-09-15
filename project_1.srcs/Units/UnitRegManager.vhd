@@ -25,10 +25,17 @@ port(
     frontLastSendingIn: in std_logic;
     frontData: in BufferEntryArray;
     
-    aluMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
-    branchMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
-    storeMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
-    loadMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+--    aluMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+--    branchMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+--    storeMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+--    loadMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+
+        aluMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
+        mulMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
+        branchMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
+        storeMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
+        loadMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
+
 
     renamedArgsInt: out RenameInfoArray(0 to PIPE_WIDTH-1);
     renamedArgsFloat: out RenameInfoArray(0 to PIPE_WIDTH-1);
@@ -159,6 +166,9 @@ architecture Behavioral of UnitRegManager is
             res(i).ins.tags.bqPointerSeq := addIntTrunc(bqPointerSeq, countOnes(branches(0 to i-1)), BQ_PTR_SIZE + 2 + 1); -- CAREFUL, TODO: define BQ_SEQ_PTR_SIZE
         end loop;
 
+        -- TODO: Why do we cancel ops after event? Rethink, maybe this step is needed just because of some bad design elsewhere
+        --       The OOO already has to deal with dynamically arising events
+
         -- If found special instruction or exception, kill next ones
         for i in 0 to PIPE_WIDTH-1 loop
             if found then
@@ -173,7 +183,7 @@ architecture Behavioral of UnitRegManager is
                 res(i).ins.classInfo.secCluster := '0';
                 res(i).ins.classInfo.useLQ := '0';            
             end if;
-            
+
             if hasSyncEvent(res(i).ins) = '1' then
                 found := true;
             end if;
@@ -455,7 +465,7 @@ begin
                                     '0' --dbtrapOn
                                     );
 
-    stageDataRenameIn <= classifyForDispatch((renamedBase));
+    stageDataRenameIn <= classifyForDispatch(renamedBase);
 
     renamedDataLiving <= restoreRenameIndex(renamedDataLivingPre);
 
@@ -635,8 +645,14 @@ begin
 
     renamingBr <= frontLastSending and frontDataISL(0).ins.controlInfo.firstBr;
 
-    aluMaskRe <= getAluMask(renamedBase);
-    branchMaskRe <= getBranchMask(renamedBase);
-    loadMaskRe <= getLoadMask(renamedBase);
-    storeMaskRe <= getStoreMask(renamedBase);
+--    aluMaskRe <= getAluMask(renamedBase);
+--    branchMaskRe <= getBranchMask(renamedBase);
+--    loadMaskRe <= getLoadMask(renamedBase);
+--    storeMaskRe <= getStoreMask(renamedBase);
+    
+        aluMaskRe1 <= getAluMask1(stageDataRenameIn);
+        mulMaskRe1 <= getMulMask1(stageDataRenameIn);
+        branchMaskRe1 <= getBranchMask1(stageDataRenameIn);
+        loadMaskRe1 <= getLoadMask1(stageDataRenameIn);
+        storeMaskRe1 <= getStoreMask1(stageDataRenameIn);
 end Behavioral;

@@ -69,6 +69,7 @@ architecture Behavioral of Core is
            execEventSignalE0, execEventSignalE1, lateEventSignal, lateEventSetPC,
            robSending, robAccepting, renamedSending, commitAccepting,
            lsbrAccepting, lsbrAcceptingMore,
+           allocAcceptAlu,
            issueQueuesAccepting, issueQueuesAcceptingMore, renameSendingBr, stopRename,
            queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingI1, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
            robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreI1, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
@@ -78,7 +79,9 @@ architecture Behavioral of Core is
 
     signal renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
-    signal aluMaskRe, branchMaskRe, loadMaskRe, storeMaskRe, branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO,
+    signal --aluMaskRe, branchMaskRe, loadMaskRe, storeMaskRe,
+            aluMaskRe1, mulMaskRe1, branchMaskRe1, loadMaskRe1, storeMaskRe1,
+            branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO,
            commitMaskSQ, commitEffectiveMaskSQ, commitMaskLQ, commitEffectiveMaskLQ, branchCommitMask, branchCommitEffectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
     signal frontOutput: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
@@ -127,6 +130,7 @@ architecture Behavioral of Core is
     signal dbState: DbCoreState := DEFAULT_DB_STATE;
     
         signal freedMaskI0, usedMaskI0: std_logic_vector(0 to IQ_SIZE_I0-1) := (others => '0');
+        signal TMP_aluTags: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
     --    constant CONNECT_MQ: boolean := true;--false;
 begin
 
@@ -228,11 +232,17 @@ begin
         frontLastSendingIn => frontLastSending,
         frontData => frontOutput,
         
-        aluMaskRe => aluMaskRe,
-        branchMaskRe => branchMaskRe,
-        loadMaskRe => loadMaskRe,
-        storeMaskRe => storeMaskRe,
-    
+--        aluMaskRe => aluMaskRe,
+--        branchMaskRe => branchMaskRe,
+--        loadMaskRe => loadMaskRe,
+--        storeMaskRe => storeMaskRe,
+
+            aluMaskRe1 => aluMaskRe1,
+            mulMaskRe1 => mulMaskRe1,
+            branchMaskRe1 => branchMaskRe1,
+            loadMaskRe1 => loadMaskRe1,
+            storeMaskRe1 => storeMaskRe1,
+  
         nextAccepting => canSendRename,
 
         renamedDataLiving => renamedDataLivingRe,
@@ -279,7 +289,14 @@ begin
         end if;
     end process;
 
-    canSendFront <= renameAccepting and not stopRename;
+--      ch0 <= bool2std(aluMaskRe1 = aluMaskRe);
+--      ch1 <= bool2std(branchMaskRe1 = branchMaskRe);
+--      ch2 <= bool2std(loadMaskRe1 = loadMaskRe);
+--      ch3 <= bool2std(storeMaskRe1 = storeMaskRe);
+
+
+    canSendFront <= renameAccepting and not stopRename
+                                               and allocAcceptAlu;
     canSendRename <= not stopRename;  --  Could also be : queuesAccepting;  
 
     renamedDataLivingMerged <= replaceDests(renamedDataLivingRe, renamedArgsMerged);
@@ -336,11 +353,14 @@ begin
                     clk => clk, evt => events,
 
                     inReady => frontLastSending,
-                    inMask => aluMaskRe,
+                    inMask => aluMaskRe1,
                     inGroup => frontOutput,
 
                     outReady => open,
                     outGroup => open,
+                        TMP_outTags => TMP_aluTags,
+                    
+                    accept => allocAcceptAlu,
 
                     iqUsed => usedMaskI0,
                     iqFreed => freedMaskI0
@@ -451,7 +471,8 @@ begin
                 IQ_SIZE => IQ_SIZE_I0,
                 FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING1(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-                FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
+                FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
+                    TMP_USE_ALLOC => true --false
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -461,6 +482,7 @@ begin
 
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedA,
+                        TMP_newTags => TMP_aluTags,
                 fni => fni,
                 readyRegFlags => readyRegFlagsInt_Early,
                 memFail => memFail,
@@ -571,6 +593,7 @@ begin
 
                             prevSendingOK => renamedSending,
                             newArr => schedInfoUpdatedA,
+                                 TMP_newTags => (others => sn(0)),
                             fni => fni,
                             readyRegFlags => readyRegFlagsInt_Early,
                             memFail => memFail,
@@ -660,6 +683,7 @@ begin
                acceptingMore => iqAcceptingMoreM0,
                prevSendingOK => renamedSending,
                newArr => schedInfoUpdatedA,
+                     TMP_newTags => (others => sn(0)),
                fni => fni,
                readyRegFlags => readyRegFlagsInt_Early,
                memFail => memFail,
@@ -824,6 +848,7 @@ begin
                 acceptingMore => iqAcceptingMoreS0,
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedIntA,
+                        TMP_newTags => (others => sn(0)),
                 fni => fni,     
                 readyRegFlags => readyRegFlagsSV,
                 memFail => memFail,
@@ -890,6 +915,7 @@ begin
                 acceptingMore => iqAcceptingMoreSF0,
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedFloatA,
+                        TMP_newTags => (others => sn(0)),
                 fni => fniFloat,      
                 readyRegFlags => readyRegFlagsFloatSV,
                 memFail => memFail,
@@ -954,6 +980,7 @@ begin
                 acceptingMore => iqAcceptingMoreF0,
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedA,
+                        TMP_newTags => (others => sn(0)),
                 fni => fniFloat,
                 readyRegFlags => readyRegFlagsFloat_Early,
                 memFail => memFail,
@@ -1273,7 +1300,7 @@ begin
 	       
 	    bqPtrOut => bqPointer,
 	    
-	    branchMaskRe => branchMaskRe,
+	    branchMaskRe => branchMaskRe1,
 		dataIn => renamedDataToBQ,
         dataInBr => bpData,
 
@@ -1313,7 +1340,7 @@ begin
 	    prevSendingRe => frontLastSending,
 		prevSending => renamedSending,
 		
-        renameMask => storeMaskRe,
+        renameMask => storeMaskRe1,
         inputMask => storeMaskOO,
         systemMask => systemStoreMaskOO,
            
@@ -1362,7 +1389,7 @@ begin
 	    prevSendingRe => frontLastSending,				
 		prevSending => renamedSending,
 		
-		renameMask => loadMaskRe,
+		renameMask => loadMaskRe1,
         inputMask => loadMaskOO,
         systemMask => systemLoadMaskOO,
             
