@@ -70,6 +70,7 @@ architecture Behavioral of Core is
            robSending, robAccepting, renamedSending, commitAccepting,
            lsbrAccepting, lsbrAcceptingMore,
            allocAcceptAlu,
+            allocAcceptSQ, allocAcceptLQ, allocAcceptROB,
            issueQueuesAccepting, issueQueuesAcceptingMore, renameSendingBr, stopRename,
            queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingI1, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
            robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreI1, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
@@ -296,7 +297,8 @@ begin
 
 
     canSendFront <= renameAccepting and not stopRename
-                                               and allocAcceptAlu;
+                                               and allocAcceptAlu
+                                               and allocAcceptSQ and allocAcceptLQ and allocAcceptROB;
     canSendRename <= not stopRename;  --  Could also be : queuesAccepting;  
 
     renamedDataLivingMerged <= replaceDests(renamedDataLivingRe, renamedArgsMerged);
@@ -306,11 +308,16 @@ begin
     
     issueQueuesAccepting <= iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0;
     issueQueuesAcceptingMore <= iqAcceptingMoreI0 and iqAcceptingMoreM0 and iqAcceptingMoreS0 and iqAcceptingMoreF0 and iqAcceptingMoreSF0;
-    
+
     queuesAccepting <= lsbrAccepting and issueQueuesAccepting;
-    queuesAcceptingMore <= lsbrAcceptingMore and issueQueuesAcceptingMore;
+    queuesAcceptingMore <= --robAcceptingMore and
+                            --!! not almostFullSQ and
+                            -- not almostFullLQ and --lsbrAcceptingMore and 
+                           issueQueuesAcceptingMore;
 
     renamedArgsMerged <= mergeRenameInfoFP(renamedArgsInt, renamedArgsFloat);
+
+        ch0 <= stopRename and allocAcceptSQ and allocAcceptLQ;
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(
@@ -328,9 +335,11 @@ begin
 			
 		inputData => renamedDataLivingMerged,
 		prevSending => renamedSending,
-		
+		prevSendingRe => frontLastSending,
+
 		acceptingOut => robAccepting,
 		acceptingMore => robAcceptingMore,
+		acceptAlloc => allocAcceptROB,
 		
 		nextAccepting => commitAccepting,
 		
@@ -1336,7 +1345,8 @@ begin
 
 		acceptingOut => acceptingSQ,
 		almostFull => almostFullSQ,
-				
+		acceptAlloc => allocAcceptSQ,
+		
 	    prevSendingRe => frontLastSending,
 		prevSending => renamedSending,
 		
@@ -1385,6 +1395,7 @@ begin
 
 		acceptingOut => acceptingLQ,
 		almostFull => almostFullLQ,
+		acceptAlloc => allocAcceptLQ,
 
 	    prevSendingRe => frontLastSending,				
 		prevSending => renamedSending,
@@ -1450,6 +1461,7 @@ begin
 
         acceptingOut => acceptingMQ,
         almostFull => almostFullMQ,
+		acceptAlloc => open,
 
         prevSendingRe => '0',                
         prevSending => '0',

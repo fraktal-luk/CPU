@@ -106,7 +106,7 @@ architecture MissQueue of StoreQueue is
                 res(i) := '1';
             end if;
         end loop;
-        
+
         res := getFirstOne(res);
         return res;
     end function;
@@ -188,14 +188,14 @@ begin
 
                 -- Wakeup for dependents on SQ:
                 -- CAREFUL: compare SQ pointers ignoring the high bit of StoreData sqPointer (used for ordering, not indexing the content!)    
-                if queueContent(i).sqMiss = '1' and queueContent(i).sqTag(2 downto 0) = storeValueResult.dest(2 downto 0) then
+                if queueContent(i).active = '1' and queueContent(i).sqMiss = '1' and storeValueResult.full = '1' and queueContent(i).sqTag(2 downto 0) = storeValueResult.dest(2 downto 0) then
                     queueContent(i).ready <= '1';
                 end if;
 
                 if (canSend and selectMask(i)) = '1' then
                     queueContent(i).active <= '0';
                 end if;
-                
+
                 -- CAREFUL: can't be reordered after "Update late part" because 'full' signals would be incorrect
                 queueContent(i).full <= (fullMask(i) and not killMask(i) and not outputFullMask3(i)) or inputFullMask(i);
                 queueContent(i).TMP_cnt <= addIntTrunc(queueContent(i).TMP_cnt, 1, 3);
@@ -220,7 +220,7 @@ begin
                         queueContent(i).tlbMiss <= compareAddressCtrl.controlInfo.tlbMiss;
                         queueContent(i).dataMiss <= compareAddressCtrl.controlInfo.dataMiss;
                         queueContent(i).sqMiss <= compareAddressCtrl.controlInfo.sqMiss;
-                        
+
                         addresses(i) <= compareAddressCtrl.ip;
                         tags(i) <= tagInWord; -- CAREFUL: tag is duplicated (this used for output, other accessible for comparisons when kill signal). 
                                               --          Impact on efficiencynot known (redundant memory but don't need output mux for FF data) 
@@ -230,6 +230,13 @@ begin
                         queueContent(i).full <= '0';    
                         queueContent(i).active <= '0';    
                     end if;
+
+                end if;
+                
+                if killMask(i) = '1' then
+                    queueContent(i).full <= '0';
+                    queueContent(i).active <= '0';
+                    queueContent(i).ready <= '0';
                 end if;
             end loop;
 
@@ -241,6 +248,7 @@ begin
                                                                compareAddressEarlyInput_Ctrl.tags.renameIndex;
                 queueContent(p2i(writePtr, QUEUE_SIZE)).TMP_cnt <= (others => '0');
             end if;
+
 
 
             if sending3 = '1' then

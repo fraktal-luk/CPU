@@ -27,6 +27,7 @@ entity StoreQueue is
 
 		acceptingOut: out std_logic;
 		almostFull: out std_logic;
+		acceptAlloc: out std_logic;
 		
    	    prevSendingRe: in std_logic;
 		prevSending: in std_logic;
@@ -75,13 +76,13 @@ architecture Behavioral of StoreQueue is
 
 	signal adrPtr, pSelect, pSelectPrev, pStart, pStartNext, pDrain, pDrainNext, pDrainPrev,
            pTagged, pTaggedNext, pFlush, pRenamed, pRenamedNext, pStartEffective, pStartEffectiveNext,
-	       nFull, nFullNext, nIn, nInRe, nOut, nCommitted, nCommittedEffective, recoveryCounter: SmallNumber := (others => '0');
+	       nFull, nFullNext, nAlloc, nAllocNext, nIn, nInRe, nOut, nCommitted, nCommittedEffective, recoveryCounter: SmallNumber := (others => '0');
 
     signal addresses, storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 
     signal queueContent, queueContentShifting, queueContentShiftingNext: QueueEntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_QUEUE_ENTRY);
 
-    signal isFull, isAlmostFull, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDrainingPrev, isSelected: std_logic := '0';
+    signal isFull, isAlmostFull, canAlloc, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDrainingPrev, isSelected: std_logic := '0';
     signal memEmpty: std_logic := '1'; -- CAREFUL! Starts as '1'
 
     signal drainOutput, selectedOutput: ControlPacket := DEFAULT_CONTROL_PACKET;
@@ -205,13 +206,13 @@ begin
             else       pFlush when execEventSignal = '1'
             else       addIntTrunc(pRenamed, slv2u(nInRe), QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
             else       pRenamed;
-    
+
     pFlush <= execCausing.dest;
-   
+
      process (clk)   
      begin
 		if rising_edge(clk) then
-		      
+
             isDrainingPrev <= drainReq;
 		    allowDrain <= not (nowCancelled or (not drainEqual and drainEffectiveEqual));
  
@@ -248,16 +249,19 @@ begin
 
             --- ctr management
 	        nFull <= nFullNext;
-   
+            nAlloc <= nAllocNext;
+
    	        isFull <= cmpGtU(nFullNext, QUEUE_SIZE-4);
             isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
-   
+
+            canAlloc <= not cmpGtU(nAllocNext, QUEUE_SIZE-4);
+
             if lateEventSignal = '1' or execEventSignal = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
             elsif isNonzero(recoveryCounter) = '1' then
                 recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
-            
+
             recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here       
 		end if;
 	end process;
@@ -266,13 +270,16 @@ begin
 		
 	LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
     	nFullNext <= getNumFull(pStartNext, pTaggedNext, QUEUE_PTR_SIZE);
-    	
+    	nAllocNext <= getNumFull(pStartNext, pRenamedNext, QUEUE_PTR_SIZE);
+
 	    nInRe <= i2slv(countOnes(renameMask), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
         nOut <= nCommitted when committing = '1' else (others => '0');
     end generate;
     
     STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
     	nFullNext <= getNumFull(pDrain, pTaggedNext, QUEUE_PTR_SIZE);
+    	nAllocNext <= getNumFull(pDrain, pRenamedNext, QUEUE_PTR_SIZE);
+
 	    -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
         nInRe <= i2slv(countOnes(renameMask), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    	
         nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isDrainingPrev = '1' else (others => '0');		  
@@ -290,6 +297,7 @@ begin
     -- Acc sigs
 	acceptingOut <= not isFull;
 	almostFull <= isAlmostFull;
+    acceptAlloc <= canAlloc;
 
     renamedPtr <= pRenamed;
 
