@@ -36,7 +36,9 @@ port(
         branchMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
         storeMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
         loadMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
-
+        intStoreMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
+        floatStoreMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
+        fpMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
 
     renamedArgsInt: out RenameInfoArray(0 to PIPE_WIDTH-1);
     renamedArgsFloat: out RenameInfoArray(0 to PIPE_WIDTH-1);
@@ -657,4 +659,7 @@ begin
         branchMaskRe1 <= getBranchMask1(stageDataRenameIn);
         loadMaskRe1 <= getLoadMask1(stageDataRenameIn);
         storeMaskRe1 <= getStoreMask1(stageDataRenameIn);
+        fpMaskRe1 <= getFpMask1(stageDataRenameIn);
+        intStoreMaskRe1 <= getIntStoreMask1(stageDataRenameIn);
+        floatStoreMaskRe1 <= getFloatStoreMask1(stageDataRenameIn);            
 end Behavioral;

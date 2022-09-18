@@ -81,7 +81,7 @@ architecture Behavioral of Core is
     signal renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal --aluMaskRe, branchMaskRe, loadMaskRe, storeMaskRe,
-            aluMaskRe1, mulMaskRe1, memMaskRe1, branchMaskRe1, loadMaskRe1, storeMaskRe1,
+            aluMaskRe1, mulMaskRe1, memMaskRe1, branchMaskRe1, loadMaskRe1, storeMaskRe1, intStoreMaskRe1, floatStoreMaskRe1, fpMaskRe1,
             branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO,
            commitMaskSQ, commitEffectiveMaskSQ, commitMaskLQ, commitEffectiveMaskLQ, branchCommitMask, branchCommitEffectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
@@ -245,6 +245,9 @@ begin
             branchMaskRe1 => branchMaskRe1,
             loadMaskRe1 => loadMaskRe1,
             storeMaskRe1 => storeMaskRe1,
+            intStoreMaskRe1 => intStoreMaskRe1,
+            floatstoreMaskRe1 => floatStoreMaskRe1,
+            fpMaskRe1 => fpMaskRe1,
   
         nextAccepting => canSendRename,
 
@@ -300,6 +303,7 @@ begin
 
     canSendFront <= renameAccepting and not stopRename
                                                and allocAcceptAlu and allocAcceptMul and allocAcceptMem
+                                                    and allocAcceptSVI and allocAcceptSVF and allocAcceptF0
                                                and allocAcceptSQ and allocAcceptLQ and allocAcceptROB;
     canSendRename <= not stopRename;  --  Could also be : queuesAccepting;  
 
@@ -310,7 +314,7 @@ begin
     
     issueQueuesAccepting <= iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0;
     issueQueuesAcceptingMore <= --iqAcceptingMoreI0 and iqAcceptingMoreM0 and 
-                                    iqAcceptingMoreS0 and iqAcceptingMoreF0 and iqAcceptingMoreSF0;
+                                  '1'; --  iqAcceptingMoreS0 and iqAcceptingMoreF0 and iqAcceptingMoreSF0;
 
     queuesAccepting <= lsbrAccepting and issueQueuesAccepting;
     queuesAcceptingMore <= --robAcceptingMore and
@@ -420,6 +424,70 @@ begin
                     iqUsed => usedMaskM0,
                     iqFreed => freedMaskM0
                 );
+
+                SVI_ALLOC: entity work.QueueAllocator
+                generic map(
+                    QUEUE_SIZE => 12, BANK_SIZE => 3
+                )
+                port map(
+                    clk => clk, evt => events,
+
+                    inReady => frontLastSending,
+                    inMask => intStoreMaskRe1,
+                    inGroup => frontOutput,
+
+                    outReady => open,
+                    outGroup => open,
+                        TMP_outTags => TMP_sviTags,
+
+                    accept => allocAcceptSVI,
+
+                    iqUsed => usedMaskSVI,
+                    iqFreed => freedMaskSVI
+                );
+
+                SVF_ALLOC: entity work.QueueAllocator
+                generic map(
+                    QUEUE_SIZE => 12, BANK_SIZE => 3
+                )
+                port map(
+                    clk => clk, evt => events,
+
+                    inReady => frontLastSending,
+                    inMask => floatStoreMaskRe1,
+                    inGroup => frontOutput,
+
+                    outReady => open,
+                    outGroup => open,
+                        TMP_outTags => TMP_svfTags,
+
+                    accept => allocAcceptSVF,
+
+                    iqUsed => usedMaskSVF,
+                    iqFreed => freedMaskSVf
+                );
+
+                FP_ALLOC: entity work.QueueAllocator
+                generic map(
+                    QUEUE_SIZE => 12, BANK_SIZE => 3
+                )
+                port map(
+                    clk => clk, evt => events,
+
+                    inReady => frontLastSending,
+                    inMask => fpMaskRe1,
+                    inGroup => frontOutput,
+
+                    outReady => open,
+                    outGroup => open,
+                        TMP_outTags => TMP_fpTags,
+
+                    accept => allocAcceptF0,
+
+                    iqUsed => usedMaskF0,
+                    iqFreed => freedMaskF0
+                );
+
 
     TEMP_EXEC: block
        use work.LogicExec.all;
@@ -898,7 +966,8 @@ begin
                 IQ_SIZE => IQ_SIZE_INT_SV,
                 DONT_MATCH1 => true,
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_INT_D(0 to 2),
-                IGNORE_MEM_FAIL => true
+                IGNORE_MEM_FAIL => true,
+                                    TMP_USE_ALLOC => true --false
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -907,7 +976,7 @@ begin
                 acceptingMore => iqAcceptingMoreS0,
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedIntA,
-                        TMP_newTags => (others => sn(0)),
+                        TMP_newTags => TMP_sviTags,
                 fni => fni,     
                 readyRegFlags => readyRegFlagsSV,
                 memFail => memFail,
@@ -916,7 +985,8 @@ begin
                 events => events,
                 schedulerOut => slotSelIntSV,
                 outputSignals => outSigsSVI,
-                
+                                freedMask => freedMaskSVI,
+                                usedMask => usedMaskSVI,
                 dbState => dbState
             );
 
@@ -965,7 +1035,8 @@ begin
                 IQ_SIZE => IQ_SIZE_FLOAT_SV, -- CAREFUL: not IS_FP because doesn't have destination
                 DONT_MATCH1 => true,
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_FLOAT_D(0 to 2),
-                IGNORE_MEM_FAIL => true
+                IGNORE_MEM_FAIL => true,
+                                    TMP_USE_ALLOC => true --false
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -974,7 +1045,7 @@ begin
                 acceptingMore => iqAcceptingMoreSF0,
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedFloatA,
-                        TMP_newTags => (others => sn(0)),
+                        TMP_newTags => TMP_svfTags,
                 fni => fniFloat,      
                 readyRegFlags => readyRegFlagsFloatSV,
                 memFail => memFail,
@@ -983,7 +1054,8 @@ begin
                 events => events,
                 schedulerOut => slotSelFloatSV,              
                 outputSignals => outSigsSVF,
-                
+                                freedMask => freedMaskSVF,
+                                usedMask => usedMaskSVF,
                 dbState => dbState
             );       
 
@@ -1030,7 +1102,8 @@ begin
                 IQ_SIZE => IQ_SIZE_F0,
                 FORWARDING(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
                 FORWARDING1(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
-                FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT_D(0 to 2)
+                FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT_D(0 to 2),
+                    TMP_USE_ALLOC => true --false
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -1039,7 +1112,7 @@ begin
                 acceptingMore => iqAcceptingMoreF0,
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedA,
-                        TMP_newTags => (others => sn(0)),
+                        TMP_newTags => TMP_fpTags,
                 fni => fniFloat,
                 readyRegFlags => readyRegFlagsFloat_Early,
                 memFail => memFail,
@@ -1048,7 +1121,8 @@ begin
                 events => events,
                 schedulerOut => slotSelF0,
                 outputSignals => outSigsF0,
-                
+                                freedMask => freedMaskF0,
+                                usedMask => usedMaskF0,
                 dbState => dbState
             );
            
