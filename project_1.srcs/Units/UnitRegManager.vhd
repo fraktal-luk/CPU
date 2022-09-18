@@ -32,6 +32,7 @@ port(
 
         aluMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
         mulMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
+        memMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
         branchMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
         storeMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
         loadMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
@@ -652,6 +653,7 @@ begin
     
         aluMaskRe1 <= getAluMask1(stageDataRenameIn);
         mulMaskRe1 <= getMulMask1(stageDataRenameIn);
+        memMaskRe1 <= getMemMask1(stageDataRenameIn);
         branchMaskRe1 <= getBranchMask1(stageDataRenameIn);
         loadMaskRe1 <= getLoadMask1(stageDataRenameIn);
         storeMaskRe1 <= getStoreMask1(stageDataRenameIn);

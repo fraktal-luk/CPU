@@ -69,7 +69,7 @@ architecture Behavioral of Core is
            execEventSignalE0, execEventSignalE1, lateEventSignal, lateEventSetPC,
            robSending, robAccepting, renamedSending, commitAccepting,
            lsbrAccepting, lsbrAcceptingMore,
-           allocAcceptAlu,
+           allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0,
             allocAcceptSQ, allocAcceptLQ, allocAcceptROB,
            issueQueuesAccepting, issueQueuesAcceptingMore, renameSendingBr, stopRename,
            queuesAccepting, queuesAcceptingMore, iqAcceptingI0, iqAcceptingI1, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
@@ -81,7 +81,7 @@ architecture Behavioral of Core is
     signal renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal --aluMaskRe, branchMaskRe, loadMaskRe, storeMaskRe,
-            aluMaskRe1, mulMaskRe1, branchMaskRe1, loadMaskRe1, storeMaskRe1,
+            aluMaskRe1, mulMaskRe1, memMaskRe1, branchMaskRe1, loadMaskRe1, storeMaskRe1,
             branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO,
            commitMaskSQ, commitEffectiveMaskSQ, commitMaskLQ, commitEffectiveMaskLQ, branchCommitMask, branchCommitEffectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
@@ -130,8 +130,9 @@ architecture Behavioral of Core is
             
     signal dbState: DbCoreState := DEFAULT_DB_STATE;
     
-        signal freedMaskI0, usedMaskI0: std_logic_vector(0 to IQ_SIZE_I0-1) := (others => '0');
-        signal TMP_aluTags: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
+        signal freedMaskI0, usedMaskI0, freedMaskI1, usedMaskI1, freedMaskM0, usedMaskM0,
+                freedMaskSVI, usedMaskSVI, freedMaskSVF, usedMaskSVF, freedMaskF0, usedMaskF0: std_logic_vector(0 to IQ_SIZE_I0-1) := (others => '0');
+        signal TMP_aluTags, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
     --    constant CONNECT_MQ: boolean := true;--false;
 begin
 
@@ -240,6 +241,7 @@ begin
 
             aluMaskRe1 => aluMaskRe1,
             mulMaskRe1 => mulMaskRe1,
+            memMaskRe1 => memMaskRe1,
             branchMaskRe1 => branchMaskRe1,
             loadMaskRe1 => loadMaskRe1,
             storeMaskRe1 => storeMaskRe1,
@@ -376,6 +378,47 @@ begin
                 );
             end generate;
 
+                MUL_ALLOC: entity work.QueueAllocator
+                generic map(
+                    QUEUE_SIZE => 12, BANK_SIZE => 3
+                )
+                port map(
+                    clk => clk, evt => events,
+
+                    inReady => frontLastSending,
+                    inMask => mulMaskRe1,
+                    inGroup => frontOutput,
+
+                    outReady => open,
+                    outGroup => open,
+                        TMP_outTags => TMP_mulTags,
+                    
+                    accept => allocAcceptMul,
+
+                    iqUsed => usedMaskI1,
+                    iqFreed => freedMaskI1
+                );
+                
+                MEM_ALLOC: entity work.QueueAllocator
+                generic map(
+                    QUEUE_SIZE => 12, BANK_SIZE => 3
+                )
+                port map(
+                    clk => clk, evt => events,
+
+                    inReady => frontLastSending,
+                    inMask => memMaskRe1,
+                    inGroup => frontOutput,
+
+                    outReady => open,
+                    outGroup => open,
+                        TMP_outTags => TMP_memTags,
+
+                    accept => allocAcceptMem,
+
+                    iqUsed => usedMaskM0,
+                    iqFreed => freedMaskM0
+                );
 
     TEMP_EXEC: block
        use work.LogicExec.all;
@@ -602,7 +645,7 @@ begin
 
                             prevSendingOK => renamedSending,
                             newArr => schedInfoUpdatedA,
-                                 TMP_newTags => (others => sn(0)),
+                                 TMP_newTags => TMP_mulTags,
                             fni => fni,
                             readyRegFlags => readyRegFlagsInt_Early,
                             memFail => memFail,
@@ -611,6 +654,9 @@ begin
                             events => events,
                             schedulerOut => slotSelI1,
                             outputSignals => outSigsI1,
+                            
+                                freedMask => freedMaskI1,
+                                usedMask => usedMaskI1,
 
                             dbState => dbState
                         );
@@ -692,7 +738,7 @@ begin
                acceptingMore => iqAcceptingMoreM0,
                prevSendingOK => renamedSending,
                newArr => schedInfoUpdatedA,
-                     TMP_newTags => (others => sn(0)),
+                     TMP_newTags => TMP_memTags,
                fni => fni,
                readyRegFlags => readyRegFlagsInt_Early,
                memFail => memFail,
@@ -701,7 +747,8 @@ begin
                events => events,
                schedulerOut => slotSelM0,
                outputSignals => outSigsM0,
-               
+                   freedMask => freedMaskM0,
+                   usedMask => usedMaskM0,              
                dbState => dbState
            );
 
