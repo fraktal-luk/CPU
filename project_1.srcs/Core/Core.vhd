@@ -299,7 +299,7 @@ begin
 
 
     canSendFront <= renameAccepting and not stopRename
-                                               and allocAcceptAlu
+                                               and allocAcceptAlu and allocAcceptMul and allocAcceptMem
                                                and allocAcceptSQ and allocAcceptLQ and allocAcceptROB;
     canSendRename <= not stopRename;  --  Could also be : queuesAccepting;  
 
@@ -309,7 +309,8 @@ begin
     lsbrAcceptingMore <= robAcceptingMore and not almostFullSQ and not almostFullLQ;
     
     issueQueuesAccepting <= iqAcceptingI0 and iqAcceptingM0 and iqAcceptingS0 and iqAcceptingF0 and iqAcceptingSF0;
-    issueQueuesAcceptingMore <= iqAcceptingMoreI0 and iqAcceptingMoreM0 and iqAcceptingMoreS0 and iqAcceptingMoreF0 and iqAcceptingMoreSF0;
+    issueQueuesAcceptingMore <= --iqAcceptingMoreI0 and iqAcceptingMoreM0 and 
+                                    iqAcceptingMoreS0 and iqAcceptingMoreF0 and iqAcceptingMoreSF0;
 
     queuesAccepting <= lsbrAccepting and issueQueuesAccepting;
     queuesAcceptingMore <= --robAcceptingMore and
@@ -635,7 +636,8 @@ begin
                             IQ_SIZE => IQ_SIZE_I0,
                             FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                             FORWARDING1(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-                            FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
+                            FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
+                                                TMP_USE_ALLOC => true --false
                         )
                         port map(
                             clk => clk, reset => '0', en => '0',
@@ -729,7 +731,8 @@ begin
                IQ_SIZE => IQ_SIZE_M0,
                DONT_MATCH1 => true,
                FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-               FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
+               FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
+                                   TMP_USE_ALLOC => true --false
            )
            port map(
                clk => clk, reset => '0', en => '0',
