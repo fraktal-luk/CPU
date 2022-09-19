@@ -28,6 +28,8 @@ function getVirtualDests(ria: RenameInfoArray) return RegNameArray;
 function getPhysicalArgs(ria: RenameInfoArray) return PhysNameArray;
 function getPhysicalDests(ria: RenameInfoArray) return PhysNameArray;
 
+function getVirtualArgs(ia: BufferEntryArray) return RegNameArray;
+
 function whichTakeReg(ria: RenameInfoArray; fp: boolean) return std_logic_vector;
 function findOverriddenDests(ria: RenameInfoArray; fp: boolean) return std_logic_vector;
 
@@ -207,6 +209,16 @@ begin
     return res;
 end function;
 
+function getVirtualArgs(ia: BufferEntryArray) return RegNameArray is
+    variable res: RegNameArray(0 to 3*ia'length-1) := (others => (others => '0'));
+begin
+    for i in ia'range loop
+        res(3*i+0) := ia(i).argSpec.args(0)(4 downto 0);
+        res(3*i+1) := ia(i).argSpec.args(1)(4 downto 0);
+        res(3*i+2) := ia(i).argSpec.args(2)(4 downto 0);
+    end loop;
+    return res;
+end function;
 
 function getVirtualDests(ria: RenameInfoArray) return RegNameArray is
     variable res: RegNameArray(0 to ria'length-1) := (others=>(others=>'0'));

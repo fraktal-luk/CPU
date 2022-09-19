@@ -62,12 +62,10 @@ end Core;
 
 architecture Behavioral of Core is
 
-    signal frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending,
+    signal frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending, canSendFront, canSendRename, robSending, robAccepting, renameSendingBr, renamedSending, commitAccepting,
            frontEventSignal, bqAccepting, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ,
-           canSendFront, canSendRename, robSending, robAccepting, renameSendingBr, renamedSending, commitAccepting,
            execEventSignalE0, execEventSignalE1, lateEventSignal, lateEventSetPC,
-           allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0,
-           allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
+           allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
            iqAcceptingI0, iqAcceptingI1, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
            robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreI1, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
            mqReady, mqIssueSending, mqRegReadSending, memoryMissed, sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
@@ -116,7 +114,9 @@ architecture Behavioral of Core is
 
         signal freedMaskI0, usedMaskI0, freedMaskI1, usedMaskI1, freedMaskM0, usedMaskM0,
                freedMaskSVI, usedMaskSVI, freedMaskSVF, usedMaskSVF, freedMaskF0, usedMaskF0: std_logic_vector(0 to IQ_SIZE_I0-1) := (others => '0');
-        signal TMP_aluTags, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
+        signal TMP_aluTags, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags,
+                TMP_aluTagsPre, TMP_mulTagsPre, TMP_memTagsPre, TMP_sviTagsPre, TMP_svfTagsPre, TMP_fpTagsPre
+                : SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
 begin
 
     intSignal <= int0 or int1;
@@ -163,7 +163,7 @@ begin
         robSpecial => specialOutROB,
         ---
         bqTargetData => bqTargetData,
-            
+
         sbSending => sbSending,
         dataFromSB => dataFromSB,
         sbEmpty => sbEmpty,
@@ -316,6 +316,7 @@ begin
                     outReady => open,
                     outGroup => open,
                         TMP_outTags => TMP_aluTags,
+                        TMP_outTagsPre => TMP_aluTagsPre,
 
                     accept => allocAcceptAlu,
 
@@ -337,6 +338,7 @@ begin
                     outReady => open,
                     outGroup => open,
                         TMP_outTags => TMP_mulTags,
+                        TMP_outTagsPre => TMP_mulTagsPre,
                     
                     accept => allocAcceptMul,
 
@@ -358,6 +360,7 @@ begin
                     outReady => open,
                     outGroup => open,
                         TMP_outTags => TMP_memTags,
+                        TMP_outTagsPre => TMP_memTagsPre,
 
                     accept => allocAcceptMem,
 
@@ -426,6 +429,26 @@ begin
 
                     iqUsed => usedMaskF0,
                     iqFreed => freedMaskF0
+                );
+
+
+                RENAMER: entity work.Renamer
+                port map(
+                    clk => clk, evt => events,
+                    
+                    prevSending => frontLastSending,
+                    
+                    frontData => frontOutput,
+                    
+                    maskAlu => aluMaskRe,
+                    maskMul => mulMaskRe,
+                    maskMem => memMaskRe,
+                    
+                    TMP_tagsAlu => TMP_aluTagsPre,
+                    TMP_tagsMul => TMP_mulTagsPre,
+                    TMP_tagsMem => TMP_memTagsPre,
+
+                    dummy => open
                 );
 
 
