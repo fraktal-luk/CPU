@@ -24,21 +24,16 @@ port(
     renameAccepting: out std_logic;
     frontLastSendingIn: in std_logic;
     frontData: in BufferEntryArray;
-    
---    aluMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
---    branchMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
---    storeMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
---    loadMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
 
-        aluMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
-        mulMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
-        memMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
-        branchMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
-        storeMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
-        loadMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
-        intStoreMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
-        floatStoreMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
-        fpMaskRe1: out std_logic_vector(0 to PIPE_WIDTH-1);
+    aluMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+    mulMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+    memMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+    branchMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+    storeMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+    loadMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+    intStoreMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+    floatStoreMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+    fpMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
 
     renamedArgsInt: out RenameInfoArray(0 to PIPE_WIDTH-1);
     renamedArgsFloat: out RenameInfoArray(0 to PIPE_WIDTH-1);
@@ -648,18 +643,13 @@ begin
 
     renamingBr <= frontLastSending and frontDataISL(0).ins.controlInfo.firstBr;
 
---    aluMaskRe <= getAluMask(renamedBase);
---    branchMaskRe <= getBranchMask(renamedBase);
---    loadMaskRe <= getLoadMask(renamedBase);
---    storeMaskRe <= getStoreMask(renamedBase);
-    
-        aluMaskRe1 <= getAluMask1(stageDataRenameIn);
-        mulMaskRe1 <= getMulMask1(stageDataRenameIn);
-        memMaskRe1 <= getMemMask1(stageDataRenameIn);
-        branchMaskRe1 <= getBranchMask1(stageDataRenameIn);
-        loadMaskRe1 <= getLoadMask1(stageDataRenameIn);
-        storeMaskRe1 <= getStoreMask1(stageDataRenameIn);
-        fpMaskRe1 <= getFpMask1(stageDataRenameIn);
-        intStoreMaskRe1 <= getIntStoreMask1(stageDataRenameIn);
-        floatStoreMaskRe1 <= getFloatStoreMask1(stageDataRenameIn);            
+    aluMaskRe <= getAluMask1(stageDataRenameIn);
+    mulMaskRe <= getMulMask1(stageDataRenameIn);
+    memMaskRe <= getMemMask1(stageDataRenameIn);
+    branchMaskRe <= getBranchMask1(stageDataRenameIn);
+    loadMaskRe <= getLoadMask1(stageDataRenameIn);
+    storeMaskRe <= getStoreMask1(stageDataRenameIn);
+    fpMaskRe <= getFpMask1(stageDataRenameIn);
+    intStoreMaskRe <= getIntStoreMask1(stageDataRenameIn);
+    floatStoreMaskRe <= getFloatStoreMask1(stageDataRenameIn);            
 end Behavioral;
