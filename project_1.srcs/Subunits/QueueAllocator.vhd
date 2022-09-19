@@ -29,6 +29,7 @@ entity QueueAllocator is
 
         outReady: out std_logic;
         outGroup: out InstructionSlotArray(0 to RENAME_W-1);
+            TMP_outTagsPre: out SmallNumberArray(0 to RENAME_W-1);
             TMP_outTags: out SmallNumberArray(0 to RENAME_W-1);
 
         accept: out std_logic;
@@ -190,5 +191,7 @@ begin
     end process;
 
         accept <= allOf(lanesReady);
+
+        TMP_outTagsPre <= newInds;
 
 end Behavioral;

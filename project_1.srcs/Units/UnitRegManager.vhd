@@ -80,7 +80,7 @@ architecture Behavioral of UnitRegManager is
                renameFull,
                  ch0, ch1, ch2
                : std_logic := '0';
- 
+
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG; -- This is rewinded on events
     signal renameCtr, renameCtrNext: Word := (others => '0');
 
@@ -190,71 +190,6 @@ architecture Behavioral of UnitRegManager is
         return res;
     end function;
 
-    function findDeps(ia: BufferEntryArray) return DependencyVec is
-        variable res: DependencyVec := DEFAULT_DEP_VEC;
-    begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
-                    
-                    if ia(i).argSpec.args(k)(4 downto 0) = ia(j).argSpec.dest(4 downto 0) -- name match       
-                    then
-                        res(i)(k)(j) := '1';                   
-                    end if;
-                end loop;
-            end loop;
-        end loop;
-        
-        return res;
-    end function;
-
-
-    function getRealDepVecInt(ia: BufferEntryArray; depVec: DependencyVec) return DependencyVec is
-        variable res: DependencyVec := (others => (others => (others => '0')));
-    begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
-                    
-                    if depVec(i)(k)(j) = '1' and ia(i).argSpec.intArgSel(k) = '1' and ia(j).argSpec.intDestSel = '1' -- intSel match
-                    then
-                        res(i)(k)(j) := '1';
-                        exit;                        
-                    end if;
-                end loop;
-            end loop;                     
-    
-        end loop;        
-        return res;
-    end function;
-
-    function getRealDepVecFloat(ia: BufferEntryArray; depVec: DependencyVec) return DependencyVec is
-        variable res: DependencyVec := (others => (others => (others => '0')));
-    begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
-                    
-                    if depVec(i)(k)(j) = '1' and ia(i).argSpec.floatArgSel(k) = '1' and ia(j).argSpec.floatDestSel = '1'
-                    then
-                        res(i)(k)(j) := '1';
-                        exit;                   
-                    end if;
-                end loop;
-            end loop;                     
-    
-        end loop;        
-        return res;
-    end function;   
 
     function classifyForDispatch(insVec: InstructionSlotArray) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
