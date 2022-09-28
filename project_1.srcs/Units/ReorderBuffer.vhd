@@ -216,7 +216,8 @@ begin
     CTR_MANAGEMENT: block
         signal recoveryCounter, nFull, nFullNext, nAlloc, nAllocNext, nIn, nInAlloc, nOut: SmallNumber := (others => '0');
     begin    
-        startPtrNext <= startPtr when isSending = '0' else addIntTrunc(startPtr, 1, ROB_PTR_SIZE+1);
+        startPtrNext <= addIntTrunc(startPtr, 1, ROB_PTR_SIZE+1) when isSending = '1'
+                   else startPtr;
         
         endPtrNext <= startPtrNext when lateEventSignal = '1'
                     else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when execEvent = '1'

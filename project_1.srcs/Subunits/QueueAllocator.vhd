@@ -53,7 +53,7 @@ architecture Behavioral of QueueAllocator is
 
     signal recoveryCounter: SmallNumber := sn(0);
 
-        signal TMP_execEventD: std_logic := '0'; -- Must wait for flushing actual IQ
+        --signal TMP_execEventD: std_logic := '0'; -- Must wait for flushing actual IQ
 
         signal fullMaskMirror: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
@@ -167,7 +167,7 @@ begin
     process (clk)
     begin
         if rising_edge(clk) then
-                TMP_execEventD <= evt.execEvent;
+            --    TMP_execEventD <= evt.execEvent;
 
             reclaim(usedTable, iqFreed);
 

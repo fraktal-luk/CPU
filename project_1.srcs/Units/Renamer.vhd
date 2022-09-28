@@ -11,6 +11,8 @@ use work.CoreConfig.all;
 use work.PipelineGeneral.all;
 use work.LogicRenaming.all;
 
+use work.LogicROB.all;
+
 
 entity Renamer is
     port (
@@ -32,6 +34,9 @@ entity Renamer is
         TMP_destsOut: out SmallNumberArray(0 to RENAME_W-1);
         TMP_sourcesOut: out SmallNumberArray(0 to 3*RENAME_W-1);
 
+            renameSending: in std_logic;
+            robSending: in std_logic;
+
         dummy: out std_logic
     );
 end Renamer;
@@ -51,19 +56,61 @@ architecture Behavioral of Renamer is
     signal baseSrcs, finalSrcs, finalSrcsReg: SmallNumberArray(0 to 3*RENAME_W-1) := (others => sn(0));
 
     
---            res(i).deps := depVec(i);
---            res(i).physicalSourcesNew := res(i).physicalSources;
-        
---            for j in 0 to 2 loop
---                res(i).sourcesNew(j) := isNonzero(res(i).deps(j));
---                for k in PIPE_WIDTH-1 downto 0 loop
---                    if res(i).deps(j)(k) = '1' then
---                        res(i).physicalSourcesNew(j) := dests(k);
---                        exit;
---                    end if;
---                end loop;
---            end loop;    
+    type AbstractMapping is record
+        used: std_logic;
+        virtual: RegName;
+        assigned: std_logic;
+        physical: PhysName;
+    end record;
     
+    type AbstractMappingGroup is array(0 to RENAME_W-1) of AbstractMapping;
+
+    type MapRow is record
+        used: std_logic;
+        tag: InsTag;
+        mappings: AbstractMappingGroup;
+    end record;
+
+    type MapList is array(0 to ROB_SIZE-1) of MapRow;
+
+    signal abstractMapList: MapList;
+    signal listWritePtr: integer := -1;
+        
+       -- Same as in ROB
+	   signal startPtr, startPtrNext, endPtr, endPtrNext, renamedPtr, renamedPtrNext, causingPtr: SmallNumber := (others => '0');	
+
+    signal newFreeDests: PhysNameArray(0 to RENAME_W-1) := (others => (others => '0'));
+
+
+    function makeMapRow(frontData: BufferEntryArray; newPhysDests: PhysNameArray) return MapRow is
+        variable res: MapRow;
+    begin
+        res.used := '0';
+        res.tag := (others => 'Z');
+        for i in 0 to RENAME_W-1 loop
+            res.mappings(i).used := frontData(i).argSpec.intDestSel;
+            res.mappings(i).virtual := frontData(i).argSpec.dest(4 downto 0);
+            res.mappings(i).assigned := '1';
+            res.mappings(i).physical := newPhysDests(i);
+            
+            res.used := res.used or res.mappings(i).used;          
+        end loop;
+        return res;
+    end function;
+
+    signal newMapRow: MapRow;
+
+    function findFreeRow(list: MapList) return integer is
+    begin
+        for i in list'range loop
+            if list(i).used /= '1' then
+                return i;
+            end if;
+        end loop;
+        return -1;
+    end function;
+
+
     function TMP_replaceNewDests(baseSrcs: SmallNumberArray; depVec: DependencyVec; newDests: SmallNumberArray) return SmallNumberArray is
         variable res: SmallNumberArray(baseSrcs'range) := baseSrcs;
     begin
@@ -120,9 +167,48 @@ begin
                     end if;
                 end loop;
             end if;
+            
+            --------------------------------------------
+            -- Abstract map for reference
+            --------------------------------------------
+            --if prevSending = '1' and newMapRow.used = '1' then
+            if prevSending = '1' then
+                abstractMapList(p2i(renamedPtrNext, ROB_SIZE)) <= newMapRow;
+            end if;
 
+            if robSending = '1' then
+                abstractMapList(p2i(startPtr, ROB_SIZE)).used <= '0';
+            end if;
+            
+            startPtr <= startPtrNext;
+            endPtr <= endPtrNext;
+            renamedPtr <= renamedPtrNext;
+            
         end if;
     end process;
+
+    	causingPtr <= getTagHighSN(evt.execCausing.tag) and PTR_MASK_SN_LONG;
+
+
+        startPtrNext <= addIntTrunc(startPtr, 1, ROB_PTR_SIZE+1) when robSending = '1'
+                   else startPtr;
+
+        endPtrNext <= startPtrNext when evt.lateEvent = '1'
+                    else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when evt.execEvent = '1'
+                    else  addIntTrunc(endPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
+                    else  endPtr;
+
+        renamedPtrNext <= startPtrNext when evt.lateEvent = '1'
+                    else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when evt.execEvent = '1'
+                    else  addIntTrunc(renamedPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
+                    else  renamedPtr;
+
+
+        newMapRow <= makeMapRow(frontData, newFreeDests);
+        listWritePtr <= findFreeRow(abstractMapList);
+
+
+
 
     TMP_destsOut <= newTags;
     TMP_sourcesOut <= finalSrcsReg;

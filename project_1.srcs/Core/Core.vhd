@@ -124,7 +124,7 @@ begin
 
     events <= (lateEventSignal, execEventSignalE0, dataToBranch.tags, execEvent, lateEvent);
 
-    execEvent <= (DEFAULT_DEBUG_INFO, execEventSignalE0, '0', InsTag'(others => '0'), branchResultE0.tags.bqPointerSeq, branchResultE0.target);
+    execEvent <= (DEFAULT_DEBUG_INFO, execEventSignalE0, '0', branchResultE0.tags.renameIndex, branchResultE0.tags.bqPointerSeq, branchResultE0.target);
     dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'),
                      zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
 
@@ -447,6 +447,9 @@ begin
                     TMP_tagsAlu => TMP_aluTagsPre,
                     TMP_tagsMul => TMP_mulTagsPre,
                     TMP_tagsMem => TMP_memTagsPre,
+                        
+                        renameSending => renamedSending, -- CAREFUL, it's an input
+                        robSending => robSending, -- CAREFUL, it's an input
 
                     dummy => open
                 );

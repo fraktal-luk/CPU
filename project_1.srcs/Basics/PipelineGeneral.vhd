@@ -115,61 +115,80 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
     others => (others => '0')
 );
 
-    type DependencySpec is array(0 to 2) of std_logic_vector(0 to PIPE_WIDTH-1); 
-    type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
+type DependencySpec is array(0 to 2) of std_logic_vector(0 to PIPE_WIDTH-1); 
+type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
+
+constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
+
+
+type RenameInfo is record
+        dbInfo: InstructionDebugInfo;
+
+        dbDepTags: InsTagArray(0 to 2); -- TODO: replace with DbDepedency because content of DB infos should be encapsulated
+
+    destSel: std_logic;
+    destSelFP: std_logic;
+        psel: std_logic;
+    virtualDest: RegName;
+    physicalDest: PhysName;
+    sourceSel: std_logic_vector(0 to 2);
+    sourceConst: std_logic_vector(0 to 2); 
+    virtualSources: RegNameArray(0 to 2);
+    physicalSources: PhysNameArray(0 to 2);
+    physicalSourcesStable: PhysNameArray(0 to 2);
+    physicalSourcesNew: PhysNameArray(0 to 2); -- sources in case of of group dependency        
+    deps: DependencySpec;
+    sourcesStable: std_logic_vector(0 to 2); -- true if source is from stable map - always ready
+    sourcesNew: std_logic_vector(0 to 2);   -- true if group dependency
+    sourcesReady: std_logic_vector(0 to 2); -- ready as read from ReadyTable based on NewestMap
+end record;
+
+type RenameInfoArray is array(natural range <>) of RenameInfo;
+
+constant DEFAULT_RENAME_INFO: RenameInfo := (
+        dbInfo => DEFAULT_DEBUG_INFO, 
+        
+        dbDepTags => (others => (others => 'U')),
+                   
+    destSel => '0',
+    destSelFP => '0',
+        psel => '0',
+    virtualDest => (others => '0'),
+    physicalDest => (others => '0'),
+    sourceSel => (others => '0'),
+    sourceConst => (others => '0'),
+    virtualSources => (others => (others => '0')),
+    physicalSources => (others => (others => '0')),
+    physicalSourcesStable => (others => (others => '0')),
+    physicalSourcesNew => (others => (others => '0')),
+    deps => (others => (others => '0')),
+    sourcesStable => (others => '0'),
+    sourcesNew => (others => '0'),
+    sourcesReady => (others => '0')       
+);
+
+-- Is it needed? Unify with ExecResult?
+type BypassEntry is record
+    en: std_logic;
+    failed: std_logic;
+    tag: InsTag;
+    iqTag: SmallNumber;
+    dest: PhysName;
+    value: Mword;
+end record;
+
+
+type MapEntry is record
     
-    constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
+    tag: InsTag;
+    virtual: RegName;
+    physical: PhysName;
+end record;
 
 
-    type RenameInfo is record
-            dbInfo: InstructionDebugInfo;
-    
-            dbDepTags: InsTagArray(0 to 2); -- TODO: replace with DbDepedency because content of DB infos should be encapsulated
+function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInfoArray;
 
-        destSel: std_logic;
-        destSelFP: std_logic;
-            psel: std_logic;
-        virtualDest: RegName;
-        physicalDest: PhysName;
-        sourceSel: std_logic_vector(0 to 2);
-        sourceConst: std_logic_vector(0 to 2); 
-        virtualSources: RegNameArray(0 to 2);
-        physicalSources: PhysNameArray(0 to 2);
-        physicalSourcesStable: PhysNameArray(0 to 2);
-        physicalSourcesNew: PhysNameArray(0 to 2); -- sources in case of of group dependency        
-        deps: DependencySpec;
-        sourcesStable: std_logic_vector(0 to 2); -- true if source is from stable map - always ready
-        sourcesNew: std_logic_vector(0 to 2);   -- true if group dependency
-        sourcesReady: std_logic_vector(0 to 2); -- ready as read from ReadyTable based on NewestMap
-    end record;
-
-    type RenameInfoArray is array(natural range <>) of RenameInfo;
-
-    constant DEFAULT_RENAME_INFO: RenameInfo := (
-            dbInfo => DEFAULT_DEBUG_INFO, 
-            
-            dbDepTags => (others => (others => 'U')),
-                       
-        destSel => '0',
-        destSelFP => '0',
-            psel => '0',
-        virtualDest => (others => '0'),
-        physicalDest => (others => '0'),
-        sourceSel => (others => '0'),
-        sourceConst => (others => '0'),
-        virtualSources => (others => (others => '0')),
-        physicalSources => (others => (others => '0')),
-        physicalSourcesStable => (others => (others => '0')),
-        physicalSourcesNew => (others => (others => '0')),
-        deps => (others => (others => '0')),
-        sourcesStable => (others => '0'),
-        sourcesNew => (others => '0'),
-        sourcesReady => (others => '0')       
-    );
-
-    function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInfoArray;
-
-    function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray;
+function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray;
 
 function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector;
 
