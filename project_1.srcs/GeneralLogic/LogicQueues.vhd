@@ -82,9 +82,9 @@ package body LogicQueues is
     procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural; isl: InstructionSlot; sysOp: std_logic; constant IS_LOAD_QUEUE: boolean) is
     begin
         if not IS_LOAD_QUEUE then
-            content(ind).isSysOp <= isStoreSysOp(isl.ins);
+            content(ind).isSysOp <= isStoreSysOp(isl.ins.specificOperation);
         else
-            content(ind).isSysOp <= isLoadSysOp(isl.ins);                
+            content(ind).isSysOp <= isLoadSysOp(isl.ins.specificOperation);                
         end if;
         
         content(ind).isSysOp <= sysOp;

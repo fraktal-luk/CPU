@@ -16,7 +16,6 @@ package PipelineGeneral is
 
 function sn(n: integer) return SmallNumber;
 
-
 function p2i(p: SmallNumber; n: natural) return natural;
 
 type PhysicalSubpipe is (ALU, Mem, FP, StoreDataInt, StoreDataFloat);
@@ -46,74 +45,6 @@ type RegisterStateArray is array(integer range <>) of RegisterState;
 type RegisterStateArray2D is array(integer range <>) of RegisterStateArray(0 to 2);
 
 
-
-type ForwardingInfo is record
-	nextTagsM3:	PhysNameArray(0 to 2);
-	nextTagsM2:	PhysNameArray(0 to 2);
-	nextTagsM1: PhysNameArray(0 to 2);
-	tags0: PhysNameArray(0 to 2);
-	tags1: PhysNameArray(0 to 2);
-	values0: MwordArray(0 to 2);
-	values1: MwordArray(0 to 2);
-	failedM2: std_logic_vector(0 to 2);	
-	failedM1: std_logic_vector(0 to 2);	
-	failed0: std_logic_vector(0 to 2);	
-	failed1: std_logic_vector(0 to 2);	
-end record;
-
-
-type ForwardingComparisons is record
-    cmpM3: std_logic_vector(0 to 2);
-    cmpM2: std_logic_vector(0 to 2);
-    cmpM1: std_logic_vector(0 to 2);
-    cmp0: std_logic_vector(0 to 2);
-    cmp1: std_logic_vector(0 to 2);
-    reg:  std_logic;
-end record;
-
-constant DEFAULT_FORWARDING_COMPARISONS: ForwardingComparisons := (reg => '0', others => (others => '0'));
-
-type ForwardingComparisonsArray is array(natural range <>) of ForwardingComparisons;
-
-type ForwardingMatches is record
-    -- src0
-    a0cmpM3: std_logic_vector(0 to 2);
-    a0cmpM2: std_logic_vector(0 to 2);
-    a0cmpM1: std_logic_vector(0 to 2);
-    a0cmp1: std_logic_vector(0 to 2);    
-	a0cmp0: std_logic_vector(0 to 2);
-    
-    -- src1
-	a1cmpM3: std_logic_vector(0 to 2);
-	a1cmpM2: std_logic_vector(0 to 2);
-	a1cmpM1: std_logic_vector(0 to 2);
-	a1cmp1: std_logic_vector(0 to 2);	    
-	a1cmp0: std_logic_vector(0 to 2);
-	
-	cmps: ForwardingComparisonsArray(0 to 1);
-end record;
-
-type ForwardingMatchesArray is array(integer range <>) of ForwardingMatches; 
-
-
-constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
-	nextTagsM3 => (others => (others => '0')),
-	nextTagsM2 => (others => (others => '0')),
-	nextTagsM1 => (others => (others => '0')),
-    tags0 => (others => (others => '0')),
-    tags1 => (others => (others => '0')),
-    values0 => (others => (others => '0')),
-    values1 => (others => (others => '0')),
-    failedM2 => (others => '0'),
-    failedM1 => (others => '0'),
-    failed0 => (others => '0'),
-    failed1 => (others => '0')
-);
-
-constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
-    cmps => (others => DEFAULT_FORWARDING_COMPARISONS),
-    others => (others => '0')
-);
 
 type DependencySpec is array(0 to 2) of std_logic_vector(0 to PIPE_WIDTH-1); 
 type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
@@ -190,8 +121,6 @@ function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInf
 
 function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray;
 
-function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector;
-
 function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector;
 function extractFullMask(cpa: ControlPacketArray) return std_logic_vector;
 function extractFullMask(ba: BufferEntryArray) return std_logic_vector;
@@ -199,9 +128,6 @@ function extractFullMask(ba: BufferEntryArray) return std_logic_vector;
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
 function compareIndBefore(tagA, tagB: SmallNumber; PTR_SIZE: natural) return std_logic;
-
--- TODO: deprecate?
-function getExceptionMask(insVec: InstructionSlotArray) return std_logic_vector;
 
 -- general op tag handling
 function getTagHigh(tag: std_logic_vector) return std_logic_vector;
@@ -223,22 +149,13 @@ function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSl
 
 function getAddressIncrement(ins: InstructionState) return Mword;
 
-
 function findDeps(ia: BufferEntryArray) return DependencyVec;
 function getRealDepVecInt(ia: BufferEntryArray; depVec: DependencyVec) return DependencyVec;
 function getRealDepVecFloat(ia: BufferEntryArray; depVec: DependencyVec) return DependencyVec;   
 
-
 function hasSyncEvent(ins: InstructionState) return std_logic;
 function hasSyncEvent(ct: InstructionControlInfo) return std_logic;
 
-function isBranchIns(ins: InstructionState) return std_logic;
-function isLoadOp(ins: InstructionState) return std_logic;
-function isStoreOp(ins: InstructionState) return std_logic;
-function isLoadMemOp(ins: InstructionState) return std_logic;
-function isStoreMemOp(ins: InstructionState) return std_logic;
-function isLoadSysOp(ins: InstructionState) return std_logic;
-function isStoreSysOp(ins: InstructionState) return std_logic;
 
 function isLoadMemOp(op: SpecificOp) return std_logic;
 function isStoreMemOp(op: SpecificOp) return std_logic;
@@ -248,27 +165,18 @@ function isLoadSysOp(op: SpecificOp) return std_logic;
 function isStoreSysOp(op: SpecificOp) return std_logic;
 
 
--- sorting subpipelines
---function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
---function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector;
---function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getStoreSysMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getLoadSysMask(insVec: InstructionSlotArray) return std_logic_vector;
---function getFloatStoreMask(insVec, insVecF: InstructionSlotArray) return std_logic_vector;
---function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
---function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector;
---function getMemMask(insVec: InstructionSlotArray) return std_logic_vector;
 
-
-        function getBranchMask1(insVec: InstructionSlotArray) return std_logic_vector;
-        function getLoadMask1(insVec: InstructionSlotArray) return std_logic_vector;
-        function getStoreMask1(insVec: InstructionSlotArray) return std_logic_vector;
-        function getIntStoreMask1(insVec: InstructionSlotArray) return std_logic_vector;       
-        function getFloatStoreMask1(insVec: InstructionSlotArray) return std_logic_vector;
-        function getAluMask1(insVec: InstructionSlotArray) return std_logic_vector;
-        function getMulMask1(insVec: InstructionSlotArray) return std_logic_vector;
-        function getFpMask1(insVec: InstructionSlotArray) return std_logic_vector;
-        function getMemMask1(insVec: InstructionSlotArray) return std_logic_vector;
+function getBranchMask1(insVec: InstructionSlotArray) return std_logic_vector;
+function getLoadMask1(insVec: InstructionSlotArray) return std_logic_vector;
+function getStoreMask1(insVec: InstructionSlotArray) return std_logic_vector;
+function getIntStoreMask1(insVec: InstructionSlotArray) return std_logic_vector;       
+function getFloatStoreMask1(insVec: InstructionSlotArray) return std_logic_vector;
+function getAluMask1(insVec: InstructionSlotArray) return std_logic_vector;
+function getMulMask1(insVec: InstructionSlotArray) return std_logic_vector;
+function getFpMask1(insVec: InstructionSlotArray) return std_logic_vector;
+function getMemMask1(insVec: InstructionSlotArray) return std_logic_vector;
 
 
 function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray;
@@ -315,21 +223,7 @@ function updateMemDest(er: ExecResult; used: std_logic) return ExecResult;
                                            resOutSQ: ExecResult)
                 return ControlPacket;
 
-
-function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
-                                s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
-                                s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
-          : ExecResult
-) return ForwardingInfo;
-
-function buildForwardingNetworkFP(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
-                                  s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
-                                  s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
-          : ExecResult
-) return ForwardingInfo;
-
 end package;
-
 
 
 package body PipelineGeneral is
@@ -370,43 +264,6 @@ end function;
         res(9 to 11) := ri(3).physicalSourcesNew;
         return res;
     end function;
-
-
--- REFAC
-function getSelector(mr, mi: std_logic_vector(0 to 2)) return std_logic_vector is
-    variable res: std_logic_vector(1 downto 0) := "00";
-    variable m6: std_logic_vector(0 to 5) := mr & mi;
-    variable n0: integer := 0;
-begin
-    n0 := 6 - countOnes(m6);
-    case m6 is
-        --when "111000" =>
-        --    res := "11";
-        when "111001" => 
-            res := "10";
-        when "111010" | "111011" => 
-            res := "01";
-        when "111100" | "111101" | "111110" | "111111" => 
-            res := "00";
- 
-        --when "110000" => 
-        --    res := "11";
-        --when "110001" | "110010" => 
-        --    res := "11";
-        when "110011" | "110101" => 
-            res := "10";
-        when "110110" | "110111" =>
-            res := "01";
-
-        when "100111" => 
-            res := "10";
-
-        when others =>
-            res := "11";
-    end case;
-    return res;
-end function;
-
 
 function getAddressIncrement(ins: InstructionState) return Mword is
 	variable res: Mword := (others => '0');
@@ -537,27 +394,6 @@ begin
 end function;
 
 
-function getExceptionMask(insVec: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(insVec'range) := (others=>'0');
-begin
-	for i in insVec'range loop
-		res(i) := insVec(i).ins.controlInfo.hasException
-		       or insVec(i).ins.controlInfo.specialAction; -- CAREFUL: what if special actions are allowed to write registers?
-	end loop;			
-	return res;
-end function;
-
-
---function getCausingMask(insVec: InstructionSlotArray) return std_logic_vector is
---	variable res: std_logic_vector(insVec'range) := (others=>'0');
---begin
---    for i in insVec'range loop
---        res(i) := insVec(i).ins.controlInfo.causing; -- CAREFUL: what if special actions are allowed to write registers?
---    end loop;            
---    return res;
---end function;
-
-
 function getKilledMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(insVec'range) := (others=>'0');
 begin
@@ -567,219 +403,128 @@ begin
     return res;
 end function;
 
---function getIgnoredMask(insVec: InstructionSlotArray) return std_logic_vector is
---	variable res: std_logic_vector(insVec'range) := (others=>'0');
---begin
---    for i in insVec'range loop
---        res(i) := insVec(i).ins.controlInfo.ignored;
---    end loop;            
---    return res;
---end function;
+
+function getBranchMask1(insVec: InstructionSlotArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := insVec(i).ins.classInfo.branchIns;
+    end loop;	
+    return res;
+end function;
+
+function getLoadMask1(insVec: InstructionSlotArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := insVec(i).ins.classInfo.useLQ;
+    end loop;
+    
+    return res;
+end function;
+
+function getStoreMask1(insVec: InstructionSlotArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := insVec(i).ins.classInfo.useSQ;
+    end loop;
+    
+    return res;
+end function;
 
 
---function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector is
---	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
---begin
---	for i in 0 to PIPE_WIDTH-1 loop
---		res(i) := insVec(i).full and insVec(i).ins.classInfo.branchIns;
---	end loop;	
---	return res;
---end function;
+function getIntStoreMask1(insVec: InstructionSlotArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := insVec(i).ins.classInfo.storeInt;
+    end loop;
+    
+    return res;
+end function;
 
-
----- Base for implementing subpipe selection
---function getSubpipeMask(insVec: InstructionSlotArray; subpipe: SubpipeType) return std_logic_vector is
---	variable res: std_logic_vector(insVec'range) := (others => '0');
---begin
---    for i in insVec'range loop
---        res(i) := insVec(i).full and bool2std(insVec(i).ins.specificOperation.subpipe = subpipe);
---    end loop;
---    return res;
---end function;
-
-
---function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector is
---	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
---begin
---	for i in 0 to PIPE_WIDTH-1 loop
---		if 		insVec(i).full = '1'
---			and insVec(i).ins.specificOperation.subpipe = Mem 
---			and (insVec(i).ins.specificOperation.memory = opLoad or insVec(i).ins.specificOperation.memory = opLoadSys) 
---		then
---			res(i) := '1';
---		end if;
---	end loop;
-	
---	return res;
---end function;
-
---function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector is
---	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
---begin
---	for i in 0 to PIPE_WIDTH-1 loop
---		if 	  insVec(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
---		      and (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys)			
---		then
---			res(i) := '1';
---		end if;
---	end loop;
-	
---	return res;
---end function;
+function getFloatStoreMask1(insVec: InstructionSlotArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := insVec(i).ins.classInfo.storeFP;
+    end loop;
+    
+    return res;
+end function;
 
 function getStoreSysMask(insVec: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-	variable sm1: std_logic_vector(0 to PIPE_WIDTH-1) := getStoreMask1(insVec);
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+    variable sm1: std_logic_vector(0 to PIPE_WIDTH-1) := getStoreMask1(insVec);
 begin
-	for i in 0 to PIPE_WIDTH-1 loop
-		if 	  sm1(i) = '1' --insVec(i).full = '1'
-		       and insVec(i).ins.specificOperation.subpipe = Mem 
-		      and (insVec(i).ins.specificOperation.memory = opStoreSys)		
-		then
-			res(i) := '1';
-		end if;
-	end loop;
-	
-	return res;
+    for i in 0 to PIPE_WIDTH-1 loop
+        if       sm1(i) = '1' --insVec(i).full = '1'
+               and insVec(i).ins.specificOperation.subpipe = Mem 
+              and (insVec(i).ins.specificOperation.memory = opStoreSys)        
+        then
+            res(i) := '1';
+        end if;
+    end loop;
+    
+    return res;
 end function;
 
 function getLoadSysMask(insVec: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-	variable lm1: std_logic_vector(0 to PIPE_WIDTH-1) := getLoadMask1(insVec);
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+    variable lm1: std_logic_vector(0 to PIPE_WIDTH-1) := getLoadMask1(insVec);
 begin
-	for i in 0 to PIPE_WIDTH-1 loop
-		if 	  lm1(i) = '1' -- insVec(i).full = '1' 
-		      and insVec(i).ins.specificOperation.subpipe = Mem 
-		      and (insVec(i).ins.specificOperation.memory = opLoadSys)		
-		then
-			res(i) := '1';
-		end if;
-	end loop;
-	
-	return res;
+    for i in 0 to PIPE_WIDTH-1 loop
+        if       lm1(i) = '1' -- insVec(i).full = '1' 
+              and insVec(i).ins.specificOperation.subpipe = Mem 
+              and (insVec(i).ins.specificOperation.memory = opLoadSys)        
+        then
+            res(i) := '1';
+        end if;
+    end loop;
+    
+    return res;
 end function;
 
+function getAluMask1(insVec: InstructionSlotArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := insVec(i).ins.classInfo.useAlu;
+    end loop;
+    
+    return res;
+end function;
 
---function getFloatStoreMask(insVec, insVecF: InstructionSlotArray) return std_logic_vector is
---	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
---begin
---	for i in 0 to PIPE_WIDTH-1 loop
---		if 	  insVecF(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
---		      and (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys)			
---		then
---			res(i) := '1';
---		end if;
---	end loop;
-	
---	return res;
---end function;
+function getMulMask1(insVec: InstructionSlotArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := insVec(i).ins.classInfo.useMul;
+    end loop;
+    
+    return res;
+end function;
 
+function getFpMask1(insVec: InstructionSlotArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := insVec(i).ins.classInfo.useFP;
+    end loop;
+    
+    return res;
+end function;
 
---function getAluMask(insVec: InstructionSlotArray) return std_logic_vector is
---begin
---	return getSubpipeMask(insVec, ALU);
---end function;
-
---function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector is
---begin
---	return getSubpipeMask(insVec, FP);
---end function;
-
---function getMemMask(insVec: InstructionSlotArray) return std_logic_vector is
---begin
---	return getSubpipeMask(insVec, Mem);
---end function;
-
-        function getBranchMask1(insVec: InstructionSlotArray) return std_logic_vector is
-            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                res(i) := insVec(i).ins.classInfo.branchIns;
-            end loop;	
-            return res;
-        end function;
-        
-        function getLoadMask1(insVec: InstructionSlotArray) return std_logic_vector is
-            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                res(i) := insVec(i).ins.classInfo.useLQ;
-            end loop;
-            
-            return res;
-        end function;
-        
-        function getStoreMask1(insVec: InstructionSlotArray) return std_logic_vector is
-            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                res(i) := insVec(i).ins.classInfo.useSQ;
-            end loop;
-            
-            return res;
-        end function;
-
-
-        function getIntStoreMask1(insVec: InstructionSlotArray) return std_logic_vector is
-            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                res(i) := insVec(i).ins.classInfo.storeInt;
-            end loop;
-            
-            return res;
-        end function;
-        
-        function getFloatStoreMask1(insVec: InstructionSlotArray) return std_logic_vector is
-            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                res(i) := insVec(i).ins.classInfo.storeFP;
-            end loop;
-            
-            return res;
-        end function;
-        
-        
-        function getAluMask1(insVec: InstructionSlotArray) return std_logic_vector is
-            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                res(i) := insVec(i).ins.classInfo.useAlu;
-            end loop;
-            
-            return res;
-        end function;
-
-        function getMulMask1(insVec: InstructionSlotArray) return std_logic_vector is
-            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                res(i) := insVec(i).ins.classInfo.useMul;
-            end loop;
-            
-            return res;
-        end function;
-        
-        function getFpMask1(insVec: InstructionSlotArray) return std_logic_vector is
-            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                res(i) := insVec(i).ins.classInfo.useFP;
-            end loop;
-            
-            return res;
-        end function;
-        
-        function getMemMask1(insVec: InstructionSlotArray) return std_logic_vector is
-            variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                res(i) := insVec(i).ins.classInfo.useMem;
-            end loop;
-            
-            return res;
-        end function;
+function getMemMask1(insVec: InstructionSlotArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := insVec(i).ins.classInfo.useMem;
+    end loop;
+    
+    return res;
+end function;
 
 
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray is
@@ -1086,41 +831,6 @@ begin
     return res;
 end function;
 
-function isBranchIns(ins: InstructionState) return std_logic is
-begin
-    return bool2std(ins.specificOperation.arith = opJz or ins.specificOperation.arith = opJnz or ins.specificOperation.arith = opJ or ins.specificOperation.arith = opJl);
-end function;
-
-function isLoadOp(ins: InstructionState) return std_logic is
-begin
-    return bool2std(ins.specificOperation.memory = opLoad or ins.specificOperation.memory = opLoadSys);            
-end function;
-
-function isStoreOp(ins: InstructionState) return std_logic is
-begin
-    return bool2std(ins.specificOperation.memory = opStore or ins.specificOperation.memory = opStoreSys);              
-end function;
-
-function isLoadMemOp(ins: InstructionState) return std_logic is
-begin
-    return bool2std(ins.specificOperation.memory = opLoad);        
-end function;
-
-function isStoreMemOp(ins: InstructionState) return std_logic is
-begin
-    return bool2std(ins.specificOperation.memory = opStore);
-end function;
-
-function isLoadSysOp(ins: InstructionState) return std_logic is
-begin
-    return bool2std(ins.specificOperation.memory = opLoadSys);
-end function;
-
-function isStoreSysOp(ins: InstructionState) return std_logic is
-begin
-    return bool2std(ins.specificOperation.memory = opStoreSys);        
-end function;
-
 
 function isLoadMemOp(op: SpecificOp) return std_logic is
 begin
@@ -1303,95 +1013,48 @@ begin
     return res;
 end function;
 
-                function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState is
-                    variable res: SchedulerState := DEFAULT_SCHED_STATE;
-                begin
-                    res.full := mqRegReadSending;
-                    res.operation := mqReexecCtrlRR.op;
-                    res.renameIndex := mqReexecCtrlRR.tags.renameIndex;
-                    res.tags := mqReexecCtrlRR.tags;
-                    
-                    -- adr
-                    res.args(1) := mqReexecCtrlRR.target;
-                    
-                    res.argSpec.dest := mqReexecResRR.dest;
-                    res.argSpec.intDestSel := not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
-                    res.argSpec.floatDestSel := mqReexecCtrlRR.classInfo.useFP;
+        function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState is
+            variable res: SchedulerState := DEFAULT_SCHED_STATE;
+        begin
+            res.full := mqRegReadSending;
+            res.operation := mqReexecCtrlRR.op;
+            res.renameIndex := mqReexecCtrlRR.tags.renameIndex;
+            res.tags := mqReexecCtrlRR.tags;
+            
+            -- adr
+            res.args(1) := mqReexecCtrlRR.target;
+            
+            res.argSpec.dest := mqReexecResRR.dest;
+            res.argSpec.intDestSel := not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
+            res.argSpec.floatDestSel := mqReexecCtrlRR.classInfo.useFP;
 
-                    return res;
-                end function;
+            return res;
+        end function;
 
-                function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult is
-                    variable res: ExecResult := er;
-                begin
-                    res.full := res.full and memoryMissed;
-                    res.value := memResult;
-                    return res;
-                end function;
-                                
-                function TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f: ExecResult;
-                                           ctrlE1, ctrlE1u: ControlPacket;
-                                           resOutSQ: ExecResult)
-                return ControlPacket is
-                    variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-                begin
-                    res.ip := subpipeM0_E1.value;
-                    res.op := ctrlE1.op;
-                    res.tags := ctrlE1u.tags;
-                    res.target(SMALL_NUMBER_SIZE-1 downto 0) := resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
-                    res.classInfo.useFP := subpipeM0_E1f.full;
-                    res.controlInfo.tlbMiss := ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
-                    res.controlInfo.dataMiss := ctrlE1u.controlInfo.dataMiss;
-                    res.controlInfo.sqMiss := ctrlE1u.controlInfo.sqMiss;                    
-                    return res;
-                end function;
-
-
-function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
-                                s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
-                                s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
-          : ExecResult
-) return ForwardingInfo is
-    variable fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
-begin
-         -- Forwarding network
-		 fni.nextTagsM3 := (0 => s0_M3.dest,                              1 => s1_M3.dest,                               2 => s2_M3.dest,                             others => (others => '0'));
-		 fni.nextTagsM2 := (0 => s0_M2.dest,                              1 => s1_M2.dest,                               2 => s2_M2.dest,                             others => (others => '0'));
-		 fni.nextTagsM1 := (0 => s0_M1.dest,                              1 => s1_M1.dest,                               2 => s2_M1.dest,                             others => (others => '0'));        
-         fni.tags0 :=      (0 => s0_R0.dest,                              1 => s1_R0.dest,                               2 => s2_R0.dest,                             others => (others => '0')); 
-         fni.tags1 :=      (0 => s0_R1.dest,                              1 => s1_R1.dest,                               2 => s2_R1.dest,                             others => (others => '0'));
-         fni.values0 :=    (0 => s0_R0.value,                             1 => s1_R0.value,                              2 => s2_R0.value,                            others => (others => '0'));
-         fni.values1 :=    (0 => s0_R1.value,                             1 => s1_R1.value,                              2 => s2_R1.value,                            others => (others => '0'));                 
-         fni.failedM2 :=   (0 => s0_M2.failed,                            1 => s1_M2.failed,                             2 => s2_M2.failed,                           others => '0');                 
-         fni.failedM1 :=   (0 => s0_M1.failed,                            1 => s1_M1.failed,                             2 => s2_M1.failed,                           others => '0');                 
-         fni.failed0  :=   (0 => s0_R0.failed,                            1 => s1_R0.failed,                             2 => s2_R0.failed,                           others => '0');                 
-         fni.failed1  :=   (0 => s0_R1.failed,                            1 => s1_R1.failed,                             2 => s2_R1.failed,                           others => '0');                 
-
-    return fni;
-end function;
-
-function buildForwardingNetworkFP(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
-                                  s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
-                                  s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
-          : ExecResult
-) return ForwardingInfo is
-    variable fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
-begin
-         -- Forwarding network
-		 fni.nextTagsM3 := (0 => s0_M3.dest,                                                                             2 => s2_M3.dest,                             others => (others => '0'));
-		 fni.nextTagsM2 := (0 => s0_M2.dest,                                                                             2 => s2_M2.dest,                             others => (others => '0'));
-		 fni.nextTagsM1 := (0 => s0_M1.dest,                                                                             2 => s2_M1.dest,                             others => (others => '0'));        
-         fni.tags0 :=      (0 => s0_R0.dest,                                                                             2 => s2_R0.dest,                             others => (others => '0')); 
-         fni.tags1 :=      (0 => s0_R1.dest,                                                                             2 => s2_R1.dest,                             others => (others => '0'));
-         fni.values0 :=    (0 => s0_R0.value,                                                                            2 => s2_R0.value,                            others => (others => '0'));
-         fni.values1 :=    (0 => s0_R1.value,                                                                            2 => s2_R1.value,                            others => (others => '0'));                 
-         fni.failedM2 :=   (0 => s0_M2.failed,                                                                           2 => s2_M2.failed,                           others => '0');                 
-         fni.failedM1 :=   (0 => s0_M1.failed,                                                                           2 => s2_M1.failed,                           others => '0');                 
-         fni.failed0  :=   (0 => s0_R0.failed,                                                                           2 => s2_R0.failed,                           others => '0');                 
-         fni.failed1  :=   (0 => s0_R1.failed,                                                                           2 => s2_R1.failed,                           others => '0');                 
-
-    return fni;
-end function;
+        function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult is
+            variable res: ExecResult := er;
+        begin
+            res.full := res.full and memoryMissed;
+            res.value := memResult;
+            return res;
+        end function;
+                        
+        function TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f: ExecResult;
+                                   ctrlE1, ctrlE1u: ControlPacket;
+                                   resOutSQ: ExecResult)
+        return ControlPacket is
+            variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+        begin
+            res.ip := subpipeM0_E1.value;
+            res.op := ctrlE1.op;
+            res.tags := ctrlE1u.tags;
+            res.target(SMALL_NUMBER_SIZE-1 downto 0) := resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
+            res.classInfo.useFP := subpipeM0_E1f.full;
+            res.controlInfo.tlbMiss := ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
+            res.controlInfo.dataMiss := ctrlE1u.controlInfo.dataMiss;
+            res.controlInfo.sqMiss := ctrlE1u.controlInfo.sqMiss;                    
+            return res;
+        end function;
 
 
 end package body;
