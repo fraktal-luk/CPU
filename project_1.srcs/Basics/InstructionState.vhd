@@ -356,6 +356,8 @@ type BufferEntry is record
     mainCluster: std_logic;
     secCluster: std_logic;
     useLQ:      std_logic;
+    useSQ:      std_logic;
+    useSys:     std_logic;
 
     specificOperation: SpecificOp;
 

@@ -43,6 +43,7 @@ end Renamer;
 
 
 architecture Behavioral of Renamer is
+    signal evtD: EventState := DEFAULT_EVENT_STATE;
     signal newTags, newTagsNext: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
     
     signal tagTable: SmallNumberArray(0 to 31) := (others => sn(0));
@@ -61,6 +62,7 @@ architecture Behavioral of Renamer is
         virtual: RegName;
         assigned: std_logic;
         physical: PhysName;
+        freeListIndex: integer;
     end record;
     
     type AbstractMappingGroup is array(0 to RENAME_W-1) of AbstractMapping;
@@ -75,30 +77,59 @@ architecture Behavioral of Renamer is
 
     signal abstractMapList: MapList;
     signal listWritePtr: integer := -1;
-        
+    
+    signal physRegFreeList: PhysNameArray(0 to FREE_LIST_SIZE-1) := initFreeList(false);
+    signal physRegStateTable: std_logic_vector(0 to N_PHYS-1) := (others => '0'); -- TODO: change to array of PhysRegState (create this type first)
+    
+    signal listPtrTake, listPtrTakeStable, listPtrTakeStableNext, listCausingTag: natural := 0;
+    signal listPtrPut, listPtrPutNext: natural := (N_PHYS - 32);
+
+
+    signal abstractLatestTable, abstractPersistentTable: PhysNameArray(0 to 31) := initMap(false);
+
        -- Same as in ROB
 	   signal startPtr, startPtrNext, endPtr, endPtrNext, renamedPtr, renamedPtrNext, causingPtr: SmallNumber := (others => '0');	
 
     signal newFreeDests: PhysNameArray(0 to RENAME_W-1) := (others => (others => '0'));
 
 
-    function makeMapRow(frontData: BufferEntryArray; newPhysDests: PhysNameArray) return MapRow is
+    function makeMapRow(frontData: BufferEntryArray; newPhysDests: PhysNameArray; freeListIndex: natural) return MapRow is
         variable res: MapRow;
+        variable j: natural := 0;
     begin
         res.used := '0';
         res.tag := (others => 'Z');
         for i in 0 to RENAME_W-1 loop
             res.mappings(i).used := frontData(i).argSpec.intDestSel;
             res.mappings(i).virtual := frontData(i).argSpec.dest(4 downto 0);
-            res.mappings(i).assigned := '1';
-            res.mappings(i).physical := newPhysDests(i);
+            if frontData(i).argSpec.intDestSel = '1' then
+                res.mappings(i).assigned := '1';
+                res.mappings(i).physical := newPhysDests(j);
+                res.mappings(i).freeListIndex := (freeListIndex + j) mod FREE_LIST_SIZE;
+                j := j + 1;
+            else
+                res.mappings(i).assigned := '0';
+                res.mappings(i).physical := (others => '-');
+                res.mappings(i).freeListIndex := -1;
+            end if;
             
             res.used := res.used or res.mappings(i).used;          
         end loop;
         return res;
     end function;
 
-    signal newMapRow: MapRow;
+    function getNumUsed(row: MapRow) return natural is
+        variable res: natural := 0;
+    begin
+        for i in 0 to RENAME_W-1 loop
+            if row.mappings(i).used = '1' then
+                res := res + 1;
+            end if;
+        end loop;
+        return res;
+    end function;
+
+    signal newMapRow, committingMapRow: MapRow;
 
     function findFreeRow(list: MapList) return integer is
     begin
@@ -129,6 +160,16 @@ architecture Behavioral of Renamer is
 
         return res;
     end function;
+    
+    function getFreeRegs(list: PhysNameArray; ptr: natural) return PhysNameArray is
+        variable res: PhysNameArray(0 to RENAME_W-1) := (others => (others => '0'));
+    begin
+        for i in 0 to RENAME_W-1 loop
+            res(i) := list((ptr+i) mod FREE_LIST_SIZE);
+        end loop;
+        return res;
+    end function;
+    
 begin
 
     depVecBasic <= findDeps(frontData);
@@ -184,6 +225,45 @@ begin
             endPtr <= endPtrNext;
             renamedPtr <= renamedPtrNext;
             
+            if prevSending = '1' then
+                for i in 0 to RENAME_W-1 loop
+                    if newMapRow.mappings(i).used = '1' then
+                        abstractLatestTable(slv2u(virtualSrcs(i))) <= newFreeDests(i);
+                    end if;
+                end loop;
+            end if;
+
+            if robSending = '1' then
+                for i in 0 to RENAME_W-1 loop
+                    if committingMapRow.mappings(i).used = '1' then
+                        abstractPersistentTable(slv2u(committingMapRow.mappings(i).virtual)) <= committingMapRow.mappings(i).physical;
+                    end if;
+                end loop;
+            end if;
+            
+            if prevSending = '1' then
+                listPtrTake <= (listPtrTake + getNumUsed(newMapRow)) mod FREE_LIST_SIZE;
+            end if;
+            
+            if robSending = '1' then
+                listPtrTakeStable <= (listPtrTakeStable + getNumUsed(committingMapRow)) mod FREE_LIST_SIZE;
+            end if;
+            
+            -- Flush to persistent state
+            if evtD.lateEvent = '1' then
+                listPtrTake <= listPtrTakeStable;
+            -- Partial flush
+            elsif evtD.execEvent = '1' then 
+                -- reconstruct map...
+                -- 1. find freeListIndex by renameTag of causing op
+                    -- row where high(row.tag) == high(causing.tag)
+                    --     element where subindex == low(causing.tag)
+                -- if not found, error!
+                -- if found, take its (freeListIndex + 1) and write it to listPtrTake 
+            end if;
+            
+            -- when freeing...
+
         end if;
     end process;
 
@@ -204,10 +284,13 @@ begin
                     else  renamedPtr;
 
 
-        newMapRow <= makeMapRow(frontData, newFreeDests);
+        newMapRow <= makeMapRow(frontData, newFreeDests, listPtrTake);
         listWritePtr <= findFreeRow(abstractMapList);
 
+        committingMapRow <= abstractMapList(p2i(startPtr, ROB_SIZE));
 
+
+        newFreeDests <= getFreeRegs(physRegFreeList, listPtrTake);
 
 
     TMP_destsOut <= newTags;

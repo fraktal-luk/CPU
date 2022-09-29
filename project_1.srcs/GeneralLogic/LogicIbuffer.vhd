@@ -75,7 +75,7 @@ function serializeEntry(elem: BufferEntry) return Dword is
     variable res: Dword := (others => '0');    
     variable controlByte, opByte, restByte: Byte := (others => '0');
     variable argSpecWord: Word := (others => '0');
-begin 
+begin
     -- 8b
     controlByte := elem.branchIns & elem.frontBranch & elem.confirmedBranch & elem.specialAction
                 &  elem.fpRename  & elem.mainCluster & elem.secCluster & elem.useLQ;

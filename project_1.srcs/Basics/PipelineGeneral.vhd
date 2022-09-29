@@ -249,15 +249,15 @@ function isStoreSysOp(op: SpecificOp) return std_logic;
 
 
 -- sorting subpipelines
-function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
-function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector;
-function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector;
+--function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector;
+--function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector;
+--function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getStoreSysMask(insVec: InstructionSlotArray) return std_logic_vector;
 function getLoadSysMask(insVec: InstructionSlotArray) return std_logic_vector;
-function getFloatStoreMask(insVec, insVecF: InstructionSlotArray) return std_logic_vector;
-function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
-function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector;
-function getMemMask(insVec: InstructionSlotArray) return std_logic_vector;
+--function getFloatStoreMask(insVec, insVecF: InstructionSlotArray) return std_logic_vector;
+--function getAluMask(insVec: InstructionSlotArray) return std_logic_vector;
+--function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector;
+--function getMemMask(insVec: InstructionSlotArray) return std_logic_vector;
 
 
         function getBranchMask1(insVec: InstructionSlotArray) return std_logic_vector;
@@ -548,14 +548,14 @@ begin
 end function;
 
 
-function getCausingMask(insVec: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(insVec'range) := (others=>'0');
-begin
-    for i in insVec'range loop
-        res(i) := insVec(i).ins.controlInfo.causing; -- CAREFUL: what if special actions are allowed to write registers?
-    end loop;            
-    return res;
-end function;
+--function getCausingMask(insVec: InstructionSlotArray) return std_logic_vector is
+--	variable res: std_logic_vector(insVec'range) := (others=>'0');
+--begin
+--    for i in insVec'range loop
+--        res(i) := insVec(i).ins.controlInfo.causing; -- CAREFUL: what if special actions are allowed to write registers?
+--    end loop;            
+--    return res;
+--end function;
 
 
 function getKilledMask(insVec: InstructionSlotArray) return std_logic_vector is
@@ -567,65 +567,65 @@ begin
     return res;
 end function;
 
-function getIgnoredMask(insVec: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(insVec'range) := (others=>'0');
-begin
-    for i in insVec'range loop
-        res(i) := insVec(i).ins.controlInfo.ignored;
-    end loop;            
-    return res;
-end function;
+--function getIgnoredMask(insVec: InstructionSlotArray) return std_logic_vector is
+--	variable res: std_logic_vector(insVec'range) := (others=>'0');
+--begin
+--    for i in insVec'range loop
+--        res(i) := insVec(i).ins.controlInfo.ignored;
+--    end loop;            
+--    return res;
+--end function;
 
 
-function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-begin
-	for i in 0 to PIPE_WIDTH-1 loop
-		res(i) := insVec(i).full and insVec(i).ins.classInfo.branchIns;
-	end loop;	
-	return res;
-end function;
+--function getBranchMask(insVec: InstructionSlotArray) return std_logic_vector is
+--	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+--begin
+--	for i in 0 to PIPE_WIDTH-1 loop
+--		res(i) := insVec(i).full and insVec(i).ins.classInfo.branchIns;
+--	end loop;	
+--	return res;
+--end function;
 
 
--- Base for implementing subpipe selection
-function getSubpipeMask(insVec: InstructionSlotArray; subpipe: SubpipeType) return std_logic_vector is
-	variable res: std_logic_vector(insVec'range) := (others => '0');
-begin
-    for i in insVec'range loop
-        res(i) := insVec(i).full and bool2std(insVec(i).ins.specificOperation.subpipe = subpipe);
-    end loop;
-    return res;
-end function;
+---- Base for implementing subpipe selection
+--function getSubpipeMask(insVec: InstructionSlotArray; subpipe: SubpipeType) return std_logic_vector is
+--	variable res: std_logic_vector(insVec'range) := (others => '0');
+--begin
+--    for i in insVec'range loop
+--        res(i) := insVec(i).full and bool2std(insVec(i).ins.specificOperation.subpipe = subpipe);
+--    end loop;
+--    return res;
+--end function;
 
 
-function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-begin
-	for i in 0 to PIPE_WIDTH-1 loop
-		if 		insVec(i).full = '1'
-			and insVec(i).ins.specificOperation.subpipe = Mem 
-			and (insVec(i).ins.specificOperation.memory = opLoad or insVec(i).ins.specificOperation.memory = opLoadSys) 
-		then
-			res(i) := '1';
-		end if;
-	end loop;
+--function getLoadMask(insVec: InstructionSlotArray) return std_logic_vector is
+--	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+--begin
+--	for i in 0 to PIPE_WIDTH-1 loop
+--		if 		insVec(i).full = '1'
+--			and insVec(i).ins.specificOperation.subpipe = Mem 
+--			and (insVec(i).ins.specificOperation.memory = opLoad or insVec(i).ins.specificOperation.memory = opLoadSys) 
+--		then
+--			res(i) := '1';
+--		end if;
+--	end loop;
 	
-	return res;
-end function;
+--	return res;
+--end function;
 
-function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-begin
-	for i in 0 to PIPE_WIDTH-1 loop
-		if 	  insVec(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
-		      and (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys)			
-		then
-			res(i) := '1';
-		end if;
-	end loop;
+--function getStoreMask(insVec: InstructionSlotArray) return std_logic_vector is
+--	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+--begin
+--	for i in 0 to PIPE_WIDTH-1 loop
+--		if 	  insVec(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
+--		      and (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys)			
+--		then
+--			res(i) := '1';
+--		end if;
+--	end loop;
 	
-	return res;
-end function;
+--	return res;
+--end function;
 
 function getStoreSysMask(insVec: InstructionSlotArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
@@ -660,35 +660,35 @@ begin
 end function;
 
 
-function getFloatStoreMask(insVec, insVecF: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-begin
-	for i in 0 to PIPE_WIDTH-1 loop
-		if 	  insVecF(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
-		      and (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys)			
-		then
-			res(i) := '1';
-		end if;
-	end loop;
+--function getFloatStoreMask(insVec, insVecF: InstructionSlotArray) return std_logic_vector is
+--	variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+--begin
+--	for i in 0 to PIPE_WIDTH-1 loop
+--		if 	  insVecF(i).full = '1' and insVec(i).ins.specificOperation.subpipe = Mem 
+--		      and (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys)			
+--		then
+--			res(i) := '1';
+--		end if;
+--	end loop;
 	
-	return res;
-end function;
+--	return res;
+--end function;
 
 
-function getAluMask(insVec: InstructionSlotArray) return std_logic_vector is
-begin
-	return getSubpipeMask(insVec, ALU);
-end function;
+--function getAluMask(insVec: InstructionSlotArray) return std_logic_vector is
+--begin
+--	return getSubpipeMask(insVec, ALU);
+--end function;
 
-function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector is
-begin
-	return getSubpipeMask(insVec, FP);
-end function;
+--function getFpuMask(insVec: InstructionSlotArray) return std_logic_vector is
+--begin
+--	return getSubpipeMask(insVec, FP);
+--end function;
 
-function getMemMask(insVec: InstructionSlotArray) return std_logic_vector is
-begin
-	return getSubpipeMask(insVec, Mem);
-end function;
+--function getMemMask(insVec: InstructionSlotArray) return std_logic_vector is
+--begin
+--	return getSubpipeMask(insVec, Mem);
+--end function;
 
         function getBranchMask1(insVec: InstructionSlotArray) return std_logic_vector is
             variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
@@ -1266,6 +1266,7 @@ begin
     res.ins.classInfo.mainCluster := elem.mainCluster;            
     res.ins.classInfo.secCluster := elem.secCluster;            
     res.ins.classInfo.useLQ := elem.useLQ;
+    res.ins.classInfo.useSQ := elem.secCluster;
     
     res.ins.specificOperation := unfoldOp(elem.specificOperation);
     

@@ -76,6 +76,7 @@ begin
     res.classInfo.mainCluster := decodedIns.classInfo.mainCluster;
     res.classInfo.secCluster := decodedIns.classInfo.secCluster;
     res.classInfo.useLQ := decodedIns.classInfo.useLQ;
+    res.classInfo.useSQ := decodedIns.classInfo.useSQ;
 
         res.specificOperation := op;
         res.classInfo := classInfo;
@@ -431,7 +432,7 @@ begin
 
 	for i in insVec'range loop
        res(i).controlInfo := insVecSh(i).controlInfo;
-       res(i).controlInfo.full := branchMask(i) and insVec(i).controlInfo.full; -- TODO: getBranchMask already check for 'full' - remove it here?
+       res(i).controlInfo.full := branchMask(i);
        res(i).classInfo := insVecSh(i).classInfo;
        res(i).target := insVecSh(i).target;
        res(i).nip := insVecSh(i).nip;

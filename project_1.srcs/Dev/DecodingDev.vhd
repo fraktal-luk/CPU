@@ -277,6 +277,7 @@ begin
     res.classInfo.mainCluster := bool2std(op0 /= "000111"); -- !!
     res.classInfo.secCluster := bool2std(isStore);
     res.classInfo.useLQ := bool2std(isLoad);
+    res.classInfo.useSQ := bool2std(isStore);
     
     res.classInfo.fpRename := bool2std(hasFpDest or fpSrc0 or fpSrc1 or fpSrc2);
     

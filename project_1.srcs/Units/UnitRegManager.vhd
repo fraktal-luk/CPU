@@ -129,10 +129,11 @@ architecture Behavioral of UnitRegManager is
         variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
         variable tag: InsTag := renameGroupCtrNext;
        	variable found: boolean := false;
+       	constant fullMask: std_logic_vector(0 to PIPE_WIDTH-1) := extractFullMask(insVec);
     begin
-        stores := getStoreMask(insVec);
-        loads := getLoadMask(insVec);
-        branches := getBranchMask(insVec);
+        stores := getStoreMask1(insVec) and fullMask;
+        loads := getLoadMask1(insVec) and fullMask;
+        branches := getBranchMask1(insVec) and fullMask;
         
         -- Assign dest registers
         for i in 0 to PIPE_WIDTH-1 loop
@@ -180,6 +181,7 @@ architecture Behavioral of UnitRegManager is
                 -- CAREFUL: needed for correct operation of StoreQueue + LQ
                 res(i).ins.classInfo.secCluster := '0';
                 res(i).ins.classInfo.useLQ := '0';            
+                res(i).ins.classInfo.useSQ := '0';            
             end if;
 
             if hasSyncEvent(res(i).ins) = '1' then
