@@ -109,12 +109,12 @@ type BypassEntry is record
 end record;
 
 
-type MapEntry is record
+--type MapEntry is record
     
-    tag: InsTag;
-    virtual: RegName;
-    physical: PhysName;
-end record;
+--    tag: InsTag;
+--    virtual: RegName;
+--    physical: PhysName;
+--end record;
 
 
 function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInfoArray;
@@ -128,6 +128,10 @@ function extractFullMask(ba: BufferEntryArray) return std_logic_vector;
 function setFullMask(insVec: InstructionSlotArray; mask: std_logic_vector) return InstructionSlotArray;
 
 function compareIndBefore(tagA, tagB: SmallNumber; PTR_SIZE: natural) return std_logic;
+
+
+subtype InsTagHighPart is std_logic_vector(TAG_SIZE-LOG2_PIPE_WIDTH-1 downto 0);
+subtype InsTagLowPart is std_logic_vector(LOG2_PIPE_WIDTH-1 downto 0);
 
 -- general op tag handling
 function getTagHigh(tag: std_logic_vector) return std_logic_vector;
@@ -391,16 +395,6 @@ function getLowBits(vec: std_logic_vector; n: integer) return std_logic_vector i
 begin
 	res(n-1 downto 0) := vec(n-1 downto 0);
 	return res;
-end function;
-
-
-function getKilledMask(insVec: InstructionSlotArray) return std_logic_vector is
-	variable res: std_logic_vector(insVec'range) := (others=>'0');
-begin
-    for i in insVec'range loop
-        res(i) := insVec(i).ins.controlInfo.killed;
-    end loop;            
-    return res;
 end function;
 
 

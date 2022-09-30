@@ -76,13 +76,15 @@ architecture Behavioral of StoreQueue is
 
 	signal adrPtr, pSelect, pSelectPrev, pStart, pStartNext, pDrain, pDrainNext, pDrainPrev,
            pTagged, pTaggedNext, pFlush, pRenamed, pRenamedNext, pStartEffective, pStartEffectiveNext,
-	       nFull, nFullNext, nAlloc, nAllocNext, nIn, nInRe, nOut, nCommitted, nCommittedEffective, recoveryCounter: SmallNumber := (others => '0');
+	       nFull, nFullNext, 
+	       nAlloc, nAllocNext, nIn, nInRe, nOut, nCommitted, nCommittedEffective, recoveryCounter: SmallNumber := (others => '0');
 
     signal addresses, storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 
     signal queueContent, queueContentShifting, queueContentShiftingNext: QueueEntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_QUEUE_ENTRY);
 
-    signal isFull, isAlmostFull, canAlloc, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDrainingPrev, isSelected: std_logic := '0';
+    signal -- isFull, isAlmostFull,
+            canAlloc, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDrainingPrev, isSelected: std_logic := '0';
     signal memEmpty: std_logic := '1'; -- CAREFUL! Starts as '1'
 
     signal drainOutput, selectedOutput: ControlPacket := DEFAULT_CONTROL_PACKET;
@@ -251,8 +253,8 @@ begin
 	        nFull <= nFullNext;
             nAlloc <= nAllocNext;
 
-   	        isFull <= cmpGtU(nFullNext, QUEUE_SIZE-4);
-            isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
+   	        --isFull <= cmpGtU(nFullNext, QUEUE_SIZE-4);
+            --isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
 
             canAlloc <= not cmpGtU(nAllocNext, QUEUE_SIZE-4);
 
@@ -295,8 +297,8 @@ begin
 
 
     -- Acc sigs
-	acceptingOut <= not isFull;
-	almostFull <= isAlmostFull;
+	--acceptingOut <= not isFull;
+	--almostFull <= isAlmostFull;
     acceptAlloc <= canAlloc;
 
     renamedPtr <= pRenamed;

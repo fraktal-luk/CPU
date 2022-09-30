@@ -58,7 +58,8 @@ architecture Behavioral of ReorderBuffer is
     signal outputDataSig, outputDataSig_Pre: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
     signal outputSpecialSig, inputSpecial: InstructionSlot := DEFAULT_INS_SLOT;
         
-	signal isSending, isEmpty, outputCompleted, outputCompleted_Pre, outputEmpty, execEvent, isFull, isAlmostFull, allowAlloc: std_logic := '0';	
+	signal isSending, isEmpty, outputCompleted, outputCompleted_Pre, outputEmpty, execEvent,-- isFull, isAlmostFull,
+	       allowAlloc: std_logic := '0';	
 	signal startPtr, startPtrNext, endPtr, endPtrNext, renamedPtr, renamedPtrNext, causingPtr: SmallNumber := (others => '0');	
 
     -- Static content arrays - not changing throughout lifetime
@@ -214,7 +215,10 @@ begin
 
 
     CTR_MANAGEMENT: block
-        signal recoveryCounter, nFull, nFullNext, nAlloc, nAllocNext, nIn, nInAlloc, nOut: SmallNumber := (others => '0');
+        signal recoveryCounter,-- nFull, nFullNext,
+                                 nAlloc, nAllocNext,-- nIn,
+                                 nInAlloc --, nOut
+                                 : SmallNumber := (others => '0');
     begin    
         startPtrNext <= addIntTrunc(startPtr, 1, ROB_PTR_SIZE+1) when isSending = '1'
                    else startPtr;
@@ -231,11 +235,11 @@ begin
 
         isEmpty <= getQueueEmpty(startPtr, endPtr, ROB_PTR_SIZE+1);
         -- nFull logic
-        nIn <= i2slv(1, SMALL_NUMBER_SIZE) when prevSending = '1' else (others => '0');
+        --nIn <= i2slv(1, SMALL_NUMBER_SIZE) when prevSending = '1' else (others => '0');
         nInAlloc <= i2slv(1, SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');
-        nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');
+        --nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');
 
-        nFullNext <= getNumFull(startPtrNext, endPtrNext, ROB_PTR_SIZE);
+        --nFullNext <= getNumFull(startPtrNext, endPtrNext, ROB_PTR_SIZE);
         nAllocNext <= getNumFull(startPtrNext, renamedPtrNext, ROB_PTR_SIZE);
 
         MANAGEMENT: process (clk)
@@ -245,11 +249,11 @@ begin
                 endPtr <= endPtrNext;
                 renamedPtr <= renamedPtrNext;
 
-                nFull <= nFullNext;
+                --nFull <= nFullNext;
                 nAlloc <= nAllocNext;
     
-                isFull <= cmpGtU(nFullNext, ROB_SIZE-1);
-                isAlmostFull <= cmpGtU(nFullNext, ROB_SIZE-2);
+                --isFull <= cmpGtU(nFullNext, ROB_SIZE-1);
+                --isAlmostFull <= cmpGtU(nFullNext, ROB_SIZE-2);
 
             	allowAlloc <= not cmpGtU(nAllocNext, ROB_SIZE-1);
             	
@@ -274,8 +278,8 @@ begin
     outputArgInfoF <= getRenameInfoSC(setDestFlags(outputDataSig), true);                
     outputSpecial <= outputSpecialSig.ins.specificOperation;
 
-	acceptingOut <= not isFull;
-    acceptingMore <= not isAlmostFull;
+	--acceptingOut <= not isFull;
+    --acceptingMore <= not isAlmostFull;
 	acceptAlloc <= allowAlloc;
 	
     isSending <= outputCompleted and nextAccepting and not outputEmpty;  

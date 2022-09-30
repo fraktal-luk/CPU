@@ -62,12 +62,14 @@ end Core;
 
 architecture Behavioral of Core is
 
-    signal frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending, canSendFront, canSendRename, robSending, robAccepting, renameSendingBr, renamedSending, commitAccepting,
-           frontEventSignal, bqAccepting, acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ,
+    signal frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending, canSendFront, canSendRename, robSending,-- robAccepting, 
+            renameSendingBr, renamedSending, commitAccepting,
+           frontEventSignal, bqAccepting,-- acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ,
            execEventSignalE0, execEventSignalE1, lateEventSignal, lateEventSetPC,
            allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
            iqAcceptingI0, iqAcceptingI1, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
-           robAcceptingMore, iqAcceptingMoreI0, iqAcceptingMoreI1, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
+           --robAcceptingMore, 
+           iqAcceptingMoreI0, iqAcceptingMoreI1, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
            mqReady, mqIssueSending, mqRegReadSending, memoryMissed, sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
            : std_logic := '0';
 
@@ -286,8 +288,8 @@ begin
 		prevSending => renamedSending,
 		prevSendingRe => frontLastSending,
 
-		acceptingOut => robAccepting,
-		acceptingMore => robAcceptingMore,
+		--acceptingOut => robAccepting,
+		--acceptingMore => robAcceptingMore,
 		acceptAlloc => allocAcceptROB,
 
 		nextAccepting => commitAccepting,
@@ -1428,8 +1430,8 @@ begin
 		reset => '0',
 		en => '0',
 
-		acceptingOut => acceptingSQ,
-		almostFull => almostFullSQ,
+--		acceptingOut => acceptingSQ,
+--		almostFull => almostFullSQ,
 		acceptAlloc => allocAcceptSQ,
 		
 	    prevSendingRe => frontLastSending,
@@ -1478,8 +1480,8 @@ begin
 		reset => '0',
 		en => '0',
 
-		acceptingOut => acceptingLQ,
-		almostFull => almostFullLQ,
+--		acceptingOut => acceptingLQ,
+--		almostFull => almostFullLQ,
 		acceptAlloc => allocAcceptLQ,
 
 	    prevSendingRe => frontLastSending,				
