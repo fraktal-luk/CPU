@@ -83,6 +83,8 @@ package AbstractRenaming is
     function scanFreeList(freeList: PhysNameArray; tag: InsTag; startPtr, endPtr: natural) return IntArray;
     function scanMappingTable(table: PhysNameArray; skipR0: boolean := true) return IntArray;
 
+    function applyChangedMappings(table, changed: PhysNameArray) return PhysNameArray;
+
 end package;
 
 
@@ -476,6 +478,18 @@ package body AbstractRenaming is
         for i in iStart to 31 loop
             regNum := slv2u(table(i));
             res(regNum) := res(regNum) + 1;
+        end loop;
+        
+        return res;
+    end function;
+
+    function applyChangedMappings(table, changed: PhysNameArray) return PhysNameArray is
+        variable res: PhysNameArray(table'range) := table;
+    begin
+        for i in res'range loop
+            if changed(i) /= nothing then
+                res(i) := changed(i);
+            end if;
         end loop;
         
         return res;

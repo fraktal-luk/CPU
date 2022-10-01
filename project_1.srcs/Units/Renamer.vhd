@@ -53,35 +53,30 @@ architecture Behavioral of Renamer is
 
     signal virtualSrcs: RegNameArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
     signal destMask: std_logic_vector(0 to RENAME_W-1) := (others => '0');
-    
+
     signal depVecBasic, depVec: DependencyVec;
-    
+
     signal baseSrcs, finalSrcs, finalSrcsReg: SmallNumberArray(0 to 3*RENAME_W-1) := (others => sn(0));
 
     signal abstractMapList: MapList := (others => DEFAULT_MAP_ROW);
-    signal listWritePtr: integer := -1;
-    
+
     signal physRegFreeList: PhysNameArray(0 to FREE_LIST_SIZE-1) := initFreeList(false);
     signal physRegStateTable: std_logic_vector(0 to N_PHYS-1) := (others => '0'); -- TODO: change to array of PhysRegState (create this type first)
-    
+
     signal listPtrTake, listPtrTakeStable, listPtrTakeStableNext, listCausingTag: natural := 0;
     signal listPtrPut, listPtrPutNext: natural := (N_PHYS - 32);
-
 
     signal abstractLatestTable, abstractPersistentTable: PhysNameArray(0 to 31) := initMap(false);
     signal abstractChangedTable, abstractFlushedTable: PhysNameArray(0 to 31) := (others => nothing);
 
-       -- Same as in ROB
-	   signal startPtr, startPtrNext, endPtr, endPtrNext, renamedPtr, renamedPtrNext, causingPtr: SmallNumber := (others => '0');	
+    -- Same as in ROB
+    signal startPtr, startPtrNext, endPtr, endPtrNext, renamedPtr, renamedPtrNext, causingPtr: SmallNumber := (others => '0');	
 
     signal newFreeDests, releasedDests: PhysNameArray(0 to RENAME_W-1) := (others => (others => '0'));
 
-
     signal newMapRow, committingMapRow: MapRow := DEFAULT_MAP_ROW;
-
-
     signal causingMapping, lastUsedMapping: AbstractMapping := DEFAULT_ABSTRACT_MAPPING;
-    
+
     -- check status of very physical reg: zero/free/speculative/persistent
     -- zero iff its number is 0
     -- free iff in freeList
@@ -121,16 +116,18 @@ begin
         variable lastUsedMappingVar: AbstractMapping;
         variable releasingDestsVar: PhysNameArray(0 to RENAME_W-1) := (others => nothing);
         variable stableProxyVar: PhysNameArray(0 to 31) := (others => nothing);
+        variable listPtrTakeStableVar: natural := 0;
         variable nReleased: natural:= 9;
     begin
         if rising_edge(clk) then
             releasingDestsVar := (others => nothing);
             stableProxyVar := (others => nothing);
+            listPtrTakeStableVar := 0;
             nReleased := 0;
 
             evtD <= evt;
             evtD2 <= evtD;
-        
+
             newTags <= newTagsNext;
             finalSrcsReg <= finalSrcs;
 
@@ -141,23 +138,19 @@ begin
                     end if;
                 end loop;
             end if;
-            
-            --------------------------------------------
-            -- Abstract map for reference
-            --------------------------------------------
+
             if prevSending = '1' then
                 abstractMapList(p2i(renamedPtr, ROB_SIZE)) <= newMapRow;
             end if;
 
             if robSending = '1' then
-                --abstractMapList(p2i(startPtr, ROB_SIZE)).used <= '0';
                 abstractMapList(p2i(startPtr, ROB_SIZE)) <= DEFAULT_MAP_ROW;
             end if;
             
             startPtr <= startPtrNext;
             endPtr <= endPtrNext;
             renamedPtr <= renamedPtrNext;
-            
+
             if prevSending = '1' then
                 for i in 0 to RENAME_W-1 loop
                     if newMapRow.mappings(i).used = '1' then
@@ -166,24 +159,15 @@ begin
                 end loop;
             end if;
 
-            if robSending = '1' then
-                -- TODO: handle overridden dests!
-            
+            if robSending = '1' then            
                 stableProxyVar := abstractPersistentTable;
-
                 for i in 0 to RENAME_W-1 loop
-                
                     if committingMapRow.mappings(i).used = '1' then
                         releasingDestsVar(i) := stableProxyVar(slv2u(committingMapRow.mappings(i).virtual));
                         stableProxyVar(slv2u(committingMapRow.mappings(i).virtual)) := committingMapRow.mappings(i).physical;
                     end if;
                 end loop;
---                for i in 0 to RENAME_W-1 loop
---                    if committingMapRow.mappings(i).used = '1' then                    
---                        abstractPersistentTable(slv2u(committingMapRow.mappings(i).virtual)) <= stableProxyVar(i);
---                    end if;
---                end loop;
-                
+
                 abstractPersistentTable <= stableProxyVar;
                 releasedDests <= releasingDestsVar;
             end if;
@@ -192,40 +176,45 @@ begin
                 listPtrTake <= (listPtrTake + getNumUsed(newMapRow)) mod FREE_LIST_SIZE;
             end if;
             
+            listPtrTakeStableVar := listPtrTakeStable;
             if robSending = '1' then
                 listPtrTakeStable <= (listPtrTakeStable + getNumUsed(committingMapRow)) mod FREE_LIST_SIZE;
+                listPtrTakeStableVar := (listPtrTakeStable + getNumUsed(committingMapRow)) mod FREE_LIST_SIZE;
             end if;
-            
---            if evt.lateEvent = '1' or evt.execEvent = '1' then
---                endPtrAtEvent <= endPtr;
---            end if;
-            
-            
-            -- Flush to persistent state (persistent map can't be updated when lateEvent is signalled - Commit is locked)
-            if evtD.lateEvent = '1' then
-                listPtrTake <= listPtrTakeStable;                                
-            -- Partial flush (persistent map can be updated in this cycle and directly following ones!)
-            elsif evtD.execEvent = '1' then
 
-                -- reconstruct map...
-                -- 1. find freeListIndex by renameTag of causing op
-                    -- row where high(row.tag) == high(causing.tag)
-                    --     element where subindex == low(causing.tag)
-                -- if not found, error!
-                -- if found, take its (freeListIndex + 1) and write it to listPtrTake
-                
-                lastUsedMappingVar := findLastMappingByTag(abstractMapList, evtD.execCausing.tag, startPtr);
+            if evt.lateEvent = '1' then -- Flush to persistent state (persistent map can't be updated when lateEvent is signalled - Commit is locked)
+                listPtrTake <= listPtrTakeStableVar;
+            elsif evt.execEvent = '1' then -- Partial flush (persistent map can be updated in this cycle and directly following ones!)
+                -- Rewind free list ptr to 1 after last active mapping. If none exists, use committed state
+                lastUsedMappingVar := findLastMappingByTag(abstractMapList, evt.execCausing.tag, startPtr);
                 if lastUsedMappingVar.used = '1' then
                     listPtrTake <= (lastUsedMappingVar.freeListIndex + 1) mod FREE_LIST_SIZE;
                 else
-                    listPtrTake <= listPtrTakeStable;
+                    listPtrTake <= listPtrTakeStableVar;
                 end if;
-                
+
                 lastUsedMapping <= lastUsedMappingVar;                
                 -- Write lastTable with combinaiton of persistent and changed! (changed table is being generated now)
+                -- ....
             end if;
-            
-            -- when freeing...
+
+--            if evtD.lateEvent = '1' then -- Flush to persistent state (persistent map can't be updated when lateEvent is signalled - Commit is locked)
+--                listPtrTake <= listPtrTakeStable;
+--            elsif evtD.execEvent = '1' then -- Partial flush (persistent map can be updated in this cycle and directly following ones!)
+--                -- Rewind free list ptr to 1 after last active mapping. If none exists, use committed state
+--                lastUsedMappingVar := findLastMappingByTag(abstractMapList, evtD.execCausing.tag, startPtr);
+--                if lastUsedMappingVar.used = '1' then
+--                    listPtrTake <= (lastUsedMappingVar.freeListIndex + 1) mod FREE_LIST_SIZE;
+--                else
+--                    listPtrTake <= listPtrTakeStable;
+--                end if;
+
+--                lastUsedMapping <= lastUsedMappingVar;                
+--                -- Write lastTable with combinaiton of persistent and changed! (changed table is being generated now)
+--                -- ....
+--            end if;
+
+            -- Write released mappings to free list
             for i in 0 to RENAME_W-1 loop
                 if releasingDestsVar(i) /= nothing then
                     physRegFreeList((listPtrPut + nReleased) mod FREE_LIST_SIZE) <= releasingDestsVar(i);
@@ -236,12 +225,12 @@ begin
             
             if evt.lateEvent = '1' then
                 abstractMapList <= (others => DEFAULT_MAP_ROW);
-                
+
                 --abstractChangedTable <= scanChangedMappings(abstractMapList, evtD.execCausing.tag, startPtr, endPtr);
                 --abstractFlushedTable <= scanFlushedMappings(abstractMapList, evtD.execCausing.tag, startPtr, endPtr);
             elsif evt.execEvent = '1' then
                 abstractMapList <= clearAbstractMappingsPartial(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
-                
+
                 abstractChangedTable <= scanChangedMappings(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
                 abstractFlushedTable <= scanFlushedMappings(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
             end if;
@@ -250,32 +239,28 @@ begin
         
     end process;
 
-        causingMapping <= findMappingByTag(abstractMapList, evt.execCausing.tag);
+    causingMapping <= findMappingByTag(abstractMapList, evt.execCausing.tag);
 
-    	causingPtr <= getTagHighSN(evt.execCausing.tag) and PTR_MASK_SN_LONG;
-
-
-        startPtrNext <= addIntTrunc(startPtr, 1, ROB_PTR_SIZE+1) when robSending = '1'
-                   else startPtr;
-
-        endPtrNext <= startPtrNext when evt.lateEvent = '1'
-                    else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when evt.execEvent = '1'
-                    else  addIntTrunc(endPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
-                    else  endPtr;
-
-        renamedPtrNext <= startPtrNext when evt.lateEvent = '1'
-                    else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when evt.execEvent = '1'
-                    else  addIntTrunc(renamedPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
-                    else  renamedPtr;
+    causingPtr <= getTagHighSN(evt.execCausing.tag) and PTR_MASK_SN_LONG;
 
 
-        newMapRow <= makeMapRow(frontData, newFreeDests, listPtrTake);
-        listWritePtr <= findFreeRow(abstractMapList);
+    startPtrNext <= addIntTrunc(startPtr, 1, ROB_PTR_SIZE+1) when robSending = '1'
+               else startPtr;
 
-        committingMapRow <= abstractMapList(p2i(startPtr, ROB_SIZE));
+    endPtrNext <= startPtrNext when evt.lateEvent = '1'
+                else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when evt.execEvent = '1'
+                else  addIntTrunc(endPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
+                else  endPtr;
 
+    renamedPtrNext <= startPtrNext when evt.lateEvent = '1'
+                else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when evt.execEvent = '1'
+                else  addIntTrunc(renamedPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
+                else  renamedPtr;
 
-        newFreeDests <= getFreeRegs(physRegFreeList, listPtrTake);
+    newFreeDests <= getFreeRegs(physRegFreeList, listPtrTake);
+    newMapRow <= makeMapRow(frontData, newFreeDests, listPtrTake);
+
+    committingMapRow <= abstractMapList(p2i(startPtr, ROB_SIZE));
 
 
     TMP_destsOut <= newTags;
