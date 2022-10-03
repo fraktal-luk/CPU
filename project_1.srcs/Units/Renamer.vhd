@@ -317,6 +317,7 @@ begin
         signal mappingList: MapList := (others => DEFAULT_MAP_ROW);
         
         signal latestSubindexTable, persistentSubindexTable: IntArray(0 to 31) := (others => -1);
+        signal latestRowTable, persistentRowTable: IntArray(0 to 31) := (others => -1);
         signal latestTagTable, persistentTagTable: IntArray(0 to 31) := (others => -1);
         
         signal nextFreeIndex, committingIndex, causingIndex, causingSubindex: integer := -1;
@@ -395,9 +396,11 @@ begin
             return res;
         end function;
         
-        signal releasedTags, releasedSubinds: IntArray(0 to RENAME_W-1) := (others => -1);
+        signal releasedTags, releasedSubinds,  releasedRows: IntArray(0 to RENAME_W-1) := (others => -1);
         
         signal releasedMask: std_logic_vector(0 to RENAME_W-1) := (others => '0');
+        
+        signal persistentCount, committedCount, releseadCount: natural := 0;
     begin
         nextFreeIndex <= findFreeRow(mappingList);
         committingIndex <= findRowByTag(mappingList, commitGroupCtrNext);
@@ -406,8 +409,12 @@ begin
         causingIndex <= findRowByTag(mappingList, clearTagLow(evt.execCausing.tag));
         causingSubindex <= slv2u(getTagLow(evt.execCausing.tag));
 
+             --committedCount <= countOnes(mappingList(committingIndex).mask);
+             --releasedCount <= countOnes();
+
         process (clk)
-            variable releasedTagsV, releasedSubindsV: IntArray(0 to RENAME_W-1) := (others => -1);
+            variable releasedTagsV, releasedRowsV, releasedSubindsV: IntArray(0 to RENAME_W-1) := (others => -1);
+            variable persistentTagTableVar, persistentRowTableVar, persistentSubindexTableVar: IntArray(0 to 31) := (others => -1);
             
             variable releasedMaskV: std_logic_vector(0 to RENAME_W-1) := (others => '0');
             --variable releasedIndsV: IntArray(0 to RENAME_W-1) := (others => -1);
@@ -416,7 +423,12 @@ begin
             if rising_edge(clk) then
                 releasedMaskV := (others => '0');
                 releasedTagsV := (others => -1);
+                releasedRowsV := (others => -1);
                 releasedSubindsV := (others => -1);
+                
+                    persistentTagTableVar := (others => -1);
+                    persistentSubindexTableVar := (others => -1);
+                    persistentRowTableVar := (others => -1);
                 
                 if evt.lateEvent = '1' then
                     mappingList <= flushAll(mappingList); --(others => DEFAULT_MAP_ROW);
@@ -434,31 +446,50 @@ begin
 
                     for i in 0 to RENAME_W-1 loop
                         if destMask(i) = '1' then
+                            latestRowTable(slv2u(virtualDests(i))) <= nextFreeIndex;
                             latestTagTable(slv2u(virtualDests(i))) <= slv2u(renameGroupCtrNext);
                             latestSubindexTable(slv2u(virtualDests(i))) <= i;
                         end if;
                     end loop;
                 end if;
 
+                persistentTagTableVar := persistentTagTable;
+                persistentSubindexTableVar := persistentSubindexTable;
+                persistentRowTableVar := persistentRowTable;
+
                 if robSending = '1' then
                     mappingList(committingIndex).persistent <= '1';
+                    
                     
                     for i in 0 to RENAME_W-1 loop
                         if mappingList(committingIndex).used = '1' and mappingList(committingIndex).mask(i) = '1' then  -- must have '0' at partially flushed ops!
                                 releasedMaskV(i) := '1';
-                                releasedTagsV(i) := persistentTagTable(slv2u(mappingList(committingIndex).virtual(i)));
-                                releasedSubindsV(i) := i;
+                                releasedRowsV(i) := persistentRowTableVar(slv2u(mappingList(committingIndex).virtual(i)));
+                                releasedTagsV(i) := persistentTagTableVar(slv2u(mappingList(committingIndex).virtual(i)));
+                                releasedSubindsV(i) := persistentSubindexTableVar(slv2u(mappingList(committingIndex).virtual(i)));
                         
-                            persistentTagTable(slv2u(mappingList(committingIndex).virtual(i))) <= slv2u(commitGroupCtrNext);
-                            persistentSubindexTable(slv2u(mappingList(committingIndex).virtual(i))) <= i;
+                            persistentRowTableVar(slv2u(mappingList(committingIndex).virtual(i))) := committingIndex;
+                            persistentTagTableVar(slv2u(mappingList(committingIndex).virtual(i))) := slv2u(commitGroupCtrNext);
+                            persistentSubindexTableVar(slv2u(mappingList(committingIndex).virtual(i))) := i;
                         end if;
                     end loop;
                     
+                    persistentTagTable <= persistentTagTableVar;
+                    persistentSubindexTable <= persistentSubindexTableVar;
+                    persistentRowTable <= persistentRowTableVar;
+                    
                     for i in 0 to RENAME_W-1 loop
                         if releasedMaskV(i) = '1' then
-                            if releasedTagsV(i) = -1 then next; end if;
+                            --if releasedTagsV(i) = -1 then next; end if;
                         
-                            mappingList(findRowByTag(mappingList, i2slv(releasedTagsV(i), TAG_SIZE))).mask(releasedSubindsV(i)) <= '0';
+                              --   releasedRows(i) <= findRowByTag(mappingList, i2slv(releasedTagsV(i), TAG_SIZE));
+                              --   if findRowByTag(mappingList, i2slv(releasedTagsV(i), TAG_SIZE)) = -1 then next; end if;
+                        
+                            --mappingList(findRowByTag(mappingList, i2slv(releasedTagsV(i), TAG_SIZE))).mask(releasedSubindsV(i)) <= '0';
+                            if releasedRowsV(i) = -1 then next; end if;
+                            --if releasedSubindsV(i) = -1 then next; end if;
+                            
+                            mappingList(releasedRowsV(i)).mask(releasedSubindsV(i)) <= '0';
                         end if;
                     end loop;
                     -- release overwritten entries of persistent table
@@ -467,6 +498,7 @@ begin
             end if;
             
                 releasedTags <= releasedTagsV;
+                releasedRows <= releasedRowsV;
                 releasedSubinds <= releasedSubindsV;
                 releasedMask <= releasedMaskV;
             
