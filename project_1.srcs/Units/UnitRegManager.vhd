@@ -61,6 +61,7 @@ port(
     sendingFromROB: in std_logic;
    
     commitGroupCtr: in InsTag;
+        renameGroupCtrNextOut: out InsTag;
   
     execCausing: in ControlPacket;
     
@@ -588,5 +589,7 @@ begin
     storeMaskRe <= getStoreMask1(stageDataRenameIn);
     fpMaskRe <= getFpMask1(stageDataRenameIn);
     intStoreMaskRe <= getIntStoreMask1(stageDataRenameIn);
-    floatStoreMaskRe <= getFloatStoreMask1(stageDataRenameIn);            
+    floatStoreMaskRe <= getFloatStoreMask1(stageDataRenameIn);
+    
+        renameGroupCtrNextOut <= renameGroupCtrNext;           
 end Behavioral;

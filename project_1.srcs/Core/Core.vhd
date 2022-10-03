@@ -85,7 +85,8 @@ architecture Behavioral of Core is
 
     signal bqPointer, bqPointerSeq, lqPointer, sqPointer: SmallNumber := (others => '0');
 
-    signal commitGroupCtr: InsTag := (others => '0'); -- TODO: check if can be internal to RegManager (inc on commit signal)
+    signal commitGroupCtr, commitGroupCtrNext: InsTag := (others => '0'); -- TODO: check if can be internal to RegManager (inc on commit signal)
+        signal renameGroupCtrNext: InsTag := (others => '0'); -- TODO: check if can be internal to RegManager (inc on commit signal)
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal intType: std_logic_vector(0 to 1) := (others => '0');
@@ -171,6 +172,7 @@ begin
         sbEmpty => sbEmpty,
 
         commitGroupCtrOut => commitGroupCtr,
+        commitGroupCtrNextOut => commitGroupCtrNext,
 
         doneSig => oaux(0),
         failSig => oaux(1)
@@ -252,6 +254,8 @@ begin
         specialOut => specialOp,
 
         commitGroupCtr => commitGroupCtr,
+
+        renameGroupCtrNextOut => renameGroupCtrNext,
 
         execCausing => branchResultE0,
 
@@ -449,6 +453,12 @@ begin
                     TMP_tagsAlu => TMP_aluTagsPre,
                     TMP_tagsMul => TMP_mulTagsPre,
                     TMP_tagsMem => TMP_memTagsPre,
+                        
+                    commitArgInfoI => renamedArgsIntROB,
+                        
+                        commitGroupCtr => commitGroupCtr,
+                        commitGroupCtrNext => commitGroupCtrNext,
+                        renameGroupCtrNext => renameGroupCtrNext,
                         
                         renameSending => renamedSending, -- CAREFUL, it's an input
                         robSending => robSending, -- CAREFUL, it's an input
