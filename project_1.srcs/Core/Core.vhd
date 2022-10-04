@@ -120,6 +120,9 @@ architecture Behavioral of Core is
         signal TMP_aluTags, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags,
                 TMP_aluTagsPre, TMP_mulTagsPre, TMP_memTagsPre, TMP_sviTagsPre, TMP_svfTagsPre, TMP_fpTagsPre
                 : SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
+                
+        signal TMP_renamedDests: SmallNumberArray(0 to RENAME_W-1) := (others => (others => '0'));
+        signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
 begin
 
     intSignal <= int0 or int1;
@@ -456,6 +459,9 @@ begin
                         
                     commitArgInfoI => renamedArgsIntROB,
                         
+                        TMP_destsOut => TMP_renamedDests,
+                        TMP_sourcesOut => TMP_renamedSources,
+
                         commitGroupCtr => commitGroupCtr,
                         commitGroupCtrNext => commitGroupCtrNext,
                         renameGroupCtrNext => renameGroupCtrNext,
@@ -561,7 +567,7 @@ begin
         begin
             fmaInt <= work.LogicIssue.findForwardingMatchesArray_N(schedInfoA, fni, readyRegFlagsInt_Early, regInfo);
 
-            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeALU(renamedDataLivingRe)), aluMask, true, removeArg2(renamedArgsInt));
+            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeALU(renamedDataLivingRe)), aluMask, true, removeArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, false, FORWARDING_MODES_INT_D, memFail, false);
 
             IQUEUE_I0: entity work.IssueQueue(Behavioral)
@@ -673,7 +679,7 @@ begin
                     begin
                         fmaInt <= work.LogicIssue.findForwardingMatchesArray_N(schedInfoA, fni, readyRegFlagsInt_Early, regInfo);
 
-                        schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeMul(renamedDataLivingRe)), mulMask, true, removeArg2(renamedArgsInt));
+                        schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeMul(renamedDataLivingRe)), mulMask, true, removeArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
                         schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, false, FORWARDING_MODES_INT_D, memFail, false);
 
                         IQUEUE_I1: entity work.IssueQueue(Behavioral)
@@ -767,7 +773,7 @@ begin
            signal slotRegReadM0iq, slotRegReadM0mq: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
            signal resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
         begin
-           schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingRe), memMask, true, removeArg2(renamedArgsMerged));         
+           schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingRe), memMask, true, removeArg2(renamedArgsMerged), TMP_renamedDests, TMP_renamedSources);         
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D, memFail, false);
 
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)
@@ -928,10 +934,10 @@ begin
             signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoFloatA, schedInfoUpdatedFloatA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
         begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
-            schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingRe), intStoreMask, false, useStoreArg2(renamedArgsInt));
+            schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingRe), intStoreMask, false, useStoreArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
             schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, true, FORWARDING_MODES_SV_INT_D, memFail, true);
 
-            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingRe), fpStoreMask, false, useStoreArg2(renamedArgsFloat));
+            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingRe), fpStoreMask, false, useStoreArg2(renamedArgsFloat), TMP_renamedDests, TMP_renamedSources);
             schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, true, FORWARDING_MODES_SV_FLOAT_D, memFail, true);
 
             fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni, readyRegFlagsSV);
@@ -1070,7 +1076,7 @@ begin
         begin
             fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat, readyRegFlagsFloat_Early);
 
-            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingRe), fpMask, false, renamedArgsFloat);
+            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingRe), fpMask, false, renamedArgsFloat, TMP_renamedDests, TMP_renamedSources);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, false, FORWARDING_MODES_FLOAT_D, memFail, false);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)

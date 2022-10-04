@@ -391,6 +391,7 @@ type SchedulerState is record
 
     operation: SpecificOp;
     argSpec: InstructionArgSpec;
+        destTag: SmallNumber;
 
     immediate: std_logic;
     immValue: Hword;
@@ -419,6 +420,7 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
 
       operation => DEFAULT_SPECIFIC_OP,
       argSpec => DEFAULT_ARG_SPEC,
+        destTag => (others => '0'),
 
       immediate => '0',
       immValue => (others => '0'),

@@ -114,6 +114,13 @@ type ForwardingInfo is record
 	tags1: PhysNameArray(0 to 2);
 	values0: MwordArray(0 to 2);
 	values1: MwordArray(0 to 2);
+	
+        iqTagsM3:	PhysNameArray(0 to 2);
+        iqTagsM2:    PhysNameArray(0 to 2);
+        iqTagsM1: PhysNameArray(0 to 2);
+        iqTags0: PhysNameArray(0 to 2);
+        iqTags1: PhysNameArray(0 to 2);
+
 	failedM2: std_logic_vector(0 to 2);	
 	failedM1: std_logic_vector(0 to 2);	
 	failed0: std_logic_vector(0 to 2);	
@@ -161,6 +168,13 @@ constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
 	nextTagsM1 => (others => (others => '0')),
     tags0 => (others => (others => '0')),
     tags1 => (others => (others => '0')),
+    
+        iqTagsM3 => (others => (others => '0')),
+        iqTagsM2 => (others => (others => '0')),
+        iqTagsM1 => (others => (others => '0')),
+        iqTags0 => (others => (others => '0')),
+        iqTags1 => (others => (others => '0')),
+
     values0 => (others => (others => '0')),
     values1 => (others => (others => '0')),
     failedM2 => (others => '0'),
@@ -207,6 +221,13 @@ begin
 		 fni.nextTagsM1 := (0 => s0_M1.dest,                              1 => s1_M1.dest,                               2 => s2_M1.dest,                             others => (others => '0'));        
          fni.tags0 :=      (0 => s0_R0.dest,                              1 => s1_R0.dest,                               2 => s2_R0.dest,                             others => (others => '0')); 
          fni.tags1 :=      (0 => s0_R1.dest,                              1 => s1_R1.dest,                               2 => s2_R1.dest,                             others => (others => '0'));
+
+--		 fni.iqTagsM3 :=   (0 => s0_M3.dest,                              1 => s1_M3.dest,                               2 => s2_M3.dest,                             others => (others => '0'));
+--		 fni.iqTagsM2 :=   (0 => s0_M2.dest,                              1 => s1_M2.dest,                               2 => s2_M2.dest,                             others => (others => '0'));
+--		 fni.iqTagsM1 :=   (0 => s0_M1.dest,                              1 => s1_M1.dest,                               2 => s2_M1.dest,                             others => (others => '0'));        
+--         fni.iqTags0 :=    (0 => s0_R0.dest,                              1 => s1_R0.dest,                               2 => s2_R0.dest,                             others => (others => '0')); 
+--         fni.iqTags1 :=    (0 => s0_R1.dest,                              1 => s1_R1.dest,                               2 => s2_R1.dest,                             others => (others => '0'));
+
          fni.values0 :=    (0 => s0_R0.value,                             1 => s1_R0.value,                              2 => s2_R0.value,                            others => (others => '0'));
          fni.values1 :=    (0 => s0_R1.value,                             1 => s1_R1.value,                              2 => s2_R1.value,                            others => (others => '0'));                 
          fni.failedM2 :=   (0 => s0_M2.failed,                            1 => s1_M2.failed,                             2 => s2_M2.failed,                           others => '0');                 

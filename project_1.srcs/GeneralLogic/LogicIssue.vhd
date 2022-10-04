@@ -49,6 +49,7 @@ type DbDependencyArray is array(natural range <>) of DbDependency;
 type ArgumentState is record
     used: std_logic;
     reg: PhysName;
+    iqTag: SmallNumber;
     zero: std_logic;
     imm: std_logic;
     value: Hword;
@@ -69,6 +70,7 @@ end record;
 constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
     used => '0',
     reg => (others => '0'),
+    iqTag => (others => '0'),
     zero => '0',
     imm => '0',
     value => (others => '0'),
@@ -148,6 +150,7 @@ type DynamicInfo is record
     intDestSel: std_logic;
     floatDestSel: std_logic;
     dest: PhysName;
+    --destTag: SmallNumber;
     
     argStates: ArgumentStateArray(0 to 2);
 end record;
@@ -172,6 +175,7 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     intDestSel => '0',
     floatDestSel => '0',
     dest => (others => '0'),
+    --destTag => (others => '0'),
 
     argStates => (others => DEFAULT_ARG_STATE)
 );
@@ -202,11 +206,13 @@ type slv2D is array(natural range <>, natural range <>) of std_logic;
 constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0');
 
 function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo; 
-function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo;
+function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo;
+                                TMP_renamedDest: SmallNumber; TMP_renamedSrcs: SmallNumberArray(0 to 2)) return DynamicInfo;
 
-function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray) return SchedulerInfoArray;
+function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray;
+                           TMP_renamedDests: SmallNumberArray; TMP_renamedSources: SmallNumberArray) return SchedulerInfoArray;
 
-function getSchedEntrySlot(info: SchedulerInfo; full: std_logic) return SchedulerState;
+function getSchedEntrySlot(info: SchedulerInfo; full: std_logic; iqTag: SmallNumber) return SchedulerState;
 
 function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
 
@@ -530,7 +536,8 @@ package body LogicIssue is
     end function; 
 
 
-    function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo) return DynamicInfo is
+    function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo;
+                                    TMP_renamedDest: SmallNumber; TMP_renamedSrcs: SmallNumberArray(0 to 2)) return DynamicInfo is
         variable res: DynamicInfo := DEFAULT_DYNAMIC_INFO;
     begin
         res.full := isl.full;
@@ -551,6 +558,7 @@ package body LogicIssue is
             res.argStates(i).zero := ri.sourceConst(i);
 
             res.argStates(i).reg := ri.physicalSourcesNew(i);
+            res.argStates(i).iqTag := TMP_renamedSrcs(i);
 
             -- Possibility to implement late allocation or advanced renaming schemes - delayed selection of args
             if false then
@@ -585,7 +593,8 @@ package body LogicIssue is
     end function; 
     
     
-    function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray) return SchedulerInfoArray is
+    function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray;
+                                    TMP_renamedDests: SmallNumberArray; TMP_renamedSources: SmallNumberArray) return SchedulerInfoArray is
         variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1);
         variable slot: InstructionSlot := DEFAULT_INS_SLOT;
     begin
@@ -593,13 +602,13 @@ package body LogicIssue is
             slot := insVec(i);
             slot.full := mask(i);
             res(i).static := getIssueStaticInfo(slot, USE_IMM, ria(i));
-            res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, ria(i));
+            res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, ria(i), TMP_renamedDests(i), TMP_renamedSources(3*i to 3*i + 2));
         end loop;
         return res;    
     end function;
-    
-    
-    function getSchedEntrySlot(info: SchedulerInfo; full: std_logic) return SchedulerState is
+
+
+    function getSchedEntrySlot(info: SchedulerInfo; full: std_logic; iqTag: SmallNumber) return SchedulerState is
         variable res: SchedulerState := DEFAULT_SCHED_STATE;
     begin
         res.full := full;
@@ -631,6 +640,8 @@ package body LogicIssue is
         res.argSpec.intDestSel := info.dynamic.intDestSel;
         res.argSpec.floatDestSel := info.dynamic.floatDestSel;
         res.argSpec.dest := info.dynamic.dest;
+
+            res.destTag := iqTag;
 
         for k in 0 to 2 loop
             res.argLocsPipe(k) := info.dynamic.argStates(k).srcPipe;

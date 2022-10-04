@@ -89,6 +89,7 @@ architecture Behavioral of IssueQueue is
                     isSent, isSent2, isSent3, isSent4, sentKilled, sentKilled1, sentKilled2, sentKilled3, sentKilled4, isEmpty, isFull, isAlmostFull: std_logic := '0';
     
     signal selectedSlot: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+    signal selectedIqTag: SmallNumber := (others => '0');
     signal dispatchDataNew: SchedulerState := DEFAULT_SCHED_STATE;       
 
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
@@ -190,6 +191,7 @@ begin
     -- Selection for issue
     selMask <= getSelMask(readyMaskAll, ageMatrix);
     selectedSlot <= queueSelect(queueContentUpdatedSel, selMask);  
+        selectedIqTag <= sn(getFirstOnePosition(selMask));
 
     COUNTERS_SYNCHRONOUS: process(clk)
     begin
@@ -209,7 +211,7 @@ begin
         end if;
     end process;
 
-    dispatchDataNew <= getSchedEntrySlot(selectedSlot, sends);
+    dispatchDataNew <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
 
     schedulerOut <= dispatchDataNew;
     acceptingOut <= acceptingBanked(bankCounts, BANK_SIZE);
