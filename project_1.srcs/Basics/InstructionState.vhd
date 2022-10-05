@@ -337,6 +337,27 @@ constant DEFAULT_EXEC_RESULT: ExecResult := (
     value => (others => '0')
 );
 
+    type ExecResult_N is record
+            dbInfo: InstructionDebugInfo;
+        full: std_logic;
+        failed: std_logic;
+        tag: InsTag;
+        iqTag: SmallNumber;
+        dest: PhysName;
+        value: Mword;
+    end record;
+    
+    constant DEFAULT_EXEC_RESULT_N: ExecResult_N := (
+            DEFAULT_DEBUG_INFO,
+        '0',
+        '0',
+        tag => (others => '0'),
+        iqTag => (others => '0'),
+        dest => (others => '0'),
+        value => (others => '0')
+    );
+
+
 type ExecResultArray is array(integer range <>) of ExecResult;
 
 

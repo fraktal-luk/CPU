@@ -114,6 +114,8 @@ begin
      end process;
 
 
+    -- pragma synthesis off
+
     -- Abstract mapping
     ABSTRACT_MAPPER: block
         signal abstractLatestTable, abstractPersistentTable: PhysNameArray(0 to 31) := initMap(false);
@@ -511,6 +513,7 @@ begin
 
         end process;
     end block;
+    -- pragma synthesis on
 
 end Behavioral;
 

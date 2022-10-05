@@ -22,6 +22,8 @@ type PhysicalSubpipe is (ALU, Mem, FP, StoreDataInt, StoreDataFloat);
 
 
 function makeExecResult(isl: SchedulerState) return ExecResult;
+    function makeExecResult_N(isl: SchedulerState) return ExecResult_N;
+    function makeExecResult_N(er: ExecResult; iqTag: SmallNumber) return ExecResult_N;
 
 
 type IssueQueueSignals is record
@@ -925,6 +927,28 @@ begin
 
     return res;
 end function;
+
+    function makeExecResult_N(isl: SchedulerState) return ExecResult_N is
+        variable res: ExecResult_N := DEFAULT_EXEC_RESULT_N;
+    begin
+        res.full := isl.full;
+        res.tag := isl.renameIndex;
+        res.dest := isl.argSpec.dest;
+            res.iqTag := isl.destTag;
+    
+        return res;
+    end function;
+
+    function makeExecResult_N(er: ExecResult; iqTag: SmallNumber) return ExecResult_N is
+        variable res: ExecResult_N := DEFAULT_EXEC_RESULT_N;
+    begin
+        res.full := er.full;
+        res.tag := er.tag;
+        res.dest := er.dest;
+            res.iqTag := iqTag;
+    
+        return res;
+    end function;
 
 function convertROBData(isa: InstructionSlotArray) return ControlPacketArray is
     variable res: ControlPacketArray(isa'range) := (others => DEFAULT_CONTROL_PACKET);

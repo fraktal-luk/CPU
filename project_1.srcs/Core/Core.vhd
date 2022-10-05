@@ -527,6 +527,21 @@ begin
               subpipe_DUMMY
                 : ExecResult := DEFAULT_EXEC_RESULT;
 
+           signal subpipeI0_Issue_N, subpipeI0_RegRead_N, subpipeI0_E0_N,                                    subpipeI0_D0_N,
+                  --subpipeI1_Issue, subpipeI1_RegRead, subpipeI1_E0,  subpipeI1_E1,    subpipeI1_E2,    subpipeI1_D0,  subpipeI1_D1,
+                  --subpipeM0_Issue, subpipeM0_RegRead, subpipeM0_E0,  subpipeM0_E1,    subpipeM0_E2,
+                  --                           subpipeM0_RR_u,
+                  --                     subpipeM0_RRi, subpipeM0_E0i, subpipeM0_E1i,   subpipeM0_E2i,   subpipeM0_D0i, subpipeM0_D1i,
+                  --                     subpipeM0_RRf, subpipeM0_E0f, subpipeM0_E1f,   subpipeM0_E2f,   subpipeM0_D0f, subpipeM0_D1f,
+                  --                                                              subpipeM0_E1_u,
+                  --                                                              subpipeM0_E1i_u,
+                  --                                                              subpipeM0_E1f_u,
+    
+                  --subpipeF0_Issue, subpipeF0_RegRead, subpipeF0_E0,    subpipeF0_E1,      subpipeF0_E2,      subpipeF0_D0,
+                  --                             subpipeF0_RRu,
+                  subpipe_DUMMY_N
+                    : ExecResult_N := DEFAULT_EXEC_RESULT_N;
+
         signal unfoldedAluOp: work.LogicExec.AluControl := work.LogicExec.DEFAULT_ALU_CONTROL;     
         signal aluMask, mulMask, memMask, fpMask, intStoreMask, fpStoreMask, branchMask, sqMask, lqMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
         signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
@@ -626,6 +641,9 @@ begin
 
                 subpipeI0_Issue <= makeExecResult(slotIssueI0);
                 subpipeI0_RegRead <= makeExecResult(slotRegReadI0);
+                
+                    subpipeI0_Issue_N <= makeExecResult_N(slotIssueI0);
+                    subpipeI0_RegRead_N <= makeExecResult_N(slotRegReadI0);
             end block;
 
             dataToAlu <= executeAlu(slotRegReadI0.full and not outSigsI0.killSel2, slotRegReadI0, bqSelected.nip, dataToBranch.controlInfo, unfoldedAluOp);
@@ -639,6 +657,7 @@ begin
             begin
                 if rising_edge(clk) then
                     subpipeI0_E0 <= dataToAlu;
+                        subpipeI0_E0_N <= makeExecResult_N(dataToAlu, slotRegReadI0.destTag);
                     branchResultE0 <= dataToBranch;
                 end if;
             end process;
@@ -1184,7 +1203,8 @@ begin
          begin
             if rising_edge(clk) then
                  subpipeI0_D0 <= subpipeI0_E0;
-                 
+                     subpipeI0_D0_N <= subpipeI0_E0_N;
+
                  subpipeI1_D0 <= subpipeI1_E2;
                  subpipeI1_D1 <= subpipeI1_D0;
 
