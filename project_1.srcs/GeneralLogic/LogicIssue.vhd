@@ -1053,7 +1053,19 @@ package body LogicIssue is
         return res;
     end function;
     
-    
+            
+            function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; forwardingModes0: ForwardingModeArray;
+                            memFail: std_logic; dynamic: boolean; selection: boolean; dontMatch1: boolean; constant ignoreMemFail: boolean)
+            return SchedulerInfoArray is
+                variable res: SchedulerInfoArray(0 to schedArray'length-1);
+            begin
+                for i in schedArray'range loop
+                    res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, dontMatch1, forwardingModes0, forwardingModes0, memFail, ignoreMemFail);
+                end loop;    
+                return res;
+            end function;
+
+
     function findForwardingMatches(info: SchedulerInfo; fni: ForwardingInfo; readyRegs: std_logic_vector) return ForwardingMatches is
         variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
         constant arg0: PhysName := info.dynamic.argStates(0).reg;

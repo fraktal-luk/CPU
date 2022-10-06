@@ -1247,7 +1247,7 @@ begin
         execOutSec(2) <= sqValueResult;
 
 
-        fni <= buildForwardingNetwork(DEFAULT_EXEC_RESULT, subpipeI0_Issue,     subpipeI0_RegRead,   subpipeI0_E0,        subpipeI0_D0,
+        fni <= buildForwardingNetwork(DEFAULT_EXEC_RESULT_N, subpipeI0_Issue_N,     subpipeI0_RegRead_N,   subpipeI0_E0_N,        subpipeI0_D0_N,
                                       DEFAULT_EXEC_RESULT, subpipeI1_E1,        subpipeI1_E2,        subpipeI1_D0,        subpipeI1_D1,
                                       subpipeM0_RegRead,   subpipeM0_E0i,       subpipeM0_E1i,       subpipeM0_E2i,       subpipeM0_D0i                     
                                      );

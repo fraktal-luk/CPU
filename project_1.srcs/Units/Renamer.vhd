@@ -54,7 +54,9 @@ architecture Behavioral of Renamer is
     signal evtD, evtD2: EventState := DEFAULT_EVENT_STATE;
     signal newTags, newTagsNext: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
     
-    signal tagTable: SmallNumberArray(0 to 31) := (others => sn(0));
+    signal iqTagTable, renameTagTable: SmallNumberArray(0 to 31) := (others => sn(0));
+    signal validTable: std_logic_vector(0 to 31) := (others => '0'); -- indicates valid iqTagTable entiries. If entry is invalid, phys reg map should be used
+
     signal virtualDests: RegNameArray(0 to RENAME_W-1) := (others => (others => '0'));
 
     signal virtualSrcs: RegNameArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
@@ -86,7 +88,7 @@ begin
     virtualSrcs <= getVirtualArgs(frontData);
 
     MUX_SRCS: for i in 0 to 3*RENAME_W-1 generate
-        baseSrcs(i) <= tagTable(slv2u(virtualSrcs(i)));
+        baseSrcs(i) <= iqTagTable(slv2u(virtualSrcs(i)));
     end generate;
 
     finalSrcs <= TMP_replaceNewDests(baseSrcs, depVec, newTagsNext);
@@ -106,10 +108,15 @@ begin
             if prevSending = '1' then
                 for i in 0 to RENAME_W-1 loop
                     if destMask(i) = '1' then
-                        tagTable(slv2u(virtualDests(i))) <= newTagsNext(i);
+                        iqTagTable(slv2u(virtualDests(i))) <= newTagsNext(i);
                     end if;
                 end loop;
             end if;
+            
+            -- TODO: the table entries must be invalidated on events (Exec: renameIndex cmp, Late: ocomplete flush)
+            --      They have to be invalidated when producing op finally leaves IQ (Issue + time for confirmed status). This can be together with putting to free list
+            --      If producer is committed, it has already been issued and invalidated.
+            
          end if;
      end process;
 

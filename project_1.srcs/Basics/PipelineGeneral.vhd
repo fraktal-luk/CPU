@@ -933,8 +933,8 @@ end function;
     begin
         res.full := isl.full;
         res.tag := isl.renameIndex;
+        res.iqTag := isl.destTag;
         res.dest := isl.argSpec.dest;
-            res.iqTag := isl.destTag;
     
         return res;
     end function;
@@ -942,10 +942,15 @@ end function;
     function makeExecResult_N(er: ExecResult; iqTag: SmallNumber) return ExecResult_N is
         variable res: ExecResult_N := DEFAULT_EXEC_RESULT_N;
     begin
+
+        res.dbInfo := er.dbInfo;
+    
         res.full := er.full;
+        res.failed := er.failed;
         res.tag := er.tag;
+        res.iqTag := iqTag;
         res.dest := er.dest;
-            res.iqTag := iqTag;
+        res.value := er.value;
     
         return res;
     end function;

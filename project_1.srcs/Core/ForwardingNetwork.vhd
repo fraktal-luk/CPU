@@ -189,7 +189,7 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
 );
 
 
-function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1: ExecResult_N;
                                 s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
                                 s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
           : ExecResult
@@ -208,7 +208,7 @@ end ForwardingNetwork;
 package body  ForwardingNetwork is
 
 
-function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
+function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1: ExecResult_N;
                                 s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
                                 s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
           : ExecResult
@@ -222,11 +222,11 @@ begin
          fni.tags0 :=      (0 => s0_R0.dest,                              1 => s1_R0.dest,                               2 => s2_R0.dest,                             others => (others => '0')); 
          fni.tags1 :=      (0 => s0_R1.dest,                              1 => s1_R1.dest,                               2 => s2_R1.dest,                             others => (others => '0'));
 
---		 fni.iqTagsM3 :=   (0 => s0_M3.dest,                              1 => s1_M3.dest,                               2 => s2_M3.dest,                             others => (others => '0'));
---		 fni.iqTagsM2 :=   (0 => s0_M2.dest,                              1 => s1_M2.dest,                               2 => s2_M2.dest,                             others => (others => '0'));
---		 fni.iqTagsM1 :=   (0 => s0_M1.dest,                              1 => s1_M1.dest,                               2 => s2_M1.dest,                             others => (others => '0'));        
---         fni.iqTags0 :=    (0 => s0_R0.dest,                              1 => s1_R0.dest,                               2 => s2_R0.dest,                             others => (others => '0')); 
---         fni.iqTags1 :=    (0 => s0_R1.dest,                              1 => s1_R1.dest,                               2 => s2_R1.dest,                             others => (others => '0'));
+		 fni.iqTagsM3 :=   (0 => s0_M3.iqTag,                                                                                                                          others => (others => '0'));
+		 fni.iqTagsM2 :=   (0 => s0_M2.iqTag,                                                                                                                          others => (others => '0'));
+		 fni.iqTagsM1 :=   (0 => s0_M1.iqTag,                                                                                                                          others => (others => '0'));        
+         fni.iqTags0 :=    (0 => s0_R0.iqTag,                                                                                                                          others => (others => '0')); 
+         fni.iqTags1 :=    (0 => s0_R1.iqTag,                                                                                                                          others => (others => '0'));
 
          fni.values0 :=    (0 => s0_R0.value,                             1 => s1_R0.value,                              2 => s2_R0.value,                            others => (others => '0'));
          fni.values1 :=    (0 => s0_R1.value,                             1 => s1_R1.value,                              2 => s2_R1.value,                            others => (others => '0'));                 

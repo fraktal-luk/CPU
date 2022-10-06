@@ -121,11 +121,6 @@ architecture Behavioral of IssueQueue is
         end function;
 
 begin
-    nFullNext <=        sub(i2slv(countOnes(fullMask), SMALL_NUMBER_SIZE), nOut) when slv2u(recoveryCounter) = 1
-                  else  add(nFull, sub(nIn, nOut));
-
-    nIn <= i2slv(countOnes(extractFullMask(newArr)), SMALL_NUMBER_SIZE) when prevSendingOK = '1' else (others => '0'); 
-    nOut <= i2slv(1, SMALL_NUMBER_SIZE) when (isSent and not sentKilled) = '1' else (others => '0');
 
     fma <= findForwardingMatchesArray(queueContent, fni, "000");
 
@@ -193,23 +188,6 @@ begin
     selectedSlot <= queueSelect(queueContentUpdatedSel, selMask);  
         selectedIqTag <= sn(getFirstOnePosition(selMask));
 
-    COUNTERS_SYNCHRONOUS: process(clk)
-    begin
-        if rising_edge(clk) then               
-            nFull <= nFullNext;
-                
-            if events.lateEvent = '1' or events.execEvent = '1' then
-                recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
-            elsif isNonzero(recoveryCounter) = '1' then
-                recoveryCounter <= addInt(recoveryCounter, -1);
-            end if;
-            
-            recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here    
-       
-            isFull <= cmpGtU(nFullNext, QUEUE_SIZE_EXT - PIPE_WIDTH);
-            isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE_EXT - 2*PIPE_WIDTH);
-        end if;
-    end process;
 
     dispatchDataNew <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
 
@@ -230,6 +208,33 @@ begin
         freedMask <= --selMask3 when isSent3 = '1' else (others => '0'); -- TMP!
                         getFreedVec(controlSigs);
         usedMask <= fullMask;
+
+
+
+    nFullNext <=        sub(i2slv(countOnes(fullMask), SMALL_NUMBER_SIZE), nOut) when slv2u(recoveryCounter) = 1
+                  else  add(nFull, sub(nIn, nOut));
+
+    nIn <= i2slv(countOnes(extractFullMask(newArr)), SMALL_NUMBER_SIZE) when prevSendingOK = '1' else (others => '0'); 
+    nOut <= i2slv(1, SMALL_NUMBER_SIZE) when (isSent and not sentKilled) = '1' else (others => '0');
+
+    COUNTERS_SYNCHRONOUS: process(clk)
+    begin
+        if rising_edge(clk) then               
+            nFull <= nFullNext;
+                
+            if events.lateEvent = '1' or events.execEvent = '1' then
+                recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
+            elsif isNonzero(recoveryCounter) = '1' then
+                recoveryCounter <= addInt(recoveryCounter, -1);
+            end if;
+            
+            recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here    
+       
+            isFull <= cmpGtU(nFullNext, QUEUE_SIZE_EXT - PIPE_WIDTH);
+            isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE_EXT - 2*PIPE_WIDTH);
+        end if;
+    end process;
+
 
     -- pragma synthesis off
     DEBUG_HANDLING: if DB_ENABLE generate
