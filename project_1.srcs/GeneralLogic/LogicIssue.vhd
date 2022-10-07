@@ -202,6 +202,27 @@ end record;
 
 type slv2D is array(natural range <>, natural range <>) of std_logic;
 
+    type SchedulerUpdateConfig is record
+        dynamic: boolean;
+        selection: boolean;
+        dontMatch1: boolean;
+        ignoreMemFail: boolean;
+        fwModes: ForwardingModeArray(0 to 2);
+    end record;
+    
+    constant DEFUALT_SCHEDULER_UPDATE_CONFIG: SchedulerUpdateConfig := (
+        dynamic => false,
+        selection => false,
+        dontMatch1 => false,
+        ignoreMemFail => false,
+        fwModes => FORWARDING_MODES_NONE
+    );
+
+        function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;-- forwardingModes0: ForwardingModeArray;
+                        memFail: std_logic;
+                        config: SchedulerUpdateConfig)
+        return SchedulerInfoArray;
+
 
 constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0');
 
@@ -243,14 +264,6 @@ return SchedulerInfoArray;
 
 function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector;
 
-function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
-                dynamic: boolean;
-                selection: boolean;
-                dontMatch1: boolean;
-                forwardingModes0: ForwardingModeArray;
-                memFail: std_logic; constant ignoreMemFail: boolean
-            )
-return SchedulerInfoArray;
 
 function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; rrf: std_logic_vector) return ForwardingMatchesArray;
 
@@ -873,34 +886,59 @@ package body LogicIssue is
         return res;
     end function;
 
-    function updateArgInfo(argState: ArgumentState; wakeups: WakeupStruct; selection: boolean)
+
+        function TMP_incSrcStage(stage: SmallNumber) return SmallNumber is
+        begin
+            case stage(1 downto 0) is
+                when "11" =>
+                    return "00000000";
+                when "00" =>
+                    return "00000001";               
+                when others =>
+                    return "00000010";
+            end case;            
+        end function;
+
+    function updateArgInfo_A(argState: ArgumentState)
     return ArgumentState is
         variable res: ArgumentState := argState;
         variable wakeupVec: std_logic_vector(0 to 2) := (others => '0');
         variable wakeupPhases: SmallNumberArray(0 to 2) := (others => (others => '0'));  
     begin
-        if argState.waiting = '1' then
-            res.srcPipe := wakeups.argLocsPipe;
-            res.srcStage := wakeups.argSrc;
-            res.waiting := not wakeups.match;
-            res.activeCounter := (others => '0');
-        elsif not selection then
-            res.activeCounter := addInt(res.activeCounter, 1);
 
-            case argState.srcStage(1 downto 0) is
-                when "11" =>
-                    res.srcStage := "00000000";
-                when "00" =>
-                    res.srcStage := "00000001";               
-                when others =>
-                    res.srcStage := "00000010";
-            end case;
-        end if;
-
+        res.activeCounter := addInt(res.activeCounter, 1);
         res.activeCounter(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0');
-        
+
+        res.srcStage := TMP_incSrcStage(res.srcStage);
+
         return res;
     end function;    
+
+
+    function setArgReady(argState: ArgumentState; wakeups: WakeupStruct)
+    return ArgumentState is
+        variable res: ArgumentState := argState;
+    begin
+        -- apply wakeup
+        res.srcPipe := wakeups.argLocsPipe;
+        res.srcStage := wakeups.argSrc;
+        res.waiting := '0';
+        res.activeCounter := (others => '0');
+
+        return res;
+    end function;
+
+
+    function updateWaitingArg(argState: ArgumentState; wakeups: WakeupStruct)
+    return ArgumentState is
+        variable res: ArgumentState := argState;
+    begin
+        if argState.waiting = '1' and wakeups.match = '1' then
+            res := setArgReady(res, wakeups);
+        end if;
+
+        return res;
+    end function;
 
         function setMatch(matchVec: std_logic_vector; p: natural; stage: integer; fc: ForwardingComparisons) return std_logic_vector is
             variable res: std_logic_vector(matchVec'range) := matchVec;
@@ -918,7 +956,7 @@ package body LogicIssue is
                     res(p) := fc.cmp1(p);
                 when others =>
                     res(p) := '0';
-            end case;            
+            end case;
             return res;
         end function;
 
@@ -931,6 +969,7 @@ package body LogicIssue is
             end if;
         end function;
 
+
     function getWakeupStructStatic(fc: ForwardingComparisons; forwardingModes: ForwardingModeArray; selection: boolean)
     return WakeupStruct is
         variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
@@ -941,12 +980,19 @@ package body LogicIssue is
             matchVec := setMatch(matchVec, p, forwardingModes(p).stage, fc);
             if matchVec(p) = '1' then
                 res.argLocsPipe(2 downto 0) := i2slv(p, 3);
-                if selection then
-                    srcStage := tmpMin(forwardingModes(p).stage + 1, 2);
-                else
+                
+                srcStage := tmpMin(forwardingModes(p).stage + 1, 2);
+                
+                if not selection then -- if not selection: move srcStage by 1
+                    --srcStage := tmpMin(srcStage + 1, 2);
                     srcStage := tmpMin(forwardingModes(p).stage + 2, 2);
                 end if;
+
                 res.argSrc(1 downto 0) := i2slv(srcStage, 2);
+                
+--                if not selection then -- if not selection: move srcStage by 1
+--                    res.argSrc := TMP_incSrcStage(res.argSrc);
+--                end if;                
             end if;
         end loop;
         res.match := isNonzero(matchVec);
@@ -984,87 +1030,87 @@ package body LogicIssue is
 
         return res;
     end function;
-    
-    
+
+            function getWakeupStruct(fc: ForwardingComparisons; config: SchedulerUpdateConfig)
+            return WakeupStruct is
+                variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+            begin
+                if not config.dynamic then
+                    res := getWakeupStructStatic(fc, config.fwModes, config.selection);
+                else
+                    res := getWakeupStructDynamic(fc, config.fwModes);
+                end if;            
+
+                return res;
+            end function;
+
         function dependsOnMemHit(state: ArgumentState) return std_logic is
         begin
             return bool2std(state.srcPipe(1 downto 0) = "10" and state.activeCounter = X"01") and not state.zero and not state.waiting;
         end function;
-    
+
     function updateSchedulerState(state: SchedulerInfo;
-                                    fni: ForwardingInfo;
-                                    fm: ForwardingMatches;
-                                    dynamic: boolean;
-                                    selection: boolean;
-                                    dontMatch1: boolean;
-                                    forwardingModes0, forwardingModes1: ForwardingModeArray;
-                                    memFail: std_logic;
-                                    constant ignoreMemFail: boolean
-                                    )
+                                  fni: ForwardingInfo;
+                                  fm: ForwardingMatches;
+                                  memFail: std_logic;
+                                  config: SchedulerUpdateConfig
+                                  )
     return SchedulerInfo is
         variable res: SchedulerInfo := state;
         variable wakeups0, wakeups1: WakeupStruct := DEFAULT_WAKEUP_STRUCT;    
         variable a0dep, a1dep: std_logic := '0';
     begin
-        if not dynamic then
-            wakeups0 := getWakeupStructStatic(fm.cmps(0), forwardingModes0, selection);
-            wakeups1 := getWakeupStructStatic(fm.cmps(1), forwardingModes0, selection);
-        else
-            wakeups0 := getWakeupStructDynamic(fm.cmps(0), forwardingModes0);
-            wakeups1 := getWakeupStructDynamic(fm.cmps(1), forwardingModes0);
+        wakeups0 := getWakeupStruct(fm.cmps(0), config);
+        wakeups1 := getWakeupStruct(fm.cmps(1), config);
+
+        -- Fast wakeups: 
+        if config.selection then
+            -- wakeup
+            res.dynamic.argStates(0) := updateWaitingArg(res.dynamic.argStates(0), wakeups0);
+            res.dynamic.argStates(1) := updateWaitingArg(res.dynamic.argStates(1), wakeups1);
         end if;
 
         -- Apply poison if dependency on M0 E1
-        if memFail = '1' and not ignoreMemFail and not selection then
-            a0dep := dependsOnMemHit(state.dynamic.argStates(0));
-            a1dep := dependsOnMemHit(state.dynamic.argStates(1));
-
-            if (a0dep or a1dep) = '1' then
-                res.dynamic.poisoned := '1';
-                res.dynamic.argStates(0).waiting := a0dep;
-                res.dynamic.argStates(1).waiting := a1dep;
-            end if;
-
-            -- When mem fail detected, wakeups are not allowed because dependence of failed op may be signalling
-            wakeups0.match := '0';
-            wakeups1.match := '0';
-        end if;
-
-        res.dynamic.argStates(0) := updateArgInfo(res.dynamic.argStates(0), wakeups0, selection);
+        if not config.selection then
+             res.dynamic.argStates(0) := updateArgInfo_A(res.dynamic.argStates(0));
+             res.dynamic.argStates(1) := updateArgInfo_A(res.dynamic.argStates(1));
         
-        if dontMatch1 then
-            res.dynamic.argStates(1).waiting := '0';
-        else
-            res.dynamic.argStates(1) := updateArgInfo(res.dynamic.argStates(1), wakeups1, selection);
+             if memFail = '1' and not config.ignoreMemFail then
+                a0dep := dependsOnMemHit(state.dynamic.argStates(0));
+                a1dep := dependsOnMemHit(state.dynamic.argStates(1));
+    
+                -- Resetting to waiting state
+                if (a0dep or a1dep) = '1' then
+                    res.dynamic.poisoned := '1';
+                    res.dynamic.argStates(0).waiting := a0dep;
+                    res.dynamic.argStates(1).waiting := a1dep;
+                end if;
+
+                -- When mem fail detected, wakeups are not allowed because dependence of failed op may be signalling
+                --wakeups0.match := '0';
+                --wakeups1.match := '0';
+             --end if;
+             else
+                -- wakeup
+                res.dynamic.argStates(0) := updateWaitingArg(res.dynamic.argStates(0), wakeups0);
+                res.dynamic.argStates(1) := updateWaitingArg(res.dynamic.argStates(1), wakeups1);
+             end if;
         end if;
 
         return res;
     end function;
-    
-    function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;
-                    dynamic: boolean; selection: boolean; dontMatch1: boolean; forwardingModes0: ForwardingModeArray;
-                    memFail: std_logic; constant ignoreMemFail: boolean)
-    return SchedulerInfoArray is
-        variable res: SchedulerInfoArray(0 to schedArray'length-1);
-    begin
-        for i in schedArray'range loop
-            res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, dontMatch1, forwardingModes0, forwardingModes0, memFail, ignoreMemFail);
-        end loop;	
-        return res;
-    end function;
-    
-            
-            function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray; forwardingModes0: ForwardingModeArray;
-                            memFail: std_logic; dynamic: boolean; selection: boolean; dontMatch1: boolean; constant ignoreMemFail: boolean)
+
+            function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;-- forwardingModes0: ForwardingModeArray;
+                            memFail: std_logic;
+                            config: SchedulerUpdateConfig)
             return SchedulerInfoArray is
                 variable res: SchedulerInfoArray(0 to schedArray'length-1);
             begin
                 for i in schedArray'range loop
-                    res(i) := updateSchedulerState(schedArray(i), fni, fma(i), dynamic, selection, dontMatch1, forwardingModes0, forwardingModes0, memFail, ignoreMemFail);
+                    res(i) := updateSchedulerState(schedArray(i), fni, fma(i), memFail, config);
                 end loop;    
                 return res;
             end function;
-
 
     function findForwardingMatches(info: SchedulerInfo; fni: ForwardingInfo; readyRegs: std_logic_vector) return ForwardingMatches is
         variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;

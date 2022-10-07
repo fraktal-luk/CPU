@@ -104,6 +104,14 @@ constant FORWARDING_MODES_SV_FLOAT_D: ForwardingModeArray(0 to 2) := (
 );
 
 
+--            constant CFG_ALU: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_INT_D); (-2, -2, -3)
+--            constant CFG_MUL: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_INT_D); (-2, -2, -3)
+--            constant CFG_MEM: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, false, FORWARDING_MODES_INT_D);  (-2, -2, -3)  [[-2,-1], [-2,-1], [-3,-1]]
+
+--            constant CFG_SVI: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, true, FORWARDING_MODES_SV_INT_D);   (0, 0, 0)     [[0, 1 ],  [0, 1], [0, 1]]
+--            constant CFG_SVF: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, true, FORWARDING_MODES_SV_FLOAT_D); (0, -, 0)     [[0, 1 ]   [-- ],  [0, 1]]
+--            constant CFG_FP0: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_FLOAT_D);  (-3, --, -1)  [[-3, -1], [ --],  [-1 ] ]
+
 
 
 type ForwardingInfo is record

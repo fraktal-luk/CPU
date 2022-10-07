@@ -23,9 +23,9 @@ entity IssueQueue is
 	    NAME: string;
 		IQ_SIZE: natural := 12;
 		DONT_MATCH1: boolean := false;
-		FORWARDING: ForwardingModeArray := (0 => (-100, false));  -- Can be used immediately
-		FORWARDING1: ForwardingModeArray := (0 => (-100, false));
-		FORWARDING_D: ForwardingModeArray := (0 => (-100, false)); -- Can be used with 1 cycle delay
+		FORWARDING: ForwardingModeArray(0 to 2) := (others => (-100, false));  -- Can be used immediately
+		FORWARDING1: ForwardingModeArray(0 to 2) := (others => (-100, false));
+		FORWARDING_D: ForwardingModeArray(0 to 2) := (others => (-100, false)); -- Can be used with 1 cycle delay
 		IGNORE_MEM_FAIL: boolean := false;
 		  TMP_USE_ALLOC: boolean := false
 	);
@@ -119,15 +119,19 @@ architecture Behavioral of IssueQueue is
             end loop;
             return res;
         end function;
-
+    
+        constant CFG_WAIT: work.LogicIssue.SchedulerUpdateConfig := (false, false, DONT_MATCH1, IGNORE_MEM_FAIL, FORWARDING_D);
+        constant CFG_SEL: work.LogicIssue.SchedulerUpdateConfig :=  (false, true,  DONT_MATCH1, IGNORE_MEM_FAIL, FORWARDING);
 begin
 
     fma <= findForwardingMatchesArray(queueContent, fni, "000");
 
-    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, false, false, DONT_MATCH1, FORWARDING_D, memFail, IGNORE_MEM_FAIL);
-    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, false, true, DONT_MATCH1, FORWARDING, memFail, IGNORE_MEM_FAIL);
+    --queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, false, false, DONT_MATCH1, FORWARDING_D, memFail, IGNORE_MEM_FAIL);
+    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, memFail, CFG_WAIT);
+    --queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, false, true, DONT_MATCH1, FORWARDING, memFail, IGNORE_MEM_FAIL);
+    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, memFail, CFG_SEL);
 
-    insertionLocs_O <=  getNewLocsBanked(fullMask);
+    insertionLocs_O <= getNewLocsBanked(fullMask);
     insertionLocs_N <= getNewLocs_N(fullMask, TMP_newTags, newArr);
 
         insertionLocs <= insertionLocs_N when TMP_USE_ALLOC else insertionLocs_O;
