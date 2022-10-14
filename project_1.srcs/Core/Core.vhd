@@ -118,7 +118,11 @@ architecture Behavioral of Core is
         signal freedMaskI0, usedMaskI0, freedMaskI1, usedMaskI1, freedMaskM0, usedMaskM0,
                freedMaskSVI, usedMaskSVI, freedMaskSVF, usedMaskSVF, freedMaskF0, usedMaskF0: std_logic_vector(0 to IQ_SIZE_I0-1) := (others => '0');
         signal TMP_aluTags, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags,
-                TMP_aluTagsPre, TMP_mulTagsPre, TMP_memTagsPre, TMP_sviTagsPre, TMP_svfTagsPre, TMP_fpTagsPre
+                TMP_aluTagsPre, TMP_mulTagsPre, TMP_memTagsPre, TMP_sviTagsPre, TMP_svfTagsPre, TMP_fpTagsPre,
+                
+                TMP_aluTagsT, TMP_mulTagsT, TMP_memTagsT, TMP_sviTagsT, TMP_svfTagsT, TMP_fpTagsT,
+                TMP_aluTagsPreT, TMP_mulTagsPreT, TMP_memTagsPreT, TMP_sviTagsPreT, TMP_svfTagsPreT, TMP_fpTagsPreT
+                
                 : SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
                 
         signal TMP_renamedDests: SmallNumberArray(0 to RENAME_W-1) := (others => (others => '0'));
@@ -311,6 +315,21 @@ begin
 		dbState => dbState	
 	);     
 
+                TMP_aluTagsT <= iqInds2tags(TMP_aluTags);
+                TMP_mulTagsT <= iqInds2tags(TMP_mulTags);
+                TMP_memTagsT <= iqInds2tags(TMP_memTags);
+                TMP_sviTagsT <= iqInds2tags(TMP_sviTags);
+                TMP_svfTagsT <= iqInds2tags(TMP_svfTags);
+                TMP_fpTagsT <= iqInds2tags(TMP_fpTags);
+
+                TMP_aluTagsPreT <= iqInds2tags(TMP_aluTagsPre);
+                TMP_mulTagsPreT <= iqInds2tags(TMP_mulTagsPre);
+                TMP_memTagsPreT <= iqInds2tags(TMP_memTagsPre);
+                TMP_sviTagsPreT <= iqInds2tags(TMP_sviTagsPre);
+                TMP_svfTagsPreT <= iqInds2tags(TMP_svfTagsPre);
+                TMP_fpTagsPreT <= iqInds2tags(TMP_fpTagsPre);
+
+
                 ALU_ALLOC: entity work.QueueAllocator
                 generic map(
                     QUEUE_SIZE => 12, BANK_SIZE => 3
@@ -453,9 +472,9 @@ begin
                     maskMul => mulMaskRe,
                     maskMem => memMaskRe,
                     
-                    TMP_tagsAlu => TMP_aluTagsPre,
-                    TMP_tagsMul => TMP_mulTagsPre,
-                    TMP_tagsMem => TMP_memTagsPre,
+                    TMP_tagsAlu => TMP_aluTagsPreT,
+                    TMP_tagsMul => TMP_mulTagsPreT,
+                    TMP_tagsMem => TMP_memTagsPreT,
                         
                     commitArgInfoI => renamedArgsIntROB,
                         
@@ -516,7 +535,7 @@ begin
               subpipeI1_Issue, subpipeI1_RegRead, subpipeI1_E0,  subpipeI1_E1,    subpipeI1_E2,    subpipeI1_D0,  subpipeI1_D1,
               subpipeM0_Issue, subpipeM0_RegRead, subpipeM0_E0,  subpipeM0_E1,    subpipeM0_E2,
                                          subpipeM0_RR_u,
-                                   subpipeM0_RRi, subpipeM0_E0i, subpipeM0_E1i,   subpipeM0_E2i,   subpipeM0_D0i, subpipeM0_D1i,
+                                   subpipeM0_RRi, subpipeM0_E0i, subpipeM0_E1i,   subpipeM0_E2i,   subpipeM0_D0i,-- subpipeM0_D1i,
                                    subpipeM0_RRf, subpipeM0_E0f, subpipeM0_E1f,   subpipeM0_E2f,   subpipeM0_D0f, subpipeM0_D1f,
                                                                             subpipeM0_E1_u,
                                                                             subpipeM0_E1i_u,
@@ -527,12 +546,14 @@ begin
               subpipe_DUMMY
                 : ExecResult := DEFAULT_EXEC_RESULT;
 
-           signal subpipeI0_Issue_N, subpipeI0_RegRead_N, subpipeI0_E0_N,                                    subpipeI0_D0_N,
-                  --subpipeI1_Issue, subpipeI1_RegRead, subpipeI1_E0,  subpipeI1_E1,    subpipeI1_E2,    subpipeI1_D0,  subpipeI1_D1,
-                  --subpipeM0_Issue, subpipeM0_RegRead, subpipeM0_E0,  subpipeM0_E1,    subpipeM0_E2,
+           signal subpipeI0_Issue_N, subpipeI0_RegRead_N, subpipeI0_E0_N,                                      subpipeI0_D0_N,
+                  subpipeI1_Issue_N, subpipeI1_RegRead_N, subpipeI1_E0_N,  subpipeI1_E1_N,    subpipeI1_E2_N,  subpipeI1_D0_N,  subpipeI1_D1_N,
+                  subpipeM0_Issue_N, subpipeM0_RegRead_N, subpipeM0_E0_N,  subpipeM0_E1_N,    subpipeM0_E2_N,
                   --                           subpipeM0_RR_u,
-                  --                     subpipeM0_RRi, subpipeM0_E0i, subpipeM0_E1i,   subpipeM0_E2i,   subpipeM0_D0i, subpipeM0_D1i,
-                  --                     subpipeM0_RRf, subpipeM0_E0f, subpipeM0_E1f,   subpipeM0_E2f,   subpipeM0_D0f, subpipeM0_D1f,
+                  --                     subpipeM0_RRi, 
+                                                          subpipeM0_E0i_N, subpipeM0_E1i_N,   subpipeM0_E2i_N,   subpipeM0_D0i_N, --subpipeM0_D1i,
+                  --                     subpipeM0_RRf, 
+                                                          subpipeM0_E0f_N, subpipeM0_E1f_N,   subpipeM0_E2f_N,   subpipeM0_D0f_N, subpipeM0_D1f_N,
                   --                                                              subpipeM0_E1_u,
                   --                                                              subpipeM0_E1i_u,
                   --                                                              subpipeM0_E1f_u,
@@ -584,7 +605,7 @@ begin
            
            constant CFG_ALU: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_INT_D);
         begin
-            fmaInt <= work.LogicIssue.findForwardingMatchesArray_N(schedInfoA, fni, readyRegFlagsInt_Early, regInfo);
+            fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni, CFG_ALU, readyRegFlagsInt_Early);--, regInfo);
 
             schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeALU(renamedDataLivingRe)), aluMask, true, removeArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
             --schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, false, FORWARDING_MODES_INT_D, memFail, false);
@@ -763,6 +784,9 @@ begin
 
                             subpipeI1_Issue <= makeExecResult(slotIssueI1);
                             subpipeI1_RegRead <= makeExecResult(slotRegReadI1);
+
+                                subpipeI1_Issue_N <= makeExecResult_N(slotIssueI1);
+                                subpipeI1_RegRead_N <= makeExecResult_N(slotRegReadI1);
                         end block;
 
                         controlI1_RR.controlInfo.full <= slotRegReadI1.full;
@@ -775,12 +799,18 @@ begin
                         subpipeI1_E1 <= dataMulE1;
                         subpipeI1_E2 <= dataMulE2;
 
+                            
+
                         process (clk)
                         begin
                             if rising_edge(clk) then
                                 dataMulE0 <= dataToMul;
                                 dataMulE1 <= dataMulE0;
                                 dataMulE2 <= dataMulE1;
+                                    
+                                    subpipeI1_E0_N <= makeExecResult_N(dataToMul, slotRegReadI1.destTag);
+                                    subpipeI1_E1_N <= subpipeI1_E0_N;
+                                    subpipeI1_E2_N <= subpipeI1_E1_N;
 
                                 ctrlE0 <= controlI1_RR;
                                 ctrlE1 <= ctrlE0;
@@ -857,6 +887,8 @@ begin
                 subpipeM0_Issue <= makeExecResult(slotIssueM0);
                 subpipeM0_RegRead <= makeExecResult(slotRegReadM0);
                 
+                    subpipeM0_Issue_N <= makeExecResult_N(slotIssueM0);
+                    subpipeM0_RegRead_N <= makeExecResult_N(slotRegReadM0);                
             end block;
 
             mqIssueSending <= mqReexecCtrlIssue.controlInfo.full;
@@ -903,17 +935,29 @@ begin
                     subpipeM0_E0i <= resultToM0_E0i; -- common: tag, value; different: full, dest
                     subpipeM0_E0f <= resultToM0_E0f; -- common: tag, value; different: full, dest
 
+                       subpipeM0_E0_N <= makeExecResult_N(resultToM0_E0, slotRegReadM0.destTag);
+                       subpipeM0_E0i_N <= makeExecResult_N(resultToM0_E0i, slotRegReadM0.destTag);
+                       subpipeM0_E0f_N <= makeExecResult_N(resultToM0_E0f, slotRegReadM0.destTag);
+
+
                     ctrlE1 <= ctrlE0;
                     subpipeM0_E1 <= subpipeM0_E0;
                     subpipeM0_E1i <= subpipeM0_E0i;
                     subpipeM0_E1f <= subpipeM0_E0f;
+
+                        subpipeM0_E1_N <= subpipeM0_E0_N;
+                        subpipeM0_E1i_N <= subpipeM0_E0i_N;
+                        subpipeM0_E1f_N <= subpipeM0_E0f_N;
 
                     -- Here we integrate mem read result
                     ctrlE2 <= ctrlE1u; -- TODO: update status based on hit/miss 
                     subpipeM0_E2 <= subpipeM0_E1_u;         -- injection of mem miss to 'full'
                     subpipeM0_E2i <= subpipeM0_E1i_u;
                     subpipeM0_E2f <= subpipeM0_E1f_u;
-                    
+
+                        subpipeM0_E2_N <= makeExecResult_N(subpipeM0_E1_u, subpipeM0_E1_N.iqTag);
+                        subpipeM0_E2i_N <= makeExecResult_N(subpipeM0_E1i_u, subpipeM0_E1_N.iqTag);
+                        subpipeM0_E2f_N <= makeExecResult_N(subpipeM0_E1f_u, subpipeM0_E1_N.iqTag);                 
                 end if;
             end process;
 
@@ -974,8 +1018,8 @@ begin
             --schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, true, FORWARDING_MODES_SV_FLOAT_D, memFail, true);
             schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, memFail, CFG_SVF);
 
-            fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni, readyRegFlagsSV);
-            fmaFloatSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoFloatA, fniFloat, readyRegFlagsFloatSV);
+            fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni, CFG_SVI, readyRegFlagsSV);
+            fmaFloatSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoFloatA, fniFloat, CFG_SVF, readyRegFlagsFloatSV);
         
             IQUEUE_SV: entity work.IssueQueue(Behavioral)
             generic map(
@@ -1110,7 +1154,7 @@ begin
             
             constant CFG_FP0: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_FLOAT_D);
         begin
-            fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat, readyRegFlagsFloat_Early);
+            fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat, CFG_FP0, readyRegFlagsFloat_Early);
 
             schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingRe), fpMask, false, renamedArgsFloat, TMP_renamedDests, TMP_renamedSources);
             --schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, false, FORWARDING_MODES_FLOAT_D, memFail, false);
@@ -1225,11 +1269,16 @@ begin
 
                  subpipeI1_D0 <= subpipeI1_E2;
                  subpipeI1_D1 <= subpipeI1_D0;
-
+                     subpipeI1_D0_N <= subpipeI1_E2_N;
+                     subpipeI1_D1_N <= subpipeI1_D0_N;
+                 
                  subpipeM0_D0i <= subpipeM0_E2i;
                  subpipeM0_D0f <= subpipeM0_E2f;
                  subpipeM0_D1f <= subpipeM0_D0f;
-
+                     subpipeM0_D0i_N <= subpipeM0_E2i_N;
+                     subpipeM0_D0f_N <= subpipeM0_E2f_N;
+                     subpipeM0_D1f_N <= subpipeM0_D0f_N;
+                 
                  subpipeF0_D0 <= subpipeF0_E2;
              end if;
          end process;
@@ -1266,8 +1315,8 @@ begin
 
 
         fni <= buildForwardingNetwork(DEFAULT_EXEC_RESULT_N, subpipeI0_Issue_N,     subpipeI0_RegRead_N,   subpipeI0_E0_N,        subpipeI0_D0_N,
-                                      DEFAULT_EXEC_RESULT, subpipeI1_E1,        subpipeI1_E2,        subpipeI1_D0,        subpipeI1_D1,
-                                      subpipeM0_RegRead,   subpipeM0_E0i,       subpipeM0_E1i,       subpipeM0_E2i,       subpipeM0_D0i                     
+                                      DEFAULT_EXEC_RESULT_N, subpipeI1_E1_N,        subpipeI1_E2_N,        subpipeI1_D0_N,        subpipeI1_D1_N,
+                                      subpipeM0_RegRead_N,   subpipeM0_E0i_N,       subpipeM0_E1_N,        subpipeM0_E2i_N,       subpipeM0_D0i_N
                                      );
 
         fniFloat <= buildForwardingNetworkFP(subpipeF0_RegRead,   subpipeF0_E0,        subpipeF0_E1,        subpipeF0_E2,        subpipeF0_D0,

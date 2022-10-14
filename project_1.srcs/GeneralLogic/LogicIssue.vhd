@@ -265,7 +265,7 @@ return SchedulerInfoArray;
 function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector;
 
 
-function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; rrf: std_logic_vector) return ForwardingMatchesArray;
+function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig; rrf: std_logic_vector) return ForwardingMatchesArray;
 
      function findForwardingMatchesArray_N(schedArray: SchedulerInfoArray; fni: ForwardingInfo; rrf: std_logic_vector; regInfo: RegisterStateArray2D) return ForwardingMatchesArray;
 
@@ -671,6 +671,7 @@ package body LogicIssue is
         res.full := prevSending;
         if prevSending = '0' or (input.argSpec.intDestSel = '0' and input.argSpec.floatDestSel = '0') then
            res.argSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
+           res.destTag := (others => '1');
         end if;
     
         return res;
@@ -1112,24 +1113,43 @@ package body LogicIssue is
                 return res;
             end function;
 
-    function findForwardingMatches(info: SchedulerInfo; fni: ForwardingInfo; readyRegs: std_logic_vector) return ForwardingMatches is
+    function findForwardingMatches(info: SchedulerInfo; fni: ForwardingInfo; config: SchedulerUpdateConfig; readyRegs: std_logic_vector) return ForwardingMatches is
         variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
         constant arg0: PhysName := info.dynamic.argStates(0).reg;
         constant arg1: PhysName := info.dynamic.argStates(1).reg;
+        
+        constant tag0: PhysName := info.dynamic.argStates(0).iqTag;
+        constant tag1: PhysName := info.dynamic.argStates(1).iqTag;
     begin
-        res.cmps(0).reg   := '0';
-        res.cmps(0).cmp1  := findRegTag(arg0, fni.tags1);
-        res.cmps(0).cmp0  := findRegTag(arg0, fni.tags0);        
-        res.cmps(0).cmpM1 := findRegTag(arg0, fni.nextTagsM1);
-        res.cmps(0).cmpM2 := findRegTag(arg0, fni.nextTagsM2);        
-        res.cmps(0).cmpM3 := findRegTag(arg0, fni.nextTagsM3);
+        if true then
+            res.cmps(0).reg   := '0';
+            res.cmps(0).cmp1  := findRegTag(arg0, fni.tags1);
+            res.cmps(0).cmp0  := findRegTag(arg0, fni.tags0);        
+            res.cmps(0).cmpM1 := findRegTag(arg0, fni.nextTagsM1);
+            res.cmps(0).cmpM2 := findRegTag(arg0, fni.nextTagsM2);        
+            res.cmps(0).cmpM3 := findRegTag(arg0, fni.nextTagsM3);
+    
+            res.cmps(1).reg   := '0';
+            res.cmps(1).cmp1  := findRegTag(arg1, fni.tags1);
+            res.cmps(1).cmp0  := findRegTag(arg1, fni.tags0);        
+            res.cmps(1).cmpM1 := findRegTag(arg1, fni.nextTagsM1);
+            res.cmps(1).cmpM2 := findRegTag(arg1, fni.nextTagsM2);        
+            res.cmps(1).cmpM3 := findRegTag(arg1, fni.nextTagsM3);
+        elsif false then
+            res.cmps(0).reg   := '0';
+            res.cmps(0).cmp1  := findRegTag(tag0, fni.iqTags1);
+            res.cmps(0).cmp0  := findRegTag(tag0, fni.iqTags0);        
+            res.cmps(0).cmpM1 := findRegTag(tag0, fni.iqTagsM1);
+            res.cmps(0).cmpM2 := findRegTag(tag0, fni.iqTagsM2);        
+            res.cmps(0).cmpM3 := findRegTag(tag0, fni.iqTagsM3);
 
-        res.cmps(1).reg   := '0';
-        res.cmps(1).cmp1  := findRegTag(arg1, fni.tags1);
-        res.cmps(1).cmp0  := findRegTag(arg1, fni.tags0);        
-        res.cmps(1).cmpM1 := findRegTag(arg1, fni.nextTagsM1);
-        res.cmps(1).cmpM2 := findRegTag(arg1, fni.nextTagsM2);        
-        res.cmps(1).cmpM3 := findRegTag(arg1, fni.nextTagsM3);
+            res.cmps(1).reg   := '0';
+            res.cmps(1).cmp1  := findRegTag(tag1, fni.iqTags1);
+            res.cmps(1).cmp0  := findRegTag(tag1, fni.iqTags0);        
+            res.cmps(1).cmpM1 := findRegTag(tag1, fni.iqTagsM1);
+            res.cmps(1).cmpM2 := findRegTag(tag1, fni.iqTagsM2);        
+            res.cmps(1).cmpM3 := findRegTag(tag1, fni.iqTagsM3);
+        end if;
 
         return res;
     end function;
@@ -1157,7 +1177,7 @@ package body LogicIssue is
     end function;
     
     
-    function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; rrf: std_logic_vector) return ForwardingMatchesArray is
+    function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig; rrf: std_logic_vector) return ForwardingMatchesArray is
         variable res: ForwardingMatchesArray(schedArray'range) := (others => DEFAULT_FORWARDING_MATCHES);
         
         constant readyFlags: std_logic_vector(0 to 3*schedArray'length-1) := (others => '0');
@@ -1165,7 +1185,7 @@ package body LogicIssue is
     begin
         for i in schedArray'range loop
             readyFlagsSlice := readyFlags(3*i to 3*i + 2);
-            res(i) := findForwardingMatches(schedArray(i), fni, readyFlagsSlice);
+            res(i) := findForwardingMatches(schedArray(i), fni, config, readyFlagsSlice);
         end loop;
         return res;
     end function;

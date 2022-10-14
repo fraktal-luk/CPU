@@ -18,6 +18,8 @@ function sn(n: integer) return SmallNumber;
 
 function p2i(p: SmallNumber; n: natural) return natural;
 
+function iqInds2tags(inds: SmallNumberArray) return SmallNumberArray;
+
 type PhysicalSubpipe is (ALU, Mem, FP, StoreDataInt, StoreDataFloat);
 
 
@@ -233,6 +235,19 @@ end package;
 
 
 package body PipelineGeneral is
+
+function iqInds2tags(inds: SmallNumberArray) return SmallNumberArray is
+    variable res: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
+    variable lane: SmallNumber := sn(0);
+begin
+    for i in 0 to RENAME_W-1 loop 
+        lane := sn(i);
+        res(i)(SMALL_NUMBER_SIZE-1 downto 2) := inds(i)(SMALL_NUMBER_SIZE-3 downto 0);
+        res(i) := res(i) or lane;
+    end loop;
+    return res;
+end function;
+
 
 function sn(n: integer) return SmallNumber is
 begin

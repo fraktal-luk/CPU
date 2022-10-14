@@ -124,7 +124,7 @@ architecture Behavioral of IssueQueue is
         constant CFG_SEL: work.LogicIssue.SchedulerUpdateConfig :=  (false, true,  DONT_MATCH1, IGNORE_MEM_FAIL, FORWARDING);
 begin
 
-    fma <= findForwardingMatchesArray(queueContent, fni, "000");
+    fma <= findForwardingMatchesArray(queueContent, fni, CFG_SEL, "000");
 
     --queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, false, false, DONT_MATCH1, FORWARDING_D, memFail, IGNORE_MEM_FAIL);
     queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, memFail, CFG_WAIT);

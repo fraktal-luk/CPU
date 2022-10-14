@@ -149,21 +149,7 @@ constant DEFAULT_FORWARDING_COMPARISONS: ForwardingComparisons := (reg => '0', o
 
 type ForwardingComparisonsArray is array(natural range <>) of ForwardingComparisons;
 
-type ForwardingMatches is record
-    -- src0
-    a0cmpM3: std_logic_vector(0 to 2);
-    a0cmpM2: std_logic_vector(0 to 2);
-    a0cmpM1: std_logic_vector(0 to 2);
-    a0cmp1: std_logic_vector(0 to 2);    
-	a0cmp0: std_logic_vector(0 to 2);
-    
-    -- src1
-	a1cmpM3: std_logic_vector(0 to 2);
-	a1cmpM2: std_logic_vector(0 to 2);
-	a1cmpM1: std_logic_vector(0 to 2);
-	a1cmp1: std_logic_vector(0 to 2);	    
-	a1cmp0: std_logic_vector(0 to 2);
-	
+type ForwardingMatches is record	
 	cmps: ForwardingComparisonsArray(0 to 1);
 end record;
 
@@ -192,15 +178,15 @@ constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
 );
 
 constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
-    cmps => (others => DEFAULT_FORWARDING_COMPARISONS),
-    others => (others => '0')
+    cmps => (others => DEFAULT_FORWARDING_COMPARISONS)
+--    others => (others => '0')
 );
 
 
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1: ExecResult_N;
-                                s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
-                                s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
-          : ExecResult
+                                s1_M3, s1_M2, s1_M1, s1_R0, s1_R1: ExecResult_N;
+                                s2_M3, s2_M2, s2_M1, s2_R0, s2_R1: ExecResult_N
+         -- : ExecResult
 ) return ForwardingInfo;
 
 function buildForwardingNetworkFP(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1,
@@ -217,9 +203,9 @@ package body  ForwardingNetwork is
 
 
 function buildForwardingNetwork(s0_M3, s0_M2, s0_M1, s0_R0, s0_R1: ExecResult_N;
-                                s1_M3, s1_M2, s1_M1, s1_R0, s1_R1,
-                                s2_M3, s2_M2, s2_M1, s2_R0, s2_R1
-          : ExecResult
+                                s1_M3, s1_M2, s1_M1, s1_R0, s1_R1: ExecResult_N;
+                                s2_M3, s2_M2, s2_M1, s2_R0, s2_R1: ExecResult_N
+         -- : ExecResult
 ) return ForwardingInfo is
     variable fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 begin
@@ -230,14 +216,15 @@ begin
          fni.tags0 :=      (0 => s0_R0.dest,                              1 => s1_R0.dest,                               2 => s2_R0.dest,                             others => (others => '0')); 
          fni.tags1 :=      (0 => s0_R1.dest,                              1 => s1_R1.dest,                               2 => s2_R1.dest,                             others => (others => '0'));
 
-		 fni.iqTagsM3 :=   (0 => s0_M3.iqTag,                                                                                                                          others => (others => '0'));
-		 fni.iqTagsM2 :=   (0 => s0_M2.iqTag,                                                                                                                          others => (others => '0'));
-		 fni.iqTagsM1 :=   (0 => s0_M1.iqTag,                                                                                                                          others => (others => '0'));        
-         fni.iqTags0 :=    (0 => s0_R0.iqTag,                                                                                                                          others => (others => '0')); 
-         fni.iqTags1 :=    (0 => s0_R1.iqTag,                                                                                                                          others => (others => '0'));
+		 fni.iqTagsM3 :=   (0 => s0_M3.iqTag,                             1 => s1_M3.iqTag,                              2 => s2_M3.iqTag,                            others => (others => '0'));
+		 fni.iqTagsM2 :=   (0 => s0_M2.iqTag,                             1 => s1_M2.iqTag,                              2 => s2_M2.iqTag,                            others => (others => '0'));
+		 fni.iqTagsM1 :=   (0 => s0_M1.iqTag,                             1 => s1_M1.iqTag,                              2 => s2_M1.iqTag,                            others => (others => '0'));        
+         fni.iqTags0 :=    (0 => s0_R0.iqTag,                             1 => s1_R0.iqTag,                              2 => s2_R0.iqTag,                            others => (others => '0')); 
+         fni.iqTags1 :=    (0 => s0_R1.iqTag,                             1 => s1_R1.iqTag,                              2 => s2_R1.iqTag,                            others => (others => '0'));
 
          fni.values0 :=    (0 => s0_R0.value,                             1 => s1_R0.value,                              2 => s2_R0.value,                            others => (others => '0'));
          fni.values1 :=    (0 => s0_R1.value,                             1 => s1_R1.value,                              2 => s2_R1.value,                            others => (others => '0'));                 
+
          fni.failedM2 :=   (0 => s0_M2.failed,                            1 => s1_M2.failed,                             2 => s2_M2.failed,                           others => '0');                 
          fni.failedM1 :=   (0 => s0_M1.failed,                            1 => s1_M1.failed,                             2 => s2_M1.failed,                           others => '0');                 
          fni.failed0  :=   (0 => s0_R0.failed,                            1 => s1_R0.failed,                             2 => s2_R0.failed,                           others => '0');                 

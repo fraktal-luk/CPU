@@ -79,10 +79,13 @@ begin
         destMask(i) <= frontData(i).argSpec.intDestSel;
         virtualDests(i) <= frontData(i).argSpec.dest(4 downto 0);
 
-        newTagsNext(i) <= TMP_tagsAlu(i) or LANE_SPEC or X"00" when maskAlu(i) = '1'
-                     else TMP_tagsMul(i) or LANE_SPEC or X"10" when maskMul(i) = '1'
-                     else TMP_tagsMem(i) or LANE_SPEC or X"20" when maskMem(i) = '1'
-                     else X"30";
+        newTagsNext(i) <= TMP_tagsAlu(i) or X"10" 
+                                when maskAlu(i) = '1'
+                     else TMP_tagsMul(i) or X"20" 
+                                when maskMul(i) = '1'
+                     else TMP_tagsMem(i) or X"30" 
+                                when maskMem(i) = '1'
+                     else X"ff";
     end generate;
 
     virtualSrcs <= getVirtualArgs(frontData);
