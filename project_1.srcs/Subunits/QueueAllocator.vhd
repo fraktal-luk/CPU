@@ -49,7 +49,9 @@ architecture Behavioral of QueueAllocator is
     signal usedTable: TableType := (others => (others => '0'));
 
     signal newInds: SmallNumberArray(0 to RENAME_W-1) := (others => (others => '0'));
-    signal lanesReady: std_logic_vector(0 to RENAME_W-1) := (others => '0');
+    signal lanesReady, lanesReadyExpected: std_logic_vector(0 to RENAME_W-1) := (others => '0');
+
+    signal allReadyExpected, accept_Alt: std_logic := '0';
 
     signal recoveryCounter: SmallNumber := sn(0);
 
@@ -120,6 +122,24 @@ architecture Behavioral of QueueAllocator is
         end loop;
     end procedure;
 
+        function nextExpectedTable(table: TableType; inReady: std_logic; usedLanes: std_logic_vector; newInds: SmallNumberArray; freed: std_logic_vector) return TableType is
+            variable res: TableType := table; 
+        begin
+            for bank in 0 to N_BANKS-1 loop
+                if usedLanes(bank) = '1' and inReady = '1' then
+                    res(bank, slv2u(newInds(bank))) := '1';
+                end if;
+            end loop;
+            for bank in 0 to N_BANKS-1 loop
+                for slot in 0 to BANK_SIZE-1 loop
+                    if freed(slot*N_BANKS + bank) = '1' then
+                        res(bank, slot) := '0';
+                    end if;
+                end loop;
+            end loop;
+            return res;
+        end function;
+
     procedure flush(signal table: inout TableType; iqUsed: std_logic_vector; lateEvent: std_logic) is
     begin
         if lateEvent = '1' then
@@ -164,6 +184,9 @@ begin
     newInds <= getFreeIndices(usedTable);
     lanesReady <= hasFreeIndices(usedTable);
 
+      lanesReadyExpected <= hasFreeIndices(nextExpectedTable(usedTable, inReady, inMask, newInds, iqFreed));
+      allReadyExpected <= allOf(lanesReadyExpected);
+
     process (clk)
     begin
         if rising_edge(clk) then
@@ -187,10 +210,15 @@ begin
                 recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
             recoveryCounter(SMALL_NUMBER_SIZE-1 downto 2) <= (others => '0');
+            
+            
+                  accept_Alt <= allReadyExpected;
+
         end if;
     end process;
 
-        accept <= allOf(lanesReady);
+        accept <= --allOf(lanesReady);
+                    accept_Alt;
 
         TMP_outTagsPre <= newInds;
 
