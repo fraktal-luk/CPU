@@ -62,14 +62,11 @@ end Core;
 
 architecture Behavioral of Core is
 
-    signal frontAccepting, bpAccepting, bpSending, renameAccepting, frontLastSending, canSendFront, canSendRename, robSending,-- robAccepting, 
+    signal frontAccepting, bpAccepting, bpSending, renameAllow, frontGroupSend, frontSendAllow, canSendRename, robSending,
             renameSendingBr, renamedSending, commitAccepting,
-           frontEventSignal, bqAccepting,-- acceptingSQ, almostFullSQ, acceptingLQ, almostFullLQ,
+           frontEventSignal, bqAccepting,
            execEventSignalE0, execEventSignalE1, lateEventSignal, lateEventSetPC,
            allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
-           iqAcceptingI0, iqAcceptingI1, iqAcceptingM0, iqAcceptingF0, iqAcceptingS0, iqAcceptingSF0,
-           --robAcceptingMore, 
-           iqAcceptingMoreI0, iqAcceptingMoreI1, iqAcceptingMoreM0, iqAcceptingMoreF0, iqAcceptingMoreS0, iqAcceptingMoreSF0,
            mqReady, mqIssueSending, mqRegReadSending, memoryMissed, sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
            : std_logic := '0';
 
@@ -79,7 +76,7 @@ architecture Behavioral of Core is
            branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO,
            commitMaskSQ, commitEffectiveMaskSQ, commitMaskLQ, commitEffectiveMaskLQ, branchCommitMask, branchCommitEffectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
-    signal frontOutput: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
+    signal frontGroupOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 
     signal renamedArgsInt, renamedArgsFloat, renamedArgsMerged, renamedArgsIntROB, renamedArgsFloatROB: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 
@@ -201,9 +198,9 @@ begin
         bpSending => bpSending,
         bpData => bpData,
 
-        renameAccepting => canSendFront,
-        dataOut => frontOutput,
-        lastSending => frontLastSending,
+        renameAccepting => frontSendAllow,
+        dataOut => frontGroupOut,
+        lastSending => frontGroupSend,
 
         frontEventSignal => frontEventSignal,
         frontCausing => frontEvent,
@@ -221,9 +218,9 @@ begin
     REGISTER_MANAGER: entity work.UnitRegManager(Behavioral)
     port map(
         clk => clk,
-        renameAccepting => renameAccepting,
-        frontLastSendingIn => frontLastSending,
-        frontData => frontOutput,
+        renameAccepting => renameAllow,
+        frontSendingIn => frontGroupSend,
+        frontData => frontGroupOut,
 
         aluMaskRe => aluMaskRe,
         mulMaskRe => mulMaskRe,
@@ -272,7 +269,7 @@ begin
         dbState => dbState
     );
 
-    canSendFront <=     renameAccepting 
+    frontSendAllow <=     renameAllow 
                     and allocAcceptAlu and allocAcceptMul and allocAcceptMem
                     and allocAcceptSVI and allocAcceptSVF and allocAcceptF0
                     and allocAcceptSQ and allocAcceptLQ and allocAcceptROB;
@@ -297,10 +294,8 @@ begin
 
 		inputData => renamedDataLivingMerged,
 		prevSending => renamedSending,
-		prevSendingRe => frontLastSending,
+		prevSendingRe => frontGroupSend,
 
-		--acceptingOut => robAccepting,
-		--acceptingMore => robAcceptingMore,
 		acceptAlloc => allocAcceptROB,
 
 		nextAccepting => commitAccepting,
@@ -337,12 +332,12 @@ begin
                 port map(
                     clk => clk, evt => events,
 
-                    inReady => frontLastSending,
+                    inReady => frontGroupSend,
                     inMask => aluMaskRe,
-                    inGroup => frontOutput,
+                    --inGroup => frontGroupOut,
 
-                    outReady => open,
-                    outGroup => open,
+                    --outReady => open,
+                    --outGroup => open,
                         TMP_outTags => TMP_aluTags,
                         TMP_outTagsPre => TMP_aluTagsPre,
 
@@ -359,12 +354,12 @@ begin
                 port map(
                     clk => clk, evt => events,
 
-                    inReady => frontLastSending,
+                    inReady => frontGroupSend,
                     inMask => mulMaskRe,
-                    inGroup => frontOutput,
+                    --inGroup => frontGroupOut,
 
-                    outReady => open,
-                    outGroup => open,
+                    --outReady => open,
+                    --outGroup => open,
                         TMP_outTags => TMP_mulTags,
                         TMP_outTagsPre => TMP_mulTagsPre,
                     
@@ -381,12 +376,12 @@ begin
                 port map(
                     clk => clk, evt => events,
 
-                    inReady => frontLastSending,
+                    inReady => frontGroupSend,
                     inMask => memMaskRe,
-                    inGroup => frontOutput,
+                    --inGroup => frontGroupOut,
 
-                    outReady => open,
-                    outGroup => open,
+                    --outReady => open,
+                    --outGroup => open,
                         TMP_outTags => TMP_memTags,
                         TMP_outTagsPre => TMP_memTagsPre,
 
@@ -403,12 +398,12 @@ begin
                 port map(
                     clk => clk, evt => events,
 
-                    inReady => frontLastSending,
+                    inReady => frontGroupSend,
                     inMask => intStoreMaskRe,
-                    inGroup => frontOutput,
+                    --inGroup => frontGroupOut,
 
-                    outReady => open,
-                    outGroup => open,
+                    --outReady => open,
+                    --outGroup => open,
                         TMP_outTags => TMP_sviTags,
 
                     accept => allocAcceptSVI,
@@ -424,12 +419,12 @@ begin
                 port map(
                     clk => clk, evt => events,
 
-                    inReady => frontLastSending,
+                    inReady => frontGroupSend,
                     inMask => floatStoreMaskRe,
-                    inGroup => frontOutput,
+                    --inGroup => frontGroupOut,
 
-                    outReady => open,
-                    outGroup => open,
+                    --outReady => open,
+                    --outGroup => open,
                         TMP_outTags => TMP_svfTags,
 
                     accept => allocAcceptSVF,
@@ -445,12 +440,12 @@ begin
                 port map(
                     clk => clk, evt => events,
 
-                    inReady => frontLastSending,
+                    inReady => frontGroupSend,
                     inMask => fpMaskRe,
-                    inGroup => frontOutput,
+                    --inGroup => frontGroupOut,
 
-                    outReady => open,
-                    outGroup => open,
+                    --outReady => open,
+                    --outGroup => open,
                         TMP_outTags => TMP_fpTags,
 
                     accept => allocAcceptF0,
@@ -464,9 +459,9 @@ begin
                 port map(
                     clk => clk, evt => events,
                     
-                    prevSending => frontLastSending,
+                    prevSending => frontGroupSend,
                     
-                    frontData => frontOutput,
+                    frontData => frontGroupOut,
                     
                     maskAlu => aluMaskRe,
                     maskMul => mulMaskRe,
@@ -565,7 +560,7 @@ begin
 
         signal unfoldedAluOp: work.LogicExec.AluControl := work.LogicExec.DEFAULT_ALU_CONTROL;     
         signal aluMask, mulMask, memMask, fpMask, intStoreMask, fpStoreMask, branchMask, sqMask, lqMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        signal fmaInt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
+        signal fmaInt, fmaInt_Alt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 
         function TMP_clearFull(ss: SchedulerState; evts: EventState) return SchedulerState is
@@ -597,19 +592,26 @@ begin
     
 
         SUBPIPE_ALU: block
-        
            signal dataToAlu: ExecResult := DEFAULT_EXEC_RESULT;           
            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
 
            signal regInfo: RegisterStateArray2D(0 to PIPE_WIDTH-1) := (others => (others => (others => '0')));
            
-           constant CFG_ALU: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_INT_D);
+           constant CFG_ALU: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_INT_D, false);
+               constant CFG_ALU_Alt: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_INT_D, true);
         begin
-            fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni, CFG_ALU, readyRegFlagsInt_Early);--, regInfo);
+            fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni, CFG_ALU, readyRegFlagsInt_Early);
+                fmaInt_Alt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni, CFG_ALU_Alt, readyRegFlagsInt_Early);
 
             schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeALU(renamedDataLivingRe)), aluMask, true, removeArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
-            --schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, false, FORWARDING_MODES_INT_D, memFail, false);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, memFail, CFG_ALU);
+             --   schedInfoUpdatedB <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, memFail, CFG_ALU_Alt);
+
+                DUMMY_CMP: block
+                    use work.LogicIssue.SchedulerInfoArray;
+                begin
+                    ch0 <= bool2std(fmaInt_Alt = fmaInt);
+                end block;
 
             IQUEUE_I0: entity work.IssueQueue(Behavioral)
             generic map(
@@ -618,28 +620,25 @@ begin
                 FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING1(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
-                    TMP_USE_ALLOC => true --false
+                    WAKEUP_SPEC => WAKEUP_SPEC_I0,--MODES => WAKEUP_MODES_I0,
+                    USE_WAKEUP_MODES => true
             )
             port map(
-                clk => clk, reset => '0', en => '0',
-
-                acceptingOut => iqAcceptingI0,
-                acceptingMore => iqAcceptingMoreI0,
+                clk => clk, reset => '0', en => '0', events => events,
 
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedA,
                         TMP_newTags => TMP_aluTags,
                 fni => fni,
                 readyRegFlags => readyRegFlagsInt_Early,
-                memFail => memFail,
-                memDepFail => prevMemDepFail,
+
                 nextAccepting => allowIssueI0,
-                events => events,
+                
                 schedulerOut => slotSelI0,
                 outputSignals => outSigsI0,
                 
-                    freedMask => freedMaskI0,
-                    usedMask => usedMaskI0,
+                freedMask => freedMaskI0,
+                usedMask => usedMaskI0,
                     
                 dbState => dbState
             );
@@ -721,7 +720,7 @@ begin
                        signal controlI1_RR, controlToI1_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
 
                        signal regInfo: RegisterStateArray2D(0 to PIPE_WIDTH-1) := (others => (others => (others => '0')));
-                       constant CFG_MUL: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_INT_D); -- TODO: turn off immediates
+                       constant CFG_MUL: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_INT_D, false); -- TODO: turn off immediates
                     begin
                         fmaInt <= work.LogicIssue.findForwardingMatchesArray_N(schedInfoA, fni, readyRegFlagsInt_Early, regInfo);
 
@@ -735,22 +734,22 @@ begin
                             IQ_SIZE => IQ_SIZE_I0,
                             FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                             FORWARDING1(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-                            FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
-                                                TMP_USE_ALLOC => true --false
+                            FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
+                                         --       TMP_USE_ALLOC => true --false
                         )
                         port map(
                             clk => clk, reset => '0', en => '0',
 
-                            acceptingOut => iqAcceptingI1,
-                            acceptingMore => iqAcceptingMoreI1,
+                            --acceptingOut => iqAcceptingI1,
+                            --acceptingMore => iqAcceptingMoreI1,
 
                             prevSendingOK => renamedSending,
                             newArr => schedInfoUpdatedA,
                                  TMP_newTags => TMP_mulTags,
                             fni => fni,
                             readyRegFlags => readyRegFlagsInt_Early,
-                            memFail => memFail,
-                            memDepFail => prevMemDepFail,
+                            --memFail => memFail,
+                            --memDepFail => prevMemDepFail,
                             nextAccepting => allowIssueI1,
                             events => events,
                             schedulerOut => slotSelI1,
@@ -829,7 +828,7 @@ begin
            signal slotRegReadM0iq, slotRegReadM0mq: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
            signal resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
            
-           constant CFG_MEM: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, false, FORWARDING_MODES_INT_D);
+           constant CFG_MEM: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, false, FORWARDING_MODES_INT_D, false);
         begin
            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingRe), memMask, true, removeArg2(renamedArgsMerged), TMP_renamedDests, TMP_renamedSources);         
            --schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D, memFail, false);
@@ -841,21 +840,21 @@ begin
                IQ_SIZE => IQ_SIZE_M0,
                DONT_MATCH1 => true,
                FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-               FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
-                                   TMP_USE_ALLOC => true --false
+               FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
+                               --    TMP_USE_ALLOC => true --false
            )
            port map(
                clk => clk, reset => '0', en => '0',
        
-               acceptingOut => iqAcceptingM0,
-               acceptingMore => iqAcceptingMoreM0,
+               --acceptingOut => iqAcceptingM0,
+               --acceptingMore => iqAcceptingMoreM0,
                prevSendingOK => renamedSending,
                newArr => schedInfoUpdatedA,
                      TMP_newTags => TMP_memTags,
                fni => fni,
                readyRegFlags => readyRegFlagsInt_Early,
-               memFail => memFail,
-               memDepFail => prevMemDepFail,
+               --memFail => memFail,
+               --memDepFail => prevMemDepFail,
                nextAccepting => allowIssueM0,
                events => events,
                schedulerOut => slotSelM0,
@@ -1006,8 +1005,8 @@ begin
             signal sendingToRegReadI, sendingToRegReadF, sendingToRegReadIntSV, sendingToRegReadFloatSV: std_logic := '0';
             signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoFloatA, schedInfoUpdatedFloatA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
             
-            constant CFG_SVI: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, true, FORWARDING_MODES_SV_INT_D);
-            constant CFG_SVF: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, true, FORWARDING_MODES_SV_FLOAT_D);
+            constant CFG_SVI: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, true, FORWARDING_MODES_SV_INT_D, false);
+            constant CFG_SVF: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, true, FORWARDING_MODES_SV_FLOAT_D, false);
         begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
             schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingRe), intStoreMask, false, useStoreArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
@@ -1028,20 +1027,21 @@ begin
                 DONT_MATCH1 => true,
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_INT_D(0 to 2),
                 IGNORE_MEM_FAIL => true,
-                                    TMP_USE_ALLOC => true --false
+                    WAKEUP_SPEC => WAKEUP_SPEC_SVI,--MODES => WAKEUP_MODES_I0,
+                    USE_WAKEUP_MODES => true
             )
             port map(
                 clk => clk, reset => '0', en => '0',
         
-                acceptingOut => iqAcceptingS0,
-                acceptingMore => iqAcceptingMoreS0,
+                --acceptingOut => iqAcceptingS0,
+                --acceptingMore => iqAcceptingMoreS0,
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedIntA,
                         TMP_newTags => TMP_sviTags,
                 fni => fni,     
                 readyRegFlags => readyRegFlagsSV,
-                memFail => memFail,
-                memDepFail => prevMemDepFail,
+                --memFail => memFail,
+                --memDepFail => prevMemDepFail,
                 nextAccepting => allowIssueStoreDataInt,
                 events => events,
                 schedulerOut => slotSelIntSV,
@@ -1096,21 +1096,21 @@ begin
                 IQ_SIZE => IQ_SIZE_FLOAT_SV, -- CAREFUL: not IS_FP because doesn't have destination
                 DONT_MATCH1 => true,
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_FLOAT_D(0 to 2),
-                IGNORE_MEM_FAIL => true,
-                                    TMP_USE_ALLOC => true --false
+                IGNORE_MEM_FAIL => true
+                             --       TMP_USE_ALLOC => true --false
             )
             port map(
                 clk => clk, reset => '0', en => '0',
        
-                acceptingOut => iqAcceptingSF0,
-                acceptingMore => iqAcceptingMoreSF0,
+                --acceptingOut => iqAcceptingSF0,
+                --acceptingMore => iqAcceptingMoreSF0,
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedFloatA,
                         TMP_newTags => TMP_svfTags,
                 fni => fniFloat,      
                 readyRegFlags => readyRegFlagsFloatSV,
-                memFail => memFail,
-                memDepFail => prevMemDepFail,
+                --memFail => memFail,
+                --memDepFail => prevMemDepFail,
                 nextAccepting => allowIssueStoreDataFP,
                 events => events,
                 schedulerOut => slotSelFloatSV,              
@@ -1152,7 +1152,7 @@ begin
             signal fmaF0: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);          
             signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
             
-            constant CFG_FP0: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_FLOAT_D);
+            constant CFG_FP0: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_FLOAT_D, false);
         begin
             fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat, CFG_FP0, readyRegFlagsFloat_Early);
 
@@ -1166,21 +1166,21 @@ begin
                 IQ_SIZE => IQ_SIZE_F0,
                 FORWARDING(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
                 FORWARDING1(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
-                FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT_D(0 to 2),
-                    TMP_USE_ALLOC => true --false
+                FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT_D(0 to 2)
+                    --TMP_USE_ALLOC => true --false
             )
             port map(
                 clk => clk, reset => '0', en => '0',
         
-                acceptingOut => iqAcceptingF0,
-                acceptingMore => iqAcceptingMoreF0,
+                --acceptingOut => iqAcceptingF0,
+                --acceptingMore => iqAcceptingMoreF0,
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedA,
                         TMP_newTags => TMP_fpTags,
                 fni => fniFloat,
                 readyRegFlags => readyRegFlagsFloat_Early,
-                memFail => memFail,
-                memDepFail => prevMemDepFail,
+                --memFail => memFail,
+                --memDepFail => prevMemDepFail,
                 nextAccepting => allowIssueF0,
                 events => events,
                 schedulerOut => slotSelF0,
@@ -1316,12 +1316,14 @@ begin
 
         fni <= buildForwardingNetwork(DEFAULT_EXEC_RESULT_N, subpipeI0_Issue_N,     subpipeI0_RegRead_N,   subpipeI0_E0_N,        subpipeI0_D0_N,
                                       DEFAULT_EXEC_RESULT_N, subpipeI1_E1_N,        subpipeI1_E2_N,        subpipeI1_D0_N,        subpipeI1_D1_N,
-                                      subpipeM0_RegRead_N,   subpipeM0_E0i_N,       subpipeM0_E1_N,        subpipeM0_E2i_N,       subpipeM0_D0i_N
+                                      subpipeM0_RegRead_N,   subpipeM0_E0i_N,       subpipeM0_E1_N,        subpipeM0_E2i_N,       subpipeM0_D0i_N,
+                                      memFail, memDepFail
                                      );
 
         fniFloat <= buildForwardingNetworkFP(subpipeF0_RegRead,   subpipeF0_E0,        subpipeF0_E1,        subpipeF0_E2,        subpipeF0_D0,
                                              DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT,
-                                             subpipeM0_E0f,       subpipeM0_E1f,       subpipeM0_E2f,       subpipeM0_D0f,       subpipeM0_D1f                                        
+                                             subpipeM0_E0f,       subpipeM0_E1f,       subpipeM0_E2f,       subpipeM0_D0f,       subpipeM0_D1f,
+                                             memFail, memDepFail
                                             );
 
         regsSelI0 <= work.LogicRenaming.getPhysicalArgs(slotIssueI0);
@@ -1402,7 +1404,7 @@ begin
         port map(
             clk => clk, reset => '0', en => '0',
 
-            sendingToReserve => frontLastSending,
+            sendingToReserve => frontGroupSend,
             newPhysDests => newIntDests,
             newPhysSources => newIntSources,
             writingData_T(0) => resultToIntRF_EarlyEffective,
@@ -1435,7 +1437,7 @@ begin
         port map(
             clk => clk, reset => '0', en => '0', 
              
-            sendingToReserve => frontLastSending,                 
+            sendingToReserve => frontGroupSend,                 
             newPhysDests => newFloatDests,
             newPhysSources => newFloatSources,
             writingData_T(0) => resultToFloatRF_Early,
@@ -1537,7 +1539,7 @@ begin
 --		almostFull => almostFullSQ,
 		acceptAlloc => allocAcceptSQ,
 		
-	    prevSendingRe => frontLastSending,
+	    prevSendingRe => frontGroupSend,
 		prevSending => renamedSending,
 		
         renameMask => storeMaskRe,
@@ -1587,7 +1589,7 @@ begin
 --		almostFull => almostFullLQ,
 		acceptAlloc => allocAcceptLQ,
 
-	    prevSendingRe => frontLastSending,				
+	    prevSendingRe => frontGroupSend,				
 		prevSending => renamedSending,
 		
 		renameMask => loadMaskRe,

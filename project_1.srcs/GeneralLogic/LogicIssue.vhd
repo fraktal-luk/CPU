@@ -208,6 +208,8 @@ type slv2D is array(natural range <>, natural range <>) of std_logic;
         dontMatch1: boolean;
         ignoreMemFail: boolean;
         fwModes: ForwardingModeArray(0 to 2);
+        matchIQ: boolean;
+        --matchNonzero: boolean;
     end record;
     
     constant DEFUALT_SCHEDULER_UPDATE_CONFIG: SchedulerUpdateConfig := (
@@ -215,13 +217,41 @@ type slv2D is array(natural range <>, natural range <>) of std_logic;
         selection => false,
         dontMatch1 => false,
         ignoreMemFail => false,
-        fwModes => FORWARDING_MODES_NONE
+        fwModes => FORWARDING_MODES_NONE,
+        matchIQ => false
+        --matchNonzero => false
     );
 
         function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;-- forwardingModes0: ForwardingModeArray;
                         memFail: std_logic;
                         config: SchedulerUpdateConfig)
         return SchedulerInfoArray;
+
+
+    
+    type ArgWakeup is record
+        active: std_logic;
+        mode: WakeupMode;
+        producer: InsTag;
+        iqTag: SmallNumber;
+        
+        match: std_logic;
+        pipe:  SmallNumber;
+        stage: SmallNumber;
+    end record;
+
+
+    type WakeupInfo is record
+        active: std_logic; -- if happening this cycle
+        arg0: ArgWakeup;
+        arg1: ArgWakeup;
+    end record;
+
+
+    type WakeupInfoArray is array(natural range <>) of WakeupInfo;
+
+        function getWakeupInfoA(content, newArray: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D; fni: ForwardingInfo; readyRegFlags: std_logic_vector; config: SchedulerUpdateConfig)
+        return WakeupInfoArray;
 
 
 constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0');
@@ -880,13 +910,30 @@ package body LogicIssue is
         variable res: std_logic_vector(list'range) := (others => '0');
     begin
         for i in list'range loop
-            if tag(PHYS_REG_BITS-1 downto 0) = list(i)(PHYS_REG_BITS-1 downto 0) then
+            if tag(PHYS_REG_BITS-1 downto 0) = list(i)(PHYS_REG_BITS-1 downto 0) 
+                 --   and isNonzero(tag) = '1' 
+            then
                 res(i) := '1';
             end if;
         end loop;
         return res;
     end function;
 
+    function findIqTag(tag: SmallNumber; list: SmallNumberArray) return std_logic_vector is
+        variable res: std_logic_vector(list'range) := (others => '0');
+        variable candidate: SmallNumber := sn(0);
+        variable iqSelector: SmallNumber := sn(0);
+    begin
+        for i in list'range loop
+            candidate := list(i) and X"0f";
+            iqSelector := sn(16*(1+i));
+            candidate := candidate or iqSelector;
+            if tag(5 downto 0) = candidate(5 downto 0) and list(i)(7) /= '1' then
+                res(i) := '1';
+            end if;
+        end loop;
+        return res;
+    end function;
 
         function TMP_incSrcStage(stage: SmallNumber) return SmallNumber is
         begin
@@ -1051,7 +1098,7 @@ package body LogicIssue is
         end function;
 
     function updateSchedulerState(state: SchedulerInfo;
-                                  fni: ForwardingInfo;
+                                  --fni: ForwardingInfo;
                                   fm: ForwardingMatches;
                                   memFail: std_logic;
                                   config: SchedulerUpdateConfig
@@ -1108,7 +1155,7 @@ package body LogicIssue is
                 variable res: SchedulerInfoArray(0 to schedArray'length-1);
             begin
                 for i in schedArray'range loop
-                    res(i) := updateSchedulerState(schedArray(i), fni, fma(i), memFail, config);
+                    res(i) := updateSchedulerState(schedArray(i), fma(i), memFail, config);
                 end loop;    
                 return res;
             end function;
@@ -1118,10 +1165,10 @@ package body LogicIssue is
         constant arg0: PhysName := info.dynamic.argStates(0).reg;
         constant arg1: PhysName := info.dynamic.argStates(1).reg;
         
-        constant tag0: PhysName := info.dynamic.argStates(0).iqTag;
-        constant tag1: PhysName := info.dynamic.argStates(1).iqTag;
+        constant tag0: SmallNumber := info.dynamic.argStates(0).iqTag;
+        constant tag1: SmallNumber := info.dynamic.argStates(1).iqTag;
     begin
-        if true then
+        if not config.matchIQ then
             res.cmps(0).reg   := '0';
             res.cmps(0).cmp1  := findRegTag(arg0, fni.tags1);
             res.cmps(0).cmp0  := findRegTag(arg0, fni.tags0);        
@@ -1135,20 +1182,20 @@ package body LogicIssue is
             res.cmps(1).cmpM1 := findRegTag(arg1, fni.nextTagsM1);
             res.cmps(1).cmpM2 := findRegTag(arg1, fni.nextTagsM2);        
             res.cmps(1).cmpM3 := findRegTag(arg1, fni.nextTagsM3);
-        elsif false then
+        else
             res.cmps(0).reg   := '0';
-            res.cmps(0).cmp1  := findRegTag(tag0, fni.iqTags1);
-            res.cmps(0).cmp0  := findRegTag(tag0, fni.iqTags0);        
-            res.cmps(0).cmpM1 := findRegTag(tag0, fni.iqTagsM1);
-            res.cmps(0).cmpM2 := findRegTag(tag0, fni.iqTagsM2);        
-            res.cmps(0).cmpM3 := findRegTag(tag0, fni.iqTagsM3);
+            res.cmps(0).cmp1  := findIqTag(tag0, fni.iqTags1);
+            res.cmps(0).cmp0  := findIqTag(tag0, fni.iqTags0);        
+            res.cmps(0).cmpM1 := findIqTag(tag0, fni.iqTagsM1);
+            res.cmps(0).cmpM2 := findIqTag(tag0, fni.iqTagsM2);        
+            res.cmps(0).cmpM3 := findIqTag(tag0, fni.iqTagsM3);
 
             res.cmps(1).reg   := '0';
-            res.cmps(1).cmp1  := findRegTag(tag1, fni.iqTags1);
-            res.cmps(1).cmp0  := findRegTag(tag1, fni.iqTags0);        
-            res.cmps(1).cmpM1 := findRegTag(tag1, fni.iqTagsM1);
-            res.cmps(1).cmpM2 := findRegTag(tag1, fni.iqTagsM2);        
-            res.cmps(1).cmpM3 := findRegTag(tag1, fni.iqTagsM3);
+            res.cmps(1).cmp1  := findIqTag(tag1, fni.iqTags1);
+            res.cmps(1).cmp0  := findIqTag(tag1, fni.iqTags0);        
+            res.cmps(1).cmpM1 := findIqTag(tag1, fni.iqTagsM1);
+            res.cmps(1).cmpM2 := findIqTag(tag1, fni.iqTagsM2);        
+            res.cmps(1).cmpM3 := findIqTag(tag1, fni.iqTagsM3);
         end if;
 
         return res;
@@ -1490,6 +1537,57 @@ package body LogicIssue is
             --end if;
             end loop;
 
+            return res;
+        end function;
+
+
+        function getWakeupInfoA(content, newArray: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D; fni: ForwardingInfo; readyRegFlags: std_logic_vector; config: SchedulerUpdateConfig)
+        return WakeupInfoArray is
+            constant LEN: natural := content'length;
+            variable res: WakeupInfoArray(0 to LEN-1);
+            variable queueElem: SchedulerInfo;
+            variable ready: std_logic := '0';
+            variable waiting0, waiting1: std_logic := '0';
+            variable wakeups0, wakeups1: WakeupStruct;
+            constant fma: ForwardingMatchesArray(0 to LEN-1) := findForwardingMatchesArray(content, fni, config, "000");
+        begin
+            -- ignore new elements for now
+            for i in 0 to LEN-1 loop
+                    res(i).active := '0';
+            
+                queueElem := content(i);
+                --ready := '0';
+                if queueElem.dynamic.full = '1' then            
+                    queueElem := updateSchedulerState(queueElem, fma(i), '0', config);
+                    waiting0 := queueElem.dynamic.argStates(0).waiting;
+                    waiting1 := queueElem.dynamic.argStates(1).waiting;
+                    
+                    if (not waiting0 and content(i).dynamic.argStates(0).waiting) = '1' then
+                        wakeups0 := getWakeupStruct(fma(i).cmps(0), config);
+                            res(i).arg0.active := '1';
+                        res(i).active := '1';
+                    end if;
+                    
+                    if (not waiting1 and content(i).dynamic.argStates(1).waiting) = '1' then
+                        wakeups1 := getWakeupStruct(fma(i).cmps(1), config);
+                            res(i).arg1.active := '1';
+                        res(i).active := '1';
+                    end if;
+
+                end if;
+            end loop;
+            
+            -- handle new elements
+            for k in 0 to RENAME_W-1 loop
+                if (newArray(k).dynamic.full and prevSending) /= '1' then
+                    next;
+                end if;
+                
+                for i in 0 to LEN-1 loop
+                    
+                end loop;
+            end loop;
+            
             return res;
         end function;
 

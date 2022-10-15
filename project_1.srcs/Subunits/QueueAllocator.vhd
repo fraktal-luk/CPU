@@ -25,10 +25,10 @@ entity QueueAllocator is
 
         inReady: in std_logic;
         inMask: std_logic_vector;
-        inGroup: in BufferEntryArray;
+        --inGroup: in BufferEntryArray;
 
-        outReady: out std_logic;
-        outGroup: out InstructionSlotArray(0 to RENAME_W-1);
+        --outReady: out std_logic;
+        --outGroup: out InstructionSlotArray(0 to RENAME_W-1);
             TMP_outTagsPre: out SmallNumberArray(0 to RENAME_W-1);
             TMP_outTags: out SmallNumberArray(0 to RENAME_W-1);
 

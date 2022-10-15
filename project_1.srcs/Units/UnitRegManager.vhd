@@ -22,7 +22,7 @@ port(
     clk: in std_logic;
     
     renameAccepting: out std_logic;
-    frontLastSendingIn: in std_logic;
+    frontSendingIn: in std_logic;
     frontData: in BufferEntryArray;
 
     aluMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
@@ -382,7 +382,7 @@ begin
     resultRenameInfoInt <= getRenameInfo(frontData,   renamedBase, newIntDests, newIntSources, newIntSourcesAlt, newProducersInt, newSourceSelectorInt);
     resultRenameInfoFloat <= getRenameInfo(frontData, renamedBase, newFloatDests, newFloatSources, newFloatSourcesAlt, newProducersFloat, newSourceSelectorFloat, true);
 
-    frontLastSending <= frontLastSendingIn and not eventSig;
+    frontLastSending <= frontSendingIn and not eventSig;
 
     eventSig <= execEventSignal or lateEventSignal;
 
@@ -481,7 +481,7 @@ begin
         
         rewind => renameLockEndDelayed,
         
-        sendingToReserve => frontLastSendingIn,
+        sendingToReserve => frontSendingIn,
         reserveInfoA => inputRenameInfoInt,
         newPhysDestsOrig => newIntDests,    -- MAPPING (from FREE LIST)
         
@@ -504,7 +504,7 @@ begin
         
         rewind => renameLockEndDelayed,
         
-        sendingToReserve => frontLastSendingIn,
+        sendingToReserve => frontSendingIn,
 
         reserveInfoA => inputRenameInfoFloat,
         newPhysDestsOrig => newFloatDests,
@@ -534,8 +534,8 @@ begin
         lateEventSignal => lateEventSignal,
         causingPointer => execCausing.tags.intPointer,
         
-        sendingToReserve => frontLastSendingIn, 
-        takeAllow => frontLastSendingIn,
+        sendingToReserve => frontSendingIn, 
+        takeAllow => frontSendingIn,
 
         reserveInfoA => inputRenameInfoInt,
         newPhysDests => newIntDests,
@@ -558,8 +558,8 @@ begin
         lateEventSignal => lateEventSignal,        
         causingPointer => execCausing.tags.floatPointer,
         
-        sendingToReserve => frontLastSendingIn, 
-        takeAllow => frontLastSendingIn,	-- FROM SEQ
+        sendingToReserve => frontSendingIn, 
+        takeAllow => frontSendingIn,	-- FROM SEQ
 
         reserveInfoA => inputRenameInfoFloat,
 
