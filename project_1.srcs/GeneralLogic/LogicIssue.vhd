@@ -282,15 +282,19 @@ function updateDispatchArgs_Is(st: SchedulerState) return SchedulerState;
 function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean) return SchedulerState;
 
 
+    function prepareNewArr(input: SchedulerInfoArray; rrf: std_logic_vector) return SchedulerInfoArray;
+    
+    function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray;
+
 function iqNext_NS(queueContent: SchedulerInfoArray;
-                  inputData: SchedulerInfoArray;           
-                  prevSending, sends: std_logic;
-                  killMask, trialMask, selMask: std_logic_vector;
-                  rrf: std_logic_vector;
-                  insertionLocs: slv2D;
-                  memFail: std_logic)
+                  sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail: std_logic)
 return SchedulerInfoArray;
 
+    function iqNext_NS_2(queueContent: SchedulerInfoArray;
+                      inputData: SchedulerInfoArray;               
+                      prevSending: std_logic;
+                      insertionLocs: slv2D)
+    return SchedulerInfoArray;
 
 function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector;
 
@@ -801,139 +805,8 @@ package body LogicIssue is
     
         return res;
     end function;
-       
-    
-    function iqNext_NS(queueContent: SchedulerInfoArray;
-                      inputData: SchedulerInfoArray;               
-                      prevSending, sends: std_logic;
-                      killMask, trialMask, selMask: std_logic_vector;
-                      rrf: std_logic_vector;
-                      insertionLocs: slv2D;
-                      memFail: std_logic)
-    return SchedulerInfoArray is
-        constant LEN: natural := queueContent'length;
-        variable res: SchedulerInfoArray(queueContent'range) := queueContent;
-        variable newArr: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputData;                
-        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
-    begin
-        for i in 0 to LEN-1 loop
-            res(i).dynamic.freed := '0'; -- This is set for 1 cycle when freeing
-
-            -- Remove after successful issue
-            if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME then
-                res(i).dynamic.full := '0';
-                res(i).dynamic.issued := '0';
-                res(i).dynamic.freed := '1';
-                res(i).dynamic.active := '0';
-                res(i).dynamic.stageCtr := (others => '0');
-            end if;
-
-            -- pull back because mem miss
-            if memFail = '1' and queueContent(i).dynamic.issued = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "01" then
-                res(i).dynamic.issued := '0';
-                res(i).dynamic.active := '1';
-                res(i).dynamic.stageCtr := (others => '0');
-            -- waiting to confirm issue success
-            elsif queueContent(i).dynamic.issued = '1' then
-                res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1);
-            end if;
-
-            -- set issued
-            if (selMask(i) and sends) = '1' then
-                res(i).dynamic.issued := '1';
-                res(i).dynamic.active := '0';
-                res(i).dynamic.stageCtr := addInt(res(i).dynamic.stageCtr, 1); 
-            end if;
-
-            -- flush on event
-            if killMask(i) = '1' then -- the same as at removing successfully issued?
-                res(i).dynamic.full := '0';
-                res(i).dynamic.issued := '0';
-                res(i).dynamic.active := '0';
-                res(i).dynamic.stageCtr := (others => '0');
-             end if;
-
-             -- set age comparison for possible subsequent flush
-             res(i).dynamic.trial := trialMask(i);           
-
-             res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
-        end loop;
 
 
-        -- Insert new elements
-        for j in 0 to PIPE_WIDTH-1 loop
-            rm(3*j to 3*j + 2) := (others => inputData(j).dynamic.full); 
-        end loop;
-
-        rrfFull := rm and rrf;
-        newArr := restoreRenameIndex(updateRR(inputData, rrfFull));
-
-        if prevSending = '1' then                    
-            for i in 0 to PIPE_WIDTH-1 loop
-                for k in 0 to LEN-1 loop
-                    if insertionLocs(k, i) = '1' then
-                        res(k) := newArr(i);
-                            res(k).dynamic.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
-                        exit;
-                    end if;
-                end loop;
-            end loop;
-        end if;
-
-        -- Handle DB info
-        for i in 0 to LEN-1 loop
-            for j in 0 to 2 loop
-                if res(i).dynamic.issued = '1' then
-                    null;
-                elsif res(i).dynamic.argStates(j).waiting = '1' then
-                    res(i).dynamic.argStates(j).dbDep := DB_incCyclesWaiting(res(i).dynamic.argStates(j).dbDep);
-                else
-                    res(i).dynamic.argStates(j).dbDep := DB_incCyclesReady(res(i).dynamic.argStates(j).dbDep);
-                end if;
-            end loop;
-        end loop;
-
-        for i in 0 to LEN-1 loop
-            if res(i).dynamic.full /= '1' then
-                res(i).static.dbInfo := DEFAULT_DEBUG_INFO;
-                res(i).dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
-                res(i).dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
-                res(i).dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
-            end if;
-        end loop;
-
-        return res;
-    end function;
-    
-    
-    function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector is
-        variable res: std_logic_vector(list'range) := (others => '0');
-    begin
-        for i in list'range loop
-            if tag(PHYS_REG_BITS-1 downto 0) = list(i)(PHYS_REG_BITS-1 downto 0) 
-                 --   and isNonzero(tag) = '1' 
-            then
-                res(i) := '1';
-            end if;
-        end loop;
-        return res;
-    end function;
-
-    function findIqTag(tag: SmallNumber; list: SmallNumberArray) return std_logic_vector is
-        variable res: std_logic_vector(list'range) := (others => '0');
-        variable candidate: SmallNumber := sn(0);
-        variable iqSelector: SmallNumber := sn(0);
-    begin
-        for i in list'range loop
-            candidate := list(i) and X"0f";
-            iqSelector := sn(16*(1+i));
-            candidate := candidate or iqSelector;
-            if tag(5 downto 0) = candidate(5 downto 0) and list(i)(7) /= '1' then
-                res(i) := '1';
-            end if;
-        end loop;
-        return res;
-    end function;
 
         function TMP_incSrcStage(stage: SmallNumber) return SmallNumber is
         begin
@@ -946,47 +819,6 @@ package body LogicIssue is
                     return "00000010";
             end case;            
         end function;
-
-    function updateArgInfo_A(argState: ArgumentState)
-    return ArgumentState is
-        variable res: ArgumentState := argState;
-        variable wakeupVec: std_logic_vector(0 to 2) := (others => '0');
-        variable wakeupPhases: SmallNumberArray(0 to 2) := (others => (others => '0'));  
-    begin
-
-        res.activeCounter := addInt(res.activeCounter, 1);
-        res.activeCounter(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0');
-
-        res.srcStage := TMP_incSrcStage(res.srcStage);
-
-        return res;
-    end function;    
-
-
-    function setArgReady(argState: ArgumentState; wakeups: WakeupStruct)
-    return ArgumentState is
-        variable res: ArgumentState := argState;
-    begin
-        -- apply wakeup
-        res.srcPipe := wakeups.argLocsPipe;
-        res.srcStage := wakeups.argSrc;
-        res.waiting := '0';
-        res.activeCounter := (others => '0');
-
-        return res;
-    end function;
-
-
-    function updateWaitingArg(argState: ArgumentState; wakeups: WakeupStruct)
-    return ArgumentState is
-        variable res: ArgumentState := argState;
-    begin
-        if argState.waiting = '1' and wakeups.match = '1' then
-            res := setArgReady(res, wakeups);
-        end if;
-
-        return res;
-    end function;
 
         function setMatch(matchVec: std_logic_vector; p: natural; stage: integer; fc: ForwardingComparisons) return std_logic_vector is
             variable res: std_logic_vector(matchVec'range) := matchVec;
@@ -1017,7 +849,6 @@ package body LogicIssue is
             end if;
         end function;
 
-
     function getWakeupStructStatic(fc: ForwardingComparisons; forwardingModes: ForwardingModeArray; selection: boolean)
     return WakeupStruct is
         variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
@@ -1030,17 +861,11 @@ package body LogicIssue is
                 res.argLocsPipe(2 downto 0) := i2slv(p, 3);
                 
                 srcStage := tmpMin(forwardingModes(p).stage + 1, 2);
-                
                 if not selection then -- if not selection: move srcStage by 1
-                    --srcStage := tmpMin(srcStage + 1, 2);
                     srcStage := tmpMin(forwardingModes(p).stage + 2, 2);
                 end if;
 
-                res.argSrc(1 downto 0) := i2slv(srcStage, 2);
-                
---                if not selection then -- if not selection: move srcStage by 1
---                    res.argSrc := TMP_incSrcStage(res.argSrc);
---                end if;                
+                res.argSrc(1 downto 0) := i2slv(srcStage, 2);              
             end if;
         end loop;
         res.match := isNonzero(matchVec);
@@ -1092,61 +917,341 @@ package body LogicIssue is
                 return res;
             end function;
 
+        -- TODO: include config to distinguih memFail 2 cycles after wakeup (Int) and 1 cycle after wakeup (FP)
         function dependsOnMemHit(state: ArgumentState) return std_logic is
         begin
             return bool2std(state.srcPipe(1 downto 0) = "10" and state.activeCounter = X"01") and not state.zero and not state.waiting;
         end function;
 
+        function updateArgInfo_A(argState: ArgumentState) return ArgumentState is
+            variable res: ArgumentState := argState;  
+        begin
+            res.activeCounter := addIntTrunc(res.activeCounter, 1, 2);
+            res.srcStage := TMP_incSrcStage(res.srcStage);
+            return res;
+        end function;
+
+        function setArgReady(argState: ArgumentState; wakeups: WakeupStruct)
+        return ArgumentState is
+            variable res: ArgumentState := argState;
+        begin
+            -- apply wakeup
+            res.srcPipe := wakeups.argLocsPipe;
+            res.srcStage := wakeups.argSrc;
+            res.waiting := '0';
+            res.activeCounter := sn(0);--(others => '0');
+
+            return res;
+        end function;
+
+        function updateWaitingArg(argState: ArgumentState; wakeups: WakeupStruct)
+        return ArgumentState is
+            variable res: ArgumentState := argState;
+        begin
+            if argState.waiting = '1' and wakeups.match = '1' then
+                res := setArgReady(res, wakeups);
+            end if;
+
+            return res;
+        end function;
+
+        function retractArg(argState: ArgumentState) return ArgumentState is
+            variable res: ArgumentState := argState;
+        begin
+            res.waiting := '1';
+            return res;
+        end function;
+
     function updateSchedulerState(state: SchedulerInfo;
-                                  --fni: ForwardingInfo;
                                   fm: ForwardingMatches;
                                   memFail: std_logic;
                                   config: SchedulerUpdateConfig
                                   )
     return SchedulerInfo is
         variable res: SchedulerInfo := state;
-        variable wakeups0, wakeups1: WakeupStruct := DEFAULT_WAKEUP_STRUCT;    
-        variable a0dep, a1dep: std_logic := '0';
+        variable wakeups: WakeupStruct := DEFAULT_WAKEUP_STRUCT;  
     begin
-        wakeups0 := getWakeupStruct(fm.cmps(0), config);
-        wakeups1 := getWakeupStruct(fm.cmps(1), config);
-
         -- Fast wakeups: 
         if config.selection then
             -- wakeup
-            res.dynamic.argStates(0) := updateWaitingArg(res.dynamic.argStates(0), wakeups0);
-            res.dynamic.argStates(1) := updateWaitingArg(res.dynamic.argStates(1), wakeups1);
+            for a in 0 to 1 loop
+                wakeups := getWakeupStruct(fm.cmps(a), config);
+                res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wakeups);
+            end loop;
         end if;
 
-        -- Apply poison if dependency on M0 E1
         if not config.selection then
-             res.dynamic.argStates(0) := updateArgInfo_A(res.dynamic.argStates(0));
-             res.dynamic.argStates(1) := updateArgInfo_A(res.dynamic.argStates(1));
-        
-             if memFail = '1' and not config.ignoreMemFail then
-                a0dep := dependsOnMemHit(state.dynamic.argStates(0));
-                a1dep := dependsOnMemHit(state.dynamic.argStates(1));
-    
-                -- Resetting to waiting state
-                if (a0dep or a1dep) = '1' then
-                    res.dynamic.poisoned := '1';
-                    res.dynamic.argStates(0).waiting := a0dep;
-                    res.dynamic.argStates(1).waiting := a1dep;
-                end if;
+            for a in 0 to 1 loop
+                wakeups := getWakeupStruct(fm.cmps(a), config);
+                res.dynamic.argStates(a) := updateArgInfo_A(res.dynamic.argStates(a));
 
-                -- When mem fail detected, wakeups are not allowed because dependence of failed op may be signalling
-                --wakeups0.match := '0';
-                --wakeups1.match := '0';
-             --end if;
-             else
+                if memFail = '1' and not config.ignoreMemFail then
+                -- Resetting to waiting state
+                    if dependsOnMemHit(state.dynamic.argStates(a)) = '1' then -- Remember, this depends on "old" state, before counter increments!
+                        res.dynamic.argStates(a) := retractArg(res.dynamic.argStates(a));
+                    end if;
+                else
                 -- wakeup
-                res.dynamic.argStates(0) := updateWaitingArg(res.dynamic.argStates(0), wakeups0);
-                res.dynamic.argStates(1) := updateWaitingArg(res.dynamic.argStates(1), wakeups1);
-             end if;
+                    res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wakeups);
+                end if;
+            end loop;
         end if;
 
         return res;
     end function;
+    
+    
+    function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray is
+        constant LEN: natural := content'length;
+        variable res: SchedulerInfoArray(content'range) := content;
+    begin
+            for i in 0 to PIPE_WIDTH-1 loop
+                for k in 0 to LEN-1 loop
+                    if insertionLocs(k, i) = '1' then
+                        res(k) := newArr(i);
+                            res(k).dynamic.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
+                        exit;
+                    end if;
+                end loop;
+            end loop;
+        return res;
+    end function;
+
+
+    function handleIqDbInfo(queueContent: SchedulerInfoArray) return SchedulerInfoArray is
+        constant LEN: natural := queueContent'length;
+        variable res: SchedulerInfoArray(queueContent'range) := queueContent;    
+    begin
+        for i in 0 to LEN-1 loop
+            for j in 0 to 2 loop
+                if res(i).dynamic.issued = '1' then
+                    null;
+                elsif res(i).dynamic.argStates(j).waiting = '1' then
+                    res(i).dynamic.argStates(j).dbDep := DB_incCyclesWaiting(res(i).dynamic.argStates(j).dbDep);
+                else
+                    res(i).dynamic.argStates(j).dbDep := DB_incCyclesReady(res(i).dynamic.argStates(j).dbDep);
+                end if;
+            end loop;
+        end loop;
+
+        for i in 0 to LEN-1 loop
+            if res(i).dynamic.full /= '1' then
+                res(i).static.dbInfo := DEFAULT_DEBUG_INFO;
+                res(i).dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
+                res(i).dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
+                res(i).dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
+            end if;
+        end loop;        
+        return res;
+    end function;
+
+    function prepareNewArr(input: SchedulerInfoArray; rrf: std_logic_vector) return SchedulerInfoArray is
+        --constant LEN: natural := queueContent'length;
+        variable res: SchedulerInfoArray(input'range) := input;
+        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+    begin
+        for j in 0 to PIPE_WIDTH-1 loop
+            rm(3*j to 3*j + 2) := (others => input(j).dynamic.full); 
+        end loop;
+
+        rrfFull := rm and rrf;
+    
+        res := restoreRenameIndex(updateRR(input, rrfFull));
+   
+        return res;
+    end function;
+
+        function removeEntry(entry: SchedulerInfo; freed: std_logic) return SchedulerInfo is
+            variable res: SchedulerInfo := entry;
+        begin
+            res.dynamic.full := '0';
+            res.dynamic.issued := '0';
+            --res.dynamic.freed := freed;
+            res.dynamic.active := '0';
+            res.dynamic.stageCtr := sn(0);
+            
+            return res;
+        end function;
+        
+        function pullbackEntry(entry: SchedulerInfo) return SchedulerInfo is
+            variable res: SchedulerInfo := entry;
+        begin
+            res.dynamic.issued := '0';
+            res.dynamic.active := '1';
+            res.dynamic.stageCtr := sn(0);
+            
+            return res;
+        end function;
+        
+        function updateIssuedEntry(entry: SchedulerInfo) return SchedulerInfo is
+            variable res: SchedulerInfo := entry;
+        begin
+            res.dynamic.stageCtr := addInt(res.dynamic.stageCtr, 1);
+
+            return res;
+        end function;
+        
+        function issueEntry(entry: SchedulerInfo) return SchedulerInfo is
+            variable res: SchedulerInfo := entry;
+        begin
+            res.dynamic.issued := '1';
+            res.dynamic.active := '0';
+            
+            -- TODO: change to hardcoded 1h (then maybe shoudl be made 0 and all checks corrected by -1?
+            res.dynamic.stageCtr := addInt(res.dynamic.stageCtr, 1);
+            return res;
+        end function;
+
+
+    function TMP_updateIQ(queueContent: SchedulerInfoArray;
+                      sends: std_logic;
+                      killMask, trialMask, selMask: std_logic_vector;
+                      memFail: std_logic)
+    return SchedulerInfoArray is
+        constant LEN: natural := queueContent'length;
+        variable res: SchedulerInfoArray(queueContent'range) := queueContent;
+        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+    begin
+        for i in 0 to LEN-1 loop
+            res(i).dynamic.freed := '0'; -- This is set for 1 cycle when freeing
+
+            if queueContent(i).dynamic.issued = '1' then
+                -- Remove after successful issue
+                if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME then
+                    -- if isDone
+                    res(i) := removeEntry(res(i), '1');
+                    res(i).dynamic.freed := '1';
+
+                -- pull back because mem miss
+                -- if needsPullback
+                elsif memFail = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "01" then
+                    res(i) := pullbackEntry(res(i));
+                else
+                    res(i) := updateIssuedEntry(res(i));
+                end if;
+            end if;
+
+            -- set issued
+            if (selMask(i) and sends) = '1' then
+                res(i) := issueEntry(res(i));
+            end if;
+
+            -- flush on event
+            if killMask(i) = '1' then -- the same as at removing successfully issued?
+                res(i) := removeEntry(res(i), '0');                
+             end if;
+
+             -- set age comparison for possible subsequent flush
+             -- this is done regardless of other parts of state
+             res(i).dynamic.trial := trialMask(i);        
+
+             res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
+        end loop;
+
+        return res;
+    end function;
+
+
+    function iqNext_NS(queueContent: SchedulerInfoArray;
+                      sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail: std_logic)
+    return SchedulerInfoArray is
+        constant LEN: natural := queueContent'length;
+        variable res: SchedulerInfoArray(queueContent'range) := queueContent;
+       -- variable newArr: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputData;                
+        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+    begin
+        for i in 0 to LEN-1 loop
+            res(i).dynamic.freed := '0'; -- This is set for 1 cycle when freeing
+
+            if queueContent(i).dynamic.issued = '1' then
+                -- Remove after successful issue
+                if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME then
+                    -- if isDone
+                    res(i) := removeEntry(res(i), '1');
+                    res(i).dynamic.freed := '1';
+
+                -- pull back because mem miss
+                -- if needsPullback
+                elsif memFail = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "01" then
+                    res(i) := pullbackEntry(res(i));
+                else
+                    res(i) := updateIssuedEntry(res(i));
+                end if;
+            end if;
+
+            -- set issued
+            if (selMask(i) and sends) = '1' then
+                res(i) := issueEntry(res(i));
+            end if;
+
+            -- flush on event
+            if killMask(i) = '1' then -- the same as at removing successfully issued?
+                res(i) := removeEntry(res(i), '0');                
+             end if;
+
+             -- set age comparison for possible subsequent flush
+             -- this is done regardless of other parts of state
+             res(i).dynamic.trial := trialMask(i);        
+
+             res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
+        end loop;
+
+        return res;
+    end function;
+
+
+    
+        function iqNext_NS_2(queueContent: SchedulerInfoArray;
+                          inputData: SchedulerInfoArray;               
+                          prevSending: std_logic;
+                          insertionLocs: slv2D)
+        return SchedulerInfoArray is
+            constant LEN: natural := queueContent'length;
+            variable res: SchedulerInfoArray(queueContent'range) := queueContent;
+            variable newArr: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputData;                
+            variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+        begin
+            newArr := inputData;
+                        
+            if prevSending = '1' then
+                res := insertElements(res, newArr, insertionLocs);
+            end if;
+    
+            res := handleIqDbInfo(res);
+    
+            return res;
+        end function;
+
+
+    function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector is
+        variable res: std_logic_vector(list'range) := (others => '0');
+    begin
+        for i in list'range loop
+            if tag(PHYS_REG_BITS-1 downto 0) = list(i)(PHYS_REG_BITS-1 downto 0)
+                 --   and isNonzero(tag) = '1' 
+            then
+                res(i) := '1';
+            end if;
+        end loop;
+        return res;
+    end function;
+
+    function findIqTag(tag: SmallNumber; list: SmallNumberArray) return std_logic_vector is
+        variable res: std_logic_vector(list'range) := (others => '0');
+        variable candidate: SmallNumber := sn(0);
+        variable iqSelector: SmallNumber := sn(0);
+    begin
+        for i in list'range loop
+            candidate := list(i) and X"0f";
+            iqSelector := sn(16*(1+i));
+            candidate := candidate or iqSelector;
+            if tag(5 downto 0) = candidate(5 downto 0) and list(i)(7) /= '1' then
+                res(i) := '1';
+            end if;
+        end loop;
+        return res;
+    end function;
+
 
             function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;-- forwardingModes0: ForwardingModeArray;
                             memFail: std_logic;

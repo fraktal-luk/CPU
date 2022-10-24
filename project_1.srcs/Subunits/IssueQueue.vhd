@@ -69,7 +69,7 @@ architecture Behavioral of IssueQueue is
     
     signal recoveryCounter: SmallNumber := (others => '0');
 
-    signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdatedSel: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
+    signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdated_2, queueContentUpdatedSel: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
 
     signal ageMatrix, ageMatrixNext: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := (others => (others => '0'));
     signal insertionLocs: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -235,7 +235,7 @@ architecture Behavioral of IssueQueue is
                                 res.stage := X"03";
                             end if;
                         end if;
-                        
+
                     when INIT_REG => ------------------------------------------------
                         matched := bool2std(argState.reg = fni.tags0(i) or argState.reg = fni.tags0(i));
                         if (matched and argState.waiting) = '1' then
@@ -247,21 +247,20 @@ architecture Behavioral of IssueQueue is
                             res.pipe := sn(i);
                             res.stage := X"02";
                         end if;                        
-                    
+
                     when CONST =>
                         res.mode := CONST;
-                    
+
                     when others =>
                 end case;
-                
+
             end loop;
             return res;
         end function;
-        
+
         function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray is
             constant LEN: natural := content'length; 
             variable res: WakeupInfoArray(content'range);
-            
         begin
 
             for i in 0 to LEN-1 loop
@@ -272,7 +271,7 @@ architecture Behavioral of IssueQueue is
             
             return res;
         end function;
-        
+
         signal wa: WakeupInfoArray(0 to IQ_SIZE-1);
 begin
 
@@ -284,12 +283,17 @@ begin
           wa <= getWakeupArray(queueContent, fni, WAKEUP_SPEC, CFG_WAIT); -- CFG_WAIT is needed for 'ignoreMemFail')
         end generate;
 
-    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, fni.memFail, CFG_WAIT);
     queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, fni.memFail, CFG_SEL);
+
+    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, fni.memFail, CFG_WAIT);
 
     insertionLocs <= getNewLocs_N(fullMask, TMP_newTags, newArr);
 
-    queueContentNext <= iqNext_NS(queueContentUpdated, newArr, prevSendingOK, sends, killMask, trialMask, selMask, readyRegFlags, insertionLocs, fni.memFail);
+        queueContentUpdated_2 <= iqNext_NS(queueContentUpdated, sends, killMask, trialMask, selMask, fni.memFail);
+
+    queueContentNext <= iqNext_NS_2(queueContentUpdated_2, prepareNewArr(newArr, readyRegFlags),
+                                                        prevSendingOK, insertionLocs);
+
     ageMatrixNext <= updateAgeMatrix(ageMatrix, insertionLocs, fullMask);
 
 
@@ -322,7 +326,7 @@ begin
         end if;
     end process;
 
-    controlSigs <= getControlSignals(queueContentUpdatedSel, events);               
+    controlSigs <= getControlSignals(queueContentUpdatedSel, events);
 
     -- Vector signals
     killMask <= getKilledVec(controlSigs);
@@ -330,7 +334,7 @@ begin
     fullMask <= getFullVec(controlSigs);
     readyMaskAll <= getReadyVec(controlSigs);
     readyMaskLive <= getReadyLiveVec(controlSigs);
-    
+
     -- Scalar signals
     isEmpty <= not isNonzero(fullMask);
     anyReadyLive <= isNonzero(readyMaskLive);
@@ -368,7 +372,7 @@ begin
             elsif isNonzero(recoveryCounter) = '1' then
                 recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
-            
+
             recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here    
         end if;
     end process;
@@ -376,11 +380,10 @@ begin
 
     -- pragma synthesis off
     DEBUG_HANDLING: if DB_ENABLE generate
-    
         process (clk)
             use std.textio.all;
             use work.Assembler.all;
-    
+
             function getArgString(argState: ArgumentState) return string is
                 variable immValue: Hword := argState.value;
             begin
@@ -398,9 +401,9 @@ begin
                         return "{" & natural'image(slv2u(argState.reg)) & " [1]}";                
                     end if;
                 end if;
-                
+
             end function;
-        
+
             procedure printContent is
                file outFile: text open write_mode is "issue_queue" & NAME & ".txt";
                variable preRow, currentLine: line := null;
@@ -412,25 +415,25 @@ begin
                         writeline(outFile, currentLine);
                         next;
                     end if;
-    
+
                     write(currentLine, natural'image(slv2u(queueContent(i).dynamic.renameIndex)));
                     write(currentLine, string'(", "));
                     write(currentLine, std_logic'image(queueContent(i).dynamic.issued));
                     write(currentLine, string'(", "));
-    
+
                     write(currentLine, getArgString(queueContent(i).dynamic.argStates(0)));
                     write(currentLine, string'(", "));
                     write(currentLine, getArgString(queueContent(i).dynamic.argStates(1)));
-                    
+
                     write(currentLine, string'(" // "));
-                    
+
                     write(currentLine, disasmWord(queueContent(i).static.dbInfo.bits));
                     writeline(outFile, currentLine);
                 end loop;
             end procedure;
-            
+
         begin
-            
+
             if rising_edge(clk) then
                 if DB_LOG_EVENTS then
                     if dbState.dbSignal = '1' then
@@ -440,7 +443,7 @@ begin
                 end if;
             end if;
         end process;
-        
+
     end generate;
     -- pragma synthesis on
 

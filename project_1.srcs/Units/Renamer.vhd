@@ -123,407 +123,410 @@ begin
          end if;
      end process;
 
+    
+    EXPERIMENTAL: if false generate
+        -- pragma synthesis off
 
-    -- pragma synthesis off
-
-    -- Abstract mapping
-    ABSTRACT_MAPPER: block
-        signal abstractLatestTable, abstractPersistentTable: PhysNameArray(0 to 31) := initMap(false);
-        signal abstractChangedTable, abstractFlushedTable: PhysNameArray(0 to 31) := (others => nothing);
-
-
-        signal abstractMapList: MapList := (others => DEFAULT_MAP_ROW);
-        -- Same as in ROB
-        signal startPtr, startPtrNext, endPtr, endPtrNext, renamedPtr, renamedPtrNext, causingPtr: SmallNumber := (others => '0');    
+        -- Abstract mapping
+        ABSTRACT_MAPPER: block
+            signal abstractLatestTable, abstractPersistentTable: PhysNameArray(0 to 31) := initMap(false);
+            signal abstractChangedTable, abstractFlushedTable: PhysNameArray(0 to 31) := (others => nothing);
     
-        signal newMapRow, committingMapRow: MapRow := DEFAULT_MAP_ROW;
-        signal causingMapping, lastUsedMapping: AbstractMapping := DEFAULT_ABSTRACT_MAPPING;
     
-
-        signal physRegFreeList: PhysNameArray(0 to FREE_LIST_SIZE-1) := initFreeList(false);
-        signal listPtrTake, listPtrTakeStable, listPtrTakeStableNext, listCausingTag: natural := 0;
-        signal listPtrPut, listPtrPutNext: natural := (N_PHYS - 32);
-        signal newFreeDests, releasedDests: PhysNameArray(0 to RENAME_W-1) := (others => (others => '0'));
+            signal abstractMapList: MapList := (others => DEFAULT_MAP_ROW);
+            -- Same as in ROB
+            signal startPtr, startPtrNext, endPtr, endPtrNext, renamedPtr, renamedPtrNext, causingPtr: SmallNumber := (others => '0');    
+        
+            signal newMapRow, committingMapRow: MapRow := DEFAULT_MAP_ROW;
+            signal causingMapping, lastUsedMapping: AbstractMapping := DEFAULT_ABSTRACT_MAPPING;
+        
     
-        -- check status of very physical reg: zero/free/speculative/persistent
-        -- zero iff its number is 0
-        -- free iff in freeList
-        -- speculative iff in abstractMapper temporary
-        -- persistent iff in stableMap
-    
-        signal physRegStateTable: std_logic_vector(0 to N_PHYS-1) := (others => '0'); -- TODO: change to array of PhysRegState (create this type first)
-        signal mapCounts, freeListCounts, stableCounts: IntArray(0 to N_PHYS-1) := (others => 0);
-    begin
-    
-        mapCounts <= scanMappings(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
-        freeListCounts <= scanFreeList(physRegFreeList, evt.execCausing.tag, listPtrTake, listPtrPut);
-        stableCounts <= scanMappingTable(abstractPersistentTable);
-    
-        process (clk)
-            variable lastUsedMappingVar: AbstractMapping;
-            variable releasingDestsVar: PhysNameArray(0 to RENAME_W-1) := (others => nothing);
-            variable stableProxyVar, changedMapVar, flushedMapVar: PhysNameArray(0 to 31) := (others => nothing);
-            variable listPtrTakeStableVar: natural := 0;
-            variable nReleased: natural:= 9;
+            signal physRegFreeList: PhysNameArray(0 to FREE_LIST_SIZE-1) := initFreeList(false);
+            signal listPtrTake, listPtrTakeStable, listPtrTakeStableNext, listCausingTag: natural := 0;
+            signal listPtrPut, listPtrPutNext: natural := (N_PHYS - 32);
+            signal newFreeDests, releasedDests: PhysNameArray(0 to RENAME_W-1) := (others => (others => '0'));
+        
+            -- check status of very physical reg: zero/free/speculative/persistent
+            -- zero iff its number is 0
+            -- free iff in freeList
+            -- speculative iff in abstractMapper temporary
+            -- persistent iff in stableMap
+        
+            signal physRegStateTable: std_logic_vector(0 to N_PHYS-1) := (others => '0'); -- TODO: change to array of PhysRegState (create this type first)
+            signal mapCounts, freeListCounts, stableCounts: IntArray(0 to N_PHYS-1) := (others => 0);
         begin
-            if rising_edge(clk) then
-                releasingDestsVar := (others => nothing);
-                stableProxyVar := (others => nothing);
-                listPtrTakeStableVar := 0;
-                nReleased := 0;
-
-                -- Mapping list:
-                if prevSending = '1' then
-                    abstractMapList(p2i(renamedPtr, ROB_SIZE)) <= newMapRow;
-                end if;
-
-                if robSending = '1' then
-                    abstractMapList(p2i(startPtr, ROB_SIZE)) <= DEFAULT_MAP_ROW;
-                end if;
-
-                startPtr <= startPtrNext;
-                endPtr <= endPtrNext;
-                renamedPtr <= renamedPtrNext;
-
-                -- Tables:
-                
-                -- Update latestTable
-                if prevSending = '1' then
-                    for i in 0 to RENAME_W-1 loop
-                        if newMapRow.mappings(i).used = '1' then
-                            abstractLatestTable(slv2u(virtualDests(i))) <= newMapRow.mappings(i).physical;
-                        end if;
-                    end loop;
-                end if;
+        
+            mapCounts <= scanMappings(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
+            freeListCounts <= scanFreeList(physRegFreeList, evt.execCausing.tag, listPtrTake, listPtrPut);
+            stableCounts <= scanMappingTable(abstractPersistentTable);
+        
+            process (clk)
+                variable lastUsedMappingVar: AbstractMapping;
+                variable releasingDestsVar: PhysNameArray(0 to RENAME_W-1) := (others => nothing);
+                variable stableProxyVar, changedMapVar, flushedMapVar: PhysNameArray(0 to 31) := (others => nothing);
+                variable listPtrTakeStableVar: natural := 0;
+                variable nReleased: natural:= 9;
+            begin
+                if rising_edge(clk) then
+                    releasingDestsVar := (others => nothing);
+                    stableProxyVar := (others => nothing);
+                    listPtrTakeStableVar := 0;
+                    nReleased := 0;
     
-                -- Update persistentTable
-                stableProxyVar := abstractPersistentTable;
-                if robSending = '1' then
-                    for i in 0 to RENAME_W-1 loop
-                        if committingMapRow.mappings(i).used = '1' then
-                            releasingDestsVar(i) := stableProxyVar(slv2u(committingMapRow.mappings(i).virtual));
-                            stableProxyVar(slv2u(committingMapRow.mappings(i).virtual)) := committingMapRow.mappings(i).physical;
-                        end if;
-                    end loop;
-
-                    abstractPersistentTable <= stableProxyVar;
-                    releasedDests <= releasingDestsVar; -- to FreeList
-                end if;
-                
-                -- free list
-                -- Move front pointer
-                if prevSending = '1' then
-                    listPtrTake <= (listPtrTake + getNumUsed(newMapRow)) mod FREE_LIST_SIZE;
-                end if;
-                
-                -- Update persistent pointer position
-                listPtrTakeStableVar := listPtrTakeStable;
-                if robSending = '1' then
-                    listPtrTakeStable <= (listPtrTakeStable + getNumUsed(committingMapRow)) mod FREE_LIST_SIZE;
-                    listPtrTakeStableVar := (listPtrTakeStable + getNumUsed(committingMapRow)) mod FREE_LIST_SIZE;
-                end if;
-
-                -- Rewind front pointer on event 
-                if evt.lateEvent = '1' then -- Flush to persistent state (persistent map can't be updated when lateEvent is signalled - Commit is locked)
-                    listPtrTake <= listPtrTakeStableVar;
-                elsif evt.execEvent = '1' then -- Partial flush (persistent map can be updated in this cycle and directly following ones!)
-                    -- Rewind free list ptr to 1 after last active mapping. If none exists, use committed state
-                    lastUsedMappingVar := findLastMappingByTag(abstractMapList, evt.execCausing.tag, startPtr);
-                    if lastUsedMappingVar.used = '1' then
-                        listPtrTake <= (lastUsedMappingVar.freeListIndex + 1) mod FREE_LIST_SIZE;
-                    else
+                    -- Mapping list:
+                    if prevSending = '1' then
+                        abstractMapList(p2i(renamedPtr, ROB_SIZE)) <= newMapRow;
+                    end if;
+    
+                    if robSending = '1' then
+                        abstractMapList(p2i(startPtr, ROB_SIZE)) <= DEFAULT_MAP_ROW;
+                    end if;
+    
+                    startPtr <= startPtrNext;
+                    endPtr <= endPtrNext;
+                    renamedPtr <= renamedPtrNext;
+    
+                    -- Tables:
+                    
+                    -- Update latestTable
+                    if prevSending = '1' then
+                        for i in 0 to RENAME_W-1 loop
+                            if newMapRow.mappings(i).used = '1' then
+                                abstractLatestTable(slv2u(virtualDests(i))) <= newMapRow.mappings(i).physical;
+                            end if;
+                        end loop;
+                    end if;
+        
+                    -- Update persistentTable
+                    stableProxyVar := abstractPersistentTable;
+                    if robSending = '1' then
+                        for i in 0 to RENAME_W-1 loop
+                            if committingMapRow.mappings(i).used = '1' then
+                                releasingDestsVar(i) := stableProxyVar(slv2u(committingMapRow.mappings(i).virtual));
+                                stableProxyVar(slv2u(committingMapRow.mappings(i).virtual)) := committingMapRow.mappings(i).physical;
+                            end if;
+                        end loop;
+    
+                        abstractPersistentTable <= stableProxyVar;
+                        releasedDests <= releasingDestsVar; -- to FreeList
+                    end if;
+                    
+                    -- free list
+                    -- Move front pointer
+                    if prevSending = '1' then
+                        listPtrTake <= (listPtrTake + getNumUsed(newMapRow)) mod FREE_LIST_SIZE;
+                    end if;
+                    
+                    -- Update persistent pointer position
+                    listPtrTakeStableVar := listPtrTakeStable;
+                    if robSending = '1' then
+                        listPtrTakeStable <= (listPtrTakeStable + getNumUsed(committingMapRow)) mod FREE_LIST_SIZE;
+                        listPtrTakeStableVar := (listPtrTakeStable + getNumUsed(committingMapRow)) mod FREE_LIST_SIZE;
+                    end if;
+    
+                    -- Rewind front pointer on event 
+                    if evt.lateEvent = '1' then -- Flush to persistent state (persistent map can't be updated when lateEvent is signalled - Commit is locked)
                         listPtrTake <= listPtrTakeStableVar;
+                    elsif evt.execEvent = '1' then -- Partial flush (persistent map can be updated in this cycle and directly following ones!)
+                        -- Rewind free list ptr to 1 after last active mapping. If none exists, use committed state
+                        lastUsedMappingVar := findLastMappingByTag(abstractMapList, evt.execCausing.tag, startPtr);
+                        if lastUsedMappingVar.used = '1' then
+                            listPtrTake <= (lastUsedMappingVar.freeListIndex + 1) mod FREE_LIST_SIZE;
+                        else
+                            listPtrTake <= listPtrTakeStableVar;
+                        end if;
+    
+                        lastUsedMapping <= lastUsedMappingVar;
                     end if;
-
-                    lastUsedMapping <= lastUsedMappingVar;
+        
+                    -- Put new content at the back
+                    for i in 0 to RENAME_W-1 loop
+                        if releasingDestsVar(i) /= nothing then
+                            physRegFreeList((listPtrPut + nReleased) mod FREE_LIST_SIZE) <= releasingDestsVar(i);
+                            nReleased := nReleased + 1;
+                        end if;
+                        listPtrPut <= (listPtrPut + nReleased) mod FREE_LIST_SIZE;
+                    end loop;
+    
+    
+                    -- mapping list
+                    if evt.lateEvent = '1' then
+                        abstractMapList <= (others => DEFAULT_MAP_ROW);
+        
+                        --abstractChangedTable <= scanChangedMappings(abstractMapList, evtD.execCausing.tag, startPtr, endPtr);
+                        --abstractFlushedTable <= scanFlushedMappings(abstractMapList, evtD.execCausing.tag, startPtr, endPtr);
+                        
+                        -- Table - update latest on event
+                        abstractLatestTable <= stableProxyVar;
+                    elsif evt.execEvent = '1' then
+                        abstractMapList <= clearAbstractMappingsPartial(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
+    
+                        --abstractChangedTable <= scanChangedMappings(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
+                        changedMapVar := scanChangedMappings(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
+                        abstractChangedTable <= changedMapVar;
+                        --abstractFlushedTable <= scanFlushedMappings(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
+                        flushedMapVar := scanFlushedMappings(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
+                        abstractFlushedTable <= flushedMapVar;
+                        
+                        -- table - update latest on event
+                        abstractLatestTable <= applyChangedMappings(stableProxyVar, changedMapVar);    
+                    end if;
+                    
                 end if;
     
-                -- Put new content at the back
-                for i in 0 to RENAME_W-1 loop
-                    if releasingDestsVar(i) /= nothing then
-                        physRegFreeList((listPtrPut + nReleased) mod FREE_LIST_SIZE) <= releasingDestsVar(i);
-                        nReleased := nReleased + 1;
+            end process;
+    
+            causingMapping <= findMappingByTag(abstractMapList, evt.execCausing.tag);
+        
+            causingPtr <= getTagHighSN(evt.execCausing.tag) and PTR_MASK_SN_LONG;
+        
+        
+            startPtrNext <= addIntTrunc(startPtr, 1, ROB_PTR_SIZE+1) when robSending = '1'
+                       else startPtr;
+        
+            endPtrNext <= startPtrNext when evt.lateEvent = '1'
+                        else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when evt.execEvent = '1'
+                        else  addIntTrunc(endPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
+                        else  endPtr;
+        
+            renamedPtrNext <= startPtrNext when evt.lateEvent = '1'
+                        else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when evt.execEvent = '1'
+                        else  addIntTrunc(renamedPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
+                        else  renamedPtr;
+    
+            newFreeDests <= getFreeRegs(physRegFreeList, listPtrTake);
+            newMapRow <= makeMapRow(frontData, newFreeDests, listPtrTake);
+        
+            committingMapRow <= abstractMapList(p2i(startPtr, ROB_SIZE));
+            
+            
+            EXT_freeDests <= newFreeDests;
+            EXT_releasedDests <= releasedDests;
+        end block;
+    
+        INDIRECT_MAPPER: block
+            type MapRow is record
+                used: std_logic;
+                persistent: std_logic;
+                tag: InsTag;
+                mask: std_logic_vector(0 to RENAME_W-1);
+                virtual: RegNameArray(0 to RENAME_W-1);
+                physical: PhysNameArray(0 to RENAME_W-1);
+            end record;
+            
+            constant DEFAULT_MAP_ROW: MapRow := (
+                used => '0',
+                persistent => '0',
+                tag => (others => 'U'),
+                mask => (others => '0'),
+                virtual => (others => (others => 'U')),
+                physical => (others => (others => 'U'))
+            );
+            
+            constant MAP_SIZE: natural := ROB_SIZE + 32;
+            
+            type MapList is array(0 to MAP_SIZE-1) of MapRow;
+            
+            signal mappingList: MapList := (others => DEFAULT_MAP_ROW);
+            
+            signal latestSubindexTable, persistentSubindexTable: IntArray(0 to 31) := (others => -1);
+            signal latestRowTable, persistentRowTable: IntArray(0 to 31) := (others => -1);
+            signal latestTagTable, persistentTagTable: IntArray(0 to 31) := (others => -1);
+            
+            signal nextFreeIndex, committingIndex, causingIndex, causingSubindex: integer := -1;
+            signal newRow: MapRow := DEFAULT_MAP_ROW;
+    
+            function findFreeRow(list: MapList) return integer is
+            begin
+                for i in list'range loop
+                    if list(i).used /= '1' then
+                        return i;
                     end if;
-                    listPtrPut <= (listPtrPut + nReleased) mod FREE_LIST_SIZE;
                 end loop;
-
-
-                -- mapping list
-                if evt.lateEvent = '1' then
-                    abstractMapList <= (others => DEFAULT_MAP_ROW);
     
-                    --abstractChangedTable <= scanChangedMappings(abstractMapList, evtD.execCausing.tag, startPtr, endPtr);
-                    --abstractFlushedTable <= scanFlushedMappings(abstractMapList, evtD.execCausing.tag, startPtr, endPtr);
-                    
-                    -- Table - update latest on event
-                    abstractLatestTable <= stableProxyVar;
-                elsif evt.execEvent = '1' then
-                    abstractMapList <= clearAbstractMappingsPartial(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
-
-                    --abstractChangedTable <= scanChangedMappings(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
-                    changedMapVar := scanChangedMappings(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
-                    abstractChangedTable <= changedMapVar;
-                    --abstractFlushedTable <= scanFlushedMappings(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
-                    flushedMapVar := scanFlushedMappings(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
-                    abstractFlushedTable <= flushedMapVar;
-                    
-                    -- table - update latest on event
-                    abstractLatestTable <= applyChangedMappings(stableProxyVar, changedMapVar);    
-                end if;
-                
-            end if;
-
-        end process;
-
-        causingMapping <= findMappingByTag(abstractMapList, evt.execCausing.tag);
-    
-        causingPtr <= getTagHighSN(evt.execCausing.tag) and PTR_MASK_SN_LONG;
-    
-    
-        startPtrNext <= addIntTrunc(startPtr, 1, ROB_PTR_SIZE+1) when robSending = '1'
-                   else startPtr;
-    
-        endPtrNext <= startPtrNext when evt.lateEvent = '1'
-                    else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when evt.execEvent = '1'
-                    else  addIntTrunc(endPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
-                    else  endPtr;
-    
-        renamedPtrNext <= startPtrNext when evt.lateEvent = '1'
-                    else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when evt.execEvent = '1'
-                    else  addIntTrunc(renamedPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
-                    else  renamedPtr;
-
-        newFreeDests <= getFreeRegs(physRegFreeList, listPtrTake);
-        newMapRow <= makeMapRow(frontData, newFreeDests, listPtrTake);
-    
-        committingMapRow <= abstractMapList(p2i(startPtr, ROB_SIZE));
-        
-        
-        EXT_freeDests <= newFreeDests;
-        EXT_releasedDests <= releasedDests;
-    end block;
-
-    INDIRECT_MAPPER: block
-        type MapRow is record
-            used: std_logic;
-            persistent: std_logic;
-            tag: InsTag;
-            mask: std_logic_vector(0 to RENAME_W-1);
-            virtual: RegNameArray(0 to RENAME_W-1);
-            physical: PhysNameArray(0 to RENAME_W-1);
-        end record;
-        
-        constant DEFAULT_MAP_ROW: MapRow := (
-            used => '0',
-            persistent => '0',
-            tag => (others => 'U'),
-            mask => (others => '0'),
-            virtual => (others => (others => 'U')),
-            physical => (others => (others => 'U'))
-        );
-        
-        constant MAP_SIZE: natural := ROB_SIZE + 32;
-        
-        type MapList is array(0 to MAP_SIZE-1) of MapRow;
-        
-        signal mappingList: MapList := (others => DEFAULT_MAP_ROW);
-        
-        signal latestSubindexTable, persistentSubindexTable: IntArray(0 to 31) := (others => -1);
-        signal latestRowTable, persistentRowTable: IntArray(0 to 31) := (others => -1);
-        signal latestTagTable, persistentTagTable: IntArray(0 to 31) := (others => -1);
-        
-        signal nextFreeIndex, committingIndex, causingIndex, causingSubindex: integer := -1;
-        signal newRow: MapRow := DEFAULT_MAP_ROW;
-
-        function findFreeRow(list: MapList) return integer is
-        begin
-            for i in list'range loop
-                if list(i).used /= '1' then
-                    return i;
-                end if;
-            end loop;
-
-            return -1;
-        end function;
-        
-        function findRowByTag(list: MapList; tag: InsTag) return integer is
-        begin
-            for i in list'range loop
-                if list(i).tag = tag then
-                    return i;
-                end if;
-            end loop;            
-            return -1;
-        end function;
-
-        function makeRow(virtual: RegNameArray; physical: physNameArray; mask: std_logic_vector; tag: InsTag) return MapRow is
-            variable res: MapRow := DEFAULT_MAP_ROW;
-        begin
-            res.used := '1';
-            res.persistent := '0';
-            res.tag := tag;
-            res.mask := mask;
-            res.virtual := virtual;
-            for i in mask'range loop
-                if mask(i) = '1' then
-                    res.physical(i) := physical(countOnes(mask(0 to i)) - 1);
-                end if;
-            end loop;
-
-            return res;
-        end function;
-        
-        function flushPartial(row: MapRow; subind: natural) return MapRow is
-            variable res: MapRow := row; 
-        begin
-            for i in 0 to RENAME_W-1 loop
-                if i > subind then
-                    res.mask(i) := '0';
-                    res.virtual(i) := (others => 'U');
-                    res.physical(i) := (others => 'U');
-                end if;
-            end loop;
-            return res;
-        end function;
-        
-        function flushRows(list: MapList; tag: InsTag) return MapList is
-            variable res: MapList := list;
-        begin
-            for i in list'range loop
-                if list(i).used = '1' and list(i).persistent /= '1' and compareTagBefore(tag, list(i).tag) = '1' then
-                    res(i) := DEFAULT_MAP_ROW;
-                end if;
-            end loop;         
-            return res;
-        end function;
-
-        function flushAll(list: MapList) return MapList is
-            variable res: MapList := list;
-        begin
-            for i in list'range loop
-                if list(i).used = '1' and list(i).persistent /= '1'then
-                    res(i) := DEFAULT_MAP_ROW;
-                end if;
-            end loop;         
-            return res;
-        end function;
-        
-        signal releasedTags, releasedSubinds,  releasedRows: IntArray(0 to RENAME_W-1) := (others => -1);
-        
-        signal releasedMask: std_logic_vector(0 to RENAME_W-1) := (others => '0');
-        
-        signal persistentCount, committedCount, releseadCount: natural := 0;
-    begin
-        nextFreeIndex <= findFreeRow(mappingList);
-        committingIndex <= findRowByTag(mappingList, commitGroupCtrNext);
-        newRow <= makeRow(virtualDests, EXT_freeDests, destMask, renameGroupCtrNext);
-
-        causingIndex <= findRowByTag(mappingList, clearTagLow(evt.execCausing.tag));
-        causingSubindex <= slv2u(getTagLow(evt.execCausing.tag));
-
-             --committedCount <= countOnes(mappingList(committingIndex).mask);
-             --releasedCount <= countOnes();
-
-        process (clk)
-            variable releasedTagsV, releasedRowsV, releasedSubindsV: IntArray(0 to RENAME_W-1) := (others => -1);
-            variable persistentTagTableVar, persistentRowTableVar, persistentSubindexTableVar: IntArray(0 to 31) := (others => -1);
+                return -1;
+            end function;
             
-            variable releasedMaskV: std_logic_vector(0 to RENAME_W-1) := (others => '0');
-            --variable releasedIndsV: IntArray(0 to RENAME_W-1) := (others => -1);
+            function findRowByTag(list: MapList; tag: InsTag) return integer is
+            begin
+                for i in list'range loop
+                    if list(i).tag = tag then
+                        return i;
+                    end if;
+                end loop;            
+                return -1;
+            end function;
+    
+            function makeRow(virtual: RegNameArray; physical: physNameArray; mask: std_logic_vector; tag: InsTag) return MapRow is
+                variable res: MapRow := DEFAULT_MAP_ROW;
+            begin
+                res.used := '1';
+                res.persistent := '0';
+                res.tag := tag;
+                res.mask := mask;
+                res.virtual := virtual;
+                for i in mask'range loop
+                    if mask(i) = '1' then
+                        res.physical(i) := physical(countOnes(mask(0 to i)) - 1);
+                    end if;
+                end loop;
+    
+                return res;
+            end function;
             
+            function flushPartial(row: MapRow; subind: natural) return MapRow is
+                variable res: MapRow := row; 
+            begin
+                for i in 0 to RENAME_W-1 loop
+                    if i > subind then
+                        res.mask(i) := '0';
+                        res.virtual(i) := (others => 'U');
+                        res.physical(i) := (others => 'U');
+                    end if;
+                end loop;
+                return res;
+            end function;
+            
+            function flushRows(list: MapList; tag: InsTag) return MapList is
+                variable res: MapList := list;
+            begin
+                for i in list'range loop
+                    if list(i).used = '1' and list(i).persistent /= '1' and compareTagBefore(tag, list(i).tag) = '1' then
+                        res(i) := DEFAULT_MAP_ROW;
+                    end if;
+                end loop;         
+                return res;
+            end function;
+    
+            function flushAll(list: MapList) return MapList is
+                variable res: MapList := list;
+            begin
+                for i in list'range loop
+                    if list(i).used = '1' and list(i).persistent /= '1'then
+                        res(i) := DEFAULT_MAP_ROW;
+                    end if;
+                end loop;         
+                return res;
+            end function;
+            
+            signal releasedTags, releasedSubinds,  releasedRows: IntArray(0 to RENAME_W-1) := (others => -1);
+            
+            signal releasedMask: std_logic_vector(0 to RENAME_W-1) := (others => '0');
+            
+            signal persistentCount, committedCount, releseadCount: natural := 0;
         begin
-            if rising_edge(clk) then
-                releasedMaskV := (others => '0');
-                releasedTagsV := (others => -1);
-                releasedRowsV := (others => -1);
-                releasedSubindsV := (others => -1);
+            nextFreeIndex <= findFreeRow(mappingList);
+            committingIndex <= findRowByTag(mappingList, commitGroupCtrNext);
+            newRow <= makeRow(virtualDests, EXT_freeDests, destMask, renameGroupCtrNext);
+    
+            causingIndex <= findRowByTag(mappingList, clearTagLow(evt.execCausing.tag));
+            causingSubindex <= slv2u(getTagLow(evt.execCausing.tag));
+    
+                 --committedCount <= countOnes(mappingList(committingIndex).mask);
+                 --releasedCount <= countOnes();
+    
+            process (clk)
+                variable releasedTagsV, releasedRowsV, releasedSubindsV: IntArray(0 to RENAME_W-1) := (others => -1);
+                variable persistentTagTableVar, persistentRowTableVar, persistentSubindexTableVar: IntArray(0 to 31) := (others => -1);
                 
-                    persistentTagTableVar := (others => -1);
-                    persistentSubindexTableVar := (others => -1);
-                    persistentRowTableVar := (others => -1);
+                variable releasedMaskV: std_logic_vector(0 to RENAME_W-1) := (others => '0');
+                --variable releasedIndsV: IntArray(0 to RENAME_W-1) := (others => -1);
                 
-                if evt.lateEvent = '1' then
-                    mappingList <= flushAll(mappingList); --(others => DEFAULT_MAP_ROW);
-
-                    latestTagTable <= persistentTagTable;
-                    latestSubindexTable <= persistentSubindexTable;
-
-                elsif evt.execEvent = '1' then
-                    mappingList <= flushRows(mappingList, evt.execCausing.tag);
-                    mappingList(causingIndex) <= flushPartial(mappingList(causingIndex), causingSubindex);
-
-
-                elsif prevSending = '1' then
-                    mappingList(nextFreeIndex) <= newRow;
-
-                    for i in 0 to RENAME_W-1 loop
-                        if destMask(i) = '1' then
-                            latestRowTable(slv2u(virtualDests(i))) <= nextFreeIndex;
-                            latestTagTable(slv2u(virtualDests(i))) <= slv2u(renameGroupCtrNext);
-                            latestSubindexTable(slv2u(virtualDests(i))) <= i;
-                        end if;
-                    end loop;
-                end if;
-
-                persistentTagTableVar := persistentTagTable;
-                persistentSubindexTableVar := persistentSubindexTable;
-                persistentRowTableVar := persistentRowTable;
-
-                if robSending = '1' then
-                    mappingList(committingIndex).persistent <= '1';
+            begin
+                if rising_edge(clk) then
+                    releasedMaskV := (others => '0');
+                    releasedTagsV := (others => -1);
+                    releasedRowsV := (others => -1);
+                    releasedSubindsV := (others => -1);
                     
+                        persistentTagTableVar := (others => -1);
+                        persistentSubindexTableVar := (others => -1);
+                        persistentRowTableVar := (others => -1);
                     
-                    for i in 0 to RENAME_W-1 loop
-                        if mappingList(committingIndex).used = '1' and mappingList(committingIndex).mask(i) = '1' then  -- must have '0' at partially flushed ops!
-                                releasedMaskV(i) := '1';
-                                releasedRowsV(i) := persistentRowTableVar(slv2u(mappingList(committingIndex).virtual(i)));
-                                releasedTagsV(i) := persistentTagTableVar(slv2u(mappingList(committingIndex).virtual(i)));
-                                releasedSubindsV(i) := persistentSubindexTableVar(slv2u(mappingList(committingIndex).virtual(i)));
+                    if evt.lateEvent = '1' then
+                        mappingList <= flushAll(mappingList); --(others => DEFAULT_MAP_ROW);
+    
+                        latestTagTable <= persistentTagTable;
+                        latestSubindexTable <= persistentSubindexTable;
+    
+                    elsif evt.execEvent = '1' then
+                        mappingList <= flushRows(mappingList, evt.execCausing.tag);
+                        mappingList(causingIndex) <= flushPartial(mappingList(causingIndex), causingSubindex);
+    
+    
+                    elsif prevSending = '1' then
+                        mappingList(nextFreeIndex) <= newRow;
+    
+                        for i in 0 to RENAME_W-1 loop
+                            if destMask(i) = '1' then
+                                latestRowTable(slv2u(virtualDests(i))) <= nextFreeIndex;
+                                latestTagTable(slv2u(virtualDests(i))) <= slv2u(renameGroupCtrNext);
+                                latestSubindexTable(slv2u(virtualDests(i))) <= i;
+                            end if;
+                        end loop;
+                    end if;
+    
+                    persistentTagTableVar := persistentTagTable;
+                    persistentSubindexTableVar := persistentSubindexTable;
+                    persistentRowTableVar := persistentRowTable;
+    
+                    if robSending = '1' then
+                        mappingList(committingIndex).persistent <= '1';
                         
-                            persistentRowTableVar(slv2u(mappingList(committingIndex).virtual(i))) := committingIndex;
-                            persistentTagTableVar(slv2u(mappingList(committingIndex).virtual(i))) := slv2u(commitGroupCtrNext);
-                            persistentSubindexTableVar(slv2u(mappingList(committingIndex).virtual(i))) := i;
-                        end if;
-                    end loop;
-                    
-                    persistentTagTable <= persistentTagTableVar;
-                    persistentSubindexTable <= persistentSubindexTableVar;
-                    persistentRowTable <= persistentRowTableVar;
-                    
-                    for i in 0 to RENAME_W-1 loop
-                        if releasedMaskV(i) = '1' then
-                            --if releasedTagsV(i) = -1 then next; end if;
                         
-                              --   releasedRows(i) <= findRowByTag(mappingList, i2slv(releasedTagsV(i), TAG_SIZE));
-                              --   if findRowByTag(mappingList, i2slv(releasedTagsV(i), TAG_SIZE)) = -1 then next; end if;
-                        
-                            --mappingList(findRowByTag(mappingList, i2slv(releasedTagsV(i), TAG_SIZE))).mask(releasedSubindsV(i)) <= '0';
-                            if releasedRowsV(i) = -1 then next; end if;
-                            --if releasedSubindsV(i) = -1 then next; end if;
+                        for i in 0 to RENAME_W-1 loop
+                            if mappingList(committingIndex).used = '1' and mappingList(committingIndex).mask(i) = '1' then  -- must have '0' at partially flushed ops!
+                                    releasedMaskV(i) := '1';
+                                    releasedRowsV(i) := persistentRowTableVar(slv2u(mappingList(committingIndex).virtual(i)));
+                                    releasedTagsV(i) := persistentTagTableVar(slv2u(mappingList(committingIndex).virtual(i)));
+                                    releasedSubindsV(i) := persistentSubindexTableVar(slv2u(mappingList(committingIndex).virtual(i)));
                             
-                            mappingList(releasedRowsV(i)).mask(releasedSubindsV(i)) <= '0';
-                        end if;
-                    end loop;
-                    -- release overwritten entries of persistent table
+                                persistentRowTableVar(slv2u(mappingList(committingIndex).virtual(i))) := committingIndex;
+                                persistentTagTableVar(slv2u(mappingList(committingIndex).virtual(i))) := slv2u(commitGroupCtrNext);
+                                persistentSubindexTableVar(slv2u(mappingList(committingIndex).virtual(i))) := i;
+                            end if;
+                        end loop;
+                        
+                        persistentTagTable <= persistentTagTableVar;
+                        persistentSubindexTable <= persistentSubindexTableVar;
+                        persistentRowTable <= persistentRowTableVar;
+                        
+                        for i in 0 to RENAME_W-1 loop
+                            if releasedMaskV(i) = '1' then
+                                --if releasedTagsV(i) = -1 then next; end if;
+                            
+                                  --   releasedRows(i) <= findRowByTag(mappingList, i2slv(releasedTagsV(i), TAG_SIZE));
+                                  --   if findRowByTag(mappingList, i2slv(releasedTagsV(i), TAG_SIZE)) = -1 then next; end if;
+                            
+                                --mappingList(findRowByTag(mappingList, i2slv(releasedTagsV(i), TAG_SIZE))).mask(releasedSubindsV(i)) <= '0';
+                                if releasedRowsV(i) = -1 then next; end if;
+                                --if releasedSubindsV(i) = -1 then next; end if;
+                                
+                                mappingList(releasedRowsV(i)).mask(releasedSubindsV(i)) <= '0';
+                            end if;
+                        end loop;
+                        -- release overwritten entries of persistent table
+                    end if;
+                    
                 end if;
                 
-            end if;
-            
-                releasedTags <= releasedTagsV;
-                releasedRows <= releasedRowsV;
-                releasedSubinds <= releasedSubindsV;
-                releasedMask <= releasedMaskV;
-            
-            -- Reclaim persistent rows which are no longer needed 
-            for i in 0 to MAP_SIZE-1 loop
-                if mappingList(i).persistent = '1' and isNonzero(mappingList(i).mask) /= '1' then
-                    mappingList(i) <= DEFAULT_MAP_ROW;
-                end if;
-            end loop;
+                    releasedTags <= releasedTagsV;
+                    releasedRows <= releasedRowsV;
+                    releasedSubinds <= releasedSubindsV;
+                    releasedMask <= releasedMaskV;
+                
+                -- Reclaim persistent rows which are no longer needed 
+                for i in 0 to MAP_SIZE-1 loop
+                    if mappingList(i).persistent = '1' and isNonzero(mappingList(i).mask) /= '1' then
+                        mappingList(i) <= DEFAULT_MAP_ROW;
+                    end if;
+                end loop;
+    
+            end process;
+        end block;
+        -- pragma synthesis on
+    end generate;
 
-        end process;
-    end block;
-    -- pragma synthesis on
 
 end Behavioral;
 
