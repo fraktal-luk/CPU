@@ -205,7 +205,7 @@ type slv2D is array(natural range <>, natural range <>) of std_logic;
     type SchedulerUpdateConfig is record
         dynamic: boolean;
         selection: boolean;
-        dontMatch1: boolean;
+        fp: boolean;
         ignoreMemFail: boolean;
         fwModes: ForwardingModeArray(0 to 2);
         matchIQ: boolean;
@@ -215,7 +215,7 @@ type slv2D is array(natural range <>, natural range <>) of std_logic;
     constant DEFUALT_SCHEDULER_UPDATE_CONFIG: SchedulerUpdateConfig := (
         dynamic => false,
         selection => false,
-        dontMatch1 => false,
+        fp => false,
         ignoreMemFail => false,
         fwModes => FORWARDING_MODES_NONE,
         matchIQ => false
@@ -917,10 +917,14 @@ package body LogicIssue is
                 return res;
             end function;
 
-        -- TODO: include config to distinguih memFail 2 cycles after wakeup (Int) and 1 cycle after wakeup (FP)
-        function dependsOnMemHit(state: ArgumentState) return std_logic is
+        -- TODO: include config to distinguish memFail 2 cycles after wakeup (Int) and 1 cycle after wakeup (FP)
+        function dependsOnMemHit(state: ArgumentState; constant IS_FP: boolean) return std_logic is
+            variable matchingCtr: SmallNumber := sn(1);
         begin
-            return bool2std(state.srcPipe(1 downto 0) = "10" and state.activeCounter = X"01") and not state.zero and not state.waiting;
+            if IS_FP then
+                matchingCtr := sn(0);
+            end if;
+            return bool2std(state.srcPipe(1 downto 0) = "10" and state.activeCounter = matchingCtr) and not state.zero and not state.waiting;
         end function;
 
         function updateArgInfo_A(argState: ArgumentState) return ArgumentState is
@@ -987,7 +991,7 @@ package body LogicIssue is
 
                 if memFail = '1' and not config.ignoreMemFail then
                 -- Resetting to waiting state
-                    if dependsOnMemHit(state.dynamic.argStates(a)) = '1' then -- Remember, this depends on "old" state, before counter increments!
+                    if dependsOnMemHit(state.dynamic.argStates(a), config.fp) = '1' then -- Remember, this depends on "old" state, before counter increments!
                         res.dynamic.argStates(a) := retractArg(res.dynamic.argStates(a));
                     end if;
                 else
@@ -1098,58 +1102,60 @@ package body LogicIssue is
             res.dynamic.active := '0';
             
             -- TODO: change to hardcoded 1h (then maybe shoudl be made 0 and all checks corrected by -1?
-            res.dynamic.stageCtr := addInt(res.dynamic.stageCtr, 1);
+            res.dynamic.stageCtr := --addInt(res.dynamic.stageCtr, 1);
+                                    --sn(1);
+                                    sn(0);
             return res;
         end function;
 
 
-    function TMP_updateIQ(queueContent: SchedulerInfoArray;
-                      sends: std_logic;
-                      killMask, trialMask, selMask: std_logic_vector;
-                      memFail: std_logic)
-    return SchedulerInfoArray is
-        constant LEN: natural := queueContent'length;
-        variable res: SchedulerInfoArray(queueContent'range) := queueContent;
-        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
-    begin
-        for i in 0 to LEN-1 loop
-            res(i).dynamic.freed := '0'; -- This is set for 1 cycle when freeing
+--    function TMP_updateIQ(queueContent: SchedulerInfoArray;
+--                      sends: std_logic;
+--                      killMask, trialMask, selMask: std_logic_vector;
+--                      memFail: std_logic)
+--    return SchedulerInfoArray is
+--        constant LEN: natural := queueContent'length;
+--        variable res: SchedulerInfoArray(queueContent'range) := queueContent;
+--        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+--    begin
+--        for i in 0 to LEN-1 loop
+--            res(i).dynamic.freed := '0'; -- This is set for 1 cycle when freeing
 
-            if queueContent(i).dynamic.issued = '1' then
-                -- Remove after successful issue
-                if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME then
-                    -- if isDone
-                    res(i) := removeEntry(res(i), '1');
-                    res(i).dynamic.freed := '1';
+--            if queueContent(i).dynamic.issued = '1' then
+--                -- Remove after successful issue
+--                if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME then
+--                    -- if isDone
+--                    res(i) := removeEntry(res(i), '1');
+--                    res(i).dynamic.freed := '1';
 
-                -- pull back because mem miss
-                -- if needsPullback
-                elsif memFail = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "01" then
-                    res(i) := pullbackEntry(res(i));
-                else
-                    res(i) := updateIssuedEntry(res(i));
-                end if;
-            end if;
+--                -- pull back because mem miss
+--                -- if needsPullback
+--                elsif memFail = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "01" then
+--                    res(i) := pullbackEntry(res(i));
+--                else
+--                    res(i) := updateIssuedEntry(res(i));
+--                end if;
+--            end if;
 
-            -- set issued
-            if (selMask(i) and sends) = '1' then
-                res(i) := issueEntry(res(i));
-            end if;
+--            -- set issued
+--            if (selMask(i) and sends) = '1' then
+--                res(i) := issueEntry(res(i));
+--            end if;
 
-            -- flush on event
-            if killMask(i) = '1' then -- the same as at removing successfully issued?
-                res(i) := removeEntry(res(i), '0');                
-             end if;
+--            -- flush on event
+--            if killMask(i) = '1' then -- the same as at removing successfully issued?
+--                res(i) := removeEntry(res(i), '0');                
+--             end if;
 
-             -- set age comparison for possible subsequent flush
-             -- this is done regardless of other parts of state
-             res(i).dynamic.trial := trialMask(i);        
+--             -- set age comparison for possible subsequent flush
+--             -- this is done regardless of other parts of state
+--             res(i).dynamic.trial := trialMask(i);        
 
-             res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
-        end loop;
+--             res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
+--        end loop;
 
-        return res;
-    end function;
+--        return res;
+--    end function;
 
 
     function iqNext_NS(queueContent: SchedulerInfoArray;
@@ -1165,14 +1171,16 @@ package body LogicIssue is
 
             if queueContent(i).dynamic.issued = '1' then
                 -- Remove after successful issue
-                if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME then
+                if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME
+                                                               - 1   then
                     -- if isDone
                     res(i) := removeEntry(res(i), '1');
                     res(i).dynamic.freed := '1';
 
                 -- pull back because mem miss
                 -- if needsPullback
-                elsif memFail = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "01" then
+                elsif memFail = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = --"01" then
+                                                                                        "00" then
                     res(i) := pullbackEntry(res(i));
                 else
                     res(i) := updateIssuedEntry(res(i));
@@ -1186,7 +1194,8 @@ package body LogicIssue is
 
             -- flush on event
             if killMask(i) = '1' then -- the same as at removing successfully issued?
-                res(i) := removeEntry(res(i), '0');                
+                res(i) := removeEntry(res(i), '0');
+                    --res(i).dynamic.freed := '0';
              end if;
 
              -- set age comparison for possible subsequent flush

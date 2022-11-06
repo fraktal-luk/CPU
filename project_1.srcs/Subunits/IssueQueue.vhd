@@ -114,13 +114,13 @@ architecture Behavioral of IssueQueue is
             return res;
         end function;
     
-        constant CFG_WAIT: work.LogicIssue.SchedulerUpdateConfig := (false, false, DONT_MATCH1, IGNORE_MEM_FAIL, FORWARDING_D, false);
-        constant CFG_SEL: work.LogicIssue.SchedulerUpdateConfig :=  (false, true,  DONT_MATCH1, IGNORE_MEM_FAIL, FORWARDING, false);
+        constant CFG_WAIT: work.LogicIssue.SchedulerUpdateConfig := (false, false, false, IGNORE_MEM_FAIL, FORWARDING_D, false);
+        constant CFG_SEL: work.LogicIssue.SchedulerUpdateConfig :=  (false, true,  false, IGNORE_MEM_FAIL, FORWARDING, false);
 
-        constant CFG_WAIT_Alt: work.LogicIssue.SchedulerUpdateConfig := (false, false, DONT_MATCH1, IGNORE_MEM_FAIL, FORWARDING_D, true);        
+        constant CFG_WAIT_Alt: work.LogicIssue.SchedulerUpdateConfig := (false, false, false, IGNORE_MEM_FAIL, FORWARDING_D, true);        
         signal wakeups, wakeups_Alt: WakeupInfoArray(0 to QUEUE_SIZE_EXT-1);
-        
- 
+
+
         --                type ArgWakeup is record
         --                    active: std_logic;
         --                    mode: WakeupMode;

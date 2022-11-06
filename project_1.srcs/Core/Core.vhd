@@ -828,7 +828,7 @@ begin
            signal slotRegReadM0iq, slotRegReadM0mq: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
            signal resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
            
-           constant CFG_MEM: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, false, FORWARDING_MODES_INT_D, false);
+           constant CFG_MEM: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_INT_D, false);
         begin
            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingRe), memMask, true, removeArg2(renamedArgsMerged), TMP_renamedDests, TMP_renamedSources);         
            --schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D, memFail, false);
@@ -1005,7 +1005,7 @@ begin
             signal sendingToRegReadI, sendingToRegReadF, sendingToRegReadIntSV, sendingToRegReadFloatSV: std_logic := '0';
             signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoFloatA, schedInfoUpdatedFloatA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
             
-            constant CFG_SVI: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, true, FORWARDING_MODES_SV_INT_D, false);
+            constant CFG_SVI: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, true, FORWARDING_MODES_SV_INT_D, false);
             constant CFG_SVF: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, true, FORWARDING_MODES_SV_FLOAT_D, false);
         begin
             -- CHECK: does it need to use 'sentCancelled' signal from IQs?
@@ -1152,7 +1152,7 @@ begin
             signal fmaF0: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);          
             signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
             
-            constant CFG_FP0: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_FLOAT_D, false);
+            constant CFG_FP0: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, false, FORWARDING_MODES_FLOAT_D, false);
         begin
             fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat, CFG_FP0, readyRegFlagsFloat_Early);
 
