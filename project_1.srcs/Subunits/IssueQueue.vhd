@@ -69,7 +69,7 @@ architecture Behavioral of IssueQueue is
     
     signal recoveryCounter: SmallNumber := (others => '0');
 
-    signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdated_2, queueContentUpdatedSel: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
+    signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdated_N, queueContentUpdated_2, queueContentUpdatedSel: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
 
     signal ageMatrix, ageMatrixNext: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := (others => (others => '0'));
     signal insertionLocs: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -77,8 +77,7 @@ architecture Behavioral of IssueQueue is
     signal fma: ForwardingMatchesArray(0 to QUEUE_SIZE_EXT - 1) := (others => DEFAULT_FORWARDING_MATCHES);
 
     signal controlSigs: SlotControlArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SLOT_CONTROL);
-    signal fullMask, trialMask, readyMaskLive, killMask, readyMaskAll, selMask, selMask1, selMask2, selMask3, selMask4,
-            depMemE1_0, depMemE1_1, depAluRR_0, depAluRR_1
+    signal fullMask, trialMask, readyMaskLive, killMask, readyMaskAll, selMask, selMask1, selMask2, selMask3, selMask4, depMemE1_0, depMemE1_1, depAluRR_0, depAluRR_1
         : std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
     signal anyReadyFull, anyReadyLive, sends, sendingKilled, maybeSent, maybeSent2, maybeSent3, maybeSent4,
                     isSent, isSent2, isSent3, isSent4, sentKilled, sentKilled1, sentKilled2, sentKilled3, sentKilled4, isEmpty: std_logic := '0';
@@ -272,8 +271,23 @@ architecture Behavioral of IssueQueue is
             return res;
         end function;
 
+            function fma2wups(fma: ForwardingMatchesArray; config: SchedulerUpdateConfig) return WakeupStructArray2D is
+                variable res: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
+            begin
+                for i in 0 to IQ_SIZE-1 loop
+                    res(i, 0) := getWakeupStruct(fma(i).cmps(0), config);
+                    res(i, 1) := getWakeupStruct(fma(i).cmps(1), config);
+                end loop;
+
+                return res;
+            end function;
+
         signal wa: WakeupInfoArray(0 to IQ_SIZE-1);
+        
+        signal wups: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
 begin
+
+        wups <= fma2wups(fma, CFG_WAIT);
 
         wakeups <= getWakeupInfoA(queueContent, newArr, prevSendingOK, insertionLocs, fni, readyRegFlags, CFG_WAIT);
         wakeups_Alt <= getWakeupInfoA(queueContent, newArr, prevSendingOK, insertionLocs, fni, readyRegFlags, CFG_WAIT_ALT);
@@ -285,14 +299,14 @@ begin
 
     queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, fni.memFail, CFG_SEL);
 
-    queueContentUpdated <= updateSchedulerArray(queueContent, fni, fma, fni.memFail, CFG_WAIT);
+    --queueContentUpdated_N <= updateSchedulerArray(queueContent, fni, fma, fni.memFail, CFG_WAIT);
+        queueContentUpdated <= updateSchedulerArray_N(queueContent, fni, wups, fni.memFail, CFG_WAIT);
 
     insertionLocs <= getNewLocs_N(fullMask, TMP_newTags, newArr);
 
         queueContentUpdated_2 <= iqNext_NS(queueContentUpdated, sends, killMask, trialMask, selMask, fni.memFail);
 
-    queueContentNext <= iqNext_NS_2(queueContentUpdated_2, prepareNewArr(newArr, readyRegFlags),
-                                                        prevSendingOK, insertionLocs);
+    queueContentNext <= iqNext_NS_2(queueContentUpdated_2, prepareNewArr(newArr, readyRegFlags), prevSendingOK, insertionLocs);
 
     ageMatrixNext <= updateAgeMatrix(ageMatrix, insertionLocs, fullMask);
 
