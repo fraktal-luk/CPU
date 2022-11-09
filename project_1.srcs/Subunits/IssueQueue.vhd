@@ -69,7 +69,8 @@ architecture Behavioral of IssueQueue is
     
     signal recoveryCounter: SmallNumber := (others => '0');
 
-    signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdated_N, queueContentUpdated_2, queueContentUpdatedSel: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
+    signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdated_N, queueContentUpdated_2, queueContentUpdatedSel, queueContentUpdatedSel_NEW
+            : SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
 
     signal ageMatrix, ageMatrixNext: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := (others => (others => '0'));
     signal insertionLocs: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -271,41 +272,31 @@ architecture Behavioral of IssueQueue is
             return res;
         end function;
 
-            function fma2wups(fma: ForwardingMatchesArray; config: SchedulerUpdateConfig) return WakeupStructArray2D is
-                variable res: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
-            begin
-                for i in 0 to IQ_SIZE-1 loop
-                    res(i, 0) := getWakeupStruct(fma(i).cmps(0), config);
-                    res(i, 1) := getWakeupStruct(fma(i).cmps(1), config);
-                end loop;
-
-                return res;
-            end function;
 
         signal wa: WakeupInfoArray(0 to IQ_SIZE-1);
         
-        signal wups: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
+        signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
 begin
-
-        wups <= fma2wups(fma, CFG_WAIT);
-
-        wakeups <= getWakeupInfoA(queueContent, newArr, prevSendingOK, insertionLocs, fni, readyRegFlags, CFG_WAIT);
-        wakeups_Alt <= getWakeupInfoA(queueContent, newArr, prevSendingOK, insertionLocs, fni, readyRegFlags, CFG_WAIT_ALT);
 
     fma <= findForwardingMatchesArray(queueContent, fni, CFG_SEL, "000");
         TMP_WUP: if USE_WAKEUP_MODES generate
           wa <= getWakeupArray(queueContent, fni, WAKEUP_SPEC, CFG_WAIT); -- CFG_WAIT is needed for 'ignoreMemFail')
         end generate;
 
-    queueContentUpdatedSel <= updateSchedulerArray(queueContent, fni, fma, fni.memFail, CFG_SEL);
+    wups <= fma2wups(fma, CFG_WAIT);
+    wupsSelection <= fma2wups(fma, CFG_SEL);
 
-    --queueContentUpdated_N <= updateSchedulerArray(queueContent, fni, fma, fni.memFail, CFG_WAIT);
-        queueContentUpdated <= updateSchedulerArray_N(queueContent, fni, wups, fni.memFail, CFG_WAIT);
+        wakeups <= getWakeupInfoA(queueContent, newArr, prevSendingOK, insertionLocs, fni, readyRegFlags, CFG_WAIT);
+        wakeups_Alt <= getWakeupInfoA(queueContent, newArr, prevSendingOK, insertionLocs, fni, readyRegFlags, CFG_WAIT_ALT);
+
+    queueContentUpdatedSel <= updateSchedulerArray_S_NEW(queueContent, fni, wupsSelection, fni.memFail, CFG_SEL);
+
+
+    queueContentUpdated <= updateSchedulerArray_N(queueContent, fni, wups, fni.memFail, CFG_WAIT);
+
+    queueContentUpdated_2 <= iqNext_NS(queueContentUpdated, sends, killMask, trialMask, selMask, fni.memFail);
 
     insertionLocs <= getNewLocs_N(fullMask, TMP_newTags, newArr);
-
-        queueContentUpdated_2 <= iqNext_NS(queueContentUpdated, sends, killMask, trialMask, selMask, fni.memFail);
-
     queueContentNext <= iqNext_NS_2(queueContentUpdated_2, prepareNewArr(newArr, readyRegFlags), prevSendingOK, insertionLocs);
 
     ageMatrixNext <= updateAgeMatrix(ageMatrix, insertionLocs, fullMask);

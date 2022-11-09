@@ -223,10 +223,12 @@ type slv2D is array(natural range <>, natural range <>) of std_logic;
         --matchNonzero => false
     );
 
-        function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;-- forwardingModes0: ForwardingModeArray;
-                        memFail: std_logic;
-                        config: SchedulerUpdateConfig)
-        return SchedulerInfoArray;
+--        function updateSchedulerArray_S(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;-- forwardingModes0: ForwardingModeArray;
+--                        memFail: std_logic;
+--                        config: SchedulerUpdateConfig)
+--        return SchedulerInfoArray;
+
+
 
 constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0');
 
@@ -236,6 +238,11 @@ type WakeupStructArray2D is array(natural range <>, natural range <>) of WakeupS
             function updateSchedulerArray_N(schedArray: SchedulerInfoArray; fni: ForwardingInfo; wakeups: WakeupStructArray2D;
                             memFail: std_logic;
                             config: SchedulerUpdateConfig) return SchedulerInfoArray;
+
+                function updateSchedulerArray_S_NEW(schedArray: SchedulerInfoArray; fni: ForwardingInfo; wakeups: WakeupStructArray2D;
+                                memFail: std_logic;
+                                config: SchedulerUpdateConfig)
+                return SchedulerInfoArray;
     
     type ArgWakeup is record
         active: std_logic;
@@ -369,6 +376,7 @@ function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vec
     function updateRenameIndex(content: SchedulerInfoArray) return SchedulerInfoArray;
     function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return SchedulerInfo;
 
+            function fma2wups(fma: ForwardingMatchesArray; config: SchedulerUpdateConfig) return WakeupStructArray2D;
 
     -- Debug functions
     function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency;
@@ -1074,55 +1082,6 @@ package body LogicIssue is
         end function;
 
 
---    function TMP_updateIQ(queueContent: SchedulerInfoArray;
---                      sends: std_logic;
---                      killMask, trialMask, selMask: std_logic_vector;
---                      memFail: std_logic)
---    return SchedulerInfoArray is
---        constant LEN: natural := queueContent'length;
---        variable res: SchedulerInfoArray(queueContent'range) := queueContent;
---        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
---    begin
---        for i in 0 to LEN-1 loop
---            res(i).dynamic.freed := '0'; -- This is set for 1 cycle when freeing
-
---            if queueContent(i).dynamic.issued = '1' then
---                -- Remove after successful issue
---                if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME then
---                    -- if isDone
---                    res(i) := removeEntry(res(i), '1');
---                    res(i).dynamic.freed := '1';
-
---                -- pull back because mem miss
---                -- if needsPullback
---                elsif memFail = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "01" then
---                    res(i) := pullbackEntry(res(i));
---                else
---                    res(i) := updateIssuedEntry(res(i));
---                end if;
---            end if;
-
---            -- set issued
---            if (selMask(i) and sends) = '1' then
---                res(i) := issueEntry(res(i));
---            end if;
-
---            -- flush on event
---            if killMask(i) = '1' then -- the same as at removing successfully issued?
---                res(i) := removeEntry(res(i), '0');                
---             end if;
-
---             -- set age comparison for possible subsequent flush
---             -- this is done regardless of other parts of state
---             res(i).dynamic.trial := trialMask(i);        
-
---             res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
---        end loop;
-
---        return res;
---    end function;
-
-
     function iqNext_NS(queueContent: SchedulerInfoArray;
                       sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail: std_logic)
     return SchedulerInfoArray is
@@ -1261,9 +1220,43 @@ package body LogicIssue is
         return res;
     end function;
 
+--    function updateSchedulerState_S(state: SchedulerInfo;
+--                                  fm: ForwardingMatches;
+--                                  memFail: std_logic;
+--                                  config: SchedulerUpdateConfig
+--                                  )
+--    return SchedulerInfo is
+--        variable res: SchedulerInfo := state;
+--        variable wakeups: WakeupStruct := DEFAULT_WAKEUP_STRUCT;  
+--    begin
+
+--        for a in 0 to 1 loop
+--            wakeups := getWakeupStruct(fm.cmps(a), config);
+--            res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wakeups);
+--        end loop;
+
+--        return res;
+--    end function;
+
+    function updateSchedulerState_S_NEW(state: SchedulerInfo;
+                                  wups: WakeupStructArray2D; k: natural
+                                  --memFail: std_logic;
+                                  --config: SchedulerUpdateConfig
+                                  )
+    return SchedulerInfo is
+        variable res: SchedulerInfo := state;
+        variable wakeups: WakeupStruct := DEFAULT_WAKEUP_STRUCT;  
+    begin
+
+        for a in 0 to 1 loop
+            wakeups := wups(k, a);
+            res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wakeups);
+        end loop;
+
+        return res;
+    end function;
+
         function updateSchedulerState_N(state: SchedulerInfo;
-                                      --fm: ForwardingMatches;
-                                      
                                       wups: WakeupStructArray2D; k: natural;
                                       memFail: std_logic;
                                       config: SchedulerUpdateConfig
@@ -1272,46 +1265,47 @@ package body LogicIssue is
             variable res: SchedulerInfo := state;
             variable wakeups: WakeupStruct := DEFAULT_WAKEUP_STRUCT;  
         begin
-            -- Fast wakeups: 
-            if config.selection then
-                -- wakeup
-                for a in 0 to 1 loop
-                    wakeups := wups(k, a);--getWakeupStruct(fm.cmps(a), config);
-                    res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wakeups);
-                end loop;
-            end if;
-    
-            if not config.selection then
-                for a in 0 to 1 loop
-                    wakeups := wups(k, a);--getWakeupStruct(fm.cmps(a), config);
-                    res.dynamic.argStates(a) := updateArgInfo_A(res.dynamic.argStates(a));
-    
-                    if memFail = '1' and not config.ignoreMemFail then
-                    -- Resetting to waiting state
-                        if dependsOnMemHit(state.dynamic.argStates(a), config.fp) = '1' then -- Remember, this depends on "old" state, before counter increments!
-                            res.dynamic.argStates(a) := retractArg(res.dynamic.argStates(a));
-                        end if;
-                    else
-                    -- wakeup
-                        res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wakeups);
+            for a in 0 to 1 loop
+                wakeups := wups(k, a);--getWakeupStruct(fm.cmps(a), config);
+                res.dynamic.argStates(a) := updateArgInfo_A(res.dynamic.argStates(a));
+
+                if memFail = '1' and not config.ignoreMemFail then
+                -- Resetting to waiting state
+                    if dependsOnMemHit(state.dynamic.argStates(a), config.fp) = '1' then -- Remember, this depends on "old" state, before counter increments!
+                        res.dynamic.argStates(a) := retractArg(res.dynamic.argStates(a));
                     end if;
-                end loop;
-            end if;
-    
+                else
+                -- wakeup
+                    res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wakeups);
+                end if;
+            end loop;
+
             return res;
         end function;
 
-            function updateSchedulerArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;-- forwardingModes0: ForwardingModeArray;
-                            memFail: std_logic;
-                            config: SchedulerUpdateConfig)
-            return SchedulerInfoArray is
-                variable res: SchedulerInfoArray(0 to schedArray'length-1);
-            begin
-                for i in schedArray'range loop
-                    res(i) := updateSchedulerState(schedArray(i), fma(i), memFail, config);
-                end loop;    
-                return res;
-            end function;
+--            function updateSchedulerArray_S(schedArray: SchedulerInfoArray; fni: ForwardingInfo; fma: ForwardingMatchesArray;-- forwardingModes0: ForwardingModeArray;
+--                            memFail: std_logic;
+--                            config: SchedulerUpdateConfig)
+--            return SchedulerInfoArray is
+--                variable res: SchedulerInfoArray(0 to schedArray'length-1);
+--            begin
+--                for i in schedArray'range loop
+--                    res(i) := updateSchedulerState_S(schedArray(i), fma(i), memFail, config);
+--                end loop;    
+--                return res;
+--            end function;
+
+                function updateSchedulerArray_S_NEW(schedArray: SchedulerInfoArray; fni: ForwardingInfo; wakeups: WakeupStructArray2D;
+                                memFail: std_logic;
+                                config: SchedulerUpdateConfig)
+                return SchedulerInfoArray is
+                    variable res: SchedulerInfoArray(0 to schedArray'length-1);
+                begin
+                    for i in schedArray'range loop
+                        res(i) := updateSchedulerState_S_NEW(schedArray(i), wakeups, i);
+                    end loop;    
+                    return res;
+                end function;
 
             function updateSchedulerArray_N(schedArray: SchedulerInfoArray; fni: ForwardingInfo; wakeups: WakeupStructArray2D;
                             memFail: std_logic;
@@ -1322,6 +1316,17 @@ package body LogicIssue is
                 for i in schedArray'range loop
                     res(i) := updateSchedulerState_N(schedArray(i), wakeups, i, memFail, config);
                 end loop;    
+                return res;
+            end function;
+
+            function fma2wups(fma: ForwardingMatchesArray; config: SchedulerUpdateConfig) return WakeupStructArray2D is
+                variable res: WakeupStructArray2D(0 to fma'length-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
+            begin
+                for i in 0 to res'length-1 loop
+                    res(i, 0) := getWakeupStruct(fma(i).cmps(0), config);
+                    res(i, 1) := getWakeupStruct(fma(i).cmps(1), config);
+                end loop;
+
                 return res;
             end function;
 
