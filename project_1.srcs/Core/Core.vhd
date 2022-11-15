@@ -653,7 +653,7 @@ begin
                 -- Reg
                 slotIssueI0 <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
-                sendingToRegReadI0 <= slotIssueI0.full and not outSigsI0.cancelled;
+                sendingToRegReadI0 <= slotIssueI0.full and not (outSigsI0.cancelled or outSigsI0.killFollowerNext);
                 -- Reg
                 slotRegReadI0 <= updateDispatchArgs_RR(argStateR, fni.values0, regValsI0, false);
 
@@ -674,9 +674,11 @@ begin
                     subpipeI0_RegRead_N <= makeExecResult_N(slotRegReadI0);
             end block;
 
-            dataToAlu <= executeAlu(slotRegReadI0.full and not outSigsI0.killSel2, slotRegReadI0, bqSelected.nip, dataToBranch.controlInfo, unfoldedAluOp);
+            --dataToAlu <= executeAlu(slotRegReadI0.full and not outSigsI0.killSel2, slotRegReadI0, bqSelected.nip, dataToBranch.controlInfo, unfoldedAluOp);
+            dataToAlu <= executeAlu(slotRegReadI0.full and not outSigsI0.killFollower, slotRegReadI0, bqSelected.nip, dataToBranch.controlInfo, unfoldedAluOp);
 
-            dataToBranch <= basicBranch(slotRegReadI0.full and not outSigsI0.killSel2 and not lateEventSignal and slotRegReadI0.branchIns,
+            --dataToBranch <= basicBranch(slotRegReadI0.full and not outSigsI0.killSel2 and not lateEventSignal and slotRegReadI0.branchIns,
+            dataToBranch <= basicBranch(slotRegReadI0.full and not outSigsI0.killFollower and not lateEventSignal and slotRegReadI0.branchIns,
                                         slotRegReadI0,
                                         bqSelected.tags, bqSelected.controlInfo, bqSelected.target, bqSelected.nip,                            
                                         unfoldedAluOp);

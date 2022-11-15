@@ -37,6 +37,8 @@ type IssueQueueSignals is record
     killSel1: std_logic;
     killSel2: std_logic;
     killSel3: std_logic;
+    killFollower: std_logic;
+    killFollowerNext: std_logic;
 end record;
 
 

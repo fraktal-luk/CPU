@@ -80,7 +80,7 @@ architecture Behavioral of IssueQueue is
     signal controlSigs: SlotControlArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SLOT_CONTROL);
     signal fullMask, trialMask, readyMaskLive, killMask, readyMaskAll, selMask, selMask1, selMask2, selMask3, selMask4, depMemE1_0, depMemE1_1, depAluRR_0, depAluRR_1
         : std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
-    signal anyReadyFull, anyReadyLive, sends, sendingKilled, maybeSent, maybeSent2, maybeSent3, maybeSent4,
+    signal anyReadyFull, anyReadyLive, sends, sendingKilled, maybeSent, maybeSent2, maybeSent3, maybeSent4, killFollowerCmp, killFollowerNextCmp,
                     isSent, isSent2, isSent3, isSent4, sentKilled, sentKilled1, sentKilled2, sentKilled3, sentKilled4, isEmpty: std_logic := '0';
     
     signal selectedSlot: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
@@ -97,16 +97,19 @@ architecture Behavioral of IssueQueue is
 
         signal wa: WakeupInfoArray(0 to IQ_SIZE-1);
         
-        signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
+        signal wups, wupsSelection, wupsSelection_T: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
 begin
 
     fma <= findForwardingMatchesArray(queueContent, fni, false, "000");
+        fmaSelection <= findForwardingMatchesArray(queueContent, fni, true, "000");
+
         TMP_WUP: if USE_WAKEUP_MODES generate
           wa <= getWakeupArray(queueContent, fni, WAKEUP_SPEC, CFG_WAIT); -- CFG_WAIT is needed for 'ignoreMemFail')
         end generate;
 
     wups <= fma2wups(fma, CFG_WAIT, false);
     wupsSelection <= fma2wups(fma, CFG_SEL, true);
+        wupsSelection_T <= fma2wups(fmaSelection, CFG_SEL, true);
 
     queueContentUpdatedSel <= updateSchedulerArray_S_NEW(queueContent, fni, wupsSelection, fni.memFail, CFG_SEL);
 
@@ -147,6 +150,9 @@ begin
             maybeSent2 <= maybeSent;
             maybeSent3 <= maybeSent2;
             maybeSent4 <= maybeSent3;
+            
+               killFollowerCmp <= isNonzero(selMask1 and trialMask);
+               killFollowerNextCmp <= isNonzero(selMask and trialMask);
         end if;
     end process;
 
@@ -182,7 +188,9 @@ begin
                         killSel => sendingKilled,
                         killSel1 => sentKilled1,
                         killSel2 => sentKilled2,
-                        killSel3 => sentKilled3
+                        killSel3 => sentKilled3,
+                        killFollower => killFollowerCmp and events.execEvent,
+                        killFollowerNext => killFollowerNextCmp and events.execEvent
                         );
 
     freedMask <= getFreedVec(controlSigs);
