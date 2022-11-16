@@ -560,7 +560,7 @@ begin
 
         signal unfoldedAluOp: work.LogicExec.AluControl := work.LogicExec.DEFAULT_ALU_CONTROL;     
         signal aluMask, mulMask, memMask, fpMask, intStoreMask, fpStoreMask, branchMask, sqMask, lqMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        signal fmaInt, fmaInt_Alt: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
+
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 
         function TMP_clearFull(ss: SchedulerState; evts: EventState) return SchedulerState is
@@ -593,28 +593,20 @@ begin
 
         SUBPIPE_ALU: block
            signal dataToAlu: ExecResult := DEFAULT_EXEC_RESULT;           
-           signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
+           signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
 
            signal regInfo: RegisterStateArray2D(0 to PIPE_WIDTH-1) := (others => (others => (others => '0')));
            
            constant CFG_ALU: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
-               constant CFG_ALU_Alt: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, true);
+           constant CFG_ALU_Alt: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, true);
                
-                signal wups: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
+           signal wups: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
         begin
-            fmaInt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni, false, readyRegFlagsInt_Early);
-                fmaInt_Alt <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fni, false, readyRegFlagsInt_Early);
-            wups <= work.LogicIssue.fma2wups(fmaInt, CFG_ALU, false);
+            wups <= work.LogicIssue.getInitWakeups(schedInfoA, fni, CFG_ALU);
 
             schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeALU(renamedDataLivingRe)), aluMask, true, removeArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups, memFail, CFG_ALU);
-             --   schedInfoUpdatedB <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, memFail, CFG_ALU_Alt);
-
-                DUMMY_CMP: block
-                    use work.LogicIssue.SchedulerInfoArray;
-                begin
-                    ch0 <= bool2std(fmaInt_Alt = fmaInt);
-                end block;
+            schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early );
 
             IQUEUE_I0: entity work.IssueQueue(Behavioral)
             generic map(
@@ -623,26 +615,21 @@ begin
                 FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING1(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
-                    WAKEUP_SPEC => WAKEUP_SPEC_I0,--MODES => WAKEUP_MODES_I0,
+                    WAKEUP_SPEC => WAKEUP_SPEC_I0,
                     USE_WAKEUP_MODES => true
             )
             port map(
                 clk => clk, reset => '0', en => '0', events => events,
 
                 prevSendingOK => renamedSending,
-                newArr => schedInfoUpdatedA,
+                newArr => schedInfoUpdatedU,
                         TMP_newTags => TMP_aluTags,
                 fni => fni,
-                readyRegFlags => readyRegFlagsInt_Early,
-
                 nextAccepting => allowIssueI0,
-                
                 schedulerOut => slotSelI0,
                 outputSignals => outSigsI0,
-                
                 freedMask => freedMaskI0,
-                usedMask => usedMaskI0,
-                    
+                usedMask => usedMaskI0, 
                 dbState => dbState
             );
 
@@ -674,10 +661,8 @@ begin
                     subpipeI0_RegRead_N <= makeExecResult_N(slotRegReadI0);
             end block;
 
-            --dataToAlu <= executeAlu(slotRegReadI0.full and not outSigsI0.killSel2, slotRegReadI0, bqSelected.nip, dataToBranch.controlInfo, unfoldedAluOp);
             dataToAlu <= executeAlu(slotRegReadI0.full and not outSigsI0.killFollower, slotRegReadI0, bqSelected.nip, dataToBranch.controlInfo, unfoldedAluOp);
 
-            --dataToBranch <= basicBranch(slotRegReadI0.full and not outSigsI0.killSel2 and not lateEventSignal and slotRegReadI0.branchIns,
             dataToBranch <= basicBranch(slotRegReadI0.full and not outSigsI0.killFollower and not lateEventSignal and slotRegReadI0.branchIns,
                                         slotRegReadI0,
                                         bqSelected.tags, bqSelected.controlInfo, bqSelected.target, bqSelected.nip,                            
@@ -720,24 +705,21 @@ begin
                 MUL_BLOCK: if true generate
                     SUBPIPE_MUL: block
                        signal dataToMul, dataMulE0, dataMulE1, dataMulE2: ExecResult := DEFAULT_EXEC_RESULT;           
-                       signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
+                       signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
 
                        signal controlI1_RR, controlToI1_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
 
                        signal regInfo: RegisterStateArray2D(0 to PIPE_WIDTH-1) := (others => (others => (others => '0')));
                        constant CFG_MUL: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false); -- TODO: turn off immediates
                        
-                             signal wups: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
+                       signal wups: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
                     begin
-                            wups <= work.LogicIssue.fma2wups(fmaInt, CFG_MUL, false);
-                    
-                        --fmaInt <= work.LogicIssue.findForwardingMatchesArray_N(schedInfoA, fni, readyRegFlagsInt_Early, regInfo);
-
+                        wups <= work.LogicIssue.getInitWakeups(schedInfoA, fni, CFG_MUL);
+                            
                         schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeMul(renamedDataLivingRe)), mulMask, true, removeArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
-                        --schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false, false, FORWARDING_MODES_INT_D, memFail, false);
-                        schedInfoUpdatedA <= --work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, memFail, CFG_MUL);
-                                             work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups, memFail, CFG_MUL);
-                                             
+                        schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups, memFail, CFG_MUL);
+                        schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early );
+                           
                         IQUEUE_I1: entity work.IssueQueue(Behavioral)
                         generic map(
                             NAME => "I1",
@@ -745,29 +727,20 @@ begin
                             FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                             FORWARDING1(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                             FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
-                                         --       TMP_USE_ALLOC => true --false
                         )
                         port map(
                             clk => clk, reset => '0', en => '0',
 
-                            --acceptingOut => iqAcceptingI1,
-                            --acceptingMore => iqAcceptingMoreI1,
-
                             prevSendingOK => renamedSending,
-                            newArr => schedInfoUpdatedA,
+                            newArr => schedInfoUpdatedU,
                                  TMP_newTags => TMP_mulTags,
                             fni => fni,
-                            readyRegFlags => readyRegFlagsInt_Early,
-                            --memFail => memFail,
-                            --memDepFail => prevMemDepFail,
                             nextAccepting => allowIssueI1,
                             events => events,
                             schedulerOut => slotSelI1,
                             outputSignals => outSigsI1,
-                            
                                 freedMask => freedMaskI1,
                                 usedMask => usedMaskI1,
-
                             dbState => dbState
                         );
 
@@ -808,7 +781,6 @@ begin
                         subpipeI1_E1 <= dataMulE1;
                         subpipeI1_E2 <= dataMulE2;
 
-                            
 
                         process (clk)
                         begin
@@ -832,7 +804,7 @@ begin
 
 
         SUBPIPE_MEM: block
-           signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1); 
+           signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1); 
            signal memLoadValue, memResult: Mword := (others => '0');
            signal controlM0_RR, controlToM0_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
            signal slotRegReadM0iq, slotRegReadM0mq: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
@@ -840,14 +812,14 @@ begin
            
            constant CFG_MEM: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
             
-               signal wups: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
+           signal wups: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
         begin
-                    wups <= work.LogicIssue.fma2wups(fmaInt, CFG_MEM, false);
-           schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingRe), memMask, true, removeArg2(renamedArgsMerged), TMP_renamedDests, TMP_renamedSources);         
-           --schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, true, false,  true, FORWARDING_MODES_INT_D, memFail, false);
-           schedInfoUpdatedA <= --work.LogicIssue.updateSchedulerArray(schedInfoA, fni, fmaInt, memFail, CFG_MEM);
-                                work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups, memFail, CFG_MEM);
+           wups <= work.LogicIssue.getInitWakeups(schedInfoA, fni, CFG_MEM);
 
+           schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingRe), memMask, true, removeArg2(renamedArgsMerged), TMP_renamedDests, TMP_renamedSources);         
+           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups, memFail, CFG_MEM);
+           schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early );
+           
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)
            generic map(
                NAME => "M0",
@@ -855,20 +827,14 @@ begin
                DONT_MATCH1 => true,
                FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
-                               --    TMP_USE_ALLOC => true --false
            )
            port map(
                clk => clk, reset => '0', en => '0',
-       
-               --acceptingOut => iqAcceptingM0,
-               --acceptingMore => iqAcceptingMoreM0,
+
                prevSendingOK => renamedSending,
-               newArr => schedInfoUpdatedA,
+               newArr => schedInfoUpdatedU,
                      TMP_newTags => TMP_memTags,
                fni => fni,
-               readyRegFlags => readyRegFlagsInt_Early,
-               --memFail => memFail,
-               --memDepFail => prevMemDepFail,
                nextAccepting => allowIssueM0,
                events => events,
                schedulerOut => slotSelM0,
@@ -1015,28 +981,25 @@ begin
         readyRegFlagsSV <= (readyRegFlagsInt_Early(2), '0', '0', readyRegFlagsInt_Early(5), '0', '0', readyRegFlagsInt_Early(8), '0', '0', readyRegFlagsInt_Early(11), '0', '0');
 
         SUBPIPES_STORE_VALUE: block
-            signal fmaIntSV, fmaFloatSV: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);
             signal sendingToRegReadI, sendingToRegReadF, sendingToRegReadIntSV, sendingToRegReadFloatSV: std_logic := '0';
-            signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoFloatA, schedInfoUpdatedFloatA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
+            signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoUpdatedIntU, schedInfoFloatA, schedInfoUpdatedFloatA, schedInfoUpdatedFloatU: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
             
             constant CFG_SVI: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, FORWARDING_MODES_SV_INT_D, false);
             constant CFG_SVF: work.LogicIssue.SchedulerUpdateConfig := (true, true, true, FORWARDING_MODES_SV_FLOAT_D, false);
-               signal wupsInt, wupsFloat: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
+            
+            signal wupsInt, wupsFloat: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
         begin
-                 wupsInt <= work.LogicIssue.fma2wups(fmaIntSV, CFG_SVI, false);
-                 wupsFloat <= work.LogicIssue.fma2wups(fmaFloatSV, CFG_SVF, false);
-            schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingRe), intStoreMask, false, useStoreArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
-            --schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, true, false, true, FORWARDING_MODES_SV_INT_D, memFail, true);
-            schedInfoUpdatedIntA <= --work.LogicIssue.updateSchedulerArray(schedInfoIntA, fni, fmaIntSV, memFail, CFG_SVI);
-                                    work.LogicIssue.updateSchedulerArray_N(schedInfoIntA, fni, wupsInt, memFail, CFG_SVI);
-            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingRe), fpStoreMask, false, useStoreArg2(renamedArgsFloat), TMP_renamedDests, TMP_renamedSources);
-            --schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, true, false, true, FORWARDING_MODES_SV_FLOAT_D, memFail, true);
-            schedInfoUpdatedFloatA <= --work.LogicIssue.updateSchedulerArray(schedInfoFloatA, fni, fmaFloatSV, memFail, CFG_SVF);
-                                      work.LogicIssue.updateSchedulerArray_N(schedInfoFloatA, fni, wupsFloat, memFail, CFG_SVF);
+            wupsInt <= work.LogicIssue.getInitWakeups(schedInfoIntA, fni, CFG_SVI);
+            wupsFloat <= work.LogicIssue.getInitWakeups(schedInfoFloatA, fniFloat, CFG_SVF);          
 
-            fmaIntSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoIntA, fni, false, readyRegFlagsSV);
-            fmaFloatSV <= work.LogicIssue.findForwardingMatchesArray(schedInfoFloatA, fniFloat, false, readyRegFlagsFloatSV);
-        
+            schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingRe), intStoreMask, false, useStoreArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
+            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray_N(schedInfoIntA, fni, wupsInt, memFail, CFG_SVI);
+            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingRe), fpStoreMask, false, useStoreArg2(renamedArgsFloat), TMP_renamedDests, TMP_renamedSources);
+            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray_N(schedInfoFloatA, fniFloat, wupsFloat, memFail, CFG_SVF);
+
+                schedInfoUpdatedIntU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedIntA, readyRegFlagsSV );
+                schedInfoUpdatedFloatU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedFloatA, readyRegFlagsFloatSV );
+
             IQUEUE_SV: entity work.IssueQueue(Behavioral)
             generic map(
                 NAME => "SVI",
@@ -1049,16 +1012,11 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-        
-                --acceptingOut => iqAcceptingS0,
-                --acceptingMore => iqAcceptingMoreS0,
+
                 prevSendingOK => renamedSending,
-                newArr => schedInfoUpdatedIntA,
+                newArr => schedInfoUpdatedIntU,
                         TMP_newTags => TMP_sviTags,
-                fni => fni,     
-                readyRegFlags => readyRegFlagsSV,
-                --memFail => memFail,
-                --memDepFail => prevMemDepFail,
+                fni => fni,
                 nextAccepting => allowIssueStoreDataInt,
                 events => events,
                 schedulerOut => slotSelIntSV,
@@ -1114,20 +1072,14 @@ begin
                 DONT_MATCH1 => true,
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_FLOAT_D(0 to 2),
                 IGNORE_MEM_FAIL => true
-                             --       TMP_USE_ALLOC => true --false
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-       
-                --acceptingOut => iqAcceptingSF0,
-                --acceptingMore => iqAcceptingMoreSF0,
+
                 prevSendingOK => renamedSending,
-                newArr => schedInfoUpdatedFloatA,
+                newArr => schedInfoUpdatedFloatU,
                         TMP_newTags => TMP_svfTags,
-                fni => fniFloat,      
-                readyRegFlags => readyRegFlagsFloatSV,
-                --memFail => memFail,
-                --memDepFail => prevMemDepFail,
+                fni => fniFloat,
                 nextAccepting => allowIssueStoreDataFP,
                 events => events,
                 schedulerOut => slotSelFloatSV,              
@@ -1166,19 +1118,17 @@ begin
 
         
         SUBPIPE_FP0: block
-            signal fmaF0: ForwardingMatchesArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_FORWARDING_MATCHES);          
-            signal schedInfoA, schedInfoUpdatedA: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
+            signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
             
             constant CFG_FP0: work.LogicIssue.SchedulerUpdateConfig := (true, true, false, FORWARDING_MODES_FLOAT_D, false);
-               signal wups: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
+            signal wups: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
         begin
-             wups <= work.LogicIssue.fma2wups(fmaF0, CFG_FP0, false);
-            fmaF0 <= work.LogicIssue.findForwardingMatchesArray(schedInfoA, fniFloat, false, readyRegFlagsFloat_Early);
+            wups <= work.LogicIssue.getInitWakeups(schedInfoA, fniFloat, CFG_FP0);
 
             schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingRe), fpMask, false, renamedArgsFloat, TMP_renamedDests, TMP_renamedSources);
-            --schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, true, false, false, FORWARDING_MODES_FLOAT_D, memFail, false);
-            schedInfoUpdatedA <= --work.LogicIssue.updateSchedulerArray(schedInfoA, fniFloat, fmaF0, memFail, CFG_FP0);
-                                 work.LogicIssue.updateSchedulerArray_N(schedInfoA, fniFloat, wups, memFail, CFG_FP0);
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fniFloat, wups, memFail, CFG_FP0);
+            schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsFloat_Early );
+            
             IQUEUE_F0: entity work.IssueQueue(Behavioral)
             generic map(
                 NAME => "F0",
@@ -1186,20 +1136,14 @@ begin
                 FORWARDING(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
                 FORWARDING1(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT_D(0 to 2)
-                    --TMP_USE_ALLOC => true --false
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-        
-                --acceptingOut => iqAcceptingF0,
-                --acceptingMore => iqAcceptingMoreF0,
+
                 prevSendingOK => renamedSending,
-                newArr => schedInfoUpdatedA,
+                newArr => schedInfoUpdatedU,
                         TMP_newTags => TMP_fpTags,
                 fni => fniFloat,
-                readyRegFlags => readyRegFlagsFloat_Early,
-                --memFail => memFail,
-                --memDepFail => prevMemDepFail,
                 nextAccepting => allowIssueF0,
                 events => events,
                 schedulerOut => slotSelF0,
@@ -1554,8 +1498,6 @@ begin
 		reset => '0',
 		en => '0',
 
---		acceptingOut => acceptingSQ,
---		almostFull => almostFullSQ,
 		acceptAlloc => allocAcceptSQ,
 		
 	    prevSendingRe => frontGroupSend,
@@ -1604,8 +1546,6 @@ begin
 		reset => '0',
 		en => '0',
 
---		acceptingOut => acceptingLQ,
---		almostFull => almostFullLQ,
 		acceptAlloc => allocAcceptLQ,
 
 	    prevSendingRe => frontGroupSend,				

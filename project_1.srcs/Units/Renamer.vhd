@@ -81,10 +81,10 @@ begin
 
         newTagsNext(i) <= TMP_tagsAlu(i) or X"10" 
                                 when maskAlu(i) = '1'
-                     else TMP_tagsMul(i) or X"20" 
-                                when maskMul(i) = '1'
-                     else TMP_tagsMem(i) or X"30" 
-                                when maskMem(i) = '1'
+--                     else TMP_tagsMul(i) or X"20" 
+--                                when maskMul(i) = '1'
+--                     else TMP_tagsMem(i) or X"30" 
+--                                when maskMem(i) = '1'
                      else X"ff";
     end generate;
 
@@ -114,6 +114,10 @@ begin
                         iqTagTable(slv2u(virtualDests(i))) <= newTagsNext(i);
                     end if;
                 end loop;
+            end if;
+            
+            if (evt.execEvent or evt.lateEvent) = '1' then
+                iqTagTable <= (others => X"ff");
             end if;
             
             -- TODO: the table entries must be invalidated on events (Exec: renameIndex cmp, Late: ocomplete flush)

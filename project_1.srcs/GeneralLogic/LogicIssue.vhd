@@ -197,8 +197,40 @@ type SchedulerInfoArray is array(natural range <>) of SchedulerInfo;
 type WakeupStruct is record
     argLocsPipe: SmallNumber;
     argSrc: SmallNumber;
-    match:   std_logic;         
+    match:   std_logic;
+    
+        producer: InsTag;
+        reg: PhysName;
+        iqTag: SmallNumber;
+        
+        active: std_logic;
 end record;
+
+constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0', (others => '0'), (others => '0'), sn(0), '0');
+
+
+    type ArgWakeup is record
+        active: std_logic;
+        mode: WakeupMode;
+        producer: InsTag;
+        iqTag: SmallNumber;
+
+        match: std_logic;
+        pipe:  SmallNumber;
+        stage: SmallNumber;
+    end record;
+
+
+    type WakeupInfo is record
+        active: std_logic; -- if happening this cycle
+        arg0: ArgWakeup;
+        arg1: ArgWakeup;
+    end record;
+
+
+    type WakeupInfoArray is array(natural range <>) of WakeupInfo;
+
+
 
 type slv2D is array(natural range <>, natural range <>) of std_logic;
 
@@ -224,9 +256,6 @@ type slv2D is array(natural range <>, natural range <>) of std_logic;
     );
 
 
-constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0');
-
-
 type WakeupStructArray2D is array(natural range <>, natural range <>) of WakeupStruct;
 
             function updateSchedulerArray_N(schedArray: SchedulerInfoArray; fni: ForwardingInfo; wakeups: WakeupStructArray2D;
@@ -237,30 +266,7 @@ type WakeupStructArray2D is array(natural range <>, natural range <>) of WakeupS
                                 memFail: std_logic;
                                 config: SchedulerUpdateConfig)
                 return SchedulerInfoArray;
-    
-    type ArgWakeup is record
-        active: std_logic;
-        mode: WakeupMode;
-        producer: InsTag;
-        iqTag: SmallNumber;
-        
-        match: std_logic;
-        pipe:  SmallNumber;
-        stage: SmallNumber;
-    end record;
 
-
-    type WakeupInfo is record
-        active: std_logic; -- if happening this cycle
-        arg0: ArgWakeup;
-        arg1: ArgWakeup;
-    end record;
-
-
-    type WakeupInfoArray is array(natural range <>) of WakeupInfo;
-
-        function getWakeupStruct(fc: ForwardingComparisons; config: SchedulerUpdateConfig; selection: boolean)
-        return WakeupStruct;
 
 function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo; 
 function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo;
@@ -305,10 +311,6 @@ return SchedulerInfoArray;
 function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector;
 
 
-function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; matchIQ: boolean; rrf: std_logic_vector) return ForwardingMatchesArray;
-
-     function findForwardingMatchesArray_N(schedArray: SchedulerInfoArray; fni: ForwardingInfo; rrf: std_logic_vector; regInfo: RegisterStateArray2D) return ForwardingMatchesArray;
-
 function extractFullMask(queueContent: SchedulerInfoArray) return std_logic_vector;
 
         function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup;
@@ -317,6 +319,12 @@ function extractFullMask(queueContent: SchedulerInfoArray) return std_logic_vect
 function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray;
 
 function restoreRenameIndex(sia: SchedulerInfoArray) return SchedulerInfoArray;
+
+
+    function getSlowWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D;
+    function getFastWakeups_O(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D;
+    function getInitWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D;
+
 
 function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vector) return SchedulerInfo;
 
@@ -369,8 +377,6 @@ function prioSelect16(inputElems: SchedulerInfoArray; inputSelVec: std_logic_vec
 
     function updateRenameIndex(content: SchedulerInfoArray) return SchedulerInfoArray;
     function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return SchedulerInfo;
-
-            function fma2wups(fma: ForwardingMatchesArray; config: SchedulerUpdateConfig; selection: boolean) return WakeupStructArray2D;
 
     -- Debug functions
     function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency;
@@ -817,6 +823,61 @@ package body LogicIssue is
     end function;
 
 
+    function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector is
+        variable res: std_logic_vector(list'range) := (others => '0');
+    begin
+        for i in list'range loop
+            if tag(PHYS_REG_BITS-1 downto 0) = list(i)(PHYS_REG_BITS-1 downto 0)
+                 --   and isNonzero(tag) = '1' 
+            then
+                res(i) := '1';
+            end if;
+        end loop;
+        return res;
+    end function;
+
+    function findIqTag(tag: SmallNumber; list: SmallNumberArray) return std_logic_vector is
+        variable res: std_logic_vector(list'range) := (others => '0');
+        variable candidate: SmallNumber := sn(0);
+        variable iqSelector: SmallNumber := sn(0);
+    begin
+        for i in list'range loop
+            candidate := list(i) and X"0f";
+            iqSelector := sn(16*(1+i));
+            candidate := candidate or iqSelector;
+            if tag(5 downto 0) = candidate(5 downto 0) and list(i)(7) /= '1' then
+                res(i) := '1';
+            end if;
+        end loop;
+        return res;
+    end function;
+
+
+    function findForwardingMatch(info: SchedulerInfo; arg: natural; fni: ForwardingInfo; matchIQ: boolean) return ForwardingComparisons is
+        variable res: ForwardingComparisons := DEFAULT_FORWARDING_COMPARISONS;
+        
+        constant arg0: PhysName := info.dynamic.argStates(arg).reg;        
+        constant tag0: SmallNumber := info.dynamic.argStates(arg).iqTag;
+    begin
+        if not matchIQ then
+            res.reg   := '0';
+            res.cmp1  := findRegTag(arg0, fni.tags1);
+            res.cmp0  := findRegTag(arg0, fni.tags0);        
+            res.cmpM1 := findRegTag(arg0, fni.nextTagsM1);
+            res.cmpM2 := findRegTag(arg0, fni.nextTagsM2);        
+            res.cmpM3 := findRegTag(arg0, fni.nextTagsM3);
+        else
+            res.reg   := '0';
+            res.cmp1  := findIqTag(tag0, fni.iqTags1);
+            res.cmp0  := findIqTag(tag0, fni.iqTags0);        
+            res.cmpM1 := findIqTag(tag0, fni.iqTagsM1);
+            res.cmpM2 := findIqTag(tag0, fni.iqTagsM2);        
+            res.cmpM3 := findIqTag(tag0, fni.iqTagsM3);
+        end if;
+
+        return res;
+    end function;
+
         function TMP_incSrcStage(stage: SmallNumber) return SmallNumber is
         begin
             case stage(1 downto 0) is
@@ -912,19 +973,59 @@ package body LogicIssue is
 
         return res;
     end function;
+    
+            function getSlowWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D is
+                constant LEN: natural := content'length;
+                variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
+                variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
+            begin
 
-        function getWakeupStruct(fc: ForwardingComparisons; config: SchedulerUpdateConfig; selection: boolean)
-        return WakeupStruct is
-            variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
-        begin
-            if not config.dynamic then
-                res := getWakeupStructStatic(fc, config.fwModes, selection);
-            else
-                res := getWakeupStructDynamic(fc, config.fwModes);
-            end if;            
+                for i in 0 to LEN-1 loop
+                    --fma(i) := findForwardingMatches(content(i), fni, false);
+                    
+                    fma(i).cmps(0) := findForwardingMatch(content(i), 0, fni, false);
+                    res(i, 0) := getWakeupStructStatic(fma(i).cmps(0), config.fwModes, false);
+                    
+                    fma(i).cmps(1) := findForwardingMatch(content(i), 1, fni, false);
+                    res(i, 1) := getWakeupStructStatic(fma(i).cmps(1), config.fwModes, false);
+                end loop;
+                
+                return res;
+            end function;
 
-            return res;
-        end function;
+
+            function getFastWakeups_O(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D is
+                constant LEN: natural := content'length;
+                variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
+                variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
+            begin
+                for i in 0 to LEN-1 loop
+                    fma(i).cmps(0) := findForwardingMatch(content(i), 0, fni, false);
+                    res(i, 0) := getWakeupStructStatic(fma(i).cmps(0), config.fwModes, true);
+                                        
+                    fma(i).cmps(1) := findForwardingMatch(content(i), 1, fni, false);
+                    res(i, 1) := getWakeupStructStatic(fma(i).cmps(1), config.fwModes, true);
+                end loop;
+
+                return res;
+            end function;
+
+            function getInitWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D is
+                constant LEN: natural := content'length;
+                variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
+                variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
+            begin
+                for i in 0 to LEN-1 loop
+                    fma(i).cmps(0) := findForwardingMatch(content(i), 0, fni, false);
+                    res(i, 0) := getWakeupStructDynamic(fma(i).cmps(0), config.fwModes);
+                                        
+                    fma(i).cmps(1) := findForwardingMatch(content(i), 1, fni, false);
+                    res(i, 1) := getWakeupStructDynamic(fma(i).cmps(1), config.fwModes);
+                end loop;
+
+                return res;
+            end function;
+
 
         -- TODO: include config to distinguish memFail 2 cycles after wakeup (Int) and 1 cycle after wakeup (FP)
         function dependsOnMemHit(state: ArgumentState; constant IS_FP: boolean) return std_logic is
@@ -1145,36 +1246,6 @@ package body LogicIssue is
         end function;
 
 
-    function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector is
-        variable res: std_logic_vector(list'range) := (others => '0');
-    begin
-        for i in list'range loop
-            if tag(PHYS_REG_BITS-1 downto 0) = list(i)(PHYS_REG_BITS-1 downto 0)
-                 --   and isNonzero(tag) = '1' 
-            then
-                res(i) := '1';
-            end if;
-        end loop;
-        return res;
-    end function;
-
-    function findIqTag(tag: SmallNumber; list: SmallNumberArray) return std_logic_vector is
-        variable res: std_logic_vector(list'range) := (others => '0');
-        variable candidate: SmallNumber := sn(0);
-        variable iqSelector: SmallNumber := sn(0);
-    begin
-        for i in list'range loop
-            candidate := list(i) and X"0f";
-            iqSelector := sn(16*(1+i));
-            candidate := candidate or iqSelector;
-            if tag(5 downto 0) = candidate(5 downto 0) and list(i)(7) /= '1' then
-                res(i) := '1';
-            end if;
-        end loop;
-        return res;
-    end function;
-
-
     function updateSchedulerState_S_NEW(state: SchedulerInfo;
                                   wups: WakeupStructArray2D; k: natural
                                   )
@@ -1242,127 +1313,6 @@ package body LogicIssue is
                 return res;
             end function;
 
-            function fma2wups(fma: ForwardingMatchesArray; config: SchedulerUpdateConfig; selection: boolean) return WakeupStructArray2D is
-                variable res: WakeupStructArray2D(0 to fma'length-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
-            begin
-                for i in 0 to res'length-1 loop
-                    res(i, 0) := getWakeupStruct(fma(i).cmps(0), config, selection);
-                    res(i, 1) := getWakeupStruct(fma(i).cmps(1), config, selection);
-                end loop;
-
-                return res;
-            end function;
-
-    function findForwardingMatches(info: SchedulerInfo; fni: ForwardingInfo; matchIQ: boolean; readyRegs: std_logic_vector) return ForwardingMatches is
-        variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
-        constant arg0: PhysName := info.dynamic.argStates(0).reg;
-        constant arg1: PhysName := info.dynamic.argStates(1).reg;
-        
-        constant tag0: SmallNumber := info.dynamic.argStates(0).iqTag;
-        constant tag1: SmallNumber := info.dynamic.argStates(1).iqTag;
-    begin
-        if not matchIQ then
-            res.cmps(0).reg   := '0';
-            res.cmps(0).cmp1  := findRegTag(arg0, fni.tags1);
-            res.cmps(0).cmp0  := findRegTag(arg0, fni.tags0);        
-            res.cmps(0).cmpM1 := findRegTag(arg0, fni.nextTagsM1);
-            res.cmps(0).cmpM2 := findRegTag(arg0, fni.nextTagsM2);        
-            res.cmps(0).cmpM3 := findRegTag(arg0, fni.nextTagsM3);
-    
-            res.cmps(1).reg   := '0';
-            res.cmps(1).cmp1  := findRegTag(arg1, fni.tags1);
-            res.cmps(1).cmp0  := findRegTag(arg1, fni.tags0);        
-            res.cmps(1).cmpM1 := findRegTag(arg1, fni.nextTagsM1);
-            res.cmps(1).cmpM2 := findRegTag(arg1, fni.nextTagsM2);        
-            res.cmps(1).cmpM3 := findRegTag(arg1, fni.nextTagsM3);
-        else
-            res.cmps(0).reg   := '0';
-            res.cmps(0).cmp1  := findIqTag(tag0, fni.iqTags1);
-            res.cmps(0).cmp0  := findIqTag(tag0, fni.iqTags0);        
-            res.cmps(0).cmpM1 := findIqTag(tag0, fni.iqTagsM1);
-            res.cmps(0).cmpM2 := findIqTag(tag0, fni.iqTagsM2);        
-            res.cmps(0).cmpM3 := findIqTag(tag0, fni.iqTagsM3);
-
-            res.cmps(1).reg   := '0';
-            res.cmps(1).cmp1  := findIqTag(tag1, fni.iqTags1);
-            res.cmps(1).cmp0  := findIqTag(tag1, fni.iqTags0);        
-            res.cmps(1).cmpM1 := findIqTag(tag1, fni.iqTagsM1);
-            res.cmps(1).cmpM2 := findIqTag(tag1, fni.iqTagsM2);        
-            res.cmps(1).cmpM3 := findIqTag(tag1, fni.iqTagsM3);
-        end if;
-
-        return res;
-    end function;
-
-    function findForwardingMatches_N(info: SchedulerInfo; fni: ForwardingInfo; regInfo: RegisterStateArray) return ForwardingMatches is
-        variable res: ForwardingMatches := DEFAULT_FORWARDING_MATCHES;
-        constant arg0: PhysName := info.dynamic.argStates(0).reg;
-        constant arg1: PhysName := info.dynamic.argStates(1).reg;
-    begin
-        res.cmps(0).reg   := regInfo(0).ready;
-        res.cmps(0).cmp1  := findRegTag(arg0, fni.tags1);
-        res.cmps(0).cmp0  := findRegTag(arg0, fni.tags0);
-        res.cmps(0).cmpM1 := findRegTag(arg0, fni.nextTagsM1);
-        res.cmps(0).cmpM2 := findRegTag(arg0, fni.nextTagsM2);
-        res.cmps(0).cmpM3 := findRegTag(arg0, fni.nextTagsM3);
-
-        res.cmps(1).reg   := regInfo(1).ready;
-        res.cmps(1).cmp1  := findRegTag(arg1, fni.tags1);
-        res.cmps(1).cmp0  := findRegTag(arg1, fni.tags0);
-        res.cmps(1).cmpM1 := findRegTag(arg1, fni.nextTagsM1);
-        res.cmps(1).cmpM2 := findRegTag(arg1, fni.nextTagsM2);
-        res.cmps(1).cmpM3 := findRegTag(arg1, fni.nextTagsM3);
-
-        return res;
-    end function;
-    
-    
-    function findForwardingMatchesArray(schedArray: SchedulerInfoArray; fni: ForwardingInfo; matchIQ: boolean; rrf: std_logic_vector) return ForwardingMatchesArray is
-        variable res: ForwardingMatchesArray(schedArray'range) := (others => DEFAULT_FORWARDING_MATCHES);
-        
-        constant readyFlags: std_logic_vector(0 to 3*schedArray'length-1) := (others => '0');
-        variable readyFlagsSlice: std_logic_vector(0 to 2) := "000";
-    begin
-        for i in schedArray'range loop
-            readyFlagsSlice := readyFlags(3*i to 3*i + 2);
-            res(i) := findForwardingMatches(schedArray(i), fni, matchIQ, readyFlagsSlice);
-        end loop;
-        return res;
-    end function;
-    
-        function findForwardingMatchesArray_N(schedArray: SchedulerInfoArray; fni: ForwardingInfo; rrf: std_logic_vector; regInfo: RegisterStateArray2D) return ForwardingMatchesArray is
-            variable res: ForwardingMatchesArray(schedArray'range) := (others => DEFAULT_FORWARDING_MATCHES);
-            
-            constant readyFlags: std_logic_vector(0 to 3*schedArray'length-1) := (others => '0');
-            variable readyFlagsSlice: std_logic_vector(0 to 2) := "000";
-        begin
-            for i in schedArray'range loop
-                readyFlagsSlice := readyFlags(3*i to 3*i + 2);
-                res(i) := findForwardingMatches_N(schedArray(i), fni, regInfo(i));
-            end loop;
-            return res;
-        end function;
-
-        --signal wakeups, wakeups_Alt: WakeupInfoArray(0 to QUEUE_SIZE_EXT-1);
-
-
-        --                type ArgWakeup is record
-        --                    active: std_logic;
-        --                    mode: WakeupMode;
-        --                    producer: InsTag;
-        --                    iqTag: SmallNumber;
-                            
-        --                    match: std_logic;
-        --                    pipe:  SmallNumber;
-        --                    stage: SmallNumber;
-        --                end record;
-                    
-                    
-        --                type WakeupInfo is record
-        --                    active: std_logic; -- if happening this cycle
-        --                    arg0: ArgWakeup;
-        --                    arg1: ArgWakeup;
-        --                end record;       
         function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup is
             variable res: ArgWakeup;
             variable mode: WakeupMode := NONE;
@@ -1496,7 +1446,8 @@ package body LogicIssue is
             
             return res;
         end function;
-  
+
+
     function getIndex4(inSelVec: std_logic_vector) return std_logic_vector is
         constant selVec: std_logic_vector(0 to 3) := inSelVec;
         variable res: std_logic_vector(1 downto 0) := "11";
@@ -1715,7 +1666,7 @@ package body LogicIssue is
         variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := ageMatrix;
     begin
         for i in 0 to PIPE_WIDTH-1 loop
-            -- insert current fullMask into proper row    
+            -- insert current fullMask into proper row
             for j in 0 to QUEUE_SIZE_EXT-1 loop
                 if insertionLocs(j, i) = '1' then
                     -- Sorry, assigment doesn;t work for ranges in >= 2D
