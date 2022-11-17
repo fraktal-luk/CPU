@@ -939,7 +939,7 @@ function makeExecResult(isl: SchedulerState) return ExecResult is
     variable res: ExecResult := DEFAULT_EXEC_RESULT;
 begin
     res.full := isl.full;
-    res.tag := isl.renameIndex;
+    res.tag := isl.tags.renameIndex;
     res.dest := isl.argSpec.dest;
 
     return res;
@@ -949,7 +949,7 @@ end function;
         variable res: ExecResult_N := DEFAULT_EXEC_RESULT_N;
     begin
         res.full := isl.full;
-        res.tag := isl.renameIndex;
+        res.tag := isl.tags.renameIndex;
         res.iqTag := isl.destTag;
         res.dest := isl.argSpec.dest;
     
@@ -1058,7 +1058,7 @@ end function;
         begin
             res.full := mqRegReadSending;
             res.operation := mqReexecCtrlRR.op;
-            res.renameIndex := mqReexecCtrlRR.tags.renameIndex;
+            --res.renameIndex := mqReexecCtrlRR.tags.renameIndex;
             res.tags := mqReexecCtrlRR.tags;
             
             -- adr

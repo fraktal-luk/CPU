@@ -63,7 +63,7 @@ architecture Behavioral of IssueQueue is
     constant CFG_WAIT: SchedulerUpdateConfig := (false, false, IGNORE_MEM_FAIL, FORWARDING_D, false);
     constant CFG_SEL: SchedulerUpdateConfig :=  (false, false, IGNORE_MEM_FAIL, FORWARDING, false);
 
-    signal bankCounts: SmallNumberArray(0 to 3) := (others => (others => '0'));
+    --signal bankCounts: SmallNumberArray(0 to 3) := (others => (others => '0'));
     -- For future development: selects bank for each input element. Becomes relevant when load balancing among banks is introduced
     signal TMP_inputDirs: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
@@ -159,7 +159,7 @@ begin
     sends <= anyReadyFull and nextAccepting;
     sendingKilled <= isNonzero(killMask and selMask);
 
-        bankCounts <= getBankCounts(fullMask);
+    --    bankCounts <= getBankCounts(fullMask);
 
     -- Selection for issue
     selMask <= getSelMask(readyMaskAll, ageMatrix);

@@ -680,7 +680,7 @@ begin
             sendingBranchRR <= (sendingToRegReadI0 and slotIssueI0.branchIns);
 
             bqCompareEarly.full <= sendingBranchRR;
-            bqCompareEarly.tag <= slotIssueI0.renameIndex;
+            bqCompareEarly.tag <= slotIssueI0.tags.renameIndex;
             bqCompareEarly.dest <= slotIssueI0.tags.bqPointer;
 
             execEventSignalE0 <= branchResultE0.controlInfo.full and branchResultE0.controlInfo.newEvent;
@@ -1179,7 +1179,7 @@ begin
             end block;
 
             subpipeF0_RRu.full <= slotRegReadF0.full and not outSigsF0.killSel2;
-            subpipeF0_RRu.tag <= slotRegReadF0.renameIndex;
+            subpipeF0_RRu.tag <= slotRegReadF0.tags.renameIndex;
             subpipeF0_RRu.dest <= slotRegReadF0.argSpec.dest;
             subpipeF0_RRu.value <= executeFpu(slotRegReadF0);
 
@@ -1195,7 +1195,7 @@ begin
          end block;
 
          sqValueResult.full <= sendingToStoreWrite;
-         sqValueResult.tag <= stateExecStoreValue.renameIndex;
+         sqValueResult.tag <= stateExecStoreValue.tags.renameIndex;
          sqValueResult.dest <= stateExecStoreValue.tags.sqPointer;
          sqValueResult.value <= stateExecStoreValue.args(0);
          
@@ -1313,7 +1313,7 @@ begin
                                              dbInfo => DEFAULT_DEBUG_INFO,
                                              full => slotIssueI0.full and not memFail,
                                              failed => '0',
-                                             tag => slotIssueI0.renameIndex,
+                                             tag => slotIssueI0.tags.renameIndex,
                                              dest => slotIssueI0.argSpec.dest,
                                              value => (others => '0')
                                          );

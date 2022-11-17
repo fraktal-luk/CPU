@@ -253,7 +253,7 @@ package body LogicExec is
 		end if;
 		
 		res.full := full;
-		res.tag := st.renameIndex;
+		res.tag := st.tags.renameIndex;
 		res.dest := st.argSpec.dest;
 		res.value := result;
 		return res;
@@ -320,7 +320,7 @@ package body LogicExec is
         result := arg0 xor arg1;
 		
 		res.full := full;
-		res.tag := st.renameIndex;
+		res.tag := st.tags.renameIndex;
 		res.dest := st.argSpec.dest;
 		res.value := result;
 		return res;
@@ -373,7 +373,7 @@ package body LogicExec is
         end if;
 
         res.full := full;
-        res.tag := st.renameIndex;
+        res.tag := st.tags.renameIndex;
         res.dest := st.argSpec.dest;        
         res.value := adr;
         
