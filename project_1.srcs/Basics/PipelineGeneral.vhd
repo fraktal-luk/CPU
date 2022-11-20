@@ -24,8 +24,8 @@ type PhysicalSubpipe is (ALU, Mem, FP, StoreDataInt, StoreDataFloat);
 
 
 function makeExecResult(isl: SchedulerState) return ExecResult;
-    function makeExecResult_N(isl: SchedulerState) return ExecResult_N;
-    function makeExecResult_N(er: ExecResult; iqTag: SmallNumber) return ExecResult_N;
+function makeExecResult_N(isl: SchedulerState) return ExecResult_N;
+function makeExecResult_N(er: ExecResult; iqTag: SmallNumber) return ExecResult_N;
 
 
 type IssueQueueSignals is record
@@ -59,13 +59,13 @@ constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')
 
 
 type RenameInfo is record
-        dbInfo: InstructionDebugInfo;
+    dbInfo: InstructionDebugInfo;
 
-        dbDepTags: InsTagArray(0 to 2); -- TODO: replace with DbDepedency because content of DB infos should be encapsulated
+    dbDepTags: InsTagArray(0 to 2); -- TODO: replace with DbDepedency because content of DB infos should be encapsulated
 
     destSel: std_logic;
     destSelFP: std_logic;
-        psel: std_logic;
+    psel: std_logic;
     virtualDest: RegName;
     physicalDest: PhysName;
     sourceSel: std_logic_vector(0 to 2);
@@ -83,13 +83,13 @@ end record;
 type RenameInfoArray is array(natural range <>) of RenameInfo;
 
 constant DEFAULT_RENAME_INFO: RenameInfo := (
-        dbInfo => DEFAULT_DEBUG_INFO, 
-        
-        dbDepTags => (others => (others => 'U')),
+    dbInfo => DEFAULT_DEBUG_INFO, 
+    
+    dbDepTags => (others => (others => 'U')),
                    
     destSel => '0',
     destSelFP => '0',
-        psel => '0',
+    psel => '0',
     virtualDest => (others => '0'),
     physicalDest => (others => '0'),
     sourceSel => (others => '0'),
@@ -113,14 +113,6 @@ type BypassEntry is record
     dest: PhysName;
     value: Mword;
 end record;
-
-
---type MapEntry is record
-    
---    tag: InsTag;
---    virtual: RegName;
---    physical: PhysName;
---end record;
 
 
 function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInfoArray;
@@ -210,10 +202,8 @@ function replaceDests(insVec: InstructionSlotArray; ria: RenameInfoArray) return
 -- For setting dest sel flags in stages after ROB!
 function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray;
 
-
 function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic;
 function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
-
 
 function convertROBData(isa: InstructionSlotArray) return ControlPacketArray;
 
@@ -224,14 +214,14 @@ function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray;
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult;
 function updateMemDest(er: ExecResult; used: std_logic) return ExecResult;
 
-                function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState;
+function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState;
+
+function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult;
                 
-                function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult;
-                                
-                function TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f: ExecResult;
-                                           ctrlE1, ctrlE1u: ControlPacket;
-                                           resOutSQ: ExecResult)
-                return ControlPacket;
+function TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f: ExecResult;
+                           ctrlE1, ctrlE1u: ControlPacket;
+                           resOutSQ: ExecResult)
+return ControlPacket;
 
 end package;
 
@@ -291,7 +281,7 @@ end function;
 function getAddressIncrement(ins: InstructionState) return Mword is
 	variable res: Mword := (others => '0');
 begin
-	if ins.classInfo.short = '1' then
+	if false then --ins.classInfo.short = '1' then
 		res(1) := '1'; -- 2
 	else
 		res(2) := '1'; -- 4
@@ -421,7 +411,7 @@ function getBranchMask1(insVec: InstructionSlotArray) return std_logic_vector is
     variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i) := insVec(i).ins.classInfo.branchIns;
+        res(i) := insVec(i).ins.typeInfo.branchIns;
     end loop;	
     return res;
 end function;
@@ -430,7 +420,7 @@ function getLoadMask1(insVec: InstructionSlotArray) return std_logic_vector is
     variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i) := insVec(i).ins.classInfo.useLQ;
+        res(i) := insVec(i).ins.typeInfo.useLQ;
     end loop;
     
     return res;
@@ -440,7 +430,7 @@ function getStoreMask1(insVec: InstructionSlotArray) return std_logic_vector is
     variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i) := insVec(i).ins.classInfo.useSQ;
+        res(i) := insVec(i).ins.typeInfo.useSQ;
     end loop;
     
     return res;
@@ -451,7 +441,7 @@ function getIntStoreMask1(insVec: InstructionSlotArray) return std_logic_vector 
     variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i) := insVec(i).ins.classInfo.storeInt;
+        res(i) := insVec(i).ins.dispatchInfo.storeInt;
     end loop;
     
     return res;
@@ -461,7 +451,7 @@ function getFloatStoreMask1(insVec: InstructionSlotArray) return std_logic_vecto
     variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i) := insVec(i).ins.classInfo.storeFP;
+        res(i) := insVec(i).ins.dispatchInfo.storeFP;
     end loop;
     
     return res;
@@ -503,7 +493,7 @@ function getAluMask1(insVec: InstructionSlotArray) return std_logic_vector is
     variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i) := insVec(i).ins.classInfo.useAlu;
+        res(i) := insVec(i).ins.dispatchInfo.useAlu;
     end loop;
     
     return res;
@@ -513,7 +503,7 @@ function getMulMask1(insVec: InstructionSlotArray) return std_logic_vector is
     variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i) := insVec(i).ins.classInfo.useMul;
+        res(i) := insVec(i).ins.dispatchInfo.useMul;
     end loop;
     
     return res;
@@ -523,7 +513,7 @@ function getFpMask1(insVec: InstructionSlotArray) return std_logic_vector is
     variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i) := insVec(i).ins.classInfo.useFP;
+        res(i) := insVec(i).ins.dispatchInfo.useFP;
     end loop;
     
     return res;
@@ -533,7 +523,7 @@ function getMemMask1(insVec: InstructionSlotArray) return std_logic_vector is
     variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i) := insVec(i).ins.classInfo.useMem;
+        res(i) := insVec(i).ins.dispatchInfo.useMem;
     end loop;
     
     return res;
@@ -734,71 +724,71 @@ end function;
 
 
 
-    function findDeps(ia: BufferEntryArray) return DependencyVec is
-        variable res: DependencyVec := DEFAULT_DEP_VEC;
-    begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
-                    
-                    if ia(i).argSpec.args(k)(4 downto 0) = ia(j).argSpec.dest(4 downto 0) -- name match       
-                    then
-                        res(i)(k)(j) := '1';                   
-                    end if;
-                end loop;
+function findDeps(ia: BufferEntryArray) return DependencyVec is
+    variable res: DependencyVec := DEFAULT_DEP_VEC;
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        for k in 0 to 2 loop -- For each of 3 possible source arguments
+            for j in PIPE_WIDTH-1 downto 0 loop
+                if j >= i then
+                    next;
+                end if;
+                
+                if ia(i).argSpec.args(k)(4 downto 0) = ia(j).argSpec.dest(4 downto 0) -- name match       
+                then
+                    res(i)(k)(j) := '1';                   
+                end if;
             end loop;
         end loop;
-        
-        return res;
-    end function;
-
-
-    function getRealDepVecInt(ia: BufferEntryArray; depVec: DependencyVec) return DependencyVec is
-        variable res: DependencyVec := (others => (others => (others => '0')));
-    begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
-                    
-                    if depVec(i)(k)(j) = '1' and ia(i).argSpec.intArgSel(k) = '1' and ia(j).argSpec.intDestSel = '1' -- intSel match
-                    then
-                        res(i)(k)(j) := '1';
-                        exit;                        
-                    end if;
-                end loop;
-            end loop;                     
+    end loop;
     
-        end loop;        
-        return res;
-    end function;
+    return res;
+end function;
 
-    function getRealDepVecFloat(ia: BufferEntryArray; depVec: DependencyVec) return DependencyVec is
-        variable res: DependencyVec := (others => (others => (others => '0')));
-    begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
-                    
-                    if depVec(i)(k)(j) = '1' and ia(i).argSpec.floatArgSel(k) = '1' and ia(j).argSpec.floatDestSel = '1'
-                    then
-                        res(i)(k)(j) := '1';
-                        exit;                   
-                    end if;
-                end loop;
-            end loop;                     
-    
-        end loop;        
-        return res;
-    end function;   
+
+function getRealDepVecInt(ia: BufferEntryArray; depVec: DependencyVec) return DependencyVec is
+    variable res: DependencyVec := (others => (others => (others => '0')));
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        for k in 0 to 2 loop -- For each of 3 possible source arguments
+            for j in PIPE_WIDTH-1 downto 0 loop
+                if j >= i then
+                    next;
+                end if;
+                
+                if depVec(i)(k)(j) = '1' and ia(i).argSpec.intArgSel(k) = '1' and ia(j).argSpec.intDestSel = '1' -- intSel match
+                then
+                    res(i)(k)(j) := '1';
+                    exit;                        
+                end if;
+            end loop;
+        end loop;                     
+
+    end loop;
+    return res;
+end function;
+
+function getRealDepVecFloat(ia: BufferEntryArray; depVec: DependencyVec) return DependencyVec is
+    variable res: DependencyVec := (others => (others => (others => '0')));
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        for k in 0 to 2 loop -- For each of 3 possible source arguments
+            for j in PIPE_WIDTH-1 downto 0 loop
+                if j >= i then
+                    next;
+                end if;
+                
+                if depVec(i)(k)(j) = '1' and ia(i).argSpec.floatArgSel(k) = '1' and ia(j).argSpec.floatDestSel = '1'
+                then
+                    res(i)(k)(j) := '1';
+                    exit;                   
+                end if;
+            end loop;
+        end loop;                     
+
+    end loop;        
+    return res;
+end function;
 
 
 function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray is
@@ -945,41 +935,44 @@ begin
     return res;
 end function;
 
-    function makeExecResult_N(isl: SchedulerState) return ExecResult_N is
-        variable res: ExecResult_N := DEFAULT_EXEC_RESULT_N;
-    begin
-        res.full := isl.full;
-        res.tag := isl.tags.renameIndex;
-        res.iqTag := isl.destTag;
-        res.dest := isl.argSpec.dest;
-    
-        return res;
-    end function;
+function makeExecResult_N(isl: SchedulerState) return ExecResult_N is
+    variable res: ExecResult_N := DEFAULT_EXEC_RESULT_N;
+begin
+    res.full := isl.full;
+    res.tag := isl.tags.renameIndex;
+    res.iqTag := isl.destTag;
+    res.dest := isl.argSpec.dest;
 
-    function makeExecResult_N(er: ExecResult; iqTag: SmallNumber) return ExecResult_N is
-        variable res: ExecResult_N := DEFAULT_EXEC_RESULT_N;
-    begin
+    return res;
+end function;
 
-        res.dbInfo := er.dbInfo;
-    
-        res.full := er.full;
-        res.failed := er.failed;
-        res.tag := er.tag;
-        res.iqTag := iqTag;
-        res.dest := er.dest;
-        res.value := er.value;
-    
-        return res;
-    end function;
+function makeExecResult_N(er: ExecResult; iqTag: SmallNumber) return ExecResult_N is
+    variable res: ExecResult_N := DEFAULT_EXEC_RESULT_N;
+begin
+
+    res.dbInfo := er.dbInfo;
+
+    res.full := er.full;
+    res.failed := er.failed;
+    res.tag := er.tag;
+    res.iqTag := iqTag;
+    res.dest := er.dest;
+    res.value := er.value;
+
+    return res;
+end function;
 
 function convertROBData(isa: InstructionSlotArray) return ControlPacketArray is
     variable res: ControlPacketArray(isa'range) := (others => DEFAULT_CONTROL_PACKET);
 begin
     for i in res'range loop
-            res(i).dbInfo := isa(i).ins.dbInfo;
+        res(i).dbInfo := isa(i).ins.dbInfo;
         res(i).controlInfo := isa(i).ins.controlInfo;
         res(i).controlInfo.full := isa(i).full;
-        res(i).classInfo := isa(i).ins.classInfo;        
+
+        res(i).classInfo.branchIns := isa(i).ins.typeInfo.branchIns;      
+        res(i).classInfo.secCluster := isa(i).ins.typeInfo.secCluster;      
+        res(i).classInfo.useLQ := isa(i).ins.typeInfo.useLQ;      
     end loop;
     return res;
 end function;
@@ -1004,24 +997,20 @@ function getInsSlot(elem: BufferEntry) return InstructionSlot is
     variable res: InstructionSlot := DEFAULT_INS_SLOT;
 begin
     res.full := elem.full;
-        res.ins.dbInfo := elem.dbInfo;
-    
-    res.ins.controlInfo.firstBr := elem.firstBr;
-    res.ins.classInfo.branchIns := elem.branchIns;
-    --res.ins.controlInfo.frontBranch := elem.frontBranch;
-    --res.ins.controlInfo.confirmedBranch := elem.confirmedBranch;
-    res.ins.controlInfo.specialAction := elem.specialAction;
+    res.ins.dbInfo := elem.dbInfo;
 
-    res.ins.classInfo.fpRename := elem.fpRename;           
-    res.ins.classInfo.mainCluster := elem.mainCluster;            
-    res.ins.classInfo.secCluster := elem.secCluster;            
-    res.ins.classInfo.useLQ := elem.useLQ;
-    res.ins.classInfo.useSQ := elem.secCluster;
-    
     res.ins.specificOperation := unfoldOp(elem.specificOperation);
-    
+
+    res.ins.typeInfo := elem.classInfo;
+    res.ins.typeInfo.useSQ := elem.classInfo.secCluster;
+
     res.ins.constantArgs := elem.constantArgs;
     res.ins.virtualArgSpec := elem.argSpec; 
+
+
+    res.ins.controlInfo.firstBr := elem.firstBr;
+    res.ins.controlInfo.specialAction := elem.specialAction;
+
     return res;
 end function;
 
@@ -1053,48 +1042,47 @@ begin
     return res;
 end function;
 
-        function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState is
-            variable res: SchedulerState := DEFAULT_SCHED_STATE;
-        begin
-            res.full := mqRegReadSending;
-            res.operation := mqReexecCtrlRR.op;
-            --res.renameIndex := mqReexecCtrlRR.tags.renameIndex;
-            res.tags := mqReexecCtrlRR.tags;
-            
-            -- adr
-            res.args(1) := mqReexecCtrlRR.target;
-            
-            res.argSpec.dest := mqReexecResRR.dest;
-            res.argSpec.intDestSel := not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
-            res.argSpec.floatDestSel := mqReexecCtrlRR.classInfo.useFP;
+function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState is
+    variable res: SchedulerState := DEFAULT_SCHED_STATE;
+begin
+    res.full := mqRegReadSending;
+    res.operation := mqReexecCtrlRR.op;
+    res.tags := mqReexecCtrlRR.tags;
+    
+    -- adr
+    res.args(1) := mqReexecCtrlRR.target;
+    
+    res.argSpec.dest := mqReexecResRR.dest;
+    res.argSpec.intDestSel := not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
+    res.argSpec.floatDestSel := mqReexecCtrlRR.classInfo.useFP;
 
-            return res;
-        end function;
+    return res;
+end function;
 
-        function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult is
-            variable res: ExecResult := er;
-        begin
-            res.full := res.full and memoryMissed;
-            res.value := memResult;
-            return res;
-        end function;
-                        
-        function TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f: ExecResult;
-                                   ctrlE1, ctrlE1u: ControlPacket;
-                                   resOutSQ: ExecResult)
-        return ControlPacket is
-            variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-        begin
-            res.ip := subpipeM0_E1.value;
-            res.op := ctrlE1.op;
-            res.tags := ctrlE1u.tags;
-            res.target(SMALL_NUMBER_SIZE-1 downto 0) := resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
-            res.classInfo.useFP := subpipeM0_E1f.full;
-            res.controlInfo.tlbMiss := ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
-            res.controlInfo.dataMiss := ctrlE1u.controlInfo.dataMiss;
-            res.controlInfo.sqMiss := ctrlE1u.controlInfo.sqMiss;                    
-            return res;
-        end function;
+function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult is
+    variable res: ExecResult := er;
+begin
+    res.full := res.full and memoryMissed;
+    res.value := memResult;
+    return res;
+end function;
+                
+function TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f: ExecResult;
+                           ctrlE1, ctrlE1u: ControlPacket;
+                           resOutSQ: ExecResult)
+return ControlPacket is
+    variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+begin
+    res.ip := subpipeM0_E1.value;
+    res.op := ctrlE1.op;
+    res.tags := ctrlE1u.tags;
+    res.target(SMALL_NUMBER_SIZE-1 downto 0) := resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
+    res.classInfo.useFP := subpipeM0_E1f.full;
+    res.controlInfo.tlbMiss := ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
+    res.controlInfo.dataMiss := ctrlE1u.controlInfo.dataMiss;
+    res.controlInfo.sqMiss := ctrlE1u.controlInfo.sqMiss;                    
+    return res;
+end function;
 
 
 end package body;

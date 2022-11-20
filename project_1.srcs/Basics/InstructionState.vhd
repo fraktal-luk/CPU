@@ -138,7 +138,7 @@ constant DEFAULT_DEBUG_INFO: InstructionDebugInfo := (
 type InstructionControlInfo is record
     full: std_logic;
 	newEvent: std_logic; -- True if any new event appears
-	hasInterrupt: std_logic;
+	hasInterrupt: std_logic;   -- CP
 	hasException: std_logic;
     refetch: std_logic;
     frontBranch: std_logic;
@@ -146,29 +146,35 @@ type InstructionControlInfo is record
 	specialAction: std_logic;
 	dbtrap: std_logic;
     orderViolation: std_logic;
-    tlbMiss: std_logic;
-    dataMiss: std_logic;
-    sqMiss:    std_logic;
+    tlbMiss: std_logic;         -- MQ
+    dataMiss: std_logic;        -- MQ
+    sqMiss:    std_logic;       -- MQ
     firstBr: std_logic;
     killed: std_logic;
     causing: std_logic;
     ignored: std_logic;
 end record;
 
-type InstructionClassInfo is record
-	short: std_logic;
-	mainCluster: std_logic;
-	secCluster: std_logic;
-	fpRename: std_logic; -- true if instruction is routed to FP renamer (NOTE, CHECK: Int renamer is used for all ops, even those that don't go to any IQ)
-	branchIns: std_logic;
-	useLQ: std_logic;
-	useSQ: std_logic;
+
+type ClassInfo_Dispatch is record
 	storeInt: std_logic;
-	storeFP: std_logic;
-	useAlu: std_logic;
-	useMul: std_logic;
-	useMem: std_logic;
-	useFP: std_logic;
+    storeFP: std_logic;
+    useAlu: std_logic;
+    useMul: std_logic;
+    useMem: std_logic;
+    useFP: std_logic;
+end record;
+
+constant DEFAULT_CLASS_INFO_DISPATCH: ClassInfo_Dispatch := (others => '0');
+
+
+type InstructionClassInfo is record
+	mainCluster: std_logic; --
+	secCluster: std_logic; --
+	branchIns: std_logic; --
+	useLQ: std_logic; --
+	useSQ: std_logic; -- 
+	useFP: std_logic; -- true if instruction is routed to FP renamer (NOTE, CHECK: Int renamer is used for all ops, even those that don't go to any IQ)
 end record;
 
 
@@ -197,11 +203,13 @@ type InstructionTags is record
 end record;
 
 type InstructionState is record
-        dbInfo: InstructionDebugInfo;
+    dbInfo: InstructionDebugInfo;
 	controlInfo: InstructionControlInfo;
 	tags: InstructionTags;
 	specificOperation: SpecificOp;
-	classInfo: InstructionClassInfo;
+	typeInfo: InstructionClassInfo;
+	dispatchInfo: ClassInfo_Dispatch;
+
 	constantArgs: InstructionConstantArgs;
 	virtualArgSpec: InstructionArgSpec;
 	physicalArgSpec: InstructionArgSpec;
@@ -210,11 +218,12 @@ end record;
 type InstructionStateArray is array(integer range <>) of InstructionState;
 
 type ControlPacket is record
-        dbInfo: InstructionDebugInfo;
+    dbInfo: InstructionDebugInfo;
     controlInfo: InstructionControlInfo;
     classInfo: InstructionClassInfo;
     op: SpecificOp;
     tags: InstructionTags;
+
     tag: InsTag;
     ip: Mword;
     nip: Mword;
@@ -222,6 +231,34 @@ type ControlPacket is record
 end record;
 
 type ControlPacketArray is array(integer range <>) of ControlPacket;
+
+type SchedulerState is record
+    full: std_logic;
+
+    ------------------------- (StaticInfo)
+    dbInfo: InstructionDebugInfo;
+
+    operation: SpecificOp;
+    branchIns: std_logic;
+
+    tags: InstructionTags;
+
+    immediate: std_logic;
+    immValue: Hword;
+    zero: std_logic_vector(0 to 2);
+    -------------------------
+
+    argSpec: InstructionArgSpec;
+    destTag: SmallNumber;
+    poisoned: std_logic;
+
+    readNew: std_logic_vector(0 to 2);
+    args: MwordArray(0 to 2);
+
+    argLocsPipe: SmallNumberArray(0 to 2);
+    argSrc: SmallNumberArray(0 to 2);
+end record;
+
 
 constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
     full => '0',
@@ -233,6 +270,7 @@ constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
     confirmedBranch => '0',												    											
     specialAction => '0',
     dbtrap => '0',
+
     orderViolation => '0',
     tlbMiss => '0',
     dataMiss => '0',
@@ -244,18 +282,11 @@ constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
 );
 
 constant DEFAULT_CLASS_INFO: InstructionClassInfo := ( 
-    short => '0',
     mainCluster => '0',
     secCluster => '0',
-    fpRename => '0',
     branchIns => '0',
     useLQ => '0',
 	useSQ => '0',
-    storeInt => '0',
-    storeFP => '0',
-    useAlu => '0',
-    useMul => '0',
-    useMem => '0',
     useFP => '0'
 );
 
@@ -282,11 +313,12 @@ constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
 );
 
 constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
-        dbInfo => DEFAULT_DEBUG_INFO,
+    dbInfo => DEFAULT_DEBUG_INFO,
 	controlInfo => DEFAULT_CONTROL_INFO,	
 	specificOperation => DEFAULT_SPECIFIC_OP,
 	tags => DEFAULT_INSTRUCTION_TAGS,
-	classInfo => DEFAULT_CLASS_INFO,
+	typeInfo => DEFAULT_CLASS_INFO,
+	dispatchInfo => DEFAULT_CLASS_INFO_DISPATCH,
 	constantArgs => DEFAULT_CONSTANT_ARGS,
 	virtualArgSpec => DEFAULT_ARG_SPEC,
 	physicalArgSpec => DEFAULT_ARG_SPEC
@@ -298,7 +330,7 @@ constant DEFAULT_CONTROL_PACKET: ControlPacket := (
     dbInfo => DEFAULT_DEBUG_INFO,
 
     controlInfo => DEFAULT_CONTROL_INFO,
-        classInfo => DEFAULT_CLASS_INFO,
+    classInfo => DEFAULT_CLASS_INFO,
     op => DEFAULT_SPECIFIC_OP,
     tags => DEFAULT_INSTRUCTION_TAGS,
     tag => (others => '0'),
@@ -320,7 +352,7 @@ constant DEFAULT_INS_SLOT: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 type InstructionSlotArray is array(integer range <>) of InstructionSlot;
 
 type ExecResult is record
-        dbInfo: InstructionDebugInfo;
+    dbInfo: InstructionDebugInfo;
     full: std_logic;
     failed: std_logic;
     tag: InsTag;
@@ -329,7 +361,7 @@ type ExecResult is record
 end record;
 
 constant DEFAULT_EXEC_RESULT: ExecResult := (
-        DEFAULT_DEBUG_INFO,
+    DEFAULT_DEBUG_INFO,
     '0',
     '0',
     tag => (others => '0'),
@@ -337,49 +369,42 @@ constant DEFAULT_EXEC_RESULT: ExecResult := (
     value => (others => '0')
 );
 
-    type ExecResult_N is record
-            dbInfo: InstructionDebugInfo;
-        full: std_logic;
-        failed: std_logic;
-        tag: InsTag;
-        iqTag: SmallNumber;
-        dest: PhysName;
-        value: Mword;
-    end record;
-    
-    constant DEFAULT_EXEC_RESULT_N: ExecResult_N := (
-            DEFAULT_DEBUG_INFO,
-        '0',
-        '0',
-        tag => (others => '0'),
-        iqTag => (others => '0'),
-        dest => (others => '0'),
-        value => (others => '0')
-    );
+type ExecResult_N is record
+    dbInfo: InstructionDebugInfo;
+    full: std_logic;
+    failed: std_logic;
+    tag: InsTag;
+    iqTag: SmallNumber;
+    dest: PhysName;
+    value: Mword;
+end record;
+
+constant DEFAULT_EXEC_RESULT_N: ExecResult_N := (
+    DEFAULT_DEBUG_INFO,
+    '0',
+    '0',
+    tag => (others => '0'),
+    iqTag => (others => '0'),
+    dest => (others => '0'),
+    value => (others => '0')
+);
 
 
 type ExecResultArray is array(integer range <>) of ExecResult;
 
 
 type BufferEntry is record
-        dbInfo: InstructionDebugInfo;
+    dbInfo: InstructionDebugInfo;
     full: std_logic;
     firstBr: std_logic; -- TEMP
 
     -- NOTE: for compresion maybe can be just 2 bits:
     --       (br NT, br T, br T confirmed, special) is 4 possibilities     
-    branchIns: std_logic;
     frontBranch: std_logic;
     confirmedBranch: std_logic;
     specialAction: std_logic;
 
-    fpRename: std_logic;           
-    mainCluster: std_logic;
-    secCluster: std_logic;
-    useLQ:      std_logic;
-    useSQ:      std_logic;
-    useSys:     std_logic;
-
+    classInfo: InstructionClassInfo;
     specificOperation: SpecificOp;
 
     constantArgs: InstructionConstantArgs;
@@ -387,8 +412,9 @@ type BufferEntry is record
 end record;
 
 constant DEFAULT_BUFFER_ENTRY: BufferEntry := (
-        dbInfo => DEFAULT_DEBUG_INFO,
+    dbInfo => DEFAULT_DEBUG_INFO,
     specificOperation => sop(None, opNone),
+    classInfo => DEFAULT_CLASS_INFO,
     constantArgs => DEFAULT_CONSTANT_ARGS,
     argSpec => DEFAULT_ARG_SPEC,
     others => '0'
@@ -398,47 +424,23 @@ type BufferEntryArray is array(0 to PIPE_WIDTH-1) of BufferEntry;
 type BufferEntryArray2D is array(0 to IBUFFER_SIZE-1, 0 to PIPE_WIDTH-1) of BufferEntry;
 
 
-type SchedulerState is record
-    full: std_logic;
-    branchIns: std_logic;
-
-    --renameIndex: InsTag;
-
-    tags: InstructionTags;
-
-    operation: SpecificOp;
-    argSpec: InstructionArgSpec;
-        destTag: SmallNumber;
-
-    immediate: std_logic;
-    immValue: Hword;
-
-        poisoned: std_logic;
-
-    zero: std_logic_vector(0 to 2);
-    readNew: std_logic_vector(0 to 2);
-    args: MwordArray(0 to 2);
-
-    argLocsPipe: SmallNumberArray(0 to 2);
-    argSrc: SmallNumberArray(0 to 2);
-end record;
-
 constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       full => '0',
-      branchIns => '0',
 
-      --renameIndex => (others => '0'),
-
-            tags => DEFAULT_INSTRUCTION_TAGS,
+      dbInfo => DEFAULT_DEBUG_INFO,
 
       operation => DEFAULT_SPECIFIC_OP,
+      branchIns => '0',
+
+      tags => DEFAULT_INSTRUCTION_TAGS,
+
       argSpec => DEFAULT_ARG_SPEC,
-        destTag => (others => '0'),
+      destTag => (others => '0'),
 
       immediate => '0',
       immValue => (others => '0'),
 
-        poisoned => '0',
+      poisoned => '0',
 
       zero => (others => '0'),
       readNew => (others => '0'),
@@ -467,9 +469,8 @@ type EventState is record
     lateEvent: std_logic;
     execEvent: std_logic;
     preExecTags: InstructionTags;
-        execCausing: ExecResult;
-        lateCausing: ExecResult;
-        --frontCausing: ControlPacket;
+    execCausing: ExecResult;
+    lateCausing: ExecResult;
 end record;
 
 constant DEFAULT_EVENT_STATE: EventState := (

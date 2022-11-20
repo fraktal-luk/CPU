@@ -272,14 +272,14 @@ begin
      
     res.specificOperation := decodeOperation(op0, op1, op2);
     
-    res.classInfo.branchIns := bool2std(isBranch);
+    classInfo.branchIns := bool2std(isBranch);
     
-    res.classInfo.mainCluster := bool2std(op0 /= "000111"); -- !!
-    res.classInfo.secCluster := bool2std(isStore);
-    res.classInfo.useLQ := bool2std(isLoad);
-    res.classInfo.useSQ := bool2std(isStore);
+    classInfo.mainCluster := bool2std(op0 /= "000111"); -- !!
+    classInfo.secCluster := bool2std(isStore);
+    classInfo.useLQ := bool2std(isLoad);
+    classInfo.useSQ := bool2std(isStore);
     
-    res.classInfo.fpRename := bool2std(hasFpDest or fpSrc0 or fpSrc1 or fpSrc2);
+    classInfo.useFP := bool2std(hasFpDest or fpSrc0 or fpSrc1 or fpSrc2);
     
     -- assign register definitions
     res.virtualArgSpec.dest := "000" & qa;
@@ -322,7 +322,7 @@ begin
         res.constantArgs.imm(31 downto 10) := (others => w(9));
     end if;
     
-    classInfo := res.classInfo;
+    --classInfo := res.classInfo;
     op := res.specificOperation;
     constantArgs := res.constantArgs;
     argSpec := res.virtualArgSpec;

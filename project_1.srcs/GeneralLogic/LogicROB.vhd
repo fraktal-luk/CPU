@@ -194,9 +194,12 @@ begin
     res.virtualDest := isl.ins.virtualArgSpec.dest(4 downto 0);    
     res.physicalDest := isl.ins.physicalArgSpec.dest;
 
-    res.useSQ := isl.ins.classInfo.secCluster; -- ??
-    res.useLQ := isl.ins.classInfo.useLQ;
-    res.useBQ := isl.ins.classInfo.branchIns;
+    res.useSQ := isl.ins.--classInfo.secCluster; -- ??
+                         typeInfo.secCluster;
+    res.useLQ := isl.ins.--classInfo.useLQ;
+                         typeInfo.useLQ;
+    res.useBQ := isl.ins.--classInfo.branchIns;
+                         typeInfo.branchIns;
     
     return res;
 end function;
@@ -221,8 +224,10 @@ begin
     res.causing := '0';
     res.completed0 := '0';
     res.completed1 := '0';
-    res.mainCluster := isl.ins.classInfo.mainCluster;
-    res.secCluster := isl.ins.classInfo.secCluster;
+    res.mainCluster := isl.ins.--classInfo.mainCluster;
+                                typeInfo.mainCluster;
+    res.secCluster := isl.ins.--classInfo.secCluster;
+                                typeInfo.secCluster;
 
     res.hasEvent := '0';
     res.hasException := '0';
@@ -264,10 +269,14 @@ begin
     res.ins.virtualArgSpec.dest(4 downto 0) := stat.virtualDest;    
     res.ins.physicalArgSpec.dest := stat.physicalDest;
 
-    res.ins.classInfo.secCluster := stat.useSQ;
-    res.ins.classInfo.useLQ := stat.useLQ;
-    res.ins.classInfo.branchIns := stat.useBQ;
-               
+--    res.ins.classInfo.secCluster := stat.useSQ;
+--    res.ins.classInfo.useLQ := stat.useLQ;
+--    res.ins.classInfo.branchIns := stat.useBQ;
+
+        res.ins.typeInfo.secCluster := stat.useSQ;
+        res.ins.typeInfo.useLQ := stat.useLQ;
+        res.ins.typeInfo.branchIns := stat.useBQ;
+
     return res;
 end function;   
 

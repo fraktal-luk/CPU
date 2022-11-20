@@ -118,19 +118,39 @@ type StaticInfoArray is array(natural range <>) of StaticInfo;
 
 -- Scheduler structure
 
-type DynamicInfo is record
-    full: std_logic;
+type EntryStatus is record
     active: std_logic;
     issued: std_logic;
     freed: std_logic;
     trial: std_logic;
-    poisoned: std_logic;
-    pulledBack: std_logic;
     stageCtr: SmallNumber;
+end record;
+
+constant DEFAULT_ENTRY_STATUS: EntryStatus := (
+    active => '0',
+    issued => '0',
+    freed => '0',
+    trial => '0',
+    stageCtr => (others => '0')
+);
+
+type DynamicInfo is record
+    full: std_logic;
+
+--    active: std_logic;
+--    issued: std_logic;
+--    freed: std_logic;
+--    trial: std_logic;
+--    stageCtr: SmallNumber;
+    
+    status: EntryStatus;
+
     renameIndex: InsTag;
+
     intDestSel: std_logic;
     floatDestSel: std_logic;
     dest: PhysName;
+
     --destTag: SmallNumber;    
     argStates: ArgumentStateArray(0 to 2);
 end record;
@@ -138,13 +158,14 @@ end record;
 
 constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     full => '0',
-    active => '0',
-    issued => '0',
-    freed => '0',
-    trial => '0',
-    poisoned => '0',
-    pulledBack => '0',
-    stageCtr => (others => '0'),
+--    active => '0',
+--    issued => '0',
+--    freed => '0',
+--    trial => '0',
+    
+    status => DEFAULT_ENTRY_STATUS,
+
+--    stageCtr => (others => '0'),
     renameIndex => (others => '0'),
     intDestSel => '0',
     floatDestSel => '0',
@@ -412,10 +433,10 @@ package body LogicIssue is
         variable res: StaticInfo;
     begin
         res.dbInfo := isl.ins.dbInfo;
-            
+
         res.operation := isl.ins.specificOperation;
-    
-        res.branchIns := isl.ins.classInfo.branchIns;      
+
+        res.branchIns := isl.ins.typeInfo.branchIns;      
 
         res.tags := isl.ins.tags;
 
@@ -445,10 +466,12 @@ package body LogicIssue is
         variable res: DynamicInfo := DEFAULT_DYNAMIC_INFO;
     begin
         res.full := isl.full;
-        res.active := res.full;
-        res.issued := '0';
-        res.trial := '0';
-    
+        --res.active := res.full;
+        --res.issued := '0';
+        --res.trial := '0';
+
+            res.status.active := res.full;
+
         res.renameIndex := isl.ins.tags.renameIndex;
 
         res.intDestSel := ri.destSel and not ri.destSelFP;
@@ -914,27 +937,32 @@ end function;
             variable res: SchedulerInfo := entry;
         begin
             res.dynamic.full := '0';
-            res.dynamic.issued := '0';
-            res.dynamic.active := '0';
-            res.dynamic.stageCtr := sn(0);
-            
+            --res.dynamic.issued := '0';
+            --res.dynamic.active := '0';
+            --res.dynamic.stageCtr := sn(0);
+                res.dynamic.status.issued := '0';
+                res.dynamic.status.active := '0';
+                res.dynamic.status.stageCtr := sn(0);
             return res;
         end function;
         
         function pullbackEntry(entry: SchedulerInfo) return SchedulerInfo is
             variable res: SchedulerInfo := entry;
         begin
-            res.dynamic.issued := '0';
-            res.dynamic.active := '1';
-            res.dynamic.stageCtr := sn(0);
-            
+            --res.dynamic.issued := '0';
+            --res.dynamic.active := '1';
+            --res.dynamic.stageCtr := sn(0);
+                res.dynamic.status.issued := '0';
+                res.dynamic.status.active := '1';
+                res.dynamic.status.stageCtr := sn(0);
             return res;
         end function;
         
         function updateIssuedEntry(entry: SchedulerInfo) return SchedulerInfo is
             variable res: SchedulerInfo := entry;
         begin
-            res.dynamic.stageCtr := addInt(res.dynamic.stageCtr, 1);
+            --res.dynamic.stageCtr := addInt(res.dynamic.stageCtr, 1);
+                res.dynamic.status.stageCtr := addInt(res.dynamic.status.stageCtr, 1);
 
             return res;
         end function;
@@ -942,11 +970,13 @@ end function;
         function issueEntry(entry: SchedulerInfo) return SchedulerInfo is
             variable res: SchedulerInfo := entry;
         begin
-            res.dynamic.issued := '1';
-            res.dynamic.active := '0';
-            
+            --res.dynamic.issued := '1';
+            --res.dynamic.active := '0';
+                res.dynamic.status.issued := '1';
+                res.dynamic.status.active := '0';
             -- TODO: change to hardcoded 1h (then maybe shoudl be made 0 and all checks corrected by -1?
-            res.dynamic.stageCtr := sn(0);
+            --res.dynamic.stageCtr := sn(0);
+                res.dynamic.status.stageCtr := sn(0);
             return res;
         end function;
 -----------------------
@@ -1028,7 +1058,8 @@ end function;
                 for k in 0 to LEN-1 loop
                     if insertionLocs(k, i) = '1' then
                         res(k) := newArr(i);
-                            res(k).dynamic.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
+                            --res(k).dynamic.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
+                                res(k).dynamic.status.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
                         exit;
                     end if;
                 end loop;
@@ -1043,7 +1074,8 @@ end function;
     begin
         for i in 0 to LEN-1 loop
             for j in 0 to 2 loop
-                if res(i).dynamic.issued = '1' then
+                --if res(i).dynamic.issued = '1' then
+                if res(i).dynamic.status.issued = '1' then
                     null;
                 elsif res(i).dynamic.argStates(j).waiting = '1' then
                     res(i).dynamic.argStates(j).dbDep := DB_incCyclesWaiting(res(i).dynamic.argStates(j).dbDep);
@@ -1074,18 +1106,23 @@ end function;
         variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
     begin
         for i in 0 to LEN-1 loop
-            res(i).dynamic.freed := '0'; -- This is set for 1 cycle when freeing
+            --res(i).dynamic.freed := '0'; -- This is set for 1 cycle when freeing
+                res(i).dynamic.status.freed := '0'; -- This is set for 1 cycle when freeing
 
-            if queueContent(i).dynamic.issued = '1' then
+            --if queueContent(i).dynamic.issued = '1' then
+            if queueContent(i).dynamic.status.issued = '1' then
                 -- Remove after successful issue
-                if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME - 1   then
+                --if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME - 1   then
+                if slv2u(res(i).dynamic.status.stageCtr) = IQ_HOLD_TIME - 1   then
                 -- if isDone
                 res(i) := removeEntry(res(i), '1');
-                res(i).dynamic.freed := '1';
+                --res(i).dynamic.freed := '1';
+                    res(i).dynamic.status.freed := '1';
 
                 -- pull back because mem miss
                 -- if needsPullback
-                elsif memFail = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "00" then
+                --elsif memFail = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "00" then
+                elsif memFail = '1' and queueContent(i).dynamic.status.stageCtr(1 downto 0) = "00" then
                     res(i) := pullbackEntry(res(i));
                 else
                     res(i) := updateIssuedEntry(res(i));
@@ -1104,9 +1141,11 @@ end function;
 
              -- set age comparison for possible subsequent flush
              -- this is done regardless of other parts of state
-             res(i).dynamic.trial := trialMask(i);        
+             --res(i).dynamic.trial := trialMask(i);        
+                 res(i).dynamic.status.trial := trialMask(i);        
 
-             res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
+             --res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
+                 res(i).dynamic.status.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
         end loop;
 
         return res;
@@ -1203,11 +1242,15 @@ end function;
         
     
         res.dynamic.full := a.dynamic.full or b.dynamic.full;
-        res.dynamic.active := a.dynamic.active or b.dynamic.active;
-        res.dynamic.issued := a.dynamic.issued or b.dynamic.issued;
-        res.dynamic.trial := a.dynamic.trial or b.dynamic.trial;
+--        res.dynamic.active := a.dynamic.active or b.dynamic.active;
+--        res.dynamic.issued := a.dynamic.issued or b.dynamic.issued;
+--        res.dynamic.trial := a.dynamic.trial or b.dynamic.trial;
 
-        res.dynamic.poisoned := a.dynamic.poisoned or b.dynamic.poisoned;
+            res.dynamic.status.active := a.dynamic.status.active or b.dynamic.status.active;
+            res.dynamic.status.issued := a.dynamic.status.issued or b.dynamic.status.issued;
+            res.dynamic.status.trial := a.dynamic.status.trial or b.dynamic.status.trial;
+
+        --res.dynamic.poisoned := a.dynamic.poisoned or b.dynamic.poisoned;
         
         res.dynamic.renameIndex := a.dynamic.renameIndex or b.dynamic.renameIndex;
 
@@ -1282,21 +1325,18 @@ end function;
         variable res: SchedulerState := DEFAULT_SCHED_STATE;
     begin
         res.full := full;
-
-        res.operation := info.static.operation;
-    
-        res.branchIns := info.static.branchIns;
-
-        res.tags := info.static.tags;
         
+        ----------------------------------------
+        res.dbInfo := info.static.dbInfo;
+        res.operation := info.static.operation;
+        res.branchIns := info.static.branchIns;
+        res.tags := info.static.tags;
         res.immediate := info.static.immediate;    
         res.immValue := info.static.immValue;
-            
-        res.poisoned := info.dynamic.poisoned;
-            
         res.zero := info.static.zero;
+        ----------------------------------------
 
-        --res.renameIndex := info.dynamic.renameIndex;
+        --res.poisoned := info.dynamic.poisoned; 
 
         res.readNew := (others => '0');
         
@@ -1438,9 +1478,9 @@ end function;
     begin
         for i in res'range loop        
             res(i).full := content(i).dynamic.full;
-            res(i).active := content(i).dynamic.active;
-            res(i).issued := content(i).dynamic.issued;
-            res(i).freed := content(i).dynamic.freed;
+            res(i).active := content(i).dynamic.status.active;
+            res(i).issued := content(i).dynamic.status.issued;
+            res(i).freed := content(i).dynamic.status.freed;
             
             res(i).trial := compareTagBefore(events.preExecTags.renameIndex, content(i).dynamic.renameIndex);
             res(i).trial_T := compareIndBefore(events.preExecTags.bqPointerSeq, content(i).static.tags.bqPointerSeq, 6); -- TODO: temp value of PTR_SIZE!
@@ -1449,11 +1489,11 @@ end function;
                res(i).trial := res(i).trial_T;
             end if;
                 
-            res(i).trialUpdated := content(i).dynamic.trial;
+            res(i).trialUpdated := content(i).dynamic.status.trial;
             res(i).killed := (res(i).trialUpdated and events.execEvent) or events.lateEvent;
             res(i).living := res(i).full and not res(i).killed;
 
-            res(i).ready := not content(i).dynamic.argStates(0).waiting and not content(i).dynamic.argStates(1).waiting and content(i).dynamic.active;          
+            res(i).ready := not content(i).dynamic.argStates(0).waiting and not content(i).dynamic.argStates(1).waiting and content(i).dynamic.status.active;          
             res(i).readyFull := res(i).ready;
             res(i).readyLiving := res(i).ready and res(i).living;
 

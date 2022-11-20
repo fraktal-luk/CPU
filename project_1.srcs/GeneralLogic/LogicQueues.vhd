@@ -33,7 +33,7 @@ package LogicQueues is
         value => (others => '0'),
         others => '0'
     );
-        
+
     type QueueEntryArray is array (natural range <>) of QueueEntry;
 
     procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural; isl: InstructionSlot; sysOp: std_logic; constant IS_LOAD_QUEUE: boolean);    
@@ -58,11 +58,11 @@ package LogicQueues is
     function cmpIndexAfter(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
     function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, nFull: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
 
-    function getCommittedEffectiveMask(robData: InstructionSlotArray; isLQ: boolean) return std_logic_vector;
-    function getCommittedMask(robData: InstructionSlotArray; isLQ: boolean) return std_logic_vector;
+--    function getCommittedEffectiveMask(robData: InstructionSlotArray; isLQ: boolean) return std_logic_vector;
+--    function getCommittedMask(robData: InstructionSlotArray; isLQ: boolean) return std_logic_vector;
 
-    function getCommittedEffectiveMaskBr(robData: InstructionSlotArray) return std_logic_vector;
-    function getCommittedMaskBr(robData: InstructionSlotArray) return std_logic_vector;
+--    function getCommittedEffectiveMaskBr(robData: InstructionSlotArray) return std_logic_vector;
+--    function getCommittedMaskBr(robData: InstructionSlotArray) return std_logic_vector;
 
     function getCommittedEffectiveMask(robData: ControlPacketArray; isLQ: boolean) return std_logic_vector;
     function getCommittedMask(robData: ControlPacketArray; isLQ: boolean) return std_logic_vector;
@@ -289,79 +289,85 @@ package body LogicQueues is
         return res;
     end function;
 
--- scan: full and syncEvent; full and [usingQ]
- function getCommittedEffectiveMask(robData: InstructionSlotArray; isLQ: boolean) return std_logic_vector is
-    variable res: std_logic_vector(robData'range) := (others => '0');
- begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        if robData(i).full = '1' and hasSyncEvent(robData(i).ins) = '1' then
-            exit;
-        end if;
+---- scan: full and syncEvent; full and [usingQ]
+-- function getCommittedEffectiveMask(robData: InstructionSlotArray; isLQ: boolean) return std_logic_vector is
+--    variable res: std_logic_vector(robData'range) := (others => '0');
+-- begin
+--    for i in 0 to PIPE_WIDTH-1 loop
+--        if robData(i).full = '1' and hasSyncEvent(robData(i).ins) = '1' then
+--            exit;
+--        end if;
         
-        if isLQ then
-            res(i) := robData(i).full and robData(i).ins.classInfo.useLQ;--'1';
-        else
-            res(i) := robData(i).full and robData(i).ins.classInfo.secCluster;--'1';
-        end if;
+--        if isLQ then
+--            res(i) := robData(i).full and robData(i).ins.--classInfo.useLQ;--'1';
+--                                                         typeInfo.useLQ;
+--        else
+--            res(i) := robData(i).full and robData(i).ins.--classInfo.secCluster;--'1';
+--                                                         typeInfo.secCluster;
+--        end if;
      
-    end loop;
-    return res;
- end function;
+--    end loop;
+--    return res;
+-- end function;
     
-    -- scan: newEvent and syncEvent; [usingQ] 
-    function getCommittedMask(robData: InstructionSlotArray; isLQ: boolean) return std_logic_vector is
-        variable res: std_logic_vector(robData'range) := (others => '0');
-    begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        -- A redirected branch cuts a group in SQ, so it must stop there
-        if robData(i).ins.controlInfo.newEvent = '1' and hasSyncEvent(robData(i).ins) = '0' then
-            exit;
-        end if;
+--    -- scan: newEvent and syncEvent; [usingQ] 
+--    function getCommittedMask(robData: InstructionSlotArray; isLQ: boolean) return std_logic_vector is
+--        variable res: std_logic_vector(robData'range) := (others => '0');
+--    begin
+--    for i in 0 to PIPE_WIDTH-1 loop
+--        -- A redirected branch cuts a group in SQ, so it must stop there
+--        if robData(i).ins.controlInfo.newEvent = '1' and hasSyncEvent(robData(i).ins) = '0' then
+--            exit;
+--        end if;
     
-        -- Not only full, because exceptions clear following 'full' bits
-        if isLQ then
-            res(i) := robData(i).ins.classInfo.useLQ;
-        else
-            res(i) := robData(i).ins.classInfo.secCluster;
-        end if;
-    end loop;
-    return res;
-    end function;
+--        -- Not only full, because exceptions clear following 'full' bits
+--        if isLQ then
+--            res(i) := robData(i).ins.--classInfo.useLQ;
+--                                     typeInfo.useLQ;
+--        else
+--            res(i) := robData(i).ins.--classInfo.secCluster;
+--                                     typeInfo.secCluster;
+--        end if;
+--    end loop;
+--    return res;
+--    end function;
 
-    -- scan: full and syncEvent; full and branch
-     function getCommittedEffectiveMaskBr(robData: InstructionSlotArray) return std_logic_vector is
-        variable res: std_logic_vector(robData'range) := (others => '0');
-     begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            if robData(i).full = '1' and hasSyncEvent(robData(i).ins) = '1' then
-                exit;
-            end if;
+--    -- scan: full and syncEvent; full and branch
+--     function getCommittedEffectiveMaskBr(robData: InstructionSlotArray) return std_logic_vector is
+--        variable res: std_logic_vector(robData'range) := (others => '0');
+--     begin
+--        for i in 0 to PIPE_WIDTH-1 loop
+--            if robData(i).full = '1' and hasSyncEvent(robData(i).ins) = '1' then
+--                exit;
+--            end if;
 
-            res(i) := robData(i).full and robData(i).ins.classInfo.branchIns;
-        end loop;
-        return res;
-     end function;
+--            res(i) := robData(i).full and robData(i).ins.--classInfo.branchIns;
+--                                                         typeInfo.branchIns;
+--        end loop;
+--        return res;
+--     end function;
      
-     -- scan: newEvent and syncEvent; branch
-     function getCommittedMaskBr(robData: InstructionSlotArray) return std_logic_vector is
-        variable res: std_logic_vector(robData'range) := (others => '0');
-     begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            -- A redirected branch cuts a group in SQ, so it must stop there
-            if robData(i).ins.controlInfo.newEvent = '1' and hasSyncEvent(robData(i).ins) = '0' then
-                exit;
-            end if;
+--     -- scan: newEvent and syncEvent; branch
+--     function getCommittedMaskBr(robData: InstructionSlotArray) return std_logic_vector is
+--        variable res: std_logic_vector(robData'range) := (others => '0');
+--     begin
+--        for i in 0 to PIPE_WIDTH-1 loop
+--            -- A redirected branch cuts a group in SQ, so it must stop there
+--            if robData(i).ins.controlInfo.newEvent = '1' and hasSyncEvent(robData(i).ins) = '0' then
+--                exit;
+--            end if;
 
-            -- Not only full, because exceptions clear following 'full' bits
-            res(i) := robData(i).ins.classInfo.branchIns;
-        end loop;
-        return res;
-     end function;
+--            -- Not only full, because exceptions clear following 'full' bits
+--            res(i) := robData(i).ins.--classInfo.branchIns;
+--                                     typeInfo.branchIns;
+--        end loop;
+--        return res;
+--     end function;
 
 
 
 -- scan: full and syncEvent; full and [usingQ]
- function getCommittedEffectiveMask(robData: ControlPAcketArray; isLQ: boolean) return std_logic_vector is
+ function getCommittedEffectiveMask(robData: ControlPacketArray; isLQ: boolean) return std_logic_vector is
     variable res: std_logic_vector(robData'range) := (others => '0');
  begin
     for i in 0 to PIPE_WIDTH-1 loop
@@ -412,7 +418,7 @@ package body LogicQueues is
         end loop;
         return res;
      end function;
-     
+
      -- scan: newEvent and syncEvent; branch
      function getCommittedMaskBr(robData: ControlPacketArray) return std_logic_vector is
         variable res: std_logic_vector(robData'range) := (others => '0');

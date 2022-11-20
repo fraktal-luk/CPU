@@ -61,14 +61,14 @@ port(
     sendingFromROB: in std_logic;
    
     commitGroupCtr: in InsTag;
-        renameGroupCtrNextOut: out InsTag;
+    renameGroupCtrNextOut: out InsTag;
   
     execCausing: in ControlPacket;
     
     execEventSignal: in std_logic;
     lateEventSignal: in std_logic;
     
-        dbState: in DbCoreState
+    dbState: in DbCoreState
 );
 end UnitRegManager;
 
@@ -152,9 +152,9 @@ architecture Behavioral of UnitRegManager is
 
         -- Setting tags
         for i in 0 to PIPE_WIDTH-1 loop
-                tag := renameGroupCtrNext or i2slv(i, TAG_SIZE);
-                res(i).ins.dbInfo := DB_addTag(res(i).ins.dbInfo, tag);-- renameGroupCtrNext or i2slv(i, TAG_SIZE);
-        
+            tag := renameGroupCtrNext or i2slv(i, TAG_SIZE);
+            res(i).ins.dbInfo := DB_addTag(res(i).ins.dbInfo, tag);-- renameGroupCtrNext or i2slv(i, TAG_SIZE);
+
             res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
             res(i).ins.tags.intPointer := addInt(newIntDestPointer, countOnes(takeVecInt(0 to i)));
                                                                          -- Don't increment pointer on ops which use no destination!
@@ -180,9 +180,9 @@ architecture Behavioral of UnitRegManager is
             
             if res(i).full = '0' then
                 -- CAREFUL: needed for correct operation of StoreQueue + LQ
-                res(i).ins.classInfo.secCluster := '0';
-                res(i).ins.classInfo.useLQ := '0';            
-                res(i).ins.classInfo.useSQ := '0';            
+                res(i).ins.typeInfo.secCluster := '0';
+                res(i).ins.typeInfo.useLQ := '0';            
+                res(i).ins.typeInfo.useSQ := '0';                               
             end if;
 
             if hasSyncEvent(res(i).ins) = '1' then
@@ -204,38 +204,31 @@ architecture Behavioral of UnitRegManager is
                      or insVec(i).ins.specificOperation.arith = opMulhU
                      or insVec(i).ins.specificOperation.arith = opMulhS
                 then
-                     res(i).ins.classInfo.useMul := '1';
+                    res(i).ins.dispatchInfo.useMul := '1';
                 else
-                    res(i).ins.classInfo.useAlu := '1';
+                    res(i).ins.dispatchInfo.useAlu := '1';
                 end if;
             elsif insVec(i).ins.specificOperation.subpipe = FP then
-                res(i).ins.classInfo.useFP := '1';
+                res(i).ins.dispatchInfo.useFP := '1';
             elsif insVec(i).ins.specificOperation.subpipe = Mem then
-                res(i).ins.classInfo.useMem := '1';
+                res(i).ins.dispatchInfo.useMem := '1';
+
 			    if (insVec(i).ins.specificOperation.memory = opLoad or insVec(i).ins.specificOperation.memory = opLoadSys) then 
-                    res(i).ins.classInfo.useLQ := '1';
+                        res(i).ins.typeInfo.useLQ := '1';
                 elsif (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys) then
-                    res(i).ins.classInfo.useSQ := '1';
-                    if res(i).ins.classInfo.fpRename = '1' then
-                        res(i).ins.classInfo.storeFP := '1';
+                        res(i).ins.typeInfo.useSQ := '1';
+                    if res(i).ins.typeInfo.useFP = '1' then
+                        res(i).ins.dispatchInfo.storeFP := '1';
                     else
-                        res(i).ins.classInfo.storeInt := '1';
+                        res(i).ins.dispatchInfo.storeInt := '1';
                     end if;
                 end if;
-            
+
             end if;
-        
+
             if insVec(i).full /= '1' then
-                res(i).ins.classInfo.mainCluster := '0';
-                res(i).ins.classInfo.secCluster := '0';
-                res(i).ins.classInfo.fpRename := '0';
-                res(i).ins.classInfo.branchIns := '0';
-                res(i).ins.classInfo.useLQ := '0';
-                res(i).ins.classInfo.useSQ := '0';
-                res(i).ins.classInfo.storeInt := '0';
-                res(i).ins.classInfo.storeFP := '0';
-                res(i).ins.classInfo.useAlu := '0';
-                res(i).ins.classInfo.useMem := '0';
+                res(i).ins.typeInfo := DEFAULT_CLASS_INFO;
+                res(i).ins.dispatchInfo := DEFAULT_CLASS_INFO_DISPATCH;
             end if;
         end loop;
         
@@ -261,7 +254,7 @@ architecture Behavioral of UnitRegManager is
         end if;
         
         for i in 0 to PIPE_WIDTH-1 loop
-                res(i).dbInfo := isa(i).ins.dbInfo;
+            res(i).dbInfo := isa(i).ins.dbInfo;
         
             va := ia(i).argSpec;
             ca := ia(i).constantArgs;
@@ -292,7 +285,7 @@ architecture Behavioral of UnitRegManager is
                 res(i).physicalSources(j) := newPhysSources(3*i + j);
                 res(i).physicalSourcesStable(j) := newPhysSourcesStable(3*i + j);
                 
-                    res(i).dbDepTags(j) := newProducers(3*i + j);
+                res(i).dbDepTags(j) := newProducers(3*i + j);
             end loop;
 
             res(i).deps := depVec(i);
@@ -492,7 +485,7 @@ begin
         newPhysSourcesAlt => newIntSourcesAlt,
         newPhysSourceSelector => newSourceSelectorInt,
 
-            newProducers => newProducersInt,
+        newProducers => newProducersInt,
 
         prevStablePhysDests => physStableInt  -- FOR MAPPING (to FREE LIST)
     );
@@ -517,7 +510,7 @@ begin
         newPhysSourcesAlt => newFloatSourcesAlt,
         newPhysSourceSelector => newSourceSelectorFloat,
         
-            newProducers => newProducersFloat,
+        newProducers => newProducersFloat,
 
         prevStablePhysDests => physStableFloat
     );
@@ -591,5 +584,5 @@ begin
     intStoreMaskRe <= getIntStoreMask1(stageDataRenameIn);
     floatStoreMaskRe <= getFloatStoreMask1(stageDataRenameIn);
     
-        renameGroupCtrNextOut <= renameGroupCtrNext;           
+    renameGroupCtrNextOut <= renameGroupCtrNext;           
 end Behavioral;

@@ -237,7 +237,7 @@ begin
 
                     write(currentLine, natural'image(slv2u(queueContent(i).dynamic.renameIndex)));
                     write(currentLine, string'(", "));
-                    write(currentLine, std_logic'image(queueContent(i).dynamic.issued));
+                    write(currentLine, std_logic'image(queueContent(i).dynamic.status.issued));
                     write(currentLine, string'(", "));
 
                     write(currentLine, getArgString(queueContent(i).dynamic.argStates(0)));

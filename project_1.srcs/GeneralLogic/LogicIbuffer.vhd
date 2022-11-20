@@ -77,8 +77,8 @@ function serializeEntry(elem: BufferEntry) return Dword is
     variable argSpecWord: Word := (others => '0');
 begin
     -- 8b
-    controlByte := elem.branchIns & elem.frontBranch & elem.confirmedBranch & elem.specialAction
-                &  elem.fpRename  & elem.mainCluster & elem.secCluster & elem.useLQ;
+    controlByte := elem.classInfo.branchIns & elem.frontBranch & elem.confirmedBranch & elem.specialAction
+                &  elem.classInfo.useFP  & elem.classInfo.mainCluster & elem.classInfo.secCluster & elem.classInfo.useLQ;
     -- 8b (probably 2 unused)
     opByte(7 downto 6) := i2slv(SubpipeType'pos(elem.specificOperation.subpipe), 2);
     opByte(OP_VALUE_BITS-1 downto 0) := elem.specificOperation.bits;
@@ -113,20 +113,19 @@ function deserializeEntry(d: Dword) return BufferEntry is
     constant restByte: Byte := "0000" & d(63 downto 60);            
     constant argSpecWord: Word := d(63 downto 32);
 begin
-    
-    res.branchIns := controlByte(7);
-    --res.frontBranch := controlByte(6);
-    --res.confirmedBranch := controlByte(5);
+
     res.specialAction := controlByte(4);
-    res.fpRename := controlByte(3);
-    res.mainCluster := controlByte(2);
-    res.secCluster := controlByte(1);
-    res.useLQ := controlByte(0);
+
+    res.classInfo.branchIns := controlByte(7);
+    res.classInfo.useFP := controlByte(3);
+    res.classInfo.mainCluster := controlByte(2);
+    res.classInfo.secCluster := controlByte(1);
+    res.classInfo.useLQ := controlByte(0);
 
     res.specificOperation.subpipe := SubpipeType'val(slv2u(opByte(7 downto 6)));
     res.specificOperation.bits := opByte(OP_VALUE_BITS-1 downto 0);
     res.specificOperation := unfoldOp(res.specificOperation);
-    
+
     res.argSpec := deserializeArgSpec(argSpecWord);
 
     res.constantArgs.imm(31 downto 16) := (others => d(31));
