@@ -136,12 +136,6 @@ constant DEFAULT_ENTRY_STATUS: EntryStatus := (
 
 type DynamicInfo is record
     full: std_logic;
-
---    active: std_logic;
---    issued: std_logic;
---    freed: std_logic;
---    trial: std_logic;
---    stageCtr: SmallNumber;
     
     status: EntryStatus;
 
@@ -269,13 +263,15 @@ function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector;
 -- functions - updating
 
 -- API, enqueue and inside IQ
-function getSlowWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D;
+function getSlowWakeups(content: SchedulerInfoArray; fni: ForwardingInfo;  bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
+    function getSlowWakeups_B(content: SchedulerInfoArray; fni: ForwardingInfo;  bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
 function getFastWakeups_O(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D;
 function getInitWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D;
+    function getInitWakeups_B(content: SchedulerInfoArray; fni: ForwardingInfo; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
 
-    -- experimental
-    function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup;
-    function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray;
+-- experimental
+function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup;
+function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray;
 
 
 function updateSchedulerArray_N(schedArray: SchedulerInfoArray; fni: ForwardingInfo; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
@@ -287,14 +283,10 @@ return SchedulerInfoArray;
   
 function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray;
 
-function iqNext_NS(queueContent: SchedulerInfoArray;
-                  sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail: std_logic)
+function iqNext_NS(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail: std_logic)
 return SchedulerInfoArray;
 
-function iqNext_NS_2(queueContent: SchedulerInfoArray;
-                  inputData: SchedulerInfoArray;               
-                  prevSending: std_logic;
-                  insertionLocs: slv2D)
+function iqNext_NS_2(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
 return SchedulerInfoArray;
 
 function updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D;
@@ -387,7 +379,7 @@ package body LogicIssue is
     
        return res;
     end function;
-    
+
     function restoreRenameIndex(sia: SchedulerInfoArray) return SchedulerInfoArray is
        variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := sia;
     begin
@@ -398,19 +390,19 @@ package body LogicIssue is
     end function;
 ------------------------------
     
-        function getNewLocs_N(fullMask: std_logic_vector; tags: SmallNumberArray; newArr: SchedulerInfoArray) return slv2D is
-            constant QUEUE_SIZE_EXT: natural := fullMask'length;
-            variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
-            variable cnt: natural := 0;
-            constant N_BANKS: natural := 4;
-            constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
-        begin
-           for b in 0 to N_BANKS-1 loop
-                res(slv2u(tags(b)) * N_BANKS + b, b) := newArr(b).dynamic.full;
-            end loop;
+    function getNewLocs_N(fullMask: std_logic_vector; tags: SmallNumberArray; newArr: SchedulerInfoArray) return slv2D is
+        constant QUEUE_SIZE_EXT: natural := fullMask'length;
+        variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
+        variable cnt: natural := 0;
+        constant N_BANKS: natural := 4;
+        constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+    begin
+       for b in 0 to N_BANKS-1 loop
+            res(slv2u(tags(b)) * N_BANKS + b, b) := newArr(b).dynamic.full;
+        end loop;
 
-            return res;
-        end function;
+        return res;
+    end function;
 
 
     function prepareNewArr(input: SchedulerInfoArray; rrf: std_logic_vector) return SchedulerInfoArray is
@@ -466,11 +458,8 @@ package body LogicIssue is
         variable res: DynamicInfo := DEFAULT_DYNAMIC_INFO;
     begin
         res.full := isl.full;
-        --res.active := res.full;
-        --res.issued := '0';
-        --res.trial := '0';
-
-            res.status.active := res.full;
+        
+        res.status.active := res.full;
 
         res.renameIndex := isl.ins.tags.renameIndex;
 
@@ -592,172 +581,333 @@ package body LogicIssue is
         return res;
     end function;
 
-        function TMP_incSrcStage(stage: SmallNumber) return SmallNumber is
-        begin
-            case stage(1 downto 0) is
-                when "11" =>
-                    return "00000000";
-                when "00" =>
-                    return "00000001";               
-                when others =>
-                    return "00000010";
-            end case;            
-        end function;
 
-        function setMatch(matchVec: std_logic_vector; p: natural; stage: integer; fc: ForwardingComparisons) return std_logic_vector is
-            variable res: std_logic_vector(matchVec'range) := matchVec;
-        begin
-            case stage is
-                when -3 =>
-                    res(p) := fc.cmpM3(p);
-                when -2 =>
-                    res(p) := fc.cmpM2(p);
-                when -1 =>
-                    res(p) := fc.cmpM1(p);
-                when 0 =>
-                    res(p) := fc.cmp0(p);
-                when 1 =>
-                    res(p) := fc.cmp1(p);
-                when others =>
-                    res(p) := '0';
-            end case;
-            return res;
-        end function;
-
-        function tmpMin(a, b: integer) return integer is
-        begin
-            if b < a then
-                return b;
-            else
-                return a;
-            end if;
-        end function;
-
-    function getWakeupStructStatic(fc: ForwardingComparisons; forwardingModes: ForwardingModeArray; selection: boolean)
-    return WakeupStruct is
-        variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
-        variable matchVec: std_logic_vector(0 to 2) := (others => '0');
-        variable srcStage: natural := 2;
+    function TMP_incSrcStage(stage: SmallNumber) return SmallNumber is
     begin
-        for p in forwardingModes'range loop
-            matchVec := setMatch(matchVec, p, forwardingModes(p).stage, fc);
-            if matchVec(p) = '1' then
-                res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+        case stage(1 downto 0) is
+            when "11" =>
+                return "00000000";
+            when "00" =>
+                return "00000001";               
+            when others =>
+                return "00000010";
+        end case;            
+    end function;
+
+    function setMatch(matchVec: std_logic_vector; p: natural; stage: integer; fc: ForwardingComparisons) return std_logic_vector is
+        variable res: std_logic_vector(matchVec'range) := matchVec;
+    begin
+        case stage is
+            when -3 =>
+                res(p) := fc.cmpM3(p);
+            when -2 =>
+                res(p) := fc.cmpM2(p);
+            when -1 =>
+                res(p) := fc.cmpM1(p);
+            when 0 =>
+                res(p) := fc.cmp0(p);
+            when 1 =>
+                res(p) := fc.cmp1(p);
+            when others =>
+                res(p) := '0';
+        end case;
+        return res;
+    end function;
+
+    function tmpMin(a, b: integer) return integer is
+    begin
+        if b < a then
+            return b;
+        else
+            return a;
+        end if;
+    end function;
+
+--    function getWakeupStructStatic(fc: ForwardingComparisons; forwardingModes: ForwardingModeArray; selection: boolean)
+--    return WakeupStruct is
+--        variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+--        variable matchVec: std_logic_vector(0 to 2) := (others => '0');
+--        variable srcStage: natural := 2;
+--    begin
+--        for p in forwardingModes'range loop
+--            matchVec := setMatch(matchVec, p, forwardingModes(p).stage, fc);
+--            if matchVec(p) = '1' then
+--                res.argLocsPipe(2 downto 0) := i2slv(p, 3);
                 
-                srcStage := tmpMin(forwardingModes(p).stage + 1, 2);
-                if not selection then -- if not selection: move srcStage by 1
-                    srcStage := tmpMin(forwardingModes(p).stage + 2, 2);
-                end if;
+--                srcStage := tmpMin(forwardingModes(p).stage + 1, 2);
+--                if not selection then -- if not selection: move srcStage by 1
+--                    srcStage := tmpMin(forwardingModes(p).stage + 2, 2);
+--                end if;
 
-                res.argSrc(1 downto 0) := i2slv(srcStage, 2);              
-            end if;
-        end loop;
-        res.match := isNonzero(matchVec);
+--                res.argSrc(1 downto 0) := i2slv(srcStage, 2);              
+--            end if;
+--        end loop;
+--        res.match := isNonzero(matchVec);
 
-        return res;
-    end function;
+--        return res;
+--    end function;
 
-    function getWakeupStructDynamic(fc: ForwardingComparisons; forwardingModes: ForwardingModeArray) return WakeupStruct is
-        variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
-        variable matchVec: std_logic_vector(0 to 2) := (others => '0');
-        variable latestStage: integer := 1;
-        variable srcStage: natural := 2;
+--    function getWakeupStructDynamic(fc: ForwardingComparisons; forwardingModes: ForwardingModeArray) return WakeupStruct is
+--        variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+--        variable matchVec: std_logic_vector(0 to 2) := (others => '0');
+--        variable latestStage: integer := 1;
+--        variable srcStage: natural := 2;
+--    begin
+--        for p in forwardingModes'range loop
+--                if forwardingModes(p).stage < 0 then
+--                    latestStage := -1;
+--                else
+--                    latestStage := 1;
+--                end if;
+
+--            for q in -3 to 1 loop
+--                if forwardingModes(p).stage <= q and q <= latestStage then
+--                    matchVec := setMatch(matchVec, p, q, fc);   
+--                    if matchVec(p) = '1' then
+--                        res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+--                        srcStage := tmpMin(q + 2, 2);
+--                        res.argSrc(1 downto 0) := i2slv(srcStage, 2);
+
+--                        exit;
+--                    end if;               
+--                end if;
+--            end loop;
+--        end loop;
+--        res.match := isNonzero(matchVec);
+
+--        return res;
+--    end function;
+
+    -- TODO: include config to distinguish memFail 2 cycles after wakeup (Int) and 1 cycle after wakeup (FP)
+    function dependsOnMemHit(state: ArgumentState; constant IS_FP: boolean) return std_logic is
+        variable matchingCtr: SmallNumber := sn(1);
     begin
-        for p in forwardingModes'range loop
-                if forwardingModes(p).stage < 0 then
-                    latestStage := -1;
-                else
-                    latestStage := 1;
-                end if;
+        if IS_FP then
+            matchingCtr := sn(0);
+        end if;
+        return bool2std(state.srcPipe(1 downto 0) = "10" and state.activeCounter = matchingCtr) and not state.zero and not state.waiting;
+    end function;
 
-            for q in -3 to 1 loop
-                if forwardingModes(p).stage <= q and q <= latestStage then
-                    matchVec := setMatch(matchVec, p, q, fc);   
-                    if matchVec(p) = '1' then
-                        res.argLocsPipe(2 downto 0) := i2slv(p, 3);
-                        srcStage := tmpMin(q + 2, 2);
-                        res.argSrc(1 downto 0) := i2slv(srcStage, 2);
+    function updateArgInfo_A(argState: ArgumentState) return ArgumentState is
+        variable res: ArgumentState := argState;  
+    begin
+        res.activeCounter := addIntTrunc(res.activeCounter, 1, 2);
+        res.srcStage := TMP_incSrcStage(res.srcStage);
+        return res;
+    end function;
 
-                        exit;
-                    end if;               
-                end if;
-            end loop;
-        end loop;
-        res.match := isNonzero(matchVec);
+    function setArgReady(argState: ArgumentState; wakeups: WakeupStruct)
+    return ArgumentState is
+        variable res: ArgumentState := argState;
+    begin
+        -- apply wakeup
+        res.srcPipe := wakeups.argLocsPipe;
+        res.srcStage := wakeups.argSrc;
+        res.waiting := '0';
+        res.activeCounter := sn(0);
 
         return res;
     end function;
-	
-        -- TODO: include config to distinguish memFail 2 cycles after wakeup (Int) and 1 cycle after wakeup (FP)
-        function dependsOnMemHit(state: ArgumentState; constant IS_FP: boolean) return std_logic is
-            variable matchingCtr: SmallNumber := sn(1);
-        begin
-            if IS_FP then
-                matchingCtr := sn(0);
-            end if;
-            return bool2std(state.srcPipe(1 downto 0) = "10" and state.activeCounter = matchingCtr) and not state.zero and not state.waiting;
-        end function;
 
-        function updateArgInfo_A(argState: ArgumentState) return ArgumentState is
-            variable res: ArgumentState := argState;  
-        begin
-            res.activeCounter := addIntTrunc(res.activeCounter, 1, 2);
-            res.srcStage := TMP_incSrcStage(res.srcStage);
-            return res;
-        end function;
+    function updateWaitingArg(argState: ArgumentState; wakeups: WakeupStruct)
+    return ArgumentState is
+        variable res: ArgumentState := argState;
+    begin
+        if argState.waiting = '1' and wakeups.match = '1' then
+            res := setArgReady(res, wakeups);
+        end if;
 
-        function setArgReady(argState: ArgumentState; wakeups: WakeupStruct)
-        return ArgumentState is
-            variable res: ArgumentState := argState;
-        begin
-            -- apply wakeup
-            res.srcPipe := wakeups.argLocsPipe;
-            res.srcStage := wakeups.argSrc;
-            res.waiting := '0';
-            res.activeCounter := sn(0);
+        return res;
+    end function;
 
-            return res;
-        end function;
-
-        function updateWaitingArg(argState: ArgumentState; wakeups: WakeupStruct)
-        return ArgumentState is
-            variable res: ArgumentState := argState;
-        begin
-            if argState.waiting = '1' and wakeups.match = '1' then
-                res := setArgReady(res, wakeups);
-            end if;
-
-            return res;
-        end function;
-
-        function retractArg(argState: ArgumentState) return ArgumentState is
-            variable res: ArgumentState := argState;
-        begin
-            res.waiting := '1';
-            return res;
-        end function;
+    function retractArg(argState: ArgumentState) return ArgumentState is
+        variable res: ArgumentState := argState;
+    begin
+        res.waiting := '1';
+        return res;
+    end function;
 -----------------------------------------
 
+function getSlowWakeup(si: SchedulerInfo; a: natural; fni: ForwardingInfo; bypass: BypassState; fwModes: ForwardingModeArray) return WakeupStruct is
+    variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+    
+    variable matchVec: std_logic_vector(0 to 2) := (others => '0');
+    variable srcStage: natural := 2;
+begin
+    -- for i in 0 to fwTags.length-1 loop
+    --   if match then
+    --      setMatch();      
+    --      exit;
+    --   end if;
+    --
+    -- end loop;
+
+
+    for p in fwModes'range loop
+        matchVec := setMatch(matchVec, p, fwModes(p).stage, findForwardingMatch(si, a, fni, false));
+        if matchVec(p) = '1' then
+            res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+            srcStage := tmpMin(fwModes(p).stage + 2, 2);
+            res.argSrc(1 downto 0) := i2slv(srcStage, 2);
+            
+                exit;             
+        end if;
+    end loop;
+    res.match := isNonzero(matchVec);
+
+    return res;
+end function;
+
+function getSlowWakeup_B(si: SchedulerInfo; a: natural; fni: ForwardingInfo; bypass: BypassState; fwModes: ForwardingModeArray) return WakeupStruct is
+    variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+    constant arg: PhysName := si.dynamic.argStates(a).reg;
+begin
+    for p in 0 to bypass.used'length-1 loop
+        if bypass.used(p) /= '1' then
+            next;
+        end if;
+
+        if bypass.obj(p).dest(PHYS_REG_BITS-1 downto 0) = arg(PHYS_REG_BITS-1 downto 0) then
+            res.match := '1';
+            res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+            res.argSrc(1 downto 0) := i2slv(bypass.phase(p), 2);
+            exit;
+        end if;
+
+    end loop;
+
+    return res;
+end function;
+
+
+function getFastWakeup(si: SchedulerInfo; a: natural; fni: ForwardingInfo; fwModes: ForwardingModeArray) return WakeupStruct is
+    variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+
+    variable matchVec: std_logic_vector(0 to 2) := (others => '0');
+    variable srcStage: natural := 2;
+begin
+
+    for p in fwModes'range loop
+        matchVec := setMatch(matchVec, p, fwModes(p).stage, findForwardingMatch(si, a, fni, false));
+        if matchVec(p) = '1' then
+            res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+            srcStage := tmpMin(fwModes(p).stage + 1, 2);
+            res.argSrc(1 downto 0) := i2slv(srcStage, 2);              
+        end if;
+    end loop;
+    res.match := isNonzero(matchVec);
+
+    return res;
+end function;
+
+function getInitWakeup(si: SchedulerInfo; a: natural; fni: ForwardingInfo; fwModes: ForwardingModeArray) return WakeupStruct is
+    variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+
+    variable matchVec: std_logic_vector(0 to 2) := (others => '0');
+    variable latestStage: integer := 1;
+    variable srcStage: natural := 2;
+begin
+            if si.dynamic.argStates(a).waiting /= '1' then
+                return res;
+            end if;
+
+    for p in fwModes'range loop
+            if fwModes(p).stage < 0 then
+                latestStage := -1;
+            else
+                latestStage := 1;
+            end if;
+    
+        for q in -3 to 1 loop
+            if fwModes(p).stage <= q and q <= latestStage then
+                matchVec := setMatch(matchVec, p, q, findForwardingMatch(si, a, fni, false));   
+                if matchVec(p) = '1' then
+                    res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+                    srcStage := tmpMin(q + 2, 2);
+                    res.argSrc(1 downto 0) := i2slv(srcStage, 2);
+    
+                    exit;
+                end if;               
+            end if;
+        end loop;
+        
+                if matchVec(p) = '1' then
+                    exit;
+                end if;
+    end loop;
+    res.match := isNonzero(matchVec);
+
+    return res;
+end function;
+
+    function getInitWakeup_B(si: SchedulerInfo; a: natural; fni: ForwardingInfo; bypass: BypassState; fwModes: ForwardingModeArray) return WakeupStruct is
+        variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+        constant arg: PhysName := si.dynamic.argStates(a).reg;
+    begin
+            if si.dynamic.argStates(a).waiting /= '1' then
+                return res;
+            end if;
+
+        for p in 0 to bypass.used'length-1 loop
+            if bypass.used(p) /= '1' then
+                next;
+            end if;
+
+            if bypass.obj(p).dest(PHYS_REG_BITS-1 downto 0) = arg(PHYS_REG_BITS-1 downto 0) then
+                res.match := '1';
+                res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+                res.argSrc(1 downto 0) := i2slv(bypass.phase(p), 2);
+                exit;
+            elsif bypass.objNext(p).dest(PHYS_REG_BITS-1 downto 0) = arg(PHYS_REG_BITS-1 downto 0) then
+                res.match := '1';
+                res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+                res.argSrc(1 downto 0) := i2slv(bypass.phase(p) + 1, 2);
+                    if bypass.phase(p) + 1 > 2 then
+                        res.argSrc(1 downto 0) := "10";
+                    end if;
+                exit;
+            elsif bypass.objNext2(p).dest(PHYS_REG_BITS-1 downto 0) = arg(PHYS_REG_BITS-1 downto 0) then
+                res.match := '1';
+                res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+                res.argSrc(1 downto 0) := i2slv(bypass.phase(p) + 2, 2);
+                    if bypass.phase(p) + 2 > 2 then
+                        res.argSrc(1 downto 0) := "10";
+                    end if;
+                exit;
+            end if;
+
+        end loop;
+    
+        return res;
+    end function;
+
+
 -- Wakeups
-function getSlowWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D is
+function getSlowWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D is
 	constant LEN: natural := content'length;
 	variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
 	variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
 begin
-
-	for i in 0 to LEN-1 loop
-		--fma(i) := findForwardingMatches(content(i), fni, false);
-		
-		fma(i).cmps(0) := findForwardingMatch(content(i), 0, fni, false);
-		res(i, 0) := getWakeupStructStatic(fma(i).cmps(0), config.fwModes, false);
-		
-		fma(i).cmps(1) := findForwardingMatch(content(i), 1, fni, false);
-		res(i, 1) := getWakeupStructStatic(fma(i).cmps(1), config.fwModes, false);
+	for i in 0 to LEN-1 loop	
+		res(i, 0) := getSlowWakeup(content(i), 0, fni, bypass, config.fwModes);
+		res(i, 1) := getSlowWakeup(content(i), 1, fni, bypass, config.fwModes);
 	end loop;
-	
+
 	return res;
 end function;
 
+    function getSlowWakeups_B(content: SchedulerInfoArray; fni: ForwardingInfo; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D is
+        constant LEN: natural := content'length;
+        variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
+        variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
+    begin
+        for i in 0 to LEN-1 loop	
+            res(i, 0) := getSlowWakeup_B(content(i), 0, fni, bypass, config.fwModes);
+            res(i, 1) := getSlowWakeup_B(content(i), 1, fni, bypass, config.fwModes);
+        end loop;
+    
+        return res;
+    end function;
 
 function getFastWakeups_O(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D is
 	constant LEN: natural := content'length;
@@ -765,11 +915,8 @@ function getFastWakeups_O(content: SchedulerInfoArray; fni: ForwardingInfo; conf
 	variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
 begin
 	for i in 0 to LEN-1 loop
-		fma(i).cmps(0) := findForwardingMatch(content(i), 0, fni, false);
-		res(i, 0) := getWakeupStructStatic(fma(i).cmps(0), config.fwModes, true);
-							
-		fma(i).cmps(1) := findForwardingMatch(content(i), 1, fni, false);
-		res(i, 1) := getWakeupStructStatic(fma(i).cmps(1), config.fwModes, true);
+		res(i, 0) := getFastWakeup(content(i), 0, fni, config.fwModes);
+		res(i, 1) := getFastWakeup(content(i), 1, fni, config.fwModes);
 	end loop;
 
 	return res;
@@ -781,210 +928,205 @@ function getInitWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; config
 	variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
 begin
 	for i in 0 to LEN-1 loop
-		fma(i).cmps(0) := findForwardingMatch(content(i), 0, fni, false);
-		res(i, 0) := getWakeupStructDynamic(fma(i).cmps(0), config.fwModes);
-							
-		fma(i).cmps(1) := findForwardingMatch(content(i), 1, fni, false);
-		res(i, 1) := getWakeupStructDynamic(fma(i).cmps(1), config.fwModes);
+		res(i, 0) := getInitWakeup(content(i), 0, fni, config.fwModes);
+		res(i, 1) := getInitWakeup(content(i), 1, fni, config.fwModes);
 	end loop;
 
 	return res;
 end function;
 
+    function getInitWakeups_B(content: SchedulerInfoArray; fni: ForwardingInfo; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D is
+        constant LEN: natural := content'length;
+        variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
+        variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
+    begin
+        for i in 0 to LEN-1 loop
+            res(i, 0) := getInitWakeup_B(content(i), 0, fni, bypass, config.fwModes);
+            res(i, 1) := getInitWakeup_B(content(i), 1, fni, bypass, config.fwModes);
+        end loop;
+    
+        return res;
+    end function;
 
 -------------------------------
 -- wups experimental
-        function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup is
-            variable res: ArgWakeup;
-            variable mode: WakeupMode := NONE;
-            constant N_SRCS: natural := MODES'length(2);
-            variable matched, matchedM3, matchedM2, matchedM1: std_logic := '0';
-            --variable pos: natural := 0;
-            variable iqTagFull, iqTagFullM2, iqTagFullM1: SmallNumber := sn(0);
-        begin
-            for i in 0 to N_SRCS-1 loop
-                mode := MODES(MODE_IND, i);
-                
-                case mode is
-                    when FAST =>
-                        iqTagFull := fni.iqTagsM2(i);
-                        iqTagFull := iqTagFull or sn(16*(1+i));
-                        matched := bool2std(argState.iqTag = iqTagFull);
-                        if (matched and argState.waiting) = '1' then
-                            res.active := '1';
-                            res.mode := FAST;
-                            --res.producer := 
-                            res.iqTag := iqTagFull;
-                            res.match := '1';
-                            res.pipe := sn(i);
+    function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup is
+        variable res: ArgWakeup;
+        variable mode: WakeupMode := NONE;
+        constant N_SRCS: natural := MODES'length(2);
+        variable matched, matchedM3, matchedM2, matchedM1: std_logic := '0';
+        variable iqTagFull, iqTagFullM2, iqTagFullM1: SmallNumber := sn(0);
+    begin
+        for i in 0 to N_SRCS-1 loop
+            mode := MODES(MODE_IND, i);
+            
+            case mode is
+                when FAST =>
+                    iqTagFull := fni.iqTagsM2(i);
+                    iqTagFull := iqTagFull or sn(16*(1+i));
+                    matched := bool2std(argState.iqTag = iqTagFull);
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := FAST;
+                        --res.producer := 
+                        res.iqTag := iqTagFull;
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        res.stage := X"00";
+                    end if;
+                    
+                when SLOW =>
+                    matched := bool2std(argState.reg = fni.nextTagsM3(i));
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := SLOW;
+                        --res.producer := 
+                        res.iqTag := fni.iqTagsM3(i);
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        res.stage := X"03";
+                    end if;
+                    
+                when REG =>
+                    matched := bool2std(argState.reg = fni.tags0(i));
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := REG;
+                        --res.producer := 
+                        res.iqTag := fni.iqTags0(i);
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        res.stage := X"02";
+                    end if;
+                    
+                when INIT_FAST => ------------------------------------------------
+                    iqTagFullM2 := fni.iqTagsM2(i);
+                    iqTagFullM2 := iqTagFull or sn(16*(1+i));
+                    matchedM2 := bool2std(argState.iqTag = iqTagFullM2);
+                    iqTagFullM1 := fni.iqTagsM1(i);
+                    iqTagFullM1 := iqTagFullM1 or sn(16*(1+i));
+                    matchedM1 := bool2std(argState.iqTag = iqTagFullM1);
+                    matched := matchedM2 or matchedM1;
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := INIT_FAST;
+                        --res.producer := 
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        
+                        if matchedM1 = '1' then
+                            res.iqTag := iqTagFullM1;
+                            res.stage := X"01";
+                        else
+                            res.iqTag := iqTagFullM2;
                             res.stage := X"00";
                         end if;
+                    end if;
+
+                when INIT_SLOW => -----------------------------------------------
+                    matchedM3 := bool2std(argState.reg = fni.nextTagsM3(i));
+                    matchedM2 := bool2std(argState.reg = fni.nextTagsM2(i));
+                    matchedM1 := bool2std(argState.reg = fni.nextTagsM1(i));
+                    matched := matchedM3 or matchedM2 or matchedM1; 
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := INIT_SLOW;
+                        --res.producer := 
+                        res.match := '1';
+                        res.pipe := sn(i);
                         
-                    when SLOW =>
-                        matched := bool2std(argState.reg = fni.nextTagsM3(i));
-                        if (matched and argState.waiting) = '1' then
-                            res.active := '1';
-                            res.mode := SLOW;
-                            --res.producer := 
+                        if matchedM1 = '1' then
+                            res.iqTag := fni.iqTagsM1(i);
+                            res.stage := X"01";
+                        elsif matchedM2 = '1' then
+                            res.iqTag := fni.iqTagsM2(i);
+                            res.stage := X"00";                      
+                        else
                             res.iqTag := fni.iqTagsM3(i);
-                            res.match := '1';
-                            res.pipe := sn(i);
                             res.stage := X"03";
                         end if;
-                        
-                    when REG =>
-                        matched := bool2std(argState.reg = fni.tags0(i));
-                        if (matched and argState.waiting) = '1' then
-                            res.active := '1';
-                            res.mode := REG;
-                            --res.producer := 
-                            res.iqTag := fni.iqTags0(i);
-                            res.match := '1';
-                            res.pipe := sn(i);
-                            res.stage := X"02";
-                        end if;
-                        
-                    when INIT_FAST => ------------------------------------------------
-                        iqTagFullM2 := fni.iqTagsM2(i);
-                        iqTagFullM2 := iqTagFull or sn(16*(1+i));
-                        matchedM2 := bool2std(argState.iqTag = iqTagFullM2);
-                        iqTagFullM1 := fni.iqTagsM1(i);
-                        iqTagFullM1 := iqTagFullM1 or sn(16*(1+i));
-                        matchedM1 := bool2std(argState.iqTag = iqTagFullM1);
-                        matched := matchedM2 or matchedM1;
-                        if (matched and argState.waiting) = '1' then
-                            res.active := '1';
-                            res.mode := INIT_FAST;
-                            --res.producer := 
-                            res.match := '1';
-                            res.pipe := sn(i);
-                            
-                            if matchedM1 = '1' then
-                                res.iqTag := iqTagFullM1;
-                                res.stage := X"01";
-                            else
-                                res.iqTag := iqTagFullM2;
-                                res.stage := X"00";
-                            end if;
-                        end if;
+                    end if;
 
-                    when INIT_SLOW => -----------------------------------------------
-                        matchedM3 := bool2std(argState.reg = fni.nextTagsM3(i));
-                        matchedM2 := bool2std(argState.reg = fni.nextTagsM2(i));
-                        matchedM1 := bool2std(argState.reg = fni.nextTagsM1(i));
-                        matched := matchedM3 or matchedM2 or matchedM1; 
-                        if (matched and argState.waiting) = '1' then
-                            res.active := '1';
-                            res.mode := INIT_SLOW;
-                            --res.producer := 
-                            res.match := '1';
-                            res.pipe := sn(i);
-                            
-                            if matchedM1 = '1' then
-                                res.iqTag := fni.iqTagsM1(i);
-                                res.stage := X"01";
-                            elsif matchedM2 = '1' then
-                                res.iqTag := fni.iqTagsM2(i);
-                                res.stage := X"00";                      
-                            else
-                                res.iqTag := fni.iqTagsM3(i);
-                                res.stage := X"03";
-                            end if;
-                        end if;
+                when INIT_REG => ------------------------------------------------
+                    matched := bool2std(argState.reg = fni.tags0(i) or argState.reg = fni.tags0(i));
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := INIT_REG;
+                        --res.producer := 
+                        res.iqTag := fni.iqTags0(i);
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        res.stage := X"02";
+                    end if;                        
 
-                    when INIT_REG => ------------------------------------------------
-                        matched := bool2std(argState.reg = fni.tags0(i) or argState.reg = fni.tags0(i));
-                        if (matched and argState.waiting) = '1' then
-                            res.active := '1';
-                            res.mode := INIT_REG;
-                            --res.producer := 
-                            res.iqTag := fni.iqTags0(i);
-                            res.match := '1';
-                            res.pipe := sn(i);
-                            res.stage := X"02";
-                        end if;                        
+                when CONST =>
+                    res.mode := CONST;
 
-                    when CONST =>
-                        res.mode := CONST;
+                when others =>
+            end case;
 
-                    when others =>
-                end case;
+        end loop;
+        return res;
+    end function;
 
-            end loop;
-            return res;
-        end function;
+    function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray is
+        constant LEN: natural := content'length; 
+        variable res: WakeupInfoArray(content'range);
+    begin
 
-        function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray is
-            constant LEN: natural := content'length; 
-            variable res: WakeupInfoArray(content'range);
-        begin
-
-            for i in 0 to LEN-1 loop
-                res(i).arg0 := getWakeup(content(i).dynamic.argStates(0), fni, WAKEUP_SPEC, 0);
-                res(i).arg1 := getWakeup(content(i).dynamic.argStates(1), fni, WAKEUP_SPEC, 1);
-                res(i).active := res(i).arg0.active or res(i).arg1.active;
-            end loop;
-            
-            return res;
-        end function;
+        for i in 0 to LEN-1 loop
+            res(i).arg0 := getWakeup(content(i).dynamic.argStates(0), fni, WAKEUP_SPEC, 0);
+            res(i).arg1 := getWakeup(content(i).dynamic.argStates(1), fni, WAKEUP_SPEC, 1);
+            res(i).active := res(i).arg0.active or res(i).arg1.active;
+        end loop;
+        
+        return res;
+    end function;
 ----------------------------------------------
 
 
-   
 ---------------------------
 -- state handling internal
-        function removeEntry(entry: SchedulerInfo; freed: std_logic) return SchedulerInfo is
-            variable res: SchedulerInfo := entry;
-        begin
-            res.dynamic.full := '0';
-            --res.dynamic.issued := '0';
-            --res.dynamic.active := '0';
-            --res.dynamic.stageCtr := sn(0);
-                res.dynamic.status.issued := '0';
-                res.dynamic.status.active := '0';
-                res.dynamic.status.stageCtr := sn(0);
-            return res;
-        end function;
-        
-        function pullbackEntry(entry: SchedulerInfo) return SchedulerInfo is
-            variable res: SchedulerInfo := entry;
-        begin
-            --res.dynamic.issued := '0';
-            --res.dynamic.active := '1';
-            --res.dynamic.stageCtr := sn(0);
-                res.dynamic.status.issued := '0';
-                res.dynamic.status.active := '1';
-                res.dynamic.status.stageCtr := sn(0);
-            return res;
-        end function;
-        
-        function updateIssuedEntry(entry: SchedulerInfo) return SchedulerInfo is
-            variable res: SchedulerInfo := entry;
-        begin
-            --res.dynamic.stageCtr := addInt(res.dynamic.stageCtr, 1);
-                res.dynamic.status.stageCtr := addInt(res.dynamic.status.stageCtr, 1);
+    function removeEntry(entry: SchedulerInfo; freed: std_logic) return SchedulerInfo is
+        variable res: SchedulerInfo := entry;
+    begin
+        res.dynamic.full := '0';
 
-            return res;
-        end function;
-        
-        function issueEntry(entry: SchedulerInfo) return SchedulerInfo is
-            variable res: SchedulerInfo := entry;
-        begin
-            --res.dynamic.issued := '1';
-            --res.dynamic.active := '0';
-                res.dynamic.status.issued := '1';
-                res.dynamic.status.active := '0';
-            -- TODO: change to hardcoded 1h (then maybe shoudl be made 0 and all checks corrected by -1?
-            --res.dynamic.stageCtr := sn(0);
-                res.dynamic.status.stageCtr := sn(0);
-            return res;
-        end function;
+        res.dynamic.status.issued := '0';
+        res.dynamic.status.active := '0';
+        res.dynamic.status.stageCtr := sn(0);
+        return res;
+    end function;
+    
+    function pullbackEntry(entry: SchedulerInfo) return SchedulerInfo is
+        variable res: SchedulerInfo := entry;
+    begin
+        res.dynamic.status.issued := '0';
+        res.dynamic.status.active := '1';
+        res.dynamic.status.stageCtr := sn(0);
+        return res;
+    end function;
+    
+    function updateIssuedEntry(entry: SchedulerInfo) return SchedulerInfo is
+        variable res: SchedulerInfo := entry;
+    begin
+        res.dynamic.status.stageCtr := addInt(res.dynamic.status.stageCtr, 1);
+        return res;
+    end function;
+    
+    function issueEntry(entry: SchedulerInfo) return SchedulerInfo is
+        variable res: SchedulerInfo := entry;
+    begin
+        res.dynamic.status.issued := '1';
+        res.dynamic.status.active := '0';
+        -- TODO: change to hardcoded 1h (then maybe shoudl be made 0 and all checks corrected by -1?
+        res.dynamic.status.stageCtr := sn(0);
+        return res;
+    end function;
 -----------------------
 
 
-    function updateSchedulerState_S_NEW(state: SchedulerInfo;
-                                  wups: WakeupStructArray2D; k: natural
-                                  )
+    function updateSchedulerState_S_NEW(state: SchedulerInfo; wups: WakeupStructArray2D; k: natural)
     return SchedulerInfo is
         variable res: SchedulerInfo := state;
         variable wakeups: WakeupStruct := DEFAULT_WAKEUP_STRUCT;  
@@ -998,56 +1140,48 @@ end function;
         return res;
     end function;
 
-        function updateSchedulerState_N(state: SchedulerInfo;
-                                      wups: WakeupStructArray2D; k: natural;
-                                      memFail: std_logic;
-                                      config: SchedulerUpdateConfig
-                                      )
-        return SchedulerInfo is
-            variable res: SchedulerInfo := state;
-            variable wakeups: WakeupStruct := DEFAULT_WAKEUP_STRUCT;  
-        begin
-            for a in 0 to 1 loop
-                wakeups := wups(k, a);--getWakeupStruct(fm.cmps(a), config);
-                res.dynamic.argStates(a) := updateArgInfo_A(res.dynamic.argStates(a));
+    function updateSchedulerState_N(state: SchedulerInfo; wups: WakeupStructArray2D; k: natural; memFail: std_logic; config: SchedulerUpdateConfig)
+    return SchedulerInfo is
+        variable res: SchedulerInfo := state;
+        variable wakeups: WakeupStruct := DEFAULT_WAKEUP_STRUCT;  
+    begin
+        for a in 0 to 1 loop
+            wakeups := wups(k, a);
+            res.dynamic.argStates(a) := updateArgInfo_A(res.dynamic.argStates(a));
 
-                if memFail = '1' and not config.ignoreMemFail then
-                -- Resetting to waiting state
-                    if dependsOnMemHit(state.dynamic.argStates(a), config.fp) = '1' then -- Remember, this depends on "old" state, before counter increments!
-                        res.dynamic.argStates(a) := retractArg(res.dynamic.argStates(a));
-                    end if;
-                else
-                -- wakeup
-                    res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wakeups);
+            if memFail = '1' and not config.ignoreMemFail then
+            -- Resetting to waiting state
+                if dependsOnMemHit(state.dynamic.argStates(a), config.fp) = '1' then -- Remember, this depends on "old" state, before counter increments!
+                    res.dynamic.argStates(a) := retractArg(res.dynamic.argStates(a));
                 end if;
-            end loop;
+            else
+            -- wakeup
+                res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wakeups);
+            end if;
+        end loop;
 
-            return res;
-        end function;
+        return res;
+    end function;
 
-            function updateSchedulerArray_S_NEW(schedArray: SchedulerInfoArray; fni: ForwardingInfo; wakeups: WakeupStructArray2D;
-                            memFail: std_logic;
-                            config: SchedulerUpdateConfig)
-            return SchedulerInfoArray is
-                variable res: SchedulerInfoArray(0 to schedArray'length-1);
-            begin
-                for i in schedArray'range loop
-                    res(i) := updateSchedulerState_S_NEW(schedArray(i), wakeups, i);
-                end loop;    
-                return res;
-            end function;
+    function updateSchedulerArray_S_NEW(schedArray: SchedulerInfoArray; fni: ForwardingInfo; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
+    return SchedulerInfoArray is
+        variable res: SchedulerInfoArray(0 to schedArray'length-1);
+    begin
+        for i in schedArray'range loop
+            res(i) := updateSchedulerState_S_NEW(schedArray(i), wakeups, i);
+        end loop;    
+        return res;
+    end function;
 
-            function updateSchedulerArray_N(schedArray: SchedulerInfoArray; fni: ForwardingInfo; wakeups: WakeupStructArray2D;
-                            memFail: std_logic;
-                            config: SchedulerUpdateConfig)
-            return SchedulerInfoArray is
-                variable res: SchedulerInfoArray(0 to schedArray'length-1);
-            begin
-                for i in schedArray'range loop
-                    res(i) := updateSchedulerState_N(schedArray(i), wakeups, i, memFail, config);
-                end loop;    
-                return res;
-            end function;
+    function updateSchedulerArray_N(schedArray: SchedulerInfoArray; fni: ForwardingInfo; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
+    return SchedulerInfoArray is
+        variable res: SchedulerInfoArray(0 to schedArray'length-1);
+    begin
+        for i in schedArray'range loop
+            res(i) := updateSchedulerState_N(schedArray(i), wakeups, i, memFail, config);
+        end loop;    
+        return res;
+    end function;
 
 
     function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray is
@@ -1058,8 +1192,7 @@ end function;
                 for k in 0 to LEN-1 loop
                     if insertionLocs(k, i) = '1' then
                         res(k) := newArr(i);
-                            --res(k).dynamic.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
-                                res(k).dynamic.status.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
+                        res(k).dynamic.status.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
                         exit;
                     end if;
                 end loop;
@@ -1074,7 +1207,6 @@ end function;
     begin
         for i in 0 to LEN-1 loop
             for j in 0 to 2 loop
-                --if res(i).dynamic.issued = '1' then
                 if res(i).dynamic.status.issued = '1' then
                     null;
                 elsif res(i).dynamic.argStates(j).waiting = '1' then
@@ -1098,30 +1230,20 @@ end function;
 
 
 
-    function iqNext_NS(queueContent: SchedulerInfoArray;
-                      sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail: std_logic)
+    function iqNext_NS(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail: std_logic)
     return SchedulerInfoArray is
         constant LEN: natural := queueContent'length;
         variable res: SchedulerInfoArray(queueContent'range) := queueContent;
         variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
     begin
         for i in 0 to LEN-1 loop
-            --res(i).dynamic.freed := '0'; -- This is set for 1 cycle when freeing
-                res(i).dynamic.status.freed := '0'; -- This is set for 1 cycle when freeing
+            res(i).dynamic.status.freed := '0'; -- This is set for 1 cycle when freeing
 
-            --if queueContent(i).dynamic.issued = '1' then
             if queueContent(i).dynamic.status.issued = '1' then
                 -- Remove after successful issue
-                --if slv2u(res(i).dynamic.stageCtr) = IQ_HOLD_TIME - 1   then
                 if slv2u(res(i).dynamic.status.stageCtr) = IQ_HOLD_TIME - 1   then
-                -- if isDone
-                res(i) := removeEntry(res(i), '1');
-                --res(i).dynamic.freed := '1';
+                    res(i) := removeEntry(res(i), '1');
                     res(i).dynamic.status.freed := '1';
-
-                -- pull back because mem miss
-                -- if needsPullback
-                --elsif memFail = '1' and queueContent(i).dynamic.stageCtr(1 downto 0) = "00" then
                 elsif memFail = '1' and queueContent(i).dynamic.status.stageCtr(1 downto 0) = "00" then
                     res(i) := pullbackEntry(res(i));
                 else
@@ -1137,25 +1259,20 @@ end function;
             -- flush on event
             if killMask(i) = '1' then -- the same as at removing successfully issued?
                 res(i) := removeEntry(res(i), '0');
-             end if;
+            end if;
 
              -- set age comparison for possible subsequent flush
-             -- this is done regardless of other parts of state
-             --res(i).dynamic.trial := trialMask(i);        
-                 res(i).dynamic.status.trial := trialMask(i);        
+             -- this is done regardless of other parts of state      
+             res(i).dynamic.status.trial := trialMask(i);        
 
-             --res(i).dynamic.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
-                 res(i).dynamic.status.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
+             res(i).dynamic.status.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
         end loop;
 
         return res;
     end function;
 
 
-        function iqNext_NS_2(queueContent: SchedulerInfoArray;
-                          inputData: SchedulerInfoArray;               
-                          prevSending: std_logic;
-                          insertionLocs: slv2D)
+        function iqNext_NS_2(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
         return SchedulerInfoArray is
             constant LEN: natural := queueContent'length;
             variable res: SchedulerInfoArray(queueContent'range) := queueContent;
@@ -1242,15 +1359,10 @@ end function;
         
     
         res.dynamic.full := a.dynamic.full or b.dynamic.full;
---        res.dynamic.active := a.dynamic.active or b.dynamic.active;
---        res.dynamic.issued := a.dynamic.issued or b.dynamic.issued;
---        res.dynamic.trial := a.dynamic.trial or b.dynamic.trial;
 
-            res.dynamic.status.active := a.dynamic.status.active or b.dynamic.status.active;
-            res.dynamic.status.issued := a.dynamic.status.issued or b.dynamic.status.issued;
-            res.dynamic.status.trial := a.dynamic.status.trial or b.dynamic.status.trial;
-
-        --res.dynamic.poisoned := a.dynamic.poisoned or b.dynamic.poisoned;
+        res.dynamic.status.active := a.dynamic.status.active or b.dynamic.status.active;
+        res.dynamic.status.issued := a.dynamic.status.issued or b.dynamic.status.issued;
+        res.dynamic.status.trial := a.dynamic.status.trial or b.dynamic.status.trial;
         
         res.dynamic.renameIndex := a.dynamic.renameIndex or b.dynamic.renameIndex;
 
@@ -1335,8 +1447,6 @@ end function;
         res.immValue := info.static.immValue;
         res.zero := info.static.zero;
         ----------------------------------------
-
-        --res.poisoned := info.dynamic.poisoned; 
 
         res.readNew := (others => '0');
         

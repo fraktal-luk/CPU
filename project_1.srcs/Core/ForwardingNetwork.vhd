@@ -109,28 +109,14 @@ type ForwardingModeArray is array (natural range <>) of ForwardingMode;
 
 
 ---- 1 per arg. const if unused
---type WakeupModes is record
---    stage: IntArray(0 to 2);
---    fast:  std_logic_vector(0 to 2);
---    const: std_logic_vector(0 to 2);
---end record;
-
---type WakeupModesArray is array(0 to 2) of WakeupModes;
-
---constant DEFAULT_WAKEUP_MODES: WakeupModes := ((others => -5), (others => '0'), (others => '1'));
-
-
---constant WAKEUP_MODES_INT_FULL: WakeupModes :=(
---    (-2, -100, -3),
---    ('1', '0', '0'), -- fast on I0
---    ('0', '1', '0')  -- I1 unused
---);
-
---constant WAKEUP_MODES_ARRAY_I0: WakeupModesArray := (
---    0 => WAKEUP_MODES_INT_FULL,
---    1 => WAKEUP_MODES_INT_FULL,
---    2 => DEFAULT_WAKEUP_MODES
---);
+type BypassState is record
+    used:  std_logic_vector(0 to 2);
+    obj:   ExecResultArray(0 to 2);
+    objNext:   ExecResultArray(0 to 2);
+    objNext2:   ExecResultArray(0 to 2);
+    stage: IntArray(0 to 2);
+    phase: IntArray(0 to 2);
+end record;
 
 
 
@@ -143,9 +129,9 @@ constant FORWARDING_MODES_NONE: ForwardingModeArray(0 to 2) := (
 --
 -- src:   I0   I1   M0
 -- fast: -2    -    -
--- slow: -2    -   -3
+-- slow: -2   -2   -3
 -- 
--- stage: -2  -  -3 
+-- stage: -2  -2  -3 
 -- fast:   1  -   0
 -- const:  0  -   0
 
@@ -156,6 +142,11 @@ constant FORWARDING_MODES_INT: ForwardingModeArray(0 to 2) := (
 constant FORWARDING_MODES_INT_D: ForwardingModeArray(0 to 2) := (
     (-2, false), (-2, false), (-3, false)
 );
+--  Slow wakeups for Int:
+-- 
+--     subpipeI0_Issue_N,   subpipeI1_E1_N,    subpipeM0_RegRead_N
+--          -2 -> 0,          -2 -> 0,             -3 -> -1
+--            true             true                  true
 
 
 -- FP
