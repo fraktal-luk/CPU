@@ -42,9 +42,9 @@ entity IssueQueue is
 
 		fni: in ForwardingInfo;
 
-            bypass: in BypassState;
+        bypass: in BypassState;
 
-		schedulerOut: out SchedulerEntrySlot;
+		schedulerOut: out SchedulerState;
         outputSignals: out IssueQueueSignals;
 
         freedMask: out std_logic_vector(0 to IQ_SIZE-1);
@@ -70,7 +70,7 @@ architecture Behavioral of IssueQueue is
     signal ageMatrix, ageMatrixNext: slv2D(0 to IQ_SIZE-1, 0 to IQ_SIZE-1) := (others => (others => '0'));
     signal insertionLocs: slv2D(0 to IQ_SIZE-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
-    signal wups, wups_B, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
+    signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
 
     signal controlSigs: SlotControlArray(0 to IQ_SIZE-1) := (others => DEFAULT_SLOT_CONTROL);
     signal fullMask, trialMask, killMask, readyMaskAll, selMask, selMask1, selMask2, selMask3, selMask4: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
@@ -84,14 +84,13 @@ architecture Behavioral of IssueQueue is
     signal selectedSlot, selectedSlot1, selectedSlot2, selectedSlot3: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
     signal selectedIqTag: SmallNumber := (others => '0');
 
-        signal wa: WakeupInfoArray(0 to IQ_SIZE-1);
+    signal wa: WakeupInfoArray(0 to IQ_SIZE-1);
 
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
 
 begin
 
     wups <= getSlowWakeups(queueContent, fni, bypass, CFG_WAIT);
-        wups_B <= getSlowWakeups_B(queueContent, fni, bypass, CFG_WAIT);
 
     wupsSelection <= getFastWakeups_O(queueContent, fni, CFG_SEL);
 
@@ -99,19 +98,13 @@ begin
 
     queueContentUpdatedSel <= updateSchedulerArray_S_NEW(queueContent, fni, wupsSelection, fni.memFail, CFG_SEL);
 
-    queueContentUpdated <= updateSchedulerArray_N(queueContent, fni, wups_B, fni.memFail, CFG_WAIT);
+    queueContentUpdated <= updateSchedulerArray_N(queueContent, fni, wups, fni.memFail, CFG_WAIT);
     queueContentUpdated_2 <= iqNext_NS(queueContentUpdated, sends, killMask, trialMask, selMask, fni.memFail);
 
     insertionLocs <= getNewLocs_N(fullMask, TMP_newTags, newArr);
     queueContentNext <= iqNext_NS_2(queueContentUpdated_2, newArr, prevSendingOK, insertionLocs);
 
     ageMatrixNext <= updateAgeMatrix(ageMatrix, insertionLocs, fullMask);
-
-            ch0 <= bool2std(wups_B = wups);
-
-        ch1 <= selectedSlot1.dynamic.status.trial and events.execEvent;
-        ch2 <= selectedSlot2.dynamic.status.trial and events.execEvent;
-        ch3 <= selectedSlot3.dynamic.status.trial and events.execEvent;
 
 
     QUEUE_SYNCHRONOUS: process(clk)
@@ -152,8 +145,6 @@ begin
     anyReadyFull <= isNonzero(readyMaskAll);
     sends <= anyReadyFull and nextAccepting;
     sendingKilled <= isNonzero(killMask and selMask);
-
-    --    bankCounts <= getBankCounts(fullMask);
 
     -- Selection for issue
     selMask <= getSelMask(readyMaskAll, ageMatrix);

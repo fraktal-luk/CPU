@@ -500,7 +500,7 @@ begin
 
               slotSelIntSV, slotIssueIntSV, slotRegReadIntSV,
               slotSelFloatSV, slotIssueFloatSV, slotRegReadFloatSV
-                        : SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+                        : SchedulerState := DEFAULT_SCHED_STATE;
 
        signal resultToIntWQ, resultToIntWQ_Early, resultToFloatWQ, resultToFloatWQ_Early, resultToIntRF, resultToIntRF_Early, resultToIntRF_EarlyEffective,
               resultToFloatRF, resultToFloatRF_Early: ExecResult := DEFAULT_EXEC_RESULT;
@@ -598,23 +598,18 @@ begin
            use work.LogicIssue.all;
             
            signal dataToAlu: ExecResult := DEFAULT_EXEC_RESULT;           
-           signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
+           signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
 
            signal regInfo: RegisterStateArray2D(0 to PIPE_WIDTH-1) := (others => (others => (others => '0')));
            
            constant CFG_ALU: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
-           constant CFG_ALU_Alt: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, true);
                
-           signal wups, wups_B: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
+           signal wups: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
         begin
-            wups <= work.LogicIssue.getInitWakeups(schedInfoA, fni, CFG_ALU);
-                wups_B <= work.LogicIssue.getInitWakeups_B(schedInfoA, fni, bypassInt, CFG_ALU);
-                
-                ch0 <= bool2std(wups_B = wups);
-
+            wups <= work.LogicIssue.getInitWakeups(schedInfoA, fni, bypassInt, CFG_ALU);
 
             schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeALU(renamedDataLivingRe)), aluMask, true, removeArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups_B, memFail, CFG_ALU);
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups, memFail, CFG_ALU);
             schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early );
 
             IQUEUE_I0: entity work.IssueQueue(Behavioral)
@@ -659,7 +654,7 @@ begin
                         argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelI0, outSigsI0.sending), events);
 
                         argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueI0, sendingToRegReadI0, fni, true, false), events);
-                        unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.operation.arith);
+                        unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.st.operation.arith);
                     end if;
                 end process;
 
@@ -672,7 +667,7 @@ begin
 
             dataToAlu <= executeAlu(slotRegReadI0.full and not outSigsI0.killFollower, slotRegReadI0, bqSelected.nip, dataToBranch.controlInfo, unfoldedAluOp);
 
-            dataToBranch <= basicBranch(slotRegReadI0.full and not outSigsI0.killFollower and not lateEventSignal and slotRegReadI0.branchIns,
+            dataToBranch <= basicBranch(slotRegReadI0.full and not outSigsI0.killFollower and not lateEventSignal and slotRegReadI0.st.branchIns,
                                         slotRegReadI0,
                                         bqSelected.tags, bqSelected.controlInfo, bqSelected.target, bqSelected.nip,                            
                                         unfoldedAluOp);
@@ -686,11 +681,11 @@ begin
                 end if;
             end process;
 
-            sendingBranchRR <= (sendingToRegReadI0 and slotIssueI0.branchIns);
+            sendingBranchRR <= (sendingToRegReadI0 and slotIssueI0.st.branchIns);
 
             bqCompareEarly.full <= sendingBranchRR;
-            bqCompareEarly.tag <= slotIssueI0.tags.renameIndex;
-            bqCompareEarly.dest <= slotIssueI0.tags.bqPointer;
+            bqCompareEarly.tag <= slotIssueI0.st.tags.renameIndex;
+            bqCompareEarly.dest <= slotIssueI0.st.tags.bqPointer;
 
             execEventSignalE0 <= branchResultE0.controlInfo.full and branchResultE0.controlInfo.newEvent;
 
@@ -716,21 +711,19 @@ begin
                        use work.LogicIssue.all;
                     
                        signal dataToMul, dataMulE0, dataMulE1, dataMulE2: ExecResult := DEFAULT_EXEC_RESULT;           
-                       signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => work.LogicIssue.DEFAULT_SCHEDULER_INFO);
+                       signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
 
                        signal controlI1_RR, controlToI1_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
 
                        signal regInfo: RegisterStateArray2D(0 to PIPE_WIDTH-1) := (others => (others => (others => '0')));
                        constant CFG_MUL: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false); -- TODO: turn off immediates
                        
-                       signal wups, wups_B: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
+                       signal wups: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
                     begin
-                        wups <= work.LogicIssue.getInitWakeups(schedInfoA, fni, CFG_MUL);
-                            wups_B <= work.LogicIssue.getInitWakeups_B(schedInfoA, fni, bypassInt, CFG_MUL);
-                                                ch1 <= bool2std(wups_B = wups);
+                        wups <= work.LogicIssue.getInitWakeups(schedInfoA, fni, bypassInt, CFG_MUL);
 
                         schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeMul(renamedDataLivingRe)), mulMask, true, removeArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
-                        schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups_B, memFail, CFG_MUL);
+                        schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups, memFail, CFG_MUL);
                         schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early );
                            
                         IQUEUE_I1: entity work.IssueQueue(Behavioral)
@@ -786,8 +779,8 @@ begin
                         end block;
 
                         controlI1_RR.controlInfo.full <= slotRegReadI1.full;
-                        controlI1_RR.op <= slotRegReadI1.operation;
-                        controlI1_RR.tags <= slotRegReadI1.tags;
+                        controlI1_RR.op <= slotRegReadI1.st.operation;
+                        controlI1_RR.tags <= slotRegReadI1.st.tags;
 
                         dataToMul <= executeMulE0(slotRegReadI1.full and not outSigsI1.killSel2, slotRegReadI1, bqSelected.nip);
         
@@ -820,22 +813,20 @@ begin
         SUBPIPE_MEM: block
            use work.LogicIssue.all;
             
-           signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1); 
+           signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
            signal memLoadValue, memResult: Mword := (others => '0');
            signal controlM0_RR, controlToM0_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
-           signal slotRegReadM0iq, slotRegReadM0mq: SchedulerEntrySlot := DEFAULT_SCH_ENTRY_SLOT;
+           signal slotRegReadM0iq, slotRegReadM0mq: SchedulerState := DEFAULT_SCHED_STATE;
            signal resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
            
            constant CFG_MEM: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
             
-           signal wups, wups_B: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
+           signal wups: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
         begin
-           wups <= work.LogicIssue.getInitWakeups(schedInfoA, fni, CFG_MEM);
-               wups_B <= work.LogicIssue.getInitWakeups_B(schedInfoA, fni, bypassInt, CFG_MEM);
-                    ch2 <= bool2std(wups_B = wups);
+           wups <= work.LogicIssue.getInitWakeups(schedInfoA, fni, bypassInt, CFG_MEM);
 
            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingRe), memMask, true, removeArg2(renamedArgsMerged), TMP_renamedDests, TMP_renamedSources);         
-           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups_B, memFail, CFG_MEM);
+           schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups, memFail, CFG_MEM);
            schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early );
            
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)
@@ -915,8 +906,8 @@ begin
             subpipeM0_RR_u <= calcEffectiveAddress_2(slotRegReadM0.full and not outSigsM0.killSel2 and not lateEventSignal, slotRegReadM0, mqRegReadSending, DEFAULT_EXEC_RESULT);
 
             controlM0_RR.controlInfo.full <= slotRegReadM0.full;
-            controlM0_RR.op <= slotRegReadM0.operation;
-            controlM0_RR.tags <= slotRegReadM0.tags;
+            controlM0_RR.op <= slotRegReadM0.st.operation;
+            controlM0_RR.tags <= slotRegReadM0.st.tags;
 
             memCtrlRR <= controlM0_RR;
             memAddressInputEarlyMQ_Ctrl <= controlToM0_E0;
@@ -1003,24 +994,21 @@ begin
                                use work.LogicIssue.all;
 
             signal sendingToRegReadI, sendingToRegReadF, sendingToRegReadIntSV, sendingToRegReadFloatSV: std_logic := '0';
-            signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoUpdatedIntU, schedInfoFloatA, schedInfoUpdatedFloatA, schedInfoUpdatedFloatU: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
+            signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoUpdatedIntU, schedInfoFloatA, schedInfoUpdatedFloatA, schedInfoUpdatedFloatU: SchedulerInfoArray(0 to PIPE_WIDTH-1)
+                        := (others => DEFAULT_SCHEDULER_INFO);
             
             constant CFG_SVI: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, FORWARDING_MODES_SV_INT_D, false);
             constant CFG_SVF: work.LogicIssue.SchedulerUpdateConfig := (true, true, true, FORWARDING_MODES_SV_FLOAT_D, false);
             
-            signal wupsInt, wupsFloat, wupsInt_B, wupsFloat_B: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
+            signal wupsInt, wupsFloat: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
         begin
-            wupsInt <= work.LogicIssue.getInitWakeups(schedInfoIntA, fni, CFG_SVI);
-            wupsFloat <= work.LogicIssue.getInitWakeups(schedInfoFloatA, fniFloat, CFG_SVF);          
-                wupsInt_B <= work.LogicIssue.getInitWakeups_B(schedInfoIntA, fni, bypassIntSV, CFG_SVI);
-                wupsFloat_B <= work.LogicIssue.getInitWakeups_B(schedInfoFloatA, fniFloat, bypassFloatSV, CFG_SVF);
-
-                    ch3 <= bool2std(wupsInt_B = wupsInt and wupsFloat_B = wupsFloat);
+            wupsInt <= work.LogicIssue.getInitWakeups(schedInfoIntA, fni, bypassIntSV, CFG_SVI);
+            wupsFloat <= work.LogicIssue.getInitWakeups(schedInfoFloatA, fniFloat, bypassFloatSV, CFG_SVF);
 
             schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingRe), intStoreMask, false, useStoreArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
-            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray_N(schedInfoIntA, fni, wupsInt_B, memFail, CFG_SVI);
+            schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray_N(schedInfoIntA, fni, wupsInt, memFail, CFG_SVI);
             schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingRe), fpStoreMask, false, useStoreArg2(renamedArgsFloat), TMP_renamedDests, TMP_renamedSources);
-            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray_N(schedInfoFloatA, fniFloat, wupsFloat_B, memFail, CFG_SVF);
+            schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray_N(schedInfoFloatA, fniFloat, wupsFloat, memFail, CFG_SVF);
 
                 schedInfoUpdatedIntU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedIntA, readyRegFlagsSV );
                 schedInfoUpdatedFloatU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedFloatA, readyRegFlagsFloatSV );
@@ -1145,18 +1133,15 @@ begin
         
         SUBPIPE_FP0: block
             use work.LogicIssue.all;
-            signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: work.LogicIssue.SchedulerInfoArray(0 to PIPE_WIDTH-1);
+            signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1);
             
             constant CFG_FP0: work.LogicIssue.SchedulerUpdateConfig := (true, true, false, FORWARDING_MODES_FLOAT_D, false);
-            signal wups, wups_B: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
+            signal wups: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
         begin
-            wups <= work.LogicIssue.getInitWakeups(schedInfoA, fniFloat, CFG_FP0);
-                wups_B <= work.LogicIssue.getInitWakeups_B(schedInfoA, fniFloat, bypassFloat, CFG_FP0);
-
-                    ch4 <= bool2std(wups_B = wups);
+            wups <= work.LogicIssue.getInitWakeups(schedInfoA, fniFloat, bypassFloat, CFG_FP0);
 
             schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_recodeFP(renamedDataLivingRe), fpMask, false, renamedArgsFloat, TMP_renamedDests, TMP_renamedSources);
-            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fniFloat, wups_B, memFail, CFG_FP0);
+            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fniFloat, wups, memFail, CFG_FP0);
             schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsFloat_Early );
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)
@@ -1210,7 +1195,7 @@ begin
             end block;
 
             subpipeF0_RRu.full <= slotRegReadF0.full and not outSigsF0.killSel2;
-            subpipeF0_RRu.tag <= slotRegReadF0.tags.renameIndex;
+            subpipeF0_RRu.tag <= slotRegReadF0.st.tags.renameIndex;
             subpipeF0_RRu.dest <= slotRegReadF0.argSpec.dest;
             subpipeF0_RRu.value <= executeFpu(slotRegReadF0);
 
@@ -1226,8 +1211,8 @@ begin
          end block;
 
          sqValueResult.full <= sendingToStoreWrite;
-         sqValueResult.tag <= stateExecStoreValue.tags.renameIndex;
-         sqValueResult.dest <= stateExecStoreValue.tags.sqPointer;
+         sqValueResult.tag <= stateExecStoreValue.st.tags.renameIndex;
+         sqValueResult.dest <= stateExecStoreValue.st.tags.sqPointer;
          sqValueResult.value <= stateExecStoreValue.args(0);
          
          sqValueResultRR <= sqValueResult;
@@ -1379,7 +1364,7 @@ begin
                                              dbInfo => DEFAULT_DEBUG_INFO,
                                              full => slotIssueI0.full and not memFail,
                                              failed => '0',
-                                             tag => slotIssueI0.tags.renameIndex,
+                                             tag => slotIssueI0.st.tags.renameIndex,
                                              dest => slotIssueI0.argSpec.dest,
                                              value => (others => '0')
                                          );
@@ -1412,7 +1397,7 @@ begin
         port map(
             clk => clk, reset => '0', en => '0',
 
-            writeInput_T(0) => resultToIntRF,                
+            writeInput(0) => resultToIntRF,                
             readAllowVec => (others => '1'), -- TEMP!
  
             selectRead(0 to 2) => regsSelI0,
@@ -1445,7 +1430,7 @@ begin
         port map(
             clk => clk, reset => '0', en => '0',
 
-            writeInput_T(0) => resultToFloatRF, 
+            writeInput(0) => resultToFloatRF, 
             readAllowVec => (others => '1'),
 
             selectRead(0 to 2) => regsSelF0,

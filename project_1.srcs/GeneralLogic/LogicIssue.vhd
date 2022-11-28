@@ -24,166 +24,6 @@ constant PHYS_NAME_NONE: PhysName := (others => '0');
 constant IQ_HOLD_TIME: natural := 3;
 
 
--- DB stuff
-type DbDependency is record
-    -- pragma synthesis off
-    producer: InsTag;
-    cyclesWaiting: integer;
-    cyclesReady: integer;
-    -- pragma synthesis on
-    
-    dummy: DummyType;
-end record;
-
-constant DEFAULT_DB_DEPENDENCY: DbDependency := (
-                                    -- pragma synthesis off
-                                    producer => (others => 'U'),
-                                    cyclesWaiting => -1,
-                                    cyclesReady => -1,
-                                    -- pragma synthesis on
-
-                                    dummy => DUMMY_VALUE
-                                    );
-
-type DbDependencyArray is array(natural range <>) of DbDependency;
-
-
--- Scheduler structure
-type ArgumentState is record
-    used: std_logic;
-    reg: PhysName;
-    iqTag: SmallNumber;
-    zero: std_logic;
-    imm: std_logic;
-    value: Hword;
-    
-    canFail: std_logic; -- maybe a counter is needed 
-
-    activeCounter: SmallNumber;
-    failed: std_logic;
-
-    waiting: std_logic;
-    stored:  std_logic;
-    srcPipe: SmallNumber;
-    srcStage: SmallNumber;
-    
-    dbDep: DbDependency;   
-end record;
-
-constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
-    used => '0',
-    reg => (others => '0'),
-    iqTag => (others => '0'),
-    zero => '0',
-    imm => '0',
-    value => (others => '0'),
-    canFail => '0',
-    activeCounter => (others => '0'),
-    failed => '0',
-    waiting => '0',
-    stored => '0',
-    srcPipe => (others => '0'),
-    srcStage => (others => '0'),
-    
-    dbDep => DEFAULT_DB_DEPENDENCY
-); 
-
-constant DEFAULT_ARG_STATE: ArgumentState := DEFAULT_ARGUMENT_STATE;
-
-type ArgumentStateArray is array(natural range <>) of ArgumentState;
-
--- Scheduler structure
-
-type StaticInfo is record
-    dbInfo: InstructionDebugInfo;
-    operation: SpecificOp;
-    branchIns: std_logic;
-    tags: InstructionTags;    
-    immediate: std_logic;    
-    immValue: Hword;
-    zero: std_logic_vector(0 to 2);    
-end record;
-
-constant DEFAULT_STATIC_INFO: StaticInfo := (
-    dbInfo => DEFAULT_DEBUG_INFO,
-    operation => DEFAULT_SPECIFIC_OP,
-    branchIns => '0',
-    tags => DEFAULT_INSTRUCTION_TAGS,
-    immediate => '0',
-    immValue => (others => '0'),
-    zero => (others => '0')    
-);
-
-type StaticInfoArray is array(natural range <>) of StaticInfo;
-
--- Scheduler structure
-
-type EntryStatus is record
-    active: std_logic;
-    issued: std_logic;
-    freed: std_logic;
-    trial: std_logic;
-    stageCtr: SmallNumber;
-end record;
-
-constant DEFAULT_ENTRY_STATUS: EntryStatus := (
-    active => '0',
-    issued => '0',
-    freed => '0',
-    trial => '0',
-    stageCtr => (others => '0')
-);
-
-type DynamicInfo is record
-    full: std_logic;
-    
-    status: EntryStatus;
-
-    renameIndex: InsTag;
-
-    intDestSel: std_logic;
-    floatDestSel: std_logic;
-    dest: PhysName;
-
-    --destTag: SmallNumber;    
-    argStates: ArgumentStateArray(0 to 2);
-end record;
-
-
-constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
-    full => '0',
---    active => '0',
---    issued => '0',
---    freed => '0',
---    trial => '0',
-    
-    status => DEFAULT_ENTRY_STATUS,
-
---    stageCtr => (others => '0'),
-    renameIndex => (others => '0'),
-    intDestSel => '0',
-    floatDestSel => '0',
-    dest => (others => '0'),
-    --destTag => (others => '0'),
-    argStates => (others => DEFAULT_ARG_STATE)
-);
-
-type DynamicInfoArray is array(natural range <>) of DynamicInfo;
-
--- Scheduler structure
-
-type SchedulerInfo is record
-    dynamic: DynamicInfo;
-    static: StaticInfo;
-end record;
-
-constant DEFAULT_SCHEDULER_INFO: SchedulerInfo := (
-    DEFAULT_DYNAMIC_INFO,
-    DEFAULT_STATIC_INFO
-);
-
-type SchedulerInfoArray is array(natural range <>) of SchedulerInfo;
-
 -- Scheduler transient
 
 type WakeupStruct is record
@@ -264,10 +104,8 @@ function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector;
 
 -- API, enqueue and inside IQ
 function getSlowWakeups(content: SchedulerInfoArray; fni: ForwardingInfo;  bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
-    function getSlowWakeups_B(content: SchedulerInfoArray; fni: ForwardingInfo;  bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
 function getFastWakeups_O(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D;
-function getInitWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D;
-    function getInitWakeups_B(content: SchedulerInfoArray; fni: ForwardingInfo; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
+function getInitWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
 
 -- experimental
 function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup;
@@ -442,7 +280,7 @@ package body LogicIssue is
                 end if;
             end if;
         end if;
-        
+
         res.zero := ri.sourceConst;
         
         if not HAS_IMM then
@@ -623,60 +461,6 @@ package body LogicIssue is
         end if;
     end function;
 
---    function getWakeupStructStatic(fc: ForwardingComparisons; forwardingModes: ForwardingModeArray; selection: boolean)
---    return WakeupStruct is
---        variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
---        variable matchVec: std_logic_vector(0 to 2) := (others => '0');
---        variable srcStage: natural := 2;
---    begin
---        for p in forwardingModes'range loop
---            matchVec := setMatch(matchVec, p, forwardingModes(p).stage, fc);
---            if matchVec(p) = '1' then
---                res.argLocsPipe(2 downto 0) := i2slv(p, 3);
-                
---                srcStage := tmpMin(forwardingModes(p).stage + 1, 2);
---                if not selection then -- if not selection: move srcStage by 1
---                    srcStage := tmpMin(forwardingModes(p).stage + 2, 2);
---                end if;
-
---                res.argSrc(1 downto 0) := i2slv(srcStage, 2);              
---            end if;
---        end loop;
---        res.match := isNonzero(matchVec);
-
---        return res;
---    end function;
-
---    function getWakeupStructDynamic(fc: ForwardingComparisons; forwardingModes: ForwardingModeArray) return WakeupStruct is
---        variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
---        variable matchVec: std_logic_vector(0 to 2) := (others => '0');
---        variable latestStage: integer := 1;
---        variable srcStage: natural := 2;
---    begin
---        for p in forwardingModes'range loop
---                if forwardingModes(p).stage < 0 then
---                    latestStage := -1;
---                else
---                    latestStage := 1;
---                end if;
-
---            for q in -3 to 1 loop
---                if forwardingModes(p).stage <= q and q <= latestStage then
---                    matchVec := setMatch(matchVec, p, q, fc);   
---                    if matchVec(p) = '1' then
---                        res.argLocsPipe(2 downto 0) := i2slv(p, 3);
---                        srcStage := tmpMin(q + 2, 2);
---                        res.argSrc(1 downto 0) := i2slv(srcStage, 2);
-
---                        exit;
---                    end if;               
---                end if;
---            end loop;
---        end loop;
---        res.match := isNonzero(matchVec);
-
---        return res;
---    end function;
 
     -- TODO: include config to distinguish memFail 2 cycles after wakeup (Int) and 1 cycle after wakeup (FP)
     function dependsOnMemHit(state: ArgumentState; constant IS_FP: boolean) return std_logic is
@@ -726,39 +510,11 @@ package body LogicIssue is
         res.waiting := '1';
         return res;
     end function;
+
 -----------------------------------------
 
+
 function getSlowWakeup(si: SchedulerInfo; a: natural; fni: ForwardingInfo; bypass: BypassState; fwModes: ForwardingModeArray) return WakeupStruct is
-    variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
-    
-    variable matchVec: std_logic_vector(0 to 2) := (others => '0');
-    variable srcStage: natural := 2;
-begin
-    -- for i in 0 to fwTags.length-1 loop
-    --   if match then
-    --      setMatch();      
-    --      exit;
-    --   end if;
-    --
-    -- end loop;
-
-
-    for p in fwModes'range loop
-        matchVec := setMatch(matchVec, p, fwModes(p).stage, findForwardingMatch(si, a, fni, false));
-        if matchVec(p) = '1' then
-            res.argLocsPipe(2 downto 0) := i2slv(p, 3);
-            srcStage := tmpMin(fwModes(p).stage + 2, 2);
-            res.argSrc(1 downto 0) := i2slv(srcStage, 2);
-            
-                exit;             
-        end if;
-    end loop;
-    res.match := isNonzero(matchVec);
-
-    return res;
-end function;
-
-function getSlowWakeup_B(si: SchedulerInfo; a: natural; fni: ForwardingInfo; bypass: BypassState; fwModes: ForwardingModeArray) return WakeupStruct is
     variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
     constant arg: PhysName := si.dynamic.argStates(a).reg;
 begin
@@ -800,114 +556,61 @@ begin
     return res;
 end function;
 
-function getInitWakeup(si: SchedulerInfo; a: natural; fni: ForwardingInfo; fwModes: ForwardingModeArray) return WakeupStruct is
+
+function getInitWakeup(si: SchedulerInfo; a: natural; fni: ForwardingInfo; bypass: BypassState; fwModes: ForwardingModeArray) return WakeupStruct is
     variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
-
-    variable matchVec: std_logic_vector(0 to 2) := (others => '0');
-    variable latestStage: integer := 1;
-    variable srcStage: natural := 2;
+    constant arg: PhysName := si.dynamic.argStates(a).reg;
 begin
-            if si.dynamic.argStates(a).waiting /= '1' then
-                return res;
-            end if;
+        if si.dynamic.argStates(a).waiting /= '1' then
+         --   return res;
+        end if;
 
-    for p in fwModes'range loop
-            if fwModes(p).stage < 0 then
-                latestStage := -1;
-            else
-                latestStage := 1;
-            end if;
-    
-        for q in -3 to 1 loop
-            if fwModes(p).stage <= q and q <= latestStage then
-                matchVec := setMatch(matchVec, p, q, findForwardingMatch(si, a, fni, false));   
-                if matchVec(p) = '1' then
-                    res.argLocsPipe(2 downto 0) := i2slv(p, 3);
-                    srcStage := tmpMin(q + 2, 2);
-                    res.argSrc(1 downto 0) := i2slv(srcStage, 2);
-    
-                    exit;
-                end if;               
-            end if;
-        end loop;
-        
-                if matchVec(p) = '1' then
-                    exit;
+    for p in 0 to bypass.used'length-1 loop
+        if bypass.used(p) /= '1' then
+            next;
+        end if;
+
+        if bypass.obj(p).dest(PHYS_REG_BITS-1 downto 0) = arg(PHYS_REG_BITS-1 downto 0) then
+            res.match := '1';
+            res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+            res.argSrc(1 downto 0) := i2slv(bypass.phase(p), 2);
+            exit;
+        elsif bypass.objNext(p).dest(PHYS_REG_BITS-1 downto 0) = arg(PHYS_REG_BITS-1 downto 0) then
+            res.match := '1';
+            res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+            res.argSrc(1 downto 0) := i2slv(bypass.phase(p) + 1, 2);
+                if bypass.phase(p) + 1 > 2 then
+                    res.argSrc(1 downto 0) := "10";
                 end if;
+            exit;
+        elsif bypass.objNext2(p).dest(PHYS_REG_BITS-1 downto 0) = arg(PHYS_REG_BITS-1 downto 0) then
+            res.match := '1';
+            res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+            res.argSrc(1 downto 0) := i2slv(bypass.phase(p) + 2, 2);
+                if bypass.phase(p) + 2 > 2 then
+                    res.argSrc(1 downto 0) := "10";
+                end if;
+            exit;
+        end if;
+
     end loop;
-    res.match := isNonzero(matchVec);
 
     return res;
 end function;
 
-    function getInitWakeup_B(si: SchedulerInfo; a: natural; fni: ForwardingInfo; bypass: BypassState; fwModes: ForwardingModeArray) return WakeupStruct is
-        variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
-        constant arg: PhysName := si.dynamic.argStates(a).reg;
-    begin
-            if si.dynamic.argStates(a).waiting /= '1' then
-                return res;
-            end if;
 
-        for p in 0 to bypass.used'length-1 loop
-            if bypass.used(p) /= '1' then
-                next;
-            end if;
-
-            if bypass.obj(p).dest(PHYS_REG_BITS-1 downto 0) = arg(PHYS_REG_BITS-1 downto 0) then
-                res.match := '1';
-                res.argLocsPipe(2 downto 0) := i2slv(p, 3);
-                res.argSrc(1 downto 0) := i2slv(bypass.phase(p), 2);
-                exit;
-            elsif bypass.objNext(p).dest(PHYS_REG_BITS-1 downto 0) = arg(PHYS_REG_BITS-1 downto 0) then
-                res.match := '1';
-                res.argLocsPipe(2 downto 0) := i2slv(p, 3);
-                res.argSrc(1 downto 0) := i2slv(bypass.phase(p) + 1, 2);
-                    if bypass.phase(p) + 1 > 2 then
-                        res.argSrc(1 downto 0) := "10";
-                    end if;
-                exit;
-            elsif bypass.objNext2(p).dest(PHYS_REG_BITS-1 downto 0) = arg(PHYS_REG_BITS-1 downto 0) then
-                res.match := '1';
-                res.argLocsPipe(2 downto 0) := i2slv(p, 3);
-                res.argSrc(1 downto 0) := i2slv(bypass.phase(p) + 2, 2);
-                    if bypass.phase(p) + 2 > 2 then
-                        res.argSrc(1 downto 0) := "10";
-                    end if;
-                exit;
-            end if;
-
-        end loop;
-    
-        return res;
-    end function;
-
-
--- Wakeups
 function getSlowWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D is
-	constant LEN: natural := content'length;
-	variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
-	variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
+    constant LEN: natural := content'length;
+    variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
+    variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
 begin
-	for i in 0 to LEN-1 loop	
-		res(i, 0) := getSlowWakeup(content(i), 0, fni, bypass, config.fwModes);
-		res(i, 1) := getSlowWakeup(content(i), 1, fni, bypass, config.fwModes);
-	end loop;
+    for i in 0 to LEN-1 loop	
+        res(i, 0) := getSlowWakeup(content(i), 0, fni, bypass, config.fwModes);
+        res(i, 1) := getSlowWakeup(content(i), 1, fni, bypass, config.fwModes);
+    end loop;
 
-	return res;
+    return res;
 end function;
-
-    function getSlowWakeups_B(content: SchedulerInfoArray; fni: ForwardingInfo; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D is
-        constant LEN: natural := content'length;
-        variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
-        variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
-    begin
-        for i in 0 to LEN-1 loop	
-            res(i, 0) := getSlowWakeup_B(content(i), 0, fni, bypass, config.fwModes);
-            res(i, 1) := getSlowWakeup_B(content(i), 1, fni, bypass, config.fwModes);
-        end loop;
-    
-        return res;
-    end function;
 
 function getFastWakeups_O(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D is
 	constant LEN: natural := content'length;
@@ -922,31 +625,20 @@ begin
 	return res;
 end function;
 
-function getInitWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D is
-	constant LEN: natural := content'length;
-	variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
-	variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
-begin
-	for i in 0 to LEN-1 loop
-		res(i, 0) := getInitWakeup(content(i), 0, fni, config.fwModes);
-		res(i, 1) := getInitWakeup(content(i), 1, fni, config.fwModes);
-	end loop;
 
-	return res;
+function getInitWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D is
+    constant LEN: natural := content'length;
+    variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
+    variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
+begin
+    for i in 0 to LEN-1 loop
+        res(i, 0) := getInitWakeup(content(i), 0, fni, bypass, config.fwModes);
+        res(i, 1) := getInitWakeup(content(i), 1, fni, bypass, config.fwModes);
+    end loop;
+
+    return res;
 end function;
 
-    function getInitWakeups_B(content: SchedulerInfoArray; fni: ForwardingInfo; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D is
-        constant LEN: natural := content'length;
-        variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
-        variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
-    begin
-        for i in 0 to LEN-1 loop
-            res(i, 0) := getInitWakeup_B(content(i), 0, fni, bypass, config.fwModes);
-            res(i, 1) := getInitWakeup_B(content(i), 1, fni, bypass, config.fwModes);
-        end loop;
-    
-        return res;
-    end function;
 
 -------------------------------
 -- wups experimental
@@ -1438,15 +1130,16 @@ end function;
     begin
         res.full := full;
         
+            res.st := info.static;
         ----------------------------------------
-        res.dbInfo := info.static.dbInfo;
-        res.operation := info.static.operation;
-        res.branchIns := info.static.branchIns;
-        res.tags := info.static.tags;
-        res.immediate := info.static.immediate;    
-        res.immValue := info.static.immValue;
-        res.zero := info.static.zero;
-        ----------------------------------------
+--        res.dbInfo := info.static.dbInfo;
+--        res.operation := info.static.operation;
+--        res.branchIns := info.static.branchIns;
+--        res.tags := info.static.tags;
+--        res.immediate := info.static.immediate;    
+--        res.immValue := info.static.immValue;
+--        res.zero := info.static.zero;
+--        ----------------------------------------
 
         res.readNew := (others => '0');
         
@@ -1488,7 +1181,7 @@ end function;
         variable res: SchedulerState := TMP_prepareDispatchSlot(input, prevSending);
     begin
         if IMM_AS_REG then
-            res.immValue(PhysName'length-2 downto 0) := res.argSpec.args(1)(6 downto 0);
+            res.st.immValue(PhysName'length-2 downto 0) := res.argSpec.args(1)(6 downto 0);
         end if;
         
         return res;
@@ -1504,7 +1197,7 @@ end function;
             res.argSpec.args(0) := (others => '0');
         end if;
     
-        if res.argSrc(1)(1) /= '1' or res.zero(1) = '1' then
+        if res.argSrc(1)(1) /= '1' or res.st.zero(1) = '1' then
             res.argSpec.args(1) := (others => '0');
         end if;
         
@@ -1525,7 +1218,7 @@ end function;
             return res;    
         end if;
     
-        if res.zero(0) = '1' then
+        if res.st.zero(0) = '1' then
             res.args(0) := (others => '0');
         elsif res.argSrc(0)(1 downto 0) = "00" then
             res.args(0) := fni.values0(slv2u(res.argLocsPipe(0)(1 downto 0)));
@@ -1535,10 +1228,10 @@ end function;
             res.args(0) := (others => '0');           
         end if;
     
-        if res.zero(1) = '1' then
+        if res.st.zero(1) = '1' then
             if USE_IMM then
-                res.args(1)(31 downto 16) := (others => res.immValue(15));
-                res.args(1)(15 downto 0) := res.immValue;
+                res.args(1)(31 downto 16) := (others => res.st.immValue(15));
+                res.args(1)(15 downto 0) := res.st.immValue;
             else
                 res.args(1) := (others => '0');
             end if;
