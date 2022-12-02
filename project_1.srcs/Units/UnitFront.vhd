@@ -144,13 +144,15 @@ begin
 	begin
 	    partMask <= partialMask(predictedAddress);
         decodedGroup <= decodeGroup(stageDataOutFetch1, fetchedLine1, stageDataOutFetch1.ip, partMask);
-	
-        data_C <= getFrontEventMulti(predictedAddress, stageDataOutFetch1.ip, stageDataOutFetch1.target, stageDataOutFetch1, fetchedLine1, partMask, decodedGroup);
 
-        decodedFullMask <= extractFullMask(data_C);
+	       -- decodedGroup here sems to be only for .controlInfo.specialAction and firstBr
+        data_C <= getFrontEventMulti(--predictedAddress,
+                                     stageDataOutFetch1.ip, stageDataOutFetch1.target, fetchedLine1, partMask,-- decodedGroup,
+                                     decodedGroup(0).ins.controlInfo.firstBr);
 
         earlyBranchIn <= getEarlyEvent(data_C, stageDataOutFetch1.target, predictedAddress, fetchStall);
 
+        decodedFullMask <= extractFullMask(data_C);
         earlyBranchMultiDataInA_IB <= setFullMask(decodedGroup, decodedFullMask);
         
         dataToIbuffer_OLD <= adjustStage(earlyBranchMultiDataInA_IB);
@@ -158,7 +160,7 @@ begin
 
         data_CA <= adjustStage(data_C);
 
-        toBQ <= prepareForBQ(stageDataOutFetch1.ip, data_CA);
+        toBQ <= prepareForBQ(stageDataOutFetch1.ip, data_CA, decodedGroup(0).ins.controlInfo.firstBr);
         bqDataSigPre <= assignSeqNum(toBQ, decodeCounter);
     end block;
 

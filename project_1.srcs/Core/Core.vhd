@@ -63,9 +63,7 @@ end Core;
 architecture Behavioral of Core is
 
     signal frontAccepting, bpAccepting, bpSending, renameAllow, frontGroupSend, frontSendAllow, canSendRename, robSending,
-            renameSendingBr, renamedSending, commitAccepting,
-           frontEventSignal, bqAccepting,
-           execEventSignalE0, execEventSignalE1, lateEventSignal, lateEventSetPC,
+           renameSendingBr, renamedSending, commitAccepting, frontEventSignal, bqAccepting, execEventSignalE0, execEventSignalE1, lateEventSignal, lateEventSetPC,
            allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
            mqReady, mqIssueSending, mqRegReadSending, memoryMissed, sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
            : std_logic := '0';
@@ -83,7 +81,7 @@ architecture Behavioral of Core is
     signal bqPointer, bqPointerSeq, lqPointer, sqPointer: SmallNumber := (others => '0');
 
     signal commitGroupCtr, commitGroupCtrNext: InsTag := (others => '0'); -- TODO: check if can be internal to RegManager (inc on commit signal)
-        signal renameGroupCtrNext: InsTag := (others => '0'); -- TODO: check if can be internal to RegManager (inc on commit signal)
+    signal renameGroupCtrNext: InsTag := (others => '0'); -- TODO: check if can be internal to RegManager (inc on commit signal)
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal intType: std_logic_vector(0 to 1) := (others => '0');
@@ -563,7 +561,7 @@ begin
 
         signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
 
-                signal bypassInt, bypassFloat, bypassIntSV, bypassFloatSV: BypassState;
+        signal bypassInt, bypassFloat, bypassIntSV, bypassFloatSV: BypassState;
 
 
         function TMP_clearFull(ss: SchedulerState; evts: EventState) return SchedulerState is
