@@ -1,0 +1,29 @@
+$start
+	add_i r1, r0, 1
+	add_i r2, r0, 32
+	add_i r3, r0, 64
+	add_i r4, r0, 1
+
+	mult     r5, r2, r3 ; mul	      r0, r1, r2
+	mulh_u	 r1, r4, r5
+	mulh_s	 r2, r6, r7
+	or_r 	 r0, r0, r0 ;or_r  	  r0, r0, r0
+
+	or_r  r0, r0, r0
+	or_r  r0, r0, r0
+	or_r  r0, r0, r0
+	or_r  r0, r0, r0
+
+	or_r  r0, r0, r0
+	or_r  r0, r0, r0
+	or_r  r0, r0, r0
+	or_r  r0, r0, r0
+
+	or_r  r6, r5, r0
+	add_i r7, r6, -96
+	jnz_i r7, $error
+	or_r  r0, r0, r0
+
+	sys call
+$error
+    sys error

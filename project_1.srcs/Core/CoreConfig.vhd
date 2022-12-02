@@ -12,7 +12,7 @@ package CoreConfig is
 constant CLEAR_DEBUG_INFO: boolean := true;
 constant VIEW_ON: boolean := false;
 
-constant DB_ENABLE: boolean := true;
+constant DB_ENABLE: boolean := false;
 constant DB_LOG_EVENTS: boolean := false;
 
 
@@ -26,6 +26,9 @@ constant ALIGN_BITS: natural := LOG2_PIPE_WIDTH + 2;
 constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');    
 
 constant FETCH_WIDTH: positive := PIPE_WIDTH; 
+
+constant RENAME_WIDTH: natural := PIPE_WIDTH;
+alias RENAME_W is RENAME_WIDTH;
 
 constant IBUFFER_SIZE: positive := 4;
 constant ROB_SIZE: positive := 8; 
@@ -56,24 +59,17 @@ constant IQ_SIZE_FLOAT_SV: natural := 12;
 constant BQ_SIZE: natural := 8;
 constant SQ_SIZE: natural := 8;
 constant LQ_SIZE: natural := 8;
+constant MQ_SIZE: natural := 8;
 
-constant BQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
+constant BQ_PTR_MASK: SmallNumber := i2slv(BQ_SIZE-1, SMALL_NUMBER_SIZE);
 constant SQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
-constant LQ_PTR_MASK: SmallNumber := i2slv(SQ_SIZE-1, SMALL_NUMBER_SIZE);
+constant LQ_PTR_MASK: SmallNumber := i2slv(LQ_SIZE-1, SMALL_NUMBER_SIZE);
+constant MQ_PTR_MASK: SmallNumber := i2slv(MQ_SIZE-1, SMALL_NUMBER_SIZE);
 
 constant BQ_PTR_SIZE: natural := countOnes(BQ_PTR_MASK);
 constant SQ_PTR_SIZE: natural := countOnes(SQ_PTR_MASK);
 constant LQ_PTR_SIZE: natural := countOnes(LQ_PTR_MASK);
-
-    constant TMP_PARAM_COMPRESS_RETURN: boolean := false;
-    
-    constant TMP_PARAM_NEW_DECODE: boolean := true;
-    
-    constant TMP_PARAM_I0_DELAY: boolean := true;
-    constant TMP_PARAM_M0_DELAY: boolean := true;
-    
-    constant TMP_PARAM_LATE_SRC_DEP_OVERRIDE: boolean := false;
-    constant TMP_PARAM_LATE_SRC_STABLE_OVERRIDE: boolean := false;
+constant MQ_PTR_SIZE: natural := countOnes(MQ_PTR_MASK);
 
 end CoreConfig;
 

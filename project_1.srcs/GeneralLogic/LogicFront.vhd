@@ -70,71 +70,48 @@ begin
 	res.specificOperation := decodedIns.specificOperation;
 	res.constantArgs := decodedIns.constantArgs;
 	res.virtualArgSpec := decodedIns.virtualArgSpec;
-	
-    res.classInfo.fpRename := decodedIns.classInfo.fpRename;
-    res.classInfo.branchIns := decodedIns.classInfo.branchIns;
-    res.classInfo.mainCluster := decodedIns.classInfo.mainCluster;
-    res.classInfo.secCluster := decodedIns.classInfo.secCluster;
-    res.classInfo.useLQ := decodedIns.classInfo.useLQ;
 
-        res.specificOperation := op;
-        res.classInfo := classInfo;
-        res.constantArgs := constantArgs;
-        res.virtualArgSpec := argSpec;
+    res.typeInfo := classInfo;
 
-     if res.specificOperation.subpipe = none then                 	
+    res.specificOperation := op;
+    res.constantArgs := constantArgs;
+    res.virtualArgSpec := argSpec;
+
+    if res.specificOperation.subpipe = none then                 	
         res.controlInfo.specialAction := '1';
-        -- CAREFUL: Those ops don't get issued, they are handled at retirement
-        res.classInfo.mainCluster := '0';
-        res.classInfo.secCluster := '0';
-        
+    
+        res.typeInfo.mainCluster := '0';
+        res.typeInfo.secCluster := '0';
+    
         if res.specificOperation.system = opUndef then
             res.controlInfo.hasException := '1';
         end if;        
     end if;
    
-    res.controlInfo.specialAction := not (res.classInfo.mainCluster or res.classInfo.secCluster);
+    res.controlInfo.specialAction := not (res.typeInfo.mainCluster or res.typeInfo.secCluster);
 
 	return res;
 end function;
 
 
-
-
 function isJumpLink(w: Word) return std_logic is
 begin
-    if TMP_PARAM_NEW_DECODE then
-        return bool2std(w(31 downto 26) = "001001");
-    end if;
-
-    return bool2std(w(31 downto 26) = opcode2slv(jl));
+    return bool2std(w(31 downto 26) = "001001");
 end function;
 
 function isJumpCond(w: Word) return std_logic is
 begin
-    if TMP_PARAM_NEW_DECODE then
-        return bool2std(w(31 downto 26) = "001010" or w(31 downto 26) = "001011");
-    end if;
-
-    return bool2std(w(31 downto 26) = opcode2slv(jz)) or bool2std(w(31 downto 26) = opcode2slv(jnz));
+    return bool2std(w(31 downto 26) = "001010" or w(31 downto 26) = "001011");
 end function;
 
 function isJumpLong(w: Word) return std_logic is
 begin
-    if TMP_PARAM_NEW_DECODE then
-        return bool2std(w(31 downto 26) = "001000");
-    end if;
-
-    return bool2std(w(31 downto 26) = opcode2slv(j));
+    return bool2std(w(31 downto 26) = "001000");
 end function;
 
 function isJumpReg(w: Word) return std_logic is
 begin
-    if TMP_PARAM_NEW_DECODE then
-        return bool2std(w(31 downto 26) = "000000" and w(15 downto 10) = "000010" and (w(4 downto 0) = "00000" or w(4 downto 0) = "00001"));
-    end if;
-    
-    return bool2std(w(31 downto 26) = opcode2slv(ext1)) and bool2std(w(15 downto 10) = opcont2slv(ext1, jzR) or w(15 downto 10) = opcont2slv(ext1, jzR));
+    return bool2std(w(31 downto 26) = "000000" and w(15 downto 10) = "000010" and (w(4 downto 0) = "00000" or w(4 downto 0) = "00001"));
 end function;
 
 
@@ -165,7 +142,8 @@ begin
     end loop;
     
     for i in 0 to PIPE_WIDTH-1 loop
-        if full(i) = '1' and res(i).ins.classInfo.branchIns = '1' then
+        --if full(i) = '1' and res(i).ins.classInfo.branchIns = '1' then
+        if full(i) = '1' and res(i).ins.typeInfo.branchIns = '1' then
             res(0).ins.controlInfo.firstBr := '1'; -- TMP, indicating that group has a branch
         end if;   
     end loop;
@@ -308,28 +286,18 @@ begin
     
     res.firstBr := isl.ins.controlInfo.firstBr;
     
-    res.branchIns := isl.ins.classInfo.branchIns;
     res.frontBranch := isl.ins.controlInfo.frontBranch;
     res.confirmedBranch := isl.ins.controlInfo.confirmedBranch;
     res.specialAction := isl.ins.controlInfo.specialAction;
 
-    res.fpRename := isl.ins.classInfo.fpRename;           
-    res.mainCluster := isl.ins.classInfo.mainCluster;            
-    res.secCluster := isl.ins.classInfo.secCluster;            
-    res.useLQ   := isl.ins.classInfo.useLQ;
-
+    res.classInfo := isl.ins.typeInfo;
 
     res.specificOperation := isl.ins.specificOperation;
     res.constantArgs := isl.ins.constantArgs;
     res.argSpec := isl.ins.virtualArgSpec;
     
-        res.dbInfo := isl.ins.dbInfo;
-          -- controlInfo        ]
-          -- classInfo          ] -> contained in ControlPacket
-          -- specificOperation  ]
-          -- constantArgs    ] -- depend on decoded format
-          -- virtualArgSpec  ]  
-    
+    res.dbInfo := isl.ins.dbInfo;
+
     return res;
 end function;
 
@@ -414,7 +382,8 @@ begin
     for i in res'range loop
         res(i).controlInfo := insVec(i).ins.controlInfo;
         res(i).controlInfo.full := insVec(i).full;
-        res(i).classInfo := insVec(i).ins.classInfo;
+
+        res(i).classInfo := insVec(i).ins.typeInfo;
     end loop;
     
     return res;
@@ -428,8 +397,6 @@ function prepareForBQ(ip: Mword; insVec: ControlPacketArray) return ControlPacke
 	variable branchMask: std_logic_vector(insVec'range) := (others => '0');
 	variable nSh: natural := 0;
 begin
-    -- insVec: USES (controlInfo, target, full, classInfo.branchIns) [ result is overwritten]
-
     insVecSh := insVec;
     nSh := slv2u(ip(ALIGN_BITS-1 downto 2));
 
@@ -447,7 +414,7 @@ begin
 
 	for i in insVec'range loop
        res(i).controlInfo := insVecSh(i).controlInfo;
-       res(i).controlInfo.full := branchMask(i) and insVec(i).controlInfo.full; -- TODO: getBranchMask already check for 'full' - remove it here?
+       res(i).controlInfo.full := branchMask(i);
        res(i).classInfo := insVecSh(i).classInfo;
        res(i).target := insVecSh(i).target;
        res(i).nip := insVecSh(i).nip;
@@ -499,8 +466,7 @@ begin
     -- pragma synthesis off
     res.bits := bits;
     res.adr := ip;
-        res.str := work.Assembler.disasmWord(bits)(res.str'range);
-
+    res.str := work.Assembler.disasmWord(bits)(res.str'range);
     -- pragma synthesis on
     return res;
 end function;

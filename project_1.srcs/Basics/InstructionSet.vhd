@@ -30,7 +30,7 @@ type Opcode0 is (none, jumpLong, jumpLink, jumpZ, jumpNZ, intAlu, floatOp, intMe
 type Opcode1 is (none,
                  
                  -- intAlu
-                 intLogic, intArith, jumpReg,
+                 intLogic, intArith, jumpReg, intMul,
                  
                  -- intAluImm
                  intShiftLogical, intShiftArith, intRotate,
@@ -64,7 +64,9 @@ type Opcode2 is (none,
 
                 intAnd, intOr, intXor,
                 
-                intAdd, intSub, 
+                intAdd, intSub,  
+                
+                intMul, intMulHU, intMulHS,
                 
                 
                 floatMove,
@@ -198,11 +200,11 @@ constant FormatList: FormatAssignments(undef to sys_send) :=
     rot_i => intImm10,
     rot_r => int2R,
     
-    mul => Int2R,
+    mult => Int2R,
     mulh_s => Int2R,
     mulh_u => Int2R,
-    div_u => Int2R,
     div_s => Int2R,
+    div_u => Int2R,
     
     mov_f => Float1R,
     or_f => Float2R,    -- Float operations
@@ -262,9 +264,8 @@ type Operation is (none,
                     jump,
                     
                     intAnd, intOr, intXor,
-                    
-                    
                     intAdd, intSub,
+                    intMul, intMulHU, intMulHS,
                     
                     intShiftLogical, intShiftArith, intRotate,
                     
@@ -323,7 +324,7 @@ end record;
 
 
 type InstructionDefinition is record
-        mnem: ProcMnemonic;
+    mnem: ProcMnemonic;
     opc0: Opcode0;
     opc1: Opcode1;
     opc2: Opcode2;
@@ -341,8 +342,7 @@ function getDef(i, j, k: integer) return InstructionDefinition;
 
 function buildGeneralTable return GeneralTable;
 
-constant TheTable: GeneralTable --(ProcMnemonic'left to ProcMnemonic'right)
-                                := buildGeneralTable;
+constant TheTable: GeneralTable := buildGeneralTable;
 
 
 constant EmptyTable1: OpcodeTable1 := (others => (none, none, none, undef));
@@ -446,6 +446,7 @@ constant TableIntAlu: OpcodeTable1 := (
     0 => (intLogic, none, intRR, undef),
     1 => (intArith, none, intRR, undef),
     2 => (jumpReg, none, intRR, undef),
+    3 => (intMul,  none, intRR, undef),
     
     others => (none, none, none, undef)
 );
@@ -529,6 +530,12 @@ constant TableJumpReg: OpcodeTable2 := (
     others => (none, none, undef)
 );
 
+constant TableIntMul: OpcodeTable2 := (
+    0 => (intMul,   intMul,  mult),
+    1 => (intMulHU, intMulHU, mulh_u),
+    2 => (intMulHS, intMulHS,  mulh_s),
+    others => (none, none, undef)
+);
 
 constant TableFloatMove: OpcodeTable2 := (
     0 => (floatMove, floatMove, mov_f),
@@ -553,6 +560,8 @@ constant Tables2: TableArray1 := (
     intLogic => TableIntLogic,
     intArith => TableIntArith,
     jumpReg => TableJumpReg,
+    intMul => TableIntMul,
+    
     floatMove => TableFloatMove,
     
     others => EmptyTable2
@@ -586,41 +595,15 @@ function findEncoding(mnem: ProcMnemonic) return InstructionDefinition;
 
 function TMP_processStrings(cmd, a0, a1, a2, a3: string) return Word;
 
+function decodeMnem2(w: Word) return ProcMnemonic;
 
-        -- 
-        function decodeMnem2(w: Word) return ProcMnemonic;
-
-    function TMP_disasm(w: Word) return string;
+function TMP_disasm(w: Word) return string;
 
 end InstructionSet;
 
 
 
 package body InstructionSet is
-
---function findMnemonic(mnem: ProcMnemonic) return boolean is
---    variable op0, op1, op2: integer := -1;
---    variable fmt: Format := none;
---    variable tab1: OpcodeTable1;
---begin
---    -- Search in main table
---    for i in 0 to 63 loop
---        if MainTable(i).mnem = mnem and MainTable(i).op /= none then
---            op0 := i;
---            fmt := MainTable(i).fmt;
-            
---            return true;
---        end if;
---    end loop;
-    
---    -- Search in 1 level tables
---    for t in Tables1'range loop
-        
---    end loop;
-    
---    return false;
---end function;
-
 
 
 function getDef(i, j, k: integer) return InstructionDefinition is
@@ -632,11 +615,6 @@ function getDef(i, j, k: integer) return InstructionDefinition is
     variable fmt: Format;
     variable mnem: ProcMnemonic;
 begin
---    report "Row: ";
---        report integer'image(i);
---        report integer'image(j);
---        report integer'image(k);
-
     if i /= -1 then
         op0 := MainTable(i).name;
         fmt := MainTable(i).fmt;
@@ -672,10 +650,6 @@ function makeRow(i, j, k: integer) return InstructionDefinition is
     variable op: Operation;
     variable fmt: Format;
 begin
---    report "Row: ";
---        report integer'image(i);
---        report integer'image(j);
---        report integer'image(k);
 
     if i /= -1 then
         op0 := MainTable(i).name;
@@ -704,18 +678,14 @@ function buildGeneralTable return GeneralTable is
     variable tab2: OpcodeTable2;
     variable res: GeneralTable;
     variable found: boolean := false;
-begin
-    --        report "Build table";
-        
+begin        
     -- Search in main table
     for i in 0 to 63 loop
-        --found := false;
         if MainTable(i).op /= none then
             -- Add this to the table
             res(MainTable(i).mnem) := makeRow(i, -1, -1);
             res(MainTable(i).mnem).mnem := MainTable(i).mnem;
         else
-            --found := false;
             -- Enter level 1 table 
             tab1 := Tables1(MainTable(i).name);
                   
@@ -724,7 +694,6 @@ begin
                     -- Add to table
                     res(tab1(j).mnem) := makeRow(i, j, -1);
                     res(tab1(j).mnem).mnem := tab1(j).mnem;
-                    --exit;
                 else
                     -- Enter level 2 table
                     tab2 := Tables2(tab1(j).name);
@@ -734,14 +703,8 @@ begin
                             -- Add to table
                             res(tab2(k).mnem) := makeRow(i, j, k);
                             res(tab2(k).mnem).mnem := tab2(k).mnem;
-                            --found := true;
-                            --exit;
                         end if;
                     end loop;
-                    
---                    if found then
---                        exit;
---                    end if;
                 end if;
             end loop;
         end if;
@@ -750,13 +713,12 @@ begin
     return res;
 end function;
 
+
 function findEncoding(mnem: ProcMnemonic) return InstructionDefinition is
     constant Table: GeneralTable := buildGeneralTable;
 begin
     return Table(mnem);    
 end function;
-
-
 
 
 type ArgArray is array(0 to 3) of string(1 to 10);

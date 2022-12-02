@@ -28,6 +28,8 @@ function getVirtualDests(ria: RenameInfoArray) return RegNameArray;
 function getPhysicalArgs(ria: RenameInfoArray) return PhysNameArray;
 function getPhysicalDests(ria: RenameInfoArray) return PhysNameArray;
 
+function getVirtualArgs(ia: BufferEntryArray) return RegNameArray;
+
 function whichTakeReg(ria: RenameInfoArray; fp: boolean) return std_logic_vector;
 function findOverriddenDests(ria: RenameInfoArray; fp: boolean) return std_logic_vector;
 
@@ -53,6 +55,7 @@ function moveBackList(list: PhysNameArray; canWriteBack, putAllow: std_logic; nu
 function splitWord(w: Word) return PhysNameArray;
 
 function getFp1(constant IS_FP: boolean) return natural;
+function initFreeList(constant IS_FP: boolean) return PhysNameArray;
 function initFreeList32(constant IS_FP: boolean) return WordArray;
 function selAndCompactPhysDests(physStableDelayed, physCommitDestsDelayed: PhysNameArray; stableUpdateSelDelayed, freeListPutSel: std_logic_vector)
 return PhysNameArray;
@@ -207,6 +210,16 @@ begin
     return res;
 end function;
 
+function getVirtualArgs(ia: BufferEntryArray) return RegNameArray is
+    variable res: RegNameArray(0 to 3*ia'length-1) := (others => (others => '0'));
+begin
+    for i in ia'range loop
+        res(3*i+0) := ia(i).argSpec.args(0)(4 downto 0);
+        res(3*i+1) := ia(i).argSpec.args(1)(4 downto 0);
+        res(3*i+2) := ia(i).argSpec.args(2)(4 downto 0);
+    end loop;
+    return res;
+end function;
 
 function getVirtualDests(ria: RenameInfoArray) return RegNameArray is
     variable res: RegNameArray(0 to ria'length-1) := (others=>(others=>'0'));
@@ -216,7 +229,6 @@ begin
     end loop;
     return res;
 end function;
-
 
 function getPhysicalArgs(ria: RenameInfoArray) return PhysNameArray is
     variable res: PhysNameArray(0 to 3*ria'length-1) := (others=>(others=>'0'));
@@ -419,6 +431,24 @@ begin
    else
        return 0;
    end if;
+end function;
+
+function initFreeList(constant IS_FP: boolean) return PhysNameArray is
+    variable fp1: natural := 0;
+    variable res: PhysNameArray(0 to FREE_LIST_SIZE - 1) := (others => (others=> '0'));
+begin
+    if IS_FP then
+        fp1 := 1;
+    end if;
+    for i in 0 to (N_PHYS - 32) - 1 loop
+        res(i) := i2slv(i + 32 + fp1, PhysName'length);
+    end loop;
+
+--    -- For FP, there's no register 0, mapper starts with 1:32 rather than 0:31, so one less is in this list
+--    if IS_FP then
+--        res((N_PHYS - 32)/4 - 1)(31 downto 24) := (others => '0');
+--    end if;
+    return res;
 end function;
 
 function initFreeList32(constant IS_FP: boolean) return WordArray is

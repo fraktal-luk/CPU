@@ -51,7 +51,7 @@ type ExecFunc is (
 type SubpipeType is (None, ALU, Mem, FP);
 
 -- TODO: opJl is unneeded because opJ can have a destination
-type ArithOp is (opAnd, opOr, opXor, opAdd, opSub, opShl, opSha, opRot, opJz, opJnz, opJ, opJl, opMul, opMulshs, opMulhu, opDiv);
+type ArithOp is (opAnd, opOr, opXor, opAdd, opSub, opShl, opSha, opRot, opJz, opJnz, opJ, opJl, opMul, opMulHS, opMulHU, opDiv);
 
 type MemOp is (opLoad, opStore, opLoadSys, opStoreSys);
 
@@ -118,27 +118,11 @@ type InstructionDebugInfo is record
     dummy: DummyType;
 end record;
 
-constant DEFAULT_DEBUG_INFO: InstructionDebugInfo := (
-    -- pragma synthesis off
-    cycle => (others => 'U'),
-    index => (others => 'U'),
-    seqNum => (others => 'U'),
-    tag => (others => 'U'),
-    commit => (others => 'U'),
-    adr => (others => 'U'),
-    bits => (others => 'U'),
-    str => (others => ' '),
-    -- pragma synthesis on
- 
-    dummy => DUMMY_VALUE
-);
-
-
 
 type InstructionControlInfo is record
     full: std_logic;
 	newEvent: std_logic; -- True if any new event appears
-	hasInterrupt: std_logic;
+	hasInterrupt: std_logic;   -- CP
 	hasException: std_logic;
     refetch: std_logic;
     frontBranch: std_logic;
@@ -146,28 +130,33 @@ type InstructionControlInfo is record
 	specialAction: std_logic;
 	dbtrap: std_logic;
     orderViolation: std_logic;
-    tlbMiss: std_logic;
-    dataMiss: std_logic;
-    sqMiss:    std_logic;
+    tlbMiss: std_logic;         -- MQ
+    dataMiss: std_logic;        -- MQ
+    sqMiss:    std_logic;       -- MQ
     firstBr: std_logic;
     killed: std_logic;
     causing: std_logic;
     ignored: std_logic;
 end record;
 
-type InstructionClassInfo is record
-	short: std_logic;
-	mainCluster: std_logic;
-	secCluster: std_logic;
-	fpRename: std_logic; -- true if instruction is routed to FP renamer (NOTE, CHECK: Int renamer is used for all ops, even those that don't go to any IQ)
-	branchIns: std_logic;
-	useLQ: std_logic;
-	useSQ: std_logic;
+
+type ClassInfo_Dispatch is record
 	storeInt: std_logic;
-	storeFP: std_logic;
-	useAlu: std_logic;
-	useMem: std_logic;
-	useFP: std_logic;
+    storeFP: std_logic;
+    useAlu: std_logic;
+    useMul: std_logic;
+    useMem: std_logic;
+    useFP: std_logic;
+end record;
+
+
+type InstructionClassInfo is record
+	mainCluster: std_logic; --
+	secCluster: std_logic; --
+	branchIns: std_logic; --
+	useLQ: std_logic; --
+	useSQ: std_logic; -- 
+	useFP: std_logic; -- true if instruction is routed to FP renamer (NOTE, CHECK: Int renamer is used for all ops, even those that don't go to any IQ)
 end record;
 
 
@@ -195,12 +184,15 @@ type InstructionTags is record
     bqPointerSeq: SmallNumber;
 end record;
 
+
 type InstructionState is record
-        dbInfo: InstructionDebugInfo;
+    dbInfo: InstructionDebugInfo;
 	controlInfo: InstructionControlInfo;
 	tags: InstructionTags;
 	specificOperation: SpecificOp;
-	classInfo: InstructionClassInfo;
+	typeInfo: InstructionClassInfo;
+	dispatchInfo: ClassInfo_Dispatch;
+
 	constantArgs: InstructionConstantArgs;
 	virtualArgSpec: InstructionArgSpec;
 	physicalArgSpec: InstructionArgSpec;
@@ -209,11 +201,12 @@ end record;
 type InstructionStateArray is array(integer range <>) of InstructionState;
 
 type ControlPacket is record
-        dbInfo: InstructionDebugInfo;
+    dbInfo: InstructionDebugInfo;
     controlInfo: InstructionControlInfo;
     classInfo: InstructionClassInfo;
     op: SpecificOp;
     tags: InstructionTags;
+
     tag: InsTag;
     ip: Mword;
     nip: Mword;
@@ -221,6 +214,226 @@ type ControlPacket is record
 end record;
 
 type ControlPacketArray is array(integer range <>) of ControlPacket;
+
+
+
+-- DB stuff
+type DbDependency is record
+    -- pragma synthesis off
+    producer: InsTag;
+    cyclesWaiting: integer;
+    cyclesReady: integer;
+    -- pragma synthesis on
+    
+    dummy: DummyType;
+end record;
+
+type DbDependencyArray is array(natural range <>) of DbDependency;
+
+
+-- Scheduler structure
+type ArgumentState is record
+    used: std_logic;
+    reg: PhysName;
+    iqTag: SmallNumber;
+    zero: std_logic;
+    imm: std_logic;
+    value: Hword;
+    
+    canFail: std_logic; -- maybe a counter is needed 
+
+    activeCounter: SmallNumber;
+    failed: std_logic;
+
+    waiting: std_logic;
+    stored:  std_logic;
+    srcPipe: SmallNumber;
+    srcStage: SmallNumber;
+    
+    dbDep: DbDependency;   
+end record;
+
+
+type ArgumentStateArray is array(natural range <>) of ArgumentState;
+
+-- Scheduler structure
+
+type StaticInfo is record
+    dbInfo: InstructionDebugInfo;
+    operation: SpecificOp;
+    branchIns: std_logic;
+    tags: InstructionTags;    
+    immediate: std_logic;    
+    immValue: Hword;
+    zero: std_logic_vector(0 to 2);    
+end record;
+
+
+type StaticInfoArray is array(natural range <>) of StaticInfo;
+
+-- Scheduler structure
+
+type EntryStatus is record
+    active: std_logic;
+    issued: std_logic;
+    freed: std_logic;
+    trial: std_logic;
+    stageCtr: SmallNumber;
+end record;
+
+
+type DynamicInfo is record
+    full: std_logic;
+    
+    status: EntryStatus;
+
+    renameIndex: InsTag;
+
+    intDestSel: std_logic;
+    floatDestSel: std_logic;
+    dest: PhysName;
+
+    argStates: ArgumentStateArray(0 to 2);
+end record;
+
+
+type DynamicInfoArray is array(natural range <>) of DynamicInfo;
+
+-- Scheduler structure
+
+type SchedulerInfo is record
+    dynamic: DynamicInfo;
+    static: StaticInfo;
+end record;
+
+type SchedulerInfoArray is array(natural range <>) of SchedulerInfo;
+
+type SchedulerState is record
+    full: std_logic;
+
+    st: StaticInfo;
+
+    argSpec: InstructionArgSpec;
+    destTag: SmallNumber;
+    poisoned: std_logic;
+
+    readNew: std_logic_vector(0 to 2);
+    args: MwordArray(0 to 2);
+
+    argLocsPipe: SmallNumberArray(0 to 2);
+    argSrc: SmallNumberArray(0 to 2);
+end record;
+
+
+-- Created to enable *Array				
+type InstructionSlot is record 
+	full: std_logic;
+	ins: InstructionState;
+end record;
+	
+
+-- NOTE: index can be negative to enable logical division into 2 different ranges 
+type InstructionSlotArray is array(integer range <>) of InstructionSlot;
+
+type ExecResult is record
+    dbInfo: InstructionDebugInfo;
+    full: std_logic;
+    failed: std_logic;
+    tag: InsTag;
+    dest: PhysName;
+    value: Mword;
+end record;
+
+type ExecResult_N is record
+    dbInfo: InstructionDebugInfo;
+    full: std_logic;
+    failed: std_logic;
+    tag: InsTag;
+    iqTag: SmallNumber;
+    dest: PhysName;
+    value: Mword;
+end record;
+
+type ExecResultArray is array(integer range <>) of ExecResult;
+
+
+type BufferEntry is record
+    dbInfo: InstructionDebugInfo;
+    full: std_logic;
+    firstBr: std_logic; -- TEMP
+
+    -- NOTE: for compresion maybe can be just 2 bits:
+    --       (br NT, br T, br T confirmed, special) is 4 possibilities     
+    frontBranch: std_logic;
+    confirmedBranch: std_logic;
+    specialAction: std_logic;
+
+    classInfo: InstructionClassInfo;
+    specificOperation: SpecificOp;
+
+    constantArgs: InstructionConstantArgs;
+    argSpec: InstructionArgSpec;
+end record;
+
+
+type EventState is record
+    lateEvent: std_logic;
+    execEvent: std_logic;
+    preExecTags: InstructionTags;
+    execCausing: ExecResult;
+    lateCausing: ExecResult;
+end record;
+
+type DbCoreState is record
+    dummy: DummyType;
+    dbSignal: std_logic;
+end record;
+
+type BufferEntryArray is array(0 to PIPE_WIDTH-1) of BufferEntry;
+type BufferEntryArray2D is array(0 to IBUFFER_SIZE-1, 0 to PIPE_WIDTH-1) of BufferEntry;
+
+
+-- Default values
+
+constant DEFAULT_DEBUG_INFO: InstructionDebugInfo := (
+    -- pragma synthesis off
+    cycle => (others => 'U'),
+    index => (others => 'U'),
+    seqNum => (others => 'U'),
+    tag => (others => 'U'),
+    commit => (others => 'U'),
+    adr => (others => 'U'),
+    bits => (others => 'U'),
+    str => (others => ' '),
+    -- pragma synthesis on
+ 
+    dummy => DUMMY_VALUE
+);
+
+
+constant DEFAULT_CLASS_INFO_DISPATCH: ClassInfo_Dispatch := (others => '0');
+
+constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
+    renameIndex => (others => '0'),
+    intPointer => (others => '0'),
+    floatPointer => (others => '0'),
+    bqPointer => (others => '0'),
+    sqPointer => (others => '0'),
+    lqPointer => (others => '0'),
+    bqPointerSeq => (others => '0')
+);
+
+
+constant DEFAULT_STATIC_INFO: StaticInfo := (
+    dbInfo => DEFAULT_DEBUG_INFO,
+    operation => DEFAULT_SPECIFIC_OP,
+    branchIns => '0',
+    tags => DEFAULT_INSTRUCTION_TAGS,
+    immediate => '0',
+    immValue => (others => '0'),
+    zero => (others => '0')    
+);
+
 
 constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
     full => '0',
@@ -232,6 +445,7 @@ constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
     confirmedBranch => '0',												    											
     specialAction => '0',
     dbtrap => '0',
+
     orderViolation => '0',
     tlbMiss => '0',
     dataMiss => '0',
@@ -243,17 +457,11 @@ constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
 );
 
 constant DEFAULT_CLASS_INFO: InstructionClassInfo := ( 
-    short => '0',
     mainCluster => '0',
     secCluster => '0',
-    fpRename => '0',
     branchIns => '0',
     useLQ => '0',
 	useSQ => '0',
-    storeInt => '0',
-    storeFP => '0',
-    useAlu => '0',
-    useMem => '0',
     useFP => '0'
 );
 
@@ -269,22 +477,14 @@ constant DEFAULT_ARG_SPEC: InstructionArgSpec := (
     args => ((others => '0'), (others => '0'), (others => '0'))
 );
 
-constant DEFAULT_INSTRUCTION_TAGS: InstructionTags := (
-    renameIndex => (others => '0'),
-    intPointer => (others => '0'),
-    floatPointer => (others => '0'),
-    bqPointer => (others => '0'),
-    sqPointer => (others => '0'),
-    lqPointer => (others => '0'),
-    bqPointerSeq => (others => '0')
-);
 
 constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
-        dbInfo => DEFAULT_DEBUG_INFO,
+    dbInfo => DEFAULT_DEBUG_INFO,
 	controlInfo => DEFAULT_CONTROL_INFO,	
 	specificOperation => DEFAULT_SPECIFIC_OP,
 	tags => DEFAULT_INSTRUCTION_TAGS,
-	classInfo => DEFAULT_CLASS_INFO,
+	typeInfo => DEFAULT_CLASS_INFO,
+	dispatchInfo => DEFAULT_CLASS_INFO_DISPATCH,
 	constantArgs => DEFAULT_CONSTANT_ARGS,
 	virtualArgSpec => DEFAULT_ARG_SPEC,
 	physicalArgSpec => DEFAULT_ARG_SPEC
@@ -296,7 +496,7 @@ constant DEFAULT_CONTROL_PACKET: ControlPacket := (
     dbInfo => DEFAULT_DEBUG_INFO,
 
     controlInfo => DEFAULT_CONTROL_INFO,
-        classInfo => DEFAULT_CLASS_INFO,
+    classInfo => DEFAULT_CLASS_INFO,
     op => DEFAULT_SPECIFIC_OP,
     tags => DEFAULT_INSTRUCTION_TAGS,
     tag => (others => '0'),
@@ -305,29 +505,12 @@ constant DEFAULT_CONTROL_PACKET: ControlPacket := (
     target => (others => '0')
 );
 
--- Created to enable *Array				
-type InstructionSlot is record 
-	full: std_logic;
-	ins: InstructionState;
-end record;
-	
+
 constant DEFAULT_INSTRUCTION_SLOT: InstructionSlot := ('0', DEFAULT_INSTRUCTION_STATE);
 constant DEFAULT_INS_SLOT: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 
--- NOTE: index can be negative to enable logical division into 2 different ranges 
-type InstructionSlotArray is array(integer range <>) of InstructionSlot;
-
-type ExecResult is record
-        dbInfo: InstructionDebugInfo;
-    full: std_logic;
-    failed: std_logic;
-    tag: InsTag;
-    dest: PhysName;
-    value: Mword;
-end record;
-
 constant DEFAULT_EXEC_RESULT: ExecResult := (
-        DEFAULT_DEBUG_INFO,
+    DEFAULT_DEBUG_INFO,
     '0',
     '0',
     tag => (others => '0'),
@@ -335,93 +518,35 @@ constant DEFAULT_EXEC_RESULT: ExecResult := (
     value => (others => '0')
 );
 
-type ExecResultArray is array(integer range <>) of ExecResult;
-
-
-type BufferEntry is record
-        dbInfo: InstructionDebugInfo;
-    full: std_logic;
-    firstBr: std_logic; -- TEMP
-
-    -- NOTE: for compresion maybe can be just 2 bits:
-    --       (br NT, br T, br T confirmed, special) is 4 possibilities     
-    branchIns: std_logic;
-    frontBranch: std_logic;
-    confirmedBranch: std_logic;
-    specialAction: std_logic;
-
-    fpRename: std_logic;           
-    mainCluster: std_logic;
-    secCluster: std_logic;
-    useLQ:      std_logic;
-
-    specificOperation: SpecificOp;
-
-    constantArgs: InstructionConstantArgs;
-    argSpec: InstructionArgSpec;
-end record;
+constant DEFAULT_EXEC_RESULT_N: ExecResult_N := (
+    DEFAULT_DEBUG_INFO,
+    '0',
+    '0',
+    tag => (others => '0'),
+    iqTag => (others => '0'),
+    dest => (others => '0'),
+    value => (others => '0')
+);
 
 constant DEFAULT_BUFFER_ENTRY: BufferEntry := (
-        dbInfo => DEFAULT_DEBUG_INFO,
+    dbInfo => DEFAULT_DEBUG_INFO,
     specificOperation => sop(None, opNone),
+    classInfo => DEFAULT_CLASS_INFO,
     constantArgs => DEFAULT_CONSTANT_ARGS,
     argSpec => DEFAULT_ARG_SPEC,
     others => '0'
 );
 
-type BufferEntryArray is array(0 to PIPE_WIDTH-1) of BufferEntry;
-type BufferEntryArray2D is array(0 to IBUFFER_SIZE-1, 0 to PIPE_WIDTH-1) of BufferEntry;
-
-
-type SchedulerState is record
-    full: std_logic;
-    branchIns: std_logic;
-
-    renameIndex: InsTag;
-    --bqPointer: SmallNumber;
-    --sqPointer: SmallNumber;
-    --lqPointer: SmallNumber;
-    --bqPointerSeq: SmallNumber;
-
-        tags: InstructionTags;
-
-    operation: SpecificOp;
-    argSpec: InstructionArgSpec;
-
-    immediate: std_logic;
-    immValue: Hword;
-
-        poisoned: std_logic;
-
-    zero: std_logic_vector(0 to 2);
-    readNew: std_logic_vector(0 to 2);
-    args: MwordArray(0 to 2);
-
-    argLocsPipe: SmallNumberArray(0 to 2);
-    argSrc: SmallNumberArray(0 to 2);
-end record;
-
 constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       full => '0',
-      branchIns => '0',
 
-      renameIndex => (others => '0'),
-    --  bqPointer => (others => '0'),
-    --  sqPointer => (others => '0'),
-    --  lqPointer => (others => '0'),
-    --  bqPointerSeq => (others => '0'),
+      st => DEFAULT_STATIC_INFO,
 
-            tags => DEFAULT_INSTRUCTION_TAGS,
-
-      operation => DEFAULT_SPECIFIC_OP,
       argSpec => DEFAULT_ARG_SPEC,
+      destTag => (others => '0'),
 
-      immediate => '0',
-      immValue => (others => '0'),
+      poisoned => '0',
 
-        poisoned => '0',
-
-      zero => (others => '0'),
       readNew => (others => '0'),
       args => (others => (others=>'0')),
       argLocsPipe => (others => (others => '0')),
@@ -429,29 +554,6 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       );
 
 constant DEFAULT_SCHED_STATE: SchedulerState := DEFAULT_SCHEDULER_STATE;
-
-
-subtype SchedulerEntrySlot is SchedulerState;
-constant DEFAULT_SCHEDULER_ENTRY_SLOT: SchedulerEntrySlot := DEFAULT_SCHEDULER_STATE;
-constant DEFAULT_SCH_ENTRY_SLOT: SchedulerEntrySlot := DEFAULT_SCHEDULER_STATE;
-
-type SchedulerEntrySlotArray is array(integer range <>) of SchedulerEntrySlot;
-
-
-subtype PipeStage is InstructionSlotArray(0 to PIPE_WIDTH-1);
-type PipeStageArray is array(natural range <>) of PipeStage;
-
-constant DEFAULT_PIPE_STAGE: PipeStage := (others => DEFAULT_INS_SLOT); 
-
-
-type EventState is record
-    lateEvent: std_logic;
-    execEvent: std_logic;
-    preExecTags: InstructionTags;
-        execCausing: ExecResult;
-        lateCausing: ExecResult;
-        --frontCausing: ControlPacket;
-end record;
 
 constant DEFAULT_EVENT_STATE: EventState := (
     '0',
@@ -461,12 +563,64 @@ constant DEFAULT_EVENT_STATE: EventState := (
     DEFAULT_EXEC_RESULT
     );
 
-type DbCoreState is record
-    dummy: DummyType;
-    dbSignal: std_logic;
-end record;
-
 constant DEFAULT_DB_STATE: DbCoreState := (dummy => DUMMY_VALUE, dbSignal => '0');
+
+
+constant DEFAULT_DB_DEPENDENCY: DbDependency := (
+                                    -- pragma synthesis off
+                                    producer => (others => 'U'),
+                                    cyclesWaiting => -1,
+                                    cyclesReady => -1,
+                                    -- pragma synthesis on
+
+                                    dummy => DUMMY_VALUE
+                                    );
+
+constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
+    used => '0',
+    reg => (others => '0'),
+    iqTag => (others => '0'),
+    zero => '0',
+    imm => '0',
+    value => (others => '0'),
+    canFail => '0',
+    activeCounter => (others => '0'),
+    failed => '0',
+    waiting => '0',
+    stored => '0',
+    srcPipe => (others => '0'),
+    srcStage => (others => '0'),
+    
+    dbDep => DEFAULT_DB_DEPENDENCY
+); 
+
+constant DEFAULT_ARG_STATE: ArgumentState := DEFAULT_ARGUMENT_STATE;
+
+constant DEFAULT_ENTRY_STATUS: EntryStatus := (
+    active => '0',
+    issued => '0',
+    freed => '0',
+    trial => '0',
+    stageCtr => (others => '0')
+);
+
+constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
+    full => '0',
+
+    status => DEFAULT_ENTRY_STATUS,
+
+    renameIndex => (others => '0'),
+    intDestSel => '0',
+    floatDestSel => '0',
+    dest => (others => '0'),
+    argStates => (others => DEFAULT_ARG_STATE)
+);
+
+constant DEFAULT_SCHEDULER_INFO: SchedulerInfo := (
+    DEFAULT_DYNAMIC_INFO,
+    DEFAULT_STATIC_INFO
+);
+
 
 end InstructionState;
 

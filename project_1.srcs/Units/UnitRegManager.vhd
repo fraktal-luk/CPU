@@ -22,12 +22,18 @@ port(
     clk: in std_logic;
     
     renameAccepting: out std_logic;
-    frontLastSendingIn: in std_logic;
+    frontSendingIn: in std_logic;
     frontData: in BufferEntryArray;
-    
+
+    aluMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+    mulMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+    memMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
     branchMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
     storeMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
     loadMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+    intStoreMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+    floatStoreMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+    fpMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
 
     renamedArgsInt: out RenameInfoArray(0 to PIPE_WIDTH-1);
     renamedArgsFloat: out RenameInfoArray(0 to PIPE_WIDTH-1);
@@ -55,13 +61,14 @@ port(
     sendingFromROB: in std_logic;
    
     commitGroupCtr: in InsTag;
+    renameGroupCtrNextOut: out InsTag;
   
     execCausing: in ControlPacket;
     
     execEventSignal: in std_logic;
     lateEventSignal: in std_logic;
     
-        dbState: in DbCoreState
+    dbState: in DbCoreState
 );
 end UnitRegManager;
 
@@ -74,7 +81,7 @@ architecture Behavioral of UnitRegManager is
                renameFull,
                  ch0, ch1, ch2
                : std_logic := '0';
- 
+
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG; -- This is rewinded on events
     signal renameCtr, renameCtrNext: Word := (others => '0');
 
@@ -123,10 +130,11 @@ architecture Behavioral of UnitRegManager is
         variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
         variable tag: InsTag := renameGroupCtrNext;
        	variable found: boolean := false;
+       	constant fullMask: std_logic_vector(0 to PIPE_WIDTH-1) := extractFullMask(insVec);
     begin
-        stores := getStoreMask(insVec);
-        loads := getLoadMask(insVec);
-        branches := getBranchMask(insVec);
+        stores := getStoreMask1(insVec) and fullMask;
+        loads := getLoadMask1(insVec) and fullMask;
+        branches := getBranchMask1(insVec) and fullMask;
         
         -- Assign dest registers
         for i in 0 to PIPE_WIDTH-1 loop
@@ -144,9 +152,9 @@ architecture Behavioral of UnitRegManager is
 
         -- Setting tags
         for i in 0 to PIPE_WIDTH-1 loop
-                tag := renameGroupCtrNext or i2slv(i, TAG_SIZE);
-                res(i).ins.dbInfo := DB_addTag(res(i).ins.dbInfo, tag);-- renameGroupCtrNext or i2slv(i, TAG_SIZE);
-        
+            tag := renameGroupCtrNext or i2slv(i, TAG_SIZE);
+            res(i).ins.dbInfo := DB_addTag(res(i).ins.dbInfo, tag);-- renameGroupCtrNext or i2slv(i, TAG_SIZE);
+
             res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
             res(i).ins.tags.intPointer := addInt(newIntDestPointer, countOnes(takeVecInt(0 to i)));
                                                                          -- Don't increment pointer on ops which use no destination!
@@ -157,6 +165,9 @@ architecture Behavioral of UnitRegManager is
             res(i).ins.tags.lqPointer := addIntTrunc(lqPointer, countOnes(loads(0 to i-1)), LQ_PTR_SIZE + 1);
             res(i).ins.tags.bqPointerSeq := addIntTrunc(bqPointerSeq, countOnes(branches(0 to i-1)), BQ_PTR_SIZE + 2 + 1); -- CAREFUL, TODO: define BQ_SEQ_PTR_SIZE
         end loop;
+
+        -- TODO: Why do we cancel ops after event? Rethink, maybe this step is needed just because of some bad design elsewhere
+        --       The OOO already has to deal with dynamically arising events
 
         -- If found special instruction or exception, kill next ones
         for i in 0 to PIPE_WIDTH-1 loop
@@ -169,10 +180,11 @@ architecture Behavioral of UnitRegManager is
             
             if res(i).full = '0' then
                 -- CAREFUL: needed for correct operation of StoreQueue + LQ
-                res(i).ins.classInfo.secCluster := '0';
-                res(i).ins.classInfo.useLQ := '0';            
+                res(i).ins.typeInfo.secCluster := '0';
+                res(i).ins.typeInfo.useLQ := '0';            
+                res(i).ins.typeInfo.useSQ := '0';                               
             end if;
-            
+
             if hasSyncEvent(res(i).ins) = '1' then
                 found := true;
             end if;
@@ -181,106 +193,42 @@ architecture Behavioral of UnitRegManager is
         return res;
     end function;
 
-    function findDeps(ia: BufferEntryArray) return DependencyVec is
-        variable res: DependencyVec := DEFAULT_DEP_VEC;
-    begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
-                    
-                    if ia(i).argSpec.args(k)(4 downto 0) = ia(j).argSpec.dest(4 downto 0) -- name match       
-                    then
-                        res(i)(k)(j) := '1';                   
-                    end if;
-                end loop;
-            end loop;
-        end loop;
-        
-        return res;
-    end function;
-
-
-    function getRealDepVecInt(ia: BufferEntryArray; depVec: DependencyVec) return DependencyVec is
-        variable res: DependencyVec := (others => (others => (others => '0')));
-    begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
-                    
-                    if depVec(i)(k)(j) = '1' and ia(i).argSpec.intArgSel(k) = '1' and ia(j).argSpec.intDestSel = '1' -- intSel match
-                    then
-                        res(i)(k)(j) := '1';
-                        exit;                        
-                    end if;
-                end loop;
-            end loop;                     
-    
-        end loop;        
-        return res;
-    end function;
-
-    function getRealDepVecFloat(ia: BufferEntryArray; depVec: DependencyVec) return DependencyVec is
-        variable res: DependencyVec := (others => (others => (others => '0')));
-    begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            for k in 0 to 2 loop -- For each of 3 possible source arguments
-                for j in PIPE_WIDTH-1 downto 0 loop
-                    if j >= i then
-                        next;
-                    end if;
-                    
-                    if depVec(i)(k)(j) = '1' and ia(i).argSpec.floatArgSel(k) = '1' and ia(j).argSpec.floatDestSel = '1'
-                    then
-                        res(i)(k)(j) := '1';
-                        exit;                   
-                    end if;
-                end loop;
-            end loop;                     
-    
-        end loop;        
-        return res;
-    end function;   
 
     function classifyForDispatch(insVec: InstructionSlotArray) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
     begin
         for i in 0 to PIPE_WIDTH-1 loop
-            if insVec(i).ins.specificOperation.subpipe = ALU then
-                res(i).ins.classInfo.useAlu := '1';
+            if (insVec(i).ins.specificOperation.subpipe = ALU) then
+            
+                if      insVec(i).ins.specificOperation.arith = opMul
+                     or insVec(i).ins.specificOperation.arith = opMulhU
+                     or insVec(i).ins.specificOperation.arith = opMulhS
+                then
+                    res(i).ins.dispatchInfo.useMul := '1';
+                else
+                    res(i).ins.dispatchInfo.useAlu := '1';
+                end if;
             elsif insVec(i).ins.specificOperation.subpipe = FP then
-                res(i).ins.classInfo.useFP := '1';
+                res(i).ins.dispatchInfo.useFP := '1';
             elsif insVec(i).ins.specificOperation.subpipe = Mem then
-                res(i).ins.classInfo.useMem := '1';
+                res(i).ins.dispatchInfo.useMem := '1';
+
 			    if (insVec(i).ins.specificOperation.memory = opLoad or insVec(i).ins.specificOperation.memory = opLoadSys) then 
-                    res(i).ins.classInfo.useLQ := '1';
+                        res(i).ins.typeInfo.useLQ := '1';
                 elsif (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys) then
-                    res(i).ins.classInfo.useSQ := '1';
-                    if res(i).ins.classInfo.fpRename = '1' then
-                        res(i).ins.classInfo.storeFP := '1';
+                        res(i).ins.typeInfo.useSQ := '1';
+                    if res(i).ins.typeInfo.useFP = '1' then
+                        res(i).ins.dispatchInfo.storeFP := '1';
                     else
-                        res(i).ins.classInfo.storeInt := '1';
+                        res(i).ins.dispatchInfo.storeInt := '1';
                     end if;
                 end if;
-            
+
             end if;
-        
+
             if insVec(i).full /= '1' then
-                res(i).ins.classInfo.mainCluster := '0';
-                res(i).ins.classInfo.secCluster := '0';
-                res(i).ins.classInfo.fpRename := '0';
-                res(i).ins.classInfo.branchIns := '0';
-                res(i).ins.classInfo.useLQ := '0';
-                res(i).ins.classInfo.useSQ := '0';
-                res(i).ins.classInfo.storeInt := '0';
-                res(i).ins.classInfo.storeFP := '0';
-                res(i).ins.classInfo.useAlu := '0';
-                res(i).ins.classInfo.useMem := '0';
+                res(i).ins.typeInfo := DEFAULT_CLASS_INFO;
+                res(i).ins.dispatchInfo := DEFAULT_CLASS_INFO_DISPATCH;
             end if;
         end loop;
         
@@ -306,7 +254,7 @@ architecture Behavioral of UnitRegManager is
         end if;
         
         for i in 0 to PIPE_WIDTH-1 loop
-                res(i).dbInfo := isa(i).ins.dbInfo;
+            res(i).dbInfo := isa(i).ins.dbInfo;
         
             va := ia(i).argSpec;
             ca := ia(i).constantArgs;
@@ -337,7 +285,7 @@ architecture Behavioral of UnitRegManager is
                 res(i).physicalSources(j) := newPhysSources(3*i + j);
                 res(i).physicalSourcesStable(j) := newPhysSourcesStable(3*i + j);
                 
-                    res(i).dbDepTags(j) := newProducers(3*i + j);
+                res(i).dbDepTags(j) := newProducers(3*i + j);
             end loop;
 
             res(i).deps := depVec(i);
@@ -427,7 +375,7 @@ begin
     resultRenameInfoInt <= getRenameInfo(frontData,   renamedBase, newIntDests, newIntSources, newIntSourcesAlt, newProducersInt, newSourceSelectorInt);
     resultRenameInfoFloat <= getRenameInfo(frontData, renamedBase, newFloatDests, newFloatSources, newFloatSourcesAlt, newProducersFloat, newSourceSelectorFloat, true);
 
-    frontLastSending <= frontLastSendingIn and not eventSig;
+    frontLastSending <= frontSendingIn and not eventSig;
 
     eventSig <= execEventSignal or lateEventSignal;
 
@@ -446,7 +394,7 @@ begin
                                     '0' --dbtrapOn
                                     );
 
-    stageDataRenameIn <= classifyForDispatch((renamedBase));
+    stageDataRenameIn <= classifyForDispatch(renamedBase);
 
     renamedDataLiving <= restoreRenameIndex(renamedDataLivingPre);
 
@@ -526,7 +474,7 @@ begin
         
         rewind => renameLockEndDelayed,
         
-        sendingToReserve => frontLastSendingIn,
+        sendingToReserve => frontSendingIn,
         reserveInfoA => inputRenameInfoInt,
         newPhysDestsOrig => newIntDests,    -- MAPPING (from FREE LIST)
         
@@ -537,7 +485,7 @@ begin
         newPhysSourcesAlt => newIntSourcesAlt,
         newPhysSourceSelector => newSourceSelectorInt,
 
-            newProducers => newProducersInt,
+        newProducers => newProducersInt,
 
         prevStablePhysDests => physStableInt  -- FOR MAPPING (to FREE LIST)
     );
@@ -549,7 +497,7 @@ begin
         
         rewind => renameLockEndDelayed,
         
-        sendingToReserve => frontLastSendingIn,
+        sendingToReserve => frontSendingIn,
 
         reserveInfoA => inputRenameInfoFloat,
         newPhysDestsOrig => newFloatDests,
@@ -562,7 +510,7 @@ begin
         newPhysSourcesAlt => newFloatSourcesAlt,
         newPhysSourceSelector => newSourceSelectorFloat,
         
-            newProducers => newProducersFloat,
+        newProducers => newProducersFloat,
 
         prevStablePhysDests => physStableFloat
     );
@@ -579,8 +527,8 @@ begin
         lateEventSignal => lateEventSignal,
         causingPointer => execCausing.tags.intPointer,
         
-        sendingToReserve => frontLastSendingIn, 
-        takeAllow => frontLastSendingIn,
+        sendingToReserve => frontSendingIn, 
+        takeAllow => frontSendingIn,
 
         reserveInfoA => inputRenameInfoInt,
         newPhysDests => newIntDests,
@@ -603,8 +551,8 @@ begin
         lateEventSignal => lateEventSignal,        
         causingPointer => execCausing.tags.floatPointer,
         
-        sendingToReserve => frontLastSendingIn, 
-        takeAllow => frontLastSendingIn,	-- FROM SEQ
+        sendingToReserve => frontSendingIn, 
+        takeAllow => frontSendingIn,	-- FROM SEQ
 
         reserveInfoA => inputRenameInfoFloat,
 
@@ -626,7 +574,15 @@ begin
 
     renamingBr <= frontLastSending and frontDataISL(0).ins.controlInfo.firstBr;
 
-    branchMaskRe <= getBranchMask(renamedBase);
-    loadMaskRe <= getLoadMask(renamedBase);
-    storeMaskRe <= getStoreMask(renamedBase);
+    aluMaskRe <= getAluMask1(stageDataRenameIn);
+    mulMaskRe <= getMulMask1(stageDataRenameIn);
+    memMaskRe <= getMemMask1(stageDataRenameIn);
+    branchMaskRe <= getBranchMask1(stageDataRenameIn);
+    loadMaskRe <= getLoadMask1(stageDataRenameIn);
+    storeMaskRe <= getStoreMask1(stageDataRenameIn);
+    fpMaskRe <= getFpMask1(stageDataRenameIn);
+    intStoreMaskRe <= getIntStoreMask1(stageDataRenameIn);
+    floatStoreMaskRe <= getFloatStoreMask1(stageDataRenameIn);
+    
+    renameGroupCtrNextOut <= renameGroupCtrNext;           
 end Behavioral;

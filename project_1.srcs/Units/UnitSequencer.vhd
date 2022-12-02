@@ -65,6 +65,7 @@ entity UnitSequencer is
     
     -- Counter outputs
     commitGroupCtrOut: out InsTag;
+    commitGroupCtrNextOut: out InsTag;
 
     intAllowOut: out std_logic;
     
@@ -337,6 +338,7 @@ begin
     
     -- TODO: could be moved to RegisterManager because seems used only there 
     commitGroupCtrOut <= commitGroupCtr;
+    commitGroupCtrNextOut <= commitGroupCtrNext;
    
     commitAccepting <= not commitLocked; -- Blocked while procesing event
                         

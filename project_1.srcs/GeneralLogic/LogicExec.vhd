@@ -47,6 +47,8 @@ package LogicExec is
 	                                           ac: AluControl)
 	                                           return ExecResult;
 
+	function executeMulE0(full: std_logic; st: SchedulerState; link: Mword) return ExecResult;
+	
 	function executeFpu(st: SchedulerState) return Mword;
 
     function calcEffectiveAddress(st: SchedulerState; fromDLQ: std_logic; dlqData: ExecResult)
@@ -115,7 +117,7 @@ package body LogicExec is
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
 		variable targetEqual: std_logic := '0';
 	begin
-        res.tags := st.tags;
+        res.tags := st.st.tags;
 
         res.controlInfo.full := sending;
 		-- Cases to handle
@@ -125,7 +127,7 @@ package body LogicExec is
 		-- j not taken : if not taken ok, if taken goto dest
 
         targetMatch := bool2std(target = st.args(1));
-		branchTaken := resolveBranchCondition(st, st.operation.arith, ac);
+		branchTaken := resolveBranchCondition(st, st.st.operation.arith, ac);
 
         res.controlInfo.full := sending;
 
@@ -135,7 +137,7 @@ package body LogicExec is
 		elsif ctrl.frontBranch = '0' and branchTaken = '1' then
 			res.controlInfo.newEvent := '1';
 			res.controlInfo.confirmedBranch := '1';			
-			if st.immediate = '0' then
+			if st.st.immediate = '0' then
 				trueTarget := st.args(1);
 			else
 				trueTarget := target;
@@ -143,7 +145,7 @@ package body LogicExec is
 		elsif ctrl.frontBranch = '0' and branchTaken = '0' then
 			trueTarget := result;
 		else -- taken -> taken
-			if st.immediate = '0' then
+			if st.st.immediate = '0' then
 				if targetMatch = '0' then
 					res.controlInfo.newEvent := '1';	-- Need to correct the target!	
 				end if;
@@ -156,14 +158,14 @@ package body LogicExec is
 
         if branchTaken = '0' then
             trueTarget := result;
-        elsif st.immediate = '1' then
+        elsif st.st.immediate = '1' then
             trueTarget := target;
         else
             trueTarget := st.args(1);
         end if;
         
         if      (ctrl.frontBranch xor branchTaken) = '1'
-                or  (ctrl.frontBranch and branchTaken and not st.immediate and not targetMatch) = '1'
+                or  (ctrl.frontBranch and branchTaken and not st.st.immediate and not targetMatch) = '1'
         then
             res.controlInfo.newEvent := sending;
         else
@@ -251,7 +253,7 @@ package body LogicExec is
 		end if;
 		
 		res.full := full;
-		res.tag := st.renameIndex;
+		res.tag := st.st.tags.renameIndex;
 		res.dest := st.argSpec.dest;
 		res.value := result;
 		return res;
@@ -298,14 +300,40 @@ package body LogicExec is
         return ac;
     end function;
 
+
+
+	function executeMulE0(full: std_logic; st: SchedulerState; link: Mword) return ExecResult is
+		variable res: ExecResult := DEFAULT_EXEC_RESULT;
+		variable result: Mword := (others => '0');
+		variable arg0, arg1, arg2: Mword := (others => '0');
+		variable argAddSub: Mword := (others => '0');
+		variable carryIn: std_logic := '0';
+		variable resultExt: std_logic_vector(MWORD_SIZE downto 0) := (others => '0');
+		variable resultExt0, resultExt1: Word := (others => '0');
+		variable ov, carry, cl, cm0, cm1: std_logic := '0';
+	    variable shiftInput, rotated, shiftOutput: Dword := (others => '0');
+	begin
+		arg0 := st.args(0);
+		arg1 := st.args(1);
+		arg2 := st.args(2);
+
+        result := arg0 xor arg1;
+		
+		res.full := full;
+		res.tag := st.st.tags.renameIndex;
+		res.dest := st.argSpec.dest;
+		res.value := result;
+		return res;
+	end function;
+
 	
 	function executeFpu(st: SchedulerState) return Mword is
        --variable res: InstructionState := DEFAULT_INS_STATE;--ins;
        variable res: Mword := (others => '0');
 	begin
-        if st.operation.float = opOr then 
+        if st.st.operation.float = opOr then 
            res := st.args(0) or st.args(1);
-        elsif st.operation.float = opMove then
+        elsif st.st.operation.float = opMove then
            res := st.args(0);
         else
            
@@ -345,7 +373,7 @@ package body LogicExec is
         end if;
 
         res.full := full;
-        res.tag := st.renameIndex;
+        res.tag := st.st.tags.renameIndex;
         res.dest := st.argSpec.dest;        
         res.value := adr;
         

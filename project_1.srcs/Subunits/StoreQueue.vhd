@@ -27,6 +27,7 @@ entity StoreQueue is
 
 		acceptingOut: out std_logic;
 		almostFull: out std_logic;
+		acceptAlloc: out std_logic;
 		
    	    prevSendingRe: in std_logic;
 		prevSending: in std_logic;
@@ -37,15 +38,12 @@ entity StoreQueue is
 
         renamedPtr: out SmallNumber;
 
-		storeValuePtr: in SmallNumber;
 		storeValueResult: in ExecResult;
 
 		compareAddressInput: in ExecResult;
 		compareAddressCtrl: in ControlPacket;
-		
-        compareIndexInput: in SmallNumber;
-        preCompareOp: in SpecificOp;
-        compareAddressEarlyInput: in ExecResult;
+
+        compareAddressEarlyInput_Ctrl: in ControlPacket;
 
         selectedDataOutput: out ControlPacket;
         selectedDataResult: out ExecResult;
@@ -78,16 +76,18 @@ architecture Behavioral of StoreQueue is
 
 	signal adrPtr, pSelect, pSelectPrev, pStart, pStartNext, pDrain, pDrainNext, pDrainPrev,
            pTagged, pTaggedNext, pFlush, pRenamed, pRenamedNext, pStartEffective, pStartEffectiveNext,
-	       nFull, nFullNext, nIn, nInRe, nOut, nCommitted, nCommittedEffective, recoveryCounter: SmallNumber := (others => '0');
+	       nFull, nFullNext, 
+	       nAlloc, nAllocNext, nIn, nInRe, nOut, nCommitted, nCommittedEffective, recoveryCounter: SmallNumber := (others => '0');
 
     signal addresses, storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 
     signal queueContent, queueContentShifting, queueContentShiftingNext: QueueEntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_QUEUE_ENTRY);
 
-    signal isFull, isAlmostFull, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDrainingPrev, isSelected: std_logic := '0';
+    signal -- isFull, isAlmostFull,
+            canAlloc, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDrainingPrev, isSelected: std_logic := '0';
     signal memEmpty: std_logic := '1'; -- CAREFUL! Starts as '1'
 
-    signal drainOutput_N, selectedOutput_N: ControlPacket := DEFAULT_CONTROL_PACKET;
+    signal drainOutput, selectedOutput: ControlPacket := DEFAULT_CONTROL_PACKET;
     signal drainValue, selectedValue, drainAddress, selectedAddress, selectionAddress: Mword := (others => '0');
 
     signal selectedEntry, drainEntry: QueueEntry := DEFAULT_QUEUE_ENTRY;
@@ -97,6 +97,7 @@ architecture Behavioral of StoreQueue is
     signal selectedOutputSig, committedOutputSig: ControlPacket := DEFAULT_CONTROL_PACKET;
 
 	alias compareAddressInputOp is compareAddressCtrl.op;
+	alias storeValuePtr is storeValueResult.dest;
 
     signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
 
@@ -105,7 +106,8 @@ begin
     NEW_DEV: block   
     begin   
         -- Ptr for random access updating
-        adrPtr <= compareAddressInput.dest;
+        adrPtr <= compareAddressCtrl.tags.lqPointer when IS_LOAD_QUEUE
+             else compareAddressCtrl.tags.sqPointer;
     
         -- Read ptr determinded by address matching - SQ only??
         pSelect <=  addTruncZ( findNewestMatchIndex(olderSQ, (others => '0'), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE);
@@ -115,8 +117,8 @@ begin
         begin
             addressMatchMask <= getAddressMatching(queueContent, compareAddressInput.value) and getAddressCompleted(queueContent);       
                    -- TODO: could/should be pStartNext?
-            newerNextLQ <= cmpIndexAfter(pStart, pTagged, compareIndexInput, QUEUE_SIZE, PTR_MASK_SN) and getWhichMemOp(queueContent) --memOpMask
-                                                                             when isStoreMemOp(preCompareOp) = '1' else (others => '0');
+            newerNextLQ <= cmpIndexAfter(pStart, pTagged, compareAddressEarlyInput_Ctrl.tags.lqPointer, QUEUE_SIZE, PTR_MASK_SN) and getWhichMemOp(queueContent) --memOpMask
+                                                                             when isStoreMemOp(compareAddressEarlyInput_Ctrl.op) = '1' else (others => '0');
             newerLQ <=     newerRegLQ and addressMatchMask;
         end generate;
 
@@ -125,14 +127,14 @@ begin
         begin
             addressMatchMask <= getAddressMatching(queueContentShifting, compareAddressInput.value) and getAddressCompleted(queueContentShifting);
     
-            olderNextSQ <= cmpIndexBefore((others => '0'), nFull, subTruncZ(compareIndexInput, pDrainPrev, QUEUE_SIZE), QUEUE_SIZE, PTR_MASK_SN) -- TODO: nFull is not correct 
-                                                                             when isLoadMemOp(preCompareOp) = '1' else (others => '0');
+            olderNextSQ <= cmpIndexBefore((others => '0'), nFull, subTruncZ(compareAddressEarlyInput_Ctrl.tags.sqPointer, pDrainPrev, QUEUE_SIZE), QUEUE_SIZE, PTR_MASK_SN) -- TODO: nFull is not correct 
+                                                                             when isLoadMemOp(compareAddressEarlyInput_Ctrl.op) = '1' else (others => '0');
             olderSQ <=   olderRegSQ and addressMatchMask;
         end generate;
 
         updateResult.full <= compareAddressInput.full and isLoadOp(compareAddressInputOp) when IS_LOAD_QUEUE
                         else compareAddressInput.full and isStoreOp(compareAddressInputOp);
-        updateResult.dest <= compareAddressInput.dest;
+        updateResult.dest <= adrPtr;
         updateResult.value <= compareAddressInput.value;
 
         process (clk)
@@ -185,10 +187,10 @@ begin
         end process;
         
         -- E. out
-        selectedOutput_N <= getDrainOutput_N(selectedEntry, selectedAddress, selectedValue);    
+        selectedOutput <= getDrainOutput(selectedEntry, selectedAddress, selectedValue);    
         
         -- D. out
-        drainOutput_N <= getDrainOutput_N(drainEntry, drainAddress, drainValue);   
+        drainOutput <= getDrainOutput(drainEntry, drainAddress, drainValue);   
     end block;
 
     pStartEffectiveNext <= addTruncZ(pStartEffective, nCommittedEffective, QUEUE_PTR_SIZE+1) when committing = '1'
@@ -206,13 +208,13 @@ begin
             else       pFlush when execEventSignal = '1'
             else       addIntTrunc(pRenamed, slv2u(nInRe), QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
             else       pRenamed;
-    
+
     pFlush <= execCausing.dest;
-   
+
      process (clk)   
      begin
 		if rising_edge(clk) then
-		      
+
             isDrainingPrev <= drainReq;
 		    allowDrain <= not (nowCancelled or (not drainEqual and drainEffectiveEqual));
  
@@ -249,16 +251,19 @@ begin
 
             --- ctr management
 	        nFull <= nFullNext;
-   
-   	        isFull <= cmpGtU(nFullNext, QUEUE_SIZE-4);
-            isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
-   
+            nAlloc <= nAllocNext;
+
+   	        --isFull <= cmpGtU(nFullNext, QUEUE_SIZE-4);
+            --isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
+
+            canAlloc <= not cmpGtU(nAllocNext, QUEUE_SIZE-4);
+
             if lateEventSignal = '1' or execEventSignal = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
             elsif isNonzero(recoveryCounter) = '1' then
                 recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
-            
+
             recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here       
 		end if;
 	end process;
@@ -267,13 +272,16 @@ begin
 		
 	LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
     	nFullNext <= getNumFull(pStartNext, pTaggedNext, QUEUE_PTR_SIZE);
-    	
+    	nAllocNext <= getNumFull(pStartNext, pRenamedNext, QUEUE_PTR_SIZE);
+
 	    nInRe <= i2slv(countOnes(renameMask), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
         nOut <= nCommitted when committing = '1' else (others => '0');
     end generate;
     
     STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
     	nFullNext <= getNumFull(pDrain, pTaggedNext, QUEUE_PTR_SIZE);
+    	nAllocNext <= getNumFull(pDrain, pRenamedNext, QUEUE_PTR_SIZE);
+
 	    -- CAREFUL: starting from pDrainPrev because its target+result is in output register, not yet written to cache
         nInRe <= i2slv(countOnes(renameMask), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    	
         nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isDrainingPrev = '1' else (others => '0');		  
@@ -289,8 +297,9 @@ begin
 
 
     -- Acc sigs
-	acceptingOut <= not isFull;
-	almostFull <= isAlmostFull;
+	--acceptingOut <= not isFull;
+	--almostFull <= isAlmostFull;
+    acceptAlloc <= canAlloc;
 
     renamedPtr <= pRenamed;
 
@@ -309,19 +318,19 @@ begin
 
     WHEN_SQ: if not IS_LOAD_QUEUE generate
         selectedOutputSig.controlInfo.full <= isSelected;
-        selectedOutputSig.controlInfo.newEvent <= selectedOutput_N.controlInfo.newEvent;
-        selectedOutputSig.controlInfo.firstBr <= selectedOutput_N.controlInfo.firstBr;
-        selectedOutputSig.controlInfo.sqMiss <= selectedOutput_N.controlInfo.sqMiss;
+        selectedOutputSig.controlInfo.newEvent <= selectedOutput.controlInfo.newEvent;
+        selectedOutputSig.controlInfo.firstBr <= selectedOutput.controlInfo.firstBr;
+        selectedOutputSig.controlInfo.sqMiss <= selectedOutput.controlInfo.sqMiss;
         
-        selectedOutputSig.op <= selectedOutput_N.op;
-        selectedOutputSig.target <= selectedOutput_N.target;
-        selectedOutputSig.nip <= selectedOutput_N.nip;
+        selectedOutputSig.op <= selectedOutput.op;
+        selectedOutputSig.target <= selectedOutput.target;
+        selectedOutputSig.nip <= selectedOutput.nip;
 
         committedOutputSig.controlInfo.full <= isDrainingPrev and allowDrain;
         
-        committedOutputSig.op <= drainOutput_N.op;
-        committedOutputSig.target <= drainOutput_N.target;
-        committedOutputSig.nip <= drainOutput_N.nip;
+        committedOutputSig.op <= drainOutput.op;
+        committedOutputSig.target <= drainOutput.target;
+        committedOutputSig.nip <= drainOutput.nip;
     end generate;
 
 	-- D. output (ctrl)

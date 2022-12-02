@@ -34,12 +34,15 @@ entity ReorderBuffer is
 		
 		inputData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		prevSending: in std_logic;
+		prevSendingRe: in std_logic;
+
 		acceptingOut: out std_logic;
 		acceptingMore: out std_logic;
-		
+            acceptAlloc: out std_logic;
+
 		nextAccepting: in std_logic;
 		sendingOut: out std_logic; 
-		
+
         robOut: out ControlPacketArray(0 to PIPE_WIDTH-1);
 
 		outputArgInfoI: out RenameInfoArray(0 to PIPE_WIDTH-1);
@@ -55,8 +58,10 @@ architecture Behavioral of ReorderBuffer is
     signal outputDataSig, outputDataSig_Pre: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
     signal outputSpecialSig, inputSpecial: InstructionSlot := DEFAULT_INS_SLOT;
         
-	signal isSending, isEmpty, outputCompleted, outputCompleted_Pre, outputEmpty, execEvent, isFull, isAlmostFull: std_logic := '0';	
-	signal startPtr, startPtrNext, endPtr, endPtrNext, causingPtr: SmallNumber := (others => '0');	
+	signal isSending,-- isEmpty,
+	       outputCompleted, outputCompleted_Pre, outputEmpty, execEvent,-- isFull, isAlmostFull,
+	       allowAlloc: std_logic := '0';	
+	signal startPtr, startPtrNext, endPtr, endPtrNext, renamedPtr, renamedPtrNext, causingPtr: SmallNumber := (others => '0');	
 
     -- Static content arrays - not changing throughout lifetime
     signal staticContent: StaticOpInfoArray2D := (others => (others => DEFAULT_STATIC_OP_INFO));
@@ -71,7 +76,7 @@ architecture Behavioral of ReorderBuffer is
 
     signal ch0, ch1, ch2, ch3: std_logic := '0';
 
-    
+
     -- TMP: to remove
     function getRenameInfoSC(insVec: InstructionSlotArray; constant IS_FP: boolean := false)
     return RenameInfoArray is
@@ -211,32 +216,47 @@ begin
 
 
     CTR_MANAGEMENT: block
-        signal recoveryCounter, nFull, nFullNext, nIn, nOut: SmallNumber := (others => '0');
+        signal recoveryCounter,-- nFull, nFullNext,
+                                 nAlloc, nAllocNext --,-- nIn,
+                                 --nInAlloc --, nOut
+                                 : SmallNumber := (others => '0');
     begin    
-        startPtrNext <= startPtr when isSending = '0' else addIntTrunc(startPtr, 1, ROB_PTR_SIZE+1);
+        startPtrNext <= addIntTrunc(startPtr, 1, ROB_PTR_SIZE+1) when isSending = '1'
+                   else startPtr;
         
         endPtrNext <= startPtrNext when lateEventSignal = '1'
                     else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when execEvent = '1'
                     else  addIntTrunc(endPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
                     else  endPtr;
-        
-        isEmpty <= getQueueEmpty(startPtr, endPtr, ROB_PTR_SIZE+1);
-        -- nFull logic
-        nIn <= i2slv(1, SMALL_NUMBER_SIZE) when prevSending = '1' else (others => '0');
-        nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');
 
-        nFullNext <= getNumFull(startPtrNext, endPtrNext, ROB_PTR_SIZE);
-        
+        renamedPtrNext <= startPtrNext when lateEventSignal = '1'
+                    else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when execEvent = '1'
+                    else  addIntTrunc(renamedPtr, 1, ROB_PTR_SIZE+1) when prevSendingRe = '1'
+                    else  renamedPtr;
+
+        --isEmpty <= getQueueEmpty(startPtr, endPtr, ROB_PTR_SIZE+1);
+        -- nFull logic
+        --nIn <= i2slv(1, SMALL_NUMBER_SIZE) when prevSending = '1' else (others => '0');
+        --nInAlloc <= i2slv(1, SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');
+        --nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');
+
+        --nFullNext <= getNumFull(startPtrNext, endPtrNext, ROB_PTR_SIZE);
+        nAllocNext <= getNumFull(startPtrNext, renamedPtrNext, ROB_PTR_SIZE);
+
         MANAGEMENT: process (clk)
         begin
             if rising_edge(clk) then
                 startPtr <= startPtrNext;
                 endPtr <= endPtrNext;
+                renamedPtr <= renamedPtrNext;
 
-                nFull <= nFullNext;
+                --nFull <= nFullNext;
+                nAlloc <= nAllocNext;
     
-                isFull <= cmpGtU(nFullNext, ROB_SIZE-1);
-                isAlmostFull <= cmpGtU(nFullNext, ROB_SIZE-2);
+                --isFull <= cmpGtU(nFullNext, ROB_SIZE-1);
+                --isAlmostFull <= cmpGtU(nFullNext, ROB_SIZE-2);
+
+            	allowAlloc <= not cmpGtU(nAllocNext, ROB_SIZE-1);
             	
             	-- TODO: check
                 outputEmpty <= bool2std(startPtrNext = endPtr) or lateEventSignal;
@@ -259,8 +279,9 @@ begin
     outputArgInfoF <= getRenameInfoSC(setDestFlags(outputDataSig), true);                
     outputSpecial <= outputSpecialSig.ins.specificOperation;
 
-	acceptingOut <= not isFull;
-    acceptingMore <= not isAlmostFull;
+	--acceptingOut <= not isFull;
+    --acceptingMore <= not isAlmostFull;
+	acceptAlloc <= allowAlloc;
 	
     isSending <= outputCompleted and nextAccepting and not outputEmpty;  
 	sendingOut <= isSending;

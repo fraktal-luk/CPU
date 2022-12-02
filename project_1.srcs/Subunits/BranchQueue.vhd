@@ -46,7 +46,7 @@ entity BranchQueue is
 
 		storeValueInput: in ExecResult;
         compareAddressQuickInput: in ExecResult;
-        compareQuickPtr: in SmallNumber;
+        --compareQuickPtr: in SmallNumber;
 
         selectedDataOutput: out ControlPacket; -- result, target, control info, tags
 
@@ -127,12 +127,12 @@ begin
                if earlyInputSending = '1' then                   
                    earlySerialMem(p2i(pEnd, QUEUE_SIZE)) <= earlySerialInput;
                end if;
-    
+
                -- Write late data
                if lateInputSending = '1' then
                    lateSerialMem(p2i(pTagged, QUEUE_SIZE)) <= lateSerialInput;                 
                end if;
-    
+
                -- Write target array
                if storeValueInput.full = '1' then
                    targetArray(p2i(pCausing, QUEUE_SIZE)) <= storeValueInput.value;
@@ -161,7 +161,7 @@ begin
        selectedDataSlotPre_N <= getMatchedSlot_N(compareAddressQuickInput.full, compareAddressQuickInput.tag, earlySelected, lateSelected);
     end block;
 
-    pSelect <= compareQuickPtr;
+    pSelect <= compareAddressQuickInput.dest;
 
     pStartNext <= addIntTrunc(pStart, 1, QUEUE_PTR_SIZE+1) when committingBr = '1' else pStart;
 

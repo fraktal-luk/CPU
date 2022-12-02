@@ -117,8 +117,10 @@ type AbstractOperation is (
     
     add,
     sub,
-    muls,
-    mulu,
+    
+    mul,
+    mulhs,
+    mulhu,
     divs,
     divu,
     
@@ -175,6 +177,10 @@ constant OP_TABLE: OpTable(ProcMnemonic'left to ProcMnemonic'right) := (
 
     and_r => (DESC_INT, logicAnd),
     or_r =>  (DESC_INT, logicOr),
+    
+        mult => (DESC_INT, mul),
+        mulh_u => (DESC_INT, mulhu),
+        mulh_s => (DESC_INT, mulhs),
     
     ja =>    (DESC_JUMP, j),
     jl =>    (DESC_JUMP, jl),
@@ -541,7 +547,9 @@ begin
         when arithShift => intResult := bitArithmeticShift(ia0, ia1);
         when add => intResult := add(ia0, ia1);
         when sub => intResult := sub(ia0, ia1);
-               
+        
+        when mul | mulhs | mulhu => intResult := (others => '0'); -- TODO
+        
         when j | jl | jz | jnz => intResult := incrementedIP;
         
         -- FP

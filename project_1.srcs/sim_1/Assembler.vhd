@@ -233,6 +233,7 @@ begin
     for m in ProcMnemonic loop
         if matches(ar(0), ProcMnemonic'image(m)) then
             mnem := m;
+            exit;
         end if;
     end loop;
             

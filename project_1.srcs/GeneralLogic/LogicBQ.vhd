@@ -70,10 +70,6 @@ function serializeLateInfo(info: LateInfo) return std_logic_vector;
 function deserializeEarlyInfo(v: std_logic_vector) return EarlyInfo;
 function deserializeLateInfo(v: std_logic_vector) return LateInfo;
 
-
---function getMatchedSlot(full: std_logic; renameIndex: InsTag; earlySelected: EarlyInfo; lateSelected: LateInfo)
---return InstructionSlot;
-
 function getMatchedSlot_N(full: std_logic; renameIndex: InsTag; earlySelected: EarlyInfo; lateSelected: LateInfo)
 return ControlPacket;
 
@@ -106,11 +102,11 @@ begin
     res.sqPtr := insVec(0).ins.tags.sqPointer;
     res.lqPtr := insVec(0).ins.tags.lqPointer;
     
-    for i in 0 to insVec'length - 2 loop
-        res.usingInt(i) := insVec(i+1).ins.physicalArgSpec.intDestSel;
-        res.usingFloat(i) := insVec(i+1).ins.physicalArgSpec.floatDestSel;
-        res.usingSQ(i) := insVec(i+1).ins.classInfo.secCluster;
-        res.usingLQ(i) := insVec(i+1).ins.classInfo.useLQ;
+    for i in 1 to insVec'length - 1 loop
+        res.usingInt(i-1) := insVec(i).ins.tags.intPointer(0) xor insVec(i-1).ins.tags.intPointer(0);
+        res.usingFloat(i-1) := insVec(i).ins.tags.floatPointer(0) xor insVec(i-1).ins.tags.floatPointer(0);
+        res.usingSQ(i-1) := insVec(i).ins.tags.sqPointer(0) xor insVec(i-1).ins.tags.sqPointer(0);
+        res.usingLQ(i-1) := insVec(i).ins.tags.lqPointer(0) xor insVec(i-1).ins.tags.lqPointer(0);
     end loop;
     return res;
 end function;
@@ -178,66 +174,6 @@ begin
     return res;
 end function;
 
---function getMatchedSlot(full: std_logic; renameIndex: InsTag; earlySelected: EarlyInfo; lateSelected: LateInfo)
---return InstructionSlot is
---    variable res: InstructionSlot := DEFAULT_INS_SLOT;
---    constant ipBase: Mword := earlySelected.ip;
---    constant trgs: MwordArray := earlySelected.targets;
---    constant ress: MwordArray := earlySelected.links;
---    variable intBase, floatBase, sqBase, lqBase: SmallNumber;
---    variable useVecInt, useVecFloat, useVecSQ, useVecLQ: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
---    variable lowPtr: natural := 0;
---    variable resLow: Mword := (others => '0');
---begin
---    intBase := lateSelected.intPtr;
---    floatBase := lateSelected.floatPtr;
---    sqBase := lateSelected.sqPtr;
---    lqBase := lateSelected.lqPtr;
-    
---    useVecInt(1 to PIPE_WIDTH-1) := lateSelected.usingInt;
---    useVecFloat(1 to PIPE_WIDTH-1) := lateSelected.usingFloat;
---    useVecSQ(1 to PIPE_WIDTH-1) := lateSelected.usingSQ;
---    useVecLQ(1 to PIPE_WIDTH-1) := lateSelected.usingLQ;
-    
---    lowPtr := slv2u(getTagLow(renameIndex));
-    
---    res.ins.controlInfo.frontBranch := earlySelected.frontBranch(lowPtr);
---    res.ins.controlInfo.confirmedBranch := earlySelected.confirmedBranch(lowPtr);
-    
---    res.full := full;
-    
---    res.ins.ip_D := trgs(lowPtr);
---    -- !!! this doesn't work for register branches
---    if not TMP_PARAM_COMPRESS_RETURN then
---       res.ins.result_D := ress(lowPtr);
---    else  
---       resLow(ALIGN_BITS downto 0) :=  ress(lowPtr)(ALIGN_BITS downto 0);
-    
---       if resLow(ALIGN_BITS) = '1' then
---           res.ins.result_D(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ipBase(MWORD_SIZE-1 downto ALIGN_BITS), 1);
---       else
---           res.ins.result_D(MWORD_SIZE-1 downto ALIGN_BITS) := ipBase(MWORD_SIZE-1 downto ALIGN_BITS);                   
---       end if;              
---       res.ins.result_D(ALIGN_BITS-1 downto 0) := resLow(ALIGN_BITS-1 downto 0);
---    end if;
-                        
---    res.ins.target_D := trgs(lowPtr);
-   
---    if lowPtr = 0 then
---        res.ins.tags.intPointer := intBase;
---        res.ins.tags.floatPointer := floatBase;
---        res.ins.tags.sqPointer := sqBase;                 
---        res.ins.tags.lqPointer := lqBase;                 
---    else
---        res.ins.tags.intPointer := addInt(intBase, countOnes(useVecInt(1 to lowPtr)));
---        res.ins.tags.floatPointer := addInt(floatBase, countOnes(useVecFloat(1 to lowPtr)));                                 
---        res.ins.tags.sqPointer := addInt(sqBase, countOnes(useVecSQ(1 to lowPtr)));                                 
---        res.ins.tags.lqPointer := addInt(lqBase, countOnes(useVecLQ(1 to lowPtr)));                                 
---    end if;
-
---   return res;
---end function;
-
 
 function getMatchedSlot_N(full: std_logic; renameIndex: InsTag; earlySelected: EarlyInfo; lateSelected: LateInfo)
 return ControlPacket is
@@ -269,18 +205,8 @@ begin
     
     res.ip := trgs(lowPtr);
     -- !!! this doesn't work for register branches
-    if true then
-       res.nip := ress(lowPtr);
-    else  
---       resLow(ALIGN_BITS downto 0) :=  ress(lowPtr)(ALIGN_BITS downto 0);
-    
---       if resLow(ALIGN_BITS) = '1' then
---           res.nip(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ipBase(MWORD_SIZE-1 downto ALIGN_BITS), 1);
---       else
---           res.nip(MWORD_SIZE-1 downto ALIGN_BITS) := ipBase(MWORD_SIZE-1 downto ALIGN_BITS);                   
---       end if;              
---       res.nip(ALIGN_BITS-1 downto 0) := resLow(ALIGN_BITS-1 downto 0);
-    end if;
+
+    res.nip := ress(lowPtr);
 
     res.target := trgs(lowPtr);
    
