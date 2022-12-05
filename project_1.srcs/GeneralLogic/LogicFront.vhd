@@ -36,8 +36,8 @@ function getFrontEventMulti(ip, target: Mword;
                             )
 return ControlPacketArray;
 
-function getEarlyEvent(vecA: ControlPacketArray(0 to PIPE_WIDTH-1); target, predictedAddress: Mword; fetchStall: std_logic)
-return ControlPacket;
+--function getEarlyEvent(vecA: ControlPacketArray(0 to PIPE_WIDTH-1); target, predictedAddress: Mword; fetchStall: std_logic)
+--return ControlPacket;
 
 function getEarlyEvent(cp: ControlPacket; target, predictedAddress: Mword; fetchStall: std_logic)
 return ControlPacket;
@@ -276,16 +276,16 @@ begin
 
             res.controlInfo.full := '1';
 
-            res.ip := ips(i);
+            res.ip := ips(i); -- CAREFUL: this is necessary for some reason (where is int used??)
             res.target := targets(i);
-            res.nip := results(i);
+            
+                    --res.nip := results(i);
 
                 res.tags.bqPointer := sn(i); -- TMP!
 
             exit;
         end if;
     end loop;
-
 --    for i in 0 to PIPE_WIDTH-1 loop
 --        res.controlInfo := resIS(i).ins.controlInfo;
 --        res.controlInfo.full := fullOut(i);    
@@ -296,6 +296,57 @@ begin
 
 	return res;
 end function;
+
+
+
+--function getEarlyEvent(vecA: ControlPacketArray(0 to PIPE_WIDTH-1); target, predictedAddress: Mword; fetchStall: std_logic)
+--return ControlPacket is
+--	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+--begin
+--    if fetchStall = '1' then -- Need refetching
+--        res.target := predictedAddress;
+--        res.controlInfo.newEvent := '1';
+--        res.controlInfo.refetch := '1';
+--    else
+--        res.target := target;
+
+--        for i in 0 to PIPE_WIDTH-1 loop
+--            if vecA(i).controlInfo.full = '1' and vecA(i).controlInfo.frontBranch = '1' then
+--                res.controlInfo.newEvent := vecA(i).controlInfo.newEvent; -- CAREFUL: event only if needs redirection, but break group at any taken jump 
+--                res.controlInfo.frontBranch := '1';
+--                res.target := vecA(i).target; -- Correcting target within subsequent fetch line is still needed even if no redirection!               
+--                exit;
+--            end if;
+--        end loop;
+--    end if;
+
+--    return res;
+--end function;
+
+function getEarlyEvent(cp: ControlPacket; target, predictedAddress: Mword; fetchStall: std_logic)
+return ControlPacket is
+	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+begin
+    if fetchStall = '1' then -- Need refetching
+        res.target := predictedAddress;
+        res.controlInfo.newEvent := '1';
+        res.controlInfo.refetch := '1';
+    else
+        res.target := target;
+
+        for i in 0 to PIPE_WIDTH-1 loop
+            if cp.controlInfo.full = '1' and cp.controlInfo.frontBranch = '1' then
+                res.controlInfo.newEvent := cp.controlInfo.newEvent; -- CAREFUL: event only if needs redirection, but break group at any taken jump 
+                res.controlInfo.frontBranch := '1';
+                res.target := cp.target; -- Correcting target within subsequent fetch line is still needed even if no redirection!               
+                exit;
+            end if;
+        end loop;
+    end if;
+
+    return res;
+end function;
+
 
 
 
@@ -393,56 +444,6 @@ begin
 
 	return res;
 end function;
-
-
-function getEarlyEvent(vecA: ControlPacketArray(0 to PIPE_WIDTH-1); target, predictedAddress: Mword; fetchStall: std_logic)
-return ControlPacket is
-	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-begin
-    if fetchStall = '1' then -- Need refetching
-        res.target := predictedAddress;
-        res.controlInfo.newEvent := '1';
-        res.controlInfo.refetch := '1';
-    else
-        res.target := target;
-
-        for i in 0 to PIPE_WIDTH-1 loop
-            if vecA(i).controlInfo.full = '1' and vecA(i).controlInfo.frontBranch = '1' then
-                res.controlInfo.newEvent := vecA(i).controlInfo.newEvent; -- CAREFUL: event only if needs redirection, but break group at any taken jump 
-                res.controlInfo.frontBranch := '1';
-                res.target := vecA(i).target; -- Correcting target within subsequent fetch line is still needed even if no redirection!               
-                exit;
-            end if;
-        end loop;
-    end if;
-
-    return res;
-end function;
-
-function getEarlyEvent(cp: ControlPacket; target, predictedAddress: Mword; fetchStall: std_logic)
-return ControlPacket is
-	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-begin
-    if fetchStall = '1' then -- Need refetching
-        res.target := predictedAddress;
-        res.controlInfo.newEvent := '1';
-        res.controlInfo.refetch := '1';
-    else
-        res.target := target;
-
-        for i in 0 to PIPE_WIDTH-1 loop
-            if cp.controlInfo.full = '1' and cp.controlInfo.frontBranch = '1' then
-                res.controlInfo.newEvent := cp.controlInfo.newEvent; -- CAREFUL: event only if needs redirection, but break group at any taken jump 
-                res.controlInfo.frontBranch := '1';
-                res.target := cp.target; -- Correcting target within subsequent fetch line is still needed even if no redirection!               
-                exit;
-            end if;
-        end loop;
-    end if;
-
-    return res;
-end function;
-
 
 
 function getEntry(isl: InstructionSlot) return BufferEntry is
