@@ -28,12 +28,12 @@ function getFrontEvent(ip, target: Mword;
                        partMask: std_logic_vector)
 return ControlPacket;
 
-function getFrontEventMulti(ip, target: Mword;
+function getControlA(ip: Mword;
                             fetchLine: WordArray(0 to FETCH_WIDTH-1);
-                            partMask: std_logic_vector)
+                            partMask: std_logic_vector; ALIGN_IP: boolean)
 return ControlPacketArray;
 
-function getEarlyEvent(cp: ControlPacket; target, predictedAddress: Mword; fetchStall: std_logic)
+function getEarlyEvent(cp: ControlPacket; target, predictedAddress: Mword; fetchStall, send: std_logic)
 return ControlPacket;
 
 function prepareForBQ(ip: Mword; insVec: ControlPacketArray; hasBranch: std_logic) return ControlPacketArray;
@@ -45,9 +45,10 @@ function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray;
 
 
 function partialMask(adr: Mword) return std_logic_vector;
-function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector) return InstructionSlotArray;
+function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; ALIGN_IP: boolean) return InstructionSlotArray;
 
 function groupHasBranch(insVec: InstructionSlotArray) return std_logic;
+function groupHasBranch(ea: BufferEntryArray) return std_logic;
 
 --function TMP_convert2cp(insVec: InstructionSlotArray) return ControlPacketArray;
 
@@ -136,12 +137,19 @@ begin
     return res; 
 end function;
 
-function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector) return InstructionSlotArray is
+function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; ALIGN_IP: boolean) return InstructionSlotArray is
     variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    variable tmpIP: Mword := (others => '0');
+    variable baseIP, tmpIP: Mword := (others => '0');
 begin
+    if ALIGN_IP then
+        baseIP := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
+    else
+        baseIP := ip;
+    end if;
+    
     for i in 0 to PIPE_WIDTH-1 loop
-        tmpIP := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);
+        tmpIP := --ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);
+                 addInt(baseIP, 4*i);
     
         res(i).ins := decodeInstructionNew(fetchLine(i)); -- Here decoding!
 
@@ -170,6 +178,16 @@ begin
     return '0';
 end function;
 
+function groupHasBranch(ea: BufferEntryArray) return std_logic is
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        if ea(i).full = '1' and ea(i).classInfo.branchIns = '1' then
+            return '1';
+        end if;   
+    end loop;
+
+    return '0';
+end function;
 
 --function TMP_convert2cp(insVec: InstructionSlotArray) return ControlPacketArray is
 --    variable res: ControlPacketArray(0 to insVec'length-1) := (others => DEFAULT_CONTROL_PACKET);
@@ -275,7 +293,7 @@ end function;
 
 
 
-function getEarlyEvent(cp: ControlPacket; target, predictedAddress: Mword; fetchStall: std_logic)
+function getEarlyEvent(cp: ControlPacket; target, predictedAddress: Mword; fetchStall, send: std_logic)
 return ControlPacket is
 	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 begin
@@ -283,7 +301,7 @@ begin
         res.target := predictedAddress;
         res.controlInfo.newEvent := '1';
         res.controlInfo.refetch := '1';
-    else
+    elsif send = '1' then
         res.target := target;
 
         if cp.controlInfo.full = '1' and cp.controlInfo.frontBranch = '1' then
@@ -298,20 +316,20 @@ end function;
 
 
 
-function getFrontEventMulti(ip, target: Mword;
+function getControlA(ip: Mword;
                             fetchLine: WordArray(0 to FETCH_WIDTH-1);
-                            partMask: std_logic_vector)
+                            partMask: std_logic_vector; ALIGN_IP: boolean)
 return ControlPacketArray is
 	variable resIS: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	variable res: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
-	variable tempOffset, lastRes: Mword := (others => '0');
-	variable targets, ips, results: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+	variable baseIP, tempIP, tempOffset, lastRes: Mword := (others => '0');
+	variable targets, results: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 	variable fullOut, branchIns, predictedTaken, uncondJump: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 	variable regularJump, longJump, regJump: std_logic := '0';
 begin
 
     -- Calculate target for each instruction, even if it's to be skipped
-    for i in 0 to PIPE_WIDTH-1 loop        
+    for i in 0 to FETCH_WIDTH-1 loop        
         regularJump := '0';
         longJump := '0';
         regJump := '0';
@@ -347,17 +365,22 @@ begin
 
         branchIns(i) := regularJump or longJump or regJump;
 
-        ips(i) := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);    -- !! Only for BQ, indirect
-        targets(i) := add(ips(i), tempOffset);
-        results(i) := ip;
-        results(i)(ALIGN_BITS-1 downto 0) := i2slv((i+1)*4, ALIGN_BITS); -- !! Only for BQ/  CAREFUL: not for short ins
-	end loop;
+        if ALIGN_IP then
+            baseIP := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
+        else
+            baseIP := ip;
+        end if;
+        
+        tempIP := addInt(baseIP, 4*i);
+        targets(i) := add(tempIP, tempOffset);
+	    results(i) := addInt(tempIP, 4);
+--	end loop;
 
-	lastRes := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
-	results(PIPE_WIDTH-1) := add(lastRes, PC_INC);
+------	lastRes := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
+------	results(PIPE_WIDTH-1) := add(lastRes, PC_INC);
 
-    -- Find if any branch predicted
-    for i in 0 to FETCH_WIDTH-1 loop
+----    -- Find if any branch predicted
+--    for i in 0 to FETCH_WIDTH-1 loop
         fullOut(i) := partMask(i);
         if partMask(i) = '1' and branchIns(i) = '1' and predictedTaken(i) = '1' then
             if uncondJump(i) = '1' then -- CAREFUL: setting it here, so that if implementation treats is as NOP in Exec, it still gets this flag
@@ -366,14 +389,14 @@ begin
 
             resIS(i).ins.controlInfo.frontBranch := '1';					
 
-            exit;
+            --exit;
         end if;
-    end loop;
+--    end loop;
 
-    for i in 0 to PIPE_WIDTH-1 loop
+--    for i in 0 to FETCH_WIDTH-1 loop
         res(i).controlInfo := resIS(i).ins.controlInfo;
-        res(i).controlInfo.full := fullOut(i);    
-        res(i).ip := ips(i);
+      --  res(i).controlInfo.full := fullOut(i);    
+        --res(i).ip := ips(i);
         res(i).target := targets(i);    -- !! Only for BQ
         res(i).nip := results(i);        
     end loop;

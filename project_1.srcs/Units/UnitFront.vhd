@@ -55,7 +55,7 @@ architecture Behavioral of UnitFront is
 
     signal dummyBP0, dummyBP1: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0'); -- Results from BP
 	
-	signal fetchedLine0, fetchedLine1: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0'));
+	signal fetchedLine0, fetchedLine1, fetchedLine1_Sh: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0'));
 	
 	signal sendingOutFetch0, sendingOutFetch1, sendingOutBuffer, bufferAccepting, earlyBranchSending, sendingToBranchTransfer,
            pcEn, frontBranchEvent, killAll, killAllOrFront, sendingToEarlyBranch, sendingToBQ, sendingToBuffer, fetchStall, full0, full1, fullBr, fullBt,
@@ -137,41 +137,83 @@ begin
 	sendingToBuffer <= sendingOutFetch1 and not fetchStall;
 	
 	LEGACY: block
-	    signal partMask --, decodedFullMask
+	    signal partMask, partMask_N --, decodedFullMask
 	    : std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        signal dataToIbuffer_OLD: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-        signal --earlyBranchMultiDataInA_IB, 
-                decodedGroup: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+        signal decodedGroup, dataToIbuffer_IS: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+        signal decodedGroup_N, dataToIbuffer_IS_N: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
         signal toBQ, data_C, data_CA: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
-        signal frontControl: ControlPacket := DEFAULT_CONTROL_PACKET;
+        signal       data_C_N, data_CA_N: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
+        signal frontControl, frontControl_T: ControlPacket := DEFAULT_CONTROL_PACKET;
+        
+            signal groupIP: Mword := (others => '0');
         
         signal groupShift: SmallNumber := sn(0);	   
         signal lastIndex: SmallNumber := sn(3);
         
-        signal hasBranch: std_logic := '0'; 
+        signal hasBranch: std_logic := '0';
+        
+            signal cv0, cv1: std_logic_vector( 0 to FETCH_WIDTH-1) := (others => '0');
 	begin
+	       groupIP <= --stageDataOutFetch1.ip;
+	                   predictedAddress;
+	
 	    partMask <= partialMask(predictedAddress);
 
         groupShift(1 downto 0) <= predictedAddress(3 downto 2);
         lastIndex <= frontControl.tags.bqPointer;
 
+            fetchedLine1_Sh <= fetchedLine1                                                               when groupShift(1 downto 0) = "00"
+                        else   fetchedLine1(1 to 3) & fetchedLine1(3)                                     when groupShift(1 downto 0) = "01"
+                        else   fetchedLine1(2 to 3) & fetchedLine1(3) & fetchedLine1(3)                   when groupShift(1 downto 0) = "10"
+                        else   fetchedLine1(3 to 3) & fetchedLine1(3) & fetchedLine1(3) & fetchedLine1(3) when groupShift(1 downto 0) = "11";
 
-        frontControl <= getFrontEvent(stageDataOutFetch1.ip, stageDataOutFetch1.target, fetchedLine1, partMask);--, decodedGroup(0).ins.controlInfo.firstBr);
-        earlyBranchIn <= getEarlyEvent(frontControl, stageDataOutFetch1.target, predictedAddress, fetchStall);
+            partMask_N <= partMask                      when groupShift(1 downto 0) = "00"
+                        else   partMask(1 to 3) & "0"   when groupShift(1 downto 0) = "01"
+                        else   partMask(2 to 3) & "00"  when groupShift(1 downto 0) = "10"
+                        else   partMask(3 to 3) & "000" when groupShift(1 downto 0) = "11";
+
+        frontControl <= getFrontEvent(predictedAddress,
+                                        stageDataOutFetch1.target, fetchedLine1, partMask); -- Here stageDataOutFetch1.ip is aligned inside the function
+            frontControl_T <= getFrontEvent(predictedAddress,
+                                        stageDataOutFetch1.target, fetchedLine1, partMask); -- Here stageDataOutFetch1.ip is aligned inside the function
+        earlyBranchIn <= getEarlyEvent(frontControl, stageDataOutFetch1.target, predictedAddress, fetchStall, sendingOutFetch1);
 
 
-        decodedGroup <= decodeGroup(stageDataOutFetch1, fetchedLine1, stageDataOutFetch1.ip, partMask);
-        dataToIbuffer_OLD <= adjustStage(decodedGroup, slv2u(groupShift), slv2u(lastIndex) + 1 - slv2u(groupShift));
-                                            
-        hasBranch <= groupHasBranch(dataToIbuffer_OLD);
+--        decodedGroup <= decodeGroup(stageDataOutFetch1, fetchedLine1, groupIP, partMask, true);
+--        dataToIbuffer_IS <= adjustStage(decodedGroup, slv2u(groupShift), slv2u(lastIndex) + 1 - slv2u(groupShift));
+
+                decodedGroup_N <= decodeGroup(stageDataOutFetch1, fetchedLine1_Sh, groupIP, partMask_N, false);
+                dataToIbuffer_IS_N <= adjustStage(decodedGroup_N, 0                , slv2u(lastIndex) + 1 - slv2u(groupShift));
+                                              
+                ch0 <= bool2std(dataToIbuffer_IS_N = dataToIbuffer_IS);
+                                                    
+                CV_0: for i in 0 to FETCH_WIDTH-1 generate
+                    cv0(i) <= bool2std(dataToIbuffer_IS_N(i) = dataToIbuffer_IS(i));
+                    cv1(i) <= bool2std(data_CA_N(i) = data_CA(i));
+                end generate;
+                                                    
+        --    ch0 <= groupHasBranch(dataToIbuffer_IS);
+        hasBranch <= groupHasBranch(dataToIbuffer);
              
-        dataToIbuffer <= assignSeqNum(getEntryArray(dataToIbuffer_OLD), decodeCounter);
+       --      ch1 <= hasBranch xnor ch0;
+             
+        dataToIbuffer <= assignSeqNum(getEntryArray(dataToIbuffer_IS_N), decodeCounter);
 
 
-        data_C <= getFrontEventMulti(stageDataOutFetch1.ip, stageDataOutFetch1.target, fetchedLine1, partMask);--, decodedGroup(0).ins.controlInfo.firstBr);
-        data_CA <= adjustStage(data_C, slv2u(groupShift), slv2u(lastIndex) + 1 - slv2u(groupShift));
+--        data_C <= getControlA(groupIP, fetchedLine1, partMask, true);--, decodedGroup(0).ins.controlInfo.firstBr);
+--        data_CA <= adjustStage(data_C, slv2u(groupShift), slv2u(lastIndex) + 1 - slv2u(groupShift));
 
-        toBQ <= prepareForBQ(stageDataOutFetch1.ip, data_CA, hasBranch);
+                data_C_N <= getControlA(groupIP, fetchedLine1_Sh, partMask_N, false);--, decodedGroup(0).ins.controlInfo.firstBr);
+                data_CA_N <= adjustStage(data_C_N, 0            , slv2u(lastIndex) + 1 - slv2u(groupShift));
+        
+                    ch1 <= bool2std(data_CA_N = data_CA);
+        
+        
+                        ch2 <= bool2std(predictedAddress = stageDataOutFetch1.ip);
+                        ch3 <= sendingOutFetch1 and not ch2;
+                            ch4 <= bool2std(frontControl_T = frontControl);
+
+        toBQ <= prepareForBQ(groupIP, data_CA_N, hasBranch);
         bqDataSigPre <= assignSeqNum(toBQ, decodeCounter);
     end block;
 
