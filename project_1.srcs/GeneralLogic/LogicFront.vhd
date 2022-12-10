@@ -30,7 +30,7 @@ return ControlPacket;
 
 function getControlA(ip: Mword;
                             fetchLine: WordArray(0 to FETCH_WIDTH-1);
-                            partMask: std_logic_vector; ALIGN_IP: boolean)
+                            partMask: std_logic_vector; nWords: natural)--; ALIGN_IP: boolean)
 return ControlPacketArray;
 
 function getEarlyEvent(cp: ControlPacket; target, predictedAddress: Mword; fetchStall, send: std_logic)
@@ -45,7 +45,11 @@ function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray;
 
 
 function partialMask(adr: Mword) return std_logic_vector;
-function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; ALIGN_IP: boolean) return InstructionSlotArray;
+--function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; nWords: natural)--; ALIGN_IP: boolean)
+--return InstructionSlotArray;
+
+function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; nWords: natural)--; ALIGN_IP: boolean)
+return BufferEntryArray;
 
 function groupHasBranch(insVec: InstructionSlotArray) return std_logic;
 function groupHasBranch(ea: BufferEntryArray) return std_logic;
@@ -137,15 +141,51 @@ begin
     return res; 
 end function;
 
-function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; ALIGN_IP: boolean) return InstructionSlotArray is
+--function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; nWords: natural)--; ALIGN_IP: boolean)
+--return InstructionSlotArray is
+--    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+--    variable baseIP, tmpIP: Mword := (others => '0');
+--begin
+----    if ALIGN_IP then
+----        baseIP := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
+----    else
+--        baseIP := ip;
+----    end if;
+    
+--    for i in 0 to PIPE_WIDTH-1 loop
+--        tmpIP := --ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);
+--                 addInt(baseIP, 4*i);
+    
+--        res(i).ins := decodeInstructionNew(fetchLine(i)); -- Here decoding!
+
+--        res(i).ins.dbInfo := ctrl.dbInfo;
+--        res(i).ins.dbInfo := DB_addBitsAndIp(res(i).ins.dbInfo, fetchLine(i), tmpIP);
+--    end loop;
+    
+--    for i in 0 to PIPE_WIDTH-1 loop
+--        if full(i) = '1' and res(i).ins.typeInfo.branchIns = '1' then
+--            res(0).ins.controlInfo.firstBr := '1'; -- TMP, indicating that group has a branch
+--        end if;   
+--    end loop;
+
+--        res := adjustStage(res, 0, nWords);
+
+--    return res;
+--end function;
+
+
+function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; nWords: natural)--; ALIGN_IP: boolean)
+return BufferEntryArray is
     variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    variable res_N: BufferEntryArray --(0 to PIPE_WIDTH-1)
+                                         := (others => DEFAULT_BUFFER_ENTRY);
     variable baseIP, tmpIP: Mword := (others => '0');
 begin
-    if ALIGN_IP then
-        baseIP := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
-    else
+--    if ALIGN_IP then
+--        baseIP := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
+--    else
         baseIP := ip;
-    end if;
+--    end if;
     
     for i in 0 to PIPE_WIDTH-1 loop
         tmpIP := --ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);
@@ -163,8 +203,13 @@ begin
         end if;   
     end loop;
 
-    return res;
+        res := adjustStage(res, 0, nWords);
+
+    res_N := getEntryArray(res);
+
+    return res_N;
 end function;
+
 
 
 function groupHasBranch(insVec: InstructionSlotArray) return std_logic is
@@ -318,7 +363,7 @@ end function;
 
 function getControlA(ip: Mword;
                             fetchLine: WordArray(0 to FETCH_WIDTH-1);
-                            partMask: std_logic_vector; ALIGN_IP: boolean)
+                            partMask: std_logic_vector; nWords: natural)--; ALIGN_IP: boolean)
 return ControlPacketArray is
 	variable resIS: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 	variable res: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
@@ -365,11 +410,11 @@ begin
 
         branchIns(i) := regularJump or longJump or regJump;
 
-        if ALIGN_IP then
-            baseIP := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
-        else
+--        if ALIGN_IP then
+--            baseIP := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
+--        else
             baseIP := ip;
-        end if;
+--        end if;
         
         tempIP := addInt(baseIP, 4*i);
         targets(i) := add(tempIP, tempOffset);
@@ -400,6 +445,8 @@ begin
         res(i).target := targets(i);    -- !! Only for BQ
         res(i).nip := results(i);        
     end loop;
+
+        res := adjustStage(res, 0, nWords);
 
 	return res;
 end function;
