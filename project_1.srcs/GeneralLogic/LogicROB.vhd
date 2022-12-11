@@ -29,8 +29,6 @@ type StaticGroupInfo is record
 end record;
 
 type StaticOpInfo is record
---        dbInfo: InstructionDebugInfo;
-
     virtualIntDestSel:     std_logic;
     virtualFloatDestSel:   std_logic;
     virtualDest:    RegName;    
@@ -47,7 +45,6 @@ constant DEFAULT_STATIC_GROUP_INFO: StaticGroupInfo := (
 );
 
 constant DEFAULT_STATIC_OP_INFO: StaticOpInfo := (
---        dbInfo => DEFAULT_DEBUG_INFO,
     virtualDest => (others => '0'),
     physicalDest => (others => '0'),
     others => '0'
@@ -58,7 +55,7 @@ type DynamicGroupInfo is record
 end record;
 
 type DynamicOpInfo is record
-        dbInfo: InstructionDebugInfo;
+    dbInfo: InstructionDebugInfo;
 
     full:       std_logic;
     killed:     std_logic;
@@ -108,8 +105,8 @@ function getStaticOpInfoA(isa: InstructionSlotArray) return StaticOpInfoArray;
 function getDynamicOpInfo(isl: InstructionSlot) return DynamicOpInfo;
 function getDynamicOpInfoA(isa: InstructionSlotArray) return DynamicOpInfoArray;
 
-function getInstructionSlotArray(sa: StaticOpInfoArray; da: DynamicOpInfoArray; sgi: StaticGroupInfo; dgi: DynamicGroupInfo) return InstructionSlotArray;
 function getSpecialSlot(si: StaticGroupInfo; di: DynamicGroupInfo) return InstructionSlot;
+function getSpecialOperation(si: StaticGroupInfo; di: DynamicGroupInfo) return SpecificOp;
 
 function serializeStaticInfo(info: StaticOpInfo) return std_logic_vector;
 function serializeStaticInfoA(ia: StaticOpInfoArray) return std_logic_vector;
@@ -145,10 +142,7 @@ procedure updateDynamicContentBranch(signal content: inout DynamicOpInfoArray2D;
 procedure updateDynamicGroupMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionControlInfo; tag: InsTag; ind: natural);
 procedure updateDynamicContentMemEvent(signal content: inout DynamicOpInfoArray2D; useCtrl: std_logic; execInfo: InstructionControlInfo; tag: InsTag);
 
-function groupCompleted(insVec: InstructionSlotArray; da: DynamicOpInfoArray) return std_logic;
-
--- DEBUG
-function setDbInfo(isa: InstructionSlotArray; dsa: StaticOpInfoArray) return InstructionSlotArray;
+function groupCompleted(da: DynamicOpInfoArray) return std_logic;
 
 end package;
 
@@ -156,15 +150,6 @@ end package;
 
 package body LogicROB is
 
--- DEBUG (REMOVE)
-function setDbInfo(isa: InstructionSlotArray; dsa: StaticOpInfoArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := isa;
-begin
-    for i in isa'range loop
---        res(i).ins.dbInfo := dsa(i).dbInfo;
-    end loop;        
-    return res;
-end function;
 
 function getStaticGroupInfo(isa: InstructionSlotArray; ssl: InstructionSlot) return StaticGroupInfo is
     variable res: StaticGroupInfo;
@@ -187,19 +172,14 @@ end function;
 function getStaticOpInfo(isl: InstructionSlot) return StaticOpInfo is
     variable res: StaticOpInfo;
 begin
---        res.dbInfo := isl.ins.dbInfo;
-
     res.virtualIntDestSel := isl.ins.virtualArgSpec.intDestSel;
     res.virtualFloatDestSel := isl.ins.virtualArgSpec.floatDestSel;     
     res.virtualDest := isl.ins.virtualArgSpec.dest(4 downto 0);    
     res.physicalDest := isl.ins.physicalArgSpec.dest;
 
-    res.useSQ := isl.ins.--classInfo.secCluster; -- ??
-                         typeInfo.secCluster;
-    res.useLQ := isl.ins.--classInfo.useLQ;
-                         typeInfo.useLQ;
-    res.useBQ := isl.ins.--classInfo.branchIns;
-                         typeInfo.branchIns;
+    res.useSQ := isl.ins.typeInfo.secCluster;
+    res.useLQ := isl.ins.typeInfo.useLQ;
+    res.useBQ := isl.ins.typeInfo.branchIns;
     
     return res;
 end function;
@@ -224,10 +204,8 @@ begin
     res.causing := '0';
     res.completed0 := '0';
     res.completed1 := '0';
-    res.mainCluster := isl.ins.--classInfo.mainCluster;
-                                typeInfo.mainCluster;
-    res.secCluster := isl.ins.--classInfo.secCluster;
-                                typeInfo.secCluster;
+    res.mainCluster := isl.ins.typeInfo.mainCluster;
+    res.secCluster := isl.ins.typeInfo.secCluster;
 
     res.hasEvent := '0';
     res.hasException := '0';
@@ -246,51 +224,6 @@ begin
     return res;
 end function;
 
-function getOutputSlot(stat: StaticOpInfo; dyn: DynamicOpInfo) return InstructionSlot is
-    variable res: InstructionSlot := DEFAULT_INS_SLOT;
-begin
-        res.ins.dbInfo := dyn.dbInfo;
-
-    res.full := dyn.full;
-    
-    res.ins.controlInfo.full := dyn.full;
-    res.ins.controlInfo.killed := dyn.killed;
-    res.ins.controlInfo.causing := dyn.causing;
-
-    res.ins.controlInfo.newEvent := dyn.hasEvent;
-    res.ins.controlInfo.hasException := dyn.hasException;
-    res.ins.controlInfo.confirmedBranch := dyn.confirmedBranch;
-    res.ins.controlInfo.specialAction := dyn.specialAction; -- ???
-    res.ins.controlInfo.refetch := dyn.refetch;
-
-    res.ins.virtualArgSpec.intDestSel := stat.virtualIntDestSel;
-    res.ins.virtualArgSpec.floatDestSel := stat.virtualFloatDestSel;
-
-    res.ins.virtualArgSpec.dest(4 downto 0) := stat.virtualDest;    
-    res.ins.physicalArgSpec.dest := stat.physicalDest;
-
---    res.ins.classInfo.secCluster := stat.useSQ;
---    res.ins.classInfo.useLQ := stat.useLQ;
---    res.ins.classInfo.branchIns := stat.useBQ;
-
-        res.ins.typeInfo.secCluster := stat.useSQ;
-        res.ins.typeInfo.useLQ := stat.useLQ;
-        res.ins.typeInfo.branchIns := stat.useBQ;
-
-    return res;
-end function;   
-
-function getInstructionSlotArray(sa: StaticOpInfoArray; da: DynamicOpInfoArray; sgi: StaticGroupInfo; dgi: DynamicGroupInfo) return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
-begin
-    for i in res'range loop
-        res(i) := getOutputSlot(sa(i), da(i));
-    end loop; 
-    
-    res(0).ins.controlInfo.firstBr := sgi.useBQ;
-    
-    return res;
-end function;
 
 
 function getSpecialSlot(si: StaticGroupInfo; di: DynamicGroupInfo) return InstructionSlot is
@@ -300,6 +233,16 @@ begin
     res.ins.specificOperation.system := SysOp'val(slv2u(si.specialOp));
     res.ins.specificOperation.bits := si.specialOp;
     
+    return res;
+end function;
+
+function getSpecialOperation(si: StaticGroupInfo; di: DynamicGroupInfo) return SpecificOp is
+    variable res: SpecificOp := DEFAULT_SPECIFIC_OP;
+begin
+    res.subpipe := None;
+    res.system := SysOp'val(slv2u(si.specialOp));
+    res.bits := si.specialOp;
+
     return res;
 end function;
 
@@ -566,10 +509,10 @@ begin
     end if;        
 end procedure;
 
-function groupCompleted(insVec: InstructionSlotArray; da: DynamicOpInfoArray) return std_logic is
+function groupCompleted(da: DynamicOpInfoArray) return std_logic is
 begin
 	for i in 0 to PIPE_WIDTH-1 loop
-		if      insVec(i).full = '1' 
+		if da(i).full = '1'   
 		    and ((da(i).completed0 or not da(i).mainCluster) and (da(i).completed1 or not da(i).secCluster)) = '0'
 		then
 			return '0';

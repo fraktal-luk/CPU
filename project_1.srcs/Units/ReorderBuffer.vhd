@@ -38,7 +38,7 @@ entity ReorderBuffer is
 
 		acceptingOut: out std_logic;
 		acceptingMore: out std_logic;
-            acceptAlloc: out std_logic;
+        acceptAlloc: out std_logic;
 
 		nextAccepting: in std_logic;
 		sendingOut: out std_logic; 
@@ -49,18 +49,15 @@ entity ReorderBuffer is
 		outputArgInfoF: out RenameInfoArray(0 to PIPE_WIDTH-1);
 		outputSpecial: out SpecificOp;
 		
-		  dbState: in DbCoreState
+	    dbState: in DbCoreState
 	);	
 end ReorderBuffer;
 
 
 architecture Behavioral of ReorderBuffer is
-    signal outputDataSig, outputDataSig_Pre: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
-    signal outputSpecialSig, inputSpecial: InstructionSlot := DEFAULT_INS_SLOT;
+    signal inputSpecial: InstructionSlot := DEFAULT_INS_SLOT;
         
-	signal isSending,-- isEmpty,
-	       outputCompleted, outputCompleted_Pre, outputEmpty, execEvent,-- isFull, isAlmostFull,
-	       allowAlloc: std_logic := '0';	
+	signal isSending, outputCompleted, outputCompleted_Pre, outputEmpty, execEvent, allowAlloc: std_logic := '0';	
 	signal startPtr, startPtrNext, endPtr, endPtrNext, renamedPtr, renamedPtrNext, causingPtr: SmallNumber := (others => '0');	
 
     -- Static content arrays - not changing throughout lifetime
@@ -72,69 +69,197 @@ architecture Behavioral of ReorderBuffer is
     signal dynamicContent: DynamicOpInfoArray2D := (others => (others => DEFAULT_DYNAMIC_OP_INFO));
     signal dynamicGroupContent: DynamicGroupInfoArray := (others => DEFAULT_DYNAMIC_GROUP_INFO);
     -- 
+    signal robOut_N: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 
 
     signal ch0, ch1, ch2, ch3: std_logic := '0';
 
 
+
+
     -- TMP: to remove
-    function getRenameInfoSC(insVec: InstructionSlotArray; constant IS_FP: boolean := false)
+    function getRenameInfoSC(sa: StaticOpInfoArray; da: DynamicOpInfoArray; constant IS_FP: boolean := false)
     return RenameInfoArray is
         variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
-        variable va, pa: InstructionArgSpec := DEFAULT_ARG_SPEC;
-        variable ca: InstructionConstantArgs := DEFAULT_CONSTANT_ARGS;
-        variable depVec: DependencyVec;
+        --variable va: InstructionArgSpec := DEFAULT_ARG_SPEC;
+        --variable isl: InstructionSlot := DEFAULT_INS_SLOT;
+        variable cancelDest: std_logic := '0';
     begin
 
         for i in 0 to PIPE_WIDTH-1 loop
-                res(i).dbInfo := insVec(i).ins.dbInfo;
-                
-            va := insVec(i).ins.virtualArgSpec;
-            pa := insVec(i).ins.physicalArgSpec;
-            ca := insVec(i).ins.constantArgs;
-        
-            if IS_FP then        
-                res(i).destSel := va.floatDestSel;
-                res(i).destSelFP := va.floatDestSel;
-                
-                res(i).psel := pa.floatDestSel;
-            else
-                res(i).destSel := va.intDestSel;
-                res(i).psel := pa.intDestSel;
-            end if;
+            --isl := getOutputSlot(sa(i), da(i));
+
+            cancelDest := not da(i).full or da(i).hasException or da(i).specialAction;
+
+            res(i).dbInfo := --isl.ins.dbInfo;
+                              da(i).dbInfo;
+
+            --va := isl.ins.virtualArgSpec;
             
+            --    va.floatDestSel := sa(i).virtualFloatDestSel;
+            --    va.intDestSel := sa(i).virtualIntDestSel;
             
-            res(i).virtualDest := va.dest(4 downto 0);
-            res(i).physicalDest := pa.dest;
+            --pa := isl.ins.physicalArgSpec;
 
             if IS_FP then
-                res(i).sourceSel := va.floatArgSel;
+                res(i).destSel := --va.floatDestSel;
+                                    sa(i).virtualFloatDestSel;
+                res(i).destSelFP := --va.floatDestSel;
+                                    sa(i).virtualFloatDestSel;
+                
+                res(i).psel := --pa.floatDestSel;
+                                --va.floatDestSel;
+                                sa(i).virtualFloatDestSel;
             else
-                res(i).sourceSel := va.intArgSel;
+                res(i).destSel := --va.intDestSel;
+                                  sa(i).virtualIntDestSel;
+                res(i).psel := --pa.intDestSel;
+                                --va.intDestSel;
+                                sa(i).virtualIntDestSel;
             end if;
-
-            for j in 0 to 2 loop
-                res(i).sourceConst(j) :=   (va.intArgSel(j) and not isNonzero(va.args(j)(4 downto 0))) -- int r0
-                                        or (not va.intArgSel(j) and not va.floatArgSel(j))             -- not used
-                                        or (bool2std(j = 1) and ca.immSel);                            -- imm
-            end loop;
-
-            res(i).deps := depVec(i);
-            res(i).physicalSourcesNew := res(i).physicalSources;
-                                
-            for j in 0 to 2 loop
-                res(i).sourcesNew(j) := isNonzero(res(i).deps(j));
-                for k in PIPE_WIDTH-1 downto 0 loop
-                    if res(i).deps(j)(k) = '1' then
-                        exit;
-                    end if;
-                end loop;
-            end loop;
             
-            res(i).sourcesReady := (others => '0');
+                if da(i).full /= '1' then
+                    res(i).destSel := '0';
+                    res(i).destSelFP := '0';
+                end if;
+            
+                if cancelDest = '1' then
+                    res(i).psel := '0';
+                end if;
+            
+            res(i).virtualDest := --va.dest(4 downto 0);
+                                    sa(i).virtualDest;
+            res(i).physicalDest := --pa.dest;
+                                    sa(i).physicalDest;
         end loop;
         return res;
+    end function;  
+
+
+--    function getInstructionSlotArray(sa: StaticOpInfoArray; da: DynamicOpInfoArray; sgi: StaticGroupInfo; dgi: DynamicGroupInfo) return InstructionSlotArray is
+--        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
+--    begin
+--        for i in res'range loop
+--            res(i) := getOutputSlot(sa(i), da(i));
+--        end loop; 
+        
+--        res(0).ins.controlInfo.firstBr := sgi.useBQ;
+
+--        return res;
+--    end function;
+
+--    function convertROBData(isa: InstructionSlotArray) return ControlPacketArray is
+--        variable res: ControlPacketArray(isa'range) := (others => DEFAULT_CONTROL_PACKET);
+--    begin
+--        for i in res'range loop
+--            res(i).dbInfo := isa(i).ins.dbInfo;
+--            res(i).controlInfo := isa(i).ins.controlInfo;
+--            res(i).controlInfo.full := isa(i).full;
+    
+--            res(i).classInfo.branchIns := isa(i).ins.typeInfo.branchIns;      
+--            res(i).classInfo.secCluster := isa(i).ins.typeInfo.secCluster;      
+--            res(i).classInfo.useLQ := isa(i).ins.typeInfo.useLQ;      
+--        end loop;
+--        return res;
+--    end function;
+
+
+
+--    function getOutputSlot(stat: StaticOpInfo; dyn: DynamicOpInfo) return InstructionSlot is
+--        variable res: InstructionSlot := DEFAULT_INS_SLOT;
+--    begin
+--        res.ins.dbInfo := dyn.dbInfo;
+    
+--        res.full := dyn.full;
+
+--        res.ins.typeInfo.secCluster := stat.useSQ;
+--        res.ins.typeInfo.useLQ := stat.useLQ;
+--        res.ins.typeInfo.branchIns := stat.useBQ;
+
+--------------------------------
+----        res.ins.virtualArgSpec.dest(4 downto 0) := stat.virtualDest;    
+----        --res.ins.physicalArgSpec.dest := stat.physicalDest;
+
+----        res.ins.virtualArgSpec.intDestSel := stat.virtualIntDestSel;
+----        res.ins.virtualArgSpec.floatDestSel := stat.virtualFloatDestSel;
+--------------------------------
+
+----        if res.full /= '1' then-- or found then
+----            res.ins.virtualArgSpec.intDestSel := '0';
+----            res.ins.virtualArgSpec.floatDestSel := '0';                        
+----        end if;
+
+----        if res.full /= '1' or res.ins.controlInfo.hasException = '1' or res.ins.controlInfo.specialAction = '1' then
+----            res.ins.physicalArgSpec.intDestSel := '0';
+----            res.ins.physicalArgSpec.floatDestSel := '0';                        
+----        else
+----            res.ins.physicalArgSpec.intDestSel := res.ins.virtualArgSpec.intDestSel;
+----            res.ins.physicalArgSpec.floatDestSel := res.ins.virtualArgSpec.floatDestSel;  
+----        end if;
+
+--        res.ins.controlInfo.full := dyn.full;
+--        res.ins.controlInfo.killed := dyn.killed;
+--        res.ins.controlInfo.causing := dyn.causing;
+        
+--        res.ins.controlInfo.newEvent := dyn.hasEvent;
+--        res.ins.controlInfo.hasException := dyn.hasException;
+--        res.ins.controlInfo.confirmedBranch := dyn.confirmedBranch;
+--        res.ins.controlInfo.specialAction := dyn.specialAction; -- ???
+--        res.ins.controlInfo.refetch := dyn.refetch;
+
+
+--        return res;
+--    end function;
+
+    function getOutputControlArray(sa: StaticOpInfoArray; da: DynamicOpInfoArray; sgi: StaticGroupInfo; dgi: DynamicGroupInfo) return ControlPacketArray is
+        variable res: ControlPacketArray(sa'range) := (others => DEFAULT_CONTROL_PACKET);
+        --variable isl: InstructionSlot := DEFAULT_INS_SLOT;
+    begin
+        for i in res'range loop
+            --isl := getOutputSlot(sa(i), da(i));
+
+            res(i).dbInfo := --isl.ins.dbInfo;
+                                da(i).dbInfo;
+            
+            --res(i).controlInfo := isl.ins.controlInfo;
+            
+            res(i).controlInfo.full := da(i).full;
+            res(i).controlInfo.killed := da(i).killed;
+            res(i).controlInfo.causing := da(i).causing;
+
+            res(i).controlInfo.newEvent := da(i).hasEvent;
+            res(i).controlInfo.hasException := da(i).hasException;
+            res(i).controlInfo.confirmedBranch := da(i).confirmedBranch;
+            res(i).controlInfo.specialAction := da(i).specialAction;
+            res(i).controlInfo.refetch := da(i).refetch;
+            
+--            res.ins.controlInfo.newEvent := dyn.hasEvent;
+--            res.ins.controlInfo.hasException := dyn.hasException;
+--            res.ins.controlInfo.confirmedBranch := dyn.confirmedBranch;
+--            res.ins.controlInfo.specialAction := dyn.specialAction; -- ???
+--            res.ins.controlInfo.refetch := dyn.refetch;
+            
+            --res(i).controlInfo.full := isl.full;
+
+--        res.ins.typeInfo.secCluster := stat.useSQ;
+--        res.ins.typeInfo.useLQ := stat.useLQ;
+--        res.ins.typeInfo.branchIns := stat.useBQ;
+
+            res(i).classInfo.branchIns := sa(i).useBQ;      
+            res(i).classInfo.secCluster := sa(i).useSQ;      
+            res(i).classInfo.useLQ := sa(i).useLQ;
+
+--            res(i).classInfo.branchIns := isl.ins.typeInfo.branchIns;      
+--            res(i).classInfo.secCluster := isl.ins.typeInfo.secCluster;      
+--            res(i).classInfo.useLQ := isl.ins.typeInfo.useLQ;      
+        end loop;
+
+        res(0).controlInfo.firstBr := sgi.useBQ;
+
+        return res;
     end function;
+
+
 begin
     inputSpecial.ins.specificOperation <= specialOp;
 
@@ -143,7 +268,7 @@ begin
 	causingPtr <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN_LONG;
 	
     NEW_DEV: block
-        signal staticInput, staticOutput, staticOutput_Pre, staticOutput_PreDB: StaticOpInfoArray;
+        signal staticInput, staticOutput, staticOutputDB, staticOutput_Pre, staticOutput_PreDB: StaticOpInfoArray;
         signal dynamicInput, dynamicOutput, dynamicOutput_Pre: DynamicOpInfoArray;
 
         signal staticGroupInput, staticGroupOutput, staticGroupOutput_Pre: StaticGroupInfo;
@@ -151,7 +276,7 @@ begin
         
         signal serialInput, serialOutput: std_logic_vector(TMP_SERIAL_MEM_WIDTH-1 downto 0) := (others=> '0');
     begin
-    
+
         -- Inputs
         serialInput <= serializeStatic(staticInput, staticGroupInput);
            
@@ -162,10 +287,9 @@ begin
         dynamicGroupInput <= getDynamicGroupInfo(inputData, inputSpecial);
 
         -- Outputs
-        outputDataSig_Pre <= getInstructionSlotArray(staticOutput_Pre, dynamicOutput_Pre, staticGroupOutput_Pre, dynamicGroupOutput_Pre);
-        outputSpecialSig <= getSpecialSlot(staticGroupOutput, dynamicGroupOutput);
+        outputSpecial <= getSpecialOperation(staticGroupOutput, dynamicGroupOutput);
 
-    	outputCompleted_Pre <= groupCompleted(outputDataSig_Pre, dynamicOutput_Pre);
+    	outputCompleted_Pre <= groupCompleted(dynamicOutput_Pre);
 
         dynamicOutput_Pre <= readDynamicOutput(dynamicContent, startPtrNext);
         dynamicGroupOutput_Pre <= readDynamicGroupOutput(dynamicGroupContent, startPtrNext);
@@ -198,32 +322,32 @@ begin
                 end if;
 
                 -- Read output
-                staticOutput <= staticOutput_PreDB; --readStaticOutput(staticContent, startPtrNext); -- DB
+                serialOutput <= serialMemContent(p2i(startPtrNext, ROB_SIZE)); -- DB
+
+                staticOutput <= staticOutput_Pre; --readStaticOutput(staticContent, startPtrNext); -- DB
+                staticGroupOutput <= staticGroupOutput_Pre;
 
                 dynamicOutput <= dynamicOutput_Pre;
                 dynamicGroupOutput <= dynamicGroupOutput_Pre;
                 
-                serialOutput <= serialMemContent(p2i(startPtrNext, ROB_SIZE));
-                
-                staticGroupOutput <= staticGroupOutput_Pre;
-                  
-                outputDataSig <= setDbInfo(outputDataSig_Pre, staticOutput_PreDB);
-                
+                staticOutputDB <= staticOutput_PreDB;
+ 
                 outputCompleted <= outputCompleted_Pre;             
             end if;
         end process;
+
+        robOut_N <= getOutputControlArray(staticOutput, dynamicOutput, staticGroupOutput, dynamicGroupOutput);
+
+        outputArgInfoI <= getRenameInfoSC(staticOutput, dynamicOutput, false);
+        outputArgInfoF <= getRenameInfoSC(staticOutput, dynamicOutput, true);
 	end block;
 
-
     CTR_MANAGEMENT: block
-        signal recoveryCounter,-- nFull, nFullNext,
-                                 nAlloc, nAllocNext --,-- nIn,
-                                 --nInAlloc --, nOut
-                                 : SmallNumber := (others => '0');
+        signal recoveryCounter, nAlloc, nAllocNext: SmallNumber := (others => '0');
     begin    
         startPtrNext <= addIntTrunc(startPtr, 1, ROB_PTR_SIZE+1) when isSending = '1'
                    else startPtr;
-        
+
         endPtrNext <= startPtrNext when lateEventSignal = '1'
                     else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when execEvent = '1'
                     else  addIntTrunc(endPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
@@ -234,13 +358,6 @@ begin
                     else  addIntTrunc(renamedPtr, 1, ROB_PTR_SIZE+1) when prevSendingRe = '1'
                     else  renamedPtr;
 
-        --isEmpty <= getQueueEmpty(startPtr, endPtr, ROB_PTR_SIZE+1);
-        -- nFull logic
-        --nIn <= i2slv(1, SMALL_NUMBER_SIZE) when prevSending = '1' else (others => '0');
-        --nInAlloc <= i2slv(1, SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');
-        --nOut <= i2slv(1, SMALL_NUMBER_SIZE) when isSending = '1' else (others => '0');
-
-        --nFullNext <= getNumFull(startPtrNext, endPtrNext, ROB_PTR_SIZE);
         nAllocNext <= getNumFull(startPtrNext, renamedPtrNext, ROB_PTR_SIZE);
 
         MANAGEMENT: process (clk)
@@ -250,39 +367,29 @@ begin
                 endPtr <= endPtrNext;
                 renamedPtr <= renamedPtrNext;
 
-                --nFull <= nFullNext;
                 nAlloc <= nAllocNext;
-    
-                --isFull <= cmpGtU(nFullNext, ROB_SIZE-1);
-                --isAlmostFull <= cmpGtU(nFullNext, ROB_SIZE-2);
 
             	allowAlloc <= not cmpGtU(nAllocNext, ROB_SIZE-1);
-            	
+
             	-- TODO: check
                 outputEmpty <= bool2std(startPtrNext = endPtr) or lateEventSignal;
-                
+
                 if lateEventSignal = '1' or execEvent = '1' then
                     recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
                 elsif isNonzero(recoveryCounter) = '1' then
                     recoveryCounter <= addInt(recoveryCounter, -1);
                 end if;
-                
+
                 recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here    
             end if;		
         end process;
 
     end block;
-    
-    robOut <= convertROBData(outputDataSig);
-    
-    outputArgInfoI <= getRenameInfoSC(setDestFlags(outputDataSig), false);
-    outputArgInfoF <= getRenameInfoSC(setDestFlags(outputDataSig), true);                
-    outputSpecial <= outputSpecialSig.ins.specificOperation;
 
-	--acceptingOut <= not isFull;
-    --acceptingMore <= not isAlmostFull;
+    robOut <= robOut_N;
+
 	acceptAlloc <= allowAlloc;
-	
+
     isSending <= outputCompleted and nextAccepting and not outputEmpty;  
 	sendingOut <= isSending;
 

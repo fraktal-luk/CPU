@@ -200,16 +200,16 @@ function updateArgStatesFloat(riaInt, riaFloat: RenameInfoArray; readyRegFlags: 
 function replaceDests(insVec: InstructionSlotArray; ria: RenameInfoArray) return InstructionSlotArray;
 
 -- For setting dest sel flags in stages after ROB!
-function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray;
+--function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray;
 
 function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic;
 function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
 
-function convertROBData(isa: InstructionSlotArray) return ControlPacketArray;
+--function convertROBData(isa: InstructionSlotArray) return ControlPacketArray;
 
 function unfoldOp(op: SpecificOp) return SpecificOp;
 
-function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray;
+--function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray;
 
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult;
 function updateMemDest(er: ExecResult; used: std_logic) return ExecResult;
@@ -877,35 +877,6 @@ begin
 end function;
 
 
-function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-    variable found: boolean := false;
-begin
-    
-    for i in 0 to PIPE_WIDTH-1 loop
-        if insVec(i).full = '0' or found then
-            res(i).full := '0';
-            res(i).ins.virtualArgSpec.intDestSel := '0';
-            res(i).ins.virtualArgSpec.floatDestSel := '0';                        
-        end if;            
-    
-        if insVec(i).ins.controlInfo.hasException = '1' or insVec(i).ins.controlInfo.specialAction = '1' then
-            found := true;
-        end if;
-        
-        if insVec(i).full = '0' or found then
-            res(i).ins.physicalArgSpec.intDestSel := '0';
-            res(i).ins.physicalArgSpec.floatDestSel := '0';                        
-        else
-            res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
-            res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;  
-        end if;
-            found := false;
-    end loop;
-    
-    return res;
-end function;
-
 
 function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic is
     constant xored: SmallNumber := pStart xor pEnd;
@@ -962,20 +933,7 @@ begin
     return res;
 end function;
 
-function convertROBData(isa: InstructionSlotArray) return ControlPacketArray is
-    variable res: ControlPacketArray(isa'range) := (others => DEFAULT_CONTROL_PACKET);
-begin
-    for i in res'range loop
-        res(i).dbInfo := isa(i).ins.dbInfo;
-        res(i).controlInfo := isa(i).ins.controlInfo;
-        res(i).controlInfo.full := isa(i).full;
 
-        res(i).classInfo.branchIns := isa(i).ins.typeInfo.branchIns;      
-        res(i).classInfo.secCluster := isa(i).ins.typeInfo.secCluster;      
-        res(i).classInfo.useLQ := isa(i).ins.typeInfo.useLQ;      
-    end loop;
-    return res;
-end function;
 
 function unfoldOp(op: SpecificOp) return SpecificOp is
     variable res: SpecificOp := op;
@@ -993,35 +951,6 @@ begin
     return res;
 end function;
 
-function getInsSlot(elem: BufferEntry) return InstructionSlot is
-    variable res: InstructionSlot := DEFAULT_INS_SLOT;
-begin
-    res.full := elem.full;
-    res.ins.dbInfo := elem.dbInfo;
-
-    res.ins.specificOperation := unfoldOp(elem.specificOperation);
-
-    res.ins.typeInfo := elem.classInfo;
-    res.ins.typeInfo.useSQ := elem.classInfo.secCluster;
-
-    res.ins.constantArgs := elem.constantArgs;
-    res.ins.virtualArgSpec := elem.argSpec; 
-
-
-    res.ins.controlInfo.firstBr := elem.firstBr;
-    res.ins.controlInfo.specialAction := elem.specialAction;
-
-    return res;
-end function;
-
-function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(elemVec'range);
-begin
-    for i in res'range loop
-        res(i) := getInsSlot(elemVec(i));
-    end loop;
-    return res;
-end function;
 
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult is
     variable res: ExecResult := er;

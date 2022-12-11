@@ -296,7 +296,7 @@ package body LogicIssue is
         variable res: DynamicInfo := DEFAULT_DYNAMIC_INFO;
     begin
         res.full := isl.full;
-        
+
         res.status.active := res.full;
 
         res.renameIndex := isl.ins.tags.renameIndex;
@@ -304,7 +304,7 @@ package body LogicIssue is
         res.intDestSel := ri.destSel and not ri.destSelFP;
         res.floatDestSel := ri.destSelFP;
         res.dest := ri.physicalDest;
-    
+
         for i in 0 to 2 loop
             res.argStates(i).dbDep := DB_setProducer(res.argStates(i).dbDep, ri.dbDepTags(i));
         
@@ -1130,16 +1130,7 @@ end function;
     begin
         res.full := full;
         
-            res.st := info.static;
-        ----------------------------------------
---        res.dbInfo := info.static.dbInfo;
---        res.operation := info.static.operation;
---        res.branchIns := info.static.branchIns;
---        res.tags := info.static.tags;
---        res.immediate := info.static.immediate;    
---        res.immValue := info.static.immValue;
---        res.zero := info.static.zero;
---        ----------------------------------------
+        res.st := info.static;
 
         res.readNew := (others => '0');
         
@@ -1154,7 +1145,7 @@ end function;
         res.argSpec.floatDestSel := info.dynamic.floatDestSel;
         res.argSpec.dest := info.dynamic.dest;
 
-            res.destTag := iqTag;
+        res.destTag := iqTag;
 
         for k in 0 to 2 loop
             res.argLocsPipe(k) := info.dynamic.argStates(k).srcPipe;

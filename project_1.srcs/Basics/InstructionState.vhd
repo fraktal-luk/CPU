@@ -185,6 +185,25 @@ type InstructionTags is record
 end record;
 
 
+type BufferEntry is record
+    dbInfo: InstructionDebugInfo;
+    full: std_logic;
+    firstBr: std_logic; -- TEMP
+
+    -- NOTE: for compresion maybe can be just 2 bits:
+    --       (br NT, br T, br T confirmed, special) is 4 possibilities     
+    frontBranch: std_logic;
+    confirmedBranch: std_logic;
+    specialAction: std_logic;
+
+    classInfo: InstructionClassInfo;
+    specificOperation: SpecificOp;
+
+    constantArgs: InstructionConstantArgs;
+    argSpec: InstructionArgSpec;
+end record;
+
+
 type InstructionState is record
     dbInfo: InstructionDebugInfo;
 	controlInfo: InstructionControlInfo;
@@ -355,25 +374,6 @@ type ExecResult_N is record
 end record;
 
 type ExecResultArray is array(integer range <>) of ExecResult;
-
-
-type BufferEntry is record
-    dbInfo: InstructionDebugInfo;
-    full: std_logic;
-    firstBr: std_logic; -- TEMP
-
-    -- NOTE: for compresion maybe can be just 2 bits:
-    --       (br NT, br T, br T confirmed, special) is 4 possibilities     
-    frontBranch: std_logic;
-    confirmedBranch: std_logic;
-    specialAction: std_logic;
-
-    classInfo: InstructionClassInfo;
-    specificOperation: SpecificOp;
-
-    constantArgs: InstructionConstantArgs;
-    argSpec: InstructionArgSpec;
-end record;
 
 
 type EventState is record

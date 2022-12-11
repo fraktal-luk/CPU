@@ -273,8 +273,8 @@ begin
                     and allocAcceptSQ and allocAcceptLQ and allocAcceptROB;
     canSendRename <= '1'; 
 
-    renamedDataLivingMerged <= replaceDests(renamedDataLivingRe, renamedArgsMerged);
     renamedArgsMerged <= mergeRenameInfoFP(renamedArgsInt, renamedArgsFloat);
+    renamedDataLivingMerged <= replaceDests(renamedDataLivingRe, renamedArgsMerged);
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(
@@ -1514,7 +1514,7 @@ begin
 	    bqPtrOut => bqPointer,
 	    
 	    branchMaskRe => branchMaskRe,
-		dataIn => renamedDataToBQ,
+		dataIn => renamedDataToBQ,  -- Uses only .tags + .firstBr?
         dataInBr => bpData,
 
 		storeValueInput => bqUpdate,

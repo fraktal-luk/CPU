@@ -74,8 +74,7 @@ end UnitRegManager;
 
 
 architecture Behavioral of UnitRegManager is
-    signal stageDataRenameIn, renamedDataLivingPre, renamedBase, frontDataISL --, TMP_spMaskedData
-    : InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    signal renamedBase, renamedDataLivingPre: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, robSendingDelayed, frontLastSending, renamedSendingSig,
                renameLockState, renameLockStateNext, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed, renameLockEndDelayedNext,     
                renameFull,
@@ -107,91 +106,35 @@ architecture Behavioral of UnitRegManager is
         end function;
     ---------------
 
-      
-    function renameGroupBase(
-                            ia: BufferEntryArray;
-                            insVec: InstructionSlotArray;
-                            newIntDests: PhysNameArray;
-                            newFloatDests: PhysNameArray;                                
-                            renameGroupCtrNext: InsTag;
-                            newIntDestPointer: SmallNumber;
-                            newFloatDestPointer: SmallNumber;
-                            bqPointer: SmallNumber;
-                            sqPointer: SmallNumber;
-                            lqPointer: SmallNumber;
-                            bqPointerSeq: SmallNumber;
-                            renameCtr: Word;                               
-                            dbtrap: std_logic)
-     return InstructionSlotArray is
-        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-        variable reserveSelSig, takeVecInt, takeVecFloat, stores, loads, branches: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
-        variable nToTake: integer := 0;
-        variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
-        variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
-        variable tag: InsTag := renameGroupCtrNext;
-       	variable found: boolean := false;
-       	constant fullMask: std_logic_vector(0 to PIPE_WIDTH-1) := extractFullMask(insVec);
-    begin
-        stores := getStoreMask1(insVec) and fullMask;
-        loads := getLoadMask1(insVec) and fullMask;
-        branches := getBranchMask1(insVec) and fullMask;
-        
-        -- Assign dest registers
-        for i in 0 to PIPE_WIDTH-1 loop
-            if res(i).ins.virtualArgSpec.floatDestSel = '1' then
-                res(i).ins.physicalArgSpec.dest := newFloatDests(countOnes(takeVecFloat)); -- how many used before
-            else
-                res(i).ins.physicalArgSpec.dest := newIntDests(countOnes(takeVecInt)); -- how many used before
-            end if;
-            takeVecInt(i) := insVec(i).ins.virtualArgSpec.intDestSel;
-            takeVecFloat(i) := insVec(i).ins.virtualArgSpec.floatDestSel;
-            
-            res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
-            res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;     
-        end loop;
-
-        -- Setting tags
-        for i in 0 to PIPE_WIDTH-1 loop
-            tag := renameGroupCtrNext or i2slv(i, TAG_SIZE);
-            res(i).ins.dbInfo := DB_addTag(res(i).ins.dbInfo, tag);-- renameGroupCtrNext or i2slv(i, TAG_SIZE);
-
-            res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
-            res(i).ins.tags.intPointer := addInt(newIntDestPointer, countOnes(takeVecInt(0 to i)));
-                                                                         -- Don't increment pointer on ops which use no destination!
-            res(i).ins.tags.floatPointer := addInt(newFloatDestPointer, countOnes(takeVecFloat(0 to i)));
-            
-            res(i).ins.tags.bqPointer := bqPointer;     
-            res(i).ins.tags.sqPointer := addIntTrunc(sqPointer, countOnes(stores(0 to i-1)), SQ_PTR_SIZE + 1);
-            res(i).ins.tags.lqPointer := addIntTrunc(lqPointer, countOnes(loads(0 to i-1)), LQ_PTR_SIZE + 1);
-            res(i).ins.tags.bqPointerSeq := addIntTrunc(bqPointerSeq, countOnes(branches(0 to i-1)), BQ_PTR_SIZE + 2 + 1); -- CAREFUL, TODO: define BQ_SEQ_PTR_SIZE
-        end loop;
-
-        -- TODO: Why do we cancel ops after event? Rethink, maybe this step is needed just because of some bad design elsewhere
-        --       The OOO already has to deal with dynamically arising events
-
-        -- If found special instruction or exception, kill next ones
-        for i in 0 to PIPE_WIDTH-1 loop
-            if found then
-                if res(i).full = '1' then
-                    res(i).ins.controlInfo.ignored := '1';
-                end if;
-                res(i).full := '0';
-            end if;
-            
-            if res(i).full = '0' then
-                -- CAREFUL: needed for correct operation of StoreQueue + LQ
-                res(i).ins.typeInfo.secCluster := '0';
-                res(i).ins.typeInfo.useLQ := '0';            
-                res(i).ins.typeInfo.useSQ := '0';                               
-            end if;
-
-            if hasSyncEvent(res(i).ins) = '1' then
-                found := true;
-            end if;
-        end loop;
-
-        return res;
-    end function;
+          function getInsSlot(elem: BufferEntry) return InstructionSlot is
+              variable res: InstructionSlot := DEFAULT_INS_SLOT;
+          begin
+              res.full := elem.full;
+              res.ins.dbInfo := elem.dbInfo;
+          
+              res.ins.specificOperation := unfoldOp(elem.specificOperation);
+          
+              res.ins.typeInfo := elem.classInfo;
+              res.ins.typeInfo.useSQ := elem.classInfo.secCluster;
+          
+              res.ins.constantArgs := elem.constantArgs;
+              res.ins.virtualArgSpec := elem.argSpec; 
+          
+          
+              res.ins.controlInfo.firstBr := elem.firstBr;
+              res.ins.controlInfo.specialAction := elem.specialAction;
+          
+              return res;
+          end function;
+          
+          function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray is
+              variable res: InstructionSlotArray(elemVec'range);
+          begin
+              for i in res'range loop
+                  res(i) := getInsSlot(elemVec(i));
+              end loop;
+              return res;
+          end function;
 
 
     function classifyForDispatch(insVec: InstructionSlotArray) return InstructionSlotArray is
@@ -234,10 +177,92 @@ architecture Behavioral of UnitRegManager is
         
         return res;
     end function;
+      
+    function renameGroupBase(
+                            ia: BufferEntryArray;
+                            newIntDests: PhysNameArray;
+                            newFloatDests: PhysNameArray;                                
+                            renameGroupCtrNext: InsTag;
+                            newIntDestPointer: SmallNumber;
+                            newFloatDestPointer: SmallNumber;
+                            bqPointer: SmallNumber;
+                            sqPointer: SmallNumber;
+                            lqPointer: SmallNumber;
+                            bqPointerSeq: SmallNumber;
+                            renameCtr: Word;                               
+                            dbtrap: std_logic)
+     return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := TMP_recodeMem(getInsSlotArray(ia));
+        variable reserveSelSig, takeVecInt, takeVecFloat, stores, loads, branches: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
+        variable nToTake: integer := 0;
+        variable newGprTags: SmallNumberArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));    
+        variable newNumberTags: InsTagArray(0 to PIPE_WIDTH-1) := (others=>(others=>'0'));
+        variable tag: InsTag := renameGroupCtrNext;
+       	variable found: boolean := false;
+       	constant fullMask: std_logic_vector(0 to PIPE_WIDTH-1) := extractFullMask(res);
+    begin
+        stores := getStoreMask1(res) and fullMask;
+        loads := getLoadMask1(res) and fullMask;
+        branches := getBranchMask1(res) and fullMask;
+        
+        -- Assign dest registers
+        for i in 0 to PIPE_WIDTH-1 loop
+            takeVecInt(i) := res(i).ins.virtualArgSpec.intDestSel;
+            takeVecFloat(i) := res(i).ins.virtualArgSpec.floatDestSel;
+            
+            res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
+            res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;     
+        end loop;
 
-    function getRenameInfo( ia: BufferEntryArray; isa: InstructionSlotArray;
+        -- Setting tags
+        for i in 0 to PIPE_WIDTH-1 loop
+            tag := renameGroupCtrNext or i2slv(i, TAG_SIZE);
+            res(i).ins.dbInfo := DB_addTag(res(i).ins.dbInfo, tag);
+
+            res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
+            res(i).ins.tags.intPointer := addInt(newIntDestPointer, countOnes(takeVecInt(0 to i)));
+                                                                         -- Don't increment pointer on ops which use no destination!
+            res(i).ins.tags.floatPointer := addInt(newFloatDestPointer, countOnes(takeVecFloat(0 to i)));
+            
+            res(i).ins.tags.bqPointer := bqPointer;     
+            res(i).ins.tags.sqPointer := addIntTrunc(sqPointer, countOnes(stores(0 to i-1)), SQ_PTR_SIZE + 1);
+            res(i).ins.tags.lqPointer := addIntTrunc(lqPointer, countOnes(loads(0 to i-1)), LQ_PTR_SIZE + 1);
+            res(i).ins.tags.bqPointerSeq := addIntTrunc(bqPointerSeq, countOnes(branches(0 to i-1)), BQ_PTR_SIZE + 2 + 1); -- CAREFUL, TODO: define BQ_SEQ_PTR_SIZE
+        end loop;
+
+        -- TODO: Why do we cancel ops after event? Rethink, maybe this step is needed just because of some bad design elsewhere
+        --       The OOO already has to deal with dynamically arising events
+
+        -- If found special instruction or exception, kill next ones
+        for i in 0 to PIPE_WIDTH-1 loop
+            if found then
+                if res(i).full = '1' then
+                    res(i).ins.controlInfo.ignored := '1';
+                end if;
+                res(i).full := '0';
+            end if;
+
+            if res(i).full = '0' then
+                -- CAREFUL: needed for correct operation of StoreQueue + LQ
+                res(i).ins.typeInfo.secCluster := '0';
+                res(i).ins.typeInfo.useLQ := '0';            
+                res(i).ins.typeInfo.useSQ := '0';                               
+            end if;
+
+            if hasSyncEvent(res(i).ins) = '1' then
+                found := true;
+            end if;
+        end loop;
+
+        res := classifyForDispatch(res);
+
+        return res;
+    end function;
+
+
+    function getRenameInfo( ia: BufferEntryArray;
                             newPhysDests, newPhysSources, newPhysSourcesStable: PhysNameArray;
-                            newProducers: InsTagArray;
+                            newProducers: InsTagArray; -- TODO: split to some DB function
                             newSourceSelector: std_logic_vector; constant IS_FP: boolean := false)
     return RenameInfoArray is
         variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
@@ -254,8 +279,7 @@ architecture Behavioral of UnitRegManager is
         end if;
         
         for i in 0 to PIPE_WIDTH-1 loop
-            res(i).dbInfo := isa(i).ins.dbInfo;
-        
+            res(i).dbInfo := ia(i).dbInfo;
             va := ia(i).argSpec;
             ca := ia(i).constantArgs;
             
@@ -306,81 +330,22 @@ architecture Behavioral of UnitRegManager is
         end loop;
         return res;
     end function;
-
-    function getRenameInfoSC(insVec: InstructionSlotArray; constant IS_FP: boolean := false)
-    return RenameInfoArray is
-        variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
-        variable va, pa: InstructionArgSpec := DEFAULT_ARG_SPEC;
-        variable ca: InstructionConstantArgs := DEFAULT_CONSTANT_ARGS;
-        variable depVec: DependencyVec;
-    begin
-
-        for i in 0 to PIPE_WIDTH-1 loop
-            va := insVec(i).ins.virtualArgSpec;
-            pa := insVec(i).ins.physicalArgSpec;
-            ca := insVec(i).ins.constantArgs;
-        
-            if IS_FP then        
-                res(i).destSel := va.floatDestSel;
-                res(i).destSelFP := va.floatDestSel;
-                
-                res(i).psel := pa.floatDestSel;
-            else
-                res(i).destSel := va.intDestSel;
-                res(i).psel := pa.intDestSel;
-            end if;
-            
-            
-            res(i).virtualDest := va.dest(4 downto 0);
-            res(i).physicalDest := pa.dest;
-
-            if IS_FP then
-                res(i).sourceSel := va.floatArgSel;
-            else
-                res(i).sourceSel := va.intArgSel;
-            end if;
-
-            for j in 0 to 2 loop
-                res(i).sourceConst(j) :=   (va.intArgSel(j) and not isNonzero(va.args(j)(4 downto 0))) -- int r0
-                                        or (not va.intArgSel(j) and not va.floatArgSel(j))             -- not used
-                                        or (bool2std(j = 1) and ca.immSel);                            -- imm
-            end loop;
-
-            res(i).deps := depVec(i);
-            res(i).physicalSourcesNew := res(i).physicalSources;
-                                
-            for j in 0 to 2 loop
-                res(i).sourcesNew(j) := isNonzero(res(i).deps(j));
-                for k in PIPE_WIDTH-1 downto 0 loop
-                    if res(i).deps(j)(k) = '1' then
-                        exit;
-                    end if;
-                end loop;
-            end loop;
-            
-            res(i).sourcesReady := (others => '0');
-        end loop;
-        return res;
-    end function;
     
     signal inputRenameInfoInt, inputRenameInfoFloat, resultRenameInfoInt, resultRenameInfoFloat, storedRenameInfoInt, storedRenameInfoFloat,
                       commitArgInfoIntDelayed, commitArgInfoFloatDelayed: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 begin
 
-    frontDataISL <= TMP_recodeMem(getInsSlotArray(frontData));
+    inputRenameInfoInt <= getRenameInfo(frontData, zeroDests, zeroSources, zeroSources, zeroProducers, zeroSelector);
+    inputRenameInfoFloat <= getRenameInfo(frontData, zeroDests, zeroSources, zeroSources, zeroProducers, zeroSelector, true);
 
-    inputRenameInfoInt <= getRenameInfo(frontData,    renamedBase, zeroDests, zeroSources, zeroSources, zeroProducers, zeroSelector);
-    inputRenameInfoFloat <= getRenameInfo(frontData,  renamedBase, zeroDests, zeroSources, zeroSources, zeroProducers, zeroSelector, true);
-
-    resultRenameInfoInt <= getRenameInfo(frontData,   renamedBase, newIntDests, newIntSources, newIntSourcesAlt, newProducersInt, newSourceSelectorInt);
-    resultRenameInfoFloat <= getRenameInfo(frontData, renamedBase, newFloatDests, newFloatSources, newFloatSourcesAlt, newProducersFloat, newSourceSelectorFloat, true);
+    resultRenameInfoInt <= getRenameInfo(frontData, newIntDests, newIntSources, newIntSourcesAlt, newProducersInt, newSourceSelectorInt);
+    resultRenameInfoFloat <= getRenameInfo(frontData, newFloatDests, newFloatSources, newFloatSourcesAlt, newProducersFloat, newSourceSelectorFloat, true);
 
     frontLastSending <= frontSendingIn and not eventSig;
 
     eventSig <= execEventSignal or lateEventSignal;
 
     renamedBase <= renameGroupBase( frontData,
-                                    frontDataISL,
                                     newIntDests, 
                                     newFloatDests,
                                     renameGroupCtrNext,
@@ -394,8 +359,6 @@ begin
                                     '0' --dbtrapOn
                                     );
 
-    stageDataRenameIn <= classifyForDispatch(renamedBase);
-
     renamedDataLiving <= restoreRenameIndex(renamedDataLivingPre);
 
     renameGroupCtrNext <=   commitGroupCtr when lateEventSignal = '1'
@@ -403,7 +366,7 @@ begin
                        else addInt(renameGroupCtr, PIPE_WIDTH) when frontLastSending = '1'
                        else renameGroupCtr;
     
-    renameCtrNext <= addInt(renameCtr, countOnes(extractFullMask(stageDataRenameIn))) when frontLastSending = '1'
+    renameCtrNext <= addInt(renameCtr, countOnes(extractFullMask(renamedBase))) when frontLastSending = '1'
                        else renameCtr;
     
     -- Re-allow renaming when everything from rename/exec is committed - reg map will be well defined now
@@ -415,9 +378,9 @@ begin
         --                         renaming can't be done! So this delay may be caused by this problem.
         
     renameLockStateNext <= '1' when eventSig = '1'
-                        else   '0' when renameLockReleaseDelayed = '1'
-                        else   renameLockState;
-        
+                    else   '0' when renameLockReleaseDelayed = '1'
+                    else   renameLockState;
+
     renameLockEndDelayedNext <= renameLockStateNext and renameLockRelease;
 
     renamedSendingSig <= renameFull and nextAccepting and not eventSig;
@@ -431,7 +394,7 @@ begin
             
             if frontLastSending = '1' then
                 renameFull <= '1';
-                renamedDataLivingPre <= stageDataRenameIn;
+                renamedDataLivingPre <= renamedBase;
             elsif renamedSendingSig = '1' then
                 renameFull <= '0';
             end if;
@@ -572,17 +535,17 @@ begin
  
     renamedSending <= renamedSendingSig;   
 
-    renamingBr <= frontLastSending and frontDataISL(0).ins.controlInfo.firstBr;
+    renamingBr <= frontLastSending and frontData(0).firstBr;
 
-    aluMaskRe <= getAluMask1(stageDataRenameIn);
-    mulMaskRe <= getMulMask1(stageDataRenameIn);
-    memMaskRe <= getMemMask1(stageDataRenameIn);
-    branchMaskRe <= getBranchMask1(stageDataRenameIn);
-    loadMaskRe <= getLoadMask1(stageDataRenameIn);
-    storeMaskRe <= getStoreMask1(stageDataRenameIn);
-    fpMaskRe <= getFpMask1(stageDataRenameIn);
-    intStoreMaskRe <= getIntStoreMask1(stageDataRenameIn);
-    floatStoreMaskRe <= getFloatStoreMask1(stageDataRenameIn);
+    aluMaskRe <= getAluMask1(renamedBase);
+    mulMaskRe <= getMulMask1(renamedBase);
+    memMaskRe <= getMemMask1(renamedBase);
+    branchMaskRe <= getBranchMask1(renamedBase);
+    loadMaskRe <= getLoadMask1(renamedBase);
+    storeMaskRe <= getStoreMask1(renamedBase);
+    fpMaskRe <= getFpMask1(renamedBase);
+    intStoreMaskRe <= getIntStoreMask1(renamedBase);
+    floatStoreMaskRe <= getFloatStoreMask1(renamedBase);
     
     renameGroupCtrNextOut <= renameGroupCtrNext;           
 end Behavioral;
