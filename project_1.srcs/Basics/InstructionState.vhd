@@ -139,6 +139,26 @@ type InstructionControlInfo is record
     ignored: std_logic;
 end record;
 
+type InstructionControlInfo_T is record
+    full: std_logic;
+	newEvent: std_logic; -- True if any new event appears
+	hasInterrupt: std_logic;   -- CP
+	hasException: std_logic;
+    refetch: std_logic;
+    frontBranch: std_logic;
+    confirmedBranch: std_logic;
+	specialAction: std_logic;
+	dbtrap: std_logic;
+    orderViolation: std_logic;
+    tlbMiss: std_logic;         -- MQ
+    dataMiss: std_logic;        -- MQ
+    sqMiss:    std_logic;       -- MQ
+    firstBr: std_logic;
+    killed: std_logic;
+    causing: std_logic;
+    ignored: std_logic;
+end record;
+
 
 type ClassInfo_Dispatch is record
 	storeInt: std_logic;
@@ -455,6 +475,27 @@ constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
     causing => '0',
     ignored => '0'
 );
+
+    constant DEFAULT_CONTROL_INFO_T: InstructionControlInfo_T := (
+        full => '0',
+        newEvent => '0',
+        hasInterrupt => '0',
+        hasException => '0',
+        refetch => '0',
+        frontBranch => '0',
+        confirmedBranch => '0',												    											
+        specialAction => '0',
+        dbtrap => '0',
+    
+        orderViolation => '0',
+        tlbMiss => '0',
+        dataMiss => '0',
+        sqMiss => '0',
+        firstBr => '0',
+        killed => '0',
+        causing => '0',
+        ignored => '0'
+    );
 
 constant DEFAULT_CLASS_INFO: InstructionClassInfo := ( 
     mainCluster => '0',

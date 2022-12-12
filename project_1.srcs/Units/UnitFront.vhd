@@ -138,7 +138,7 @@ begin
 	
 	LEGACY: block
 	    signal partMask, partMask_N: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        signal toBQ, data_C: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
+        signal toBQ: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
         signal frontControl: ControlPacket := DEFAULT_CONTROL_PACKET;
                 
         signal groupShift: SmallNumber := sn(0);	   
@@ -170,9 +170,10 @@ begin
 
         hasBranch <= groupHasBranch(dataToIbuffer);
 
-        data_C <= getControlA(predictedAddress, fetchedLine1_Sh, partMask_N, slv2u(lastIndex) + 1 - slv2u(groupShift));
+        toBQ <= getControlA(predictedAddress, fetchedLine1_Sh, partMask_N, slv2u(lastIndex) + 1 - slv2u(groupShift), hasBranch);
 
-        toBQ <= prepareForBQ(predictedAddress, data_C, hasBranch);
+       -- toBQ <= --prepareForBQ(predictedAddress, data_C, hasBranch);
+       --         data_C;
         bqDataSigPre <= assignSeqNum(toBQ, decodeCounter);
     end block;
 

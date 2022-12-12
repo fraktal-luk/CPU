@@ -23,39 +23,17 @@ package LogicFront is
 
 function decodeInstructionNew(bits: Word) return InstructionState;
 
-function getFrontEvent(ip, target: Mword;
-                       fetchLine: WordArray(0 to FETCH_WIDTH-1);
-                       partMask: std_logic_vector)
-return ControlPacket;
+function getFrontEvent(ip, target: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1); partMask: std_logic_vector) return ControlPacket;
 
-function getControlA(ip: Mword;
-                            fetchLine: WordArray(0 to FETCH_WIDTH-1);
-                            partMask: std_logic_vector; nWords: natural)--; ALIGN_IP: boolean)
-return ControlPacketArray;
+function getControlA(ip: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1); partMask: std_logic_vector; nWords: natural; hasBranch: std_logic) return ControlPacketArray;
 
-function getEarlyEvent(cp: ControlPacket; target, predictedAddress: Mword; fetchStall, send: std_logic)
-return ControlPacket;
-
-function prepareForBQ(ip: Mword; insVec: ControlPacketArray; hasBranch: std_logic) return ControlPacketArray;
-
-function adjustStage(content: InstructionSlotArray; sh, nWords: natural) return InstructionSlotArray;
-function adjustStage(content: ControlPacketArray; sh, nWords: natural) return ControlPacketArray;
-
-function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray;
-
+function getEarlyEvent(cp: ControlPacket; target, predictedAddress: Mword; fetchStall, send: std_logic) return ControlPacket;
 
 function partialMask(adr: Mword) return std_logic_vector;
---function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; nWords: natural)--; ALIGN_IP: boolean)
---return InstructionSlotArray;
 
-function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; nWords: natural)--; ALIGN_IP: boolean)
-return BufferEntryArray;
+function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; nWords: natural) return BufferEntryArray;
 
-function groupHasBranch(insVec: InstructionSlotArray) return std_logic;
 function groupHasBranch(ea: BufferEntryArray) return std_logic;
-
---function TMP_convert2cp(insVec: InstructionSlotArray) return ControlPacketArray;
-
 
 -- DEBUG
 function assignSeqNum(cpa: ControlPacketArray; seqNum: Word) return ControlPacketArray;
@@ -69,42 +47,6 @@ end LogicFront;
 
 
 package body LogicFront is
-
-function decodeInstructionNew(bits: Word) return InstructionState is
-	variable res: InstructionState := DEFAULT_INS_STATE;
-    variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
-    variable classInfo: InstructionClassInfo := DEFAULT_CLASS_INFO;
-    variable op: SpecificOp := DEFAULT_SPECIFIC_OP;
-    variable constantArgs: InstructionConstantArgs := DEFAULT_CONSTANT_ARGS;
-    variable argSpec: InstructionArgSpec := DEFAULT_ARG_SPEC;
-begin
-	decodeFromWord(bits, classInfo, op, constantArgs, argSpec);
-	
-	res.specificOperation := decodedIns.specificOperation;
-	res.constantArgs := decodedIns.constantArgs;
-	res.virtualArgSpec := decodedIns.virtualArgSpec;
-
-    res.typeInfo := classInfo;
-
-    res.specificOperation := op;
-    res.constantArgs := constantArgs;
-    res.virtualArgSpec := argSpec;
-
-    if res.specificOperation.subpipe = none then                 	
-        res.controlInfo.specialAction := '1';
-    
-        res.typeInfo.mainCluster := '0';
-        res.typeInfo.secCluster := '0';
-    
-        if res.specificOperation.system = opUndef then
-            res.controlInfo.hasException := '1';
-        end if;        
-    end if;
-   
-    res.controlInfo.specialAction := not (res.typeInfo.mainCluster or res.typeInfo.secCluster);
-
-	return res;
-end function;
 
 
 function isJumpLink(w: Word) return std_logic is
@@ -141,87 +83,95 @@ begin
     return res; 
 end function;
 
---function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; nWords: natural)--; ALIGN_IP: boolean)
---return InstructionSlotArray is
---    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
---    variable baseIP, tmpIP: Mword := (others => '0');
---begin
-----    if ALIGN_IP then
-----        baseIP := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
-----    else
---        baseIP := ip;
-----    end if;
-    
---    for i in 0 to PIPE_WIDTH-1 loop
---        tmpIP := --ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);
---                 addInt(baseIP, 4*i);
-    
---        res(i).ins := decodeInstructionNew(fetchLine(i)); -- Here decoding!
 
---        res(i).ins.dbInfo := ctrl.dbInfo;
---        res(i).ins.dbInfo := DB_addBitsAndIp(res(i).ins.dbInfo, fetchLine(i), tmpIP);
---    end loop;
-    
---    for i in 0 to PIPE_WIDTH-1 loop
---        if full(i) = '1' and res(i).ins.typeInfo.branchIns = '1' then
---            res(0).ins.controlInfo.firstBr := '1'; -- TMP, indicating that group has a branch
---        end if;   
---    end loop;
-
---        res := adjustStage(res, 0, nWords);
-
---    return res;
---end function;
-
-
-function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; nWords: natural)--; ALIGN_IP: boolean)
-return BufferEntryArray is
-    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    variable res_N: BufferEntryArray --(0 to PIPE_WIDTH-1)
-                                         := (others => DEFAULT_BUFFER_ENTRY);
-    variable baseIP, tmpIP: Mword := (others => '0');
+function decodeInstructionNew(bits: Word) return InstructionState is
+	variable res: InstructionState := DEFAULT_INS_STATE;
+    variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
+    variable classInfo: InstructionClassInfo := DEFAULT_CLASS_INFO;
+    variable op: SpecificOp := DEFAULT_SPECIFIC_OP;
+    variable constantArgs: InstructionConstantArgs := DEFAULT_CONSTANT_ARGS;
+    variable argSpec: InstructionArgSpec := DEFAULT_ARG_SPEC;
 begin
---    if ALIGN_IP then
---        baseIP := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
---    else
-        baseIP := ip;
---    end if;
-    
-    for i in 0 to PIPE_WIDTH-1 loop
-        tmpIP := --ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);
-                 addInt(baseIP, 4*i);
-    
-        res(i).ins := decodeInstructionNew(fetchLine(i)); -- Here decoding!
+	decodeFromWord(bits, classInfo, op, constantArgs, argSpec);
 
-        res(i).ins.dbInfo := ctrl.dbInfo;
-        res(i).ins.dbInfo := DB_addBitsAndIp(res(i).ins.dbInfo, fetchLine(i), tmpIP);
+    res.typeInfo := classInfo;
+
+    res.specificOperation := op;
+    res.constantArgs := constantArgs;
+    res.virtualArgSpec := argSpec;
+
+    if res.specificOperation.subpipe = none then
+        res.typeInfo.mainCluster := '0';
+        res.typeInfo.secCluster := '0';
+
+        res.controlInfo.specialAction := '1';
+
+        res.controlInfo.hasException := bool2std(res.specificOperation.system = opUndef);--'1';
+    end if;
+
+    res.controlInfo.specialAction := not (res.typeInfo.mainCluster or res.typeInfo.secCluster);
+
+	return res;
+end function;
+
+function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; nWords: natural) return BufferEntryArray is
+    variable res: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+    variable res_N: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
+    variable tmpIP: Mword := (others => '0');
+    variable insState: InstructionState := DEFAULT_INS_STATE;
+    variable anyBranch: std_logic := '0';
+begin
+    for i in 0 to FETCH_WIDTH-1 loop
+        tmpIP := addInt(ip, 4*i);
+
+        res(i).ins := decodeInstructionNew(fetchLine(i)); -- Here decoding!
+        res(i).ins.dbInfo := DB_addBitsAndIp(ctrl.dbInfo, fetchLine(i), tmpIP);
     end loop;
     
-    for i in 0 to PIPE_WIDTH-1 loop
+    for i in 0 to FETCH_WIDTH-1 loop
         if full(i) = '1' and res(i).ins.typeInfo.branchIns = '1' then
-            res(0).ins.controlInfo.firstBr := '1'; -- TMP, indicating that group has a branch
+           -- anyBranch := '1';
+            --res(0).ins.controlInfo.firstBr := '1'; -- TMP, indicating that group has a branch
         end if;   
     end loop;
 
-        res := adjustStage(res, 0, nWords);
+    for i in 0 to FETCH_WIDTH-1 loop
+        res(i).full := bool2std(i < nWords);
 
-    res_N := getEntryArray(res);
+        if res(i).full = '1' and res(i).ins.typeInfo.branchIns = '1' then
+            anyBranch := '1';
+            --res(0).ins.controlInfo.firstBr := '1'; -- TMP, indicating that group has a branch
+        end if; 
+
+        if res(i).full = '0' then
+            res(i).ins.virtualArgSpec.intDestSel := '0';
+            res(i).ins.virtualArgSpec.floatDestSel := '0';
+        end if;          
+    end loop;
+
+    for i in 0 to FETCH_WIDTH-1 loop
+        res_N(i).full := res(i).full;
+        
+        res_N(i).firstBr := res(i).ins.controlInfo.firstBr;
+                            
+        res_N(i).frontBranch := res(i).ins.controlInfo.frontBranch;
+        res_N(i).confirmedBranch := res(i).ins.controlInfo.confirmedBranch;
+        res_N(i).specialAction := res(i).ins.controlInfo.specialAction;
+    
+        res_N(i).classInfo := res(i).ins.typeInfo;
+    
+        res_N(i).specificOperation := res(i).ins.specificOperation;
+        res_N(i).constantArgs := res(i).ins.constantArgs;
+        res_N(i).argSpec := res(i).ins.virtualArgSpec;
+        
+        res_N(i).dbInfo := res(i).ins.dbInfo;
+    end loop;
+
+    res_N(0).firstBr := anyBranch;
 
     return res_N;
 end function;
 
-
-
-function groupHasBranch(insVec: InstructionSlotArray) return std_logic is
-begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        if insVec(i).full = '1' and insVec(i).ins.typeInfo.branchIns = '1' then
-            return '1';
-        end if;   
-    end loop;
-
-    return '0';
-end function;
 
 function groupHasBranch(ea: BufferEntryArray) return std_logic is
 begin
@@ -234,24 +184,8 @@ begin
     return '0';
 end function;
 
---function TMP_convert2cp(insVec: InstructionSlotArray) return ControlPacketArray is
---    variable res: ControlPacketArray(0 to insVec'length-1) := (others => DEFAULT_CONTROL_PACKET);
---begin
---    for i in res'range loop
---        res(i).controlInfo := insVec(i).ins.controlInfo;
---        res(i).controlInfo.full := insVec(i).full;
 
---        res(i).classInfo := insVec(i).ins.typeInfo;
---    end loop;
-    
---    return res;
---end function;
-
-
-function getFrontEvent(ip, target: Mword;
-                       fetchLine: WordArray(0 to FETCH_WIDTH-1);
-                       partMask: std_logic_vector)
-return ControlPacket is
+function getFrontEvent(ip, target: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1); partMask: std_logic_vector) return ControlPacket is
 	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 	variable tempOffset, tempIP, tempTarget: Mword := (others => '0');
 	variable branchIns, predictedTaken, uncondJump, longJump: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
@@ -297,6 +231,7 @@ begin
                 res.controlInfo.confirmedBranch := '1';
             end if;
 
+            res.controlInfo.full := '1';
             res.controlInfo.frontBranch := '1';					
 
             if longJump(i) = '1' then
@@ -321,10 +256,6 @@ begin
                 res.controlInfo.newEvent := '1';         -- !! Only for BQ
             end if;
 
-            res.controlInfo.full := '1';
-
-            res.ip := tempIP;
-            --res.ip(10-4 downto 0) := ips(i)(10-4 downto 0); -- Miniumm numbr of bits which works
             res.target := tempTarget;
 
             res.tags.bqPointer := sn(i); -- TMP!
@@ -335,7 +266,6 @@ begin
 
 	return res;
 end function;
-
 
 
 function getEarlyEvent(cp: ControlPacket; target, predictedAddress: Mword; fetchStall, send: std_logic)
@@ -360,14 +290,9 @@ begin
 end function;
 
 
-
-function getControlA(ip: Mword;
-                            fetchLine: WordArray(0 to FETCH_WIDTH-1);
-                            partMask: std_logic_vector; nWords: natural)--; ALIGN_IP: boolean)
-return ControlPacketArray is
-	variable resIS: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
+function getControlA(ip: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1); partMask: std_logic_vector; nWords: natural; hasBranch: std_logic) return ControlPacketArray is
 	variable res: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
-	variable baseIP, tempIP, tempOffset, lastRes: Mword := (others => '0');
+	variable tempIP, tempOffset, lastRes: Mword := (others => '0');
 	variable targets, results: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 	variable fullOut, branchIns, predictedTaken, uncondJump: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 	variable regularJump, longJump, regJump: std_logic := '0';
@@ -410,159 +335,30 @@ begin
 
         branchIns(i) := regularJump or longJump or regJump;
 
---        if ALIGN_IP then
---            baseIP := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
---        else
-            baseIP := ip;
---        end if;
-        
-        tempIP := addInt(baseIP, 4*i);
+        tempIP := addInt(ip, 4*i);
         targets(i) := add(tempIP, tempOffset);
-	    results(i) := addInt(tempIP, 4);
---	end loop;
+	    results(i) := addInt(ip, 4*(i + 1));
 
-------	lastRes := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(0, ALIGN_BITS);
-------	results(PIPE_WIDTH-1) := add(lastRes, PC_INC);
-
-----    -- Find if any branch predicted
---    for i in 0 to FETCH_WIDTH-1 loop
         fullOut(i) := partMask(i);
         if partMask(i) = '1' and branchIns(i) = '1' and predictedTaken(i) = '1' then
             if uncondJump(i) = '1' then -- CAREFUL: setting it here, so that if implementation treats is as NOP in Exec, it still gets this flag
-                resIS(i).ins.controlInfo.confirmedBranch := '1';
+                res(i).controlInfo.confirmedBranch := '1';
             end if;
 
-            resIS(i).ins.controlInfo.frontBranch := '1';					
-
-            --exit;
+            res(i).controlInfo.frontBranch := '1';
         end if;
---    end loop;
 
---    for i in 0 to FETCH_WIDTH-1 loop
-        res(i).controlInfo := resIS(i).ins.controlInfo;
-      --  res(i).controlInfo.full := fullOut(i);    
-        --res(i).ip := ips(i);
-        res(i).target := targets(i);    -- !! Only for BQ
-        res(i).nip := results(i);        
+       res(i).target := targets(i);
+       res(i).nip := results(i);
     end loop;
-
-        res := adjustStage(res, 0, nWords);
-
-	return res;
-end function;
-
-
-
-function getEntry(isl: InstructionSlot) return BufferEntry is
-    variable res: BufferEntry;
-begin
-    res.full := isl.full;
-    
-    res.firstBr := isl.ins.controlInfo.firstBr;
-    
-    res.frontBranch := isl.ins.controlInfo.frontBranch;
-    res.confirmedBranch := isl.ins.controlInfo.confirmedBranch;
-    res.specialAction := isl.ins.controlInfo.specialAction;
-
-    res.classInfo := isl.ins.typeInfo;
-
-    res.specificOperation := isl.ins.specificOperation;
-    res.constantArgs := isl.ins.constantArgs;
-    res.argSpec := isl.ins.virtualArgSpec;
-    
-    res.dbInfo := isl.ins.dbInfo;
-
-    return res;
-end function;
-
-function getEntryArray(insVec: InstructionSlotArray) return BufferEntryArray is
-    variable res: BufferEntryArray;
-begin
-    for i in res'range loop
-        res(i) := getEntry(insVec(i));
-    end loop;            
-    return res;
-end function;
-
-
-function adjustStage(content: InstructionSlotArray; sh, nWords: natural) return InstructionSlotArray is
-    constant LEN: positive := content'length;
-    variable res: InstructionSlotArray(0 to LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    variable contentExt: InstructionSlotArray(0 to 2*LEN-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-begin
-    contentExt(0 to LEN-1) := content;
-    contentExt(LEN to 2*LEN-1) := (others => ('0', content(LEN-1).ins)); -- leave it instead of rotating
-
-    for i in 0 to LEN-1 loop
-        res(i) := contentExt(sh + i);
-        res(i).full := bool2std(i < nWords);
-
-        if res(i).full = '0' then
-            res(i).ins.virtualArgSpec.intDestSel := '0';
-            res(i).ins.virtualArgSpec.floatDestSel := '0';
-        end if;          
-    end loop;
-
-    -- TMP!
-    res(0).ins.controlInfo.firstBr := content(0).ins.controlInfo.firstBr;
-        
-    return res;
-end function;
-
-function adjustStage(content: ControlPacketArray; sh, nWords: natural) return ControlPacketArray is
-    constant LEN: positive := content'length;
-    variable res: ControlPacketArray(0 to LEN-1) := (others => DEFAULT_CONTROL_PACKET);
-    variable contentExt: ControlPacketArray(0 to 2*LEN-1) := (others => DEFAULT_CONTROL_PACKET);
-begin
-    contentExt(0 to LEN-1) := content;
-    contentExt(LEN to 2*LEN-1) := (others => content(LEN-1)); -- leave it instead of rotating
-
-    for i in 0 to LEN-1 loop
-        res(i) := contentExt(sh + i);
-        res(i).controlInfo.full := bool2std(i < nWords);  
-    end loop;
-
-    return res;
-end function;
-
-
-function prepareForBQ(ip: Mword; insVec: ControlPacketArray; hasBranch: std_logic) return ControlPacketArray is
-	variable insVecSh: ControlPacketArray(insVec'range) := insVec;
-	variable res: ControlPacketArray(0 to insVec'length-1) := (others => DEFAULT_CONTROL_PACKET);
-	variable result, target: Mword;
-	variable branchMask: std_logic_vector(insVec'range) := (others => '0');
-	variable nSh: natural := 0;
-begin
-    insVecSh := insVec;
-    nSh := slv2u(ip(ALIGN_BITS-1 downto 2));
-
-    for i in 0 to PIPE_WIDTH-1 loop
-        branchMask(i) := insVec(i).controlInfo.full and insVec(i).classInfo.branchIns;
-
-        if i + nSh >= PIPE_WIDTH-1 then
-            insVecSh(i).nip(MWORD_SIZE-1 downto ALIGN_BITS) := addInt(ip(MWORD_SIZE-1 downto ALIGN_BITS), 1);
-            insVecSh(i).nip(ALIGN_BITS-1 downto 0) := (others => '0');
-        else
-            insVecSh(i).nip(MWORD_SIZE-1 downto ALIGN_BITS) := ip(MWORD_SIZE-1 downto ALIGN_BITS);      
-            insVecSh(i).nip(ALIGN_BITS-1 downto 2) := i2slv(i + nSh + 1, ALIGN_BITS-2);                           
-        end if;        
-    end loop;
-
-	for i in insVec'range loop
-       res(i).controlInfo := insVecSh(i).controlInfo;
-       res(i).controlInfo.full := branchMask(i);
-       res(i).classInfo := insVecSh(i).classInfo;
-       res(i).target := insVecSh(i).target;
-       res(i).nip := insVecSh(i).nip;
-	end loop;
 
     -- TMP!
     res(0).ip(MWORD_SIZE-1 downto ALIGN_BITS) := ip(MWORD_SIZE-1 downto ALIGN_BITS);
-
     res(0).controlInfo.firstBr := hasBranch;
 
 	return res;
 end function;
+
 
 function assignSeqNum(cpa: ControlPacketArray; seqNum: Word) return ControlPacketArray is
     variable res: ControlPacketArray(0 to cpa'length-1) := cpa;
