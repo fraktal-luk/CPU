@@ -101,7 +101,7 @@ architecture Behavioral of BranchQueue is
 begin
        
     earlyInputSending <= prevSendingBr and dataInBr(0).controlInfo.firstBr;
-    lateInputSending <= prevSending and dataIn(0).ins.controlInfo.firstBr;
+    lateInputSending <= prevSending and dataIn(0).ins.controlInfo.firstBr_T;
     
     RW: block
        signal earlySerialInput, earlySerialSelected:  std_logic_vector(EARLY_INFO_SIZE-1 downto 0) := (others => '0');

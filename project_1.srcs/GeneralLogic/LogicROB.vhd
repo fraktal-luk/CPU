@@ -155,7 +155,7 @@ function getStaticGroupInfo(isa: InstructionSlotArray; ssl: InstructionSlot) ret
     variable res: StaticGroupInfo;
 begin
     res.specialOp := sop(None, ssl.ins.specificOperation.system).bits;       
-    res.useBQ := isa(0).ins.controlInfo.firstBr;
+    res.useBQ := isa(0).ins.controlInfo.firstBr_T;
     return res;
 end function;
     
@@ -209,8 +209,8 @@ begin
 
     res.hasEvent := '0';
     res.hasException := '0';
-    res.confirmedBranch := isl.ins.controlInfo.confirmedBranch;
-    res.specialAction := isl.ins.controlInfo.specialAction; -- ???
+    res.confirmedBranch := '0';--isl.ins.controlInfo.confirmedBranch;
+    res.specialAction := isl.ins.controlInfo.specialAction_T; -- ???
     res.refetch := '0';
     return res;
 end function;

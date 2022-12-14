@@ -15,7 +15,9 @@ use work.InstructionState.all;
 
 package DecodingDev is
 
-procedure decodeFromWord(w: in Word; classInfo: out InstructionClassInfo; op: out SpecificOp; constantArgs: out InstructionConstantArgs; argSpec: out InstructionArgSpec);
+--procedure decodeFromWord(w: in Word; classInfo: out InstructionClassInfo; op: out SpecificOp; constantArgs: out InstructionConstantArgs; argSpec: out InstructionArgSpec);
+procedure decodeFromWord(w: in Word; classInfo: out InstructionClassInfo; oOp: out SpecificOp; oConstantArgs: out InstructionConstantArgs; oArgSpec: out InstructionArgSpec);
+
 
 end package;
 
@@ -205,10 +207,14 @@ begin
 end function;
 
 
-procedure decodeFromWord(w: in Word; classInfo: out InstructionClassInfo; op: out SpecificOp; constantArgs: out InstructionConstantArgs; argSpec: out InstructionArgSpec) is
-    variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
+procedure decodeFromWord(w: in Word; classInfo: out InstructionClassInfo; oOp: out SpecificOp; oConstantArgs: out InstructionConstantArgs; oArgSpec: out InstructionArgSpec) is
+    --variable res: InstructionState := DEFAULT_INSTRUCTION_STATE;
     variable specificOperation: SpecificOp := DEFAULT_SPECIFIC_OP;
-    
+    variable constantArgs: InstructionConstantArgs := DEFAULT_CONSTANT_ARGS;
+
+    variable op: SpecificOp := DEFAULT_SPECIFIC_OP;
+    variable argSpec: InstructionArgSpec := DEFAULT_ARG_SPEC;
+
     constant op0: slv6 := w(31 downto 26);
     constant op1: slv6 := w(15 downto 10);
     constant op2: slv5 := w(4 downto 0);
@@ -270,7 +276,8 @@ begin
                          or checkOp1(op0, "000011", op1, OP1_FLOAT_MEM_LOAD)
                          or checkOp1(op0, "000100", op1, OP1_SYS_MEM_LOAD));
      
-    res.specificOperation := decodeOperation(op0, op1, op2);
+    --res.specificOperation := decodeOperation(op0, op1, op2);
+    op := decodeOperation(op0, op1, op2);
     
     classInfo.branchIns := bool2std(isBranch);
     
@@ -282,50 +289,90 @@ begin
     classInfo.useFP := bool2std(hasFpDest or fpSrc0 or fpSrc1 or fpSrc2);
     
     -- assign register definitions
-    res.virtualArgSpec.dest := "000" & qa;
-    if hasIntDest and isNonzero(res.virtualArgSpec.dest) = '1' then
-        res.virtualArgSpec.intDestSel := '1';
-    elsif hasFpDest then
-        res.virtualArgSpec.floatDestSel := '1';
-    else -- When none selected, set 0
-        --res.virtualArgSpec.dest := (others => '0');
-    end if;
+--    res.virtualArgSpec.dest := "000" & qa;
+--    if hasIntDest and isNonzero(res.virtualArgSpec.dest) = '1' then
+--        res.virtualArgSpec.intDestSel := '1';
+--    elsif hasFpDest then
+--        res.virtualArgSpec.floatDestSel := '1';
+--    else -- When none selected, set 0
+--        --res.virtualArgSpec.dest := (others => '0');
+--    end if;
     
-    if src0a then
-       res.virtualArgSpec.args(0) := "000" & qa;
-    else
-       res.virtualArgSpec.args(0) := "000" & qb;
-    end if;
+--    if src0a then
+--       res.virtualArgSpec.args(0) := "000" & qa;
+--    else
+--       res.virtualArgSpec.args(0) := "000" & qb;
+--    end if;
 
-    res.virtualArgSpec.intArgSel := (bool2std(intSrc0), bool2std(intSrc1), bool2std(intSrc2));
-    res.virtualArgSpec.floatArgSel := (bool2std(fpSrc0), bool2std(fpSrc1), bool2std(fpSrc2));
+--    res.virtualArgSpec.intArgSel := (bool2std(intSrc0), bool2std(intSrc1), bool2std(intSrc2));
+--    res.virtualArgSpec.floatArgSel := (bool2std(fpSrc0), bool2std(fpSrc1), bool2std(fpSrc2));
 
-    if hasImm16 or hasImm10 or hasImm26 or hasImm21 then
-        res.virtualArgSpec.args(1) := (others => '0');
-    else
-        res.virtualArgSpec.args(1) := "000" & qc;
-    end if;
+--    if hasImm16 or hasImm10 or hasImm26 or hasImm21 then
+--        res.virtualArgSpec.args(1) := (others => '0');
+--    else
+--        res.virtualArgSpec.args(1) := "000" & qc;
+--    end if;
 
-    if src2a then
-       res.virtualArgSpec.args(2) := "000" & qa;
-    else
-       res.virtualArgSpec.args(2) := (others => '0');
-    end if;
+--    if src2a then
+--       res.virtualArgSpec.args(2) := "000" & qa;
+--    else
+--       res.virtualArgSpec.args(2) := (others => '0');
+--    end if;
+
+        argSpec.dest := "000" & qa;
+        if hasIntDest and isNonzero(argSpec.dest) = '1' then
+            argSpec.intDestSel := '1';
+        elsif hasFpDest then
+            argSpec.floatDestSel := '1';
+        else -- When none selected, set 0
+            --res.virtualArgSpec.dest := (others => '0');
+        end if;
+        
+        if src0a then
+           argSpec.args(0) := "000" & qa;
+        else
+           argSpec.args(0) := "000" & qb;
+        end if;
     
+        argSpec.intArgSel := (bool2std(intSrc0), bool2std(intSrc1), bool2std(intSrc2));
+        argSpec.floatArgSel := (bool2std(fpSrc0), bool2std(fpSrc1), bool2std(fpSrc2));
+    
+        if hasImm16 or hasImm10 or hasImm26 or hasImm21 then
+            argSpec.args(1) := (others => '0');
+        else
+            argSpec.args(1) := "000" & qc;
+        end if;
+    
+        if src2a then
+           argSpec.args(2) := "000" & qa;
+        else
+           argSpec.args(2) := (others => '0');
+        end if;
+
+
     -- process immediate
-    res.constantArgs.immSel := bool2std(hasImm16 or hasImm10 or hasImm26 or hasImm21);    
-    res.constantArgs.imm := w;
+--    res.constantArgs.immSel := bool2std(hasImm16 or hasImm10 or hasImm26 or hasImm21);    
+--    res.constantArgs.imm := w;
     
-    if hasImm16 then
-        res.constantArgs.imm(31 downto 16) := (others => w(15));
-    else
-        res.constantArgs.imm(31 downto 10) := (others => w(9));
-    end if;
-    
+--    if hasImm16 then
+--        res.constantArgs.imm(31 downto 16) := (others => w(15));
+--    else
+--        res.constantArgs.imm(31 downto 10) := (others => w(9));
+--    end if;
+
+        constantArgs.immSel := bool2std(hasImm16 or hasImm10 or hasImm26 or hasImm21);    
+        constantArgs.imm := w;
+        
+        if hasImm16 then
+            constantArgs.imm(31 downto 16) := (others => w(15));
+        else
+            constantArgs.imm(31 downto 10) := (others => w(9));
+        end if;
+
     --classInfo := res.classInfo;
-    op := res.specificOperation;
-    constantArgs := res.constantArgs;
-    argSpec := res.virtualArgSpec;
+    oOp := op;
+    oConstantArgs := constantArgs;
+    oArgSpec := argSpec;
 end procedure;
 
 end package body;

@@ -140,23 +140,8 @@ type InstructionControlInfo is record
 end record;
 
 type InstructionControlInfo_T is record
-    full: std_logic;
-	newEvent: std_logic; -- True if any new event appears
-	hasInterrupt: std_logic;   -- CP
-	hasException: std_logic;
-    refetch: std_logic;
-    frontBranch: std_logic;
-    confirmedBranch: std_logic;
-	specialAction: std_logic;
-	dbtrap: std_logic;
-    orderViolation: std_logic;
-    tlbMiss: std_logic;         -- MQ
-    dataMiss: std_logic;        -- MQ
-    sqMiss:    std_logic;       -- MQ
-    firstBr: std_logic;
-    killed: std_logic;
-    causing: std_logic;
-    ignored: std_logic;
+	specialAction_T: std_logic;
+    firstBr_T: std_logic;
 end record;
 
 
@@ -226,7 +211,7 @@ end record;
 
 type InstructionState is record
     dbInfo: InstructionDebugInfo;
-	controlInfo: InstructionControlInfo;
+	controlInfo: InstructionControlInfo_T;
 	tags: InstructionTags;
 	specificOperation: SpecificOp;
 	typeInfo: InstructionClassInfo;
@@ -471,30 +456,14 @@ constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
     dataMiss => '0',
     sqMiss => '0',
     firstBr => '0',
-    killed => '0',
-    causing => '0',
-    ignored => '0'
+    killed => '0',  -- ??
+    causing => '0', -- ??
+    ignored => '0'  -- ??
 );
 
-    constant DEFAULT_CONTROL_INFO_T: InstructionControlInfo_T := (
-        full => '0',
-        newEvent => '0',
-        hasInterrupt => '0',
-        hasException => '0',
-        refetch => '0',
-        frontBranch => '0',
-        confirmedBranch => '0',												    											
-        specialAction => '0',
-        dbtrap => '0',
-    
-        orderViolation => '0',
-        tlbMiss => '0',
-        dataMiss => '0',
-        sqMiss => '0',
-        firstBr => '0',
-        killed => '0',
-        causing => '0',
-        ignored => '0'
+    constant DEFAULT_CONTROL_INFO_T: InstructionControlInfo_T := (											    											
+        specialAction_T => '0',
+        firstBr_T => '0'
     );
 
 constant DEFAULT_CLASS_INFO: InstructionClassInfo := ( 
@@ -521,7 +490,7 @@ constant DEFAULT_ARG_SPEC: InstructionArgSpec := (
 
 constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
     dbInfo => DEFAULT_DEBUG_INFO,
-	controlInfo => DEFAULT_CONTROL_INFO,	
+	controlInfo => DEFAULT_CONTROL_INFO_T,	
 	specificOperation => DEFAULT_SPECIFIC_OP,
 	tags => DEFAULT_INSTRUCTION_TAGS,
 	typeInfo => DEFAULT_CLASS_INFO,

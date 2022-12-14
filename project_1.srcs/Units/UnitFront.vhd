@@ -172,8 +172,6 @@ begin
 
         toBQ <= getControlA(predictedAddress, fetchedLine1_Sh, partMask_N, slv2u(lastIndex) + 1 - slv2u(groupShift), hasBranch);
 
-       -- toBQ <= --prepareForBQ(predictedAddress, data_C, hasBranch);
-       --         data_C;
         bqDataSigPre <= assignSeqNum(toBQ, decodeCounter);
     end block;
 

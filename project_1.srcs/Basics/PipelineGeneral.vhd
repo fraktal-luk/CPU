@@ -145,17 +145,17 @@ function getLowBits(vec: std_logic_vector; n: integer) return std_logic_vector;
 function compareTagBefore(tagA, tagB: InsTag) return std_logic;
 function compareTagAfter(tagA, tagB: InsTag) return std_logic;
 
-function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray;
+--function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray;
 
-function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot;
+--function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot;
 
-function getAddressIncrement(ins: InstructionState) return Mword;
+--function getAddressIncrement(ins: InstructionState) return Mword;
 
 function findDeps(ia: BufferEntryArray) return DependencyVec;
 function getRealDepVecInt(ia: BufferEntryArray; depVec: DependencyVec) return DependencyVec;
 function getRealDepVecFloat(ia: BufferEntryArray; depVec: DependencyVec) return DependencyVec;   
 
-function hasSyncEvent(ins: InstructionState) return std_logic;
+--function hasSyncEvent(ins: InstructionState) return std_logic;
 function hasSyncEvent(ct: InstructionControlInfo) return std_logic;
 
 
@@ -278,16 +278,16 @@ end function;
         return res;
     end function;
 
-function getAddressIncrement(ins: InstructionState) return Mword is
-	variable res: Mword := (others => '0');
-begin
-	if false then --ins.classInfo.short = '1' then
-		res(1) := '1'; -- 2
-	else
-		res(2) := '1'; -- 4
-	end if;
-	return res;
-end function;
+--function getAddressIncrement(ins: InstructionState) return Mword is
+--	variable res: Mword := (others => '0');
+--begin
+--	if false then --ins.classInfo.short = '1' then
+--		res(1) := '1'; -- 2
+--	else
+--		res(2) := '1'; -- 4
+--	end if;
+--	return res;
+--end function;
 
 
 function compareTagBefore(tagA, tagB: InsTag) return std_logic is
@@ -691,36 +691,7 @@ begin
     end loop;
     return res;
 end function;
-        
-        
-        
-function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := content;
-begin
-    for i in 1 to PIPE_WIDTH-1 loop
-        res(i).ins.tags.renameIndex := clearTagLow(res(0).ins.tags.renameIndex) or i2slv(i, TAG_SIZE);
-    end loop;
 
-    return res;
-end function;
-
-
-function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot is
-   variable res: InstructionSlot := insVec(0);
-begin
-   res.full := '0';  
-   for i in PIPE_WIDTH-1 downto 0 loop
-       -- TODO: simpler to get last full slot because if a static event is present, nothing will be after it in group.
-       --       Then the 'full' bit of 'special' would be set if specialAction/exc/dbTrap
-       if (insVec(i).full and hasSyncEvent(insVec(i).ins)) = '1' then
-           res := insVec(i);
-           res.ins.specificOperation.system := SysOp'val(slv2u(res.ins.specificOperation.bits));
-           exit;
-       end if;
-   end loop;
-   
-   return res;
-end function;    
 
 
 
@@ -865,11 +836,6 @@ begin
     return bool2std(op.memory = opStoreSys);
 end function;
 
-
-function hasSyncEvent(ins: InstructionState) return std_logic is
-begin
-    return  ins.controlInfo.hasException or ins.controlInfo.specialAction or ins.controlInfo.dbtrap; 
-end function;
 
 function hasSyncEvent(ct: InstructionControlInfo) return std_logic is
 begin

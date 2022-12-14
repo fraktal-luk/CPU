@@ -86,7 +86,7 @@ end function;
 
 function decodeInstructionNew(bits: Word) return InstructionState is
 	variable res: InstructionState := DEFAULT_INS_STATE;
-    variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
+    --variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
     variable classInfo: InstructionClassInfo := DEFAULT_CLASS_INFO;
     variable op: SpecificOp := DEFAULT_SPECIFIC_OP;
     variable constantArgs: InstructionConstantArgs := DEFAULT_CONSTANT_ARGS;
@@ -100,17 +100,6 @@ begin
     res.constantArgs := constantArgs;
     res.virtualArgSpec := argSpec;
 
-    if res.specificOperation.subpipe = none then
-        res.typeInfo.mainCluster := '0';
-        res.typeInfo.secCluster := '0';
-
-        res.controlInfo.specialAction := '1';
-
-        res.controlInfo.hasException := bool2std(res.specificOperation.system = opUndef);--'1';
-    end if;
-
-    res.controlInfo.specialAction := not (res.typeInfo.mainCluster or res.typeInfo.secCluster);
-
 	return res;
 end function;
 
@@ -118,53 +107,75 @@ function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1
     variable res: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     variable res_N: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
     variable tmpIP: Mword := (others => '0');
-    variable insState: InstructionState := DEFAULT_INS_STATE;
+    --variable insState: InstructionState := DEFAULT_INS_STATE;
+    
+    variable controlInfo: InstructionControlInfo_T := DEFAULT_CONTROL_INFO_T;
+    variable classInfo: InstructionClassInfo := DEFAULT_CLASS_INFO;
+    variable op: SpecificOp := DEFAULT_SPECIFIC_OP;
+    variable constantArgs: InstructionConstantArgs := DEFAULT_CONSTANT_ARGS;
+    variable argSpec: InstructionArgSpec := DEFAULT_ARG_SPEC;
     variable anyBranch: std_logic := '0';
 begin
     for i in 0 to FETCH_WIDTH-1 loop
         tmpIP := addInt(ip, 4*i);
 
-        res(i).ins := decodeInstructionNew(fetchLine(i)); -- Here decoding!
-        res(i).ins.dbInfo := DB_addBitsAndIp(ctrl.dbInfo, fetchLine(i), tmpIP);
-    end loop;
+        --insState := decodeInstructionNew(fetchLine(i)); 
+	    decodeFromWord(fetchLine(i), classInfo, op, constantArgs, argSpec);
+        controlInfo := DEFAULT_CONTROL_INFO_T;
+--        insState.typeInfo := classInfo;
     
-    for i in 0 to FETCH_WIDTH-1 loop
-        if full(i) = '1' and res(i).ins.typeInfo.branchIns = '1' then
-           -- anyBranch := '1';
-            --res(0).ins.controlInfo.firstBr := '1'; -- TMP, indicating that group has a branch
-        end if;   
-    end loop;
+--        insState.specificOperation := op;
+--        insState.constantArgs := constantArgs;
+--        insState.virtualArgSpec := argSpec;
+--        insState.controlInfo := controlInfo;
 
-    for i in 0 to FETCH_WIDTH-1 loop
+        --if insState.specificOperation.subpipe = none then
+        if op.subpipe = none then
+--            insState.typeInfo.mainCluster := '0';
+--            insState.typeInfo.secCluster := '0';
+            
+            classInfo.mainCluster := '0';
+            classInfo.secCluster := '0';
+        end if;
+
+    --    insState.controlInfo.specialAction_T := not (insState.typeInfo.mainCluster or insState.typeInfo.secCluster);
+        controlInfo.specialAction_T := not (classInfo.mainCluster or classInfo.secCluster);
+
+    --    insState.dbInfo := DB_addBitsAndIp(ctrl.dbInfo, fetchLine(i), tmpIP);
+
+    --    res(i).ins := insState;
+
         res(i).full := bool2std(i < nWords);
 
-        if res(i).full = '1' and res(i).ins.typeInfo.branchIns = '1' then
+        --if res(i).full = '1' and res(i).ins.typeInfo.branchIns = '1' then
+        if res(i).full = '1' and classInfo.branchIns = '1' then
             anyBranch := '1';
-            --res(0).ins.controlInfo.firstBr := '1'; -- TMP, indicating that group has a branch
         end if; 
 
         if res(i).full = '0' then
             res(i).ins.virtualArgSpec.intDestSel := '0';
             res(i).ins.virtualArgSpec.floatDestSel := '0';
+            
+            argSpec.intDestSel := '0';
+            argSpec.floatDestSel := '0';
         end if;          
-    end loop;
 
-    for i in 0 to FETCH_WIDTH-1 loop
         res_N(i).full := res(i).full;
+
+        res_N(i).specialAction := --res(i).ins.controlInfo.specialAction_T;
+                                    controlInfo.specialAction_T;
+
+        res_N(i).classInfo := --res(i).ins.typeInfo;
+                                classInfo;
+        res_N(i).specificOperation := --res(i).ins.specificOperation;
+                                        op;
+        res_N(i).constantArgs := --res(i).ins.constantArgs;
+                                    constantArgs;
+        res_N(i).argSpec := --res(i).ins.virtualArgSpec;
+                            argSpec;
         
-        res_N(i).firstBr := res(i).ins.controlInfo.firstBr;
-                            
-        res_N(i).frontBranch := res(i).ins.controlInfo.frontBranch;
-        res_N(i).confirmedBranch := res(i).ins.controlInfo.confirmedBranch;
-        res_N(i).specialAction := res(i).ins.controlInfo.specialAction;
-    
-        res_N(i).classInfo := res(i).ins.typeInfo;
-    
-        res_N(i).specificOperation := res(i).ins.specificOperation;
-        res_N(i).constantArgs := res(i).ins.constantArgs;
-        res_N(i).argSpec := res(i).ins.virtualArgSpec;
-        
-        res_N(i).dbInfo := res(i).ins.dbInfo;
+        res_N(i).dbInfo := --res(i).ins.dbInfo;
+                           DB_addBitsAndIp(ctrl.dbInfo, fetchLine(i), tmpIP);
     end loop;
 
     res_N(0).firstBr := anyBranch;

@@ -121,8 +121,8 @@ architecture Behavioral of UnitRegManager is
               res.ins.virtualArgSpec := elem.argSpec; 
           
           
-              res.ins.controlInfo.firstBr := elem.firstBr;
-              res.ins.controlInfo.specialAction := elem.specialAction;
+              res.ins.controlInfo.firstBr_T := elem.firstBr;
+              res.ins.controlInfo.specialAction_T := elem.specialAction;
           
               return res;
           end function;
@@ -177,7 +177,32 @@ architecture Behavioral of UnitRegManager is
         
         return res;
     end function;
-      
+
+        function hasSyncEvent(ins: InstructionState) return std_logic is
+        begin
+            return ins.controlInfo.specialAction_T;
+        end function;
+        
+        
+        
+        function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot is
+           variable res: InstructionSlot := insVec(0);
+        begin
+           res.full := '0';  
+           for i in PIPE_WIDTH-1 downto 0 loop
+               -- TODO: simpler to get last full slot because if a static event is present, nothing will be after it in group.
+               --       Then the 'full' bit of 'special' would be set if specialAction/exc/dbTrap
+               if (insVec(i).full and hasSyncEvent(insVec(i).ins)) = '1' then
+                   res := insVec(i);
+                   res.ins.specificOperation.system := SysOp'val(slv2u(res.ins.specificOperation.bits));
+                   exit;
+               end if;
+           end loop;
+           
+           return res;
+        end function;   
+
+
     function renameGroupBase(
                             ia: BufferEntryArray;
                             newIntDests: PhysNameArray;
@@ -236,9 +261,6 @@ architecture Behavioral of UnitRegManager is
         -- If found special instruction or exception, kill next ones
         for i in 0 to PIPE_WIDTH-1 loop
             if found then
-                if res(i).full = '1' then
-                    res(i).ins.controlInfo.ignored := '1';
-                end if;
                 res(i).full := '0';
             end if;
 
@@ -330,7 +352,17 @@ architecture Behavioral of UnitRegManager is
         end loop;
         return res;
     end function;
+
+    function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := content;
+    begin
+        for i in 1 to PIPE_WIDTH-1 loop
+            res(i).ins.tags.renameIndex := clearTagLow(res(0).ins.tags.renameIndex) or i2slv(i, TAG_SIZE);
+        end loop;
     
+        return res;
+    end function;
+
     signal inputRenameInfoInt, inputRenameInfoFloat, resultRenameInfoInt, resultRenameInfoFloat, storedRenameInfoInt, storedRenameInfoFloat,
                       commitArgInfoIntDelayed, commitArgInfoFloatDelayed: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 begin

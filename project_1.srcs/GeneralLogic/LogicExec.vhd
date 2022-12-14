@@ -32,12 +32,6 @@ package LogicExec is
 
     function getAluControl(op: ArithOp) return AluControl;
 
-	-- DUMMY: This performs some simple operation to obtain a result
-	function passArg0(ins: InstructionState) return InstructionState;
-	function passArg1(ins: InstructionState) return InstructionState;
-	function execLogicOr(ins: InstructionState) return InstructionState;
-	function execLogicXor(ins: InstructionState) return InstructionState;
-
 	function basicBranch(sending: std_logic; st: SchedulerState; tags: InstructionTags;
                          ctrl: InstructionControlInfo;
                          target, result: Mword;
@@ -76,38 +70,13 @@ end LogicExec;
 
 package body LogicExec is
 
-	function passArg0(ins: InstructionState) return InstructionState is
-		variable res: InstructionState := ins;
-	begin
-		return res;
-	end function;
-
-	function passArg1(ins: InstructionState) return InstructionState is
-		variable res: InstructionState := ins;
-	begin
-		return res;
-	end function;
-
-	function execLogicOr(ins: InstructionState) return InstructionState is
-		variable res: InstructionState := ins;
-	begin
-		return res;
-	end function;	
-
-	function execLogicXor(ins: InstructionState) return InstructionState is
-		variable res: InstructionState := ins;
-	begin
-		return res;
-	end function;	
-
-
 	function resolveBranchCondition(ss: SchedulerState; op: ArithOp; ac: AluControl) return std_logic is
 		constant isZero: std_logic := not isNonzero(ss.args(0));
 	begin			
 		return ac.jumpType(1) or (ac.jumpType(0) xor isZero);
 	end function;
 
-	function basicBranch(sending: std_logic; st: SchedulerState; tags: InstructionTags; --tags: UNUSED
+	function basicBranch(sending: std_logic; st: SchedulerState; tags: InstructionTags;
 	                     ctrl: InstructionControlInfo;
 	                     target, result: Mword;
 	                     ac: AluControl)
@@ -301,7 +270,6 @@ package body LogicExec is
     end function;
 
 
-
 	function executeMulE0(full: std_logic; st: SchedulerState; link: Mword) return ExecResult is
 		variable res: ExecResult := DEFAULT_EXEC_RESULT;
 		variable result: Mword := (others => '0');
@@ -328,7 +296,6 @@ package body LogicExec is
 
 	
 	function executeFpu(st: SchedulerState) return Mword is
-       --variable res: InstructionState := DEFAULT_INS_STATE;--ins;
        variable res: Mword := (others => '0');
 	begin
         if st.st.operation.float = opOr then 

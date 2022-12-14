@@ -75,153 +75,49 @@ architecture Behavioral of ReorderBuffer is
     signal ch0, ch1, ch2, ch3: std_logic := '0';
 
 
-
-
     -- TMP: to remove
     function getRenameInfoSC(sa: StaticOpInfoArray; da: DynamicOpInfoArray; constant IS_FP: boolean := false)
     return RenameInfoArray is
         variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
-        --variable va: InstructionArgSpec := DEFAULT_ARG_SPEC;
-        --variable isl: InstructionSlot := DEFAULT_INS_SLOT;
         variable cancelDest: std_logic := '0';
     begin
 
         for i in 0 to PIPE_WIDTH-1 loop
-            --isl := getOutputSlot(sa(i), da(i));
-
             cancelDest := not da(i).full or da(i).hasException or da(i).specialAction;
 
-            res(i).dbInfo := --isl.ins.dbInfo;
-                              da(i).dbInfo;
-
-            --va := isl.ins.virtualArgSpec;
-            
-            --    va.floatDestSel := sa(i).virtualFloatDestSel;
-            --    va.intDestSel := sa(i).virtualIntDestSel;
-            
-            --pa := isl.ins.physicalArgSpec;
+            res(i).dbInfo := da(i).dbInfo;
 
             if IS_FP then
-                res(i).destSel := --va.floatDestSel;
-                                    sa(i).virtualFloatDestSel;
-                res(i).destSelFP := --va.floatDestSel;
-                                    sa(i).virtualFloatDestSel;
+                res(i).destSel := sa(i).virtualFloatDestSel;
+                res(i).destSelFP := sa(i).virtualFloatDestSel;
                 
-                res(i).psel := --pa.floatDestSel;
-                                --va.floatDestSel;
-                                sa(i).virtualFloatDestSel;
+                res(i).psel := sa(i).virtualFloatDestSel;
             else
-                res(i).destSel := --va.intDestSel;
-                                  sa(i).virtualIntDestSel;
-                res(i).psel := --pa.intDestSel;
-                                --va.intDestSel;
-                                sa(i).virtualIntDestSel;
+                res(i).destSel := sa(i).virtualIntDestSel;
+                res(i).psel := sa(i).virtualIntDestSel;
             end if;
             
-                if da(i).full /= '1' then
-                    res(i).destSel := '0';
-                    res(i).destSelFP := '0';
-                end if;
+            if da(i).full /= '1' then
+                res(i).destSel := '0';
+                res(i).destSelFP := '0';
+            end if;
+        
+            if cancelDest = '1' then
+                res(i).psel := '0';
+            end if;
             
-                if cancelDest = '1' then
-                    res(i).psel := '0';
-                end if;
-            
-            res(i).virtualDest := --va.dest(4 downto 0);
-                                    sa(i).virtualDest;
-            res(i).physicalDest := --pa.dest;
-                                    sa(i).physicalDest;
+            res(i).virtualDest := sa(i).virtualDest;
+            res(i).physicalDest := sa(i).physicalDest;
         end loop;
         return res;
     end function;  
 
 
---    function getInstructionSlotArray(sa: StaticOpInfoArray; da: DynamicOpInfoArray; sgi: StaticGroupInfo; dgi: DynamicGroupInfo) return InstructionSlotArray is
---        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
---    begin
---        for i in res'range loop
---            res(i) := getOutputSlot(sa(i), da(i));
---        end loop; 
-        
---        res(0).ins.controlInfo.firstBr := sgi.useBQ;
-
---        return res;
---    end function;
-
---    function convertROBData(isa: InstructionSlotArray) return ControlPacketArray is
---        variable res: ControlPacketArray(isa'range) := (others => DEFAULT_CONTROL_PACKET);
---    begin
---        for i in res'range loop
---            res(i).dbInfo := isa(i).ins.dbInfo;
---            res(i).controlInfo := isa(i).ins.controlInfo;
---            res(i).controlInfo.full := isa(i).full;
-    
---            res(i).classInfo.branchIns := isa(i).ins.typeInfo.branchIns;      
---            res(i).classInfo.secCluster := isa(i).ins.typeInfo.secCluster;      
---            res(i).classInfo.useLQ := isa(i).ins.typeInfo.useLQ;      
---        end loop;
---        return res;
---    end function;
-
-
-
---    function getOutputSlot(stat: StaticOpInfo; dyn: DynamicOpInfo) return InstructionSlot is
---        variable res: InstructionSlot := DEFAULT_INS_SLOT;
---    begin
---        res.ins.dbInfo := dyn.dbInfo;
-    
---        res.full := dyn.full;
-
---        res.ins.typeInfo.secCluster := stat.useSQ;
---        res.ins.typeInfo.useLQ := stat.useLQ;
---        res.ins.typeInfo.branchIns := stat.useBQ;
-
---------------------------------
-----        res.ins.virtualArgSpec.dest(4 downto 0) := stat.virtualDest;    
-----        --res.ins.physicalArgSpec.dest := stat.physicalDest;
-
-----        res.ins.virtualArgSpec.intDestSel := stat.virtualIntDestSel;
-----        res.ins.virtualArgSpec.floatDestSel := stat.virtualFloatDestSel;
---------------------------------
-
-----        if res.full /= '1' then-- or found then
-----            res.ins.virtualArgSpec.intDestSel := '0';
-----            res.ins.virtualArgSpec.floatDestSel := '0';                        
-----        end if;
-
-----        if res.full /= '1' or res.ins.controlInfo.hasException = '1' or res.ins.controlInfo.specialAction = '1' then
-----            res.ins.physicalArgSpec.intDestSel := '0';
-----            res.ins.physicalArgSpec.floatDestSel := '0';                        
-----        else
-----            res.ins.physicalArgSpec.intDestSel := res.ins.virtualArgSpec.intDestSel;
-----            res.ins.physicalArgSpec.floatDestSel := res.ins.virtualArgSpec.floatDestSel;  
-----        end if;
-
---        res.ins.controlInfo.full := dyn.full;
---        res.ins.controlInfo.killed := dyn.killed;
---        res.ins.controlInfo.causing := dyn.causing;
-        
---        res.ins.controlInfo.newEvent := dyn.hasEvent;
---        res.ins.controlInfo.hasException := dyn.hasException;
---        res.ins.controlInfo.confirmedBranch := dyn.confirmedBranch;
---        res.ins.controlInfo.specialAction := dyn.specialAction; -- ???
---        res.ins.controlInfo.refetch := dyn.refetch;
-
-
---        return res;
---    end function;
-
     function getOutputControlArray(sa: StaticOpInfoArray; da: DynamicOpInfoArray; sgi: StaticGroupInfo; dgi: DynamicGroupInfo) return ControlPacketArray is
         variable res: ControlPacketArray(sa'range) := (others => DEFAULT_CONTROL_PACKET);
-        --variable isl: InstructionSlot := DEFAULT_INS_SLOT;
     begin
         for i in res'range loop
-            --isl := getOutputSlot(sa(i), da(i));
-
-            res(i).dbInfo := --isl.ins.dbInfo;
-                                da(i).dbInfo;
-            
-            --res(i).controlInfo := isl.ins.controlInfo;
+            res(i).dbInfo := da(i).dbInfo;
             
             res(i).controlInfo.full := da(i).full;
             res(i).controlInfo.killed := da(i).killed;
@@ -232,26 +128,10 @@ architecture Behavioral of ReorderBuffer is
             res(i).controlInfo.confirmedBranch := da(i).confirmedBranch;
             res(i).controlInfo.specialAction := da(i).specialAction;
             res(i).controlInfo.refetch := da(i).refetch;
-            
---            res.ins.controlInfo.newEvent := dyn.hasEvent;
---            res.ins.controlInfo.hasException := dyn.hasException;
---            res.ins.controlInfo.confirmedBranch := dyn.confirmedBranch;
---            res.ins.controlInfo.specialAction := dyn.specialAction; -- ???
---            res.ins.controlInfo.refetch := dyn.refetch;
-            
-            --res(i).controlInfo.full := isl.full;
-
---        res.ins.typeInfo.secCluster := stat.useSQ;
---        res.ins.typeInfo.useLQ := stat.useLQ;
---        res.ins.typeInfo.branchIns := stat.useBQ;
 
             res(i).classInfo.branchIns := sa(i).useBQ;      
             res(i).classInfo.secCluster := sa(i).useSQ;      
-            res(i).classInfo.useLQ := sa(i).useLQ;
-
---            res(i).classInfo.branchIns := isl.ins.typeInfo.branchIns;      
---            res(i).classInfo.secCluster := isl.ins.typeInfo.secCluster;      
---            res(i).classInfo.useLQ := isl.ins.typeInfo.useLQ;      
+            res(i).classInfo.useLQ := sa(i).useLQ;  
         end loop;
 
         res(0).controlInfo.firstBr := sgi.useBQ;
@@ -297,7 +177,7 @@ begin
         staticOutput_Pre <= deserializeStaticInfoA(serialMemContent(p2i(startPtrNext, ROB_SIZE)));                    
         staticGroupOutput_Pre <= deserializeStaticGroupInfo(serialMemContent(p2i(startPtrNext, ROB_SIZE)));
 
-            staticOutput_PreDB <= readStaticOutput(staticContent, startPtrNext);
+        staticOutput_PreDB <= readStaticOutput(staticContent, startPtrNext);
 
 
         SYNCH: process (clk)
@@ -324,7 +204,7 @@ begin
                 -- Read output
                 serialOutput <= serialMemContent(p2i(startPtrNext, ROB_SIZE)); -- DB
 
-                staticOutput <= staticOutput_Pre; --readStaticOutput(staticContent, startPtrNext); -- DB
+                staticOutput <= staticOutput_Pre; -- DB
                 staticGroupOutput <= staticGroupOutput_Pre;
 
                 dynamicOutput <= dynamicOutput_Pre;
