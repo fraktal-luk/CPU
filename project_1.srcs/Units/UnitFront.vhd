@@ -164,13 +164,13 @@ begin
         frontControl <= getFrontEvent(predictedAddress, stageDataOutFetch1.target, fetchedLine1, partMask);
         earlyBranchIn <= getEarlyEvent(frontControl, stageDataOutFetch1.target, predictedAddress, fetchStall, sendingOutFetch1);
 
-        decodedEA <= decodeGroup(stageDataOutFetch1, fetchedLine1_Sh, predictedAddress, partMask_N, slv2u(lastIndex) + 1 - slv2u(groupShift));
+        decodedEA <= decodeGroup(fetchedLine1_Sh, slv2u(lastIndex) + 1 - slv2u(groupShift), predictedAddress, stageDataOutFetch1);
 
-        dataToIbuffer <= assignSeqNum(decodedEA, decodeCounter);
+        dataToIbuffer <= assignSeqNum(decodedEA, decodeCounter, stageDataOutFetch1);
 
         hasBranch <= groupHasBranch(dataToIbuffer);
 
-        toBQ <= getControlA(predictedAddress, fetchedLine1_Sh, partMask_N, slv2u(lastIndex) + 1 - slv2u(groupShift), hasBranch);
+        toBQ <= getControlA(predictedAddress, fetchedLine1_Sh, slv2u(lastIndex) + 1 - slv2u(groupShift), hasBranch);
 
         bqDataSigPre <= assignSeqNum(toBQ, decodeCounter);
     end block;

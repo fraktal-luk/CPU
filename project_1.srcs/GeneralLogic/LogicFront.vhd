@@ -21,23 +21,22 @@ use work.DecodingDev.all;
 
 package LogicFront is
 
-function decodeInstructionNew(bits: Word) return InstructionState;
-
 function getFrontEvent(ip, target: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1); partMask: std_logic_vector) return ControlPacket;
 
-function getControlA(ip: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1); partMask: std_logic_vector; nWords: natural; hasBranch: std_logic) return ControlPacketArray;
+function getControlA(ip: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1);-- partMask: std_logic_vector;
+                        nWords: natural; hasBranch: std_logic) return ControlPacketArray;
 
 function getEarlyEvent(cp: ControlPacket; target, predictedAddress: Mword; fetchStall, send: std_logic) return ControlPacket;
 
 function partialMask(adr: Mword) return std_logic_vector;
 
-function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; nWords: natural) return BufferEntryArray;
+function decodeGroup(fetchLine: WordArray(0 to PIPE_WIDTH-1); nWords: natural; ip: Mword; ctrl: ControlPacket) return BufferEntryArray;
 
 function groupHasBranch(ea: BufferEntryArray) return std_logic;
 
 -- DEBUG
 function assignSeqNum(cpa: ControlPacketArray; seqNum: Word) return ControlPacketArray;
-function assignSeqNum(ba: BufferEntryArray; seqNum: Word) return BufferEntryArray;
+function assignSeqNum(ba: BufferEntryArray; seqNum: Word; ctrl: ControlPacket) return BufferEntryArray;
 
 function DB_addBitsAndIp(dbi: InstructionDebugInfo; bits: Word; ip: Mword) return InstructionDebugInfo;
 function DB_addSeqNum(dbi: InstructionDebugInfo; sn: Word) return InstructionDebugInfo;
@@ -84,103 +83,49 @@ begin
 end function;
 
 
-function decodeInstructionNew(bits: Word) return InstructionState is
-	variable res: InstructionState := DEFAULT_INS_STATE;
-    --variable decodedIns: InstructionState := DEFAULT_INSTRUCTION_STATE;
-    variable classInfo: InstructionClassInfo := DEFAULT_CLASS_INFO;
-    variable op: SpecificOp := DEFAULT_SPECIFIC_OP;
-    variable constantArgs: InstructionConstantArgs := DEFAULT_CONSTANT_ARGS;
-    variable argSpec: InstructionArgSpec := DEFAULT_ARG_SPEC;
-begin
-	decodeFromWord(bits, classInfo, op, constantArgs, argSpec);
-
-    res.typeInfo := classInfo;
-
-    res.specificOperation := op;
-    res.constantArgs := constantArgs;
-    res.virtualArgSpec := argSpec;
-
-	return res;
-end function;
-
-function decodeGroup(ctrl: ControlPacket; fetchLine: WordArray(0 to PIPE_WIDTH-1); ip: Mword; full: std_logic_vector; nWords: natural) return BufferEntryArray is
-    variable res: InstructionSlotArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    variable res_N: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
+function decodeGroup(fetchLine: WordArray(0 to PIPE_WIDTH-1); nWords: natural;
+                     ip: Mword; ctrl: ControlPacket) -- These are DB only
+return BufferEntryArray is
+    variable res: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
     variable tmpIP: Mword := (others => '0');
-    --variable insState: InstructionState := DEFAULT_INS_STATE;
-    
-    variable controlInfo: InstructionControlInfo_T := DEFAULT_CONTROL_INFO_T;
     variable classInfo: InstructionClassInfo := DEFAULT_CLASS_INFO;
     variable op: SpecificOp := DEFAULT_SPECIFIC_OP;
     variable constantArgs: InstructionConstantArgs := DEFAULT_CONSTANT_ARGS;
     variable argSpec: InstructionArgSpec := DEFAULT_ARG_SPEC;
-    variable anyBranch: std_logic := '0';
+    variable anyBranch, isFull, specialAction: std_logic := '0';
 begin
     for i in 0 to FETCH_WIDTH-1 loop
-        tmpIP := addInt(ip, 4*i);
-
-        --insState := decodeInstructionNew(fetchLine(i)); 
 	    decodeFromWord(fetchLine(i), classInfo, op, constantArgs, argSpec);
-        controlInfo := DEFAULT_CONTROL_INFO_T;
---        insState.typeInfo := classInfo;
-    
---        insState.specificOperation := op;
---        insState.constantArgs := constantArgs;
---        insState.virtualArgSpec := argSpec;
---        insState.controlInfo := controlInfo;
 
-        --if insState.specificOperation.subpipe = none then
-        if op.subpipe = none then
---            insState.typeInfo.mainCluster := '0';
---            insState.typeInfo.secCluster := '0';
-            
-            classInfo.mainCluster := '0';
-            classInfo.secCluster := '0';
-        end if;
+        specialAction := not (classInfo.mainCluster or classInfo.secCluster);
 
-    --    insState.controlInfo.specialAction_T := not (insState.typeInfo.mainCluster or insState.typeInfo.secCluster);
-        controlInfo.specialAction_T := not (classInfo.mainCluster or classInfo.secCluster);
+        isFull := bool2std(i < nWords);
 
-    --    insState.dbInfo := DB_addBitsAndIp(ctrl.dbInfo, fetchLine(i), tmpIP);
-
-    --    res(i).ins := insState;
-
-        res(i).full := bool2std(i < nWords);
-
-        --if res(i).full = '1' and res(i).ins.typeInfo.branchIns = '1' then
-        if res(i).full = '1' and classInfo.branchIns = '1' then
+        if isFull = '1' and classInfo.branchIns = '1' then
             anyBranch := '1';
         end if; 
 
-        if res(i).full = '0' then
-            res(i).ins.virtualArgSpec.intDestSel := '0';
-            res(i).ins.virtualArgSpec.floatDestSel := '0';
-            
+        if isFull = '0' then
             argSpec.intDestSel := '0';
             argSpec.floatDestSel := '0';
         end if;          
 
-        res_N(i).full := res(i).full;
+        res(i).full := isFull;
 
-        res_N(i).specialAction := --res(i).ins.controlInfo.specialAction_T;
-                                    controlInfo.specialAction_T;
+        res(i).specialAction := specialAction;
 
-        res_N(i).classInfo := --res(i).ins.typeInfo;
-                                classInfo;
-        res_N(i).specificOperation := --res(i).ins.specificOperation;
-                                        op;
-        res_N(i).constantArgs := --res(i).ins.constantArgs;
-                                    constantArgs;
-        res_N(i).argSpec := --res(i).ins.virtualArgSpec;
-                            argSpec;
+        res(i).classInfo := classInfo;
+        res(i).specificOperation := op;
+        res(i).constantArgs := constantArgs;
+        res(i).argSpec := argSpec;
         
-        res_N(i).dbInfo := --res(i).ins.dbInfo;
-                           DB_addBitsAndIp(ctrl.dbInfo, fetchLine(i), tmpIP);
+            tmpIP := addInt(ip, 4*i);
+            res(i).dbInfo := DB_addBitsAndIp(ctrl.dbInfo, fetchLine(i), tmpIP);
     end loop;
 
-    res_N(0).firstBr := anyBranch;
+    res(0).firstBr := anyBranch;
 
-    return res_N;
+    return res;
 end function;
 
 
@@ -301,11 +246,12 @@ begin
 end function;
 
 
-function getControlA(ip: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1); partMask: std_logic_vector; nWords: natural; hasBranch: std_logic) return ControlPacketArray is
+function getControlA(ip: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1);-- partMask: std_logic_vector;
+                        nWords: natural; hasBranch: std_logic) return ControlPacketArray is
 	variable res: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 	variable tempIP, tempOffset, lastRes: Mword := (others => '0');
 	variable targets, results: MwordArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
-	variable fullOut, branchIns, predictedTaken, uncondJump: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+	variable full, branchIns, predictedTaken, uncondJump: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 	variable regularJump, longJump, regJump: std_logic := '0';
 begin
 
@@ -350,8 +296,12 @@ begin
         targets(i) := add(tempIP, tempOffset);
 	    results(i) := addInt(ip, 4*(i + 1));
 
-        fullOut(i) := partMask(i);
-        if partMask(i) = '1' and branchIns(i) = '1' and predictedTaken(i) = '1' then
+        res(i).target := targets(i);
+        res(i).nip := results(i);
+
+        full(i) := bool2std(i < nWords);
+
+        if full(i) = '1' and branchIns(i) = '1' and predictedTaken(i) = '1' then
             if uncondJump(i) = '1' then -- CAREFUL: setting it here, so that if implementation treats is as NOP in Exec, it still gets this flag
                 res(i).controlInfo.confirmedBranch := '1';
             end if;
@@ -359,8 +309,6 @@ begin
             res(i).controlInfo.frontBranch := '1';
         end if;
 
-       res(i).target := targets(i);
-       res(i).nip := results(i);
     end loop;
 
     -- TMP!
@@ -387,7 +335,7 @@ begin
     return res;
 end function;
 
-function assignSeqNum(ba: BufferEntryArray; seqNum: Word) return BufferEntryArray is
+function assignSeqNum(ba: BufferEntryArray; seqNum: Word; ctrl: ControlPacket) return BufferEntryArray is
     variable res: BufferEntryArray := ba;
     variable sn: Word := seqNum;
 begin
@@ -396,7 +344,7 @@ begin
             res(i).dbInfo := DEFAULT_DEBUG_INFO;
             next;
         end if;
-    
+
         res(i).dbInfo := DB_addSeqNum(res(i).dbInfo, sn);        
         sn := addInt(sn, 1);
     end loop;

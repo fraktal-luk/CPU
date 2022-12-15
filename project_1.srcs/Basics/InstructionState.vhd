@@ -197,8 +197,8 @@ type BufferEntry is record
 
     -- NOTE: for compresion maybe can be just 2 bits:
     --       (br NT, br T, br T confirmed, special) is 4 possibilities     
-    frontBranch: std_logic;
-    confirmedBranch: std_logic;
+    frontBranch: std_logic;     -- seems unused
+    confirmedBranch: std_logic; -- seems unused
     specialAction: std_logic;
 
     classInfo: InstructionClassInfo;

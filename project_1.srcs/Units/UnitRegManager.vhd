@@ -90,6 +90,7 @@ architecture Behavioral of UnitRegManager is
     signal newSourceSelectorInt, newSourceSelectorFloat, zeroSelector: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
 
     signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;    
+    signal specialOperation: SpecificOp := DEFAULT_SPECIFIC_OP;
 
         -- DEBUG
     	signal newProducersInt, newProducersFloat, zeroProducers: InsTagArray(0 to 3*PIPE_WIDTH-1) := (others => (others => 'U'));
@@ -142,7 +143,6 @@ architecture Behavioral of UnitRegManager is
     begin
         for i in 0 to PIPE_WIDTH-1 loop
             if (insVec(i).ins.specificOperation.subpipe = ALU) then
-            
                 if      insVec(i).ins.specificOperation.arith = opMul
                      or insVec(i).ins.specificOperation.arith = opMulhU
                      or insVec(i).ins.specificOperation.arith = opMulhS
@@ -168,45 +168,38 @@ architecture Behavioral of UnitRegManager is
                 end if;
 
             end if;
-
-            if insVec(i).full /= '1' then
-                res(i).ins.typeInfo := DEFAULT_CLASS_INFO;
-                res(i).ins.dispatchInfo := DEFAULT_CLASS_INFO_DISPATCH;
-            end if;
         end loop;
         
         return res;
     end function;
 
-        function hasSyncEvent(ins: InstructionState) return std_logic is
-        begin
-            return ins.controlInfo.specialAction_T;
-        end function;
-        
-        
-        
-        function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot is
-           variable res: InstructionSlot := insVec(0);
-        begin
-           res.full := '0';  
-           for i in PIPE_WIDTH-1 downto 0 loop
-               -- TODO: simpler to get last full slot because if a static event is present, nothing will be after it in group.
-               --       Then the 'full' bit of 'special' would be set if specialAction/exc/dbTrap
-               if (insVec(i).full and hasSyncEvent(insVec(i).ins)) = '1' then
-                   res := insVec(i);
-                   res.ins.specificOperation.system := SysOp'val(slv2u(res.ins.specificOperation.bits));
-                   exit;
-               end if;
-           end loop;
-           
-           return res;
-        end function;   
 
+    function hasSyncEvent(ctrl: InstructionControlInfo_T) return std_logic is
+    begin
+        return ctrl.specialAction_T;
+    end function;
+
+
+    function getSpecialActionSlot(insVec: InstructionSlotArray) return SpecificOp is
+       variable res: SpecificOp := insVec(0).ins.specificOperation;
+    begin
+       for i in PIPE_WIDTH-1 downto 0 loop
+           -- TODO: simpler to get last full slot because if a static event is present, nothing will be after it in group.
+           --       Then the 'full' bit of 'special' would be set if specialAction/exc/dbTrap
+           if (insVec(i).full and hasSyncEvent(insVec(i).ins.controlInfo)) = '1' then
+               res := insVec(i).ins.specificOperation;
+               res.system := SysOp'val(slv2u(res.bits));
+               exit;
+           end if;
+       end loop;
+
+       return res;
+    end function;
 
     function renameGroupBase(
                             ia: BufferEntryArray;
                             newIntDests: PhysNameArray;
-                            newFloatDests: PhysNameArray;                                
+                            newFloatDests: PhysNameArray;
                             renameGroupCtrNext: InsTag;
                             newIntDestPointer: SmallNumber;
                             newFloatDestPointer: SmallNumber;
@@ -255,6 +248,8 @@ architecture Behavioral of UnitRegManager is
             res(i).ins.tags.bqPointerSeq := addIntTrunc(bqPointerSeq, countOnes(branches(0 to i-1)), BQ_PTR_SIZE + 2 + 1); -- CAREFUL, TODO: define BQ_SEQ_PTR_SIZE
         end loop;
 
+        res := classifyForDispatch(res);
+
         -- TODO: Why do we cancel ops after event? Rethink, maybe this step is needed just because of some bad design elsewhere
         --       The OOO already has to deal with dynamically arising events
 
@@ -264,19 +259,15 @@ architecture Behavioral of UnitRegManager is
                 res(i).full := '0';
             end if;
 
-            if res(i).full = '0' then
-                -- CAREFUL: needed for correct operation of StoreQueue + LQ
-                res(i).ins.typeInfo.secCluster := '0';
-                res(i).ins.typeInfo.useLQ := '0';            
-                res(i).ins.typeInfo.useSQ := '0';                               
+            if res(i).full /= '1' then
+                res(i).ins.typeInfo := DEFAULT_CLASS_INFO;
+                res(i).ins.dispatchInfo := DEFAULT_CLASS_INFO_DISPATCH;                            
             end if;
 
-            if hasSyncEvent(res(i).ins) = '1' then
+            if hasSyncEvent(res(i).ins.controlInfo) = '1' then
                 found := true;
             end if;
         end loop;
-
-        res := classifyForDispatch(res);
 
         return res;
     end function;
@@ -421,7 +412,7 @@ begin
     begin
         if rising_edge(clk) then                
             if frontLastSending = '1' then
-                specialActionSlot <= getSpecialActionSlot(renamedBase);
+                specialOperation <= getSpecialActionSlot(renamedBase);
             end if;
             
             if frontLastSending = '1' then
@@ -559,7 +550,7 @@ begin
         physStableDelayed => physStableFloat -- FOR MAPPING (from MAP)
     );
 	
-    specialOut <= specialActionSlot.ins.specificOperation;
+    specialOut <= specialOperation;
 	
     newPhysDestsOut <= newIntDests;
     newFloatDestsOut <= newFloatDests; 
