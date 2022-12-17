@@ -228,8 +228,8 @@ architecture Behavioral of UnitRegManager is
             takeVecInt(i) := res(i).ins.virtualArgSpec.intDestSel;
             takeVecFloat(i) := res(i).ins.virtualArgSpec.floatDestSel;
             
-            res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
-            res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;     
+--            res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
+--            res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;     
         end loop;
 
         -- Setting tags

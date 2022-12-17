@@ -553,8 +553,8 @@ begin
         res(i).ins.virtualArgSpec.intArgSel(0) := insVec(i).ins.virtualArgSpec.intArgSel(2);
         res(i).ins.virtualArgSpec.args(0) := insVec(i).ins.virtualArgSpec.args(2);
 
-        res(i).ins.physicalArgSpec.intArgSel(0) := insVec(i).ins.physicalArgSpec.intArgSel(2);
-        res(i).ins.physicalArgSpec.args(0) := insVec(i).ins.physicalArgSpec.args(2);                                             
+       -- res(i).ins.physicalArgSpec.intArgSel(0) := insVec(i).ins.physicalArgSpec.intArgSel(2);
+      --  res(i).ins.physicalArgSpec.args(0) := insVec(i).ins.physicalArgSpec.args(2);                                             
     end loop;
     
     return res;
@@ -573,8 +573,8 @@ begin
         res(i).ins.virtualArgSpec.floatArgSel(0) := insVecFloat(i).ins.virtualArgSpec.floatArgSel(2);
         res(i).ins.virtualArgSpec.args(0) := insVecFloat(i).ins.virtualArgSpec.args(2);
                
-        res(i).ins.physicalArgSpec.floatArgSel(0) := insVecFloat(i).ins.physicalArgSpec.floatArgSel(2);
-        res(i).ins.physicalArgSpec.args(0) := insVecFloat(i).ins.physicalArgSpec.args(2);                                            
+       -- res(i).ins.physicalArgSpec.floatArgSel(0) := insVecFloat(i).ins.physicalArgSpec.floatArgSel(2);
+       -- res(i).ins.physicalArgSpec.args(0) := insVecFloat(i).ins.physicalArgSpec.args(2);                                            
     end loop;
     
     return res;
@@ -585,11 +585,11 @@ function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArra
     variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i).ins.virtualArgSpec.intArgSel(2) := '0';
-        res(i).ins.virtualArgSpec.args(2) := (others => '0');
+      --  res(i).ins.virtualArgSpec.intArgSel(2) := '0';
+      --  res(i).ins.virtualArgSpec.args(2) := (others => '0');
         
-        res(i).ins.physicalArgSpec.intArgSel(2) := '0';
-        res(i).ins.physicalArgSpec.args(2) := (others => '0');                                                
+      --  res(i).ins.physicalArgSpec.intArgSel(2) := '0';
+      --  res(i).ins.physicalArgSpec.args(2) := (others => '0');                                                
     end loop;
     
     return res;
@@ -684,8 +684,8 @@ function replaceDests(insVec: InstructionSlotArray; ria: RenameInfoArray) return
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
     for i in res'range loop
-         res(i).ins.physicalArgSpec.intDestSel := ria(i).destSel and not ria(i).destSelFP;
-         res(i).ins.physicalArgSpec.floatDestSel := ria(i).destSelFP;
+      --   res(i).ins.physicalArgSpec.intDestSel := ria(i).destSel and not ria(i).destSelFP;
+      --   res(i).ins.physicalArgSpec.floatDestSel := ria(i).destSelFP;
          
          res(i).ins.physicalArgSpec.dest := ria(i).physicalDest;
     end loop;
@@ -778,7 +778,7 @@ begin
     for i in res'range loop
         res(i).ins.specificOperation.float := FpOp'val(slv2u(res(i).ins.specificOperation.bits));
         res(i).ins.virtualArgSpec.intDestSel := '0';          
-        res(i).ins.physicalArgSpec.intDestSel := '0';        
+        --res(i).ins.physicalArgSpec.intDestSel := '0';        
     end loop;
     return res;
 end function;
@@ -789,7 +789,7 @@ begin
     for i in res'range loop     
         res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
         res(i).ins.virtualArgSpec.floatDestSel := '0';          
-        res(i).ins.physicalArgSpec.floatDestSel := '0';          
+        --res(i).ins.physicalArgSpec.floatDestSel := '0';          
     end loop;  
     return res;
 end function;
@@ -800,7 +800,7 @@ begin
     for i in res'range loop     
         res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
         res(i).ins.virtualArgSpec.floatDestSel := '0';          
-        res(i).ins.physicalArgSpec.floatDestSel := '0';          
+        --res(i).ins.physicalArgSpec.floatDestSel := '0';          
     end loop;  
     return res;
 end function;
