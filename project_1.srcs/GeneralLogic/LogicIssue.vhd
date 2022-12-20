@@ -1275,15 +1275,17 @@ end function;
             res(i).active := content(i).dynamic.status.active;
             res(i).issued := content(i).dynamic.status.issued;
             res(i).freed := content(i).dynamic.status.freed;
-            
+
             res(i).trial := compareTagBefore(events.preExecTags.renameIndex, content(i).dynamic.renameIndex);
+                                         --   and content(i).dynamic.full;
             res(i).trial_T := compareIndBefore(events.preExecTags.bqPointerSeq, content(i).static.tags.bqPointerSeq, 6); -- TODO: temp value of PTR_SIZE!
 
             if false then -- Use bqPointerSeq to flush IQ
                res(i).trial := res(i).trial_T;
             end if;
-                
+
             res(i).trialUpdated := content(i).dynamic.status.trial;
+                                      --  and content(i).dynamic.full;
             res(i).killed := (res(i).trialUpdated and events.execEvent) or events.lateEvent;
             res(i).living := res(i).full and not res(i).killed;
 

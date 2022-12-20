@@ -29,16 +29,14 @@ function makeExecResult_N(er: ExecResult; iqTag: SmallNumber) return ExecResult_
 
 
 type IssueQueueSignals is record
+    empty: std_logic;
+    ready: std_logic;
     sending: std_logic;
     cancelled: std_logic;
-    ready: std_logic;
-    empty: std_logic;
-    killSel: std_logic;
-    killSel1: std_logic;
     killSel2: std_logic;
-    killSel3: std_logic;
     killFollower: std_logic;
     killFollowerNext: std_logic;
+        trial0, trial1, trial2, trial3, trial4: std_logic;
 end record;
 
 
@@ -186,10 +184,10 @@ function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeMul(insVec: InstructionSlotArray) return InstructionSlotArray;
 
-function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray;
-function prepareForStoreValueFloatIQ(insVecFloat: InstructionSlotArray) return InstructionSlotArray;
+--function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray;
+--function prepareForStoreValueFloatIQ(insVecFloat: InstructionSlotArray) return InstructionSlotArray;
 
-function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray;
+--function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray;
 
 function removeArg2(ria: RenameInfoArray) return RenameInfoArray;
 function useStoreArg2(ria: RenameInfoArray) return RenameInfoArray;
@@ -541,59 +539,59 @@ begin
 end function;
 
 
-function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-begin
-    for i in 0 to PIPE_WIDTH-1 loop    
-        res(i).ins.constantArgs.immSel := '0';
+--function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray is
+--    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+--begin
+--    for i in 0 to PIPE_WIDTH-1 loop    
+--        res(i).ins.constantArgs.immSel := '0';
 
-        res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
-        res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;               
+----        res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+----        res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;               
         
-        res(i).ins.virtualArgSpec.intArgSel(0) := insVec(i).ins.virtualArgSpec.intArgSel(2);
-        res(i).ins.virtualArgSpec.args(0) := insVec(i).ins.virtualArgSpec.args(2);
+----        res(i).ins.virtualArgSpec.intArgSel(0) := insVec(i).ins.virtualArgSpec.intArgSel(2);
+----        res(i).ins.virtualArgSpec.args(0) := insVec(i).ins.virtualArgSpec.args(2);
 
-       -- res(i).ins.physicalArgSpec.intArgSel(0) := insVec(i).ins.physicalArgSpec.intArgSel(2);
-      --  res(i).ins.physicalArgSpec.args(0) := insVec(i).ins.physicalArgSpec.args(2);                                             
-    end loop;
+--       -- res(i).ins.physicalArgSpec.intArgSel(0) := insVec(i).ins.physicalArgSpec.intArgSel(2);
+--      --  res(i).ins.physicalArgSpec.args(0) := insVec(i).ins.physicalArgSpec.args(2);                                             
+--    end loop;
     
-    return res;
-end function;
+--    return res;
+--end function;
 
 
-function prepareForStoreValueFloatIQ(insVecFloat: InstructionSlotArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVecFloat;
-begin
-    for i in 0 to PIPE_WIDTH-1 loop    
-        res(i).ins.constantArgs.immSel := '0';
+--function prepareForStoreValueFloatIQ(insVecFloat: InstructionSlotArray) return InstructionSlotArray is
+--    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVecFloat;
+--begin
+--    for i in 0 to PIPE_WIDTH-1 loop    
+--        res(i).ins.constantArgs.immSel := '0';
         
-        res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
-        res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;
+----        res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
+----        res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;
               
-        res(i).ins.virtualArgSpec.floatArgSel(0) := insVecFloat(i).ins.virtualArgSpec.floatArgSel(2);
-        res(i).ins.virtualArgSpec.args(0) := insVecFloat(i).ins.virtualArgSpec.args(2);
+----        res(i).ins.virtualArgSpec.floatArgSel(0) := insVecFloat(i).ins.virtualArgSpec.floatArgSel(2);
+----        res(i).ins.virtualArgSpec.args(0) := insVecFloat(i).ins.virtualArgSpec.args(2);
                
-       -- res(i).ins.physicalArgSpec.floatArgSel(0) := insVecFloat(i).ins.physicalArgSpec.floatArgSel(2);
-       -- res(i).ins.physicalArgSpec.args(0) := insVecFloat(i).ins.physicalArgSpec.args(2);                                            
-    end loop;
+--       -- res(i).ins.physicalArgSpec.floatArgSel(0) := insVecFloat(i).ins.physicalArgSpec.floatArgSel(2);
+--       -- res(i).ins.physicalArgSpec.args(0) := insVecFloat(i).ins.physicalArgSpec.args(2);                                            
+--    end loop;
     
-    return res;
-end function;
+--    return res;
+--end function;
 
 
-function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-begin
-    for i in 0 to PIPE_WIDTH-1 loop
-      --  res(i).ins.virtualArgSpec.intArgSel(2) := '0';
-      --  res(i).ins.virtualArgSpec.args(2) := (others => '0');
+--function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray is
+--    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+--begin
+--    for i in 0 to PIPE_WIDTH-1 loop
+--      --  res(i).ins.virtualArgSpec.intArgSel(2) := '0';
+--      --  res(i).ins.virtualArgSpec.args(2) := (others => '0');
         
-      --  res(i).ins.physicalArgSpec.intArgSel(2) := '0';
-      --  res(i).ins.physicalArgSpec.args(2) := (others => '0');                                                
-    end loop;
+--      --  res(i).ins.physicalArgSpec.intArgSel(2) := '0';
+--      --  res(i).ins.physicalArgSpec.args(2) := (others => '0');                                                
+--    end loop;
     
-    return res;
-end function;
+--    return res;
+--end function;
 
 
 function removeArg2(ria: RenameInfoArray) return RenameInfoArray is
@@ -687,7 +685,8 @@ begin
       --   res(i).ins.physicalArgSpec.intDestSel := ria(i).destSel and not ria(i).destSelFP;
       --   res(i).ins.physicalArgSpec.floatDestSel := ria(i).destSelFP;
          
-         res(i).ins.physicalArgSpec.dest := ria(i).physicalDest;
+       --  res(i).ins.physicalArgSpec.dest := ria(i).physicalDest;
+            res(i).ins.dest_T := ria(i).physicalDest;
     end loop;
     return res;
 end function;

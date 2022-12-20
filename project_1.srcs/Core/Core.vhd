@@ -606,7 +606,9 @@ begin
         begin
             wups <= work.LogicIssue.getInitWakeups(schedInfoA, fni, bypassInt, CFG_ALU);
 
-            schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeALU(renamedDataLivingRe)), aluMask, true, removeArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
+            schedInfoA <= work.LogicIssue.getIssueInfoArray(--TMP_removeArg2
+                                                            (TMP_recodeALU(renamedDataLivingRe)),
+                                                            aluMask, true, removeArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups, memFail, CFG_ALU);
             schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early );
 
@@ -720,7 +722,9 @@ begin
                     begin
                         wups <= work.LogicIssue.getInitWakeups(schedInfoA, fni, bypassInt, CFG_MUL);
 
-                        schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(TMP_recodeMul(renamedDataLivingRe)), mulMask, true, removeArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
+                        schedInfoA <= work.LogicIssue.getIssueInfoArray(--TMP_removeArg2
+                                                                            (TMP_recodeMul(renamedDataLivingRe)),
+                                                                                mulMask, true, removeArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
                         schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups, memFail, CFG_MUL);
                         schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early );
                            
@@ -823,7 +827,10 @@ begin
         begin
            wups <= work.LogicIssue.getInitWakeups(schedInfoA, fni, bypassInt, CFG_MEM);
 
-           schedInfoA <= work.LogicIssue.getIssueInfoArray(TMP_removeArg2(renamedDataLivingRe), memMask, true, removeArg2(renamedArgsMerged), TMP_renamedDests, TMP_renamedSources);         
+           schedInfoA <= work.LogicIssue.getIssueInfoArray(--TMP_removeArg2
+                                                            (
+                                                            renamedDataLivingRe), 
+                                                            memMask, true, removeArg2(renamedArgsMerged), TMP_renamedDests, TMP_renamedSources);         
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups, memFail, CFG_MEM);
            schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early );
            
@@ -1003,9 +1010,13 @@ begin
             wupsInt <= work.LogicIssue.getInitWakeups(schedInfoIntA, fni, bypassIntSV, CFG_SVI);
             wupsFloat <= work.LogicIssue.getInitWakeups(schedInfoFloatA, fniFloat, bypassFloatSV, CFG_SVF);
 
-            schedInfoIntA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueIQ(renamedDataLivingRe), intStoreMask, false, useStoreArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
+            schedInfoIntA <= work.LogicIssue.getIssueInfoArray(--prepareForStoreValueIQ
+                                                                    (renamedDataLivingRe),
+                                                                    intStoreMask, false, useStoreArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
             schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray_N(schedInfoIntA, fni, wupsInt, memFail, CFG_SVI);
-            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(prepareForStoreValueFloatIQ(renamedDataLivingRe), fpStoreMask, false, useStoreArg2(renamedArgsFloat), TMP_renamedDests, TMP_renamedSources);
+            schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(--prepareForStoreValueFloatIQ
+                                                                    (renamedDataLivingRe),
+                                                                 fpStoreMask, false, useStoreArg2(renamedArgsFloat), TMP_renamedDests, TMP_renamedSources);
             schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray_N(schedInfoFloatA, fniFloat, wupsFloat, memFail, CFG_SVF);
 
                 schedInfoUpdatedIntU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedIntA, readyRegFlagsSV );

@@ -175,7 +175,8 @@ begin
     res.virtualIntDestSel := isl.ins.virtualArgSpec.intDestSel;
     res.virtualFloatDestSel := isl.ins.virtualArgSpec.floatDestSel;     
     res.virtualDest := isl.ins.virtualArgSpec.dest(4 downto 0);    
-    res.physicalDest := isl.ins.physicalArgSpec.dest;
+    res.physicalDest := --isl.ins.physicalArgSpec.dest;
+                            isl.ins.dest_T;
 
     res.useSQ := isl.ins.typeInfo.secCluster;
     res.useLQ := isl.ins.typeInfo.useLQ;

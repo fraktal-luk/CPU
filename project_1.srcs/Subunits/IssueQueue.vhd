@@ -73,12 +73,16 @@ architecture Behavioral of IssueQueue is
     signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
 
     signal controlSigs: SlotControlArray(0 to IQ_SIZE-1) := (others => DEFAULT_SLOT_CONTROL);
-    signal fullMask, trialMask, killMask, readyMaskAll, selMask, selMask1, selMask2, selMask3, selMask4: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+    signal fullMask, trialMask, trialUpdatedMask, trialMaskDelay, killMask, killMask_T, readyMaskAll, selMask, selMask1, selMask2, selMask3, selMask4: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
     signal anyReadyFull,
                     sends, sendingKilled,
                     killFollowerCmp, killFollowerNextCmp,
-                    sentKilled, sentKilled1, sentKilled2, sentKilled3, sentKilled4
+                    sentKilled, sentKilled1, sentKilled2, sentKilled3, sentKilled4,
+                                        execD, lateD,
+                                        kill0, kill1, kill2, kill3, kill4,
+                    trial0, trial1, trial2, trial3, trial4,
+                    trialDelay0, trialDelay1, trialDelay2, trialDelay3, trialDelay4
                     : std_logic := '0';
 
     signal selectedSlot, selectedSlot1, selectedSlot2, selectedSlot3: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
@@ -88,7 +92,36 @@ architecture Behavioral of IssueQueue is
 
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
 
+        function TMP_killMask(content: SchedulerInfoArray; evt: EventState) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+        begin
+            for i in res'range loop
+                res(i) := (content(i).dynamic.status.trial and evt.execEvent) or evt.lateEvent;
+            end loop;
+            return res;
+        end function;
+
+        function TMP_trialMask(content: SchedulerInfoArray; evt: EventState) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+        begin
+            for i in res'range loop
+                res(i) := (content(i).dynamic.status.trial);
+            end loop;
+            return res;
+        end function;
+
+                signal TMP_kill, TMP_killSel, TMP_killNext, TMP_trial, TMP_trialSel, TMP_trialNext,
+                       TMP_kill_D, TMP_killSel_D, TMP_killNext_D, TMP_trial_D, TMP_trialSel_D, TMP_trialNext_D: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+
 begin
+            TMP_kill <= TMP_killMask(queueContent, events);
+            TMP_killSel <= TMP_killMask(queueContentUpdatedSel, events);
+            TMP_killNext <= TMP_killMask(queueContentNext, events);
+
+            TMP_trial <= TMP_trialMask(queueContent, events);
+            TMP_trialSel <= TMP_trialMask(queueContentUpdatedSel, events);
+            TMP_trialNext <= TMP_trialMask(queueContentNext, events);
+
 
     wups <= getSlowWakeups(queueContent, fni, bypass, CFG_WAIT);
 
@@ -122,6 +155,8 @@ begin
             selMask3 <= selMask2;
             selMask4 <= selMask3;
 
+                trialMaskDelay <= trialMask;
+
             sentKilled <= sendingKilled;
             sentKilled1 <= sendingKilled;
             sentKilled2 <= isNonzero(killMask and selMask1);
@@ -129,15 +164,46 @@ begin
             sentKilled4 <= isNonzero(killMask and selMask3);
 
                killFollowerCmp <= isNonzero(selMask1 and trialMask);
-               killFollowerNextCmp <= isNonzero(selMask and trialMask);
+--                                  trial0;
+              killFollowerNextCmp <= isNonzero(selMask and trialMask);
+--                                    trial1;
+                                    
+                trialDelay0 <= trial0;
+                trialDelay1 <= trial1;
+                trialDelay2 <= trial2;
+                trialDelay3 <= trial3;
+                trialDelay4 <= trial4;
+                
+                
+                
+                
+                
+                TMP_kill_D <= TMP_kill;
+                TMP_killSel_D <= TMP_killSel;
+                TMP_killNext_D <= TMP_killNext;
+                TMP_trial_D <= TMP_trial;
+                TMP_trialSel_D <= TMP_trialSel;
+                TMP_trialNext_D <= TMP_trialNext;
+                
+                    execD <= events.execEvent;
+                    lateD <= events.lateEvent;
         end if;
     end process;
 
+--               killFollowerCmp <= trial1;
+--               killFollowerNextCmp <= trial2;
+
     controlSigs <= getControlSignals(queueContentUpdatedSel, events);
+
 
     -- Vector signals
     killMask <= getKilledVec(controlSigs);
+        killMask_T <=   (others => '1') when events.lateEvent = '1' 
+                   else trialUpdatedMask  when events.execEvent = '1'
+                   else (others => '0');
+
     trialMask <= getTrialVec(controlSigs);
+        trialUpdatedMask <= getTrialUpdatedVec(controlSigs);
     fullMask <= getFullVec(controlSigs);
     readyMaskAll <= getReadyVec(controlSigs);
 
@@ -151,18 +217,38 @@ begin
     selectedSlot <= queueSelect(queueContentUpdatedSel, selMask);  
     selectedIqTag <= sn(getFirstOnePosition(selMask));
 
+        trial0 <= isNonzero(selMask and trialUpdatedMask);
+        trial1 <= isNonzero(selMask1 and trialUpdatedMask);
+        trial2 <= isNonzero(selMask2 and trialUpdatedMask);
+        trial3 <= isNonzero(selMask3 and trialUpdatedMask);
+        trial4 <= isNonzero(selMask4 and trialUpdatedMask);
+
+        kill0 <= (trial0 and events.execEvent) or events.lateEvent;
+        kill1 <= (trial1 and events.execEvent) or events.lateEvent;
+        kill2 <= (trial2 and events.execEvent) or events.lateEvent;
+        kill3 <= (trial3 and events.execEvent) or events.lateEvent;
+        kill4 <= (trial4 and events.execEvent) or events.lateEvent;
+
+
+            ch0 <= bool2std(killMask_T = killMask);
+            ch1 <= trial2 xnor killFollowerCmp;
+            ch2 <= trial1 xnor killFollowerNextCmp;
+            ch3 <= sentKilled2 xnor ((trial1 and execD) or lateD);
+
     schedulerOut <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
 
-    outputSignals <=   (sending => sends,   -- 
-                        cancelled => sentKilled or fni.memFail, --
+    outputSignals <=   (empty => '0',--isEmpty,
                         ready => '0',--anyReadyLive,
-                        empty => '0',--isEmpty,
-                        killSel => '0',--sendingKilled,
-                        killSel1 => '0',--sentKilled1,
+                        sending => sends,   -- 
+                        cancelled => sentKilled or fni.memFail, --
                         killSel2 => sentKilled2, --
-                        killSel3 => sentKilled3,
                         killFollower => killFollowerCmp and events.execEvent,  -- 
-                        killFollowerNext => killFollowerNextCmp and events.execEvent --
+                        killFollowerNext => killFollowerNextCmp and events.execEvent, --
+                            trial0 => trial0,
+                            trial1 => trial1,
+                            trial2 => trial2,
+                            trial3 => trial3,
+                            trial4 => trial4
                         );
 
     freedMask <= getFreedVec(controlSigs);

@@ -219,7 +219,8 @@ type InstructionState is record
 
 	constantArgs: InstructionConstantArgs;
 	virtualArgSpec: InstructionArgSpec;
-	physicalArgSpec: InstructionArgSpec;
+	--physicalArgSpec: InstructionArgSpec;
+	   dest_T: PhysName; 
 end record;
 
 type InstructionStateArray is array(integer range <>) of InstructionState;
@@ -497,7 +498,8 @@ constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
 	dispatchInfo => DEFAULT_CLASS_INFO_DISPATCH,
 	constantArgs => DEFAULT_CONSTANT_ARGS,
 	virtualArgSpec => DEFAULT_ARG_SPEC,
-	physicalArgSpec => DEFAULT_ARG_SPEC
+	--physicalArgSpec => DEFAULT_ARG_SPEC,
+	   dest_T => (others => '0') 
 );
 
 constant DEFAULT_INS_STATE: InstructionState := DEFAULT_INSTRUCTION_STATE;
