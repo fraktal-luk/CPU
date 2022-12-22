@@ -33,10 +33,9 @@ type IssueQueueSignals is record
     ready: std_logic;
     sending: std_logic;
     cancelled: std_logic;
-    killSel2: std_logic;
     killFollower: std_logic;
     killFollowerNext: std_logic;
-        trial0, trial1, trial2, trial3, trial4: std_logic;
+ --       trial0, trial1, trial2, trial3, trial4: std_logic;
 end record;
 
 
