@@ -475,32 +475,35 @@ begin
 
         prevStablePhysDests => physStableInt  -- FOR MAPPING (to FREE LIST)
     );
+
+    FP_MAPPER: if ENABLE_FP generate
+
+        FLOAT_MAPPER: entity work.RegisterMapper
+        generic map (IS_FP => true)
+        port map(
+            clk => clk, en => '0', reset => '0',
+            
+            rewind => renameLockEndDelayed,
+            
+            sendingToReserve => frontSendingIn,
     
-    FLOAT_MAPPER: entity work.RegisterMapper
-    generic map (IS_FP => true)
-    port map(
-        clk => clk, en => '0', reset => '0',
-        
-        rewind => renameLockEndDelayed,
-        
-        sendingToReserve => frontSendingIn,
-
-        reserveInfoA => inputRenameInfoFloat,
-        newPhysDestsOrig => newFloatDests,
-        
-        sendingToCommit => robSendingDelayed,
-        commitInfoA => commitArgInfoFloatDelayed,
-
-        newPhysSources => newFloatSources,
-        newPhysSources_NR => open,
-        newPhysSourcesAlt => newFloatSourcesAlt,
-        newPhysSourceSelector => newSourceSelectorFloat,
-        
-        newProducers => newProducersFloat,
-
-        prevStablePhysDests => physStableFloat
-    );
-
+            reserveInfoA => inputRenameInfoFloat,
+            newPhysDestsOrig => newFloatDests,
+            
+            sendingToCommit => robSendingDelayed,
+            commitInfoA => commitArgInfoFloatDelayed,
+    
+            newPhysSources => newFloatSources,
+            newPhysSources_NR => open,
+            newPhysSourcesAlt => newFloatSourcesAlt,
+            newPhysSourceSelector => newSourceSelectorFloat,
+            
+            newProducers => newProducersFloat,
+    
+            prevStablePhysDests => physStableFloat
+        );
+    end generate;
+    
                             
     INT_FREE_LIST: entity work.RegisterFreeList(Behavioral)
     port map(
@@ -525,30 +528,32 @@ begin
         physStableDelayed => physStableInt
     );
     
-    FLOAT_FREE_LIST: entity work.RegisterFreeList(Behavioral)
-    generic map( IS_FP => true)
-    port map(
-        clk => clk,
-        reset => '0',
-        en => '0',
-        
-        rewind => eventSig,
-        execEventSignal => execEventSignal,
-        lateEventSignal => lateEventSignal,        
-        causingPointer => execCausing.tags.floatPointer,
-        
-        sendingToReserve => frontSendingIn, 
-        takeAllow => frontSendingIn,	-- FROM SEQ
-
-        reserveInfoA => inputRenameInfoFloat,
-
-        newPhysDests => newFloatDests,			-- TO SEQ
-        newPhysDestPointer => newFloatDestPointer, -- TO SEQ
+    FP_FREE_LIST: if ENABLE_FP generate
+        FLOAT_FREE_LIST: entity work.RegisterFreeList(Behavioral)
+        generic map( IS_FP => true)
+        port map(
+            clk => clk,
+            reset => '0',
+            en => '0',
+            
+            rewind => eventSig,
+            execEventSignal => execEventSignal,
+            lateEventSignal => lateEventSignal,        
+            causingPointer => execCausing.tags.floatPointer,
+            
+            sendingToReserve => frontSendingIn, 
+            takeAllow => frontSendingIn,	-- FROM SEQ
     
-        sendingToRelease => robSendingDelayed,  -- FROM SEQ
-        releaseInfoA => commitArgInfoFloatDelayed,
-        physStableDelayed => physStableFloat -- FOR MAPPING (from MAP)
-    );
+            reserveInfoA => inputRenameInfoFloat,
+    
+            newPhysDests => newFloatDests,			-- TO SEQ
+            newPhysDestPointer => newFloatDestPointer, -- TO SEQ
+        
+            sendingToRelease => robSendingDelayed,  -- FROM SEQ
+            releaseInfoA => commitArgInfoFloatDelayed,
+            physStableDelayed => physStableFloat -- FOR MAPPING (from MAP)
+        );
+	end generate;
 	
     specialOut <= specialOperation;
 	

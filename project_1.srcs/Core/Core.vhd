@@ -410,47 +410,57 @@ begin
                     iqFreed => freedMaskSVI
                 );
 
-                SVF_ALLOC: entity work.QueueAllocator
-                generic map(
-                    QUEUE_SIZE => 12, BANK_SIZE => 3
-                )
-                port map(
-                    clk => clk, evt => events,
 
-                    inReady => frontGroupSend,
-                    inMask => floatStoreMaskRe,
-                    --inGroup => frontGroupOut,
+               ALLOC_FP: if ENABLE_FP generate
 
-                    --outReady => open,
-                    --outGroup => open,
-                        TMP_outTags => TMP_svfTags,
+                    SVF_ALLOC: entity work.QueueAllocator
+                    generic map(
+                        QUEUE_SIZE => 12, BANK_SIZE => 3
+                    )
+                    port map(
+                        clk => clk, evt => events,
+    
+                        inReady => frontGroupSend,
+                        inMask => floatStoreMaskRe,
+                        --inGroup => frontGroupOut,
+    
+                        --outReady => open,
+                        --outGroup => open,
+                            TMP_outTags => TMP_svfTags,
+    
+                        accept => allocAcceptSVF,
+    
+                        iqUsed => usedMaskSVF,
+                        iqFreed => freedMaskSVf
+                    );
 
-                    accept => allocAcceptSVF,
+    
+                    FP_ALLOC: entity work.QueueAllocator
+                    generic map(
+                        QUEUE_SIZE => 12, BANK_SIZE => 3
+                    )
+                    port map(
+                        clk => clk, evt => events,
+    
+                        inReady => frontGroupSend,
+                        inMask => fpMaskRe,
+                        --inGroup => frontGroupOut,
+    
+                        --outReady => open,
+                        --outGroup => open,
+                            TMP_outTags => TMP_fpTags,
+    
+                        accept => allocAcceptF0,
+    
+                        iqUsed => usedMaskF0,
+                        iqFreed => freedMaskF0
+                    );
+                end generate;
 
-                    iqUsed => usedMaskSVF,
-                    iqFreed => freedMaskSVf
-                );
-
-                FP_ALLOC: entity work.QueueAllocator
-                generic map(
-                    QUEUE_SIZE => 12, BANK_SIZE => 3
-                )
-                port map(
-                    clk => clk, evt => events,
-
-                    inReady => frontGroupSend,
-                    inMask => fpMaskRe,
-                    --inGroup => frontGroupOut,
-
-                    --outReady => open,
-                    --outGroup => open,
-                        TMP_outTags => TMP_fpTags,
-
-                    accept => allocAcceptF0,
-
-                    iqUsed => usedMaskF0,
-                    iqFreed => freedMaskF0
-                );
+                ALLOC_FP_STUB: if not ENABLE_FP generate
+                    allocAcceptSVF <= '1';
+                    allocAcceptF0 <= '1';
+                end generate;
 
 
                 RENAMER: entity work.Renamer
@@ -1092,31 +1102,33 @@ begin
    
             ------------------------------------
             readyRegFlagsFloatSV <= (readyRegFlagsFloat_Early(2), '0', '0', readyRegFlagsFloat_Early(5), '0', '0', readyRegFlagsFloat_Early(8), '0', '0', readyRegFlagsFloat_Early(11), '0', '0');
-
-            IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)
-            generic map(
-                NAME => "SVF",
-                IQ_SIZE => IQ_SIZE_FLOAT_SV, -- CAREFUL: not IS_FP because doesn't have destination
-                --DONT_MATCH1 => true,
-                FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_FLOAT_D(0 to 2),
-                IGNORE_MEM_FAIL => true
-            )
-            port map(
-                clk => clk, reset => '0', en => '0',
-
-                prevSendingOK => renamedSending,
-                newArr => schedInfoUpdatedFloatU,
-                        TMP_newTags => TMP_svfTags,
-                fni => fniFloat,
-                                    bypass => bypassFloatSV,
-                nextAccepting => allowIssueStoreDataFP,
-                events => events,
-                schedulerOut => slotSelFloatSV,              
-                outputSignals => outSigsSVF,
-                                freedMask => freedMaskSVF,
-                                usedMask => usedMaskSVF,
-                dbState => dbState
-            );       
+            
+            FP_STORE_IQ: if ENABLE_FP generate
+                IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)
+                generic map(
+                    NAME => "SVF",
+                    IQ_SIZE => IQ_SIZE_FLOAT_SV, -- CAREFUL: not IS_FP because doesn't have destination
+                    --DONT_MATCH1 => true,
+                    FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_FLOAT_D(0 to 2),
+                    IGNORE_MEM_FAIL => true
+                )
+                port map(
+                    clk => clk, reset => '0', en => '0',
+    
+                    prevSendingOK => renamedSending,
+                    newArr => schedInfoUpdatedFloatU,
+                            TMP_newTags => TMP_svfTags,
+                    fni => fniFloat,
+                                        bypass => bypassFloatSV,
+                    nextAccepting => allowIssueStoreDataFP,
+                    events => events,
+                    schedulerOut => slotSelFloatSV,              
+                    outputSignals => outSigsSVF,
+                                    freedMask => freedMaskSVF,
+                                    usedMask => usedMaskSVF,
+                    dbState => dbState
+                );       
+            end generate;
 
             TMP_ISSUE_SVF: block
                 use work.LogicIssue.all;
@@ -1147,7 +1159,7 @@ begin
         end block;
 
         
-        SUBPIPE_FP0: block
+        SUBPIPE_FP0: if ENABLE_FP generate
             use work.LogicIssue.all;
             signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1);
             
@@ -1225,7 +1237,8 @@ begin
                 end if;
             end process;
             
-         end block;
+         end generate;
+
 
          sqValueResult.full <= sendingToStoreWrite;
          sqValueResult.tag <= stateExecStoreValue.st.tags.renameIndex;
@@ -1400,7 +1413,7 @@ begin
                resultToFloatRF_Early <= resultToFloatWQ_Early;
            end if;
         end process;
-            
+
         resultToIntRF_EarlyEffective.dbInfo <= resultToIntRF_Early.dbInfo;
         resultToIntRF_EarlyEffective.full <= resultToIntRF_Early.full and not memFail;
         resultToIntRF_EarlyEffective.failed <= subpipeM0_E2.failed; -- ??
@@ -1441,39 +1454,41 @@ begin
             writingData_T(0) => resultToIntRF_EarlyEffective,
             readyRegFlagsNext => readyRegFlagsIntNext_Early
         );
+        
+        FP_REGISTERS: if ENABLE_FP generate
+            FLOAT_REG_FILE: entity work.RegFile(Behavioral)
+            generic map(IS_FP => true, WIDTH => 4, WRITE_WIDTH => 1)
+            port map(
+                clk => clk, reset => '0', en => '0',
+    
+                writeInput(0) => resultToFloatRF, 
+                readAllowVec => (others => '1'),
+    
+                selectRead(0 to 2) => regsSelF0,
+                selectRead(3 to 5) => (others => (others => '0')),
+                selectRead(6 to 8) => (others => (others => '0')),
+                selectRead(9 to 11) => regsSelFS0,
+    
+                readValues(0 to 2) => regValsF0,
+                readValues(3 to 5) => regValsFloatB,
+                readValues(6 to 8) => regValsFloatC,                       
+                readValues(9 to 11) => regValsFS0            
+            );
 
-        FLOAT_REG_FILE: entity work.RegFile(Behavioral)
-        generic map(IS_FP => true, WIDTH => 4, WRITE_WIDTH => 1)
-        port map(
-            clk => clk, reset => '0', en => '0',
-
-            writeInput(0) => resultToFloatRF, 
-            readAllowVec => (others => '1'),
-
-            selectRead(0 to 2) => regsSelF0,
-            selectRead(3 to 5) => (others => (others => '0')),
-            selectRead(6 to 8) => (others => (others => '0')),
-            selectRead(9 to 11) => regsSelFS0,
-
-            readValues(0 to 2) => regValsF0,
-            readValues(3 to 5) => regValsFloatB,
-            readValues(6 to 8) => regValsFloatC,                       
-            readValues(9 to 11) => regValsFS0            
-        );
-
-        FLOAT_READY_TABLE_EARLY: entity work.RegisterReadyTable(Behavioral)
-        generic map(
-            IS_FP => true, WRITE_WIDTH => 1
-        )
-        port map(
-            clk => clk, reset => '0', en => '0', 
-             
-            sendingToReserve => frontGroupSend,                 
-            newPhysDests => newFloatDests,
-            newPhysSources => newFloatSources,
-            writingData_T(0) => resultToFloatRF_Early,
-            readyRegFlagsNext => readyRegFlagsFloatNext_Early
-        );
+            FLOAT_READY_TABLE_EARLY: entity work.RegisterReadyTable(Behavioral)
+            generic map(
+                IS_FP => true, WRITE_WIDTH => 1
+            )
+            port map(
+                clk => clk, reset => '0', en => '0', 
+                 
+                sendingToReserve => frontGroupSend,                 
+                newPhysDests => newFloatDests,
+                newPhysSources => newFloatSources,
+                writingData_T(0) => resultToFloatRF_Early,
+                readyRegFlagsNext => readyRegFlagsFloatNext_Early
+            );
+        end generate;
 
         SRC_LATE_OVERRIDE: if true generate
              readyRegFlagsInt_T <= updateArgStates(renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext_Early);

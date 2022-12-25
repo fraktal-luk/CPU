@@ -169,7 +169,7 @@ begin
 
 
        controlSigs <= getControlSignals(queueContentUpdatedSel, events);
-    
+
 
        killMask <=   (others => '1') when events.lateEvent = '1' 
               else trialUpdatedMask  when events.execEvent = '1'
