@@ -48,6 +48,8 @@ end RegisterMapper;
 
 
 architecture Behavioral of RegisterMapper is
+        constant USE_OLD: boolean := false;
+
 	constant WIDTH: natural := PIPE_WIDTH;
 
 	signal newestMap, newestMap_NoRewind, stableMap, newestMapNext, newestMapNext_NoRewind, stableMapNext: PhysNameArray(0 to 31) := initMap(IS_FP);
@@ -114,10 +116,11 @@ begin
 	   end if;
 	end process;
 
-	prevStablePhysDests <= readStable_T2;
-	                       --    readStable;
-	newPhysSources <= readNewest_T2;
-	                  --     readNewest;
+	prevStablePhysDests <=     readStable_T2 when not USE_OLD
+	                      else readStable;
+	newPhysSources <=      readNewest_T2 when not USE_OLD
+	                  else readNewest;
+
 	newPhysSources_NR <= readNewest_NR;
     newPhysSourcesAlt <= readStableSources;
     newPhysSourceSelector <= not readUseNewest;
