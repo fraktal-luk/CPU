@@ -25,7 +25,7 @@ constant PIPE_WIDTH: positive := 2**LOG2_PIPE_WIDTH;
 constant ALIGN_BITS: natural := LOG2_PIPE_WIDTH + 2;
 constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');    
 
-constant ENABLE_FP: boolean := false; --true;
+constant ENABLE_FP: boolean := true;
 
 
 constant FETCH_WIDTH: positive := PIPE_WIDTH; 

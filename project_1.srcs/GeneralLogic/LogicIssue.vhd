@@ -281,7 +281,10 @@ package body LogicIssue is
             end if;
         end if;
 
-        res.zero := ri.sourceConst;
+        for i in 0 to 2 loop
+            res.zero(i) := --ri.sourceConst(i);
+                            ri.argStates(i).const;
+        end loop;
         
         if not HAS_IMM then
             res.immediate := '0';            
@@ -308,20 +311,30 @@ package body LogicIssue is
         for i in 0 to 2 loop
             res.argStates(i).dbDep := DB_setProducer(res.argStates(i).dbDep, ri.dbDepTags(i));
         
-            res.argStates(i).used := ri.sourceSel(i);
-            res.argStates(i).zero := ri.sourceConst(i);
+            res.argStates(i).used := --ri.sourceSel(i);
+                                        ri.argStates(i).sel;
+            res.argStates(i).zero := --ri.sourceConst(i);
+                                        ri.argStates(i).const;
 
-            res.argStates(i).reg := ri.physicalSourcesNew(i);
+            res.argStates(i).reg := --ri.physicalSourcesNew(i);
+                                                    ri.argStates(i).physicalNew;
+
             res.argStates(i).iqTag := TMP_renamedSrcs(i);
 
             -- Possibility to implement late allocation or advanced renaming schemes - delayed selection of args
             if false then
-                if ri.sourcesNew(i) = '1' then
-                    res.argStates(i).reg := ri.physicalSourcesNew(i);
-                elsif ri.sourcesStable(i) = '1' then
-                    res.argStates(i).reg := ri.physicalSourcesStable(i);
+                if ri.argStates(i).sourceNew = '1' then
+                    res.argStates(i).reg := --ri.physicalSourcesNew(i);
+                                               ri.argStates(i).physicalNew;
+
+                elsif ri.argStates(i).sourceStable = '1' then
+                    res.argStates(i).reg := --ri.physicalSourcesStable(i);
+                                                            ri.argStates(i).physicalStable;
+
                 else
-                    res.argStates(i).reg := ri.physicalSources(i);
+                    res.argStates(i).reg := --ri.physicalSources(i);
+                                                            ri.argStates(i).physical;
+
                 end if;
             end if;
 

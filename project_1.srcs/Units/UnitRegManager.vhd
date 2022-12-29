@@ -306,40 +306,69 @@ architecture Behavioral of UnitRegManager is
             res(i).virtualDest := va.dest(4 downto 0);
             res(i).physicalDest := dests(i);
 
-            if IS_FP then
-                res(i).sourceSel := va.floatArgSel;
-            else
-                res(i).sourceSel := va.intArgSel;
-            end if;
-                
-            for j in 0 to 2 loop
-                res(i).sourceConst(j) :=   (va.intArgSel(j) and not isNonzero(va.args(j)(4 downto 0))) -- int r0
-                                        or (not va.intArgSel(j) and not va.floatArgSel(j))             -- not used
-                                        or (bool2std(j = 1) and ca.immSel);                            -- imm
+--            if IS_FP then
+--                res(i).sourceSel := va.floatArgSel;
+--            else
+--                res(i).sourceSel := va.intArgSel;
+--            end if;
 
-                res(i).virtualSources(j) := va.args(j)(4 downto 0);
+            for j in 0 to 2 loop
+--                res(i).sourceConst(j) :=   (va.intArgSel(j) and not isNonzero(va.args(j)(4 downto 0))) -- int r0
+--                                        or (not va.intArgSel(j) and not va.floatArgSel(j))             -- not used
+--                                        or (bool2std(j = 1) and ca.immSel);                            -- imm
+
+--                res(i).virtualSources(j) := va.args(j)(4 downto 0);
                 
-                res(i).physicalSources(j) := newPhysSources(3*i + j);
-                res(i).physicalSourcesStable(j) := newPhysSourcesStable(3*i + j);
+--                res(i).physicalSources(j) := newPhysSources(3*i + j);
+--                res(i).physicalSourcesStable(j) := newPhysSourcesStable(3*i + j);
                 
                 res(i).dbDepTags(j) := newProducers(3*i + j);
-            end loop;
-
-            res(i).deps := depVec(i);
-            res(i).physicalSourcesNew := res(i).physicalSources;
-
-            for j in 0 to 2 loop
-                res(i).sourcesNew(j) := isNonzero(res(i).deps(j));
-                for k in PIPE_WIDTH-1 downto 0 loop
-                    if res(i).deps(j)(k) = '1' then
-                        res(i).physicalSourcesNew(j) := dests(k);
-                        exit;
+                
+                    if IS_FP then
+                        res(i).argStates(j).sel := va.floatArgSel(j);
+                    else
+                        res(i).argStates(j).sel := va.intArgSel(j);
                     end if;
-                end loop;
+                    
+                    res(i).argStates(j).const := (va.intArgSel(j) and not isNonzero(va.args(j)(4 downto 0))) -- int r0
+                                                            or (not va.intArgSel(j) and not va.floatArgSel(j))             -- not used
+                                                            or (bool2std(j = 1) and ca.immSel);
+                    res(i).argStates(j).virtual := va.args(j)(4 downto 0);
+                    res(i).argStates(j).physical := newPhysSources(3*i + j);
+                    res(i).argStates(j).physicalStable := newPhysSourcesStable(3*i + j);
+ 
+                    res(i).argStates(j).deps := depVec(i)(j);
+                    res(i).argStates(j).physicalNew := newPhysSources(3*i + j);
+                    
+                    res(i).argStates(j).sourceStable := newSourceSelector(3*i+ j);
+                    res(i).argStates(j).sourceNew := isNonzero(res(i).argStates(j).deps);
+                    res(i).argStates(j).sourceReady := '0';
+
+                    for k in PIPE_WIDTH-1 downto 0 loop
+                        if res(i).argStates(j).deps(k) = '1' then
+                            res(i).argStates(j).physicalNew := dests(k);
+                            exit;
+                        end if;
+                    end loop;
             end loop;
+
+--            res(i).deps := depVec(i);
+--            res(i).physicalSourcesNew := res(i).physicalSources;
+                    
+                    
+
+--            for j in 0 to 2 loop
+--                res(i).sourcesNew(j) := isNonzero(res(i).deps(j));
+--                for k in PIPE_WIDTH-1 downto 0 loop
+--                    if res(i).deps(j)(k) = '1' then
+--                        res(i).physicalSourcesNew(j) := dests(k);
+--                        exit;
+--                    end if;
+--                end loop;
+--            end loop;
             
-            res(i).sourcesStable := newSourceSelector(3*i to 3*i + 2);            
-            res(i).sourcesReady := (others => '0');
+--            res(i).sourcesStable := newSourceSelector(3*i to 3*i + 2);            
+--            res(i).sourcesReady := (others => '0');
         end loop;
         return res;
     end function;
@@ -460,6 +489,10 @@ begin
         
         rewind => renameLockEndDelayed,
         
+            reserveTag => renameGroupCtrNext,
+            commitTag => commitGroupCtr,
+            rewindTag => execCausing.tags.renameIndex,
+        
         sendingToReserve => frontSendingIn,
         reserveInfoA => inputRenameInfoInt,
         newPhysDestsOrig => newIntDests,    -- MAPPING (from FREE LIST)
@@ -484,7 +517,11 @@ begin
             clk => clk, en => '0', reset => '0',
             
             rewind => renameLockEndDelayed,
-            
+
+                reserveTag => renameGroupCtrNext,
+                commitTag => commitGroupCtr,
+                rewindTag => execCausing.tags.renameIndex,
+
             sendingToReserve => frontSendingIn,
     
             reserveInfoA => inputRenameInfoFloat,

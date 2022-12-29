@@ -55,6 +55,32 @@ type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
 constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
 
 
+    type ArgRenameState is record
+        sel: std_logic;
+        const: std_logic;
+        virtual: RegName;
+        physical: PhysName;
+        physicalStable: PhysName;
+        physicalNew: PhysName;
+        deps: std_logic_vector(0 to PIPE_WIDTH-1);
+        sourceStable: std_logic; 
+        sourceNew: std_logic; 
+        sourceReady: std_logic; 
+    end record;
+
+    constant DEFAULT_ARG_RENAME_STATE: ArgRenameState := (
+        virtual => (others => '0'),
+        physical => (others => '0'),
+        physicalStable => (others => '0'),
+        physicalNew => (others => '0'),
+        deps => (others => '0'),
+        const => '1',
+        sourceStable => '1',
+        others => '0'
+    );
+
+    type ArgRenameStateArray is array(natural range <>) of ArgRenameState;
+
 type RenameInfo is record
     dbInfo: InstructionDebugInfo;
 
@@ -65,16 +91,18 @@ type RenameInfo is record
     psel: std_logic;
     virtualDest: RegName;
     physicalDest: PhysName;
-    sourceSel: std_logic_vector(0 to 2);
-    sourceConst: std_logic_vector(0 to 2); 
-    virtualSources: RegNameArray(0 to 2);
-    physicalSources: PhysNameArray(0 to 2);
-    physicalSourcesStable: PhysNameArray(0 to 2);
-    physicalSourcesNew: PhysNameArray(0 to 2); -- sources in case of of group dependency        
-    deps: DependencySpec;
-    sourcesStable: std_logic_vector(0 to 2); -- true if source is from stable map - always ready
-    sourcesNew: std_logic_vector(0 to 2);   -- true if group dependency
-    sourcesReady: std_logic_vector(0 to 2); -- ready as read from ReadyTable based on NewestMap
+--    sourceSel: std_logic_vector(0 to 2);
+--    sourceConst: std_logic_vector(0 to 2); 
+--    virtualSources: RegNameArray(0 to 2);
+--    physicalSources: PhysNameArray(0 to 2);
+--    physicalSourcesStable: PhysNameArray(0 to 2);
+--    physicalSourcesNew: PhysNameArray(0 to 2); -- sources in case of of group dependency        
+--    deps: DependencySpec;
+--    sourcesStable: std_logic_vector(0 to 2); -- true if source is from stable map - always ready
+--    sourcesNew: std_logic_vector(0 to 2);   -- true if group dependency
+--    sourcesReady: std_logic_vector(0 to 2); -- ready as read from ReadyTable based on NewestMap
+        
+        argStates: ArgRenameStateArray(0 to 2);
 end record;
 
 type RenameInfoArray is array(natural range <>) of RenameInfo;
@@ -89,16 +117,18 @@ constant DEFAULT_RENAME_INFO: RenameInfo := (
     psel => '0',
     virtualDest => (others => '0'),
     physicalDest => (others => '0'),
-    sourceSel => (others => '0'),
-    sourceConst => (others => '0'),
-    virtualSources => (others => (others => '0')),
-    physicalSources => (others => (others => '0')),
-    physicalSourcesStable => (others => (others => '0')),
-    physicalSourcesNew => (others => (others => '0')),
-    deps => (others => (others => '0')),
-    sourcesStable => (others => '0'),
-    sourcesNew => (others => '0'),
-    sourcesReady => (others => '0')       
+--    sourceSel => (others => '0'),
+--    sourceConst => (others => '0'),
+--    virtualSources => (others => (others => '0')),
+--    physicalSources => (others => (others => '0')),
+--    physicalSourcesStable => (others => (others => '0')),
+--    physicalSourcesNew => (others => (others => '0')),
+--    deps => (others => (others => '0')),
+--    sourcesStable => (others => '0'),
+--    sourcesNew => (others => '0'),
+--    sourcesReady => (others => '0'),
+    
+        argStates => (others => DEFAULT_ARG_RENAME_STATE)    
 );
 
 -- Is it needed? Unify with ExecResult?
@@ -268,10 +298,16 @@ end function;
     function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray is
         variable res: PhysNameArray(0 to 3*PIPE_WIDTH-1);
     begin
-        res(0 to 2) := ri(0).physicalSourcesNew;
-        res(3 to 5) := ri(1).physicalSourcesNew;
-        res(6 to 8) := ri(2).physicalSourcesNew;
-        res(9 to 11) := ri(3).physicalSourcesNew;
+--        res(0 to 2) := ri(0).physicalSourcesNew;
+--        res(3 to 5) := ri(1).physicalSourcesNew;
+--        res(6 to 8) := ri(2).physicalSourcesNew;
+--        res(9 to 11) := ri(3).physicalSourcesNew;
+        
+            for i in 0 to PIPE_WIDTH-1 loop
+                for j in 0 to 2 loop
+                    res(3*i + j) := ri(i).argStates(j).physicalNew;
+                end loop;
+            end loop;
         return res;
     end function;
 
@@ -597,16 +633,18 @@ function removeArg2(ria: RenameInfoArray) return RenameInfoArray is
     variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := ria;
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i).sourceSel(2) := '0';
-        res(i).sourceConst(2) := '1'; 
-        res(i).virtualSources(2) := (others => '0');
-        res(i).physicalSources(2) := (others => '0');
-        res(i).physicalSourcesStable(2) := (others => '0');
-        res(i).physicalSourcesNew(2) := (others => '0'); -- sources in case of of group dependency        
-        res(i).deps(2) := (others => '0');
-        res(i).sourcesStable(2) := '1'; -- true if source is from stable map - always ready
-        res(i).sourcesNew(2) := '0';   -- true if group dependency
-        res(i).sourcesReady(2) := '0'; -- ready as read from ReadyTable based on NewestMap 
+--        res(i).sourceSel(2) := '0';
+--        res(i).sourceConst(2) := '1'; 
+--        res(i).virtualSources(2) := (others => '0');
+--        res(i).physicalSources(2) := (others => '0');
+--        res(i).physicalSourcesStable(2) := (others => '0');
+--        res(i).physicalSourcesNew(2) := (others => '0'); -- sources in case of of group dependency        
+--        res(i).deps(2) := (others => '0');
+--        res(i).sourcesStable(2) := '1'; -- true if source is from stable map - always ready
+--        res(i).sourcesNew(2) := '0';   -- true if group dependency
+--        res(i).sourcesReady(2) := '0'; -- ready as read from ReadyTable based on NewestMap
+        
+            res(i).argStates(2) := DEFAULT_ARG_RENAME_STATE;
     end loop;
     
     return res;
@@ -620,38 +658,42 @@ begin
         res(i).destSelFP := '0';
         res(i).physicalDest := (others => '0');
 
-        res(i).sourceSel(0) := res(i).sourceSel(2);
-        res(i).sourceConst(0) := res(i).sourceConst(2); 
-        res(i).virtualSources(0) := res(i).virtualSources(2);
-        res(i).physicalSources(0) := res(i).physicalSources(2);
-        res(i).physicalSourcesStable(0) := res(i).physicalSourcesStable(2);
-        res(i).physicalSourcesNew(0) := res(i).physicalSourcesNew(2); -- sources in case of of group dependency        
-        res(i).deps(0) := res(i).deps(2);
-        res(i).sourcesStable(0) := res(i).sourcesStable(2); -- true if source is from stable map - always ready
-        res(i).sourcesNew(0) := res(i).sourcesNew(2);   -- true if group dependency
-        res(i).sourcesReady(0) := res(i).sourcesReady(2); -- ready as read from ReadyTable based on NewestMap
+--        res(i).sourceSel(0) := res(i).sourceSel(2);
+--        res(i).sourceConst(0) := res(i).sourceConst(2); 
+--        res(i).virtualSources(0) := res(i).virtualSources(2);
+--        res(i).physicalSources(0) := res(i).physicalSources(2);
+--        res(i).physicalSourcesStable(0) := res(i).physicalSourcesStable(2);
+--        res(i).physicalSourcesNew(0) := res(i).physicalSourcesNew(2); -- sources in case of of group dependency        
+--        res(i).deps(0) := res(i).deps(2);
+--        res(i).sourcesStable(0) := res(i).sourcesStable(2); -- true if source is from stable map - always ready
+--        res(i).sourcesNew(0) := res(i).sourcesNew(2);   -- true if group dependency
+--        res(i).sourcesReady(0) := res(i).sourcesReady(2); -- ready as read from ReadyTable based on NewestMap
 
-        res(i).sourceSel(1) := '0';
-        res(i).sourceConst(1) := '1'; 
-        res(i).virtualSources(1) := (others => '0');
-        res(i).physicalSources(1) := (others => '0');
-        res(i).physicalSourcesStable(1) := (others => '0');
-        res(i).physicalSourcesNew(1) := (others => '0'); -- sources in case of of group dependency        
-        res(i).deps(1) := (others => '0');
-        res(i).sourcesStable(1) := '1'; -- true if source is from stable map - always ready
-        res(i).sourcesNew(1) := '0';   -- true if group dependency
-        res(i).sourcesReady(1) := '0'; -- ready as read from ReadyTable based on NewestMap
+--        res(i).sourceSel(1) := '0';
+--        res(i).sourceConst(1) := '1'; 
+--        res(i).virtualSources(1) := (others => '0');
+--        res(i).physicalSources(1) := (others => '0');
+--        res(i).physicalSourcesStable(1) := (others => '0');
+--        res(i).physicalSourcesNew(1) := (others => '0'); -- sources in case of of group dependency        
+--        res(i).deps(1) := (others => '0');
+--        res(i).sourcesStable(1) := '1'; -- true if source is from stable map - always ready
+--        res(i).sourcesNew(1) := '0';   -- true if group dependency
+--        res(i).sourcesReady(1) := '0'; -- ready as read from ReadyTable based on NewestMap
         
-        res(i).sourceSel(2) := '0';
-        res(i).sourceConst(2) := '1'; 
-        res(i).virtualSources(2) := (others => '0');
-        res(i).physicalSources(2) := (others => '0');
-        res(i).physicalSourcesStable(2) := (others => '0');
-        res(i).physicalSourcesNew(2) := (others => '0'); -- sources in case of of group dependency        
-        res(i).deps(2) := (others => '0');
-        res(i).sourcesStable(2) := '1'; -- true if source is from stable map - always ready
-        res(i).sourcesNew(2) := '0';   -- true if group dependency
-        res(i).sourcesReady(2) := '0'; -- ready as read from ReadyTable based on NewestMap        
+--        res(i).sourceSel(2) := '0';
+--        res(i).sourceConst(2) := '1'; 
+--        res(i).virtualSources(2) := (others => '0');
+--        res(i).physicalSources(2) := (others => '0');
+--        res(i).physicalSourcesStable(2) := (others => '0');
+--        res(i).physicalSourcesNew(2) := (others => '0'); -- sources in case of of group dependency        
+--        res(i).deps(2) := (others => '0');
+--        res(i).sourcesStable(2) := '1'; -- true if source is from stable map - always ready
+--        res(i).sourcesNew(2) := '0';   -- true if group dependency
+--        res(i).sourcesReady(2) := '0'; -- ready as read from ReadyTable based on NewestMap
+        
+            res(i).argStates(0) := res(i).argStates(2);        
+            res(i).argStates(1) := DEFAULT_ARG_RENAME_STATE;        
+            res(i).argStates(2) := DEFAULT_ARG_RENAME_STATE;        
     end loop;
     
     return res;
@@ -662,7 +704,10 @@ function updateArgStates(riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_l
     variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(3*i to 3*i + 2) := ((riaInt(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaInt(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
+        for j in 0 to 2 loop
+            --res(3*i to 3*i + 2) := ((riaInt(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaInt(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
+            res(3*i + j) := ((riaInt(i).argStates(j).sourceStable or readyRegFlags(3*i +j)) and not riaInt(i).argStates(j).sourceNew);-- and not riaFloat(i).sourcesNew);
+        end loop;
     end loop;
     return res;
 end function;
@@ -671,7 +716,10 @@ function updateArgStatesFloat(riaInt, riaFloat: RenameInfoArray; readyRegFlags: 
     variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(3*i to 3*i + 2) := ((riaFloat(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaFloat(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
+        for j in 0 to 2 loop
+            --res(3*i to 3*i + 2) := ((riaFloat(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaFloat(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
+            res(3*i + j) := ((riaFloat(i).argStates(j).sourceStable or readyRegFlags(3*i +j)) and not riaFloat(i).argStates(j).sourceNew);-- and not riaFloat(i).sourcesNew);
+        end loop;
     end loop;
     return res;
 end function;
