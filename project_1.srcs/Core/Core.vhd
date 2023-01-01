@@ -122,6 +122,8 @@ architecture Behavioral of Core is
                 
         signal TMP_renamedDests: SmallNumberArray(0 to RENAME_W-1) := (others => (others => '0'));
         signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
+        
+        constant QQQ: natural := 0;
 begin
 
     intSignal <= int0 or int1;
@@ -515,7 +517,7 @@ begin
 
        signal regsSelI0, regsSelI1, regsSelM0, regsSelS0, regsSelFloatA, regsSelFloatC, regsSelFS0, regsSelF0: PhysNameArray(0 to 2) := (others => (others => '0'));
        signal regValsI0, regValsI1, regValsM0, regValsS0, regValsE, regValsFloatA, regValsFloatB, regValsFloatC, regValsFS0, regValsF0: MwordArray(0 to 2) := (others => (others => '0'));
-       signal readyRegFlagsInt_Early, readyRegFlagsInt_C, readyRegFlagsFloat_Early, readyRegFlagsInt_T, readyRegFlagsFloat_T,
+       signal readyRegFlagsInt_Early, readyRegFlagsInt_Early_Mem, readyRegFlagsInt_C, readyRegFlagsFloat_Early, readyRegFlagsInt_T, readyRegFlagsFloat_T,
               readyRegFlagsIntNext_Early, readyRegFlagsIntNext_C, readyRegFlagsSV, readyRegFlagsFloatNext_Early, readyRegFlagsFloatSV
               : std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
@@ -824,6 +826,13 @@ begin
                 end generate;
 
 
+            readyRegFlagsInt_Early_Mem <= --readyRegFlagsInt_Early;
+                                          (readyRegFlagsInt_Early(0), readyRegFlagsInt_Early(1 + QQQ), readyRegFlagsInt_Early(2 - QQQ),
+                                           readyRegFlagsInt_Early(3), readyRegFlagsInt_Early(4 + QQQ), readyRegFlagsInt_Early(5 - QQQ),
+                                           readyRegFlagsInt_Early(6), readyRegFlagsInt_Early(7 + QQQ), readyRegFlagsInt_Early(8 - QQQ),
+                                           readyRegFlagsInt_Early(9), readyRegFlagsInt_Early(10 + QQQ), readyRegFlagsInt_Early(11 - QQQ)
+                                            );
+
         SUBPIPE_MEM: block
            use work.LogicIssue.all;
             
@@ -844,7 +853,7 @@ begin
                                                             renamedDataLivingRe), 
                                                             memMask, true, removeArg2(renamedArgsMerged), TMP_renamedDests, TMP_renamedSources);         
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups, memFail, CFG_MEM);
-           schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early );
+           schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early_Mem );
            
 		   IQUEUE_MEM: entity work.IssueQueue(Behavioral)
            generic map(
@@ -1007,7 +1016,10 @@ begin
         end block;
 
         ------------------------
-        readyRegFlagsSV <= (readyRegFlagsInt_Early(2), '0', '0', readyRegFlagsInt_Early(5), '0', '0', readyRegFlagsInt_Early(8), '0', '0', readyRegFlagsInt_Early(11), '0', '0');
+        readyRegFlagsSV <= (readyRegFlagsInt_Early(2 - QQQ), '0', '0',
+                            readyRegFlagsInt_Early(5 - QQQ), '0', '0',
+                            readyRegFlagsInt_Early(8 - QQQ), '0', '0',
+                            readyRegFlagsInt_Early(11 - QQQ), '0', '0');
 
         SUBPIPES_STORE_VALUE: block
                                use work.LogicIssue.all;
@@ -1099,9 +1111,12 @@ begin
 
             sendingToStoreWriteInt <= slotRegReadIntSV.full and not outSigsSVI.--killSel2;
                                                                                 killFollower;
-   
+
             ------------------------------------
-            readyRegFlagsFloatSV <= (readyRegFlagsFloat_Early(2), '0', '0', readyRegFlagsFloat_Early(5), '0', '0', readyRegFlagsFloat_Early(8), '0', '0', readyRegFlagsFloat_Early(11), '0', '0');
+            readyRegFlagsFloatSV <= (readyRegFlagsFloat_Early(2 - QQQ), '0', '0',
+                                     readyRegFlagsFloat_Early(5 - QQQ), '0', '0',
+                                     readyRegFlagsFloat_Early(8 - QQQ), '0', '0',
+                                     readyRegFlagsFloat_Early(11 - QQQ), '0', '0');
             
             FP_STORE_IQ: if ENABLE_FP generate
                 IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)

@@ -218,6 +218,8 @@ function TMP_recodeMul(insVec: InstructionSlotArray) return InstructionSlotArray
 
 --function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray;
 
+function swapArgs12(ri: RenameInfo) return RenameInfo;
+
 function removeArg2(ria: RenameInfoArray) return RenameInfoArray;
 function useStoreArg2(ria: RenameInfoArray) return RenameInfoArray;
 
@@ -629,22 +631,20 @@ end function;
 --end function;
 
 
+function swapArgs12(ri: RenameInfo) return RenameInfo is
+    variable res: RenameInfo := ri;
+begin
+    res.argStates(2) := ri.argStates(1);
+    res.argStates(1) := ri.argStates(2);
+
+    return res;
+end function;
+
 function removeArg2(ria: RenameInfoArray) return RenameInfoArray is
     variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := ria;
 begin
     for i in 0 to PIPE_WIDTH-1 loop
---        res(i).sourceSel(2) := '0';
---        res(i).sourceConst(2) := '1'; 
---        res(i).virtualSources(2) := (others => '0');
---        res(i).physicalSources(2) := (others => '0');
---        res(i).physicalSourcesStable(2) := (others => '0');
---        res(i).physicalSourcesNew(2) := (others => '0'); -- sources in case of of group dependency        
---        res(i).deps(2) := (others => '0');
---        res(i).sourcesStable(2) := '1'; -- true if source is from stable map - always ready
---        res(i).sourcesNew(2) := '0';   -- true if group dependency
---        res(i).sourcesReady(2) := '0'; -- ready as read from ReadyTable based on NewestMap
-        
-            res(i).argStates(2) := DEFAULT_ARG_RENAME_STATE;
+        res(i).argStates(2) := DEFAULT_ARG_RENAME_STATE;
     end loop;
     
     return res;
@@ -658,42 +658,9 @@ begin
         res(i).destSelFP := '0';
         res(i).physicalDest := (others => '0');
 
---        res(i).sourceSel(0) := res(i).sourceSel(2);
---        res(i).sourceConst(0) := res(i).sourceConst(2); 
---        res(i).virtualSources(0) := res(i).virtualSources(2);
---        res(i).physicalSources(0) := res(i).physicalSources(2);
---        res(i).physicalSourcesStable(0) := res(i).physicalSourcesStable(2);
---        res(i).physicalSourcesNew(0) := res(i).physicalSourcesNew(2); -- sources in case of of group dependency        
---        res(i).deps(0) := res(i).deps(2);
---        res(i).sourcesStable(0) := res(i).sourcesStable(2); -- true if source is from stable map - always ready
---        res(i).sourcesNew(0) := res(i).sourcesNew(2);   -- true if group dependency
---        res(i).sourcesReady(0) := res(i).sourcesReady(2); -- ready as read from ReadyTable based on NewestMap
-
---        res(i).sourceSel(1) := '0';
---        res(i).sourceConst(1) := '1'; 
---        res(i).virtualSources(1) := (others => '0');
---        res(i).physicalSources(1) := (others => '0');
---        res(i).physicalSourcesStable(1) := (others => '0');
---        res(i).physicalSourcesNew(1) := (others => '0'); -- sources in case of of group dependency        
---        res(i).deps(1) := (others => '0');
---        res(i).sourcesStable(1) := '1'; -- true if source is from stable map - always ready
---        res(i).sourcesNew(1) := '0';   -- true if group dependency
---        res(i).sourcesReady(1) := '0'; -- ready as read from ReadyTable based on NewestMap
-        
---        res(i).sourceSel(2) := '0';
---        res(i).sourceConst(2) := '1'; 
---        res(i).virtualSources(2) := (others => '0');
---        res(i).physicalSources(2) := (others => '0');
---        res(i).physicalSourcesStable(2) := (others => '0');
---        res(i).physicalSourcesNew(2) := (others => '0'); -- sources in case of of group dependency        
---        res(i).deps(2) := (others => '0');
---        res(i).sourcesStable(2) := '1'; -- true if source is from stable map - always ready
---        res(i).sourcesNew(2) := '0';   -- true if group dependency
---        res(i).sourcesReady(2) := '0'; -- ready as read from ReadyTable based on NewestMap
-        
-            res(i).argStates(0) := res(i).argStates(2);        
-            res(i).argStates(1) := DEFAULT_ARG_RENAME_STATE;        
-            res(i).argStates(2) := DEFAULT_ARG_RENAME_STATE;        
+        res(i).argStates(0) := res(i).argStates(2);        
+        res(i).argStates(1) := DEFAULT_ARG_RENAME_STATE;        
+        res(i).argStates(2) := DEFAULT_ARG_RENAME_STATE;        
     end loop;
     
     return res;

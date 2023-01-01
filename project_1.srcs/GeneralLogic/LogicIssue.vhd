@@ -364,12 +364,18 @@ package body LogicIssue is
                                     TMP_renamedDests: SmallNumberArray; TMP_renamedSources: SmallNumberArray) return SchedulerInfoArray is
         variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1);
         variable slot: InstructionSlot := DEFAULT_INS_SLOT;
+        variable argInfo: RenameInfo := DEFAULT_RENAME_INFO;
     begin
         for i in res'range loop
+            argInfo := ria(i);
+            if insVec(i).ins.specificOperation.subpipe = Mem then
+               --argInfo := swapArgs12(argInfo);
+            end if;
+
             slot := insVec(i);
             slot.full := mask(i);
-            res(i).static := getIssueStaticInfo(slot, USE_IMM, ria(i));
-            res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, ria(i), TMP_renamedDests(i), TMP_renamedSources(3*i to 3*i + 2));
+            res(i).static := getIssueStaticInfo(slot, USE_IMM, argInfo);
+            res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, argInfo, TMP_renamedDests(i), TMP_renamedSources(3*i to 3*i + 2));
         end loop;
         return res;    
     end function;
