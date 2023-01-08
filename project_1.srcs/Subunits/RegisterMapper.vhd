@@ -30,7 +30,7 @@ entity RegisterMapper is
 		  reserveTag: in InsTag;
 		  commitTag: in InsTag;
 		  rewindTag: in InsTag;
-		  		
+
 		sendingToReserve: in std_logic;
 		reserveInfoA: in RenameInfoArray(0 to PIPE_WIDTH-1);
 		newPhysDestsOrig: in PhysNameArray(0 to PIPE_WIDTH-1); -- to write to newest map

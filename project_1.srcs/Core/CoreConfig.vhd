@@ -12,8 +12,8 @@ package CoreConfig is
 constant CLEAR_DEBUG_INFO: boolean := true;
 constant VIEW_ON: boolean := false;
 
-constant DB_ENABLE: boolean := false;
-constant DB_LOG_EVENTS: boolean := false;
+constant DB_ENABLE: boolean := false;-- false;
+constant DB_LOG_EVENTS: boolean := false;-- false;
 
 
    constant DEBUG_LOG_COMMITTED: boolean := false;
@@ -25,7 +25,11 @@ constant PIPE_WIDTH: positive := 2**LOG2_PIPE_WIDTH;
 constant ALIGN_BITS: natural := LOG2_PIPE_WIDTH + 2;
 constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');    
 
+
 constant ENABLE_FP: boolean := true;
+
+constant QQQ: natural := 0; -- 1: remove src2, 0: don't
+
 
 
 constant FETCH_WIDTH: positive := PIPE_WIDTH; 

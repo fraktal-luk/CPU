@@ -123,7 +123,6 @@ architecture Behavioral of Core is
         signal TMP_renamedDests: SmallNumberArray(0 to RENAME_W-1) := (others => (others => '0'));
         signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
         
-        constant QQQ: natural := 0;
 begin
 
     intSignal <= int0 or int1;
@@ -851,7 +850,7 @@ begin
            schedInfoA <= work.LogicIssue.getIssueInfoArray(--TMP_removeArg2
                                                             (
                                                             renamedDataLivingRe), 
-                                                            memMask, true, removeArg2(renamedArgsMerged), TMP_renamedDests, TMP_renamedSources);         
+                                                            memMask, true, removeArg2(swapArgs12(renamedArgsMerged)), TMP_renamedDests, TMP_renamedSources);         
            schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups, memFail, CFG_MEM);
            schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early_Mem );
            
@@ -1038,11 +1037,11 @@ begin
 
             schedInfoIntA <= work.LogicIssue.getIssueInfoArray(--prepareForStoreValueIQ
                                                                     (renamedDataLivingRe),
-                                                                    intStoreMask, false, useStoreArg2(renamedArgsInt), TMP_renamedDests, TMP_renamedSources);
+                                                                    intStoreMask, false, useStoreArg2(swapArgs12(renamedArgsInt)), TMP_renamedDests, TMP_renamedSources);
             schedInfoUpdatedIntA <= work.LogicIssue.updateSchedulerArray_N(schedInfoIntA, fni, wupsInt, memFail, CFG_SVI);
             schedInfoFloatA <= work.LogicIssue.getIssueInfoArray(--prepareForStoreValueFloatIQ
                                                                     (renamedDataLivingRe),
-                                                                 fpStoreMask, false, useStoreArg2(renamedArgsFloat), TMP_renamedDests, TMP_renamedSources);
+                                                                 fpStoreMask, false, useStoreArg2(swapArgs12(renamedArgsFloat)), TMP_renamedDests, TMP_renamedSources);
             schedInfoUpdatedFloatA <= work.LogicIssue.updateSchedulerArray_N(schedInfoFloatA, fniFloat, wupsFloat, memFail, CFG_SVF);
 
                 schedInfoUpdatedIntU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedIntA, readyRegFlagsSV );
@@ -1510,9 +1509,16 @@ begin
               --         readyRegFlagsInt_C <= updateArgStates(renamedDataLivingRe_C, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext_C);
              readyRegFlagsFloat_T <= updateArgStatesFloat(renamedArgsInt, renamedArgsFloat, readyRegFlagsFloatNext_Early);
         end generate;
-         
-        readyRegFlagsInt_Early <= readyRegFlagsIntNext_Early    ;
-        readyRegFlagsFloat_Early <= readyRegFlagsFloatNext_Early;
+
+        readyRegFlagsInt_Early(0 to 2 - QQQ) <= readyRegFlagsIntNext_Early(0 to 2 - QQQ);
+        readyRegFlagsInt_Early(3 to 5 - QQQ) <= readyRegFlagsIntNext_Early(3 to 5 - QQQ);
+        readyRegFlagsInt_Early(6 to 8 - QQQ) <= readyRegFlagsIntNext_Early(6 to 8 - QQQ);
+        readyRegFlagsInt_Early(9 to 11 - QQQ) <= readyRegFlagsIntNext_Early(9 to 11 - QQQ);
+        
+        readyRegFlagsFloat_Early(0 to 2 - QQQ) <= readyRegFlagsFloatNext_Early(0 to 2 - QQQ);
+        readyRegFlagsFloat_Early(3 to 5 - QQQ) <= readyRegFlagsFloatNext_Early(3 to 5 - QQQ);
+        readyRegFlagsFloat_Early(6 to 8 - QQQ) <= readyRegFlagsFloatNext_Early(6 to 8 - QQQ);
+        readyRegFlagsFloat_Early(9 to 11 - QQQ) <= readyRegFlagsFloatNext_Early(9 to 11 - QQQ);
 
         sysRegSending <= sysRegRead;
 

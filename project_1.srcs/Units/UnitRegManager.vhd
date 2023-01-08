@@ -112,22 +112,22 @@ architecture Behavioral of UnitRegManager is
           begin
               res.full := elem.full;
               res.ins.dbInfo := elem.dbInfo;
-          
+
               res.ins.specificOperation := unfoldOp(elem.specificOperation);
-          
+
               res.ins.typeInfo := elem.classInfo;
               res.ins.typeInfo.useSQ := elem.classInfo.secCluster;
-          
+
               res.ins.constantArgs := elem.constantArgs;
               res.ins.virtualArgSpec := elem.argSpec; 
-          
-          
+
+
               res.ins.controlInfo.firstBr_T := elem.firstBr;
               res.ins.controlInfo.specialAction_T := elem.specialAction;
-          
+
               return res;
           end function;
-          
+
           function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray is
               variable res: InstructionSlotArray(elemVec'range);
           begin
@@ -304,9 +304,6 @@ architecture Behavioral of UnitRegManager is
             res(i).physicalDest := dests(i);
 
             for j in 0 to 2 loop
-                
-                res(i).dbDepTags(j) := newProducers(3*i + j);
-                
                 if IS_FP then
                     res(i).argStates(j).sel := va.floatArgSel(j);
                 else
@@ -317,10 +314,20 @@ architecture Behavioral of UnitRegManager is
                                                         or (not va.intArgSel(j) and not va.floatArgSel(j))             -- not used
                                                         or (bool2std(j = 1) and ca.immSel);
                 res(i).argStates(j).virtual := va.args(j)(4 downto 0);
+                
+                res(i).argStates(j).deps := depVec(i)(j);
+            end loop;
+
+                if ia(i).specificOperation.subpipe = Mem then
+                    res(i) := swapArgs12(res(i));
+                end if;
+
+            for j in 0 to 2 loop
+                res(i).dbDepTags(j) := newProducers(3*i + j);
+
                 res(i).argStates(j).physical := newPhysSources(3*i + j);
                 res(i).argStates(j).physicalStable := newPhysSourcesStable(3*i + j);
 
-                res(i).argStates(j).deps := depVec(i)(j);
                 res(i).argStates(j).physicalNew := newPhysSources(3*i + j);
                 
                 res(i).argStates(j).sourceStable := newSourceSelector(3*i+ j);
@@ -334,14 +341,12 @@ architecture Behavioral of UnitRegManager is
                     end if;
                 end loop;
             end loop;
-            
-            
-                if ia(i).specificOperation.subpipe = Mem then
-                    --res(i) := swapArgs12(res(i));
-                end if;
                 
+                if QQQ = 1 then
+                    res(i).argStates(2) := DEFAULT_ARG_RENAME_STATE;
+                end if;
         end loop;
-        
+
         return res;
     end function;
 
