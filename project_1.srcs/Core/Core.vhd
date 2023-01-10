@@ -110,10 +110,11 @@ architecture Behavioral of Core is
 
     signal dbState: DbCoreState := DEFAULT_DB_STATE;
 
-        signal freedMaskI0, usedMaskI0, freedMaskI1, usedMaskI1, freedMaskM0, usedMaskM0,
+        signal aluAllocAccept_C: std_logic := '0';
+        signal freedMaskI0, usedMaskI0, freedMaskI0_C, usedMaskI0_C,     freedMaskI1, usedMaskI1, freedMaskM0, usedMaskM0,
                freedMaskSVI, usedMaskSVI, freedMaskSVF, usedMaskSVF, freedMaskF0, usedMaskF0: std_logic_vector(0 to IQ_SIZE_I0-1) := (others => '0');
-        signal TMP_aluTags, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags,
-                TMP_aluTagsPre, TMP_mulTagsPre, TMP_memTagsPre, TMP_sviTagsPre, TMP_svfTagsPre, TMP_fpTagsPre,
+        signal TMP_aluTags,  TMP_aluTags_C, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags,
+                TMP_aluTagsPre, TMP_aluTagsPre_C,  TMP_mulTagsPre, TMP_memTagsPre, TMP_sviTagsPre, TMP_svfTagsPre, TMP_fpTagsPre,
                 
                 TMP_aluTagsT, TMP_mulTagsT, TMP_memTagsT, TMP_sviTagsT, TMP_svfTagsT, TMP_fpTagsT,
                 TMP_aluTagsPreT, TMP_mulTagsPreT, TMP_memTagsPreT, TMP_sviTagsPreT, TMP_svfTagsPreT, TMP_fpTagsPreT
@@ -122,7 +123,7 @@ architecture Behavioral of Core is
                 
         signal TMP_renamedDests: SmallNumberArray(0 to RENAME_W-1) := (others => (others => '0'));
         signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
-        
+
 begin
 
     intSignal <= int0 or int1;
@@ -324,140 +325,6 @@ begin
                 TMP_fpTagsPreT <= iqInds2tags(TMP_fpTagsPre);
 
 
-                ALU_ALLOC: entity work.QueueAllocator
-                generic map(
-                    QUEUE_SIZE => 12, BANK_SIZE => 3
-                )
-                port map(
-                    clk => clk, evt => events,
-
-                    inReady => frontGroupSend,
-                    inMask => aluMaskRe,
-                    --inGroup => frontGroupOut,
-
-                    --outReady => open,
-                    --outGroup => open,
-                        TMP_outTags => TMP_aluTags,
-                        TMP_outTagsPre => TMP_aluTagsPre,
-
-                    accept => allocAcceptAlu,
-
-                    iqUsed => usedMaskI0,
-                    iqFreed => freedMaskI0
-                );
-
-                MUL_ALLOC: entity work.QueueAllocator
-                generic map(
-                    QUEUE_SIZE => 12, BANK_SIZE => 3
-                )
-                port map(
-                    clk => clk, evt => events,
-
-                    inReady => frontGroupSend,
-                    inMask => mulMaskRe,
-                    --inGroup => frontGroupOut,
-
-                    --outReady => open,
-                    --outGroup => open,
-                        TMP_outTags => TMP_mulTags,
-                        TMP_outTagsPre => TMP_mulTagsPre,
-                    
-                    accept => allocAcceptMul,
-
-                    iqUsed => usedMaskI1,
-                    iqFreed => freedMaskI1
-                );
-
-                MEM_ALLOC: entity work.QueueAllocator
-                generic map(
-                    QUEUE_SIZE => 12, BANK_SIZE => 3
-                )
-                port map(
-                    clk => clk, evt => events,
-
-                    inReady => frontGroupSend,
-                    inMask => memMaskRe,
-                    --inGroup => frontGroupOut,
-
-                    --outReady => open,
-                    --outGroup => open,
-                        TMP_outTags => TMP_memTags,
-                        TMP_outTagsPre => TMP_memTagsPre,
-
-                    accept => allocAcceptMem,
-
-                    iqUsed => usedMaskM0,
-                    iqFreed => freedMaskM0
-                );
-
-                SVI_ALLOC: entity work.QueueAllocator
-                generic map(
-                    QUEUE_SIZE => 12, BANK_SIZE => 3
-                )
-                port map(
-                    clk => clk, evt => events,
-
-                    inReady => frontGroupSend,
-                    inMask => intStoreMaskRe,
-                    --inGroup => frontGroupOut,
-
-                    --outReady => open,
-                    --outGroup => open,
-                        TMP_outTags => TMP_sviTags,
-
-                    accept => allocAcceptSVI,
-
-                    iqUsed => usedMaskSVI,
-                    iqFreed => freedMaskSVI
-                );
-
-
-               ALLOC_FP: if ENABLE_FP generate
-
-                    SVF_ALLOC: entity work.QueueAllocator
-                    generic map(
-                        QUEUE_SIZE => 12, BANK_SIZE => 3
-                    )
-                    port map(
-                        clk => clk, evt => events,
-    
-                        inReady => frontGroupSend,
-                        inMask => floatStoreMaskRe,
-                        --inGroup => frontGroupOut,
-    
-                        --outReady => open,
-                        --outGroup => open,
-                            TMP_outTags => TMP_svfTags,
-    
-                        accept => allocAcceptSVF,
-    
-                        iqUsed => usedMaskSVF,
-                        iqFreed => freedMaskSVf
-                    );
-
-    
-                    FP_ALLOC: entity work.QueueAllocator
-                    generic map(
-                        QUEUE_SIZE => 12, BANK_SIZE => 3
-                    )
-                    port map(
-                        clk => clk, evt => events,
-    
-                        inReady => frontGroupSend,
-                        inMask => fpMaskRe,
-                        --inGroup => frontGroupOut,
-    
-                        --outReady => open,
-                        --outGroup => open,
-                            TMP_outTags => TMP_fpTags,
-    
-                        accept => allocAcceptF0,
-    
-                        iqUsed => usedMaskF0,
-                        iqFreed => freedMaskF0
-                    );
-                end generate;
-
                 ALLOC_FP_STUB: if not ENABLE_FP generate
                     allocAcceptSVF <= '1';
                     allocAcceptF0 <= '1';
@@ -623,6 +490,10 @@ begin
             schedInfoUpdatedA <= work.LogicIssue.updateSchedulerArray_N(schedInfoA, fni, wups, memFail, CFG_ALU);
             schedInfoUpdatedU <= work.LogicIssue.prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early );
 
+                        ch0 <= bool2std(aluAllocAccept_C = allocAcceptAlu);
+                        ch1 <= bool2std(TMP_aluTags_C = TMP_aluTags);
+                        ch2 <= bool2std(TMP_aluTagsPre_C = TMP_aluTagsPre);
+
             IQUEUE_I0: entity work.IssueQueue(Behavioral)
             generic map(
                 NAME => "I0",
@@ -635,6 +506,13 @@ begin
             port map(
                 clk => clk, reset => '0', en => '0', events => events,
 
+                    inReady => frontGroupSend,
+                    inMask => aluMaskRe,
+
+                        accept => allocAcceptAlu,
+                        TMP_outTags => TMP_aluTags,
+                        TMP_outTagsPre => TMP_aluTagsPre,
+
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedU,
                         TMP_newTags => TMP_aluTags,
@@ -643,8 +521,8 @@ begin
                 nextAccepting => allowIssueI0,
                 schedulerOut => slotSelI0,
                 outputSignals => outSigsI0,
-                freedMask => freedMaskI0,
-                usedMask => usedMaskI0, 
+                --freedMask => freedMaskI0,
+                --usedMask => usedMaskI0, 
                 dbState => dbState
             );
 
@@ -750,6 +628,14 @@ begin
                         port map(
                             clk => clk, reset => '0', en => '0',
 
+                                inReady => frontGroupSend,
+                                inMask => mulMaskRe,
+                                
+                                TMP_outTags => TMP_mulTags,
+                                TMP_outTagsPre => TMP_mulTagsPre,
+                            
+                            accept => allocAcceptMul,
+                    
                             prevSendingOK => renamedSending,
                             newArr => schedInfoUpdatedU,
                                  TMP_newTags => TMP_mulTags,
@@ -759,8 +645,6 @@ begin
                             events => events,
                             schedulerOut => slotSelI1,
                             outputSignals => outSigsI1,
-                                freedMask => freedMaskI1,
-                                usedMask => usedMaskI1,
                             dbState => dbState
                         );
 
@@ -865,6 +749,14 @@ begin
            port map(
                clk => clk, reset => '0', en => '0',
 
+                                inReady => frontGroupSend,
+                                inMask => memMaskRe,
+
+                        TMP_outTags => TMP_memTags,
+                        TMP_outTagsPre => TMP_memTagsPre,
+                    
+                    accept => allocAcceptMem,
+
                prevSendingOK => renamedSending,
                newArr => schedInfoUpdatedU,
                      TMP_newTags => TMP_memTags,
@@ -873,9 +765,7 @@ begin
                nextAccepting => allowIssueM0,
                events => events,
                schedulerOut => slotSelM0,
-               outputSignals => outSigsM0,
-                   freedMask => freedMaskM0,
-                   usedMask => usedMaskM0,              
+               outputSignals => outSigsM0,            
                dbState => dbState
            );
 
@@ -1058,7 +948,14 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-
+                                
+                                inReady => frontGroupSend,
+                                inMask => intStoreMaskRe,
+                
+                            TMP_outTags => TMP_sviTags,
+        
+                            accept => allocAcceptSVI,
+                
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedIntU,
                         TMP_newTags => TMP_sviTags,
@@ -1068,8 +965,6 @@ begin
                 events => events,
                 schedulerOut => slotSelIntSV,
                 outputSignals => outSigsSVI,
-                                freedMask => freedMaskSVI,
-                                usedMask => usedMaskSVI,
                 dbState => dbState
             );
 
@@ -1128,7 +1023,14 @@ begin
                 )
                 port map(
                     clk => clk, reset => '0', en => '0',
-    
+
+                                inReady => frontGroupSend,
+                                inMask => floatStoreMaskRe,
+
+                        TMP_outTags => TMP_svfTags,
+
+                        accept => allocAcceptSVF,
+
                     prevSendingOK => renamedSending,
                     newArr => schedInfoUpdatedFloatU,
                             TMP_newTags => TMP_svfTags,
@@ -1138,8 +1040,6 @@ begin
                     events => events,
                     schedulerOut => slotSelFloatSV,              
                     outputSignals => outSigsSVF,
-                                    freedMask => freedMaskSVF,
-                                    usedMask => usedMaskSVF,
                     dbState => dbState
                 );       
             end generate;
@@ -1196,6 +1096,14 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
+                                
+                                inReady => frontGroupSend,
+                                inMask => fpMaskRe,
+
+                        TMP_outTags => TMP_fpTags,
+                        TMP_outTagsPre => TMP_fpTagsPre,
+                    
+                    accept => allocAcceptF0,
 
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedU,
@@ -1206,8 +1114,6 @@ begin
                 events => events,
                 schedulerOut => slotSelF0,
                 outputSignals => outSigsF0,
-                                freedMask => freedMaskF0,
-                                usedMask => usedMaskF0,
                 dbState => dbState
             );
            

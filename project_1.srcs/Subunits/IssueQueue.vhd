@@ -36,6 +36,14 @@ entity IssueQueue is
 		newArr: in SchedulerInfoArray(0 to PIPE_WIDTH-1);
         TMP_newTags: in SmallNumberArray(0 to RENAME_W-1);
 
+        inReady: in std_logic;
+        inMask: std_logic_vector;
+
+        TMP_outTagsPre: out SmallNumberArray(0 to RENAME_W-1);
+        TMP_outTags: out SmallNumberArray(0 to RENAME_W-1);
+
+        accept: out std_logic;
+
 		nextAccepting: in std_logic;
 
 		events: in EventState;
@@ -46,9 +54,6 @@ entity IssueQueue is
 
 		schedulerOut: out SchedulerState;
         outputSignals: out IssueQueueSignals;
-
-        freedMask: out std_logic_vector(0 to IQ_SIZE-1);
-        usedMask: out std_logic_vector(0 to IQ_SIZE-1);
 
         dbState: in DbCoreState		
 	);
@@ -78,7 +83,6 @@ architecture Behavioral of IssueQueue is
     signal anyReadyFull, sends, sendingKilled, sendingKilled_T, sentKilled,
                     killFollowerCmp, killFollowerNextCmp,
                         sendingTrial, sentTrial1, sentTrial2, sentTrial1_T, sentTrial2_T,
-                    --kill0, kill1, kill2, kill3, -- UNUSED
                     trial0, trial1, trial2, trial3
                     : std_logic := '0';
 
@@ -87,6 +91,10 @@ architecture Behavioral of IssueQueue is
 
     signal wa: WakeupInfoArray(0 to IQ_SIZE-1);
 
+        signal freedMaskSig, usedMaskSig: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+
+        signal TMP_tags: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
+                
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
 
             function TMP_killMask(content: SchedulerInfoArray; evt: EventState) return std_logic_vector is
@@ -107,22 +115,35 @@ architecture Behavioral of IssueQueue is
                 return res;
             end function;
 
-           --     signal TMP_kill, TMP_killSel, TMP_killNext, TMP_trial, TMP_trialSel, TMP_trialNext
-            --           : std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
-
 begin
---            TMP_kill <= TMP_killMask(queueContent, events);
---            TMP_killSel <= TMP_killMask(queueContentUpdatedSel, events);
---            TMP_killNext <= TMP_killMask(queueContentNext, events);
 
---            TMP_trial <= TMP_trialMask(queueContent, events);
---            TMP_trialSel <= TMP_trialMask(queueContentUpdatedSel, events);
---            TMP_trialNext <= TMP_trialMask(queueContentNext, events);
+        ALLOCATOR: entity work.QueueAllocator
+        generic map(
+            QUEUE_SIZE => 12, BANK_SIZE => 3
+        )
+        port map(
+            clk => clk, evt => events,
+
+            inReady => inReady,
+            inMask => inMask,
+
+                TMP_outTags => TMP_tags,
+                TMP_outTagsPre => TMP_outTagsPre,
+
+            accept => accept,
+
+            iqUsed => usedMaskSig,      -- IQ
+            iqFreed => freedMaskSig     -- IQ
+        );
+
+        TMP_outTags <= TMP_tags;
 
 
     wups <= getSlowWakeups(queueContent, fni, bypass, CFG_WAIT);
-
-    wupsSelection <= getFastWakeups_O(queueContent, fni, CFG_SEL);
+    
+    FAST_WAKEUP: if ENABLE_FAST_WAKEUP generate
+        wupsSelection <= getFastWakeups_O(queueContent, fni, CFG_SEL);
+    end generate;
 
         --  wa <= getWakeupArray(queueContent, fni, WAKEUP_SPEC, CFG_WAIT); -- CFG_WAIT is needed for 'ignoreMemFail')
 
@@ -131,7 +152,8 @@ begin
     queueContentUpdated <= updateSchedulerArray_N(queueContent, fni, wups, fni.memFail, CFG_WAIT);
     queueContentUpdated_2 <= iqNext_NS(queueContentUpdated, sends, killMask, trialMask, selMask, fni.memFail);
 
-    insertionLocs <= getNewLocs_N(fullMask, TMP_newTags, newArr);
+    insertionLocs <= getNewLocs_N(fullMask, --TMP_newTags, newArr);
+                                            TMP_tags, newArr);
     queueContentNext <= iqNext_NS_2(queueContentUpdated_2, newArr, prevSendingOK, insertionLocs);
 
     ageMatrixNext <= updateAgeMatrix(ageMatrix, insertionLocs, fullMask);
@@ -209,8 +231,12 @@ begin
                         killFollowerNext => (sentTrial1_T and events.execEvent) or events.lateEvent
                         );
 
-    freedMask <= getFreedVec(controlSigs);
-    usedMask <= fullMask;
+    freedMaskSig <= getFreedVec(controlSigs);
+    usedMaskSig <= fullMask;
+
+--    freedMask <= freedMaskSig;
+--    usedMask <= usedMaskSig;
+
 
     COUNTERS_SYNCHRONOUS: process(clk)
     begin

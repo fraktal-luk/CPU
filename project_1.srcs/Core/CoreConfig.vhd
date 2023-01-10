@@ -27,6 +27,7 @@ constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');
 
 
 constant ENABLE_FP: boolean := true;
+constant ENABLE_FAST_WAKEUP: boolean := true;
 
 constant QQQ: natural := 0; -- 1: remove src2, 0: don't
 
