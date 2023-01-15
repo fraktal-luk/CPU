@@ -129,10 +129,9 @@ package body LogicQueues is
         variable allow: std_logic;
     begin
         allow := er.full;
-        indV := er.dest and PTR_MASK_SN; -- TODO: difference between LQ and SQ?
-        
+        indV := er.dest and PTR_MASK_SN;
         ind := slv2u(indV);
-        
+ 
         if allow = '1' then
             content(ind).completedA <= '1';
             content(ind).address <= er.value;

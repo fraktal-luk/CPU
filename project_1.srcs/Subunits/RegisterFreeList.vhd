@@ -165,7 +165,6 @@ begin
             signal vFree, vUsed: std_logic_vector(0 to N_PHYS-1) := (others => '0');
             signal newTaken, newPut: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
             
-            -- CAREFUL, TODO: this assumes some endianness, maybe needed universal
             function TMP_w2b(wa: WordArray) return ByteArray is
                 constant LEN: natural := wa'length;
                 variable res: ByteArray(0 to 4*LEN-1);

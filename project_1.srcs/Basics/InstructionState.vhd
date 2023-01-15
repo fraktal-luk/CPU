@@ -50,8 +50,7 @@ type ExecFunc is (
 --------------
 type SubpipeType is (None, ALU, Mem, FP);
 
--- TODO: opJl is unneeded because opJ can have a destination
-type ArithOp is (opAnd, opOr, opXor, opAdd, opSub, opShl, opSha, opRot, opJz, opJnz, opJ, opJl, opMul, opMulHS, opMulHU, opDiv);
+type ArithOp is (opAnd, opOr, opXor, opAdd, opSub, opShl, opSha, opRot, opJz, opJnz, opJ, opMul, opMulHS, opMulHU, opDiv);
 
 type MemOp is (opLoad, opStore, opLoadSys, opStoreSys);
 

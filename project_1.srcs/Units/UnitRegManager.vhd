@@ -89,7 +89,7 @@ architecture Behavioral of UnitRegManager is
     signal newIntSources, newIntSources_NR, newIntSourcesAlt, newFloatSources, newFloatSourcesAlt, zeroSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
     signal newSourceSelectorInt, newSourceSelectorFloat, zeroSelector: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
 
-    signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;    
+    --signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;    
     signal specialOperation: SpecificOp := DEFAULT_SPECIFIC_OP;
 
         -- DEBUG
@@ -184,8 +184,6 @@ architecture Behavioral of UnitRegManager is
        variable res: SpecificOp := insVec(0).ins.specificOperation;
     begin
        for i in PIPE_WIDTH-1 downto 0 loop
-           -- TODO: simpler to get last full slot because if a static event is present, nothing will be after it in group.
-           --       Then the 'full' bit of 'special' would be set if specialAction/exc/dbTrap
            if (insVec(i).full and hasSyncEvent(insVec(i).ins.controlInfo)) = '1' then
                res := insVec(i).ins.specificOperation;
                res.system := SysOp'val(slv2u(res.bits));

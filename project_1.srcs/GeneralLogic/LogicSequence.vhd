@@ -96,8 +96,7 @@ begin
             target := commitTarget;
         elsif specialOp.system = opReplay       
             or commitCt.refetch = '1' then
-            target := --add(commitTarget, MINUS_4); -- CAREFUL: wouldn't work if branch or short
-                        addInt(commitTarget, -4);
+            target := addInt(commitTarget, -4); -- CAREFUL: wouldn't work if branch or short
         elsif specialOp.system = opHalt then
             target := commitTarget; -- ???
         elsif specialOp.system = opRetI then
@@ -184,7 +183,7 @@ begin
         end if;
     end loop;
 
-    if bqTargetFull = '1' and anyConfirmed then -- TODO, CHECK: bqTargetData.full will always be '1' if anyConfirmed?
+    if anyConfirmed then
         target_O := bqTarget;
     else
         target_O := add(lastEffectiveTarget, targetInc);      

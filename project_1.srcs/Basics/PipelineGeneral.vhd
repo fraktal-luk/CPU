@@ -14,6 +14,9 @@ use work.InstructionState.all;
 
 package PipelineGeneral is
 
+type slv2D is array(natural range <>, natural range <>) of std_logic;
+
+
 function sn(n: integer) return SmallNumber;
 
 function p2i(p: SmallNumber; n: natural) return natural;
@@ -888,7 +891,7 @@ begin
     res.tags := ctrlE1u.tags;
     res.target(SMALL_NUMBER_SIZE-1 downto 0) := resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
     res.classInfo.useFP := subpipeM0_E1f.full;
-    res.controlInfo.tlbMiss := ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
+    res.controlInfo.tlbMiss := ctrlE1u.controlInfo.tlbMiss;
     res.controlInfo.dataMiss := ctrlE1u.controlInfo.dataMiss;
     res.controlInfo.sqMiss := ctrlE1u.controlInfo.sqMiss;                    
     return res;

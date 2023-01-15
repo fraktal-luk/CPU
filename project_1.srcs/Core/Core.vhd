@@ -80,8 +80,8 @@ architecture Behavioral of Core is
 
     signal bqPointer, bqPointerSeq, lqPointer, sqPointer: SmallNumber := (others => '0');
 
-    signal commitGroupCtr, commitGroupCtrNext: InsTag := (others => '0'); -- TODO: check if can be internal to RegManager (inc on commit signal)
-    signal renameGroupCtrNext: InsTag := (others => '0'); -- TODO: check if can be internal to RegManager (inc on commit signal)
+    signal commitGroupCtr, commitGroupCtrNext: InsTag := (others => '0'); -- TODO: check if can be internal to RegManager (inc on commit signal) - probably yes
+    signal renameGroupCtrNext: InsTag := (others => '0');
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal intType: std_logic_vector(0 to 1) := (others => '0');
@@ -605,7 +605,7 @@ begin
                        signal controlI1_RR, controlToI1_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
 
                        signal regInfo: RegisterStateArray2D(0 to PIPE_WIDTH-1) := (others => (others => (others => '0')));
-                       constant CFG_MUL: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false); -- TODO: turn off immediates
+                       constant CFG_MUL: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
                        
                        signal wups: work.LogicIssue.WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
                     begin
@@ -1461,7 +1461,7 @@ begin
 		en => '0',
 
 		acceptingOut => open,
-		almostFull => open,
+		--almostFull => open,
 		
 		acceptingBr => bqAccepting,
 		
@@ -1649,7 +1649,7 @@ begin
 
         lateEventSignal => lateEventSignal,
         execEventSignal => execEventSignalE1,
-        execCausing => execCausingDelayedLQ, -- TODO: verify
+        execCausing => execCausingDelayedLQ,
 
         nextAccepting => '0',
 

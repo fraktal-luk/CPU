@@ -131,7 +131,7 @@ begin
         end loop;
         
         blockStart := ind - 1;
-        while isAlphanum(str(ind)) or str(ind) = '-' loop -- and not tab nor cr!
+        while isExtAlphanum(str(ind)) or str(ind) = '-' loop -- and not tab nor cr!
             -- Copy to current group
             words(grp)(ind - blockStart) := str(ind); -- May overflow the word, but nvm                 
             ind := ind + 1;
@@ -209,7 +209,7 @@ begin
         x := TMP_str2int(s(2 to s'length ));            
     elsif s(1) = '-' then
         x := -TMP_str2int(s(2 to s'length));                  
-    elsif not isAlphanum(s(1)) then
+    elsif not isExtAlphanum(s(1)) then
         x := -1;
     elsif s(1) >= '0' and s(1) <= '9' then
         -- Hope it's a number 

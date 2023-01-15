@@ -251,7 +251,6 @@ begin
 
             	allowAlloc <= not cmpGtU(nAllocNext, ROB_SIZE-1);
 
-            	-- TODO: check
                 outputEmpty <= bool2std(startPtrNext = endPtr) or lateEventSignal;
 
                 if lateEventSignal = '1' or execEvent = '1' then

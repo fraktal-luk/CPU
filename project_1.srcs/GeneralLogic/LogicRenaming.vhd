@@ -355,7 +355,7 @@ begin
     
     if freeListRewind = '1' then                     
         tmpTag2(1 downto 0) := causingTag(1 downto 0);
-        res := subSN(i2slv(0, SMALL_NUMBER_SIZE), tmpTag2); -- TODO: find simpler notation for uminus
+        res := subSN(sn(0), tmpTag2);
     end if;
     
     if freeListTakeAllow = '1' and freeListRewind = '0' then

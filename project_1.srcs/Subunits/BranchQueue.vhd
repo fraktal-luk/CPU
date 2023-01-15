@@ -27,7 +27,7 @@ entity BranchQueue is
 		en: in std_logic;
 
 		acceptingOut: out std_logic;
-		almostFull: out std_logic;
+		--almostFull: out std_logic;
 		
 		acceptingBr: out std_logic;
 		
@@ -239,7 +239,7 @@ begin
 
     -- Acc sigs
     acceptingOut <= '1';
-    almostFull <= '0'; -- TODO: is it deprecated?
+    --almostFull <= '0';
     acceptingBr <= accepting;       
     
     -- E. out

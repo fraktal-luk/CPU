@@ -194,8 +194,8 @@ begin
     end block;
 
     pStartEffectiveNext <= addTruncZ(pStartEffective, nCommittedEffective, QUEUE_PTR_SIZE+1) when committing = '1'
-                        else pStartNext when nowCancelled = '1' and drainEqual = '1'
-                        else pStartEffective;
+                      else pStartNext when nowCancelled = '1' and drainEqual = '1'
+                      else pStartEffective;
     pDrainNext <= addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE+1) when drainReq = '1' else pDrain;
     pStartNext <= addTruncZ(pStart, nCommitted, QUEUE_PTR_SIZE+1) when committing = '1' else pStart;
 
@@ -203,21 +203,21 @@ begin
             else   pFlush when execEventSignal = '1' 
             else   addIntTrunc(pTagged, countOnes(inputMask), QUEUE_PTR_SIZE+1) when prevSending = '1'
             else   pTagged;
-                            
-    pRenamedNext <= pStart when lateEventSignal = '1'
-            else       pFlush when execEventSignal = '1'
-            else       addIntTrunc(pRenamed, slv2u(nInRe), QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
-            else       pRenamed;
+
+    pRenamedNext <= pStart when lateEventSignal = '1'  -- TODO: check if not pStartNext (it's the same because lateEvent prevents commit!)
+            else    pFlush when execEventSignal = '1'
+            else    addIntTrunc(pRenamed, slv2u(nInRe), QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
+            else    pRenamed;
 
     pFlush <= execCausing.dest;
 
-     process (clk)   
-     begin
-		if rising_edge(clk) then
+    process (clk)
+    begin
+        if rising_edge(clk) then
 
             isDrainingPrev <= drainReq;
-		    allowDrain <= not (nowCancelled or (not drainEqual and drainEffectiveEqual));
- 
+            allowDrain <= not (nowCancelled or (not drainEqual and drainEffectiveEqual));
+
             -- TODO: reanalyze nowCancelled?
             -- D. out ctrl
             if drainEqual = '1' then
@@ -250,11 +250,8 @@ begin
             pRenamed <= pRenamedNext;
 
             --- ctr management
-	        nFull <= nFullNext;
+            nFull <= nFullNext;
             nAlloc <= nAllocNext;
-
-   	        --isFull <= cmpGtU(nFullNext, QUEUE_SIZE-4);
-            --isAlmostFull <= cmpGtU(nFullNext, QUEUE_SIZE-8);
 
             canAlloc <= not cmpGtU(nAllocNext, QUEUE_SIZE-4);
 
@@ -265,11 +262,11 @@ begin
             end if;
 
             recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here       
-		end if;
-	end process;
-				
+        end if;
+    end process;
+
 	nIn <= i2slv( countOnes(inputMask), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
-		
+
 	LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
     	nFullNext <= getNumFull(pStartNext, pTaggedNext, QUEUE_PTR_SIZE);
     	nAllocNext <= getNumFull(pStartNext, pRenamedNext, QUEUE_PTR_SIZE);
@@ -297,8 +294,6 @@ begin
 
 
     -- Acc sigs
-	--acceptingOut <= not isFull;
-	--almostFull <= isAlmostFull;
     acceptAlloc <= canAlloc;
 
     renamedPtr <= pRenamed;

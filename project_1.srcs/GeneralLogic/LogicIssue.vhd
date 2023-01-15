@@ -58,8 +58,6 @@ constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0
 
     type WakeupInfoArray is array(natural range <>) of WakeupInfo;
 
--- TODO: move to general?
-type slv2D is array(natural range <>, natural range <>) of std_logic;
 
 -- CONFIG
 
@@ -481,7 +479,6 @@ package body LogicIssue is
     end function;
 
 
-    -- TODO: include config to distinguish memFail 2 cycles after wakeup (Int) and 1 cycle after wakeup (FP)
     function dependsOnMemHit(state: ArgumentState; constant IS_FP: boolean) return std_logic is
         variable matchingCtr: SmallNumber := sn(1);
     begin
@@ -830,7 +827,6 @@ end function;
     begin
         res.dynamic.status.issued := '1';
         res.dynamic.status.active := '0';
-        -- TODO: change to hardcoded 1h (then maybe shoudl be made 0 and all checks corrected by -1?
         res.dynamic.status.stageCtr := sn(0);
         return res;
     end function;
@@ -1297,7 +1293,7 @@ end function;
 
             res(i).trial := compareTagBefore(events.preExecTags.renameIndex, content(i).dynamic.renameIndex);
                                          --   and content(i).dynamic.full;
-            res(i).trial_T := compareIndBefore(events.preExecTags.bqPointerSeq, content(i).static.tags.bqPointerSeq, 6); -- TODO: temp value of PTR_SIZE!
+           --es(i).trial_T := compareIndBefore(events.preExecTags.bqPointerSeq, content(i).static.tags.bqPointerSeq, 6);
 
             if false then -- Use bqPointerSeq to flush IQ
                res(i).trial := res(i).trial_T;

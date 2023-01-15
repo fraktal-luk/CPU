@@ -258,7 +258,7 @@ package body LogicExec is
             when opJnz =>
                 ac.jump := '1';
                 ac.jumpType := "01";
-            when opJ | opJl =>
+            when opJ =>
                 ac.jump := '1';
                 ac.jumpType := "10";
             -- opMul, opMulshs, opMulhu, opDiv
@@ -398,7 +398,6 @@ package body LogicExec is
             res.newEvent := '1';
          end if;
 
-        -- TODO: remember about miss/hit status and reason of miss if relevant!
         return res;
     end function;
 
