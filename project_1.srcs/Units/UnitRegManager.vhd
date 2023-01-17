@@ -60,7 +60,7 @@ port(
     commitArgInfoF: in RenameInfoArray(0 to PIPE_WIDTH-1);
     sendingFromROB: in std_logic;
    
-    commitGroupCtr: in InsTag;
+    --commitGroupCtrIn: in InsTag;
     renameGroupCtrNextOut: out InsTag;
   
     execCausing: in ControlPacket;
@@ -83,6 +83,10 @@ architecture Behavioral of UnitRegManager is
 
     signal renameGroupCtr, renameGroupCtrNext: InsTag := INITIAL_GROUP_TAG; -- This is rewinded on events
     signal renameCtr, renameCtrNext: Word := (others => '0');
+
+    signal commitGroupCtr, commitGroupCtrNext,   commitGroupCtrIn: InsTag := INITIAL_GROUP_TAG;
+    signal commitGroupCtrInc, commitGroupCtrIncNext: InsTag := INITIAL_GROUP_TAG_INC;
+
 
     signal newIntDests, newFloatDests, physStableInt, physStableFloat, zeroDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal newIntDestPointer, newFloatDestPointer: SmallNumber := (others => '0');
@@ -362,6 +366,8 @@ architecture Behavioral of UnitRegManager is
                       commitArgInfoIntDelayed, commitArgInfoFloatDelayed: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 begin
 
+            commitGroupCtrIn <= commitGroupCtr;
+
     inputRenameInfoInt <= getRenameInfo(frontData, zeroDests, zeroSources, zeroSources, zeroProducers, zeroSelector);
     inputRenameInfoFloat <= getRenameInfo(frontData, zeroDests, zeroSources, zeroSources, zeroProducers, zeroSelector, true);
 
@@ -388,22 +394,30 @@ begin
 
     renamedDataLiving <= restoreRenameIndex(renamedDataLivingPre);
 
-    renameGroupCtrNext <=   commitGroupCtr when lateEventSignal = '1'
+    renameGroupCtrNext <=   commitGroupCtrIn when lateEventSignal = '1'
                        else clearTagLow(execCausing.tags.renameIndex) when execEventSignal = '1'
                        else addInt(renameGroupCtr, PIPE_WIDTH) when frontLastSending = '1'
                        else renameGroupCtr;
     
     renameCtrNext <= addInt(renameCtr, countOnes(extractFullMask(renamedBase))) when frontLastSending = '1'
                        else renameCtr;
-    
+
+
+
+        commitGroupCtrNext <= commitGroupCtrInc when sendingFromROB = '1' else commitGroupCtr;
+        commitGroupCtrIncNext <= addInt(commitGroupCtrInc, PIPE_WIDTH) when sendingFromROB = '1' else commitGroupCtrInc;
+
+            ch0 <= bool2std(commitGroupCtr = commitGroupCtrIn);
+
+
     -- Re-allow renaming when everything from rename/exec is committed - reg map will be well defined now
-    renameLockRelease <= '1' when commitGroupCtr = renameGroupCtr else '0';
+    renameLockRelease <= '1' when commitGroupCtrIn = renameGroupCtr else '0';
         -- CAREFUL, CHECK: when the counters are equal, renaming can be resumed, but renameLockRelease
         --                      takes effect in next cycle, so before tha cycle renaming is still stopped.
         --                         Should compare to commitCtrNext instead?
         --                         But remember that rewinding GPR map needs a cycle, and before it happens,
         --                         renaming can't be done! So this delay may be caused by this problem.
-        
+
     renameLockStateNext <= '1' when eventSig = '1'
                     else   '0' when renameLockReleaseDelayed = '1'
                     else   renameLockState;
@@ -432,7 +446,10 @@ begin
     
             renameGroupCtr <= renameGroupCtrNext;
             renameCtr <= renameCtrNext;
-    
+
+                commitGroupCtr <= commitGroupCtrNext;
+                commitGroupCtrInc <= commitGroupCtrIncNext;
+
             -- Lock when exec part causes event
             if execEventSignal = '1' or lateEventSignal = '1' then -- CAREFUL
                 renameLockState <= '1';    
@@ -465,7 +482,7 @@ begin
         rewind => renameLockEndDelayed,
         
             reserveTag => renameGroupCtrNext,
-            commitTag => commitGroupCtr,
+            commitTag => commitGroupCtrIn,
             rewindTag => execCausing.tags.renameIndex,
         
         sendingToReserve => frontSendingIn,
@@ -494,7 +511,7 @@ begin
             rewind => renameLockEndDelayed,
 
                 reserveTag => renameGroupCtrNext,
-                commitTag => commitGroupCtr,
+                commitTag => commitGroupCtrIn,
                 rewindTag => execCausing.tags.renameIndex,
 
             sendingToReserve => frontSendingIn,

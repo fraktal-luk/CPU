@@ -90,6 +90,7 @@ architecture Behavioral of UnitSequencer is
 
     signal commitGroupCtr, commitGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
     signal commitGroupCtrInc, commitGroupCtrIncNext: InsTag := INITIAL_GROUP_TAG_INC;
+    signal commitCtr, commitCtrNext, cycleCtr: Word := (others => '0');
 
     signal stageDataLateCausingIn, stageDataLastEffectiveInA: ControlPacket := DEFAULT_CONTROL_PACKET;
 
@@ -97,8 +98,6 @@ architecture Behavioral of UnitSequencer is
     signal lastEffectiveTarget, lateCausingIP, lateCausingResult, lateCausingTarget: Mword := (others => '0');
 
     signal intTypeCommitted: std_logic_vector(0 to 1) := (others => '0');
-     
-    signal commitCtr, commitCtrNext, cycleCtr: Word := (others => '0');
 
     signal sysRegArray: MwordArray(0 to 31) := (0 => (others => '1'), others => (others => '0'));    
     signal specialOp: SpecificOp := DEFAULT_SPECIFIC_OP;
@@ -233,7 +232,10 @@ begin
     pcDataOut <= pcDataSig;
     ----------
 
+    sendingToCommit <= sendingFromROB;
 
+
+    commitCtrNext <= addInt(commitCtr, countOnes(extractFullMask(robData))) when sendingToCommit = '1' else commitCtr;
     commitGroupCtrNext <= commitGroupCtrInc when sendingToCommit = '1' else commitGroupCtr;
     commitGroupCtrIncNext <= addInt(commitGroupCtrInc, PIPE_WIDTH) when sendingToCommit = '1' else commitGroupCtrInc;
 
@@ -243,7 +245,7 @@ begin
            commitGroupCtr <= commitGroupCtrNext;
            commitGroupCtrInc <= commitGroupCtrIncNext;
            commitCtr <= commitCtrNext;
-                              
+
            if sendingFromROB = '1' then
                specialOp <= robSpecial;
                
@@ -253,8 +255,6 @@ begin
         end if;
     end process;        
     
-    sendingToCommit <= sendingFromROB;
-    commitCtrNext <= addInt(commitCtr, countOnes(extractFullMask(robData))) when sendingToCommit = '1' else commitCtr;
 
     EVENT_HANDLING: block
     begin

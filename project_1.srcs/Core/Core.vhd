@@ -257,7 +257,7 @@ begin
 
         specialOut => specialOp,
 
-        commitGroupCtr => commitGroupCtr,
+        --commitGroupCtrIn => commitGroupCtr,
 
         renameGroupCtrNextOut => renameGroupCtrNext,
 
