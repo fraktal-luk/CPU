@@ -237,14 +237,13 @@ architecture Behavioral of UnitRegManager is
             res(i).ins.dbInfo := DB_addTag(res(i).ins.dbInfo, tag);
 
             res(i).ins.tags.renameIndex := renameGroupCtrNext or i2slv(i, TAG_SIZE);
-            res(i).ins.tags.intPointer := addInt(newIntDestPointer, countOnes(takeVecInt(0 to i)));
-                                                                         -- Don't increment pointer on ops which use no destination!
+            res(i).ins.tags.intPointer := addInt(newIntDestPointer, countOnes(takeVecInt(0 to i))); -- Don't increment pointer on ops which use no destination!
             res(i).ins.tags.floatPointer := addInt(newFloatDestPointer, countOnes(takeVecFloat(0 to i)));
             
             res(i).ins.tags.bqPointer := bqPointer;     
             res(i).ins.tags.sqPointer := addIntTrunc(sqPointer, countOnes(stores(0 to i-1)), SQ_PTR_SIZE + 1);
             res(i).ins.tags.lqPointer := addIntTrunc(lqPointer, countOnes(loads(0 to i-1)), LQ_PTR_SIZE + 1);
-            res(i).ins.tags.bqPointerSeq := addIntTrunc(bqPointerSeq, countOnes(branches(0 to i-1)), BQ_PTR_SIZE + 2 + 1); -- CAREFUL, TODO: define BQ_SEQ_PTR_SIZE
+            res(i).ins.tags.bqPointerSeq := addIntTrunc(bqPointerSeq, countOnes(branches(0 to i-1)), BQ_SEQ_PTR_SIZE + 1);
         end loop;
 
         res := classifyForDispatch(res);

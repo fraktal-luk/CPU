@@ -94,15 +94,14 @@ architecture Behavioral of BranchQueue is
     signal targetOutput: Mword := (others => '0');
 
     signal earlyInfoMem: EarlyInfoArray(0 to BQ_SIZE-1) := (others => DEFAULT_EARLY_INFO);
-     
     signal lateInfoMem: LateInfoArray(0 to BQ_SIZE-1) := (others => DEFAULT_LATE_INFO);
     
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0'; 
 begin
-       
+
     earlyInputSending <= prevSendingBr and dataInBr(0).controlInfo.firstBr;
     lateInputSending <= prevSending and dataIn(0).ins.controlInfo.firstBr_T;
-    
+
     RW: block
        signal earlySerialInput, earlySerialSelected:  std_logic_vector(EARLY_INFO_SIZE-1 downto 0) := (others => '0');
        signal lateSerialInput, lateSerialSelected:  std_logic_vector(LATE_INFO_SIZE-1 downto 0) := (others => '0');
@@ -112,14 +111,14 @@ begin
        signal earlyInput, earlySelected: EarlyInfo := DEFAULT_EARLY_INFO;
        signal lateInput, lateSelected: LateInfo := DEFAULT_LATE_INFO;      
     begin
-    
+
        earlyInput <= getEarlyInfo(dataInBr);
        lateInput <= getLateInfo(dataIn);
-       
+
        earlySerialInput <= serializeEarlyInfo(earlyInput);
        lateSerialInput <= serializeLateInfo(lateInput);
-    
-    
+
+
        SYNCH: process (clk)
        begin
            if rising_edge(clk) then               
@@ -180,13 +179,12 @@ begin
         else    addIntTrunc(pEnd, 1, QUEUE_PTR_SIZE+1) when earlyInputSending = '1'
         else    pEnd;
 
-    --  CAREFUL! 2 more bits than main pointers because 4 slots in ach row; depends on pipe width (TODO: make automatic) 
-    pStartSeqNext <= addTruncZ(pStartSeq, nCommitted, QUEUE_PTR_SIZE + 2 + 1) when committing = '1' else pStartSeq;   
+    pStartSeqNext <= addTruncZ(pStartSeq, nCommitted, BQ_SEQ_PTR_SIZE + 1) when committing = '1' else pStartSeq;
 
     pRenamedSeqNext <= pStartSeq when lateEventSignal = '1'
-                else       pFlushSeq when execEventSignal = '1'
-                else       addIntTrunc(pRenamedSeq, slv2u(nInRe), QUEUE_PTR_SIZE + 2 + 1) when prevSendingRe = '1' -- CAREFUL: ptr size here also
-                else       pRenamedSeq;
+            else       pFlushSeq when execEventSignal = '1'
+            else       addIntTrunc(pRenamedSeq, slv2u(nInRe), BQ_SEQ_PTR_SIZE + 1) when prevSendingRe = '1'
+            else       pRenamedSeq;
 
     pFlushSeq <= execCausing.dest;
 

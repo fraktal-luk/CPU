@@ -29,7 +29,7 @@ constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');
 constant ENABLE_FP: boolean := true;
 constant ENABLE_FAST_WAKEUP: boolean := true;
 
-constant QQQ: natural := 0; -- 1: remove src2, 0: don't
+constant QQQ: natural := 1; -- 1: remove src2, 0: don't
 
 
 
@@ -78,6 +78,8 @@ constant BQ_PTR_SIZE: natural := countOnes(BQ_PTR_MASK);
 constant SQ_PTR_SIZE: natural := countOnes(SQ_PTR_MASK);
 constant LQ_PTR_SIZE: natural := countOnes(LQ_PTR_MASK);
 constant MQ_PTR_SIZE: natural := countOnes(MQ_PTR_MASK);
+
+constant BQ_SEQ_PTR_SIZE: natural := BQ_PTR_SIZE + LOG2_PIPE_WIDTH;
 
 end CoreConfig;
 

@@ -80,7 +80,7 @@ architecture Behavioral of Core is
 
     signal bqPointer, bqPointerSeq, lqPointer, sqPointer: SmallNumber := (others => '0');
 
-    signal commitGroupCtr, commitGroupCtrNext: InsTag := (others => '0'); -- TODO: check if can be internal to RegManager (inc on commit signal) - probably yes
+    signal commitGroupCtr, commitGroupCtrNext: InsTag := (others => '0');
     signal renameGroupCtrNext: InsTag := (others => '0');
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
@@ -856,7 +856,7 @@ begin
                         subpipeM0_E1f_N <= subpipeM0_E0f_N;
 
                     -- Here we integrate mem read result
-                    ctrlE2 <= ctrlE1u; -- TODO: update status based on hit/miss 
+                    ctrlE2 <= ctrlE1u;
                     subpipeM0_E2 <= subpipeM0_E1_u;         -- injection of mem miss to 'full'
                     subpipeM0_E2i <= subpipeM0_E1i_u;
                     subpipeM0_E2f <= subpipeM0_E1f_u;
