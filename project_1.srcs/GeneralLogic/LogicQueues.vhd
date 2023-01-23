@@ -18,7 +18,6 @@ package LogicQueues is
     type QueueEntry is record
         isSysOp: std_logic;
         first: std_logic;
-        -- TODO: add operation type - needed when writing (mem or sys) and whe comparing (mem or sys), also access size!
         
         hasEvent: std_logic;
     

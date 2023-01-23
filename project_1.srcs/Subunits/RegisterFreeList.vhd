@@ -227,11 +227,10 @@ begin
                     -- Num of free regs may be overstated after rewind when physical pointer gets decremented more than the virtual one!
                     -- Beyond the time of recovery we can't tolerate less than 32 occupied regs
                     assert (numFree <= N_PHYS-32 or std2bool(isNonzero(recoveryCounter))) report "Impossible number of free regs" severity failure; 
-                    -- NOTE: For FP no phys reg 0 so 1 less free but it cancels out on both sides ((TODO?) unless -1 added to numFree)
                 end if;
             end process;
             
-            numFree <= countOnes(vFree); -- CAREFUL (TODO?): for FP physical reg 0 is not used so number actually -1
+            numFree <= countOnes(vFree);
         end generate;
         
     end block;

@@ -328,7 +328,7 @@ begin
 
         stageDataLateCausingIn <= getLatePCData(lastEffectiveCt, lastEffectiveTarget,
                                                 intCommitted, intTypeCommitted, currentState,
-                                                linkRegExc, linkRegInt, savedStateExc, savedStateInt,-- DEFAULT_INS_SLOT,
+                                                linkRegExc, linkRegInt, savedStateExc, savedStateInt,
                                                 specialOp);
     end block;
 
@@ -336,7 +336,7 @@ begin
     intAckOut <= sendingToLateCausing and intCommitted;
     intRejOut <= sendingToLateCausing and intSuppressed;
     
-    -- TODO: could be moved to RegisterManager because seems used only there 
+    -- NOTE: RegisterManager has its own, this is for DB purpose
     commitGroupCtrOut <= commitGroupCtr;
     commitGroupCtrNextOut <= commitGroupCtrNext;
    
