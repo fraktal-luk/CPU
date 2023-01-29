@@ -111,13 +111,27 @@ type ForwardingModeArray is array (natural range <>) of ForwardingMode;
 ---- 1 per arg. const if unused
 type BypassState is record
     used:  std_logic_vector(0 to 2);
+    usedFast:  std_logic_vector(0 to 2);
     obj:   ExecResultArray(0 to 2);
     objNext:   ExecResultArray(0 to 2);
     objNext2:   ExecResultArray(0 to 2);
+    objTags: SmallNumberArray(0 to 2);
     stage: IntArray(0 to 2);
     phase: IntArray(0 to 2);
+    memFail: std_logic;
 end record;
 
+constant DEFAULT_BYPASS_STATE: BypassState := (
+    used => (others => '0'),
+    usedFast => (others => '0'),
+    obj => (others => DEFAULT_EXEC_RESULT),
+    objNext => (others => DEFAULT_EXEC_RESULT),
+    objNext2 => (others => DEFAULT_EXEC_RESULT),
+    objTags => (others => sn(0)),
+    stage => (others => -4),
+    phase => (others => -4),
+    memFail => '0'
+);
 
 
 constant FORWARDING_MODES_NONE: ForwardingModeArray(0 to 2) := (

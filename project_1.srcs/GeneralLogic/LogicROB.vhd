@@ -490,7 +490,7 @@ begin
                 content(groupInd, i).specialAction <= '1';   
                 content(groupInd, i).refetch <= '1';                    
                 content(groupInd, i).causing <= '1';                    
-                eventFound:= true;
+                eventFound := true;
             end if;
         end if;
         
@@ -507,7 +507,7 @@ begin
     
     if useCtrl = '1' then
         updateDynamicGroupMemEvent(content, execInfo, tag, groupInd);
-    end if;        
+    end if;
 end procedure;
 
 function groupCompleted(da: DynamicOpInfoArray) return std_logic is

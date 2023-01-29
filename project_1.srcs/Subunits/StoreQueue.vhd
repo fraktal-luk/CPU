@@ -82,7 +82,8 @@ architecture Behavioral of StoreQueue is
 
     signal addresses, storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 
-    signal canAlloc, drainReq, drainEqual, drainEffectiveEqual, nowCancelled, allowDrain, isSending, isDrainingPrev, isSelected: std_logic := '0';
+    signal canAlloc, drainReq, drainEqual, drainEffectiveEqual,-- nowCancelled, 
+            allowDrain, isSending, isDrainingPrev, isSelected: std_logic := '0';
 
     signal drainOutput, selectedOutput, selectedOutputSig, committedOutputSig: ControlPacket := DEFAULT_CONTROL_PACKET;
     signal drainValue, selectedValue, drainAddress, selectedAddress, selectionAddress: Mword := (others => '0');
@@ -103,7 +104,7 @@ begin
          else compareAddressCtrl.tags.sqPointer;
 
     -- Read ptr determinded by address matching - SQ only
-    pSelect <= addTruncZ( findNewestMatchIndex(olderSQ, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE);
+    pSelect <= addTruncZ(findNewestMatchIndex(olderSQ, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE);
 
     -- LQ only
     LQ_MATCH: if IS_LOAD_QUEUE generate
@@ -138,7 +139,7 @@ begin
 
             -- SQ only
             queueContentShifting <= shiftQueueContent(queueContentShifting, pDrain, nFullNext, execEventSignal or lateEventSignal,
-                                                      prevSending, isDrainingPrev, compareAddressInput.full, adrPtr, compareAddressInputOp, compareAddressInput.value, QUEUE_PTR_SIZE);
+                                                      isDrainingPrev, compareAddressInput.full, adrPtr, compareAddressInputOp, compareAddressInput.value, QUEUE_PTR_SIZE);
 
             -- Front input
             if prevSending = '1' then
@@ -185,9 +186,10 @@ begin
 
     pDrainNext <= addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE+1) when drainReq = '1' else pDrain;
     pStartEffectiveNext <= addTruncZ(pStartEffective, nCommittedEffective, QUEUE_PTR_SIZE+1) when committing = '1'
-                      else pStartNext when nowCancelled = '1' and drainEqual = '1'
+                      --else pStartNext when nowCancelled = '1' and drainEqual = '1'
                       else pStartEffective;
-    pStartNext <= addTruncZ(pStart, nCommitted, QUEUE_PTR_SIZE+1) when committing = '1' else pStart;
+    pStartNext <= --addTruncZ(pStart, nCommitted, QUEUE_PTR_SIZE+1) when committing = '1' else pStart;
+                    pStartEffectiveNext;
 
     pTaggedNext <= pStart when lateEventSignal = '1'
             else   pFlush when execEventSignal = '1' 
@@ -204,14 +206,14 @@ begin
         if rising_edge(clk) then
 
             isDrainingPrev <= drainReq;
-            allowDrain <= not (nowCancelled or (not drainEqual and drainEffectiveEqual));
-
+            allowDrain <= --not (nowCancelled or (not drainEqual and drainEffectiveEqual));
+                            '1';
             -- TODO: reanalyze nowCancelled?
             -- D. out ctrl
             if drainEqual = '1' then
-                nowCancelled <= '0';
+            --    nowCancelled <= '0';
             elsif drainEffectiveEqual = '1' then
-                nowCancelled <= '1';
+            --    nowCancelled <= '1';
             end if;
 
             pDrain <= pDrainNext;

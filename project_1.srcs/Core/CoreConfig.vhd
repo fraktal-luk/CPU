@@ -31,6 +31,10 @@ constant ENABLE_FAST_WAKEUP: boolean := true;
 
 constant QQQ: natural := 1; -- 1: remove src2, 0: don't
 
+constant ENABLE_MQ: boolean := true;
+
+
+constant ENABLE_SQ_HIGHER_ADR: boolean := true;
 
 
 constant FETCH_WIDTH: positive := PIPE_WIDTH; 

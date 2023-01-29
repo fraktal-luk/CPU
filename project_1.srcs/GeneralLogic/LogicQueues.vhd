@@ -63,7 +63,7 @@ package LogicQueues is
     function getCommittedEffectiveMaskBr(robData: ControlPacketArray) return std_logic_vector;
     function getCommittedMaskBr(robData: ControlPacketArray) return std_logic_vector;
 
-    function shiftQueueContent(content: QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, prevSending, draining, compareInputFull: std_logic;
+    function shiftQueueContent(content: QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, draining, compareInputFull: std_logic;
                                sqPtr: SmallNumber; op: SpecificOp; adr: Mword; constant QUEUE_PTR_SIZE: natural)
     return QueueEntryArray;
 
@@ -77,7 +77,7 @@ package body LogicQueues is
         if not IS_LOAD_QUEUE then
             content(ind).isSysOp <= isStoreSysOp(isl.ins.specificOperation);
         else
-            content(ind).isSysOp <= isLoadSysOp(isl.ins.specificOperation);                
+            content(ind).isSysOp <= isLoadSysOp(isl.ins.specificOperation);
         end if;
         
         content(ind).isSysOp <= sysOp;
@@ -131,8 +131,7 @@ package body LogicQueues is
         end if;        
     end procedure;
 
-    procedure updateValue(signal content: inout QueueEntryArray;-- isl: InstructionSlot;
-                                ind: SmallNumber) is
+    procedure updateValue(signal content: inout QueueEntryArray; ind: SmallNumber) is
         constant LEN: natural := content'length;
         constant PTR_MASK_SN: SmallNumber := i2slv(LEN-1, SMALL_NUMBER_SIZE);
         constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
@@ -251,25 +250,23 @@ package body LogicQueues is
         return res;
     end function;
 
+    -- NOTE: pStart is for generality, in shifting adr queue it's always 0 
     function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, nFull: SmallNumber; constant QUEUE_PTR_SIZE: natural)
     return SmallNumber is
         constant LEN: integer := olderSQ'length;      
         variable tmpVec1: std_logic_vector(0 to LEN-1) := (others => '0');
         variable tmpVecExt: std_logic_vector(0 to 2*LEN-1) := (others => '0');
-        
+
         variable res: SmallNumber := (others => '0');
-        variable nShift, count: natural := 0;
+        constant nShift: natural := slv2u(pStart);
+        constant count: natural := slv2u(nFull);
     begin
-        -- Shift by pStart
-        nShift := slv2u(pStart);
-        count := slv2u(nFull);
-        
         tmpVecExt := olderSQ & olderSQ;
         
         for i in 0 to LEN-1 loop
             tmpVec1(i) := tmpVecExt(i + nShift);
         end loop;
-        
+
         -- Find first index
         for i in LEN-1 downto 0 loop
             if tmpVec1(i) = '1' and i < count then
@@ -353,19 +350,17 @@ package body LogicQueues is
 
 
 
-    function shiftQueueContent(content: QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, prevSending, draining, compareInputFull: std_logic;
+    function shiftQueueContent(content: QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, draining, compareInputFull: std_logic;
                                sqPtr: SmallNumber; op: SpecificOp; adr: Mword; constant QUEUE_PTR_SIZE: natural)
     return QueueEntryArray is
         variable res: QueueEntryArray(0 to content'length-1) := content;
         constant LEN: natural := content'length;
-        variable currentPtr: SmallNumber := (others => '0');
+        constant currentPtr: SmallNumber := subTruncZ(sqPtr, startPtrNext, QUEUE_PTR_SIZE);
     begin
         if draining = '1' then -- Move forward     
             res(0 to LEN-2) := res(1 to LEN-1);
             res(LEN-1).completedA := '0';
         end if;
-
-        currentPtr := subTruncZ(sqPtr, startPtrNext, QUEUE_PTR_SIZE);
 
         if compareInputFull = '1' and isStoreOp(op) = '1' then
             res(slv2u(currentPtr)).completedA := '1';
@@ -381,8 +376,6 @@ package body LogicQueues is
                     res(i).completedA := '0';
                 end if;
             end loop;
-        elsif prevSending = '1' then
-            -- move ptr, but it's handled by pointer mechanics
         end if;
 
         return res;

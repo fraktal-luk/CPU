@@ -839,7 +839,7 @@ end function;
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult is
     variable res: ExecResult := er;
 begin
-    res.full := er.full and not fail;
+    res.full := er.full and not (fail and bool2std(ENABLE_MQ));
     res.failed := er.full and fail;
     res.value := memResult;
     return res;

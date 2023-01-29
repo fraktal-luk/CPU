@@ -48,8 +48,6 @@ entity IssueQueue is
 
 		events: in EventState;
 
-		fni: in ForwardingInfo;
-
         bypass: in BypassState;
 
 		schedulerOut: out SchedulerState;
@@ -69,8 +67,7 @@ architecture Behavioral of IssueQueue is
 
     signal recoveryCounter: SmallNumber := (others => '0');
 
-    signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdated_N, queueContentUpdated_2, queueContentUpdatedSel, queueContentUpdatedSel_NEW
-            : SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
+    signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdated_2, queueContentUpdatedSel: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
 
     signal ageMatrix, ageMatrixNext: slv2D(0 to IQ_SIZE-1, 0 to IQ_SIZE-1) := (others => (others => '0'));
     signal insertionLocs: slv2D(0 to IQ_SIZE-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -80,80 +77,58 @@ architecture Behavioral of IssueQueue is
     signal controlSigs: SlotControlArray(0 to IQ_SIZE-1) := (others => DEFAULT_SLOT_CONTROL);
     signal fullMask, trialMask, trialUpdatedMask, killMask, readyMaskAll, selMask, selMask1, selMask2, selMask3: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
-    signal anyReadyFull, sends, sendingKilled, sendingKilled_T, sentKilled,
-                    killFollowerCmp, killFollowerNextCmp,
-                        sendingTrial, sentTrial1, sentTrial2, sentTrial1_T, sentTrial2_T,
-                    trial0, trial1, trial2, trial3
-                    : std_logic := '0';
+    signal anyReadyFull, sends, sendingKilled, sentKilled, sendingTrial, sentTrial1, sentTrial2, sentTrial1_T, sentTrial2_T: std_logic := '0';
 
     signal selectedSlot, selectedSlot1, selectedSlot2, selectedSlot3: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
     signal selectedIqTag: SmallNumber := (others => '0');
 
     signal wa: WakeupInfoArray(0 to IQ_SIZE-1);
 
-        signal freedMaskSig, usedMaskSig: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+    signal freedMaskSig, usedMaskSig: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
-        signal TMP_tags: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
+    signal TMP_tags: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
+
+    alias memFail is bypass.memFail;
                 
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
 
-            function TMP_killMask(content: SchedulerInfoArray; evt: EventState) return std_logic_vector is
-                variable res: std_logic_vector(content'range) := (others => '0');
-            begin
-                for i in res'range loop
-                    res(i) := (content(i).dynamic.status.trial and evt.execEvent) or evt.lateEvent;
-                end loop;
-                return res;
-            end function;
-    
-            function TMP_trialMask(content: SchedulerInfoArray; evt: EventState) return std_logic_vector is
-                variable res: std_logic_vector(content'range) := (others => '0');
-            begin
-                for i in res'range loop
-                    res(i) := (content(i).dynamic.status.trial);
-                end loop;
-                return res;
-            end function;
-
 begin
 
-        ALLOCATOR: entity work.QueueAllocator
-        generic map(
-            QUEUE_SIZE => 12, BANK_SIZE => 3
-        )
-        port map(
-            clk => clk, evt => events,
+    ALLOCATOR: entity work.QueueAllocator
+    generic map(
+        QUEUE_SIZE => 12, BANK_SIZE => 3
+    )
+    port map(
+        clk => clk, evt => events,
 
-            inReady => inReady,
-            inMask => inMask,
+        inReady => inReady,
+        inMask => inMask,
 
-                TMP_outTags => TMP_tags,
-                TMP_outTagsPre => TMP_outTagsPre,
+        TMP_outTags => TMP_tags,
+        TMP_outTagsPre => TMP_outTagsPre,
 
-            accept => accept,
+        accept => accept,
 
-            iqUsed => usedMaskSig,      -- IQ
-            iqFreed => freedMaskSig     -- IQ
-        );
+        iqUsed => usedMaskSig,
+        iqFreed => freedMaskSig
+    );
 
-        TMP_outTags <= TMP_tags;
+    TMP_outTags <= TMP_tags;
 
+    wups <= getSlowWakeups(queueContent, bypass, CFG_WAIT);
 
-    wups <= getSlowWakeups(queueContent, fni, bypass, CFG_WAIT);
-    
     FAST_WAKEUP: if ENABLE_FAST_WAKEUP generate
-        wupsSelection <= getFastWakeups_O(queueContent, fni, CFG_SEL);
+        wupsSelection <= getFastWakeups_N(queueContent, bypass, CFG_SEL);
     end generate;
+    
+    --  wa <= getWakeupArray(queueContent, fni, WAKEUP_SPEC, CFG_WAIT); -- CFG_WAIT is needed for 'ignoreMemFail')
 
-        --  wa <= getWakeupArray(queueContent, fni, WAKEUP_SPEC, CFG_WAIT); -- CFG_WAIT is needed for 'ignoreMemFail')
+    queueContentUpdatedSel <= updateSchedulerArray_S_NEW(queueContent, wupsSelection, memFail, CFG_SEL);
 
-    queueContentUpdatedSel <= updateSchedulerArray_S_NEW(queueContent, fni, wupsSelection, fni.memFail, CFG_SEL);
+    queueContentUpdated <= updateSchedulerArray_N(queueContent, wups, memFail, CFG_WAIT);
+    queueContentUpdated_2 <= iqNext_NS(queueContentUpdated, sends, killMask, trialMask, selMask, memFail);
 
-    queueContentUpdated <= updateSchedulerArray_N(queueContent, fni, wups, fni.memFail, CFG_WAIT);
-    queueContentUpdated_2 <= iqNext_NS(queueContentUpdated, sends, killMask, trialMask, selMask, fni.memFail);
-
-    insertionLocs <= getNewLocs_N(fullMask, --TMP_newTags, newArr);
-                                            TMP_tags, newArr);
+    insertionLocs <= getNewLocs_N(fullMask, TMP_tags, newArr);
     queueContentNext <= iqNext_NS_2(queueContentUpdated_2, newArr, prevSendingOK, insertionLocs);
 
     ageMatrixNext <= updateAgeMatrix(ageMatrix, insertionLocs, fullMask);
@@ -172,8 +147,6 @@ begin
             selMask1 <= selMask;
             selMask2 <= selMask1;
             selMask3 <= selMask2;
-            --selMask4 <= selMask3;
-
 
             sentKilled <= sendingKilled;
 
@@ -183,37 +156,28 @@ begin
         end if;
     end process;
 
-            sentTrial1_T <= isNonzero(selMask1 and trialUpdatedMask);
-            sentTrial2_T <= isNonzero(selMask2 and trialUpdatedMask);
-
---                ch1 <= sentTrial1_T xnor sentTrial1;
---                ch2 <= sentTrial2_T xnor sentTrial2;
-
-
-       controlSigs <= getControlSignals(queueContentUpdatedSel, events);
-
-
-       killMask <=   (others => '1') when events.lateEvent = '1' 
-              else trialUpdatedMask  when events.execEvent = '1'
-              else (others => '0');
+    sentTrial1_T <= isNonzero(selMask1 and trialUpdatedMask);
+    sentTrial2_T <= isNonzero(selMask2 and trialUpdatedMask);
+    
+    controlSigs <= getControlSignals(queueContentUpdatedSel, events);
+    
+    killMask <=   (others => '1') when events.lateEvent = '1' 
+          else trialUpdatedMask  when events.execEvent = '1'
+          else (others => '0');
 
 
-        trialMask <= getTrialVec(controlSigs);
-            trialUpdatedMask <= getTrialUpdatedVec(controlSigs);
-        fullMask <= getFullVec(controlSigs);
-        readyMaskAll <= getReadyVec(controlSigs);
+    trialMask <= getTrialVec(controlSigs);
+    trialUpdatedMask <= getTrialUpdatedVec(controlSigs);
+    fullMask <= getFullVec(controlSigs);
+    readyMaskAll <= getReadyVec(controlSigs);
 
 
     -- Scalar signals
     anyReadyFull <= isNonzero(readyMaskAll);
     sends <= anyReadyFull and nextAccepting;
+    sendingTrial <= isNonzero(selMask and trialUpdatedMask);
+    sendingKilled <= (sendingTrial and events.execEvent) or events.lateEvent;
 
-        sendingTrial <= isNonzero(selMask and trialUpdatedMask);
-
-    sendingKilled_T <= isNonzero(selMask and killMask);
-        sendingKilled <= (sendingTrial and events.execEvent) or events.lateEvent;
-
-            ch0 <= sendingKilled_T xnor sendingKilled;
 
     -- Selection for issue
     selMask <= getSelMask(readyMaskAll, ageMatrix);
@@ -226,17 +190,13 @@ begin
     outputSignals <=   (empty => '0',--isEmpty,
                         ready => '0',--anyReadyLive,
                         sending => sends,
-                        cancelled => sentKilled or fni.memFail, --
+                        cancelled => sentKilled or memFail, --
                         killFollower => (sentTrial2_T and events.execEvent) or events.lateEvent,
                         killFollowerNext => (sentTrial1_T and events.execEvent) or events.lateEvent
                         );
 
     freedMaskSig <= getFreedVec(controlSigs);
     usedMaskSig <= fullMask;
-
---    freedMask <= freedMaskSig;
---    usedMask <= usedMaskSig;
-
 
     COUNTERS_SYNCHRONOUS: process(clk)
     begin

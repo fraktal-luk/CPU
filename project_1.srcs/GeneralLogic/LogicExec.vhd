@@ -361,8 +361,8 @@ package body LogicExec is
                  res.specialAction := '1';
                  res.newEvent := '1';
              end if;
-             
-             if work.LogicQueues.addressHighMatching(result, ctSQ.target) = '0' then
+
+             if (work.LogicQueues.addressHighMatching(result, ctSQ.target) = '0') and ENABLE_SQ_HIGHER_ADR then
                 -- TMP
                 res.sqMiss := '1';
                 res.specialAction := '1';
@@ -371,7 +371,7 @@ package body LogicExec is
          else    -- successful mem load
          
          end if;
-       
+
          -- CAREFUL: store when newer load has been done - violation resolution when reissue is used
          if isStoreMemOp(op) = '1' and ctLQ.controlInfo.full = '1' then
             res.orderViolation := '1';

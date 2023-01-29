@@ -101,19 +101,21 @@ function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector;
 -- functions - updating
 
 -- API, enqueue and inside IQ
-function getSlowWakeups(content: SchedulerInfoArray; fni: ForwardingInfo;  bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
+function getSlowWakeups(content: SchedulerInfoArray; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
 function getFastWakeups_O(content: SchedulerInfoArray; fni: ForwardingInfo; config: SchedulerUpdateConfig) return WakeupStructArray2D;
-function getInitWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
+function getFastWakeups_N(content: SchedulerInfoArray; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
+
+function getInitWakeups(content: SchedulerInfoArray; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
 
 -- experimental
 function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup;
 function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray;
 
 
-function updateSchedulerArray_N(schedArray: SchedulerInfoArray; fni: ForwardingInfo; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
+function updateSchedulerArray_N(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfoArray;
 
-function updateSchedulerArray_S_NEW(schedArray: SchedulerInfoArray; fni: ForwardingInfo; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
+function updateSchedulerArray_S_NEW(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfoArray;
 
   
@@ -146,7 +148,7 @@ function updateDispatchArgs_Is(st: SchedulerState) return SchedulerState;
 -- Reg read stage
 function getDispatchArgValues_RR(input: SchedulerState;
                                  prevSending: std_logic;
-                                 fni: ForwardingInfo;
+                                 vals0, vals1: MwordArray;
                                  USE_IMM: boolean; REGS_ONLY: boolean)
 return SchedulerState;
 
@@ -250,7 +252,7 @@ package body LogicIssue is
         end loop;
 
         rrfFull := rm and rrf;
-    
+
         res := restoreRenameIndex(updateRR(input, rrfFull));
    
         return res;
@@ -280,8 +282,7 @@ package body LogicIssue is
         end if;
 
         for i in 0 to 2 loop
-            res.zero(i) := --ri.sourceConst(i);
-                            ri.argStates(i).const;
+            res.zero(i) := ri.argStates(i).const;
         end loop;
         
         if not HAS_IMM then
@@ -309,30 +310,19 @@ package body LogicIssue is
         for i in 0 to 2 loop
             res.argStates(i).dbDep := DB_setProducer(res.argStates(i).dbDep, ri.dbDepTags(i));
         
-            res.argStates(i).used := --ri.sourceSel(i);
-                                        ri.argStates(i).sel;
-            res.argStates(i).zero := --ri.sourceConst(i);
-                                        ri.argStates(i).const;
-
-            res.argStates(i).reg := --ri.physicalSourcesNew(i);
-                                                    ri.argStates(i).physicalNew;
-
+            res.argStates(i).used := ri.argStates(i).sel;
+            res.argStates(i).zero := ri.argStates(i).const;
+            res.argStates(i).reg := ri.argStates(i).physicalNew;
             res.argStates(i).iqTag := TMP_renamedSrcs(i);
 
             -- Possibility to implement late allocation or advanced renaming schemes - delayed selection of args
             if false then
                 if ri.argStates(i).sourceNew = '1' then
-                    res.argStates(i).reg := --ri.physicalSourcesNew(i);
-                                               ri.argStates(i).physicalNew;
-
+                    res.argStates(i).reg := ri.argStates(i).physicalNew;
                 elsif ri.argStates(i).sourceStable = '1' then
-                    res.argStates(i).reg := --ri.physicalSourcesStable(i);
-                                                            ri.argStates(i).physicalStable;
-
+                    res.argStates(i).reg := ri.argStates(i).physicalStable;
                 else
-                    res.argStates(i).reg := --ri.physicalSources(i);
-                                                            ri.argStates(i).physical;
-
+                    res.argStates(i).reg := ri.argStates(i).physical;
                 end if;
             end if;
 
@@ -340,7 +330,7 @@ package body LogicIssue is
                 res.argStates(i).imm := stInfo.immediate;
                 res.argStates(i).value := stInfo.immValue;
             end if;
-            
+
             res.argStates(i).canFail := '0';
             res.argStates(i).waiting := not stInfo.zero(i);
             res.argStates(i).stored := '0';
@@ -348,16 +338,16 @@ package body LogicIssue is
             res.argStates(i).srcPipe := (others => '0');
             res.argStates(i).srcStage := "00000010";
         end loop;
-        
+
         if IMM_AS_REG and HAS_IMM and isl.ins.constantArgs.immSel = '1' then
            res.argStates(1).reg := isl.ins.constantArgs.imm(PhysName'length-1 downto 0);
            res.argStates(1).reg(7) := '0';
         end if;
-                     
+          
         return res;
     end function; 
-    
-    
+
+
     function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray;
                                     TMP_renamedDests: SmallNumberArray; TMP_renamedSources: SmallNumberArray) return SchedulerInfoArray is
         variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1);
@@ -366,10 +356,6 @@ package body LogicIssue is
     begin
         for i in res'range loop
             argInfo := ria(i);
-            if insVec(i).ins.specificOperation.subpipe = Mem then
-               --argInfo := swapArgs12(argInfo);
-            end if;
-
             slot := insVec(i);
             slot.full := mask(i);
             res(i).static := getIssueStaticInfo(slot, USE_IMM, argInfo);
@@ -530,7 +516,7 @@ package body LogicIssue is
 -----------------------------------------
 
 
-function getSlowWakeup(si: SchedulerInfo; a: natural; fni: ForwardingInfo; bypass: BypassState; fwModes: ForwardingModeArray) return WakeupStruct is
+function getSlowWakeup(si: SchedulerInfo; a: natural; bypass: BypassState; fwModes: ForwardingModeArray) return WakeupStruct is
     variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
     constant arg: PhysName := si.dynamic.argStates(a).reg;
 begin
@@ -573,7 +559,34 @@ begin
 end function;
 
 
-function getInitWakeup(si: SchedulerInfo; a: natural; fni: ForwardingInfo; bypass: BypassState; fwModes: ForwardingModeArray) return WakeupStruct is
+function getFastWakeup_N(si: SchedulerInfo; a: natural; bypass: BypassState; fwModes: ForwardingModeArray) return WakeupStruct is
+    variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
+    constant arg: PhysName := si.dynamic.argStates(a).reg;
+
+    variable matchVec: std_logic_vector(0 to 2) := (others => '0');
+    variable srcStage: natural := 2;
+begin
+
+    for p in 0 to bypass.used'length-1 loop
+        if bypass.usedFast(p) /= '1' then
+            next;
+        end if;
+
+        if bypass.obj(p).dest(PHYS_REG_BITS-1 downto 0) = arg(PHYS_REG_BITS-1 downto 0) then
+            res.match := '1';
+            res.argLocsPipe(2 downto 0) := i2slv(p, 3);
+            res.argSrc(1 downto 0) := i2slv(bypass.phase(p) - 1, 2);
+            exit;
+        end if;
+
+    end loop;
+
+    return res;
+end function;
+
+
+
+function getInitWakeup(si: SchedulerInfo; a: natural; bypass: BypassState; fwModes: ForwardingModeArray) return WakeupStruct is
     variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
     constant arg: PhysName := si.dynamic.argStates(a).reg;
 begin
@@ -615,14 +628,14 @@ begin
 end function;
 
 
-function getSlowWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D is
+function getSlowWakeups(content: SchedulerInfoArray; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D is
     constant LEN: natural := content'length;
     variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
     variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
 begin
     for i in 0 to LEN-1 loop	
-        res(i, 0) := getSlowWakeup(content(i), 0, fni, bypass, config.fwModes);
-        res(i, 1) := getSlowWakeup(content(i), 1, fni, bypass, config.fwModes);
+        res(i, 0) := getSlowWakeup(content(i), 0, bypass, config.fwModes);
+        res(i, 1) := getSlowWakeup(content(i), 1, bypass, config.fwModes);
     end loop;
 
     return res;
@@ -641,15 +654,28 @@ begin
 	return res;
 end function;
 
+function getFastWakeups_N(content: SchedulerInfoArray; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D is
+	constant LEN: natural := content'length;
+	variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
+	variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
+begin
+	for i in 0 to LEN-1 loop
+		res(i, 0) := getFastWakeup_N(content(i), 0, bypass, config.fwModes);
+		res(i, 1) := getFastWakeup_N(content(i), 1, bypass, config.fwModes);
+	end loop;
 
-function getInitWakeups(content: SchedulerInfoArray; fni: ForwardingInfo; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D is
+	return res;
+end function;
+
+
+function getInitWakeups(content: SchedulerInfoArray; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D is
     constant LEN: natural := content'length;
     variable res: WakeupStructArray2D(0 to LEN-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
     variable fma: ForwardingMatchesArray(0 to LEN-1) := (others => DEFAULT_FORWARDING_MATCHES);
 begin
     for i in 0 to LEN-1 loop
-        res(i, 0) := getInitWakeup(content(i), 0, fni, bypass, config.fwModes);
-        res(i, 1) := getInitWakeup(content(i), 1, fni, bypass, config.fwModes);
+        res(i, 0) := getInitWakeup(content(i), 0, bypass, config.fwModes);
+        res(i, 1) := getInitWakeup(content(i), 1, bypass, config.fwModes);
     end loop;
 
     return res;
@@ -870,7 +896,7 @@ end function;
         return res;
     end function;
 
-    function updateSchedulerArray_S_NEW(schedArray: SchedulerInfoArray; fni: ForwardingInfo; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
+    function updateSchedulerArray_S_NEW(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
     return SchedulerInfoArray is
         variable res: SchedulerInfoArray(0 to schedArray'length-1);
     begin
@@ -880,7 +906,7 @@ end function;
         return res;
     end function;
 
-    function updateSchedulerArray_N(schedArray: SchedulerInfoArray; fni: ForwardingInfo; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
+    function updateSchedulerArray_N(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
     return SchedulerInfoArray is
         variable res: SchedulerInfoArray(0 to schedArray'length-1);
     begin
@@ -1214,7 +1240,7 @@ end function;
     
     function getDispatchArgValues_RR(input: SchedulerState;
                                      prevSending: std_logic;
-                                     fni: ForwardingInfo;
+                                     vals0, vals1: MwordArray;
                                      USE_IMM: boolean; REGS_ONLY: boolean)
     return SchedulerState is
         variable res: SchedulerState := TMP_prepareDispatchSlot(input, prevSending);
@@ -1227,9 +1253,9 @@ end function;
         if res.st.zero(0) = '1' then
             res.args(0) := (others => '0');
         elsif res.argSrc(0)(1 downto 0) = "00" then
-            res.args(0) := fni.values0(slv2u(res.argLocsPipe(0)(1 downto 0)));
+            res.args(0) := vals0(slv2u(res.argLocsPipe(0)(1 downto 0)));
         elsif res.argSrc(0)(1 downto 0) = "01" then
-            res.args(0) := fni.values1(slv2u(res.argLocsPipe(0)(1 downto 0)));
+            res.args(0) := vals1(slv2u(res.argLocsPipe(0)(1 downto 0)));
         else
             res.args(0) := (others => '0');           
         end if;
@@ -1242,9 +1268,9 @@ end function;
                 res.args(1) := (others => '0');
             end if;
         elsif res.argSrc(1)(1 downto 0) = "00" then
-            res.args(1) := fni.values0(slv2u(res.argLocsPipe(1)(1 downto 0)));
+            res.args(1) := vals0(slv2u(res.argLocsPipe(1)(1 downto 0)));
         elsif res.argSrc(1)(1 downto 0) = "01" then
-            res.args(1) := fni.values1(slv2u(res.argLocsPipe(1)(1 downto 0)));
+            res.args(1) := vals1(slv2u(res.argLocsPipe(1)(1 downto 0)));
         else
             res.args(1) := (others => '0');
         end if;
