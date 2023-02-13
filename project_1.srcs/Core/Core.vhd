@@ -263,8 +263,6 @@ begin
 
         specialOut => specialOp,
 
-        --commitGroupCtrIn => commitGroupCtr,
-
         renameGroupCtrNextOut => renameGroupCtrNext,
 
         execCausing => branchResultE0,
@@ -423,29 +421,15 @@ begin
               subpipe_DUMMY
                 : ExecResult := DEFAULT_EXEC_RESULT;
 
-           signal subpipeI0_Issue_N, subpipeI0_RegRead_N, subpipeI0_E0_N,                                      subpipeI0_D0_N,
-                  subpipeI1_Issue_N, subpipeI1_RegRead_N, subpipeI1_E0_N,  subpipeI1_E1_N,    subpipeI1_E2_N,  subpipeI1_D0_N,  subpipeI1_D1_N,
-                  subpipeM0_Issue_N, subpipeM0_RegRead_N, subpipeM0_E0_N,  subpipeM0_E1_N,    subpipeM0_E2_N,
-                  --                           subpipeM0_RR_u,
-                  --                     subpipeM0_RRi, 
-                                                          subpipeM0_E0i_N, subpipeM0_E1i_N,   subpipeM0_E2i_N,   subpipeM0_D0i_N, --subpipeM0_D1i,
-                  --                     subpipeM0_RRf, 
-                                                          subpipeM0_E0f_N, subpipeM0_E1f_N,   subpipeM0_E2f_N,   subpipeM0_D0f_N, subpipeM0_D1f_N,
-                  --                                                              subpipeM0_E1_u,
-                  --                                                              subpipeM0_E1i_u,
-                  --                                                              subpipeM0_E1f_u,
-    
-                  subpipeF0_Issue_N, subpipeF0_RegRead_N, subpipeF0_E0_N,  subpipeF0_E1_N,    subpipeF0_E2_N,    subpipeF0_D0_N,
-                  --                             subpipeF0_RRu,
-                  subpipe_DUMMY_N
-                    : ExecResult_N := DEFAULT_EXEC_RESULT_N;
-
         signal unfoldedAluOp: work.LogicExec.AluControl := work.LogicExec.DEFAULT_ALU_CONTROL;     
         signal aluMask, mulMask, memMask, fpMask, intStoreMask, fpStoreMask, branchMask, sqMask, lqMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
         signal bypassInt, bypassFloat, bypassIntSV, bypassFloatSV: BypassState;
 
         signal valuesInt0, valuesInt1, valuesFloat0, valuesFloat1: MwordArray(0 to 2) := (others => (others => '0'));
+
+        signal issueTagI0: SmallNumber := sn(0);
+
 
         function TMP_clearFull(ss: SchedulerState; evts: EventState) return SchedulerState is
             variable res: SchedulerState := ss;
@@ -516,7 +500,6 @@ begin
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedU,
                 TMP_newTags => TMP_aluTags,
-                --fni => fni,
                 bypass => bypassInt,
                 nextAccepting => allowIssueI0,
                 schedulerOut => slotSelI0,
@@ -548,9 +531,9 @@ begin
                 subpipeI0_Issue <= makeExecResult(slotIssueI0);
                 subpipeI0_RegRead <= makeExecResult(slotRegReadI0);
 
-                    subpipeI0_Issue_N <= makeExecResult_N(slotIssueI0);
-                    subpipeI0_RegRead_N <= makeExecResult_N(slotRegReadI0);
+                issueTagI0 <= slotIssueI0.destTag;
             end block;
+
 
 
             dataToAlu <= executeAlu(slotRegReadI0.full and not outSigsI0.killFollower, slotRegReadI0, bqSelected.nip, dataToBranch.controlInfo, unfoldedAluOp);
@@ -559,8 +542,6 @@ begin
             begin
                 if rising_edge(clk) then
                     subpipeI0_E0 <= dataToAlu;
-                        subpipeI0_E0_N <= makeExecResult_N(dataToAlu, slotRegReadI0.destTag);
-
                 end if;
             end process;
 
@@ -617,7 +598,6 @@ begin
                         NAME => "I1",
                         IQ_SIZE => IQ_SIZE_I0,
                         FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-                        --FORWARDING1(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                         FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
                     )
                     port map(
@@ -634,7 +614,6 @@ begin
                         prevSendingOK => renamedSending,
                         newArr => schedInfoUpdatedU,
                         TMP_newTags => TMP_mulTags,
-                        --fni => fni,
                         bypass => bypassInt,
                         nextAccepting => allowIssueI1,
                         events => events,
@@ -665,9 +644,6 @@ begin
 
                         subpipeI1_Issue <= makeExecResult(slotIssueI1);
                         subpipeI1_RegRead <= makeExecResult(slotRegReadI1);
-
-                            subpipeI1_Issue_N <= makeExecResult_N(slotIssueI1);
-                            subpipeI1_RegRead_N <= makeExecResult_N(slotRegReadI1);
                     end block;
 
                     controlI1_RR.controlInfo.full <= slotRegReadI1.full;
@@ -687,10 +663,6 @@ begin
                             dataMulE0 <= dataToMul;
                             dataMulE1 <= dataMulE0;
                             dataMulE2 <= dataMulE1;
-
-                                subpipeI1_E0_N <= makeExecResult_N(dataToMul, slotRegReadI1.destTag);
-                                subpipeI1_E1_N <= subpipeI1_E0_N;
-                                subpipeI1_E2_N <= subpipeI1_E1_N;
 
                             ctrlE0 <= controlI1_RR;
                             ctrlE1 <= ctrlE0;
@@ -732,7 +704,6 @@ begin
             generic map(
                NAME => "M0",
                IQ_SIZE => IQ_SIZE_M0,
-               --DONT_MATCH1 => true,
                FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
             )
@@ -750,7 +721,6 @@ begin
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedU,
                 TMP_newTags => TMP_memTags,
-                --fni => fni,
                 bypass => bypassInt,
                 nextAccepting => allowIssueM0,
                 events => events,
@@ -779,10 +749,7 @@ begin
                 end process;
 
                 subpipeM0_Issue <= makeExecResult(slotIssueM0);
-                subpipeM0_RegRead <= makeExecResult(slotRegReadM0);
-
-                    subpipeM0_Issue_N <= makeExecResult_N(slotIssueM0);
-                    subpipeM0_RegRead_N <= makeExecResult_N(slotRegReadM0);                
+                subpipeM0_RegRead <= makeExecResult(slotRegReadM0);               
             end block;
 
 
@@ -843,7 +810,6 @@ begin
             missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1, memoryMissed, memResult);    -- for MQ             
             missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f, ctrlE1, ctrlE1u, resOutSQ); -- MQ
 
-
             --------------------------------------------
 
             process (clk)
@@ -854,29 +820,16 @@ begin
                     subpipeM0_E0i <= resultToM0_E0i; -- common: tag, value; different: full, dest
                     subpipeM0_E0f <= resultToM0_E0f; -- common: tag, value; different: full, dest
 
-                       subpipeM0_E0_N <= makeExecResult_N(resultToM0_E0, slotRegReadM0.destTag);
-                       subpipeM0_E0i_N <= makeExecResult_N(resultToM0_E0i, slotRegReadM0.destTag);
-                       subpipeM0_E0f_N <= makeExecResult_N(resultToM0_E0f, slotRegReadM0.destTag);
-
-
                     ctrlE1 <= ctrlE0;
                     subpipeM0_E1 <= subpipeM0_E0;
                     subpipeM0_E1i <= subpipeM0_E0i;
                     subpipeM0_E1f <= subpipeM0_E0f;
 
-                        subpipeM0_E1_N <= subpipeM0_E0_N;
-                        subpipeM0_E1i_N <= subpipeM0_E0i_N;
-                        subpipeM0_E1f_N <= subpipeM0_E0f_N;
-
                     -- Here we integrate mem read result
                     ctrlE2 <= ctrlE1u;
                     subpipeM0_E2 <= subpipeM0_E1_u;         -- injection of mem miss to 'full'
                     subpipeM0_E2i <= subpipeM0_E1i_u;
-                    subpipeM0_E2f <= subpipeM0_E1f_u;
-
-                        subpipeM0_E2_N <= makeExecResult_N(subpipeM0_E1_u, subpipeM0_E1_N.iqTag);
-                        subpipeM0_E2i_N <= makeExecResult_N(subpipeM0_E1i_u, subpipeM0_E1_N.iqTag);
-                        subpipeM0_E2f_N <= makeExecResult_N(subpipeM0_E1f_u, subpipeM0_E1_N.iqTag);                 
+                    subpipeM0_E2f <= subpipeM0_E1f_u;             
                 end if;
             end process;
 
@@ -921,7 +874,6 @@ begin
             generic map(
                 NAME => "SVI",
                 IQ_SIZE => IQ_SIZE_INT_SV,
-                --DONT_MATCH1 => true,
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_INT_D(0 to 2),
                 IGNORE_MEM_FAIL => true,
                     WAKEUP_SPEC => WAKEUP_SPEC_SVI
@@ -939,7 +891,6 @@ begin
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedIntU,
                 TMP_newTags => TMP_sviTags,
-                --fni => fni,
                 bypass => bypassIntSV,
                 nextAccepting => allowIssueStoreDataInt,
                 events => events,
@@ -995,7 +946,6 @@ begin
                 generic map(
                     NAME => "SVF",
                     IQ_SIZE => IQ_SIZE_FLOAT_SV, -- CAREFUL: not IS_FP because doesn't have destination
-                    --DONT_MATCH1 => true,
                     FORWARDING_D(0 to 2) => FORWARDING_MODES_SV_FLOAT_D(0 to 2),
                     IGNORE_MEM_FAIL => true
                 )
@@ -1012,7 +962,6 @@ begin
                     prevSendingOK => renamedSending,
                     newArr => schedInfoUpdatedFloatU,
                     TMP_newTags => TMP_svfTags,
-                    --fni => fniFloat,
                     bypass => bypassFloatSV,
                     nextAccepting => allowIssueStoreDataFP,
                     events => events,
@@ -1068,7 +1017,6 @@ begin
                 NAME => "F0",
                 IQ_SIZE => IQ_SIZE_F0,
                 FORWARDING(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
-                --FORWARDING1(0 to 2) => FORWARDING_MODES_FLOAT(0 to 2),
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_FLOAT_D(0 to 2)
             )
             port map(
@@ -1085,7 +1033,6 @@ begin
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedU,
                 TMP_newTags => TMP_fpTags,
-                --fni => fniFloat,
                 bypass => bypassFloat,
                 nextAccepting => allowIssueF0,
                 events => events,
@@ -1116,10 +1063,6 @@ begin
     
                 subpipeF0_Issue <= makeExecResult(slotIssueF0);
                 subpipeF0_RegRead <= makeExecResult(slotRegReadF0);
-
-                    subpipeF0_Issue_N <= makeExecResult_N(slotIssueF0);
-                    subpipeF0_RegRead_N <= makeExecResult_N(slotRegReadF0);
-
             end block;
 
             subpipeF0_RRu.full <= slotRegReadF0.full and not outSigsF0.killFollower;
@@ -1173,19 +1116,13 @@ begin
          begin
             if rising_edge(clk) then
                  subpipeI0_D0 <= subpipeI0_E0;
-                     subpipeI0_D0_N <= subpipeI0_E0_N;
 
                  subpipeI1_D0 <= subpipeI1_E2;
                  subpipeI1_D1 <= subpipeI1_D0;
-                     subpipeI1_D0_N <= subpipeI1_E2_N;
-                     subpipeI1_D1_N <= subpipeI1_D0_N;
                  
                  subpipeM0_D0i <= subpipeM0_E2i;
                  subpipeM0_D0f <= subpipeM0_E2f;
                  subpipeM0_D1f <= subpipeM0_D0f;
-                     subpipeM0_D0i_N <= subpipeM0_E2i_N;
-                     subpipeM0_D0f_N <= subpipeM0_E2f_N;
-                     subpipeM0_D1f_N <= subpipeM0_D0f_N;
                  
                  subpipeF0_D0 <= subpipeF0_E2;
              end if;
@@ -1221,14 +1158,15 @@ begin
 
         execOutSec(2) <= sqValueResult;
 
-            NEW_FNI: block 
+            NEW_FNI: block
             begin
+                
                 bypassInt.used <= "111";
                 bypassInt.usedFast <= "100";
                 bypassInt.obj <= (subpipeI0_Issue, subpipeI1_E1, subpipeM0_RegRead);
                 bypassInt.objNext <= (subpipeI0_RegRead, subpipeI1_E2, subpipeM0_E0i);                
                 bypassInt.objNext2 <= (DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, subpipeM0_E1i);
-                bypassInt.objTags <= (subpipeI0_Issue_N.iqTag, sn(0), sn(0));
+                bypassInt.objTags <= (issueTagI0, sn(0), sn(0));
                 bypassInt.stage <= (-2, -2, -3);
                 bypassInt.phase <= ( 0,  0, -1);
                 bypassInt.memFail <= memFail;
@@ -1273,12 +1211,12 @@ begin
             FNI_VALUES: block
                 signal fni, fniFloat, fniEmpty: ForwardingInfo := DEFAULT_FORWARDING_INFO;
             begin
-                fni <= buildForwardingNetwork(DEFAULT_EXEC_RESULT_N, subpipeI0_Issue_N,     subpipeI0_RegRead_N,   subpipeI0_E0_N,        subpipeI0_D0_N,
-                                              DEFAULT_EXEC_RESULT_N, subpipeI1_E1_N,        subpipeI1_E2_N,        subpipeI1_D0_N,        subpipeI1_D1_N,
-                                              subpipeM0_RegRead_N,   subpipeM0_E0i_N,       subpipeM0_E1_N,        subpipeM0_E2i_N,       subpipeM0_D0i_N,
+                fni <= buildForwardingNetwork(DEFAULT_EXEC_RESULT, subpipeI0_Issue,     subpipeI0_RegRead,   subpipeI0_E0,        subpipeI0_D0,
+                                              DEFAULT_EXEC_RESULT, subpipeI1_E1,        subpipeI1_E2,        subpipeI1_D0,        subpipeI1_D1,
+                                              subpipeM0_RegRead,   subpipeM0_E0i,       subpipeM0_E1,        subpipeM0_E2i,       subpipeM0_D0i,
                                               memFail, memDepFail
                                              );
-        
+
                 fniFloat <= buildForwardingNetworkFP(subpipeF0_RegRead,   subpipeF0_E0,        subpipeF0_E1,        subpipeF0_E2,        subpipeF0_D0,
                                                      DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT,
                                                      subpipeM0_E0f,       subpipeM0_E1f,       subpipeM0_E2f,       subpipeM0_D0f,       subpipeM0_D1f,
