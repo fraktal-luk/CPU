@@ -22,13 +22,16 @@ package LogicQueues is
         hasEvent: std_logic;
     
         completedA: std_logic;
+        completedLowA: std_logic;
         completedV: std_logic;
         address: Mword;
+        addressLow: Mword;
         value: Mword;
     end record;
-    
+
     constant DEFAULT_QUEUE_ENTRY: QueueEntry := (
         address => (others => '0'),
+        addressLow => (others => '0'),
         value => (others => '0'),
         others => '0'
     );
@@ -44,7 +47,9 @@ package LogicQueues is
     constant CMP_ADDRESS_LENGTH: natural := 12;    
         
     function getAddressCompleted(content: QueueEntryArray) return std_logic_vector;
+    function getAddressCompleted_Low(content: QueueEntryArray) return std_logic_vector;
     function getAddressMatching(content: QueueEntryArray; adr: Mword) return std_logic_vector;
+    function getAddressMatching_Low(content: QueueEntryArray; adr: Mword) return std_logic_vector;
     
     function addressLowMatching(a, b: Mword) return std_logic;
     function addressHighMatching(a, b: Mword) return std_logic;
@@ -63,8 +68,10 @@ package LogicQueues is
     function getCommittedEffectiveMaskBr(robData: ControlPacketArray) return std_logic_vector;
     function getCommittedMaskBr(robData: ControlPacketArray) return std_logic_vector;
 
-    function shiftQueueContent(content: QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, draining, compareInputFull: std_logic;
-                               sqPtr: SmallNumber; op: SpecificOp; adr: Mword; constant QUEUE_PTR_SIZE: natural)
+    function shiftQueueContent(content: QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, draining: std_logic;
+                               compareInputFull: std_logic; sqPtr: SmallNumber; op: SpecificOp; adr: Mword;
+                               compareInputEarlyFull: std_logic; sqPtrEarly: SmallNumber; opEarly: SpecificOp; adrEarly: Mword;
+                               constant QUEUE_PTR_SIZE: natural)
     return QueueEntryArray;
 
 end package;
@@ -150,7 +157,16 @@ package body LogicQueues is
         return res;
     end function;
     
-    
+
+    function getAddressCompleted_Low(content: QueueEntryArray) return std_logic_vector is
+        variable res: std_logic_vector(content'range);
+    begin
+        for i in content'range loop
+            res(i) := content(i).completedLowA;
+        end loop;
+        return res;
+    end function;
+
     function addressLowMatching(a, b: Mword) return std_logic is
     begin
         return bool2std(a(CMP_ADDRESS_LENGTH-1 downto 0) = b(CMP_ADDRESS_LENGTH-1 downto 0));
@@ -167,6 +183,15 @@ package body LogicQueues is
     begin
         for i in content'range loop      
             res(i) := addressLowMatching(content(i).address, adr);
+        end loop;
+        return res;
+    end function;
+
+    function getAddressMatching_Low(content: QueueEntryArray; adr: Mword) return std_logic_vector is
+        variable res: std_logic_vector(content'range);
+    begin
+        for i in content'range loop      
+            res(i) := addressLowMatching(content(i).addressLow, adr);
         end loop;
         return res;
     end function;
@@ -350,12 +375,15 @@ package body LogicQueues is
 
 
 
-    function shiftQueueContent(content: QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, draining, compareInputFull: std_logic;
-                               sqPtr: SmallNumber; op: SpecificOp; adr: Mword; constant QUEUE_PTR_SIZE: natural)
+    function shiftQueueContent(content: QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, draining: std_logic;
+                               compareInputFull: std_logic; sqPtr: SmallNumber; op: SpecificOp; adr: Mword;
+                               compareInputEarlyFull: std_logic; sqPtrEarly: SmallNumber; opEarly: SpecificOp; adrEarly: Mword;
+                               constant QUEUE_PTR_SIZE: natural)
     return QueueEntryArray is
         variable res: QueueEntryArray(0 to content'length-1) := content;
         constant LEN: natural := content'length;
         constant currentPtr: SmallNumber := subTruncZ(sqPtr, startPtrNext, QUEUE_PTR_SIZE);
+        constant currentEarlyPtr: SmallNumber := subTruncZ(sqPtrEarly, startPtrNext, QUEUE_PTR_SIZE);
     begin
         if draining = '1' then -- Move forward     
             res(0 to LEN-2) := res(1 to LEN-1);
@@ -370,10 +398,19 @@ package body LogicQueues is
             res(slv2u(currentPtr)).address := adr;
         end if;
 
+            if compareInputEarlyFull = '1' and isStoreOp(opEarly) = '1' then
+                res(slv2u(currentEarlyPtr)).completedLowA := '1';
+            end if;
+    
+            if compareInputEarlyFull = '1' and isStoreMemOp(opEarly) = '1' then
+                res(slv2u(currentEarlyPtr)).addressLow := adrEarly;
+            end if;
+
         if ev = '1' then
             for i in 0 to LEN-1 loop -- clear 'completed' for empty slots
                 if i >= slv2u(nFullNext) then
                     res(i).completedA := '0';
+                    res(i).completedLowA := '0';
                 end if;
             end loop;
         end if;

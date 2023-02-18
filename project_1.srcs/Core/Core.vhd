@@ -94,7 +94,7 @@ architecture Behavioral of Core is
     signal branchCtrl, memoryCtrlE2, memoryCtrlPre: InstructionControlInfo := DEFAULT_CONTROL_INFO;
 
     signal bqCompareEarly, bqUpdate, sqValueResult, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
-           memAddressInput, memAddressInputEarlySQ, memAddressInputEarlyLQ,
+           memAddressInput, memAddressInputEarly,
            frontEvent, execEvent, lateEvent, execCausingDelayedSQ, execCausingDelayedLQ,
            bqTargetData, resOutSQ, dataFromSB,-- mqReexecRegRead,
            missedMemResultE1, missedMemResultE2, mqReexecResIssue, mqReexecResRR,
@@ -775,7 +775,7 @@ begin
             memCtrlRR <= controlToM0_E0; -- Interface LSQ
             memAddressInputEarlyMQ_Ctrl <= controlToM0_E0; -- Interface MQ
 
-
+                memAddressInputEarly <= resultToM0_E0;
             ------------------------------------------------
             -- E0 -- 
             memAddressInput <= subpipeM0_E0;  -- Interface LSQ
@@ -1458,11 +1458,13 @@ begin
         renamedPtr => sqPointer,
             
         storeValueResult => sqValueResult,
-    
+
+        compareAddressEarlyInput => memAddressInputEarly,
+        compareAddressEarlyInput_Ctrl => memCtrlRR,
+
         compareAddressInput => memAddressInput,
         compareAddressCtrl => memCtrlE0,
-		
-        compareAddressEarlyInput_Ctrl => memCtrlRR,
+
 
         selectedDataOutput => ctOutSQ,
         selectedDataResult => resOutSQ,
@@ -1506,11 +1508,12 @@ begin
         renamedPtr => lqPointer,
 
         storeValueResult => DEFAULT_EXEC_RESULT,
-		
+
+		compareAddressEarlyInput => memAddressInputEarly,
+        compareAddressEarlyInput_Ctrl => memCtrlRR,
+
 		compareAddressInput => memAddressInput,
         compareAddressCtrl => memCtrlE0,
-
-        compareAddressEarlyInput_Ctrl => memCtrlRR,
 
         selectedDataOutput => ctOutLQ,
 
@@ -1574,11 +1577,12 @@ begin
     
             storeValueResult => sqValueResultE2,
     
-            compareAddressInput => missedMemResultE2,
-            compareAddressCtrl => missedMemCtrlE2,
-    
+            compareAddressEarlyInput => DEFAULT_EXEC_RESULT,
             compareAddressEarlyInput_Ctrl => memAddressInputEarlyMQ_Ctrl, -- only 'tag' and 'full'
     
+            compareAddressInput => missedMemResultE2,
+            compareAddressCtrl => missedMemCtrlE2,
+            
             selectedDataOutput => mqReexecCtrlIssue,
             selectedDataResult => mqReexecResIssue,
     
