@@ -362,7 +362,7 @@ package body LogicExec is
                  res.newEvent := '1';
              end if;
 
-             if (work.LogicQueues.addressHighMatching(result, ctSQ.target) = '0') and ENABLE_SQ_HIGHER_ADR then
+             if false and (work.LogicQueues.addressHighMatching(result, ctSQ.target) = '0') and ENABLE_SQ_HIGHER_ADR then
                 -- TMP
                 res.sqMiss := '1';
                 res.specialAction := '1';

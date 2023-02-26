@@ -117,7 +117,8 @@ begin
          else compareAddressEarlyInput_Ctrl.tags.sqPointer;
 
     -- Read ptr determinded by address matching - SQ only
-    pSelect <= addTruncZ(findNewestMatchIndex(olderSQ, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE);
+    pSelect <= addTruncZ(findNewestMatchIndex(olderSQ, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE) when false
+                else pSelectEarlyPrev;
         pSelectEarly <= addTruncZ(findNewestMatchIndex(olderSQ_Early, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE);
 
     -- LQ only
@@ -134,7 +135,7 @@ begin
     SQ_MATCH: if not IS_LOAD_QUEUE generate
     begin
             amm_T <= getAddressMatching_Low(queueContentShifting, adrValueEarly) and getAddressCompleted_Low(queueContentShifting);
-            ch0 <= bool2std(ammReg_T = addressMatchMask);
+            --ch0 <= bool2std(ammReg_T = addressMatchMask);
     
             olderSQ_Early <= olderNextSQ and amm_T;
 
@@ -144,6 +145,8 @@ begin
                                                                          when isLoadMemOp(compareAddressEarlyInput_Ctrl.op) = '1' else (others => '0');
         olderSQ <=   olderRegSQ and addressMatchMask;
     end generate;
+
+            ch0 <= bool2std(pSelect /= pSelectEarlyPrev) and compareAddressInput.full;
 
     updateResult.full <= compareAddressInput.full and isLoadOp(compareAddressInputOp) when IS_LOAD_QUEUE
                     else compareAddressInput.full and isStoreOp(compareAddressInputOp);
@@ -188,7 +191,8 @@ begin
 
             -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
             if not IS_LOAD_QUEUE then
-                isSelected <= compareAddressInput.full and isNonzero(olderSQ);
+                isSelected <= --compareAddressInput.full and isNonzero(olderSQ);
+                                isSelected_Early;
                     isSelected_Early <= compareAddressEarlyInput.full and isNonzero(olderSQ_Early);
             else
                 isSelected <= compareAddressInput.full and isNonzero(newerLQ);
@@ -208,6 +212,7 @@ begin
 
                     selectedOutputReg_E <= selectedOutput_E;
                       -- selectedEntryReg_E <=  selectedEntry_E;
+                    
 
                 
                 fwMissPrev <= fwMiss;
@@ -226,8 +231,10 @@ begin
     begin
         fw <= isSelected_Early;
         valueReady <= selectedEntry_E.completedV;
-        adrReady <= selectedEntry_E.completedA;
-        adrMatch <= addressHighMatching(selectedAddress_E, adrValue);
+        adrReady <= --selectedEntry_E.completedA;
+                        queueContent(p2i(pSelect, QUEUE_SIZE)).completedA;
+        adrMatch <= addressHighMatching(--selectedAddress_E, adrValue);
+                                        addresses(p2i(pSelect, QUEUE_SIZE)), adrValue);
         adrMatchLast <= addressHighMatching(adrValuePrev, adrValue);
         tagMatchingLast <= bool2std((pSelectEarlyPrev and PTR_MASK_SN) = (adrPtrPrev and PTR_MASK_SN));
 
@@ -355,7 +362,8 @@ begin
         selectedOutputSig.controlInfo.full <= isSelected;
         selectedOutputSig.controlInfo.newEvent <= selectedOutput.controlInfo.newEvent;
         selectedOutputSig.controlInfo.firstBr <= selectedOutput.controlInfo.firstBr;
-        selectedOutputSig.controlInfo.sqMiss <= selectedOutput.controlInfo.sqMiss;
+        selectedOutputSig.controlInfo.sqMiss <= --selectedOutput.controlInfo.sqMiss;
+                                                    sqMissed;
         
         selectedOutputSig.op <= selectedOutput.op;
         selectedOutputSig.target <= selectedOutput.target;
