@@ -86,7 +86,7 @@ architecture Behavioral of StoreQueue is
     signal addresses, storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 
     signal canAlloc, drainReq, drainEqual, drainEffectiveEqual, fwMiss, fwMissPrev, fwMissAdr, fwMissAdrPrev, fwMissValue, fwMissValuePrev,
-            allowDrain, isSending, isDrainingPrev, isSelected, isSelected_Early, sqMissed: std_logic := '0';
+            allowDrain, isSending, isDrainingPrev, isSelected, isSelected_Early, sqMissed, missing, missingPrev: std_logic := '0';
 
     signal drainOutput, selectedOutput, selectedOutput_E, selectedOutputReg_E,  selectedOutputSig, committedOutputSig: ControlPacket := DEFAULT_CONTROL_PACKET;
     signal adrValuePrev, drainValue, selectedValue, selectedValue_E, drainAddress, selectedAddress, selectedAddress_E: Mword := (others => '0');
@@ -146,7 +146,7 @@ begin
         olderSQ <=   olderRegSQ and addressMatchMask;
     end generate;
 
-            ch0 <= bool2std(pSelect /= pSelectEarlyPrev) and compareAddressInput.full;
+           -- ch0 <= bool2std(pSelect /= pSelectEarlyPrev) and compareAddressInput.full;
 
     updateResult.full <= compareAddressInput.full and isLoadOp(compareAddressInputOp) when IS_LOAD_QUEUE
                     else compareAddressInput.full and isStoreOp(compareAddressInputOp);
@@ -219,6 +219,8 @@ begin
                 fwMissAdrPrev <= fwMissAdr;
                 fwMissValuePrev <= fwMissValue;
 
+                    missingPrev <= missing;
+
             -- D. outputs
             drainEntry <= queueContent(p2i(pDrain, QUEUE_SIZE));
             drainValue <= storeValues(p2i(pDrain, QUEUE_SIZE));
@@ -226,8 +228,11 @@ begin
         end if;
     end process;
 
+    --    ch0 <= bool2std(missingPrev = sqMissed);
+
     CHECK_FW: block
-        signal fw, adrReady, valueReady, adrMatch, adrMatchLast, tagMatchingLast, valueMissRef: std_logic := '0';
+        signal fw, adrReady, valueReady, adrMatch, adrMatchLast, tagMatchingLast, valueMissRef, dataReady,
+                adrMatchNormal, adrMatchRecent: std_logic := '0';
     begin
         fw <= isSelected_Early;
         valueReady <= selectedEntry_E.completedV;
@@ -245,7 +250,16 @@ begin
         valueMissRef <= isSelected and not selectedEntry.completedV;
         
         
-        sqMissed <= fwMissAdrPrev or valueMissRef;
+            adrMatchNormal <= adrReady and adrMatch;
+            adrMatchRecent <= adrMatchLast and tagMatchingLast;
+        
+            dataReady <= queueContent(p2i(pSelect, QUEUE_SIZE)).completedV;
+        
+        missing <= fw and (not (adrMatchNormal or adrMatchRecent) or not dataReady);
+
+
+        sqMissed <= --fwMissAdrPrev or valueMissRef;
+                    missingPrev;
     end block;
 
     selectedOutput <= getDrainOutput(selectedEntry, selectedAddress, selectedValue);    

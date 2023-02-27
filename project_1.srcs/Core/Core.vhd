@@ -738,13 +738,13 @@ begin
                 -- pseudo interface
                 sendingToRegReadM0 <= (slotIssueM0.full and not (outSigsM0.cancelled or outSigsM0.killFollowerNext)); -- or mqIssueSending;
                 -- Reg
-                slotRegReadM0iq <= updateDispatchArgs_RR(argStateR, valuesInt0, regValsM0, false);
+                slotRegReadM0iq <= updateDispatchArgs_RR(argStateR, valuesInt0, regValsM0, false, true);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
                         argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelM0, outSigsM0.sending), events);
-                        argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueM0, sendingToRegReadM0, valuesInt0, valuesInt1, true, false), events);
+                        argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueM0, sendingToRegReadM0, valuesInt0, valuesInt1, true, false, true), events);
                     end if;
                 end process;
 
@@ -759,7 +759,8 @@ begin
             slotRegReadM0mq <= TMP_slotRegReadM0mq(mqReexecCtrlRR, mqReexecResRR, mqRegReadSending);
 
             -- Merge IQ with MQ
-            slotRegReadM0 <= slotRegReadM0mq when mqRegReadSending = '1' else slotRegReadM0iq;
+            slotRegReadM0 <= --slotRegReadM0mq when mqRegReadSending = '1' else slotRegReadM0iq;
+                             mergeMemOp(slotRegReadM0iq, slotRegReadM0mq, mqRegReadSending);
 
             ----------------------------
             -- Single packet of information for E0
@@ -801,6 +802,7 @@ begin
             ctrlE1u.controlInfo <= memoryCtrlPre;
 
             memoryMissed <= ctrlE1u.controlInfo.dataMiss or ctrlE1u.controlInfo.sqMiss;
+                            --not memLoadReady;
 
             subpipeM0_E1_u <= setMemFail(subpipeM0_E1, memoryMissed, memResult);     
             subpipeM0_E1i_u <= setMemFail(subpipeM0_E1i, memoryMissed, memResult);
@@ -1141,7 +1143,7 @@ begin
         --     if F0 issued, to avoid WB collisions with FP load
         --     if MQ intends to reexecute
         lockIssueM0 <= fp0subpipeSelected or mqReady or memFail  or almostFullMQ or mulSubpipeAtE0; --CAREFUL: this if mul sends result to write queue after D0, 1 cycle later than Mem pipe
-
+                       --     memFail;
         lockIssueF0 <= '0' or memFail;
 
         allowIssueI0 <= not lockIssueI0;
@@ -1296,7 +1298,9 @@ begin
     
             readValues(0 to 2) => regValsI0,
             readValues(3 to 5) => regValsI1,
-            readValues(6 to 8) => regValsM0,                        
+            readValues(6 to 8) => regValsM0,
+              --  readValues(6) => regValsM0(1),
+                --readValues(7 to 8) => open,
             readValues(9 to 11) => regValsS0            
         );
 

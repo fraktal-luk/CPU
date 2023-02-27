@@ -45,6 +45,9 @@ package LogicExec is
 	
 	function executeFpu(st: SchedulerState) return Mword;     
 
+    function mergeMemOp(stIQ, stMQ: SchedulerState; mqReady: std_logic) return SchedulerState;
+
+
     function calcEffectiveAddress(full: std_logic; st: SchedulerState; fromDLQ: std_logic)--; dlqData: ExecResult)
     return ExecResult;
 
@@ -307,14 +310,26 @@ package body LogicExec is
 	end function;
 
 
+    function mergeMemOp(stIQ, stMQ: SchedulerState; mqReady: std_logic) return SchedulerState is
+        variable res: SchedulerState := stIQ;
+    begin
+        if mqReady = '1' then
+            res := stMQ;
+        end if;
+        
+        return res;    
+    end function;
+
+
     function calcEffectiveAddress(full: std_logic; st: SchedulerState; fromDLQ: std_logic)--; dlqData: ExecResult)
     return ExecResult is
         variable res: ExecResult := DEFAULT_EXEC_RESULT;
         variable adr: Mword := (others => '0'); 
     begin
-        if fromDLQ = '1' then
+        if false then --fromDLQ = '1' then
             adr := st.args(1);
-        elsif st.full = '1'then
+        elsif true then -- st.full = '1' then
+        --else --st.full = '1'then
             adr := add(st.args(0), st.args(1));
         else
             adr := (others => '0');

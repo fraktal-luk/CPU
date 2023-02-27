@@ -149,10 +149,10 @@ function updateDispatchArgs_Is(st: SchedulerState) return SchedulerState;
 function getDispatchArgValues_RR(input: SchedulerState;
                                  prevSending: std_logic;
                                  vals0, vals1: MwordArray;
-                                 USE_IMM: boolean; REGS_ONLY: boolean)
+                                 USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
 return SchedulerState;
 
-function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean) return SchedulerState;
+function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false) return SchedulerState;
 
     type SlotControl is record
         full: std_logic;
@@ -1217,7 +1217,8 @@ end function;
         variable res: SchedulerState := input;
     begin
         res.full := prevSending;
-        if prevSending = '0' or (input.argSpec.intDestSel = '0' and input.argSpec.floatDestSel = '0') then
+        if prevSending = '0' --or (input.argSpec.intDestSel = '0' and input.argSpec.floatDestSel = '0')
+        then
            res.argSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
            res.destTag := (others => '0');
         end if;
@@ -1257,7 +1258,7 @@ end function;
     function getDispatchArgValues_RR(input: SchedulerState;
                                      prevSending: std_logic;
                                      vals0, vals1: MwordArray;
-                                     USE_IMM: boolean; REGS_ONLY: boolean)
+                                     USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
     return SchedulerState is
         variable res: SchedulerState := TMP_prepareDispatchSlot(input, prevSending);
     begin
@@ -1276,7 +1277,7 @@ end function;
             res.args(0) := (others => '0');           
         end if;
     
-        if res.st.zero(1) = '1' then
+        if IMM_ONLY_1 or res.st.zero(1) = '1' then
             if USE_IMM then
                 res.args(1)(31 downto 16) := (others => res.st.immValue(15));
                 res.args(1)(15 downto 0) := res.st.immValue;
@@ -1295,7 +1296,7 @@ end function;
     end function;
     
     
-    function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean)
+    function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
     return SchedulerState is
         variable res: SchedulerState := st;
     begin
@@ -1311,12 +1312,14 @@ end function;
             res.args(0) := res.args(0) or regValues(0);
         end if;
     
-        if res.readNew(1) = '1' then
+        if IMM_ONLY_1 then
+            null; -- don't read FN or registers
+        elsif res.readNew(1) = '1' then
             res.args(1) := vals(slv2u(res.argLocsPipe(1)(1 downto 0)));
         else
             res.args(1) := res.args(1) or regValues(1);
         end if;
-    
+
         return res;
     end function;
 
