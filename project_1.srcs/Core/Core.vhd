@@ -560,7 +560,7 @@ begin
                 if rising_edge(clk) then
                     branchResultE0 <= dataToBranch;
 
-                    execEventSignalE1 <= execEventSignalE0;
+                    execEventSignalE1 <= execEventSignalE0 and not lateEventSignal; -- Don't allow subsequent event from cancelled branch
                     branchResultE1 <= branchResultE0;
                 end if;
             end process;

@@ -81,8 +81,8 @@ begin
 
     newestMapNext_NoRewind <= getNextMap(newestMap_NoRewind, stableMap, newPhysDestsOrig, reserve, newSelectedA, sendingToReserve, '0');
 
-    psels <= getPhysicalFloatDestSels(commitInfoA) when IS_FP else getPhysicalIntDestSels(commitInfoA);
-
+    psels <= --getPhysicalFloatDestSels(commitInfoA) when IS_FP else getPhysicalIntDestSels(commitInfoA);
+                getPsels(commitInfoA);
     reserve <= whichTakeReg(reserveInfoA, IS_FP); 
 
 	commit <= psels;
