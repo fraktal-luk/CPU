@@ -77,16 +77,14 @@ architecture Behavioral of StoreQueue is
 
 	signal addressMatchMask, newerLQ, newerRegLQ, newerNextLQ, olderNextSQ, olderRegSQ, olderSQ, olderSQ_Early: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
-	signal adrPtr, adrPtrEarly, adrPtrPrev, pSelect, pSelectPrev, pSelectEarly, pSelectEarlyPrev,   pStart, pStartNext, pDrain, pDrainNext, pDrainPrev,
-           pTagged, pTaggedNext, pRenamed, pRenamedNext, pStartEffective, pStartEffectiveNext,
-	       nFull, nFullNext, nAlloc, nAllocNext, nIn, nInRe, nOut, nCommitted, nCommittedEffective, recoveryCounter: SmallNumber := (others => '0');
+	signal adrPtr, adrPtrEarly, adrPtrPrev, pSelect, pSelectPrev, pSelectEarly, pSelectEarlyPrev, pStart, pStartNext, pDrain, pDrainNext, pDrainPrev,
+           pTagged, pTaggedNext, pRenamed, pRenamedNext, nFull, nFullNext, nAlloc, nAllocNext, nIn, nInRe, nOut, nCommitted, nCommittedEffective, recoveryCounter: SmallNumber := (others => '0');
 
     signal queueContent, queueContentShifting, queueContentShiftingNext: QueueEntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_QUEUE_ENTRY);
 
     signal addresses, storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 
-    signal canAlloc, drainReq, drainEqual, drainEffectiveEqual, fwMiss, fwMissPrev, fwMissAdr, fwMissAdrPrev, fwMissValue, fwMissValuePrev,
-            allowDrain, isSending, isDrainingPrev, isSelected, isSelected_Early, sqMissed, missing, missingPrev: std_logic := '0';
+    signal canAlloc, drainReq, drainEqual, allowDrain, isSending, isDrainingPrev, isSelected, isSelected_Early, sqMissed, missing, missingPrev: std_logic := '0';
 
     signal drainOutput, selectedOutput, selectedOutput_E, selectedOutputReg_E,  selectedOutputSig, committedOutputSig: ControlPacket := DEFAULT_CONTROL_PACKET;
     signal adrValuePrev, drainValue, selectedValue, selectedValue_E, drainAddress, selectedAddress, selectedAddress_E: Mword := (others => '0');
@@ -103,8 +101,6 @@ architecture Behavioral of StoreQueue is
     alias adrValueEarly is compareAddressEarlyInput.value;
     alias adrValue is compareAddressInput.value;
 
-        signal amm_T, ammReg_T: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
-
 
     signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
 begin
@@ -118,7 +114,8 @@ begin
 
     -- Read ptr determinded by address matching - SQ only
     pSelect <= addTruncZ(findNewestMatchIndex(olderSQ, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE) when false
-                else pSelectEarlyPrev;
+          else pSelectEarlyPrev;
+
         pSelectEarly <= addTruncZ(findNewestMatchIndex(olderSQ_Early, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE);
 
     -- LQ only
@@ -133,11 +130,8 @@ begin
 
     -- SQ only
     SQ_MATCH: if not IS_LOAD_QUEUE generate
-    begin
-            amm_T <= getAddressMatching_Low(queueContentShifting, adrValueEarly) and getAddressCompleted_Low(queueContentShifting);
-            --ch0 <= bool2std(ammReg_T = addressMatchMask);
-    
-            olderSQ_Early <= olderNextSQ and amm_T;
+    begin    
+        olderSQ_Early <= olderNextSQ and getAddressMatching_Low(queueContentShifting, adrValueEarly) and getAddressCompleted_Low(queueContentShifting);
 
         addressMatchMask <= getAddressMatching(queueContentShifting, adrValue) and getAddressCompleted(queueContentShifting);
 
@@ -146,7 +140,6 @@ begin
         olderSQ <=   olderRegSQ and addressMatchMask;
     end generate;
 
-           -- ch0 <= bool2std(pSelect /= pSelectEarlyPrev) and compareAddressInput.full;
 
     updateResult.full <= compareAddressInput.full and isLoadOp(compareAddressInputOp) when IS_LOAD_QUEUE
                     else compareAddressInput.full and isStoreOp(compareAddressInputOp);
@@ -158,11 +151,9 @@ begin
         if rising_edge(clk) then
             olderRegSQ <= olderNextSQ;
             newerRegLQ <= newerNextLQ;
-                
-                ammReg_T <= amm_T;
-                
-                adrValuePrev <= adrValue;
-                adrPtrPrev <= adrPtr;
+                                
+            adrValuePrev <= adrValue;
+            adrPtrPrev <= adrPtr;
 
             -- SQ only
             queueContentShifting <= shiftQueueContent(queueContentShifting, pDrain, nFullNext, execEventSignal or lateEventSignal, isDrainingPrev,
@@ -192,8 +183,8 @@ begin
             -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
             if not IS_LOAD_QUEUE then
                 isSelected <= --compareAddressInput.full and isNonzero(olderSQ);
-                                isSelected_Early;
-                    isSelected_Early <= compareAddressEarlyInput.full and isNonzero(olderSQ_Early);
+                              isSelected_Early;
+                isSelected_Early <= compareAddressEarlyInput.full and isNonzero(olderSQ_Early);
             else
                 isSelected <= compareAddressInput.full and isNonzero(newerLQ);
             end if;
@@ -204,22 +195,15 @@ begin
 
             pSelectPrev <= pSelect;
 
-                    selectedEntry_E <= queueContent(p2i(pSelectEarly, QUEUE_SIZE));
-                    selectedValue_E <= storeValues(p2i(pSelectEarly, QUEUE_SIZE));
-                    selectedAddress_E <= addresses(p2i(pSelectEarly, QUEUE_SIZE));
-        
-                    pSelectEarlyPrev <= pSelectEarly;
+                selectedEntry_E <= queueContent(p2i(pSelectEarly, QUEUE_SIZE));
+                selectedValue_E <= storeValues(p2i(pSelectEarly, QUEUE_SIZE));
+                selectedAddress_E <= addresses(p2i(pSelectEarly, QUEUE_SIZE));
+    
+                pSelectEarlyPrev <= pSelectEarly;
 
-                    selectedOutputReg_E <= selectedOutput_E;
-                      -- selectedEntryReg_E <=  selectedEntry_E;
-                    
+                selectedOutputReg_E <= selectedOutput_E;                    
 
-                
-                fwMissPrev <= fwMiss;
-                fwMissAdrPrev <= fwMissAdr;
-                fwMissValuePrev <= fwMissValue;
-
-                    missingPrev <= missing;
+            missingPrev <= missing;
 
             -- D. outputs
             drainEntry <= queueContent(p2i(pDrain, QUEUE_SIZE));
@@ -228,53 +212,38 @@ begin
         end if;
     end process;
 
-    --    ch0 <= bool2std(missingPrev = sqMissed);
 
     CHECK_FW: block
-        signal fw, adrReady, valueReady, adrMatch, adrMatchLast, tagMatchingLast, valueMissRef, dataReady,
-                adrMatchNormal, adrMatchRecent: std_logic := '0';
+        signal fw, adrReady, adrMatch, adrMatchLast, tagMatchingLast, dataReady, adrMatchNormal, adrMatchRecent: std_logic := '0';
     begin
         fw <= isSelected_Early;
-        valueReady <= selectedEntry_E.completedV;
-        adrReady <= --selectedEntry_E.completedA;
-                        queueContent(p2i(pSelect, QUEUE_SIZE)).completedA;
-        adrMatch <= addressHighMatching(--selectedAddress_E, adrValue);
-                                        addresses(p2i(pSelect, QUEUE_SIZE)), adrValue);
+
+        adrReady <= queueContent(p2i(pSelect, QUEUE_SIZE)).completedA;
+        adrMatch <= addressHighMatching(addresses(p2i(pSelect, QUEUE_SIZE)), adrValue);
+        adrMatchNormal <= adrReady and adrMatch;
+
         adrMatchLast <= addressHighMatching(adrValuePrev, adrValue);
         tagMatchingLast <= bool2std((pSelectEarlyPrev and PTR_MASK_SN) = (adrPtrPrev and PTR_MASK_SN));
-
-        fwMiss <= fw and ((not (adrReady and adrMatch) and not (adrMatchLast and tagMatchingLast)) or not valueReady);
-        fwMissAdr <= fw and ((not (adrReady and adrMatch) and not (adrMatchLast and tagMatchingLast)));
-        fwMissValue <= fw and not valueReady;
+        adrMatchRecent <= adrMatchLast and tagMatchingLast;
         
-        valueMissRef <= isSelected and not selectedEntry.completedV;
-        
-        
-            adrMatchNormal <= adrReady and adrMatch;
-            adrMatchRecent <= adrMatchLast and tagMatchingLast;
-        
-            dataReady <= queueContent(p2i(pSelect, QUEUE_SIZE)).completedV;
+        dataReady <= queueContent(p2i(pSelect, QUEUE_SIZE)).completedV;
         
         missing <= fw and (not (adrMatchNormal or adrMatchRecent) or not dataReady);
 
 
-        sqMissed <= --fwMissAdrPrev or valueMissRef;
-                    missingPrev;
+        sqMissed <= missingPrev;
     end block;
 
     selectedOutput <= getDrainOutput(selectedEntry, selectedAddress, selectedValue);    
         selectedOutput_E <= getDrainOutput(selectedEntry_E, selectedAddress_E, selectedValue_E);    
 
+    allowDrain <= '1';
     drainOutput <= getDrainOutput(drainEntry, drainAddress, drainValue);   
 
 
-
     pDrainNext <= addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE+1) when drainReq = '1' else pDrain;
-    pStartEffectiveNext <= addTruncZ(pStartEffective, nCommittedEffective, QUEUE_PTR_SIZE+1) when committing = '1'
-                      --else pStartNext when nowCancelled = '1' and drainEqual = '1'
-                      else pStartEffective;
-    pStartNext <= --addTruncZ(pStart, nCommitted, QUEUE_PTR_SIZE+1) when committing = '1' else pStart;
-                    pStartEffectiveNext;
+    pStartNext <= addTruncZ(pStart, nCommittedEffective, QUEUE_PTR_SIZE+1) when committing = '1'
+             else pStart;
 
     pTaggedNext <= pStart when lateEventSignal = '1'
             else   pFlush when execEventSignal = '1' 
@@ -286,26 +255,17 @@ begin
             else    addIntTrunc(pRenamed, slv2u(nInRe), QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
             else    pRenamed;
 
+
     process (clk)
     begin
         if rising_edge(clk) then
 
             isDrainingPrev <= drainReq;
-            allowDrain <= --not (nowCancelled or (not drainEqual and drainEffectiveEqual));
-                            '1';
-            -- TODO: reanalyze nowCancelled?
-            -- D. out ctrl
---            if drainEqual = '1' then
---            --    nowCancelled <= '0';
---            elsif drainEffectiveEqual = '1' then
---            --    nowCancelled <= '1';
---            end if;
 
             pDrain <= pDrainNext;
             pDrainPrev <= pDrain;
 
             pStart <= pStartNext;
-            pStartEffective <= pStartEffectiveNext;
 
             pTagged <= pTaggedNext;
             pRenamed <= pRenamedNext;
@@ -349,7 +309,6 @@ begin
     nCommitted <= i2slv(countOnes(commitMask), SMALL_NUMBER_SIZE);
     nCommittedEffective <= i2slv(countOnes(commitEffectiveMask), SMALL_NUMBER_SIZE);
 
-    drainEffectiveEqual <= bool2std(pStartEffective = pDrain);
     drainEqual <= bool2std(pStart = pDrain);
     drainReq <= not drainEqual;
 
@@ -376,8 +335,7 @@ begin
         selectedOutputSig.controlInfo.full <= isSelected;
         selectedOutputSig.controlInfo.newEvent <= selectedOutput.controlInfo.newEvent;
         selectedOutputSig.controlInfo.firstBr <= selectedOutput.controlInfo.firstBr;
-        selectedOutputSig.controlInfo.sqMiss <= --selectedOutput.controlInfo.sqMiss;
-                                                    sqMissed;
+        selectedOutputSig.controlInfo.sqMiss <= sqMissed;
         
         selectedOutputSig.op <= selectedOutput.op;
         selectedOutputSig.target <= selectedOutput.target;

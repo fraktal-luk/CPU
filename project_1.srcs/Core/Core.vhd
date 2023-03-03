@@ -65,7 +65,7 @@ architecture Behavioral of Core is
     signal frontAccepting, bpAccepting, bpSending, renameAllow, frontGroupSend, frontSendAllow, canSendRename, robSending,
            renameSendingBr, renamedSending, commitAccepting, frontEventSignal, bqAccepting, execEventSignalE0, execEventSignalE1, lateEventSignal, lateEventSetPC,
            allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
-           mqReady, mqRegReadSending, memoryMissed, sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
+           mqReady, mqRegReadSending, sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
            : std_logic := '0';
 
     signal renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -80,8 +80,7 @@ architecture Behavioral of Core is
 
     signal bqPointer, bqPointerSeq, lqPointer, sqPointer: SmallNumber := (others => '0');
 
-    signal commitGroupCtr, commitGroupCtrNext: InsTag := (others => '0');
-    signal renameGroupCtrNext: InsTag := (others => '0');
+    signal renameGroupCtrNext, commitGroupCtr, commitGroupCtrNext: InsTag := (others => '0');
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal intType: std_logic_vector(0 to 1) := (others => '0');
@@ -91,18 +90,15 @@ architecture Behavioral of Core is
     signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
     signal events: EventState := DEFAULT_EVENT_STATE;
     signal specialOp, specialOutROB: SpecificOp := DEFAULT_SPECIFIC_OP;
-    signal branchCtrl, memoryCtrlE2, memoryCtrlPre: InstructionControlInfo := DEFAULT_CONTROL_INFO;
+    signal branchCtrl, memoryCtrlE2: InstructionControlInfo := DEFAULT_CONTROL_INFO;
 
-    signal bqCompareEarly, bqUpdate, sqValueResult, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
-           memAddressInput, memAddressInputEarly,
-           frontEvent, execEvent, lateEvent, execCausingDelayedSQ, execCausingDelayedLQ,
-           bqTargetData, resOutSQ, dataFromSB,-- mqReexecRegRead,
-           missedMemResultE1, missedMemResultE2, mqReexecResIssue, mqReexecResRR,
-           memoryRead
+    signal bqCompareEarly, bqUpdate, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
+           memAddressInput, memAddressInputEarly, frontEvent, execEvent, lateEvent, execCausingDelayedSQ, execCausingDelayedLQ,
+           bqTargetData, resOutSQ, dataFromSB, missedMemResultE1, missedMemResultE2, mqReexecResIssue, mqReexecResRR, memoryRead
            : ExecResult := DEFAULT_EXEC_RESULT;
 
     signal pcData, dataToBranch, bqSelected, branchResultE0, branchResultE1, mqReexecCtrlIssue, mqReexecCtrlRR,
-           memCtrlRR, memCtrlE0, memAddressInputEarlyMQ_Ctrl, missedMemCtrlE1, missedMemCtrlE2, ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
+           memCtrlRR, memCtrlE0, missedMemCtrlE1, missedMemCtrlE2, ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal bpData: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
     signal robOut: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
@@ -130,10 +126,12 @@ begin
     intSignal <= int0 or int1;
     intType <= (int0, int1);
 
-            dread <= memoryRead.full;
-            dadr <= memoryRead.value;
-            sysRegReadSel <= memoryRead.value(4 downto 0);
-            sysRegRead <= memoryRead.full;
+
+    dread <= memoryRead.full;
+    dadr <= memoryRead.value;
+    sysRegReadSel <= memoryRead.value(4 downto 0);
+    sysRegRead <= memoryRead.full;
+
 
     events <= (lateEventSignal, execEventSignalE0, dataToBranch.tags, execEvent, lateEvent);
 
@@ -273,7 +271,7 @@ begin
         dbState => dbState
     );
 
-    frontSendAllow <=     renameAllow 
+    frontSendAllow <=   renameAllow 
                     and allocAcceptAlu and allocAcceptMul and allocAcceptMem
                     and allocAcceptSVI and allocAcceptSVF and allocAcceptF0
                     and allocAcceptSQ and allocAcceptLQ and allocAcceptROB;
@@ -396,25 +394,20 @@ begin
        -- Issue control 
        signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, lockIssueSVI, lockIssueSVF, allowIssueStoreDataFP, allowIssueStageStoreDataFP,
               memSubpipeSent, mulSubpipeSent, mulSubpipeAtE0, fp0subpipeSelected, mulSubpipeSelected,
-              lockIssueI0, allowIssueI0, lockIssueI1, allowIssueI1, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, memLoadReady, intWriteConflict,
-              storeValueCollision1, storeValueCollision2, cancelledSVI1, sendingToStoreWrite, sendingToStoreWriteInt, sendingToStoreWriteFloat,
-              memFail, memDepFail, prevMemDepFail: std_logic := '0';
-
-       signal sendingToRegReadI0, sendingToRegReadI1, sendingToRegReadM0, sendingToRegReadF0: std_logic := '0';  -- MOVE to subpipes     
-
-       signal stateExecStoreValue: SchedulerState := DEFAULT_SCHED_STATE;
+              lockIssueI0, allowIssueI0, lockIssueI1, allowIssueI1, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, intWriteConflict,
+              storeValueCollision1, storeValueCollision2, cancelledSVI1,
+              memFail, memDepFail, prevMemDepFail: std_logic := '0';  
 
        signal outSigsI0, outSigsI1, outSigsM0, outSigsSVI, outSigsSVF, outSigsF0: IssueQueueSignals := (others => '0');
 
        signal subpipeI0_Issue, subpipeI0_RegRead, subpipeI0_E0,                                    subpipeI0_D0,
               subpipeI1_Issue, subpipeI1_RegRead, subpipeI1_E0,  subpipeI1_E1,    subpipeI1_E2,    subpipeI1_D0,  subpipeI1_D1,
+              
               subpipeM0_Issue, subpipeM0_RegRead, subpipeM0_E0,  subpipeM0_E1,    subpipeM0_E2,
-                                   --      subpipeM0_RR_u,
                                    subpipeM0_RRi, subpipeM0_E0i, subpipeM0_E1i,   subpipeM0_E2i,   subpipeM0_D0i,-- subpipeM0_D1i,
                                    subpipeM0_RRf, subpipeM0_E0f, subpipeM0_E1f,   subpipeM0_E2f,   subpipeM0_D0f, subpipeM0_D1f,
-                                                                            subpipeM0_E1_u,
-                                                                            subpipeM0_E1i_u,
-                                                                            subpipeM0_E1f_u,
+                                                            
+                                                            subpipeM0_E1_u, subpipeM0_E1i_u, subpipeM0_E1f_u,
 
               subpipeF0_Issue, subpipeF0_RegRead, subpipeF0_E0,    subpipeF0_E1,      subpipeF0_E2,      subpipeF0_D0,
                                            subpipeF0_RRu,
@@ -456,10 +449,6 @@ begin
         lqMask <= getLoadMask1((renamedDataLivingRe));
         branchMask <= getBranchMask1((renamedDataLivingRe));
 
-        memFail <= subpipeM0_E1_u.failed;
-
-        execCausingDelayedSQ.dest <= branchResultE1.tags.sqPointer;
-        execCausingDelayedLQ.dest <= branchResultE1.tags.lqPointer;
 
         SUBPIPE_ALU: block
             use work.LogicIssue.all;
@@ -510,6 +499,7 @@ begin
             TMP_ISSUE_I0: block
                 use work.LogicIssue.all;
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal sendingToRegReadI0: std_logic := '0';
             begin
                 -- Reg
                 slotIssueI0 <= updateDispatchArgs_Is(argStateI);
@@ -532,6 +522,11 @@ begin
                 subpipeI0_RegRead <= makeExecResult(slotRegReadI0);
 
                 issueTagI0 <= slotIssueI0.destTag;
+                
+                
+                bqCompareEarly.full <= sendingToRegReadI0 and slotIssueI0.st.branchIns;
+                bqCompareEarly.tag <= slotIssueI0.st.tags.renameIndex;
+                bqCompareEarly.dest <= slotIssueI0.st.tags.bqPointer;
             end block;
 
 
@@ -545,10 +540,6 @@ begin
                 end if;
             end process;
 
-
-            bqCompareEarly.full <= sendingToRegReadI0 and slotIssueI0.st.branchIns;
-            bqCompareEarly.tag <= slotIssueI0.st.tags.renameIndex;
-            bqCompareEarly.dest <= slotIssueI0.st.tags.bqPointer;
 
             dataToBranch <= basicBranch(slotRegReadI0.full and not outSigsI0.killFollower and not lateEventSignal and slotRegReadI0.st.branchIns,
                                         slotRegReadI0,
@@ -571,6 +562,8 @@ begin
             bqUpdate.tag <= branchResultE0.tags.renameIndex;
             bqUpdate.value <= branchResultE0.target;
 
+            execCausingDelayedSQ.dest <= branchResultE1.tags.sqPointer;
+            execCausingDelayedLQ.dest <= branchResultE1.tags.lqPointer;
         end block;
 
 
@@ -625,6 +618,7 @@ begin
                     TMP_ISSUE_I1: block
                         use work.LogicIssue.all;
                         signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                        signal sendingToRegReadI1: std_logic := '0';
                     begin
                         -- Reg
                         slotIssueI1 <= updateDispatchArgs_Is(argStateI);
@@ -689,10 +683,11 @@ begin
 
             constant CFG_MEM: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
 
-            signal memLoadValue, memResult: Mword := (others => '0');
             signal controlToM0_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
             signal slotRegReadM0iq, slotRegReadM0mq: SchedulerState := DEFAULT_SCHED_STATE;
             signal resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
+            
+            signal sendingToRegReadM0: std_logic := '0';
         begin
             wups <= work.LogicIssue.getInitWakeups(schedInfoA, bypassInt, CFG_MEM);
 
@@ -736,7 +731,7 @@ begin
                 -- Reg
                 slotIssueM0 <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
-                sendingToRegReadM0 <= (slotIssueM0.full and not (outSigsM0.cancelled or outSigsM0.killFollowerNext)); -- or mqIssueSending;
+                sendingToRegReadM0 <= (slotIssueM0.full and not (outSigsM0.cancelled or outSigsM0.killFollowerNext));
                 -- Reg
                 slotRegReadM0iq <= updateDispatchArgs_RR(argStateR, valuesInt0, regValsM0, false, true);
 
@@ -759,8 +754,7 @@ begin
             slotRegReadM0mq <= TMP_slotRegReadM0mq(mqReexecCtrlRR, mqReexecResRR, mqRegReadSending);
 
             -- Merge IQ with MQ
-            slotRegReadM0 <= --slotRegReadM0mq when mqRegReadSending = '1' else slotRegReadM0iq;
-                             mergeMemOp(slotRegReadM0iq, slotRegReadM0mq, mqRegReadSending);
+            slotRegReadM0 <= mergeMemOp(slotRegReadM0iq, slotRegReadM0mq, mqRegReadSending);
 
             ----------------------------
             -- Single packet of information for E0
@@ -774,9 +768,8 @@ begin
             --------------------------------------
 
             memCtrlRR <= controlToM0_E0; -- Interface LSQ
-            memAddressInputEarlyMQ_Ctrl <= controlToM0_E0; -- Interface MQ
+            memAddressInputEarly <= resultToM0_E0;
 
-                memAddressInputEarly <= resultToM0_E0;
             ------------------------------------------------
             -- E0 -- 
             memAddressInput <= subpipeM0_E0;  -- Interface LSQ
@@ -785,32 +778,40 @@ begin
             --------------------------------------------------------
             -- E1 --
             
-            memLoadReady <= dvalid; -- In
-            memLoadValue <= din;    -- In
+            MEM_RESULTS: block
+                signal memLoadReady, memoryMissed: std_logic := '0';
+                signal memLoadValue, memResult: Mword := (others => '0');
+                signal memoryCtrlPre: InstructionControlInfo := DEFAULT_CONTROL_INFO;                
+            begin
+                memLoadReady <= dvalid; -- In
+                memLoadValue <= din;    -- In
             
-            memResult <= getLSResultData_result(  ctrlE1.op,
-                                                  memLoadReady, memLoadValue,
-                                                  sysRegSending, sysRegReadValue,
-                                                  ctOutSQ, ctOutLQ).value;
+                memResult <= getLSResultData_result(  ctrlE1.op,
+                                                      memLoadReady, memLoadValue,
+                                                      sysRegSending, sysRegReadValue,
+                                                      ctOutSQ, ctOutLQ).value;
+    
+                memoryCtrlPre <= getLSResultData(   ctrlE1.op,
+                                                    subpipeM0_E1.value,
+                                                    '1', memLoadReady, sysRegSending,
+                                                    ctOutSQ, ctOutLQ);
+                ctrlE1u.tags <= ctrlE1.tags;
+                ctrlE1u.op <= ctrlE1.op;
+                ctrlE1u.controlInfo <= memoryCtrlPre;
 
-            memoryCtrlPre <= getLSResultData(   ctrlE1.op,
-                                                subpipeM0_E1.value,
-                                                '1', memLoadReady, sysRegSending,
-                                                ctOutSQ, ctOutLQ);
-            ctrlE1u.tags <= ctrlE1.tags;
-            ctrlE1u.op <= ctrlE1.op;
-            ctrlE1u.controlInfo <= memoryCtrlPre;
-
-            memoryMissed <= ctrlE1u.controlInfo.dataMiss or ctrlE1u.controlInfo.sqMiss;
-                            --not memLoadReady;
-
-            subpipeM0_E1_u <= setMemFail(subpipeM0_E1, memoryMissed, memResult);     
-            subpipeM0_E1i_u <= setMemFail(subpipeM0_E1i, memoryMissed, memResult);
-            subpipeM0_E1f_u <= setMemFail(subpipeM0_E1f, memoryMissed, memResult);
+                memoryMissed <= ctrlE1u.controlInfo.dataMiss or ctrlE1u.controlInfo.sqMiss;
+                                --not memLoadReady;
+    
+                subpipeM0_E1_u <= setMemFail(subpipeM0_E1, memoryMissed, memResult);     
+                subpipeM0_E1i_u <= setMemFail(subpipeM0_E1i, memoryMissed, memResult);
+                subpipeM0_E1f_u <= setMemFail(subpipeM0_E1f, memoryMissed, memResult);
+    
+                memFail <= subpipeM0_E1_u.failed;
 
 
-            missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1, memoryMissed, memResult);    -- for MQ             
-            missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f, ctrlE1, ctrlE1u, resOutSQ); -- MQ
+                missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1, memoryMissed, memResult);    -- for MQ             
+                missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f, ctrlE1, ctrlE1u, resOutSQ); -- MQ
+            end block;
 
             --------------------------------------------
 
@@ -844,10 +845,6 @@ begin
         end block;
 
         ------------------------
-        readyRegFlagsSV <= (readyRegFlagsInt_Early(2 - QQQ), '0', '0',
-                            readyRegFlagsInt_Early(5 - QQQ), '0', '0',
-                            readyRegFlagsInt_Early(8 - QQQ), '0', '0',
-                            readyRegFlagsInt_Early(11 - QQQ), '0', '0');
 
         SUBPIPES_STORE_VALUE: block
             use work.LogicIssue.all;
@@ -860,6 +857,10 @@ begin
             constant CFG_SVF: SchedulerUpdateConfig := (true, true, true, FORWARDING_MODES_SV_FLOAT_D, false);
 
             signal wupsInt, wupsFloat: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
+            
+            signal stateExecStoreValue: SchedulerState := DEFAULT_SCHED_STATE;
+            
+            signal sendingToStoreWrite, sendingToStoreWriteInt, sendingToStoreWriteFloat: std_logic := '0';
         begin
             wupsInt <= getInitWakeups(schedInfoIntA, bypassIntSV, CFG_SVI);
             wupsFloat <= getInitWakeups(schedInfoFloatA, bypassFloatSV, CFG_SVF);
@@ -872,6 +873,12 @@ begin
             schedInfoUpdatedIntU <= prepareNewArr( schedInfoUpdatedIntA, readyRegFlagsSV );
             schedInfoUpdatedFloatU <= prepareNewArr( schedInfoUpdatedFloatA, readyRegFlagsFloatSV );
 
+
+            readyRegFlagsSV <= (readyRegFlagsInt_Early(2 - QQQ), '0', '0',
+                                readyRegFlagsInt_Early(5 - QQQ), '0', '0',
+                                readyRegFlagsInt_Early(8 - QQQ), '0', '0',
+                                readyRegFlagsInt_Early(11 - QQQ), '0', '0');
+                                
             IQUEUE_SV: entity work.IssueQueue(Behavioral)
             generic map(
                 NAME => "SVI",
@@ -991,13 +998,17 @@ begin
                         argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueFloatSV, sendingToRegReadFloatSV, valuesFloat0, valuesFloat1, false, true), events);
                     end if;
                 end process;
-
             end block;
 
             sendingToStoreWriteFloat <= slotRegReadFloatSV.full and not outSigsSVF.killFollower;
 
             stateExecStoreValue <= slotRegReadFloatSV when slotRegReadFloatSV.full = '1' else slotRegReadIntSV;
-            sendingToStoreWrite <= sendingToStoreWriteInt or sendingToStoreWriteFloat;            
+            sendingToStoreWrite <= sendingToStoreWriteInt or sendingToStoreWriteFloat;
+
+            sqValueResultRR.full <= sendingToStoreWrite;
+            sqValueResultRR.tag <= stateExecStoreValue.st.tags.renameIndex;
+            sqValueResultRR.dest <= stateExecStoreValue.st.tags.sqPointer;
+            sqValueResultRR.value <= stateExecStoreValue.args(0);
         end block;
 
 
@@ -1047,6 +1058,7 @@ begin
             TMP_ISSUE_F0: block
                 use work.LogicIssue.all;
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal sendingToRegReadF0: std_logic := '0';
             begin    
                 -- Reg
                 slotIssueF0 <= updateDispatchArgs_Is(argStateI);
@@ -1082,14 +1094,6 @@ begin
             end process;
             
          end generate;
-
-
-         sqValueResult.full <= sendingToStoreWrite;
-         sqValueResult.tag <= stateExecStoreValue.st.tags.renameIndex;
-         sqValueResult.dest <= stateExecStoreValue.st.tags.sqPointer;
-         sqValueResult.value <= stateExecStoreValue.args(0);
-         
-         sqValueResultRR <= sqValueResult;
          
          -- StoreData issue control:
          -- When Int and FP store data issue at the same time, the port conflict is resolved thus:
@@ -1158,7 +1162,7 @@ begin
         execOutMain(2) <= subpipeM0_E2;
         execOutMain(3) <= subpipeF0_E2;
 
-        execOutSec(2) <= sqValueResult;
+        execOutSec(2) <= sqValueResultRR;
 
             NEW_FNI: block
             begin
@@ -1461,7 +1465,7 @@ begin
            
         renamedPtr => sqPointer,
             
-        storeValueResult => sqValueResult,
+        storeValueResult => sqValueResultRR,
 
         compareAddressEarlyInput => memAddressInputEarly,
         compareAddressEarlyInput_Ctrl => memCtrlRR,
@@ -1582,7 +1586,7 @@ begin
             storeValueResult => sqValueResultE2,
     
             compareAddressEarlyInput => DEFAULT_EXEC_RESULT,
-            compareAddressEarlyInput_Ctrl => memAddressInputEarlyMQ_Ctrl, -- only 'tag' and 'full'
+            compareAddressEarlyInput_Ctrl => memCtrlRR, -- only 'tag' and 'full'
     
             compareAddressInput => missedMemResultE2,
             compareAddressCtrl => missedMemCtrlE2,

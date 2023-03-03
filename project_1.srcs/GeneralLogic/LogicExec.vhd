@@ -326,14 +326,7 @@ package body LogicExec is
         variable res: ExecResult := DEFAULT_EXEC_RESULT;
         variable adr: Mword := (others => '0'); 
     begin
-        if false then --fromDLQ = '1' then
-            adr := st.args(1);
-        elsif true then -- st.full = '1' then
-        --else --st.full = '1'then
-            adr := add(st.args(0), st.args(1));
-        else
-            adr := (others => '0');
-        end if;
+        adr := add(st.args(0), st.args(1));
 
         res.full := full;
         res.tag := st.st.tags.renameIndex;
@@ -376,15 +369,8 @@ package body LogicExec is
                  res.specialAction := '1';
                  res.newEvent := '1';
              end if;
-
-             if false and (work.LogicQueues.addressHighMatching(result, ctSQ.target) = '0') and ENABLE_SQ_HIGHER_ADR then
-                -- TMP
-                res.sqMiss := '1';
-                res.specialAction := '1';
-                res.newEvent := '1';
-             end if;
          else    -- successful mem load
-         
+            null;
          end if;
 
          -- CAREFUL: store when newer load has been done - violation resolution when reissue is used
