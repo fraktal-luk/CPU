@@ -821,7 +821,7 @@ function TMP_getArgs(argList: ArgArray) return IntArray is
             x := TMP_str2int(s(2 to s'length ));            
         elsif s(1) = '-' then
             x := -TMP_str2int(s(2 to s'length));                  
-        elsif not isAlphanum(s(1)) then
+        elsif not isExtAlphanum(s(1)) then
             x := -1;
         elsif s(1) >= '0' and s(1) <= '9' then
             -- Hope it's a number 

@@ -14,6 +14,9 @@ use work.InstructionState.all;
 
 package PipelineGeneral is
 
+type slv2D is array(natural range <>, natural range <>) of std_logic;
+
+
 function sn(n: integer) return SmallNumber;
 
 function p2i(p: SmallNumber; n: natural) return natural;
@@ -29,14 +32,10 @@ function makeExecResult_N(er: ExecResult; iqTag: SmallNumber) return ExecResult_
 
 
 type IssueQueueSignals is record
+    empty: std_logic;
+    ready: std_logic;
     sending: std_logic;
     cancelled: std_logic;
-    ready: std_logic;
-    empty: std_logic;
-    killSel: std_logic;
-    killSel1: std_logic;
-    killSel2: std_logic;
-    killSel3: std_logic;
     killFollower: std_logic;
     killFollowerNext: std_logic;
 end record;
@@ -58,6 +57,32 @@ type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
 constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
 
 
+    type ArgRenameState is record
+        sel: std_logic;
+        const: std_logic;
+        virtual: RegName;
+        physical: PhysName;
+        physicalStable: PhysName;
+        physicalNew: PhysName;
+        deps: std_logic_vector(0 to PIPE_WIDTH-1);
+        sourceStable: std_logic; 
+        sourceNew: std_logic; 
+        sourceReady: std_logic; 
+    end record;
+
+    constant DEFAULT_ARG_RENAME_STATE: ArgRenameState := (
+        virtual => (others => '0'),
+        physical => (others => '0'),
+        physicalStable => (others => '0'),
+        physicalNew => (others => '0'),
+        deps => (others => '0'),
+        const => '1',
+        sourceStable => '1',
+        others => '0'
+    );
+
+    type ArgRenameStateArray is array(natural range <>) of ArgRenameState;
+
 type RenameInfo is record
     dbInfo: InstructionDebugInfo;
 
@@ -68,16 +93,7 @@ type RenameInfo is record
     psel: std_logic;
     virtualDest: RegName;
     physicalDest: PhysName;
-    sourceSel: std_logic_vector(0 to 2);
-    sourceConst: std_logic_vector(0 to 2); 
-    virtualSources: RegNameArray(0 to 2);
-    physicalSources: PhysNameArray(0 to 2);
-    physicalSourcesStable: PhysNameArray(0 to 2);
-    physicalSourcesNew: PhysNameArray(0 to 2); -- sources in case of of group dependency        
-    deps: DependencySpec;
-    sourcesStable: std_logic_vector(0 to 2); -- true if source is from stable map - always ready
-    sourcesNew: std_logic_vector(0 to 2);   -- true if group dependency
-    sourcesReady: std_logic_vector(0 to 2); -- ready as read from ReadyTable based on NewestMap
+    argStates: ArgRenameStateArray(0 to 2);
 end record;
 
 type RenameInfoArray is array(natural range <>) of RenameInfo;
@@ -92,16 +108,7 @@ constant DEFAULT_RENAME_INFO: RenameInfo := (
     psel => '0',
     virtualDest => (others => '0'),
     physicalDest => (others => '0'),
-    sourceSel => (others => '0'),
-    sourceConst => (others => '0'),
-    virtualSources => (others => (others => '0')),
-    physicalSources => (others => (others => '0')),
-    physicalSourcesStable => (others => (others => '0')),
-    physicalSourcesNew => (others => (others => '0')),
-    deps => (others => (others => '0')),
-    sourcesStable => (others => '0'),
-    sourcesNew => (others => '0'),
-    sourcesReady => (others => '0')       
+    argStates => (others => DEFAULT_ARG_RENAME_STATE)    
 );
 
 -- Is it needed? Unify with ExecResult?
@@ -145,17 +152,10 @@ function getLowBits(vec: std_logic_vector; n: integer) return std_logic_vector;
 function compareTagBefore(tagA, tagB: InsTag) return std_logic;
 function compareTagAfter(tagA, tagB: InsTag) return std_logic;
 
-function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray;
-
-function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot;
-
-function getAddressIncrement(ins: InstructionState) return Mword;
-
 function findDeps(ia: BufferEntryArray) return DependencyVec;
 function getRealDepVecInt(ia: BufferEntryArray; depVec: DependencyVec) return DependencyVec;
 function getRealDepVecFloat(ia: BufferEntryArray; depVec: DependencyVec) return DependencyVec;   
 
-function hasSyncEvent(ins: InstructionState) return std_logic;
 function hasSyncEvent(ct: InstructionControlInfo) return std_logic;
 
 
@@ -186,10 +186,9 @@ function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray;
 function TMP_recodeMul(insVec: InstructionSlotArray) return InstructionSlotArray;
 
-function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray;
-function prepareForStoreValueFloatIQ(insVecFloat: InstructionSlotArray) return InstructionSlotArray;
 
-function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray;
+function swapArgs12(ri: RenameInfo) return RenameInfo;
+function swapArgs12(ria: RenameInfoArray) return RenameInfoArray;
 
 function removeArg2(ria: RenameInfoArray) return RenameInfoArray;
 function useStoreArg2(ria: RenameInfoArray) return RenameInfoArray;
@@ -199,17 +198,10 @@ function updateArgStatesFloat(riaInt, riaFloat: RenameInfoArray; readyRegFlags: 
 
 function replaceDests(insVec: InstructionSlotArray; ria: RenameInfoArray) return InstructionSlotArray;
 
--- For setting dest sel flags in stages after ROB!
-function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray;
-
 function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic;
 function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
 
-function convertROBData(isa: InstructionSlotArray) return ControlPacketArray;
-
 function unfoldOp(op: SpecificOp) return SpecificOp;
-
-function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray;
 
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult;
 function updateMemDest(er: ExecResult; used: std_logic) return ExecResult;
@@ -268,27 +260,17 @@ begin
 end function;
 
 
-    function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray is
-        variable res: PhysNameArray(0 to 3*PIPE_WIDTH-1);
-    begin
-        res(0 to 2) := ri(0).physicalSourcesNew;
-        res(3 to 5) := ri(1).physicalSourcesNew;
-        res(6 to 8) := ri(2).physicalSourcesNew;
-        res(9 to 11) := ri(3).physicalSourcesNew;
-        return res;
-    end function;
-
-function getAddressIncrement(ins: InstructionState) return Mword is
-	variable res: Mword := (others => '0');
+function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray is
+    variable res: PhysNameArray(0 to 3*PIPE_WIDTH-1);
 begin
-	if false then --ins.classInfo.short = '1' then
-		res(1) := '1'; -- 2
-	else
-		res(2) := '1'; -- 4
-	end if;
-	return res;
-end function;
+    for i in 0 to PIPE_WIDTH-1 loop
+        for j in 0 to 2 loop
+            res(3*i + j) := ri(i).argStates(j).physicalNew;
+        end loop;
+    end loop;
 
+    return res;
+end function;
 
 function compareTagBefore(tagA, tagB: InsTag) return std_logic is
 	variable tC: InsTag := (others => '0');
@@ -541,75 +523,33 @@ begin
 end function;
 
 
-function prepareForStoreValueIQ(insVec: InstructionSlotArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+
+function swapArgs12(ri: RenameInfo) return RenameInfo is
+    variable res: RenameInfo := ri;
 begin
-    for i in 0 to PIPE_WIDTH-1 loop    
-        res(i).ins.constantArgs.immSel := '0';
-
-        res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
-        res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;               
-        
-        res(i).ins.virtualArgSpec.intArgSel(0) := insVec(i).ins.virtualArgSpec.intArgSel(2);
-        res(i).ins.virtualArgSpec.args(0) := insVec(i).ins.virtualArgSpec.args(2);
-
-        res(i).ins.physicalArgSpec.intArgSel(0) := insVec(i).ins.physicalArgSpec.intArgSel(2);
-        res(i).ins.physicalArgSpec.args(0) := insVec(i).ins.physicalArgSpec.args(2);                                             
-    end loop;
+    if QQQ = 1 then
+        res.argStates(2) := ri.argStates(1);
+        res.argStates(1) := ri.argStates(2);
+    end if;
     
     return res;
 end function;
 
-
-function prepareForStoreValueFloatIQ(insVecFloat: InstructionSlotArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVecFloat;
-begin
-    for i in 0 to PIPE_WIDTH-1 loop    
-        res(i).ins.constantArgs.immSel := '0';
-        
-        res(i).ins.virtualArgSpec := DEFAULT_ARG_SPEC;
-        res(i).ins.physicalArgSpec := DEFAULT_ARG_SPEC;
-              
-        res(i).ins.virtualArgSpec.floatArgSel(0) := insVecFloat(i).ins.virtualArgSpec.floatArgSel(2);
-        res(i).ins.virtualArgSpec.args(0) := insVecFloat(i).ins.virtualArgSpec.args(2);
-               
-        res(i).ins.physicalArgSpec.floatArgSel(0) := insVecFloat(i).ins.physicalArgSpec.floatArgSel(2);
-        res(i).ins.physicalArgSpec.args(0) := insVecFloat(i).ins.physicalArgSpec.args(2);                                            
-    end loop;
-    
-    return res;
-end function;
-
-
-function TMP_removeArg2(insVec: InstructionSlotArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+function swapArgs12(ria: RenameInfoArray) return RenameInfoArray is
+    variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := ria;
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i).ins.virtualArgSpec.intArgSel(2) := '0';
-        res(i).ins.virtualArgSpec.args(2) := (others => '0');
-        
-        res(i).ins.physicalArgSpec.intArgSel(2) := '0';
-        res(i).ins.physicalArgSpec.args(2) := (others => '0');                                                
+        res(i) := swapArgs12(res(i));
     end loop;
     
     return res;
 end function;
-
 
 function removeArg2(ria: RenameInfoArray) return RenameInfoArray is
     variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := ria;
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(i).sourceSel(2) := '0';
-        res(i).sourceConst(2) := '1'; 
-        res(i).virtualSources(2) := (others => '0');
-        res(i).physicalSources(2) := (others => '0');
-        res(i).physicalSourcesStable(2) := (others => '0');
-        res(i).physicalSourcesNew(2) := (others => '0'); -- sources in case of of group dependency        
-        res(i).deps(2) := (others => '0');
-        res(i).sourcesStable(2) := '1'; -- true if source is from stable map - always ready
-        res(i).sourcesNew(2) := '0';   -- true if group dependency
-        res(i).sourcesReady(2) := '0'; -- ready as read from ReadyTable based on NewestMap 
+        res(i).argStates(2) := DEFAULT_ARG_RENAME_STATE;
     end loop;
     
     return res;
@@ -623,38 +563,9 @@ begin
         res(i).destSelFP := '0';
         res(i).physicalDest := (others => '0');
 
-        res(i).sourceSel(0) := res(i).sourceSel(2);
-        res(i).sourceConst(0) := res(i).sourceConst(2); 
-        res(i).virtualSources(0) := res(i).virtualSources(2);
-        res(i).physicalSources(0) := res(i).physicalSources(2);
-        res(i).physicalSourcesStable(0) := res(i).physicalSourcesStable(2);
-        res(i).physicalSourcesNew(0) := res(i).physicalSourcesNew(2); -- sources in case of of group dependency        
-        res(i).deps(0) := res(i).deps(2);
-        res(i).sourcesStable(0) := res(i).sourcesStable(2); -- true if source is from stable map - always ready
-        res(i).sourcesNew(0) := res(i).sourcesNew(2);   -- true if group dependency
-        res(i).sourcesReady(0) := res(i).sourcesReady(2); -- ready as read from ReadyTable based on NewestMap
-
-        res(i).sourceSel(1) := '0';
-        res(i).sourceConst(1) := '1'; 
-        res(i).virtualSources(1) := (others => '0');
-        res(i).physicalSources(1) := (others => '0');
-        res(i).physicalSourcesStable(1) := (others => '0');
-        res(i).physicalSourcesNew(1) := (others => '0'); -- sources in case of of group dependency        
-        res(i).deps(1) := (others => '0');
-        res(i).sourcesStable(1) := '1'; -- true if source is from stable map - always ready
-        res(i).sourcesNew(1) := '0';   -- true if group dependency
-        res(i).sourcesReady(1) := '0'; -- ready as read from ReadyTable based on NewestMap
-        
-        res(i).sourceSel(2) := '0';
-        res(i).sourceConst(2) := '1'; 
-        res(i).virtualSources(2) := (others => '0');
-        res(i).physicalSources(2) := (others => '0');
-        res(i).physicalSourcesStable(2) := (others => '0');
-        res(i).physicalSourcesNew(2) := (others => '0'); -- sources in case of of group dependency        
-        res(i).deps(2) := (others => '0');
-        res(i).sourcesStable(2) := '1'; -- true if source is from stable map - always ready
-        res(i).sourcesNew(2) := '0';   -- true if group dependency
-        res(i).sourcesReady(2) := '0'; -- ready as read from ReadyTable based on NewestMap        
+        res(i).argStates(0) := res(i).argStates(2);        
+        res(i).argStates(1) := DEFAULT_ARG_RENAME_STATE;        
+        res(i).argStates(2) := DEFAULT_ARG_RENAME_STATE;        
     end loop;
     
     return res;
@@ -665,7 +576,10 @@ function updateArgStates(riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_l
     variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(3*i to 3*i + 2) := ((riaInt(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaInt(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
+        for j in 0 to 2 loop
+            --res(3*i to 3*i + 2) := ((riaInt(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaInt(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
+            res(3*i + j) := ((riaInt(i).argStates(j).sourceStable or readyRegFlags(3*i +j)) and not riaInt(i).argStates(j).sourceNew);-- and not riaFloat(i).sourcesNew);
+        end loop;
     end loop;
     return res;
 end function;
@@ -674,7 +588,10 @@ function updateArgStatesFloat(riaInt, riaFloat: RenameInfoArray; readyRegFlags: 
     variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        res(3*i to 3*i + 2) := ((riaFloat(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaFloat(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
+        for j in 0 to 2 loop
+            --res(3*i to 3*i + 2) := ((riaFloat(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaFloat(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
+            res(3*i + j) := ((riaFloat(i).argStates(j).sourceStable or readyRegFlags(3*i +j)) and not riaFloat(i).argStates(j).sourceNew);-- and not riaFloat(i).sourcesNew);
+        end loop;
     end loop;
     return res;
 end function;
@@ -684,43 +601,15 @@ function replaceDests(insVec: InstructionSlotArray; ria: RenameInfoArray) return
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
     for i in res'range loop
-         res(i).ins.physicalArgSpec.intDestSel := ria(i).destSel and not ria(i).destSelFP;
-         res(i).ins.physicalArgSpec.floatDestSel := ria(i).destSelFP;
+      --   res(i).ins.physicalArgSpec.intDestSel := ria(i).destSel and not ria(i).destSelFP;
+      --   res(i).ins.physicalArgSpec.floatDestSel := ria(i).destSelFP;
          
-         res(i).ins.physicalArgSpec.dest := ria(i).physicalDest;
+       --  res(i).ins.physicalArgSpec.dest := ria(i).physicalDest;
+            res(i).ins.dest_T := ria(i).physicalDest;
     end loop;
     return res;
 end function;
-        
-        
-        
-function restoreRenameIndex(content: InstructionSlotArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := content;
-begin
-    for i in 1 to PIPE_WIDTH-1 loop
-        res(i).ins.tags.renameIndex := clearTagLow(res(0).ins.tags.renameIndex) or i2slv(i, TAG_SIZE);
-    end loop;
 
-    return res;
-end function;
-
-
-function getSpecialActionSlot(insVec: InstructionSlotArray) return InstructionSlot is
-   variable res: InstructionSlot := insVec(0);
-begin
-   res.full := '0';  
-   for i in PIPE_WIDTH-1 downto 0 loop
-       -- TODO: simpler to get last full slot because if a static event is present, nothing will be after it in group.
-       --       Then the 'full' bit of 'special' would be set if specialAction/exc/dbTrap
-       if (insVec(i).full and hasSyncEvent(insVec(i).ins)) = '1' then
-           res := insVec(i);
-           res.ins.specificOperation.system := SysOp'val(slv2u(res.ins.specificOperation.bits));
-           exit;
-       end if;
-   end loop;
-   
-   return res;
-end function;    
 
 
 
@@ -807,7 +696,7 @@ begin
     for i in res'range loop
         res(i).ins.specificOperation.float := FpOp'val(slv2u(res(i).ins.specificOperation.bits));
         res(i).ins.virtualArgSpec.intDestSel := '0';          
-        res(i).ins.physicalArgSpec.intDestSel := '0';        
+        --res(i).ins.physicalArgSpec.intDestSel := '0';        
     end loop;
     return res;
 end function;
@@ -818,7 +707,7 @@ begin
     for i in res'range loop     
         res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
         res(i).ins.virtualArgSpec.floatDestSel := '0';          
-        res(i).ins.physicalArgSpec.floatDestSel := '0';          
+        --res(i).ins.physicalArgSpec.floatDestSel := '0';          
     end loop;  
     return res;
 end function;
@@ -829,7 +718,7 @@ begin
     for i in res'range loop     
         res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
         res(i).ins.virtualArgSpec.floatDestSel := '0';          
-        res(i).ins.physicalArgSpec.floatDestSel := '0';          
+        --res(i).ins.physicalArgSpec.floatDestSel := '0';          
     end loop;  
     return res;
 end function;
@@ -866,45 +755,11 @@ begin
 end function;
 
 
-function hasSyncEvent(ins: InstructionState) return std_logic is
-begin
-    return  ins.controlInfo.hasException or ins.controlInfo.specialAction or ins.controlInfo.dbtrap; 
-end function;
-
 function hasSyncEvent(ct: InstructionControlInfo) return std_logic is
 begin
     return  ct.hasException or ct.specialAction or ct.dbtrap; 
 end function;
 
-
-function setDestFlags(insVec: InstructionSlotArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-    variable found: boolean := false;
-begin
-    
-    for i in 0 to PIPE_WIDTH-1 loop
-        if insVec(i).full = '0' or found then
-            res(i).full := '0';
-            res(i).ins.virtualArgSpec.intDestSel := '0';
-            res(i).ins.virtualArgSpec.floatDestSel := '0';                        
-        end if;            
-    
-        if insVec(i).ins.controlInfo.hasException = '1' or insVec(i).ins.controlInfo.specialAction = '1' then
-            found := true;
-        end if;
-        
-        if insVec(i).full = '0' or found then
-            res(i).ins.physicalArgSpec.intDestSel := '0';
-            res(i).ins.physicalArgSpec.floatDestSel := '0';                        
-        else
-            res(i).ins.physicalArgSpec.intDestSel := res(i).ins.virtualArgSpec.intDestSel;
-            res(i).ins.physicalArgSpec.floatDestSel := res(i).ins.virtualArgSpec.floatDestSel;  
-        end if;
-            found := false;
-    end loop;
-    
-    return res;
-end function;
 
 
 function getQueueEmpty(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return std_logic is
@@ -962,20 +817,7 @@ begin
     return res;
 end function;
 
-function convertROBData(isa: InstructionSlotArray) return ControlPacketArray is
-    variable res: ControlPacketArray(isa'range) := (others => DEFAULT_CONTROL_PACKET);
-begin
-    for i in res'range loop
-        res(i).dbInfo := isa(i).ins.dbInfo;
-        res(i).controlInfo := isa(i).ins.controlInfo;
-        res(i).controlInfo.full := isa(i).full;
 
-        res(i).classInfo.branchIns := isa(i).ins.typeInfo.branchIns;      
-        res(i).classInfo.secCluster := isa(i).ins.typeInfo.secCluster;      
-        res(i).classInfo.useLQ := isa(i).ins.typeInfo.useLQ;      
-    end loop;
-    return res;
-end function;
 
 function unfoldOp(op: SpecificOp) return SpecificOp is
     variable res: SpecificOp := op;
@@ -993,40 +835,11 @@ begin
     return res;
 end function;
 
-function getInsSlot(elem: BufferEntry) return InstructionSlot is
-    variable res: InstructionSlot := DEFAULT_INS_SLOT;
-begin
-    res.full := elem.full;
-    res.ins.dbInfo := elem.dbInfo;
-
-    res.ins.specificOperation := unfoldOp(elem.specificOperation);
-
-    res.ins.typeInfo := elem.classInfo;
-    res.ins.typeInfo.useSQ := elem.classInfo.secCluster;
-
-    res.ins.constantArgs := elem.constantArgs;
-    res.ins.virtualArgSpec := elem.argSpec; 
-
-
-    res.ins.controlInfo.firstBr := elem.firstBr;
-    res.ins.controlInfo.specialAction := elem.specialAction;
-
-    return res;
-end function;
-
-function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray is
-    variable res: InstructionSlotArray(elemVec'range);
-begin
-    for i in res'range loop
-        res(i) := getInsSlot(elemVec(i));
-    end loop;
-    return res;
-end function;
 
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult is
     variable res: ExecResult := er;
 begin
-    res.full := er.full and not fail;
+    res.full := er.full and not (fail and bool2std(ENABLE_MQ));
     res.failed := er.full and fail;
     res.value := memResult;
     return res;
@@ -1078,7 +891,7 @@ begin
     res.tags := ctrlE1u.tags;
     res.target(SMALL_NUMBER_SIZE-1 downto 0) := resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
     res.classInfo.useFP := subpipeM0_E1f.full;
-    res.controlInfo.tlbMiss := ctrlE1u.controlInfo.tlbMiss;  -- TODO: should be form E1, not E2? 
+    res.controlInfo.tlbMiss := ctrlE1u.controlInfo.tlbMiss;
     res.controlInfo.dataMiss := ctrlE1u.controlInfo.dataMiss;
     res.controlInfo.sqMiss := ctrlE1u.controlInfo.sqMiss;                    
     return res;

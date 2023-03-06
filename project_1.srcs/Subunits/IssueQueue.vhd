@@ -36,19 +36,22 @@ entity IssueQueue is
 		newArr: in SchedulerInfoArray(0 to PIPE_WIDTH-1);
         TMP_newTags: in SmallNumberArray(0 to RENAME_W-1);
 
+        inReady: in std_logic;
+        inMask: std_logic_vector;
+
+        TMP_outTagsPre: out SmallNumberArray(0 to RENAME_W-1);
+        TMP_outTags: out SmallNumberArray(0 to RENAME_W-1);
+
+        accept: out std_logic;
+
 		nextAccepting: in std_logic;
 
 		events: in EventState;
-
-		fni: in ForwardingInfo;
 
         bypass: in BypassState;
 
 		schedulerOut: out SchedulerState;
         outputSignals: out IssueQueueSignals;
-
-        freedMask: out std_logic_vector(0 to IQ_SIZE-1);
-        usedMask: out std_logic_vector(0 to IQ_SIZE-1);
 
         dbState: in DbCoreState		
 	);
@@ -64,44 +67,69 @@ architecture Behavioral of IssueQueue is
 
     signal recoveryCounter: SmallNumber := (others => '0');
 
-    signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdated_N, queueContentUpdated_2, queueContentUpdatedSel, queueContentUpdatedSel_NEW
-            : SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
+    signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdated_2, queueContentUpdatedSel: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
 
     signal ageMatrix, ageMatrixNext: slv2D(0 to IQ_SIZE-1, 0 to IQ_SIZE-1) := (others => (others => '0'));
     signal insertionLocs: slv2D(0 to IQ_SIZE-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
-    signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
+    signal wups, wupsSelection, wupsSelection2: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
 
-    signal controlSigs: SlotControlArray(0 to IQ_SIZE-1) := (others => DEFAULT_SLOT_CONTROL);
-    signal fullMask, trialMask, killMask, readyMaskAll, selMask, selMask1, selMask2, selMask3, selMask4: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+    signal controlSigs, controlSigs_QC: SlotControlArray(0 to IQ_SIZE-1) := (others => DEFAULT_SLOT_CONTROL);
+    signal fullMask, trialMask, trialMask_2, trialUpdatedMask, killMask, readyMaskAll, selMask, selMask1, selMask2, selMask3: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
-    signal anyReadyFull,
-                    sends, sendingKilled,
-                    killFollowerCmp, killFollowerNextCmp,
-                    sentKilled, sentKilled1, sentKilled2, sentKilled3, sentKilled4
-                    : std_logic := '0';
+    signal anyReadyFull, sends, sendingKilled, sentKilled, sendingTrial, sentTrial1, sentTrial2, sentTrial1_T, sentTrial2_T: std_logic := '0';
 
     signal selectedSlot, selectedSlot1, selectedSlot2, selectedSlot3: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
     signal selectedIqTag: SmallNumber := (others => '0');
 
     signal wa: WakeupInfoArray(0 to IQ_SIZE-1);
 
+    signal freedMaskSig, usedMaskSig: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+
+    signal TMP_tags: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
+
+    alias memFail is bypass.memFail;
+                
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
 
 begin
 
-    wups <= getSlowWakeups(queueContent, fni, bypass, CFG_WAIT);
+    ALLOCATOR: entity work.QueueAllocator
+    generic map(
+        QUEUE_SIZE => 12, BANK_SIZE => 3
+    )
+    port map(
+        clk => clk, evt => events,
 
-    wupsSelection <= getFastWakeups_O(queueContent, fni, CFG_SEL);
+        inReady => inReady,
+        inMask => inMask,
 
-        --  wa <= getWakeupArray(queueContent, fni, WAKEUP_SPEC, CFG_WAIT); -- CFG_WAIT is needed for 'ignoreMemFail')
+        TMP_outTags => TMP_tags,
+        TMP_outTagsPre => TMP_outTagsPre,
 
-    queueContentUpdatedSel <= updateSchedulerArray_S_NEW(queueContent, fni, wupsSelection, fni.memFail, CFG_SEL);
+        accept => accept,
 
-    queueContentUpdated <= updateSchedulerArray_N(queueContent, fni, wups, fni.memFail, CFG_WAIT);
-    queueContentUpdated_2 <= iqNext_NS(queueContentUpdated, sends, killMask, trialMask, selMask, fni.memFail);
+        iqUsed => usedMaskSig,
+        iqFreed => freedMaskSig
+    );
 
-    insertionLocs <= getNewLocs_N(fullMask, TMP_newTags, newArr);
+    TMP_outTags <= TMP_tags;
+
+    wups <= getSlowWakeups(queueContent, bypass, CFG_WAIT);
+
+    FAST_WAKEUP: if ENABLE_FAST_WAKEUP generate
+        wupsSelection <= getFastWakeups_N2(queueContent, bypass, CFG_SEL);
+        wupsSelection2 <= getFastWakeups_N2(queueContent, bypass, CFG_SEL);
+    end generate;
+
+    --  wa <= getWakeupArray(queueContent, fni, WAKEUP_SPEC, CFG_WAIT); -- CFG_WAIT is needed for 'ignoreMemFail')
+
+    queueContentUpdatedSel <= updateSchedulerArray_S_NEW(queueContent, wupsSelection, memFail, CFG_SEL);
+
+    queueContentUpdated <= updateSchedulerArray_N(queueContent, wups, memFail, CFG_WAIT);
+    queueContentUpdated_2 <= iqNext_NS(queueContentUpdated, sends, killMask, trialMask, selMask, memFail);
+
+    insertionLocs <= getNewLocs_N(fullMask, TMP_tags, newArr);
     queueContentNext <= iqNext_NS_2(queueContentUpdated_2, newArr, prevSendingOK, insertionLocs);
 
     ageMatrixNext <= updateAgeMatrix(ageMatrix, insertionLocs, fullMask);
@@ -113,60 +141,100 @@ begin
             queueContent <= queueContentNext;
             ageMatrix <= ageMatrixNext;
 
-                selectedSlot1 <= selectedSlot;
-                selectedSlot2 <= selectedSlot1;
-                selectedSlot3 <= selectedSlot2;
+            selectedSlot1 <= selectedSlot;
+            selectedSlot2 <= selectedSlot1;
+            selectedSlot3 <= selectedSlot2;
 
             selMask1 <= selMask;
             selMask2 <= selMask1;
             selMask3 <= selMask2;
-            selMask4 <= selMask3;
 
             sentKilled <= sendingKilled;
-            sentKilled1 <= sendingKilled;
-            sentKilled2 <= isNonzero(killMask and selMask1);
-            sentKilled3 <= isNonzero(killMask and selMask2);
-            sentKilled4 <= isNonzero(killMask and selMask3);
 
-               killFollowerCmp <= isNonzero(selMask1 and trialMask);
-               killFollowerNextCmp <= isNonzero(selMask and trialMask);
+            sentTrial1 <= isNonzero(selMask and trialMask);
+            sentTrial2 <= isNonzero(selMask1 and trialMask);
+
         end if;
     end process;
 
+    sentTrial1_T <= isNonzero(selMask1 and trialUpdatedMask);
+    sentTrial2_T <= isNonzero(selMask2 and trialUpdatedMask);
+    
     controlSigs <= getControlSignals(queueContentUpdatedSel, events);
+    controlSigs_QC <= getControlSignals(queueContent, events);
 
-    -- Vector signals
-    killMask <= getKilledVec(controlSigs);
-    trialMask <= getTrialVec(controlSigs);
-    fullMask <= getFullVec(controlSigs);
+    killMask <=   (others => '1') when events.lateEvent = '1' 
+          else trialUpdatedMask  when events.execEvent = '1'
+          else (others => '0');
+
+
+    --        ch0 <= bool2std(trialMask_2 = trialMask);
+
+    trialMask <= getTrialMask(queueContent, events);
+
+   --     trialMask_2 <= getTrialVec(controlSigs);
+
+    trialUpdatedMask <= getTrialUpdatedVec(--controlSigs);
+                                            controlSigs_QC);
+    fullMask <= getFullVec(--controlSigs);
+                            controlSigs_QC);
+
+
+    freedMaskSig <= getFreedVec(--controlSigs);
+                                controlSigs_QC);
+
+
     readyMaskAll <= getReadyVec(controlSigs);
+
 
     -- Scalar signals
     anyReadyFull <= isNonzero(readyMaskAll);
     sends <= anyReadyFull and nextAccepting;
-    sendingKilled <= isNonzero(killMask and selMask);
+    sendingTrial <= isNonzero(selMask and trialUpdatedMask);
+    sendingKilled <= (sendingTrial and events.execEvent) or events.lateEvent;
+
 
     -- Selection for issue
     selMask <= getSelMask(readyMaskAll, ageMatrix);
-    selectedSlot <= queueSelect(queueContentUpdatedSel, selMask);  
-    selectedIqTag <= sn(getFirstOnePosition(selMask));
+    selectedSlot <= queueSelect(queueContentUpdatedSel, selMask);
+ 
+        EEEEE: block
+            signal fop: integer := 0;
+            signal tg, tg2: SmallNumber := sn(0);
+            
+            function getTagLowPart(selMask: std_logic_vector) return SmallNumber is
+                variable res: SmallNumber := sn(-1);
+            begin
+                for i in selMask'range loop
+                    if selMask(i) = '1' then
+                        res := sn(i);
+                    end if;
+                end loop;
+                res(7 downto 4) := (others => '0');
+                return res;
+            end function;
+            
+        begin
+            fop <= getFirstOnePosition(selMask);
+            tg <= sn(getFirstOnePosition(selMask));
+            --tg2(3 downto 0) <= tg(3 downto 0);
+                tg2 <= getTagLowPart(selMask);
+
+            selectedIqTag(4) <= sends;
+            selectedIqTag(3 downto 0) <= tg2(3 downto 0);
+        end block;
 
     schedulerOut <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
 
-    outputSignals <=   (sending => sends,   -- 
-                        cancelled => sentKilled or fni.memFail, --
+    outputSignals <=   (empty => '0',--isEmpty,
                         ready => '0',--anyReadyLive,
-                        empty => '0',--isEmpty,
-                        killSel => '0',--sendingKilled,
-                        killSel1 => '0',--sentKilled1,
-                        killSel2 => sentKilled2, --
-                        killSel3 => sentKilled3,
-                        killFollower => killFollowerCmp and events.execEvent,  -- 
-                        killFollowerNext => killFollowerNextCmp and events.execEvent --
+                        sending => sends,
+                        cancelled => sentKilled or memFail, --
+                        killFollower => (sentTrial2_T and events.execEvent) or events.lateEvent,
+                        killFollowerNext => (sentTrial1_T and events.execEvent) or events.lateEvent
                         );
 
-    freedMask <= getFreedVec(controlSigs);
-    usedMask <= fullMask;
+    usedMaskSig <= fullMask;
 
     COUNTERS_SYNCHRONOUS: process(clk)
     begin

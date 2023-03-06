@@ -344,7 +344,7 @@ package body AbstractRenaming is
 
     function clearAbstractMappings(list: MapList) return MapList is
     begin
-    
+
     end function;
 
     function clearAbstractMappingsPartial(list: MapList; tag: InsTag; startPtr, endPtr: SmallNumber) return MapList is

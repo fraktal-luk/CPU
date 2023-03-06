@@ -197,7 +197,6 @@ type ExceptionType is (none, unknown,
 							integerOverflow,	integerDivisionBy0
 						);
 
--- TODO: enable 64b
 constant EXC_BASE:   Mword := X"00000100";
 constant CALL_BASE:  Mword := X"00000180";
 constant RESET_BASE: Mword := X"00000200";

@@ -50,8 +50,7 @@ type ExecFunc is (
 --------------
 type SubpipeType is (None, ALU, Mem, FP);
 
--- TODO: opJl is unneeded because opJ can have a destination
-type ArithOp is (opAnd, opOr, opXor, opAdd, opSub, opShl, opSha, opRot, opJz, opJnz, opJ, opJl, opMul, opMulHS, opMulHU, opDiv);
+type ArithOp is (opAnd, opOr, opXor, opAdd, opSub, opShl, opSha, opRot, opJz, opJnz, opJ, opMul, opMulHS, opMulHU, opDiv);
 
 type MemOp is (opLoad, opStore, opLoadSys, opStoreSys);
 
@@ -139,6 +138,11 @@ type InstructionControlInfo is record
     ignored: std_logic;
 end record;
 
+type InstructionControlInfo_T is record
+	specialAction_T: std_logic;
+    firstBr_T: std_logic;
+end record;
+
 
 type ClassInfo_Dispatch is record
 	storeInt: std_logic;
@@ -185,9 +189,28 @@ type InstructionTags is record
 end record;
 
 
+type BufferEntry is record
+    dbInfo: InstructionDebugInfo;
+    full: std_logic;
+    firstBr: std_logic; -- TEMP
+
+    -- NOTE: for compresion maybe can be just 2 bits:
+    --       (br NT, br T, br T confirmed, special) is 4 possibilities     
+    frontBranch: std_logic;     -- seems unused
+    confirmedBranch: std_logic; -- seems unused
+    specialAction: std_logic;
+
+    classInfo: InstructionClassInfo;
+    specificOperation: SpecificOp;
+
+    constantArgs: InstructionConstantArgs;
+    argSpec: InstructionArgSpec;
+end record;
+
+
 type InstructionState is record
     dbInfo: InstructionDebugInfo;
-	controlInfo: InstructionControlInfo;
+	controlInfo: InstructionControlInfo_T;
 	tags: InstructionTags;
 	specificOperation: SpecificOp;
 	typeInfo: InstructionClassInfo;
@@ -195,7 +218,8 @@ type InstructionState is record
 
 	constantArgs: InstructionConstantArgs;
 	virtualArgSpec: InstructionArgSpec;
-	physicalArgSpec: InstructionArgSpec;
+	--physicalArgSpec: InstructionArgSpec;
+	   dest_T: PhysName; 
 end record;
 
 type InstructionStateArray is array(integer range <>) of InstructionState;
@@ -357,25 +381,6 @@ end record;
 type ExecResultArray is array(integer range <>) of ExecResult;
 
 
-type BufferEntry is record
-    dbInfo: InstructionDebugInfo;
-    full: std_logic;
-    firstBr: std_logic; -- TEMP
-
-    -- NOTE: for compresion maybe can be just 2 bits:
-    --       (br NT, br T, br T confirmed, special) is 4 possibilities     
-    frontBranch: std_logic;
-    confirmedBranch: std_logic;
-    specialAction: std_logic;
-
-    classInfo: InstructionClassInfo;
-    specificOperation: SpecificOp;
-
-    constantArgs: InstructionConstantArgs;
-    argSpec: InstructionArgSpec;
-end record;
-
-
 type EventState is record
     lateEvent: std_logic;
     execEvent: std_logic;
@@ -451,10 +456,15 @@ constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
     dataMiss => '0',
     sqMiss => '0',
     firstBr => '0',
-    killed => '0',
-    causing => '0',
-    ignored => '0'
+    killed => '0',  -- ??
+    causing => '0', -- ??
+    ignored => '0'  -- ??
 );
+
+    constant DEFAULT_CONTROL_INFO_T: InstructionControlInfo_T := (											    											
+        specialAction_T => '0',
+        firstBr_T => '0'
+    );
 
 constant DEFAULT_CLASS_INFO: InstructionClassInfo := ( 
     mainCluster => '0',
@@ -480,14 +490,15 @@ constant DEFAULT_ARG_SPEC: InstructionArgSpec := (
 
 constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
     dbInfo => DEFAULT_DEBUG_INFO,
-	controlInfo => DEFAULT_CONTROL_INFO,	
+	controlInfo => DEFAULT_CONTROL_INFO_T,	
 	specificOperation => DEFAULT_SPECIFIC_OP,
 	tags => DEFAULT_INSTRUCTION_TAGS,
 	typeInfo => DEFAULT_CLASS_INFO,
 	dispatchInfo => DEFAULT_CLASS_INFO_DISPATCH,
 	constantArgs => DEFAULT_CONSTANT_ARGS,
 	virtualArgSpec => DEFAULT_ARG_SPEC,
-	physicalArgSpec => DEFAULT_ARG_SPEC
+	--physicalArgSpec => DEFAULT_ARG_SPEC,
+	   dest_T => (others => '0') 
 );
 
 constant DEFAULT_INS_STATE: InstructionState := DEFAULT_INSTRUCTION_STATE;

@@ -55,18 +55,18 @@ architecture Behavioral of UnitFront is
 
     signal dummyBP0, dummyBP1: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0'); -- Results from BP
 	
-	signal fetchedLine0, fetchedLine1: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0'));
+	signal fetchedLine0, fetchedLine1, fetchedLine1_Sh: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0'));
 	
 	signal sendingOutFetch0, sendingOutFetch1, sendingOutBuffer, bufferAccepting, earlyBranchSending, sendingToBranchTransfer,
            pcEn, frontBranchEvent, killAll, killAllOrFront, sendingToEarlyBranch, sendingToBQ, sendingToBuffer, fetchStall, full0, full1, fullBr, fullBt,
 	                                                                                                      ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0';
-    signal cpFetch0, cpFetch1, earlyBranchIn, earlyBranchOut, stageDataInFetch0, stageDataOutFetch0, stageDataOutFetch1: ControlPacket := DEFAULT_CONTROL_PACKET;
+    signal cpFetch0, cpFetch1, earlyBranchIn, earlyBranchIn_N, earlyBranchOut, stageDataInFetch0, stageDataOutFetch0, stageDataOutFetch1: ControlPacket := DEFAULT_CONTROL_PACKET;
     signal bqDataSig, bqDataSigPre: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 
 	signal predictedAddress, frontTarget: Mword := (others => '0');
 	signal decodeCounter, decodeCounterNext: Word := (others => '0');
 
-	signal dataToIbuffer, ibufDataOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
+	signal decodedEA, decodedEA_N, dataToIbuffer, ibufDataOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 begin
 	killAll <= execEventSignal or lateEventSignal;
     killAllOrFront <= killAll or frontBranchEvent;
@@ -137,28 +137,41 @@ begin
 	sendingToBuffer <= sendingOutFetch1 and not fetchStall;
 	
 	LEGACY: block
-	    signal partMask, decodedFullMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        signal dataToIbuffer_OLD: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-        signal earlyBranchMultiDataInA_IB, decodedGroup: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-        signal toBQ, data_C, data_CA: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);	   
+	    signal partMask, partMask_N: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        signal toBQ: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
+        signal frontControl: ControlPacket := DEFAULT_CONTROL_PACKET;
+                
+        signal groupShift: SmallNumber := sn(0);	   
+        signal lastIndex: SmallNumber := sn(3);
+        
+        signal hasBranch: std_logic := '0';        
 	begin
 	    partMask <= partialMask(predictedAddress);
-        decodedGroup <= decodeGroup(stageDataOutFetch1, fetchedLine1, stageDataOutFetch1.ip, partMask);
-	
-        data_C <= getFrontEventMulti(predictedAddress, stageDataOutFetch1.ip, stageDataOutFetch1.target, stageDataOutFetch1, fetchedLine1, partMask, decodedGroup);
 
-        decodedFullMask <= extractFullMask(data_C);
+        groupShift(1 downto 0) <= predictedAddress(3 downto 2);
+        lastIndex <= frontControl.tags.bqPointer;
 
-        earlyBranchIn <= getEarlyEvent(data_C, stageDataOutFetch1.target, predictedAddress, fetchStall);
+            fetchedLine1_Sh <= fetchedLine1                                                               when groupShift(1 downto 0) = "00"
+                        else   fetchedLine1(1 to 3) & fetchedLine1(3)                                     when groupShift(1 downto 0) = "01"
+                        else   fetchedLine1(2 to 3) & fetchedLine1(3) & fetchedLine1(3)                   when groupShift(1 downto 0) = "10"
+                        else   fetchedLine1(3 to 3) & fetchedLine1(3) & fetchedLine1(3) & fetchedLine1(3) when groupShift(1 downto 0) = "11";
 
-        earlyBranchMultiDataInA_IB <= setFullMask(decodedGroup, decodedFullMask);
-        
-        dataToIbuffer_OLD <= adjustStage(earlyBranchMultiDataInA_IB);
-        dataToIbuffer <= assignSeqNum(getEntryArray(dataToIbuffer_OLD), decodeCounter);
+            partMask_N <= partMask                      when groupShift(1 downto 0) = "00"
+                        else   partMask(1 to 3) & "0"   when groupShift(1 downto 0) = "01"
+                        else   partMask(2 to 3) & "00"  when groupShift(1 downto 0) = "10"
+                        else   partMask(3 to 3) & "000" when groupShift(1 downto 0) = "11";
 
-        data_CA <= adjustStage(data_C);
+        frontControl <= getFrontEvent(predictedAddress, stageDataOutFetch1.target, fetchedLine1, partMask);
+        earlyBranchIn <= getEarlyEvent(frontControl, stageDataOutFetch1.target, predictedAddress, fetchStall, sendingOutFetch1);
 
-        toBQ <= prepareForBQ(stageDataOutFetch1.ip, data_CA);
+        decodedEA <= decodeGroup(fetchedLine1_Sh, slv2u(lastIndex) + 1 - slv2u(groupShift), predictedAddress, stageDataOutFetch1);
+
+        dataToIbuffer <= assignSeqNum(decodedEA, decodeCounter, stageDataOutFetch1);
+
+        hasBranch <= groupHasBranch(dataToIbuffer);
+
+        toBQ <= getControlA(predictedAddress, fetchedLine1_Sh, slv2u(lastIndex) + 1 - slv2u(groupShift), hasBranch);
+
         bqDataSigPre <= assignSeqNum(toBQ, decodeCounter);
     end block;
 
@@ -198,7 +211,7 @@ begin
 	frontEventSignal <= frontBranchEvent;	
     frontCausing.full <= frontBranchEvent;
     frontCausing.value <= earlyBranchOut.target;
-        
+
     -- 	Pipeline backwards
 	frontAccepting <= '1';
 

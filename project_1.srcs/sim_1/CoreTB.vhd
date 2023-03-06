@@ -694,22 +694,26 @@ BEGIN
                 if rising_edge(clk) then
                     if resetDataMem = '1' then
                         dataMem <= (others => (others => '0'));
-                    elsif en = '1' then			
-                    -- TODO: define effective address exact size
-                
-                    -- Reading
-                    memReadDone <= dread;
-                    memReadDonePrev <= memReadDone;
-                    memReadValue <= dataMem(slv2u(dadr(MWORD_SIZE-1 downto 2))) ;-- CAREFUL: pseudo-byte addressing 
-                    memReadValuePrev <= memReadValue;	
+                    elsif en = '1' then
+                        -- TODO: define effective address exact size
                     
-                    -- Writing
-                    memWriteDone <= dwrite;
-                    memWriteValue <= dout;
-                    memWriteAddress <= doutadr;
-                    if dwrite = '1' then
-                        dataMem(slv2u(doutadr(MWORD_SIZE-1 downto 2))) <= dout; -- CAREFUL: pseudo-byte addressing		
-                    end if;
+                        -- Reading
+                        memReadDone <= dread;
+                        
+                        memReadDonePrev <= memReadDone;
+                        if isNonzero(dadr(MWORD_SIZE-1 downto 10)) /= '1' then
+                            memReadValue <= dataMem(slv2u(dadr(MWORD_SIZE-1 downto 2))) ;-- CAREFUL: pseudo-byte addressing 
+                        end if;
+                        memReadValuePrev <= memReadValue;	
+                        
+                        -- Writing
+                        memWriteDone <= dwrite;
+                        memWriteValue <= dout;
+                        memWriteAddress <= doutadr;
+                        
+                        if dwrite = '1' then
+                            dataMem(slv2u(doutadr(MWORD_SIZE-1 downto 2))) <= dout; -- CAREFUL: pseudo-byte addressing		
+                        end if;
                         
                     end if;
                 end if;	

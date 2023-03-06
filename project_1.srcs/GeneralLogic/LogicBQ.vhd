@@ -203,7 +203,7 @@ begin
     
     res.controlInfo.full := full;
     
-    res.ip := trgs(lowPtr);
+    --res.ip := trgs(lowPtr);
     -- !!! this doesn't work for register branches
 
     res.nip := ress(lowPtr);

@@ -32,12 +32,6 @@ package LogicExec is
 
     function getAluControl(op: ArithOp) return AluControl;
 
-	-- DUMMY: This performs some simple operation to obtain a result
-	function passArg0(ins: InstructionState) return InstructionState;
-	function passArg1(ins: InstructionState) return InstructionState;
-	function execLogicOr(ins: InstructionState) return InstructionState;
-	function execLogicXor(ins: InstructionState) return InstructionState;
-
 	function basicBranch(sending: std_logic; st: SchedulerState; tags: InstructionTags;
                          ctrl: InstructionControlInfo;
                          target, result: Mword;
@@ -49,12 +43,12 @@ package LogicExec is
 
 	function executeMulE0(full: std_logic; st: SchedulerState; link: Mword) return ExecResult;
 	
-	function executeFpu(st: SchedulerState) return Mword;
+	function executeFpu(st: SchedulerState) return Mword;     
 
-    function calcEffectiveAddress(st: SchedulerState; fromDLQ: std_logic; dlqData: ExecResult)
-    return Mword;        
+    function mergeMemOp(stIQ, stMQ: SchedulerState; mqReady: std_logic) return SchedulerState;
 
-    function calcEffectiveAddress_2(full: std_logic; st: SchedulerState; fromDLQ: std_logic; dlqData: ExecResult)
+
+    function calcEffectiveAddress(full: std_logic; st: SchedulerState; fromDLQ: std_logic)--; dlqData: ExecResult)
     return ExecResult;
 
     function getLSResultData(op: SpecificOp;
@@ -76,38 +70,13 @@ end LogicExec;
 
 package body LogicExec is
 
-	function passArg0(ins: InstructionState) return InstructionState is
-		variable res: InstructionState := ins;
-	begin
-		return res;
-	end function;
-
-	function passArg1(ins: InstructionState) return InstructionState is
-		variable res: InstructionState := ins;
-	begin
-		return res;
-	end function;
-
-	function execLogicOr(ins: InstructionState) return InstructionState is
-		variable res: InstructionState := ins;
-	begin
-		return res;
-	end function;	
-
-	function execLogicXor(ins: InstructionState) return InstructionState is
-		variable res: InstructionState := ins;
-	begin
-		return res;
-	end function;	
-
-
 	function resolveBranchCondition(ss: SchedulerState; op: ArithOp; ac: AluControl) return std_logic is
 		constant isZero: std_logic := not isNonzero(ss.args(0));
 	begin			
 		return ac.jumpType(1) or (ac.jumpType(0) xor isZero);
 	end function;
 
-	function basicBranch(sending: std_logic; st: SchedulerState; tags: InstructionTags; --tags: UNUSED
+	function basicBranch(sending: std_logic; st: SchedulerState; tags: InstructionTags;
 	                     ctrl: InstructionControlInfo;
 	                     target, result: Mword;
 	                     ac: AluControl)
@@ -289,7 +258,7 @@ package body LogicExec is
             when opJnz =>
                 ac.jump := '1';
                 ac.jumpType := "01";
-            when opJ | opJl =>
+            when opJ =>
                 ac.jump := '1';
                 ac.jumpType := "10";
             -- opMul, opMulshs, opMulhu, opDiv
@@ -299,7 +268,6 @@ package body LogicExec is
         
         return ac;
     end function;
-
 
 
 	function executeMulE0(full: std_logic; st: SchedulerState; link: Mword) return ExecResult is
@@ -328,7 +296,6 @@ package body LogicExec is
 
 	
 	function executeFpu(st: SchedulerState) return Mword is
-       --variable res: InstructionState := DEFAULT_INS_STATE;--ins;
        variable res: Mword := (others => '0');
 	begin
         if st.st.operation.float = opOr then 
@@ -342,35 +309,24 @@ package body LogicExec is
 		return res;
 	end function;
 
-  
-    function calcEffectiveAddress(st: SchedulerState; fromDLQ: std_logic; dlqData: ExecResult)
-    return Mword is
-        variable res: Mword := (others => '0');
+
+    function mergeMemOp(stIQ, stMQ: SchedulerState; mqReady: std_logic) return SchedulerState is
+        variable res: SchedulerState := stIQ;
     begin
-        if fromDLQ = '1' then
-            res := st.args(1);
-        elsif st.full = '1'then
-            res := add(st.args(0), st.args(1));
-        else
-            res := (others => '0');
+        if mqReady = '1' then
+            res := stMQ;
         end if;
         
-        return res;
+        return res;    
     end function;
 
 
-    function calcEffectiveAddress_2(full: std_logic; st: SchedulerState; fromDLQ: std_logic; dlqData: ExecResult)
+    function calcEffectiveAddress(full: std_logic; st: SchedulerState; fromDLQ: std_logic)--; dlqData: ExecResult)
     return ExecResult is
         variable res: ExecResult := DEFAULT_EXEC_RESULT;
         variable adr: Mword := (others => '0'); 
     begin
-        if fromDLQ = '1' then
-            adr := st.args(1);
-        elsif st.full = '1'then
-            adr := add(st.args(0), st.args(1));
-        else
-            adr := (others => '0');
-        end if;
+        adr := add(st.args(0), st.args(1));
 
         res.full := full;
         res.tag := st.st.tags.renameIndex;
@@ -413,17 +369,10 @@ package body LogicExec is
                  res.specialAction := '1';
                  res.newEvent := '1';
              end if;
-             
-             if work.LogicQueues.addressHighMatching(result, ctSQ.target) = '0' then
-                -- TMP
-                res.sqMiss := '1';
-                res.specialAction := '1';
-                res.newEvent := '1';
-             end if;
          else    -- successful mem load
-         
+            null;
          end if;
-       
+
          -- CAREFUL: store when newer load has been done - violation resolution when reissue is used
          if isStoreMemOp(op) = '1' and ctLQ.controlInfo.full = '1' then
             res.orderViolation := '1';
@@ -431,7 +380,6 @@ package body LogicExec is
             res.newEvent := '1';
          end if;
 
-        -- TODO: remember about miss/hit status and reason of miss if relevant!
         return res;
     end function;
 

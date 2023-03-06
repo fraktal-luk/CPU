@@ -90,6 +90,7 @@ architecture Behavioral of UnitSequencer is
 
     signal commitGroupCtr, commitGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
     signal commitGroupCtrInc, commitGroupCtrIncNext: InsTag := INITIAL_GROUP_TAG_INC;
+    signal commitCtr, commitCtrNext, cycleCtr: Word := (others => '0');
 
     signal stageDataLateCausingIn, stageDataLastEffectiveInA: ControlPacket := DEFAULT_CONTROL_PACKET;
 
@@ -97,8 +98,6 @@ architecture Behavioral of UnitSequencer is
     signal lastEffectiveTarget, lateCausingIP, lateCausingResult, lateCausingTarget: Mword := (others => '0');
 
     signal intTypeCommitted: std_logic_vector(0 to 1) := (others => '0');
-     
-    signal commitCtr, commitCtrNext, cycleCtr: Word := (others => '0');
 
     signal sysRegArray: MwordArray(0 to 31) := (0 => (others => '1'), others => (others => '0'));    
     signal specialOp: SpecificOp := DEFAULT_SPECIFIC_OP;
@@ -233,7 +232,10 @@ begin
     pcDataOut <= pcDataSig;
     ----------
 
+    sendingToCommit <= sendingFromROB;
 
+
+    commitCtrNext <= addInt(commitCtr, countOnes(extractFullMask(robData))) when sendingToCommit = '1' else commitCtr;
     commitGroupCtrNext <= commitGroupCtrInc when sendingToCommit = '1' else commitGroupCtr;
     commitGroupCtrIncNext <= addInt(commitGroupCtrInc, PIPE_WIDTH) when sendingToCommit = '1' else commitGroupCtrInc;
 
@@ -243,7 +245,7 @@ begin
            commitGroupCtr <= commitGroupCtrNext;
            commitGroupCtrInc <= commitGroupCtrIncNext;
            commitCtr <= commitCtrNext;
-                              
+
            if sendingFromROB = '1' then
                specialOp <= robSpecial;
                
@@ -253,8 +255,6 @@ begin
         end if;
     end process;        
     
-    sendingToCommit <= sendingFromROB;
-    commitCtrNext <= addInt(commitCtr, countOnes(extractFullMask(robData))) when sendingToCommit = '1' else commitCtr;
 
     EVENT_HANDLING: block
     begin
@@ -266,13 +266,13 @@ begin
         --            When committing normal op -> increment by length of the op
         --            The 'target' field will be used to update return address for exc/int                             
         stageDataLastEffectiveInA <= getNewEffective(sendingToCommit,
-                                                        robData,
-                                                        bqTargetData.full,
-                                                        bqTargetData.value,
-                                                        lastEffectiveTarget,
-                                                        lateCausingCt, lateCausingTarget,
-                                                        lateEventSending);
-                                                        
+                                                     robData,
+                                                     bqTargetData.full,
+                                                     bqTargetData.value,
+                                                     lastEffectiveTarget,
+                                                     lateCausingCt, lateCausingTarget,
+                                                     lateEventSending);
+
         sendingToLastEffective <= sendingToCommit or lateEventSending;
         committingEvent <= sendingToCommit and anyEvent(robData);
     
@@ -328,7 +328,7 @@ begin
 
         stageDataLateCausingIn <= getLatePCData(lastEffectiveCt, lastEffectiveTarget,
                                                 intCommitted, intTypeCommitted, currentState,
-                                                linkRegExc, linkRegInt, savedStateExc, savedStateInt,-- DEFAULT_INS_SLOT,
+                                                linkRegExc, linkRegInt, savedStateExc, savedStateInt,
                                                 specialOp);
     end block;
 
@@ -336,7 +336,7 @@ begin
     intAckOut <= sendingToLateCausing and intCommitted;
     intRejOut <= sendingToLateCausing and intSuppressed;
     
-    -- TODO: could be moved to RegisterManager because seems used only there 
+    -- NOTE: RegisterManager has its own, this is for DB purpose
     commitGroupCtrOut <= commitGroupCtr;
     commitGroupCtrNextOut <= commitGroupCtrNext;
    

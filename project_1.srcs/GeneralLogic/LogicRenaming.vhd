@@ -203,9 +203,13 @@ function getVirtualArgs(ria: RenameInfoArray) return RegNameArray is
     variable res: RegNameArray(0 to 3*ria'length-1) := (others => (others => '0'));
 begin
     for i in ria'range loop
-        res(3*i+0) := ria(i).virtualSources(0)(4 downto 0);
-        res(3*i+1) := ria(i).virtualSources(1)(4 downto 0);
-        res(3*i+2) := ria(i).virtualSources(2)(4 downto 0);
+--        res(3*i+0) := ria(i).virtualSources(0)(4 downto 0);
+--        res(3*i+1) := ria(i).virtualSources(1)(4 downto 0);
+--        res(3*i+2) := ria(i).virtualSources(2)(4 downto 0);
+        
+            res(3*i+0) := ria(i).argStates(0).virtual(4 downto 0);
+            res(3*i+1) := ria(i).argStates(1).virtual(4 downto 0);
+            res(3*i+2) := ria(i).argStates(2).virtual(4 downto 0);
     end loop;
     return res;
 end function;
@@ -234,9 +238,13 @@ function getPhysicalArgs(ria: RenameInfoArray) return PhysNameArray is
     variable res: PhysNameArray(0 to 3*ria'length-1) := (others=>(others=>'0'));
 begin
     for i in ria'range loop
-        res(3*i+0) := ria(i).physicalSources(0);
-        res(3*i+1) := ria(i).physicalSources(1);
-        res(3*i+2) := ria(i).physicalSources(2);
+--        res(3*i+0) := ria(i).physicalSources(0);
+--        res(3*i+1) := ria(i).physicalSources(1);
+--        res(3*i+2) := ria(i).physicalSources(2);
+
+            res(3*i+0) := ria(i).argStates(0).physical;
+            res(3*i+1) := ria(i).argStates(1).physical;
+            res(3*i+2) := ria(i).argStates(2).physical;
     end loop;
     return res;
 end function;
@@ -347,7 +355,7 @@ begin
     
     if freeListRewind = '1' then                     
         tmpTag2(1 downto 0) := causingTag(1 downto 0);
-        res := subSN(i2slv(0, SMALL_NUMBER_SIZE), tmpTag2); -- TODO: find simpler notation for uminus
+        res := subSN(sn(0), tmpTag2);
     end if;
     
     if freeListTakeAllow = '1' and freeListRewind = '0' then

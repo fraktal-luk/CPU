@@ -8,7 +8,7 @@ use work.Helpers.all;
 
 package CpuText is
 
-function isAlphanum(c: character) return boolean;
+function isExtAlphanum(c: character) return boolean;
 
 function matches(a, b: string) return boolean;
 
@@ -36,8 +36,7 @@ end package;
 package body CpuText is
 
 
--- TODO: change name to something true (isExtendedAlphanum?)
-function isAlphanum(c: character) return boolean is
+function isExtAlphanum(c: character) return boolean is
 begin
     return (c >= '0' and c <= '9')
         or (c >= 'A' and c <= 'Z')

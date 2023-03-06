@@ -12,8 +12,8 @@ package CoreConfig is
 constant CLEAR_DEBUG_INFO: boolean := true;
 constant VIEW_ON: boolean := false;
 
-constant DB_ENABLE: boolean := false;
-constant DB_LOG_EVENTS: boolean := false;
+constant DB_ENABLE: boolean := false;-- false;
+constant DB_LOG_EVENTS: boolean := false;-- false;
 
 
    constant DEBUG_LOG_COMMITTED: boolean := false;
@@ -24,6 +24,18 @@ constant LOG2_PIPE_WIDTH: natural := 0 + 2;
 constant PIPE_WIDTH: positive := 2**LOG2_PIPE_WIDTH;
 constant ALIGN_BITS: natural := LOG2_PIPE_WIDTH + 2;
 constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');    
+
+
+constant ENABLE_FP: boolean := true;
+constant ENABLE_FAST_WAKEUP: boolean := true;
+
+constant QQQ: natural := 1; -- 1: remove src2, 0: don't
+
+constant ENABLE_MQ: boolean := true;
+
+
+constant ENABLE_SQ_HIGHER_ADR: boolean := true;
+
 
 constant FETCH_WIDTH: positive := PIPE_WIDTH; 
 
@@ -70,6 +82,8 @@ constant BQ_PTR_SIZE: natural := countOnes(BQ_PTR_MASK);
 constant SQ_PTR_SIZE: natural := countOnes(SQ_PTR_MASK);
 constant LQ_PTR_SIZE: natural := countOnes(LQ_PTR_MASK);
 constant MQ_PTR_SIZE: natural := countOnes(MQ_PTR_MASK);
+
+constant BQ_SEQ_PTR_SIZE: natural := BQ_PTR_SIZE + LOG2_PIPE_WIDTH;
 
 end CoreConfig;
 
