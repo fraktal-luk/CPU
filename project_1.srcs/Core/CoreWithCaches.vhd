@@ -138,6 +138,9 @@ begin
 
 
         PROGRAM_MEM: block
+        
+            -- pragma synthesis off
+        
             use work.Assembler.all;
 
             procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
@@ -167,18 +170,23 @@ begin
                 --return res;
             end procedure;
             
+            -- pragma synthesis on
             
             signal programMem: WordArray(0 to 1023) := (others => (others => '0'));
             
-            constant TEST_MODE: boolean := true;
+            --constant TEST_MODE: boolean := true;
         begin
             MEM_INIT: process
             begin
+                -- pragma synthesis off
+            
                 wait for 5 ns;
                 loadTestProgram <= '1';
                 wait for 10 ns;
                 loadTestProgram <= '0';
                 wait for 10 ns;
+
+                -- pragma synthesis on
 
                 wait;
             end process;
@@ -203,8 +211,11 @@ begin
                             insInWriteD <= insInWrite;
                             insInAdrD <= insInAdr;
                             insInValueD <= insInValue;
+                            
                     if loadTestProgram = '1' then
+                        -- pragma synthesis off
                         setTestProgram(programMem);
+                        -- pragma synthesis on
                     elsif insInWriteD = '1' then
                         programMem(slv2u(insInAdrD)) <= insInValueD;
                     end if;
@@ -238,7 +249,7 @@ begin
                         -- Reading
                         memReadDone <= dread;
                         memReadDonePrev <= memReadDone;
-                        memReadValue <= dataMem(slv2u(dadr(MWORD_SIZE-1 downto 2))) ;-- CAREFUL: pseudo-byte addressing 
+                        memReadValue <= dataMem(slv2u(dadr(12-1 downto 2))) ;-- CAREFUL: pseudo-byte addressing 
                         memReadValuePrev <= memReadValue;	
                         
                         -- Writing
