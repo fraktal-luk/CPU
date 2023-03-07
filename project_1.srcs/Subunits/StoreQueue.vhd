@@ -84,7 +84,7 @@ architecture Behavioral of StoreQueue is
 
     signal addresses, storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 
-    signal canAlloc, drainReq, drainEqual, allowDrain, isSending, isDrainingPrev, isSelected, isSelected_Early, sqMissed, missing, missingPrev: std_logic := '0';
+    signal canAlloc, drainReq, drainEqual, allowDrain, isSending, isDrainingPrev, isSelected, isSelected_Early, sqMissed, missing, missingPrev, committedEmptySig: std_logic := '0';
 
     signal drainOutput, selectedOutput, selectedOutput_E, selectedOutputReg_E,  selectedOutputSig, committedOutputSig: ControlPacket := DEFAULT_CONTROL_PACKET;
     signal adrValuePrev, drainValue, selectedValue, selectedValue_E, drainAddress, selectedAddress, selectedAddress_E: Mword := (others => '0');
@@ -237,7 +237,8 @@ begin
     selectedOutput <= getDrainOutput(selectedEntry, selectedAddress, selectedValue);    
         selectedOutput_E <= getDrainOutput(selectedEntry_E, selectedAddress_E, selectedValue_E);    
 
-    allowDrain <= '1';
+    allowDrain <= --'1';
+                    not committedEmptySig;
     drainOutput <= getDrainOutput(drainEntry, drainAddress, drainValue);   
 
 
@@ -310,7 +311,7 @@ begin
     nCommittedEffective <= i2slv(countOnes(commitEffectiveMask), SMALL_NUMBER_SIZE);
 
     drainEqual <= bool2std(pStart = pDrain);
-    drainReq <= not drainEqual;
+    drainReq <= not drainEqual  and allowDrain;
 
 
     -- Acc sigs
@@ -341,16 +342,19 @@ begin
         selectedOutputSig.target <= selectedOutput.target;
         selectedOutputSig.nip <= selectedOutput.nip;
 
-        committedOutputSig.controlInfo.full <= isDrainingPrev and allowDrain;
+        committedOutputSig.controlInfo.full <= isDrainingPrev;-- and allowDrain;
         
         committedOutputSig.op <= drainOutput.op;
         committedOutputSig.target <= drainOutput.target;
         committedOutputSig.nip <= drainOutput.nip;
     end generate;
 
+	committedEmptySig <= bool2std(pStart = pDrainPrev);
+
+
 	-- D. output (ctrl)
     committedDataOut <= committedOutputSig;
-	committedEmpty <= bool2std(pStart = pDrainPrev);
+    committedEmpty <= committedEmptySig;
 	committedSending <= isDrainingPrev;
 
 

@@ -48,6 +48,9 @@ end CoreWithCaches;
 
 
 architecture Behavioral of CoreWithCaches is
+    signal loadTestProgram : std_logic := '0';
+
+
         signal insInWriteD: std_logic := '0';
         signal insInAdrD: std_logic_vector(9 downto 0) := (others => '0');
         signal insInValueD: Mword := (others => '0');
@@ -135,12 +138,56 @@ begin
 
 
         PROGRAM_MEM: block
+            use work.Assembler.all;
+
+            procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
+                constant prog: ProgramBuffer := readSourceFile(filename);
+                variable machineCode: WordArray(0 to prog'length-1);
+                variable imp, exp: XrefArray(0 to 100);
+            begin
+                processProgram(prog, machineCode, imp, exp);
+                machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
+        
+                testProgram <= (others => (others => 'U'));
+                testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);        
+            end procedure;
+
+            procedure setTestProgram(signal output: out WordArray) is
+                constant prog: ProgramBuffer := readSourceFile("primes.txt");
+                variable machineCode: WordArray(0 to prog'length-1);
+                variable imp, exp: XrefArray(0 to 100);
+                --variable res: WordArray(0 to 1023) := (others => (others => '0'));
+                constant offset: natural := 512/4;
+                --constant bound: natural := 
+            begin
+                processProgram(prog, machineCode, imp, exp);
+                machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, exp), 0, 0);
+                
+                output(offset to output'length-1) <= machineCode(0 to output'length-1 - offset);
+                --return res;
+            end procedure;
+            
+            
             signal programMem: WordArray(0 to 1023) := (others => (others => '0'));
+            
+            constant TEST_MODE: boolean := true;
         begin
+            MEM_INIT: process
+            begin
+                wait for 5 ns;
+                loadTestProgram <= '1';
+                wait for 10 ns;
+                loadTestProgram <= '0';
+                wait for 10 ns;
+
+                wait;
+            end process;
+        
             SYNCH: process (clk)
                 variable baseIP: Mword := (others => '0');
             begin
-                if rising_edge(clk) then							
+                
+                if rising_edge(clk) then					
                     -- CAREFUL! don't fetch if adr not valid, cause it may ovewrite previous, valid fetch block.
                     --				If fetch block is valid but cannot be sent further (pipe stall etc.),
                     --				it must remain in fetch buffer until it can be sent.
@@ -156,8 +203,9 @@ begin
                             insInWriteD <= insInWrite;
                             insInAdrD <= insInAdr;
                             insInValueD <= insInValue;
-                            
-                    if insInWriteD = '1' then
+                    if loadTestProgram = '1' then
+                        setTestProgram(programMem);
+                    elsif insInWriteD = '1' then
                         programMem(slv2u(insInAdrD)) <= insInValueD;
                     end if;
                 end if;	
