@@ -64,9 +64,12 @@ architecture Behavioral of UnitFront is
     signal bqDataSig, bqDataSigPre: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 
 	signal predictedAddress, frontTarget: Mword := (others => '0');
+	
+	-- TODO: move to DB only
 	signal decodeCounter, decodeCounterNext: Word := (others => '0');
 
-	signal decodedEA, decodedEA_N, dataToIbuffer, ibufDataOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
+	signal decodedEA,-- decodedEA_N, 
+	   dataToIbuffer, ibufDataOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 begin
 	killAll <= execEventSignal or lateEventSignal;
     killAllOrFront <= killAll or frontBranchEvent;
@@ -166,13 +169,13 @@ begin
 
         decodedEA <= decodeGroup(fetchedLine1_Sh, slv2u(lastIndex) + 1 - slv2u(groupShift), predictedAddress, stageDataOutFetch1);
 
-        dataToIbuffer <= assignSeqNum(decodedEA, decodeCounter, stageDataOutFetch1);
+        dataToIbuffer <= assignSeqNum(decodedEA, decodeCounter, stageDataOutFetch1); -- TODO: DB (decodeCounter incremented per instruction)
 
         hasBranch <= groupHasBranch(dataToIbuffer);
 
         toBQ <= getControlA(predictedAddress, fetchedLine1_Sh, slv2u(lastIndex) + 1 - slv2u(groupShift), hasBranch);
 
-        bqDataSigPre <= assignSeqNum(toBQ, decodeCounter);
+        bqDataSigPre <= assignSeqNum(toBQ, decodeCounter); -- TODO: DB
     end block;
 
 	sendingToBranchTransfer <= sendingOutFetch1 and not fetchStall;

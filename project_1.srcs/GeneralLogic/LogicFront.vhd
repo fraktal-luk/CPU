@@ -319,6 +319,7 @@ begin
 end function;
 
 
+
 function assignSeqNum(cpa: ControlPacketArray; seqNum: Word) return ControlPacketArray is
     variable res: ControlPacketArray(0 to cpa'length-1) := cpa;
     variable sn: Word := seqNum;

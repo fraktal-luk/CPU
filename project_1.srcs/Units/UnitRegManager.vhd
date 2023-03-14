@@ -603,5 +603,57 @@ begin
     intStoreMaskRe <= getIntStoreMask1(renamedBase);
     floatStoreMaskRe <= getFloatStoreMask1(renamedBase);
     
-    renameGroupCtrNextOut <= renameGroupCtrNext;           
+    renameGroupCtrNextOut <= renameGroupCtrNext;
+    
+    RENAME_DB: block
+        signal gapSig: std_logic := '0';
+        signal gapFirst, gapLast: Word := (others => 'U');
+        signal lastSeqNum: Word := (others => '0');
+    begin
+    
+        COMMON_SYNCHRONOUS: process(clk)
+            procedure DB_handleGroup(ia: BufferEntryArray; signal lastSeqNum: inout Word; signal gapSig: out std_logic) is--; signal gapSig: out std_logic) is
+                variable any: boolean := false;
+                variable firstNewSeqNum, lastNewSeqNum, gap: Word := (others => '0');
+                
+            begin
+                -- pragma synthesis off
+            
+                for i in 0 to PIPE_WIDTH-1 loop
+                    if ia(i).full = '1' then
+                        if not any then
+                            firstNewSeqNum := ia(i).dbInfo.seqNum;
+                        end if;
+                        lastNewSeqNum := ia(i).dbInfo.seqNum;
+                        any := true;
+                    end if;
+                end loop;
+                
+                gap := sub(firstNewSeqNum, lastSeqNum);
+                if slv2u(gap) /= 1 then
+                    gapSig <= '1';
+                    gapFirst <= addInt(lastSeqNum, 1);
+                    gapLast <= addInt(firstNewSeqNum, -1);
+                else
+                    gapSig <= '0';
+                    gapFirst <= (others => 'U');
+                    gapLast <= (others => 'U');
+                end if;
+                
+                lastSeqNum <= lastNewSeqNum;
+                
+                -- pragma synthesis on
+            end procedure;
+        begin
+            if rising_edge(clk) then
+               if frontSendingIn = '1' then
+                   
+                   -- DEBUG
+                   --robDataCommitted <= robDataCommittedNext;
+                   DB_handleGroup(frontData, lastSeqNum, gapSig);
+               end if;
+            end if;
+        end process;       
+    
+    end block;          
 end Behavioral;

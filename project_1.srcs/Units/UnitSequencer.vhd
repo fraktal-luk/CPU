@@ -90,7 +90,7 @@ architecture Behavioral of UnitSequencer is
 
     signal commitGroupCtr, commitGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
     signal commitGroupCtrInc, commitGroupCtrIncNext: InsTag := INITIAL_GROUP_TAG_INC;
-    signal commitCtr, commitCtrNext, cycleCtr: Word := (others => '0');
+    signal commitCtr, commitCtrNext, cycleCtr, lastSeqNum: Word := (others => '0');
 
     signal stageDataLateCausingIn, stageDataLastEffectiveInA: ControlPacket := DEFAULT_CONTROL_PACKET;
 
@@ -108,12 +108,13 @@ architecture Behavioral of UnitSequencer is
     alias savedStateExc is sysRegArray(4);
     alias savedStateInt is sysRegArray(5);
     
-    signal pcDbInfo, dbInfo_0, dbInfo_1, dbInfo_2: InstructionDebugInfo := DEFAULT_DEBUG_INFO;
+    signal pcDbInfo --, dbInfo_0, dbInfo_1, dbInfo_2
+    : InstructionDebugInfo := DEFAULT_DEBUG_INFO;
     
     constant HAS_RESET_SEQ: std_logic := '0';
     constant HAS_EN_SEQ: std_logic := '0';
 
-      signal robDataCommitted: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
+      signal robDataCommitted, robDataCommittedNext: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 
       signal  ch0, ch1, ch2, ch3, ch4, ch5: std_logic := '0';
 begin
@@ -239,22 +240,65 @@ begin
     commitGroupCtrNext <= commitGroupCtrInc when sendingToCommit = '1' else commitGroupCtr;
     commitGroupCtrIncNext <= addInt(commitGroupCtrInc, PIPE_WIDTH) when sendingToCommit = '1' else commitGroupCtrInc;
 
-    COMMON_SYNCHRONOUS: process(clk)     
-    begin
-        if rising_edge(clk) then
-           commitGroupCtr <= commitGroupCtrNext;
-           commitGroupCtrInc <= commitGroupCtrIncNext;
-           commitCtr <= commitCtrNext;
+    robDataCommittedNext <= assignCommitNumbers(robData, commitCtr);
 
-           if sendingFromROB = '1' then
-               specialOp <= robSpecial;
-               
-                -- DEBUG
-                robDataCommitted <= assignCommitNumbers(robData, commitCtr);
-           end if;        
-        end if;
-    end process;        
+
+    COMMIT_DB: block
+        signal gapSig: std_logic := '0';
+        signal gapFirst, gapLast: Word := (others => 'U');
+    begin
     
+        COMMON_SYNCHRONOUS: process(clk)
+            procedure DB_handleGroup(ia: ControlPacketArray; signal lastSeqNum: inout Word; signal gapSig: out std_logic) is--; signal gapSig: out std_logic) is
+                variable any: boolean := false;
+                variable firstNewSeqNum, lastNewSeqNum, gap: Word := (others => '0');
+                
+            begin
+                -- pragma synthesis off
+            
+                for i in 0 to PIPE_WIDTH-1 loop
+                    if ia(i).controlInfo.full = '1' then
+                        if not any then
+                            firstNewSeqNum := ia(i).dbInfo.seqNum;
+                        end if;
+                        lastNewSeqNum := ia(i).dbInfo.seqNum;
+                        any := true;
+                    end if;
+                end loop;
+                
+                gap := sub(firstNewSeqNum, lastSeqNum);
+                if slv2u(gap) /= 1 then
+                    gapSig <= '1';
+                    gapFirst <= addInt(lastSeqNum, 1);
+                    gapLast <= addInt(firstNewSeqNum, -1);
+                else
+                    gapSig <= '0';
+                    gapFirst <= (others => 'U');
+                    gapLast <= (others => 'U');
+                end if;
+                
+                lastSeqNum <= lastNewSeqNum;
+                
+                -- pragma synthesis on
+            end procedure;
+        begin
+            if rising_edge(clk) then
+               commitGroupCtr <= commitGroupCtrNext;
+               commitGroupCtrInc <= commitGroupCtrIncNext;
+               commitCtr <= commitCtrNext;
+    
+               if sendingFromROB = '1' then
+                   specialOp <= robSpecial;
+                   
+                   -- DEBUG
+                   robDataCommitted <= robDataCommittedNext;
+                   DB_handleGroup(robDataCommittedNext, lastSeqNum, gapSig);
+               end if;        
+            end if;
+        end process;       
+    
+    end block;
+
 
     EVENT_HANDLING: block
     begin

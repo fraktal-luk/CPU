@@ -127,6 +127,11 @@ return SchedulerInfoArray;
 function iqNext_NS_2(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
 return SchedulerInfoArray;
 
+
+    function getLastEvents(queueContent: SchedulerInfoArray) return IqEventArray;
+    function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray;
+
+
 function updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D;
 
 
@@ -837,7 +842,7 @@ end function;
 
 ---------------------------
 -- state handling internal
-    function removeEntry(entry: SchedulerInfo; freed: std_logic) return SchedulerInfo is
+    function removeEntry(entry: SchedulerInfo) return SchedulerInfo is
         variable res: SchedulerInfo := entry;
     begin
         res.dynamic.full := '0';
@@ -942,6 +947,8 @@ end function;
                     if insertionLocs(k, i) = '1' then
                         res(k) := newArr(i);
                         res(k).dynamic.status.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
+                        res(k).dynamic.currentState := active;
+                        res(k).dynamic.lastEvent := insert;
                         exit;
                     end if;
                 end loop;
@@ -949,7 +956,7 @@ end function;
         return res;
     end function;
 
-
+    -- TODO: DB?
     function handleIqDbInfo(queueContent: SchedulerInfoArray) return SchedulerInfoArray is
         constant LEN: natural := queueContent'length;
         variable res: SchedulerInfoArray(queueContent'range) := queueContent;    
@@ -978,23 +985,26 @@ end function;
     end function;
 
 
-
+    -- mark issued/retracted, remove issued or killed
     function iqNext_NS(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail: std_logic)
     return SchedulerInfoArray is
         constant LEN: natural := queueContent'length;
         variable res: SchedulerInfoArray(queueContent'range) := queueContent;
-        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
     begin
         for i in 0 to LEN-1 loop
+            res(i).dynamic.lastEvent := none;
             res(i).dynamic.status.freed := '0'; -- This is set for 1 cycle when freeing
 
             if queueContent(i).dynamic.status.issued = '1' then
-                -- Remove after successful issue
-                if slv2u(res(i).dynamic.status.stageCtr) = IQ_HOLD_TIME - 1   then
-                    res(i) := removeEntry(res(i), '1');
+                if slv2u(res(i).dynamic.status.stageCtr) = IQ_HOLD_TIME - 1   then  -- Remove after successful issue
+                    res(i) := removeEntry(res(i));
                     res(i).dynamic.status.freed := '1';
-                elsif memFail = '1' and queueContent(i).dynamic.status.stageCtr(1 downto 0) = "00" then
+                    res(i).dynamic.currentState := empty;
+                    res(i).dynamic.lastEvent := retire;
+                elsif memFail = '1' and queueContent(i).dynamic.status.stageCtr(1 downto 0) = "00" then -- Retract
                     res(i) := pullbackEntry(res(i));
+                    res(i).dynamic.currentState := active;
+                    res(i).dynamic.lastEvent := retract;
                 else
                     res(i) := updateIssuedEntry(res(i));
                 end if;
@@ -1003,15 +1013,18 @@ end function;
             -- set issued
             if (selMask(i) and sends) = '1' then
                 res(i) := issueEntry(res(i));
+                res(i).dynamic.currentState := issued;
+                res(i).dynamic.lastEvent := issue;
             end if;
 
             -- flush on event
-            if killMask(i) = '1' then -- the same as at removing successfully issued?
-                res(i) := removeEntry(res(i), '0');
+            if killMask(i) = '1' then
+                res(i) := removeEntry(res(i));
+                res(i).dynamic.currentState := empty;
+                res(i).dynamic.lastEvent := kill;
             end if;
 
-             -- set age comparison for possible subsequent flush
-             -- this is done regardless of other parts of state      
+             -- Set age comparison for possible subsequent flush. This is done regardless of other parts of state      
              res(i).dynamic.status.trial := trialMask(i);        
 
              res(i).dynamic.status.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
@@ -1021,21 +1034,41 @@ end function;
     end function;
 
 
-        function iqNext_NS_2(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
-        return SchedulerInfoArray is
-            constant LEN: natural := queueContent'length;
-            variable res: SchedulerInfoArray(queueContent'range) := queueContent;
-            variable newArr: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputData;                
-            variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+    -- Insert new elements, update db info
+    function iqNext_NS_2(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
+    return SchedulerInfoArray is
+        constant LEN: natural := queueContent'length;
+        variable res: SchedulerInfoArray(queueContent'range) := queueContent;
+        variable newArr: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputData;                
+        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+    begin
+        newArr := inputData;
+           
+        if prevSending = '1' then
+            res := insertElements(res, newArr, insertionLocs);
+        end if;
+
+        res := handleIqDbInfo(res);
+
+        return res;
+    end function;
+
+
+        function getLastEvents(queueContent: SchedulerInfoArray) return IqEventArray is
+            variable res: IqEventArray(queueContent'range) := (others => none);
         begin
-            newArr := inputData;
-                        
-            if prevSending = '1' then
-                res := insertElements(res, newArr, insertionLocs);
-            end if;
-    
-            res := handleIqDbInfo(res);
-    
+            for i in res'range loop
+                res(i) := queueContent(i).dynamic.lastEvent;
+            end loop;
+            return res;
+        end function;
+
+        function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray is
+            variable res: IqStateArray(queueContent'range) := (others => empty);
+        begin
+            for i in res'range loop
+                res(i) := queueContent(i).dynamic.currentState;
+            end loop;
             return res;
         end function;
 

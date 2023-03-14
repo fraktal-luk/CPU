@@ -72,7 +72,7 @@ architecture Behavioral of IssueQueue is
     signal ageMatrix, ageMatrixNext: slv2D(0 to IQ_SIZE-1, 0 to IQ_SIZE-1) := (others => (others => '0'));
     signal insertionLocs: slv2D(0 to IQ_SIZE-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
-    signal wups, wupsSelection, wupsSelection2: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
+    signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
 
     signal controlSigs, controlSigs_QC: SlotControlArray(0 to IQ_SIZE-1) := (others => DEFAULT_SLOT_CONTROL);
     signal fullMask, trialMask, trialMask_2, trialUpdatedMask, killMask, readyMaskAll, selMask, selMask1, selMask2, selMask3: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
@@ -119,7 +119,7 @@ begin
 
     FAST_WAKEUP: if ENABLE_FAST_WAKEUP generate
         wupsSelection <= getFastWakeups_N2(queueContent, bypass, CFG_SEL);
-        wupsSelection2 <= getFastWakeups_N2(queueContent, bypass, CFG_SEL);
+        --wupsSelection2 <= getFastWakeups_N2(queueContent, bypass, CFG_SEL);
     end generate;
 
     --  wa <= getWakeupArray(queueContent, fni, WAKEUP_SPEC, CFG_WAIT); -- CFG_WAIT is needed for 'ignoreMemFail')
@@ -197,7 +197,8 @@ begin
     -- Selection for issue
     selMask <= getSelMask(readyMaskAll, ageMatrix);
     selectedSlot <= queueSelect(queueContentUpdatedSel, selMask);
- 
+
+        -- TODO: cleanup
         EEEEE: block
             signal fop: integer := 0;
             signal tg, tg2: SmallNumber := sn(0);
@@ -252,69 +253,82 @@ begin
 
     -- pragma synthesis off
     DEBUG_HANDLING: if DB_ENABLE generate
-        process (clk)
-            use std.textio.all;
-            use work.Assembler.all;
-
-            function getArgString(argState: ArgumentState) return string is
-                variable immValue: Hword := argState.value;
-            begin
-                if argState.imm = '1' then
-                    if IMM_AS_REG then
-                        immValue(PhysName'length-2 downto 0) := argState.reg(6 downto 0);
-                    end if;
-                    return "{#" & integer'image(slv2u(immValue)) & "}";
-                elsif argState.zero = '1' then
-                    return "{zero}";
-                else
-                    if argState.waiting = '1' then
-                        return "{" & natural'image(slv2u(argState.reg)) & " [0]}";
-                    else
-                        return "{" & natural'image(slv2u(argState.reg)) & " [1]}";                
-                    end if;
-                end if;
-
-            end function;
-
-            procedure printContent is
-               file outFile: text open write_mode is "issue_queue" & NAME & ".txt";
-               variable preRow, currentLine: line := null;
-            begin
-                for i in 0 to IQ_SIZE-1 loop
-                    currentLine := null;
-                    write(currentLine, natural'image(i) & ":  ");
-                    if queueContent(i).dynamic.full /= '1' then
-                        writeline(outFile, currentLine);
-                        next;
-                    end if;
-
-                    write(currentLine, natural'image(slv2u(queueContent(i).dynamic.renameIndex)));
-                    write(currentLine, string'(", "));
-                    write(currentLine, std_logic'image(queueContent(i).dynamic.status.issued));
-                    write(currentLine, string'(", "));
-
-                    write(currentLine, getArgString(queueContent(i).dynamic.argStates(0)));
-                    write(currentLine, string'(", "));
-                    write(currentLine, getArgString(queueContent(i).dynamic.argStates(1)));
-
-                    write(currentLine, string'(" // "));
-
-                    write(currentLine, disasmWord(queueContent(i).static.dbInfo.bits));
-                    writeline(outFile, currentLine);
-                end loop;
-            end procedure;
-
+    
+        DB_DATA: block
+            signal lastEvents: IqEventArray(0 to IQ_SIZE-1) := (others => none);
+            signal currentStates: IqStateArray(0 to IQ_SIZE-1) := (others => empty);
         begin
+        
+            currentStates <= getCurrentStates(queueContent);
 
-            if rising_edge(clk) then
-                if DB_LOG_EVENTS then
-                    if dbState.dbSignal = '1' then
-                        report "IQ reporting ";
-                        printContent;
+            process (clk)
+                use std.textio.all;
+                use work.Assembler.all;
+    
+                function getArgString(argState: ArgumentState) return string is
+                    variable immValue: Hword := argState.value;
+                begin
+                    if argState.imm = '1' then
+                        if IMM_AS_REG then
+                            immValue(PhysName'length-2 downto 0) := argState.reg(6 downto 0);
+                        end if;
+                        return "{#" & integer'image(slv2u(immValue)) & "}";
+                    elsif argState.zero = '1' then
+                        return "{zero}";
+                    else
+                        if argState.waiting = '1' then
+                            return "{" & natural'image(slv2u(argState.reg)) & " [0]}";
+                        else
+                            return "{" & natural'image(slv2u(argState.reg)) & " [1]}";                
+                        end if;
+                    end if;
+    
+                end function;
+    
+                procedure printContent is
+                   file outFile: text open write_mode is "issue_queue" & NAME & ".txt";
+                   variable preRow, currentLine: line := null;
+                begin
+                    for i in 0 to IQ_SIZE-1 loop
+                        currentLine := null;
+                        write(currentLine, natural'image(i) & ":  ");
+                        if queueContent(i).dynamic.full /= '1' then
+                            writeline(outFile, currentLine);
+                            next;
+                        end if;
+    
+                        write(currentLine, natural'image(slv2u(queueContent(i).dynamic.renameIndex)));
+                        write(currentLine, string'(", "));
+                        write(currentLine, std_logic'image(queueContent(i).dynamic.status.issued));
+                        write(currentLine, string'(", "));
+    
+                        write(currentLine, getArgString(queueContent(i).dynamic.argStates(0)));
+                        write(currentLine, string'(", "));
+                        write(currentLine, getArgString(queueContent(i).dynamic.argStates(1)));
+    
+                        write(currentLine, string'(" // "));
+    
+                        write(currentLine, disasmWord(queueContent(i).static.dbInfo.bits));
+                        writeline(outFile, currentLine);
+                    end loop;
+                end procedure;
+    
+            begin
+    
+                if rising_edge(clk) then
+                
+                    lastEvents <= getLastEvents(queueContentNext);
+                
+                    if DB_LOG_EVENTS then
+                        if dbState.dbSignal = '1' then
+                            report "IQ reporting ";
+                            printContent;
+                        end if;
                     end if;
                 end if;
-            end if;
-        end process;
+            end process;
+    
+        end block;
 
     end generate;
     -- pragma synthesis on
