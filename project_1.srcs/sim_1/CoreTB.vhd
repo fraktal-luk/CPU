@@ -81,7 +81,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal opFlags: std_logic_vector(0 to 2);
     signal okFlag, errorFlag: std_logic := '0';
 
-    signal commonCode2: WordArray(0 to 999);
+    signal commonCode2: WordArray(0 to PROGRAM_BUFFER_SIZE-1);
 
     signal ch0, ch1, ch2, ch3,  ch4, ch5, ch6, ch7: std_logic := '0';
     
@@ -259,18 +259,28 @@ ARCHITECTURE Behavior OF CoreTB IS
     end procedure;
 
     procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
-	    constant prog: ProgramBuffer := readSourceFile(filename);
-        variable machineCode: WordArray(0 to prog'length-1);
+	    --constant prog: ProgramBuffer := readSourceFile(filename).words; -- range: 0 to 999
+	    constant code: CodeBuffer := readSourceFile(filename);
+	    variable wordBuf: WordBuffer;
+        variable machineCode: WordArray(0 to PROGRAM_BUFFER_SIZE-1);
         variable imp, exp: XrefArray(0 to 100);
     begin
-        processProgram(prog, machineCode, imp, exp);
+        processProgram(code, wordBuf, imp, exp);
+        machineCode := wordBuf.words(0 to PROGRAM_BUFFER_SIZE-1);
         machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
 
         testProgram <= (others => (others => 'U'));
         testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);        
     end procedure;
 
-    procedure setProgram(signal testProgram: inout WordArray; program: WordArray; offset: Mword) is
+
+    procedure setInstruction(signal testProgram: inout WordArray; offset: Mword; ins: string) is
+        constant offsetInt: natural := slv2u(offset)/4; 
+    begin
+        testProgram(offsetInt) <= asm(ins);
+    end procedure;
+
+    procedure setProgram(signal testProgram: inout WordArray; offset: Mword; program: WordArray) is
         constant offsetInt: natural := slv2u(offset)/4; 
     begin
         testProgram(offsetInt to offsetInt + program'length-1) <= program;
@@ -317,15 +327,17 @@ BEGIN
        file suiteFile: text open read_mode is "suite_names.txt";
        file testFile: text;
 
-       variable machineCodeVar2: WordArray(0 to 999);
-                
+       variable machineCodeVar2: WordArray(0 to PROGRAM_BUFFER_SIZE-1);
+       variable machineCodeBuf: WordBuffer;
+
        variable exp, imp: XrefArray(0 to 100);
        
        variable match: boolean := true;
    begin
-              processProgram(readSourceFile("common_asm.txt"), machineCodeVar2, imp, exp);
+              processProgram(readSourceFile("common_asm.txt"), machineCodeBuf, imp, exp);
+              machineCodeVar2 := machineCodeBuf.words(0 to PROGRAM_BUFFER_SIZE-1);
               commonCode2 <= machineCodeVar2;	           
-	           
+
 	  wait for 110 ns;
 
       loop
@@ -350,27 +362,28 @@ BEGIN
               end if;
 
               announceTest(currentTest, currentSuite, testName.all, suiteName.all);    
+
+
               loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory2);
 
-                    -- Reset handler
-                    testProgram2(slv2u(RESET_BASE)/4) <= asm("ja -512");
-                      
-                    -- Call handler
-                    testProgram2(slv2u(CALL_BASE)/4) <= asm("sys send");
-                    testProgram2(slv2u(CALL_BASE)/4 + 1) <= asm("ja 0");
+                -- Reset handler
+                setInstruction(programMemory2, RESET_BASE, "ja -512");
+                
+                -- Call handler
+                setInstruction(programMemory2, CALL_BASE, "sys send");
+                setInstruction(programMemory2, addInt(CALL_BASE, 4), "ja 0");
+                
+                -- Common lib
+                setProgram(testProgram2, i2slv(4*1024, 32), commonCode2);	           
 
-                    -- Common lib          
-                    setProgram(testProgram2, commonCode2, i2slv(4*1024, 32));	           
 
               setForOneCycle(resetDataMem, clk);
               disasmToFile(testName.all & "_disasm.txt", testProgram2);
 
               if CORE_SIMULATION then
                   startTest(testToDo, int0b);
-                    
                   report "Waiting for completion...";
                   cycle;
-    
                   checkTestResult(testName, testDone, testFail);
               end if;
             
@@ -378,6 +391,7 @@ BEGIN
               while emulReady /= '1' loop           
                   cycle;
               end loop;
+            
           end loop;
           
           report "All tests in suite done!";          
@@ -399,10 +413,14 @@ BEGIN
       -- Test error signal  
       announceTest(currentTest, currentSuite, "err signal", "");      
 
-          testProgram2(0) <= asm("sys error");
-          testProgram2(1) <= asm("ja 0");
-	  	           
-    	  setProgram(testProgram2, commonCode2, i2slv(4*1024, 32));	           
+          --testProgram2(0) <= asm("sys error");
+          --testProgram2(1) <= asm("ja 0");
+	  	  
+	  	  setInstruction(programMemory2, i2slv(0, MWORD_SIZE), "sys error");
+	  	  setInstruction(programMemory2, i2slv(4, MWORD_SIZE), "ja 0");
+	  	  
+	  	  
+    	  setProgram(testProgram2, i2slv(4*1024, 32), commonCode2);	           
 
 
       setForOneCycle(resetDataMem, clk);
@@ -429,15 +447,19 @@ BEGIN
       loadProgramFromFileWithImports("events.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory2);
 
               -- Reset handler      
-              testProgram2(slv2u(RESET_BASE)/4) <=     asm("ja -512");       
+              --testProgram2(slv2u(RESET_BASE)/4) <=     asm("ja -512");       
+              setInstruction(programMemory2, RESET_BASE, "ja -512");
+
               
               -- Call handler - special
-              testProgram2(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");  
-              testProgram2(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
+              --testProgram2(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");  
+              --testProgram2(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
+              setInstruction(programMemory2, CALL_BASE, "add_i r20, r0, 55");
+	  	      setInstruction(programMemory2, addInt(CALL_BASE, 4), "sys rete");
+
               
               -- Common lib
-              setProgram(testProgram2, commonCode2, i2slv(4*1024, 32)); 
-
+              setProgram(testProgram2, i2slv(4*1024, 32), commonCode2); 
 
 
       setForOneCycle(resetDataMem, clk); 
@@ -463,18 +485,23 @@ BEGIN
 
       loadProgramFromFileWithImports("events2.txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory2);
               -- Reset handler
-              testProgram2(slv2u(RESET_BASE)/4) <=     asm("ja -512");
-              
+              --testProgram2(slv2u(RESET_BASE)/4) <=     asm("ja -512");
+              setInstruction(programMemory2, RESET_BASE, "ja -512");
+
               -- Call handler - special
-              testProgram2(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");
-              testProgram2(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
+              --testProgram2(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");
+              --testProgram2(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
+              setInstruction(programMemory2, CALL_BASE, "add_i r20, r0, 55");
+              setInstruction(programMemory2, addInt(CALL_BASE, 4), "sys rete");
               
               -- Int handler - special
-              testProgram2(slv2u(INT_BASE)/4) <=     asm("add_i r0, r0, 0"); -- NOP
-              testProgram2(slv2u(INT_BASE)/4 + 1) <= asm("sys reti");
-              
+              --testProgram2(slv2u(INT_BASE)/4) <=     asm("add_i r0, r0, 0"); -- NOP
+              --testProgram2(slv2u(INT_BASE)/4 + 1) <= asm("sys reti");
+              setInstruction(programMemory2, INT_BASE, "add_i r0, r0, 0"); -- NOP
+              setInstruction(programMemory2, addInt(INT_BASE, 4), "sys reti");
+                
               -- Common lib
-              setProgram(testProgram2, commonCode2, i2slv(4*1024, 32));  
+              setProgram(testProgram2, i2slv(4*1024, 32), commonCode2);  
               
       
       setForOneCycle(resetDataMem, clk);

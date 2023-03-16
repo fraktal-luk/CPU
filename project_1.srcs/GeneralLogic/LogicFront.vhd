@@ -119,8 +119,10 @@ begin
         res(i).constantArgs := constantArgs;
         res(i).argSpec := argSpec;
         
+        --if DB_ENABLE then
             tmpIP := addInt(ip, 4*i);
             res(i).dbInfo := DB_addBitsAndIp(ctrl.dbInfo, fetchLine(i), tmpIP);
+        --end if;
     end loop;
 
     res(0).firstBr := anyBranch;

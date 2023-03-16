@@ -142,28 +142,32 @@ begin
             -- pragma synthesis off
         
             use work.Assembler.all;
-
-            procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
-                constant prog: ProgramBuffer := readSourceFile(filename);
-                variable machineCode: WordArray(0 to prog'length-1);
-                variable imp, exp: XrefArray(0 to 100);
-            begin
-                processProgram(prog, machineCode, imp, exp);
-                machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
+            
+--            -- TODO: repeated from CoreTB, remove duplication
+--            procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
+--                constant prog: ProgramBuffer := readSourceFile(filename);
+--                variable machineCode: WordArray(0 to prog'length-1);
+--                variable imp, exp: XrefArray(0 to 100);
+--            begin
+--                processProgram(prog, machineCode, imp, exp);
+--                machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
         
-                testProgram <= (others => (others => 'U'));
-                testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);        
-            end procedure;
+--                testProgram <= (others => (others => 'U'));
+--                testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);        
+--            end procedure;
 
             procedure setTestProgram(signal output: out WordArray) is
-                constant prog: ProgramBuffer := readSourceFile("primes.txt");
-                variable machineCode: WordArray(0 to prog'length-1);
+                --constant prog: ProgramBuffer := readSourceFile("primes.txt").words;
+                constant code: CodeBuffer := readSourceFile("primes.txt");
+                variable machineCodeBuf: WordBuffer;
+                variable machineCode: WordArray(0 to PROGRAM_BUFFER_SIZE-1);
                 variable imp, exp: XrefArray(0 to 100);
                 --variable res: WordArray(0 to 1023) := (others => (others => '0'));
                 constant offset: natural := 512/4;
                 --constant bound: natural := 
             begin
-                processProgram(prog, machineCode, imp, exp);
+                processProgram(code, machineCodeBuf, imp, exp);
+                machineCode := machineCodeBuf.words(0 to PROGRAM_BUFFER_SIZE-1);
                 machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, exp), 0, 0);
                 
                 output(offset to output'length-1) <= machineCode(0 to output'length-1 - offset);
