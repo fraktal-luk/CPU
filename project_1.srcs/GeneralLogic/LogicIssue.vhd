@@ -443,25 +443,25 @@ package body LogicIssue is
         end case;            
     end function;
 
-    function setMatch(matchVec: std_logic_vector; p: natural; stage: integer; fc: ForwardingComparisons) return std_logic_vector is
-        variable res: std_logic_vector(matchVec'range) := matchVec;
-    begin
-        case stage is
-            when -3 =>
-                res(p) := fc.cmpM3(p);
-            when -2 =>
-                res(p) := fc.cmpM2(p);
-            when -1 =>
-                res(p) := fc.cmpM1(p);
-            when 0 =>
-                res(p) := fc.cmp0(p);
-            when 1 =>
-                res(p) := fc.cmp1(p);
-            when others =>
-                res(p) := '0';
-        end case;
-        return res;
-    end function;
+--    function setMatch(matchVec: std_logic_vector; p: natural; stage: integer; fc: ForwardingComparisons) return std_logic_vector is
+--        variable res: std_logic_vector(matchVec'range) := matchVec;
+--    begin
+--        case stage is
+--            when -3 =>
+--                res(p) := fc.cmpM3(p);
+--            when -2 =>
+--                res(p) := fc.cmpM2(p);
+--            when -1 =>
+--                res(p) := fc.cmpM1(p);
+--            when 0 =>
+--                res(p) := fc.cmp0(p);
+--            when 1 =>
+--                res(p) := fc.cmp1(p);
+--            when others =>
+--                res(p) := '0';
+--        end case;
+--        return res;
+--    end function;
 
     function tmpMin(a, b: integer) return integer is
     begin
@@ -470,6 +470,18 @@ package body LogicIssue is
         else
             return a;
         end if;
+    end function;
+
+    function TMP_incActiveCounter(ctr: SmallNumber) return SmallNumber is
+    begin
+        case ctr(1 downto 0) is
+            when "00" =>
+                return "00000001";
+--            when "01" =>
+--                return "00000010";               
+            when others =>
+                return "00000010";
+        end case;            
     end function;
 
 
@@ -485,7 +497,8 @@ package body LogicIssue is
     function updateArgInfo_A(argState: ArgumentState) return ArgumentState is
         variable res: ArgumentState := argState;  
     begin
-        res.activeCounter := addIntTrunc(res.activeCounter, 1, 2);
+        res.activeCounter := --addIntTrunc(res.activeCounter, 1, 2);
+                                TMP_incActiveCounter(res.activeCounter);
         res.srcStage := TMP_incSrcStage(res.srcStage);
         return res;
     end function;
