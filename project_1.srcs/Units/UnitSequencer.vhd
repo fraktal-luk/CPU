@@ -281,6 +281,23 @@ begin
                 
                 -- pragma synthesis on
             end procedure;
+            
+            procedure DB_trackSeqNum(ia: ControlPacketArray) is
+            begin
+                -- pragma synthesis off
+                if DB_OP_TRACKING then
+                    for i in ia'range loop
+                        if ia(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                            report "";
+                            report "DEBUG: Tracked seqNum committed: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                            report "";
+                            
+                            return;
+                        end if;
+                    end loop;
+                end if;
+                -- pragma synthesis on
+            end procedure;
         begin
             if rising_edge(clk) then
                commitGroupCtr <= commitGroupCtrNext;
@@ -293,6 +310,7 @@ begin
                    -- DEBUG
                    robDataCommitted <= robDataCommittedNext;
                    DB_handleGroup(robDataCommittedNext, lastSeqNum, gapSig);
+                   DB_trackSeqNum(robDataCommittedNext);
                end if;        
             end if;
         end process;       

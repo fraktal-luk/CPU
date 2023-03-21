@@ -205,6 +205,9 @@ function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: 
     function DB_incCyclesWaiting(dbd: DbDependency) return DbDependency;
     function DB_incCyclesReady(dbd: DbDependency) return DbDependency;
 
+
+        procedure DB_reportEvents(content: SchedulerInfoArray);
+
 end LogicIssue;
 
 
@@ -955,19 +958,51 @@ end function;
         constant LEN: natural := content'length;
         variable res: SchedulerInfoArray(content'range) := content;
     begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                for k in 0 to LEN-1 loop
-                    if insertionLocs(k, i) = '1' then
-                        res(k) := newArr(i);
-                        res(k).dynamic.status.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
-                        res(k).dynamic.currentState := active;
-                        res(k).dynamic.lastEvent := insert;
-                        exit;
-                    end if;
-                end loop;
+        for i in 0 to PIPE_WIDTH-1 loop
+            for k in 0 to LEN-1 loop
+                if insertionLocs(k, i) = '1' then
+                    res(k) := newArr(i);
+                    res(k).dynamic.status.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
+                    res(k).dynamic.currentState := active;
+                    res(k).dynamic.lastEvent := insert;
+                    exit;
+                end if;
             end loop;
+        end loop;
+        
         return res;
     end function;
+
+        procedure DB_reportEvents(content: SchedulerInfoArray) is
+        begin        
+            -- pragma synthesis off
+            for i in 0 to content'length-1 loop
+                if DB_OP_TRACKING and content(i).static.dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                    report "";
+                    
+                    case content(i).dynamic.lastEvent is
+                        when insert =>
+                            report "DEBUG: Tracked seqNum inserted to IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                        when kill =>
+                            report "DEBUG: Tracked seqNum kill in IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                        when issue =>
+                            report "DEBUG: Tracked seqNum issued from IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                        when retract =>
+                            report "DEBUG: Tracked seqNum pulled back to IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                        when retire =>
+                            -- problem: here dbInfo is already cleared so this is never reached
+                            report "DEBUG: Tracked seqNum retired from IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                        when others =>
+                    end case;
+                    
+                    report "";
+                    
+                    exit;
+                end if;                
+            end loop;
+            -- pragma synthesis on
+        end procedure;
+    
 
     -- TODO: DB?
     function handleIqDbInfo(queueContent: SchedulerInfoArray) return SchedulerInfoArray is

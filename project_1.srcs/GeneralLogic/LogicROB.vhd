@@ -142,6 +142,9 @@ procedure updateDynamicContentBranch(signal content: inout DynamicOpInfoArray2D;
 procedure updateDynamicGroupMemEvent(signal content: inout DynamicOpInfoArray2D; execInfo: InstructionControlInfo; tag: InsTag; ind: natural);
 procedure updateDynamicContentMemEvent(signal content: inout DynamicOpInfoArray2D; useCtrl: std_logic; execInfo: InstructionControlInfo; tag: InsTag);
 
+procedure flushDynamicContent(signal content: inout DynamicOpInfoArray2D);
+procedure removeGroup(signal content: inout DynamicOpInfoArray2D; ptr: SmallNumber);
+
 function groupCompleted(da: DynamicOpInfoArray) return std_logic;
 
 end package;
@@ -368,6 +371,14 @@ procedure writeDynamicInput(signal content: inout DynamicOpInfoArray2D; input: D
 begin
     for i in input'range loop
         content(p2i(ptr, content'length), i) <= input(i);
+        
+         -- pragma synthesis off
+        if input(i).full = '1' and input(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+            report "";
+            report "DEBUG: Tracked seqNum written into ROB: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+            report "";
+        end if;
+        -- pragma synthesis on
     end loop;
 end procedure;
 
@@ -427,6 +438,14 @@ begin
             else--elsif cluster = 1 then
                 content(groupInd, opInd).completed1 <= '1';                   
             end if;
+            
+            -- pragma synthesis off
+            if DB_OP_TRACKING and content(groupInd, opInd).full = '1' and content(groupInd, opInd).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                report "";
+                report "DEBUG: Tracked seqNum completed in ROB cluster " & integer'image(CLUSTER) & ": " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                report "";
+            end if;
+            -- pragma synthesis on   
         end if;
     end loop;
 end procedure;
@@ -444,7 +463,18 @@ begin
     for i in 0 to PIPE_WIDTH-1 loop
         if eventFound then
             content(groupInd, i).full <= '0';
-            content(groupInd, i).killed <= '1';              
+            content(groupInd, i).killed <= content(groupInd, i).full;              
+        
+            --DB_trackKilledSeqNum(content(groupInd, i));
+            
+            -- pragma synthesis off
+            if DB_OP_TRACKING and content(groupInd, i).full = '1' and content(groupInd, i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                report "";
+                report "DEBUG: Tracked seqNum killed in ROB: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                report "";
+            end if;
+            -- pragma synthesis on
+
         elsif opInd = i then
             if execInfo.confirmedBranch = '1' then
                 content(groupInd, i).confirmedBranch <= '1';                    
@@ -484,7 +514,7 @@ begin
     for i in 0 to PIPE_WIDTH-1 loop
         if eventFound then
             content(groupInd, i).full <= '0';
-            content(groupInd, i).killed <= '1';                   
+            content(groupInd, i).killed <= content(groupInd, i).full;                   
         elsif opInd = i then
             if execInfo.specialAction = '1' then
                 content(groupInd, i).specialAction <= '1';   
@@ -509,6 +539,43 @@ begin
         updateDynamicGroupMemEvent(content, execInfo, tag, groupInd);
     end if;
 end procedure;
+
+
+procedure flushDynamicContent(signal content: inout DynamicOpInfoArray2D) is
+begin
+    for groupInd in 0 to ROB_SIZE-1 loop
+        for i in 0 to PIPE_WIDTH-1 loop
+            content(groupInd, i).full <= '0';
+            content(groupInd, i).killed <= content(groupInd, i).full;
+
+            -- pragma synthesis off
+            if DB_OP_TRACKING and content(groupInd, i).full = '1' and content(groupInd, i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                report "";
+                report "DEBUG: Tracked seqNum flushed from ROB: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                report "";
+            end if;
+            -- pragma synthesis on
+        end loop;
+    end loop;
+end procedure;
+
+procedure removeGroup(signal content: inout DynamicOpInfoArray2D; ptr: SmallNumber) is
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        content(p2i(ptr, content'length), i).full <= '0';
+        content(p2i(ptr, content'length), i).killed <= '0';
+        
+        -- pragma synthesis off
+        if DB_OP_TRACKING and content(p2i(ptr, content'length), i).full = '1' and content(p2i(ptr, content'length), i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+            report "";
+            report "DEBUG: Tracked seqNum leaves ROB: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+            report "";
+        end if;
+        -- pragma synthesis on
+
+    end loop;
+end procedure;
+
 
 function groupCompleted(da: DynamicOpInfoArray) return std_logic is
 begin

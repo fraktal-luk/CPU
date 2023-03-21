@@ -153,7 +153,9 @@ begin
 
             sentTrial1 <= isNonzero(selMask and trialMask);
             sentTrial2 <= isNonzero(selMask1 and trialMask);
-
+            
+            
+            DB_reportEvents(queueContentNext);
         end if;
     end process;
 

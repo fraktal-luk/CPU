@@ -547,9 +547,20 @@ begin
                                         unfoldedAluOp);
 
             process (clk)
+            
+                -- Redundant? Event log feature already exists
+                procedure DB_reportBranchEvent(cp: ControlPacket) is
+                begin
+                
+                end procedure;
+                
             begin
                 if rising_edge(clk) then
                     branchResultE0 <= dataToBranch;
+
+                    if dataToBranch.controlInfo.full = '1' then
+                        DB_reportBranchEvent(dataToBranch);
+                    end if;
 
                     execEventSignalE1 <= execEventSignalE0 and not lateEventSignal; -- Don't allow subsequent event from cancelled branch
                     branchResultE1 <= branchResultE0;

@@ -70,6 +70,20 @@ architecture Behavioral of UnitFront is
 
 	signal decodedEA,-- decodedEA_N, 
 	   dataToIbuffer, ibufDataOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
+	   
+	   
+	   procedure DB_trackSeqNum(seqNum, seqNumNext: Word) is
+	   begin
+	       if DB_OP_TRACKING then
+               if slv2u(seqNum) <= slv2u(DB_TRACKED_SEQ_NUM) and slv2u(DB_TRACKED_SEQ_NUM) < slv2u(seqNumNext) then
+                   report "";
+                   report "DEBUG: Tracked seqNum assigned: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                   report "";
+               end if;
+	       end if;
+	   end procedure;
+	   
+	   
 begin
 	killAll <= execEventSignal or lateEventSignal;
     killAllOrFront <= killAll or frontBranchEvent;
@@ -85,6 +99,10 @@ begin
         if rising_edge(clk) then
             decodeCounter <= decodeCounterNext;
             
+            if sendingToBuffer = '1' then
+                DB_trackSeqNum(decodeCounter, decodeCounterNext);    
+            end if;
+
             -- fetchedLine0: assigned async
             fetchedLine1 <= fetchedLine0;
 

@@ -18,6 +18,11 @@ constant DB_LOG_EVENTS: boolean := false;-- false;
 
    constant DEBUG_LOG_COMMITTED: boolean := false;
 
+    constant DB_OP_TRACKING: boolean := true;
+    constant DB_TRACKED_SEQ_NUM: Word := X"0000064b";
+
+
+
 --constant SYNTH_CHECK: boolean := checkSynthesis;
 
 constant LOG2_PIPE_WIDTH: natural := 0 + 2;

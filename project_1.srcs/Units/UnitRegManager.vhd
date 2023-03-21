@@ -363,6 +363,25 @@ architecture Behavioral of UnitRegManager is
 
     signal inputRenameInfoInt, inputRenameInfoFloat, resultRenameInfoInt, resultRenameInfoFloat, storedRenameInfoInt, storedRenameInfoFloat,
                       commitArgInfoIntDelayed, commitArgInfoFloatDelayed: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+                      
+                      
+                      
+        procedure DB_trackSeqNum(renamed: InstructionSlotArray) is
+        begin
+            -- pragma synthesis off
+            if DB_OP_TRACKING then
+                for i in renamed'range loop
+                    if renamed(i).ins.dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                        report "";
+                        report "DEBUG: Tracked seqNum renamed: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                        report "";
+                        
+                        return;
+                    end if;
+                end loop;
+            end if;
+            -- pragma synthesis on
+        end procedure;
 begin
 
             commitGroupCtrIn <= commitGroupCtr;
@@ -435,6 +454,9 @@ begin
             if frontLastSending = '1' then
                 renameFull <= '1';
                 renamedDataLivingPre <= renamedBase;
+                
+                DB_trackSeqNum(renamedBase);
+                
             elsif renamedSendingSig = '1' then
                 renameFull <= '0';
             end if;
