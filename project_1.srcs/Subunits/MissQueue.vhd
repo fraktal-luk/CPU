@@ -21,6 +21,8 @@ architecture MissQueue of StoreQueue is
         sqMiss: std_logic;
         
         TMP_cnt: SmallNumber;
+        
+        dbInfo: InstructionDebugInfo;
     end record;
     
     constant DEFAULT_MQ_ENTRY: MQ_Entry := (
@@ -39,7 +41,9 @@ architecture MissQueue of StoreQueue is
         dataMiss => '0',
         sqMiss => '0',
         
-        TMP_cnt => (others => '0'));
+        TMP_cnt => (others => '0'),
+        
+        dbInfo => DEFAULT_DEBUG_INFO);
     
     type MQ_EntryArray is array(integer range <>) of MQ_Entry;
     
@@ -247,6 +251,8 @@ begin
                 queueContent(p2i(writePtr, QUEUE_SIZE)).tag <= --compareAddressEarlyInput.tag;
                                                                compareAddressEarlyInput_Ctrl.tags.renameIndex;
                 queueContent(p2i(writePtr, QUEUE_SIZE)).TMP_cnt <= (others => '0');
+                
+                queueContent(p2i(writePtr, QUEUE_SIZE)).dbInfo <= compareAddressEarlyInput_Ctrl.dbInfo;
             end if;
 
 
@@ -290,6 +296,10 @@ begin
     selectedDataOutput.tags.renameIndex <= outEntrySig.tag;
     selectedDataOutput.tags.lqPointer <= tagOutWord(31 downto 24);   
     selectedDataOutput.tags.sqPointer <= tagOutWord(23 downto 16);
+
+    selectedDataOutput.dbInfo <= outEntrySig.dbInfo;
+    selectedDataResult.dbInfo <= outEntrySig.dbInfo;
+
 
     committedSending <= sending1; -- Indication to block normal mem issue
     

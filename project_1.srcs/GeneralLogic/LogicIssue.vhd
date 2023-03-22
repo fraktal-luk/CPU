@@ -1258,6 +1258,17 @@ end function;
         end loop;
         
         res := orSchedEntrySlot(a, b);
+        
+            -- Set DB info
+            -- pragma synthesis off
+            for i in 0 to QUEUE_SIZE_EXT-1 loop
+                if selMask(i) = '1' then
+                    res.static.dbInfo := inputElems(i).static.dbInfo;
+                    exit;
+                end if;
+            end loop;
+            -- pragma synthesis on
+
         return res;
     end function;
 

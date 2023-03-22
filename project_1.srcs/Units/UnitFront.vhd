@@ -68,21 +68,23 @@ architecture Behavioral of UnitFront is
 	-- TODO: move to DB only
 	signal decodeCounter, decodeCounterNext: Word := (others => '0');
 
-	signal decodedEA,-- decodedEA_N, 
-	   dataToIbuffer, ibufDataOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
+	signal decodedEA, dataToIbuffer, ibufDataOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 	   
 	   
-	   procedure DB_trackSeqNum(seqNum, seqNumNext: Word) is
-	   begin
-	       if DB_OP_TRACKING then
-               if slv2u(seqNum) <= slv2u(DB_TRACKED_SEQ_NUM) and slv2u(DB_TRACKED_SEQ_NUM) < slv2u(seqNumNext) then
-                   report "";
-                   report "DEBUG: Tracked seqNum assigned: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
-                   report "";
-               end if;
-	       end if;
-	   end procedure;
-	   
+	   procedure DB_trackSeqNum(arr: BufferEntryArray) is
+       begin
+           -- pragma synthesis off
+           if DB_OP_TRACKING then
+               for i in arr'range loop
+                   if arr(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                       report "";
+                       report "DEBUG: Tracked seqNum assigned: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                       report "";
+                   end if;
+               end loop;
+           end if;
+           -- pragma synthesis on
+       end procedure;
 	   
 begin
 	killAll <= execEventSignal or lateEventSignal;
@@ -98,10 +100,6 @@ begin
     begin
         if rising_edge(clk) then
             decodeCounter <= decodeCounterNext;
-            
-            if sendingToBuffer = '1' then
-                DB_trackSeqNum(decodeCounter, decodeCounterNext);    
-            end if;
 
             -- fetchedLine0: assigned async
             fetchedLine1 <= fetchedLine0;
@@ -123,7 +121,10 @@ begin
             -- Stage F1
             
             -- Stage Ibuf/BrEval
-            
+            if sendingToBuffer = '1' then
+                DB_trackSeqNum(dataToIbuffer);   
+            end if;
+
             -- 
 
         end if;

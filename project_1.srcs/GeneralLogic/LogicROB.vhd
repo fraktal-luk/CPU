@@ -373,7 +373,7 @@ begin
         content(p2i(ptr, content'length), i) <= input(i);
         
          -- pragma synthesis off
-        if input(i).full = '1' and input(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+        if DB_OP_TRACKING and input(i).full = '1' and input(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
             report "";
             report "DEBUG: Tracked seqNum written into ROB: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
             report "";

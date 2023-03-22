@@ -551,7 +551,14 @@ begin
                 -- Redundant? Event log feature already exists
                 procedure DB_reportBranchEvent(cp: ControlPacket) is
                 begin
-                
+                    -- pragma synthesis off
+                    if DB_BRANCH_EXEC_TRACKING and cp.controlInfo.full = '1' and cp.controlInfo.newEvent = '1' then
+                        report "";
+                        report "DEBUG: branch redirect: " & natural'image(slv2u(cp.dbInfo.seqNum));
+                        report "";
+                        report "";
+                    end if;
+                    -- pragma synthesis on
                 end procedure;
                 
             begin
@@ -776,6 +783,7 @@ begin
             controlToM0_E0.controlInfo.full <= slotRegReadM0.full;
             controlToM0_E0.op <= slotRegReadM0.st.operation;
             controlToM0_E0.tags <= slotRegReadM0.st.tags;
+            controlToM0_E0.dbInfo <= slotRegReadM0.st.dbInfo;
             --------------------------------------
 
             memCtrlRR <= controlToM0_E0; -- Interface LSQ

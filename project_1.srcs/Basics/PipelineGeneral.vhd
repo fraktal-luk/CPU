@@ -784,6 +784,7 @@ function makeExecResult(isl: SchedulerState) return ExecResult is
     variable res: ExecResult := DEFAULT_EXEC_RESULT;
 begin
     res.full := isl.full;
+    res.dbInfo := isl.st.dbInfo;
     res.tag := isl.st.tags.renameIndex;
     res.dest := isl.argSpec.dest;
 
@@ -794,6 +795,7 @@ function makeExecResult_N(isl: SchedulerState) return ExecResult_N is
     variable res: ExecResult_N := DEFAULT_EXEC_RESULT_N;
 begin
     res.full := isl.full;
+    res.dbInfo := isl.st.dbInfo;
     res.tag := isl.st.tags.renameIndex;
     res.iqTag := isl.destTag;
     res.dest := isl.argSpec.dest;
@@ -859,6 +861,8 @@ function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecR
     variable res: SchedulerState := DEFAULT_SCHED_STATE;
 begin
     res.full := mqRegReadSending;
+    res.st.dbInfo := mqReexecCtrlRR.dbInfo;
+    
     res.st.operation := mqReexecCtrlRR.op;
     res.st.tags := mqReexecCtrlRR.tags;
     
