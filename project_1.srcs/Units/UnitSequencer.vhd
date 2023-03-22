@@ -85,7 +85,7 @@ architecture Behavioral of UnitSequencer is
 
     signal pcNew, pcCurrent, pcNext: Mword := (others => '0');        
     signal sendingToPC, sendingOutPC, acceptingOutPC, sendingToLastEffective, running,
-           eventOccurred, killPC, eventCommitted, intCommitted, intSuppressed, lateEventSending, dbtrapOn, restartPC,    
+           eventOccurred, killPC, eventCommitted, intCommitted, intSuppressed, lateEventSending, dbtrapOn, restartPC, jumpWatchMatch,
            sendingToLateCausing, committingEvent, sendingToCommit, sendingOutCommit, commitLocked, fullPC, fullLateCausing: std_logic := '0';
 
     signal commitGroupCtr, commitGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
@@ -107,6 +107,9 @@ architecture Behavioral of UnitSequencer is
     alias linkRegInt is sysRegArray(3);
     alias savedStateExc is sysRegArray(4);
     alias savedStateInt is sysRegArray(5);
+    
+    alias jumpWatchTarget is sysRegArray(30);
+    alias jumpWatchAdr is sysRegArray(31);
     
     signal pcDbInfo --, dbInfo_0, dbInfo_1, dbInfo_2
     : InstructionDebugInfo := DEFAULT_DEBUG_INFO;
@@ -165,7 +168,7 @@ begin
     pcNext <= getNextPC(pcCurrent, (others => '0'), '0');
     
     SYS_REGS: block
-        signal sysStoreAllow: std_logic := '0';
+        signal sysStoreAllow, jumpDbMatch, jumpHwMatch: std_logic := '0';
         signal sysStoreAddress: slv5 := (others => '0');
         signal sysStoreValue: Mword := (others => '0');
         signal excInfoUpdate, intInfoUpdate: std_logic := '0';
@@ -179,8 +182,11 @@ begin
                                         and not lateCausingCt.hasInterrupt;
         intInfoUpdate <= lateEventSending and lateCausingCt.hasInterrupt;
     
+        jumpHwMatch <= '0' and bool2std(stageDataLastEffectiveInA.target = jumpWatchTarget);
+        jumpDbMatch <= bool2std(DB_ENABLE_JUMP_WATCH and stageDataLastEffectiveInA.target = DB_JUMP_WATCH_TARGET);
+    
         CLOCKED: process(clk)
-        begin                    
+        begin
             if rising_edge(clk) then
                 -- Reading sys regs
                 sysRegReadValue <= sysRegArray(slv2u(sysRegReadSel));            
@@ -206,7 +212,15 @@ begin
                     linkRegInt <= lateCausingIP;
                     savedStateInt <= currentState;
                 end if;
-                
+
+                jumpWatchMatch <= '0'; -- Cleared by default, set for 1 cycle if happens
+                if sendingToLastEffective = '1' then
+                    if stageDataLastEffectiveInA.controlInfo.confirmedBranch = '1' and (jumpHwMatch = '1' or jumpDbMatch = '1')  then
+                        jumpWatchAdr <= addInt(lastEffectiveTarget, 4*countOnes(extractFullMask(robData))-4);
+                        jumpWatchMatch <= '1';
+                    end if;
+                end if;
+
                 -- Enforcing content of read-only registers
                 sysRegArray(0) <= (others => '1');--PROCESSOR_ID;
 
@@ -214,7 +228,7 @@ begin
                 currentState(15 downto 10) <= (others => '0'); -- bits of state reg always set to 0
                 currentState(7 downto 2) <= (others => '0');               
                 -- Only some number of system regs exists        
-                for i in 6 to 31 loop
+                for i in 6 to 29 loop
                     sysRegArray(i) <= (others => '0');
                 end loop;                
             end if;    
@@ -341,6 +355,7 @@ begin
         EVENT_INCOMING: process(clk)
         begin
             if rising_edge(clk) then
+            
                 if sendingToLateCausing = '1' then
                     eventCommitted <= '0';
                     intCommitted <= '0';
@@ -368,6 +383,11 @@ begin
                 if sendingToLastEffective = '1' then
                     lastEffectiveCt <= stageDataLastEffectiveInA.controlInfo;
                     lastEffectiveTarget <= stageDataLastEffectiveInA.target;
+                        
+--                        if stageDataLastEffectiveInA.controlInfo.confirmedBranch = '1' and stageDataLastEffectiveInA.target = jumpWatchTarget then
+--                            jumpWatchAdr <= addInt(lastEffectiveTarget, 4*countOnes(extractFullMask(robData))-4);
+--                            jumpWatchMatch <= '1';
+--                        end if;
                 else
                     lastEffectiveCt.full <= '0';
                     lastEffectiveCt.newEvent <= '0';

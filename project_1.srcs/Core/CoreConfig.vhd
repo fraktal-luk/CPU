@@ -21,7 +21,8 @@ constant DB_LOG_EVENTS: boolean := false;-- false;
     constant DB_OP_TRACKING: boolean := true;
     constant DB_TRACKED_SEQ_NUM: Word := X"0000064b";
 
-
+    constant DB_ENABLE_JUMP_WATCH: boolean := false;
+    constant DB_JUMP_WATCH_TARGET: Mword := (others => '0');
 
 --constant SYNTH_CHECK: boolean := checkSynthesis;
 

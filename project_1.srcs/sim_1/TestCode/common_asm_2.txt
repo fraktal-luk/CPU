@@ -4,7 +4,7 @@ $labelQ
 	ldi_i r7, r8, 28
 
 	and_i r1, r1, r1
-	ja $f1
+	ja $func1
 	jnz_i r5, $f2
 
 	ldi_i r7, r0, 12
