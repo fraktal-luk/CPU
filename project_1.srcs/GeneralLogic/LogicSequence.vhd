@@ -72,6 +72,8 @@ return ControlPacket is
 	variable target, state: Mword := (others=>'0');
 	constant MINUS_4: Mword := i2slv(-4, MWORD_SIZE);
 begin
+    --res.dbInfo := commitCt.dbInfo;
+
     ct := commitCt;
     ct.hasInterrupt := int;
 

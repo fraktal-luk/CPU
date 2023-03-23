@@ -353,6 +353,18 @@ begin
         committingEvent <= sendingToCommit and anyEvent(robData);
     
         EVENT_INCOMING: process(clk)
+            -- TODO: now there's no ControlPacket to pass here, create it
+            procedure DB_reportLateEvent(cp: ControlPacket) is
+            begin
+                -- pragma synthesis off
+                if DB_BRANCH_EXEC_TRACKING and cp.controlInfo.full = '1' and cp.controlInfo.newEvent = '1' then
+                    report "";
+                    report "DEBUG: late event: " & natural'image(slv2u(cp.dbInfo.seqNum));
+                    report "";
+                    report "";
+                end if;
+                -- pragma synthesis on
+            end procedure;
         begin
             if rising_edge(clk) then
             
@@ -383,11 +395,6 @@ begin
                 if sendingToLastEffective = '1' then
                     lastEffectiveCt <= stageDataLastEffectiveInA.controlInfo;
                     lastEffectiveTarget <= stageDataLastEffectiveInA.target;
-                        
---                        if stageDataLastEffectiveInA.controlInfo.confirmedBranch = '1' and stageDataLastEffectiveInA.target = jumpWatchTarget then
---                            jumpWatchAdr <= addInt(lastEffectiveTarget, 4*countOnes(extractFullMask(robData))-4);
---                            jumpWatchMatch <= '1';
---                        end if;
                 else
                     lastEffectiveCt.full <= '0';
                     lastEffectiveCt.newEvent <= '0';

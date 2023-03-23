@@ -229,10 +229,20 @@ begin
                         tags(i) <= tagInWord; -- CAREFUL: tag is duplicated (this used for output, other accessible for comparisons when kill signal). 
                                               --          Impact on efficiencynot known (redundant memory but don't need output mux for FF data) 
                         renameTags(i)(TAG_SIZE-1 downto 0) <= compareAddressCtrl.tag;
-
+                        
+                        -- pragma synthesis off
+                        if DB_OP_TRACKING and queueContent(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                            report "";
+                            report "DEBUG: put to MQ: " & natural'image(slv2u(queueContent(i).dbInfo.seqNum));
+                            report "";
+                        end if;
+                        -- pragma synthesis on
+                        
                     else
                         queueContent(i).full <= '0';    
-                        queueContent(i).active <= '0';    
+                        queueContent(i).active <= '0';
+                        
+                        queueContent(i).dbInfo <= DEFAULT_DEBUG_INFO;
                     end if;
 
                 end if;
@@ -241,6 +251,16 @@ begin
                     queueContent(i).full <= '0';
                     queueContent(i).active <= '0';
                     queueContent(i).ready <= '0';
+                    
+                    queueContent(i).dbInfo <= DEFAULT_DEBUG_INFO;
+
+                    -- pragma synthesis off
+                    if DB_OP_TRACKING and queueContent(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                        report "";
+                        report "DEBUG: flushed from MQ: " & natural'image(slv2u(queueContent(i).dbInfo.seqNum));
+                        report "";
+                    end if;
+                    -- pragma synthesis on
                 end if;
             end loop;
 
@@ -258,6 +278,14 @@ begin
 
 
             if sending3 = '1' then
+                -- pragma synthesis off
+                if DB_OP_TRACKING and queueContent(p2i(selPtr3, QUEUE_SIZE)).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                    report "";
+                    report "DEBUG: sent from MQ: " & natural'image(slv2u(queueContent(p2i(selPtr3, QUEUE_SIZE)).dbInfo.seqNum));
+                    report "";
+                end if;
+                -- pragma synthesis on
+
                 queueContent(p2i(selPtr3, QUEUE_SIZE)) <= DEFAULT_MQ_ENTRY;
             end if;
 
