@@ -99,10 +99,6 @@ function getFastWakeups_N2(content: SchedulerInfoArray; bypass: BypassState; con
 
 function getInitWakeups(content: SchedulerInfoArray; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
 
--- experimental
-function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup;
-function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray;
-
 
 function updateSchedulerArray_N(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfoArray;
@@ -136,6 +132,8 @@ function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) 
 -- Issue stage
 function getDispatchArgValues_Is(input: SchedulerState; prevSending: std_logic) return SchedulerState;
 function updateDispatchArgs_Is(st: SchedulerState) return SchedulerState;
+function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState;
+
 
 -- Reg read stage
 function getDispatchArgValues_RR(input: SchedulerState;
@@ -163,6 +161,11 @@ function DB_incCyclesReady(dbd: DbDependency) return DbDependency;
 function getLastEvents(queueContent: SchedulerInfoArray) return IqEventArray;
 function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray;
 procedure DB_reportEvents(content: SchedulerInfoArray);
+
+
+-- experimental, don't export
+--function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup;
+--function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray;
 
 end LogicIssue;
 
@@ -656,143 +659,6 @@ begin
 end function;
 
 
--------------------------------
--- wups experimental
-    function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup is
-        variable res: ArgWakeup;
-        variable mode: WakeupMode := NONE;
-        constant N_SRCS: natural := MODES'length(2);
-        variable matched, matchedM3, matchedM2, matchedM1: std_logic := '0';
-        variable iqTagFull, iqTagFullM2, iqTagFullM1: SmallNumber := sn(0);
-    begin
-        for i in 0 to N_SRCS-1 loop
-            mode := MODES(MODE_IND, i);
-            
-            case mode is
-                when FAST =>
-                    iqTagFull := fni.iqTagsM2(i);
-                    iqTagFull := iqTagFull or sn(16*(1+i));
-                    matched := bool2std(argState.iqTag = iqTagFull);
-                    if (matched and argState.waiting) = '1' then
-                        res.active := '1';
-                        res.mode := FAST;
-                        --res.producer := 
-                        res.iqTag := iqTagFull;
-                        res.match := '1';
-                        res.pipe := sn(i);
-                        res.stage := X"00";
-                    end if;
-                    
-                when SLOW =>
-                    matched := bool2std(argState.reg = fni.nextTagsM3(i));
-                    if (matched and argState.waiting) = '1' then
-                        res.active := '1';
-                        res.mode := SLOW;
-                        --res.producer := 
-                        res.iqTag := fni.iqTagsM3(i);
-                        res.match := '1';
-                        res.pipe := sn(i);
-                        res.stage := X"03";
-                    end if;
-                    
-                when REG =>
-                    matched := bool2std(argState.reg = fni.tags0(i));
-                    if (matched and argState.waiting) = '1' then
-                        res.active := '1';
-                        res.mode := REG;
-                        --res.producer := 
-                        res.iqTag := fni.iqTags0(i);
-                        res.match := '1';
-                        res.pipe := sn(i);
-                        res.stage := X"02";
-                    end if;
-                    
-                when INIT_FAST => ------------------------------------------------
-                    iqTagFullM2 := fni.iqTagsM2(i);
-                    iqTagFullM2 := iqTagFull or sn(16*(1+i));
-                    matchedM2 := bool2std(argState.iqTag = iqTagFullM2);
-                    iqTagFullM1 := fni.iqTagsM1(i);
-                    iqTagFullM1 := iqTagFullM1 or sn(16*(1+i));
-                    matchedM1 := bool2std(argState.iqTag = iqTagFullM1);
-                    matched := matchedM2 or matchedM1;
-                    if (matched and argState.waiting) = '1' then
-                        res.active := '1';
-                        res.mode := INIT_FAST;
-                        --res.producer := 
-                        res.match := '1';
-                        res.pipe := sn(i);
-                        
-                        if matchedM1 = '1' then
-                            res.iqTag := iqTagFullM1;
-                            res.stage := X"01";
-                        else
-                            res.iqTag := iqTagFullM2;
-                            res.stage := X"00";
-                        end if;
-                    end if;
-
-                when INIT_SLOW => -----------------------------------------------
-                    matchedM3 := bool2std(argState.reg = fni.nextTagsM3(i));
-                    matchedM2 := bool2std(argState.reg = fni.nextTagsM2(i));
-                    matchedM1 := bool2std(argState.reg = fni.nextTagsM1(i));
-                    matched := matchedM3 or matchedM2 or matchedM1; 
-                    if (matched and argState.waiting) = '1' then
-                        res.active := '1';
-                        res.mode := INIT_SLOW;
-                        --res.producer := 
-                        res.match := '1';
-                        res.pipe := sn(i);
-                        
-                        if matchedM1 = '1' then
-                            res.iqTag := fni.iqTagsM1(i);
-                            res.stage := X"01";
-                        elsif matchedM2 = '1' then
-                            res.iqTag := fni.iqTagsM2(i);
-                            res.stage := X"00";                      
-                        else
-                            res.iqTag := fni.iqTagsM3(i);
-                            res.stage := X"03";
-                        end if;
-                    end if;
-
-                when INIT_REG => ------------------------------------------------
-                    matched := bool2std(argState.reg = fni.tags0(i) or argState.reg = fni.tags0(i));
-                    if (matched and argState.waiting) = '1' then
-                        res.active := '1';
-                        res.mode := INIT_REG;
-                        --res.producer := 
-                        res.iqTag := fni.iqTags0(i);
-                        res.match := '1';
-                        res.pipe := sn(i);
-                        res.stage := X"02";
-                    end if;                        
-
-                when CONST =>
-                    res.mode := CONST;
-
-                when others =>
-            end case;
-
-        end loop;
-        return res;
-    end function;
-
-    function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray is
-        constant LEN: natural := content'length; 
-        variable res: WakeupInfoArray(content'range);
-    begin
-
-        for i in 0 to LEN-1 loop
-            res(i).arg0 := getWakeup(content(i).dynamic.argStates(0), fni, WAKEUP_SPEC, 0);
-            res(i).arg1 := getWakeup(content(i).dynamic.argStates(1), fni, WAKEUP_SPEC, 1);
-            res(i).active := res(i).arg0.active or res(i).arg1.active;
-        end loop;
-        
-        return res;
-    end function;
-----------------------------------------------
-
-
 ---------------------------
 -- state handling internal
     function removeEntry(entry: SchedulerInfo) return SchedulerInfo is
@@ -1246,12 +1112,11 @@ end function;
         variable res: SchedulerState := input;
     begin
         res.full := prevSending;
-        if prevSending = '0' --or (input.argSpec.intDestSel = '0' and input.argSpec.floatDestSel = '0')
-        then
+        if prevSending = '0' then
            res.argSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
            res.destTag := (others => '0');
         end if;
-    
+
         return res;
     end function;
 
@@ -1282,7 +1147,27 @@ end function;
         return res;
     
     end function;
-    
+
+        function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState is
+            variable res: SchedulerState := st;
+        begin
+            res.full := st.full and not (ctSigs.cancelled or ctSigs.killFollowerNext);
+
+            res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
+            res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
+        
+            if res.argSrc(0)(1) /= '1' then
+                res.argSpec.args(0) := (others => '0');
+            end if;
+        
+            if res.argSrc(1)(1) /= '1' or res.st.zero(1) = '1' then
+                res.argSpec.args(1) := (others => '0');
+            end if;
+            
+            return res;
+        
+        end function;
+
     
     function getDispatchArgValues_RR(input: SchedulerState;
                                      prevSending: std_logic;
@@ -1430,5 +1315,144 @@ end function;
         -- pragma synthesis on
         return res;
     end function;
+
+
+
+-------------------------------
+-- wups experimental
+    function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup is
+        variable res: ArgWakeup;
+        variable mode: WakeupMode := NONE;
+        constant N_SRCS: natural := MODES'length(2);
+        variable matched, matchedM3, matchedM2, matchedM1: std_logic := '0';
+        variable iqTagFull, iqTagFullM2, iqTagFullM1: SmallNumber := sn(0);
+    begin
+        for i in 0 to N_SRCS-1 loop
+            mode := MODES(MODE_IND, i);
+            
+            case mode is
+                when FAST =>
+                    iqTagFull := fni.iqTagsM2(i);
+                    iqTagFull := iqTagFull or sn(16*(1+i));
+                    matched := bool2std(argState.iqTag = iqTagFull);
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := FAST;
+                        --res.producer := 
+                        res.iqTag := iqTagFull;
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        res.stage := X"00";
+                    end if;
+                    
+                when SLOW =>
+                    matched := bool2std(argState.reg = fni.nextTagsM3(i));
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := SLOW;
+                        --res.producer := 
+                        res.iqTag := fni.iqTagsM3(i);
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        res.stage := X"03";
+                    end if;
+                    
+                when REG =>
+                    matched := bool2std(argState.reg = fni.tags0(i));
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := REG;
+                        --res.producer := 
+                        res.iqTag := fni.iqTags0(i);
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        res.stage := X"02";
+                    end if;
+                    
+                when INIT_FAST => ------------------------------------------------
+                    iqTagFullM2 := fni.iqTagsM2(i);
+                    iqTagFullM2 := iqTagFull or sn(16*(1+i));
+                    matchedM2 := bool2std(argState.iqTag = iqTagFullM2);
+                    iqTagFullM1 := fni.iqTagsM1(i);
+                    iqTagFullM1 := iqTagFullM1 or sn(16*(1+i));
+                    matchedM1 := bool2std(argState.iqTag = iqTagFullM1);
+                    matched := matchedM2 or matchedM1;
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := INIT_FAST;
+                        --res.producer := 
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        
+                        if matchedM1 = '1' then
+                            res.iqTag := iqTagFullM1;
+                            res.stage := X"01";
+                        else
+                            res.iqTag := iqTagFullM2;
+                            res.stage := X"00";
+                        end if;
+                    end if;
+
+                when INIT_SLOW => -----------------------------------------------
+                    matchedM3 := bool2std(argState.reg = fni.nextTagsM3(i));
+                    matchedM2 := bool2std(argState.reg = fni.nextTagsM2(i));
+                    matchedM1 := bool2std(argState.reg = fni.nextTagsM1(i));
+                    matched := matchedM3 or matchedM2 or matchedM1; 
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := INIT_SLOW;
+                        --res.producer := 
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        
+                        if matchedM1 = '1' then
+                            res.iqTag := fni.iqTagsM1(i);
+                            res.stage := X"01";
+                        elsif matchedM2 = '1' then
+                            res.iqTag := fni.iqTagsM2(i);
+                            res.stage := X"00";                      
+                        else
+                            res.iqTag := fni.iqTagsM3(i);
+                            res.stage := X"03";
+                        end if;
+                    end if;
+
+                when INIT_REG => ------------------------------------------------
+                    matched := bool2std(argState.reg = fni.tags0(i) or argState.reg = fni.tags0(i));
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := INIT_REG;
+                        --res.producer := 
+                        res.iqTag := fni.iqTags0(i);
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        res.stage := X"02";
+                    end if;                        
+
+                when CONST =>
+                    res.mode := CONST;
+
+                when others =>
+            end case;
+
+        end loop;
+        return res;
+    end function;
+
+    function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray is
+        constant LEN: natural := content'length; 
+        variable res: WakeupInfoArray(content'range);
+    begin
+
+        for i in 0 to LEN-1 loop
+            res(i).arg0 := getWakeup(content(i).dynamic.argStates(0), fni, WAKEUP_SPEC, 0);
+            res(i).arg1 := getWakeup(content(i).dynamic.argStates(1), fni, WAKEUP_SPEC, 1);
+            res(i).active := res(i).arg0.active or res(i).arg1.active;
+        end loop;
+        
+        return res;
+    end function;
+----------------------------------------------
+
 
 end LogicIssue;
