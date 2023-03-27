@@ -1,7 +1,5 @@
 --
 
---
-
 library IEEE;
 use IEEE.STD_LOGIC_1164.all;
 
@@ -25,7 +23,6 @@ constant IQ_HOLD_TIME: natural := 3;
 
 
 -- Scheduler transient
-
 type WakeupStruct is record
     argLocsPipe: SmallNumber;
     argSrc: SmallNumber;
@@ -38,47 +35,42 @@ end record;
 
 constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0', (others => '0'), (others => '0'), sn(0), '0');
 
-    -- struct for experimental code
-    type ArgWakeup is record
-        active: std_logic;
-        mode: WakeupMode;
-        producer: InsTag;
-        iqTag: SmallNumber;
+-- struct for experimental code
+type ArgWakeup is record
+    active: std_logic;
+    mode: WakeupMode;
+    producer: InsTag;
+    iqTag: SmallNumber;
 
-        match: std_logic;
-        pipe:  SmallNumber;
-        stage: SmallNumber;
-    end record;
+    match: std_logic;
+    pipe:  SmallNumber;
+    stage: SmallNumber;
+end record;
 
-    type WakeupInfo is record
-        active: std_logic; -- if happening this cycle
-        arg0: ArgWakeup;
-        arg1: ArgWakeup;
-    end record;
+type WakeupInfo is record
+    active: std_logic; -- if happening this cycle
+    arg0: ArgWakeup;
+    arg1: ArgWakeup;
+end record;
 
-    type WakeupInfoArray is array(natural range <>) of WakeupInfo;
+type WakeupInfoArray is array(natural range <>) of WakeupInfo;
 
 
 -- CONFIG
-
 type SchedulerUpdateConfig is record
     dynamic: boolean;
-    --selection: boolean;
     fp: boolean;
     ignoreMemFail: boolean;
     fwModes: ForwardingModeArray(0 to 2);
     matchIQ: boolean;
-    --matchNonzero: boolean;
 end record;
 
 constant DEFUALT_SCHEDULER_UPDATE_CONFIG: SchedulerUpdateConfig := (
     dynamic => false,
-    --selection => false,
     fp => false,
     ignoreMemFail => false,
     fwModes => FORWARDING_MODES_NONE,
     matchIQ => false
-    --matchNonzero => false
 );
 
 
@@ -128,12 +120,7 @@ function iqNext_NS_2(queueContent: SchedulerInfoArray; inputData: SchedulerInfoA
 return SchedulerInfoArray;
 
 
-    function getLastEvents(queueContent: SchedulerInfoArray) return IqEventArray;
-    function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray;
-
-
 function updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D;
-
 
 
 -- issue
@@ -159,54 +146,23 @@ return SchedulerState;
 
 function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false) return SchedulerState;
 
-    type SlotControl is record
-        full: std_logic;
-        active: std_logic;
-        issued: std_logic;
-        freed: std_logic;
-        killed: std_logic;
-            killed_T: std_logic;
-        trial: std_logic;
-            trial_T: std_logic;
-        trialUpdated: std_logic;
-        living: std_logic;
-        ready: std_logic;
-        readyFull: std_logic;
-        readyLiving: std_logic;
-        selected: std_logic;
-    end record;
-    
-    constant DEFAULT_SLOT_CONTROL: SlotControl := (others => '0');
-    
-    type SlotControlArray is array(natural range <>) of SlotControl;
-----------------------------------------------
-    function getTrialMask(content: SchedulerInfoArray; events: EventState) return std_logic_vector;
+
+function getTrialMask(content: SchedulerInfoArray; events: EventState) return std_logic_vector;
+function getReadyMask(content: SchedulerInfoArray) return std_logic_vector;
+function getFullMask(content: SchedulerInfoArray) return std_logic_vector;
+function getFreedMask(content: SchedulerInfoArray) return std_logic_vector;
+function getTrialUpdatedMask(content: SchedulerInfoArray) return std_logic_vector;
 
 
-    function getControlSignals(content: SchedulerInfoArray; events: EventState) return SlotControlArray;
-    function getFullVec(arr: SlotControlArray) return std_logic_vector;
-    function getLivingVec(arr: SlotControlArray) return std_logic_vector;
-    function getActiveVec(arr: SlotControlArray) return std_logic_vector;
-    function getIssuedVec(arr: SlotControlArray) return std_logic_vector;
-    function getFreedVec(arr: SlotControlArray) return std_logic_vector;
-    function getKilledVec(arr: SlotControlArray) return std_logic_vector;
-        function getKilledVec_T(arr: SlotControlArray) return std_logic_vector;
-    function getTrialVec(arr: SlotControlArray) return std_logic_vector;
-        function getTrialVec_T(arr: SlotControlArray) return std_logic_vector;
-    function getTrialUpdatedVec(arr: SlotControlArray) return std_logic_vector;
-    function getReadyVec(arr: SlotControlArray) return std_logic_vector;
-    function getReadyFullVec(arr: SlotControlArray) return std_logic_vector;
-    function getReadyLiveVec(arr: SlotControlArray) return std_logic_vector;
-    function getSelectedVec(arr: SlotControlArray) return std_logic_vector;
-------------------------------------------
-
-    -- Debug functions
-    function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency;
-    function DB_incCyclesWaiting(dbd: DbDependency) return DbDependency;
-    function DB_incCyclesReady(dbd: DbDependency) return DbDependency;
+-- Debug functions
+function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency;
+function DB_incCyclesWaiting(dbd: DbDependency) return DbDependency;
+function DB_incCyclesReady(dbd: DbDependency) return DbDependency;
 
 
-        procedure DB_reportEvents(content: SchedulerInfoArray);
+function getLastEvents(queueContent: SchedulerInfoArray) return IqEventArray;
+function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray;
+procedure DB_reportEvents(content: SchedulerInfoArray);
 
 end LogicIssue;
 
@@ -446,25 +402,6 @@ package body LogicIssue is
         end case;            
     end function;
 
---    function setMatch(matchVec: std_logic_vector; p: natural; stage: integer; fc: ForwardingComparisons) return std_logic_vector is
---        variable res: std_logic_vector(matchVec'range) := matchVec;
---    begin
---        case stage is
---            when -3 =>
---                res(p) := fc.cmpM3(p);
---            when -2 =>
---                res(p) := fc.cmpM2(p);
---            when -1 =>
---                res(p) := fc.cmpM1(p);
---            when 0 =>
---                res(p) := fc.cmp0(p);
---            when 1 =>
---                res(p) := fc.cmp1(p);
---            when others =>
---                res(p) := '0';
---        end case;
---        return res;
---    end function;
 
     function tmpMin(a, b: integer) return integer is
     begin
@@ -1427,171 +1364,41 @@ end function;
         return res;
     end function;
 
-    function getControlSignals(content: SchedulerInfoArray; events: EventState) return SlotControlArray is
-        variable res: SlotControlArray(content'range);        
-        variable readyFullVec, selectedVec: std_logic_vector(content'range) := (others => '0');
-    begin
-        for i in res'range loop        
-            res(i).full := content(i).dynamic.full;
-            res(i).active := content(i).dynamic.status.active;
-            res(i).issued := content(i).dynamic.status.issued;
-            res(i).freed := content(i).dynamic.status.freed;
-
-            res(i).trial := compareTagBefore(events.preExecTags.renameIndex, content(i).dynamic.renameIndex);
-                                         --   and content(i).dynamic.full;
-           --es(i).trial_T := compareIndBefore(events.preExecTags.bqPointerSeq, content(i).static.tags.bqPointerSeq, 6);
-
-            if false then -- Use bqPointerSeq to flush IQ
-               res(i).trial := res(i).trial_T;
-            end if;
-
-            res(i).trialUpdated := content(i).dynamic.status.trial;
-                                      --  and content(i).dynamic.full;
-            res(i).killed := (res(i).trialUpdated and events.execEvent) or events.lateEvent;
-            res(i).living := res(i).full and not res(i).killed;
-
-            res(i).ready := not content(i).dynamic.argStates(0).waiting and not content(i).dynamic.argStates(1).waiting and content(i).dynamic.status.active;          
-            res(i).readyFull := res(i).ready;
-            res(i).readyLiving := res(i).ready and res(i).living;
-
-            readyFullVec(i) := res(i).readyFull;          
-        end loop;
-        
-        selectedVec := getFirstOne(readyFullVec);
-        
-        for i in res'range loop
-            res(i).selected := selectedVec(i);
-        end loop;
-        
-        return res;
-    end function;
-
-    function getFullVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
+    function getReadyMask(content: SchedulerInfoArray) return std_logic_vector is
+        variable res: std_logic_vector(content'range) := (others => '0');        
     begin
         for i in res'range loop
-            res(i) := arr(i).full;
+            res(i) := not content(i).dynamic.argStates(0).waiting and not content(i).dynamic.argStates(1).waiting and content(i).dynamic.status.active;
         end loop;
         return res;
     end function;
 
-    function getLivingVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
+    function getFullMask(content: SchedulerInfoArray) return std_logic_vector is
+        variable res: std_logic_vector(content'range) := (others => '0');        
     begin
         for i in res'range loop
-            res(i) := arr(i).living;
+            res(i) := content(i).dynamic.full;
         end loop;
         return res;
     end function;
 
-    function getActiveVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
+    function getFreedMask(content: SchedulerInfoArray) return std_logic_vector is
+        variable res: std_logic_vector(content'range) := (others => '0');        
     begin
         for i in res'range loop
-            res(i) := arr(i).active;
-        end loop;
-        return res;
-    end function;
-    
-    function getIssuedVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).issued;
-        end loop;
-        return res;
-    end function;
-    
-    function getFreedVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).freed;
+            res(i) := content(i).dynamic.status.freed;
         end loop;
         return res;
     end function;
 
-    function getKilledVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
+    function getTrialUpdatedMask(content: SchedulerInfoArray) return std_logic_vector is
+        variable res: std_logic_vector(content'range) := (others => '0');        
     begin
         for i in res'range loop
-            res(i) := arr(i).killed;
+            res(i) := content(i).dynamic.status.trial;
         end loop;
         return res;
     end function;
-
-        function getKilledVec_T(arr: SlotControlArray) return std_logic_vector is
-            variable res: std_logic_vector(arr'range) := (others => '0');
-        begin
-            for i in res'range loop
-                res(i) := arr(i).killed_T;
-            end loop;
-            return res;
-        end function;
-
-    function getTrialVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).trial;
-        end loop;
-        return res;
-    end function;
-
-        function getTrialVec_T(arr: SlotControlArray) return std_logic_vector is
-            variable res: std_logic_vector(arr'range) := (others => '0');
-        begin
-            for i in res'range loop
-                res(i) := arr(i).trial_T;
-            end loop;
-            return res;
-        end function;
-
-    function getTrialUpdatedVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).trialUpdated;
-        end loop;
-        return res;
-    end function;
-    
-    function getReadyVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).ready;
-        end loop;
-        return res;
-    end function;
-
-    function getReadyFullVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).readyFull;
-        end loop;
-        return res;
-    end function;
-    
-    function getReadyLiveVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).readyLiving;
-        end loop;
-        return res;
-    end function;    
-    
-    function getSelectedVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).selected;
-        end loop;
-        return res;
-    end function;
-
 
 
     -- Debug functions
