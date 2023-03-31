@@ -215,6 +215,9 @@ function TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f: ExecResult;
                            resOutSQ: ExecResult)
 return ControlPacket;
 
+function selectOrdered(ar: ExecResultArray) return ExecResult;
+
+
 end package;
 
 
@@ -901,5 +904,15 @@ begin
     return res;
 end function;
 
+function selectOrdered(ar: ExecResultArray) return ExecResult is
+begin
+    for i in ar'low to ar'high-1 loop
+        if ar(i).full = '1' then
+            return ar(i);
+        end if;
+    end loop;
+    return ar(ar'high);
+end function;
+            
 
 end package body;

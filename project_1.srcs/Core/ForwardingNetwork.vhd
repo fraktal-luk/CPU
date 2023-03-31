@@ -272,6 +272,12 @@ constant DEFAULT_FORWARDING_MATCHES: ForwardingMatches := (
 );
 
 
+function makeBypassInt(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassState;
+function makeBypassIntSV(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassState;
+function makeBypassFloat(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassState;
+function makeBypassFloatSV(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassState;
+
+
 function buildForwardingNetwork(s0_R0, s0_R1: ExecResult;
                                 s1_R0, s1_R1: ExecResult;
                                 s2_R0, s2_R1: ExecResult;
@@ -291,6 +297,73 @@ end ForwardingNetwork;
 
 
 package body  ForwardingNetwork is
+
+function makeBypassInt(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassState is
+    variable bypassInt: BypassState := DEFAULT_BYPASS_STATE;
+begin
+    bypassInt.used := "111";
+    bypassInt.usedFast := "100";
+    bypassInt.obj := obj;--(subpipeI0_Issue, subpipeI1_E1, subpipeM0_RegRead);
+    bypassInt.objNext := objN;--(subpipeI0_RegRead, subpipeI1_E2, subpipeM0_E0i);                
+    bypassInt.objNext2 := objN2;--(DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, subpipeM0_E1i);
+    bypassInt.objTags := (issueTagI0, sn(0), sn(0));
+    bypassInt.stage := (-2, -2, -3);
+    bypassInt.phase := ( 0,  0, -1);
+    bypassInt.memFail := memFail;
+    
+    return bypassInt;
+end function;
+
+
+function makeBypassIntSV(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassState is
+    variable bypassIntSV: BypassState := DEFAULT_BYPASS_STATE;
+begin
+    bypassIntSV.used := "111";
+    bypassIntSV.usedFast := "000";
+                        --"000";
+    bypassIntSV.obj := obj;--(subpipeI0_E0, subpipeI1_D0, subpipeM0_E2i);
+    bypassIntSV.objNext := objN;--(subpipeI0_D0, subpipeI1_D1, subpipeM0_D0i);
+    bypassIntSV.objNext2 := objN2;--(others => DEFAULT_EXEC_RESULT);
+    bypassIntSV.objTags := (others => sn(0));
+    bypassIntSV.stage := (0, 0, 0);
+    bypassIntSV.phase := (2, 2, 2);                
+    bypassIntSV.memFail := memFail;
+    
+    return bypassIntSV;
+end function;
+
+function makeBypassFloat(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassState is
+    variable bypassFloat: BypassState := DEFAULT_BYPASS_STATE;
+begin
+    bypassFloat.used := "101";
+    bypassFloat.usedFast := "000";
+    bypassFloat.obj := obj;--(subpipeI0_Issue, subpipeI1_E1, subpipeM0_RegRead);
+    bypassFloat.objNext := objN;--(subpipeI0_RegRead, subpipeI1_E2, subpipeM0_E0i);                
+    bypassFloat.objNext2 := objN2;--(DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, subpipeM0_E1i);
+    bypassFloat.objTags := (others => sn(0));
+    bypassFloat.stage := (-3, -4, -1);
+    bypassFloat.phase := (-1,  0,  1);
+    bypassFloat.memFail := memFail;
+
+    return bypassFloat;
+end function;
+
+function makeBypassFloatSV(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassState is
+    variable bypassFloatSV: BypassState := DEFAULT_BYPASS_STATE;
+begin
+    bypassFloatSV.used := "101";
+    bypassFloatSV.usedFast := "000";
+                          --"000";  
+    bypassFloatSV.obj := obj;--(subpipeF0_E2, DEFAULT_EXEC_RESULT, subpipeM0_D0f);
+    bypassFloatSV.objNext := objN;--(subpipeF0_D0, DEFAULT_EXEC_RESULT, subpipeM0_D1f);
+    bypassFloatSV.objNext2 := objN2;--(others => DEFAULT_EXEC_RESULT);
+    bypassFloatSV.objTags := (others => sn(0));
+    bypassFloatSV.stage := (0, -4, 0);
+    bypassFloatSV.phase := (2,  0, 2);                
+    bypassFloatSV.memFail := memFail;
+    
+    return bypassFloatSV;
+end function;
 
 
 function buildForwardingNetwork(s0_R0, s0_R1: ExecResult;
