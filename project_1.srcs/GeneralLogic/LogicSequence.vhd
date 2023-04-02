@@ -72,6 +72,8 @@ return ControlPacket is
 	variable target, state: Mword := (others=>'0');
 	constant MINUS_4: Mword := i2slv(-4, MWORD_SIZE);
 begin
+    --res.dbInfo := commitCt.dbInfo;
+
     ct := commitCt;
     ct.hasInterrupt := int;
 
@@ -164,7 +166,7 @@ begin
             anyConfirmed := true;
         end if;
     end loop;
-	   
+
 	if evtPhase2 = '1' then
 	   res.controlInfo := lateCt;
 	   res.target := lateTarget;
@@ -172,13 +174,13 @@ begin
 	end if;
 
     ct_O := robData(0).controlInfo;
-    target_O := robData(0).target;
+    --target_O := robData(0).target;
 
     for i in PIPE_WIDTH-1 downto 0 loop
         if robData(i).controlInfo.full = '1' then
            ct_O := robData(i).controlInfo;
            ct_O.newEvent := hasSyncEvent(robData(i).controlInfo);
-           target_O := robData(i).target;
+           --target_O := robData(i).target;
            exit;
         end if;
     end loop;

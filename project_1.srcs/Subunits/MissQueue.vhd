@@ -21,6 +21,8 @@ architecture MissQueue of StoreQueue is
         sqMiss: std_logic;
         
         TMP_cnt: SmallNumber;
+        
+        dbInfo: InstructionDebugInfo;
     end record;
     
     constant DEFAULT_MQ_ENTRY: MQ_Entry := (
@@ -39,7 +41,9 @@ architecture MissQueue of StoreQueue is
         dataMiss => '0',
         sqMiss => '0',
         
-        TMP_cnt => (others => '0'));
+        TMP_cnt => (others => '0'),
+        
+        dbInfo => DEFAULT_DEBUG_INFO);
     
     type MQ_EntryArray is array(integer range <>) of MQ_Entry;
     
@@ -225,10 +229,20 @@ begin
                         tags(i) <= tagInWord; -- CAREFUL: tag is duplicated (this used for output, other accessible for comparisons when kill signal). 
                                               --          Impact on efficiencynot known (redundant memory but don't need output mux for FF data) 
                         renameTags(i)(TAG_SIZE-1 downto 0) <= compareAddressCtrl.tag;
-
+                        
+                        -- pragma synthesis off
+                        if DB_OP_TRACKING and queueContent(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                            report "";
+                            report "DEBUG: put to MQ: " & natural'image(slv2u(queueContent(i).dbInfo.seqNum));
+                            report "";
+                        end if;
+                        -- pragma synthesis on
+                        
                     else
                         queueContent(i).full <= '0';    
-                        queueContent(i).active <= '0';    
+                        queueContent(i).active <= '0';
+                        
+                        queueContent(i).dbInfo <= DEFAULT_DEBUG_INFO;
                     end if;
 
                 end if;
@@ -237,6 +251,16 @@ begin
                     queueContent(i).full <= '0';
                     queueContent(i).active <= '0';
                     queueContent(i).ready <= '0';
+                    
+                    queueContent(i).dbInfo <= DEFAULT_DEBUG_INFO;
+
+                    -- pragma synthesis off
+                    if DB_OP_TRACKING and queueContent(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                        report "";
+                        report "DEBUG: flushed from MQ: " & natural'image(slv2u(queueContent(i).dbInfo.seqNum));
+                        report "";
+                    end if;
+                    -- pragma synthesis on
                 end if;
             end loop;
 
@@ -247,11 +271,21 @@ begin
                 queueContent(p2i(writePtr, QUEUE_SIZE)).tag <= --compareAddressEarlyInput.tag;
                                                                compareAddressEarlyInput_Ctrl.tags.renameIndex;
                 queueContent(p2i(writePtr, QUEUE_SIZE)).TMP_cnt <= (others => '0');
+                
+                queueContent(p2i(writePtr, QUEUE_SIZE)).dbInfo <= compareAddressEarlyInput_Ctrl.dbInfo;
             end if;
 
 
 
             if sending3 = '1' then
+                -- pragma synthesis off
+                if DB_OP_TRACKING and queueContent(p2i(selPtr3, QUEUE_SIZE)).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                    report "";
+                    report "DEBUG: sent from MQ: " & natural'image(slv2u(queueContent(p2i(selPtr3, QUEUE_SIZE)).dbInfo.seqNum));
+                    report "";
+                end if;
+                -- pragma synthesis on
+
                 queueContent(p2i(selPtr3, QUEUE_SIZE)) <= DEFAULT_MQ_ENTRY;
             end if;
 
@@ -290,6 +324,10 @@ begin
     selectedDataOutput.tags.renameIndex <= outEntrySig.tag;
     selectedDataOutput.tags.lqPointer <= tagOutWord(31 downto 24);   
     selectedDataOutput.tags.sqPointer <= tagOutWord(23 downto 16);
+
+    selectedDataOutput.dbInfo <= outEntrySig.dbInfo;
+    selectedDataResult.dbInfo <= outEntrySig.dbInfo;
+
 
     committedSending <= sending1; -- Indication to block normal mem issue
     

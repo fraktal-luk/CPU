@@ -84,7 +84,7 @@ architecture Behavioral of StoreQueue is
 
     signal addresses, storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 
-    signal canAlloc, drainReq, drainEqual, allowDrain, isSending, isDrainingPrev, isSelected, isSelected_Early, sqMissed, missing, missingPrev: std_logic := '0';
+    signal canAlloc, drainReq, drainEqual, allowDrain, isSending, isDrainingPrev, isSelected, isSelectedNext, isSelected_Early, sqMissed, missing, missingPrev, committedEmptySig: std_logic := '0';
 
     signal drainOutput, selectedOutput, selectedOutput_E, selectedOutputReg_E,  selectedOutputSig, committedOutputSig: ControlPacket := DEFAULT_CONTROL_PACKET;
     signal adrValuePrev, drainValue, selectedValue, selectedValue_E, drainAddress, selectedAddress, selectedAddress_E: Mword := (others => '0');
@@ -146,6 +146,10 @@ begin
     updateResult.dest <= adrPtr;
     updateResult.value <= adrValue;
 
+
+        isSelectedNext <= isSelected_Early when not IS_LOAD_QUEUE
+                     else compareAddressInput.full and isNonzero(newerLQ);
+
     process (clk)
     begin
         if rising_edge(clk) then
@@ -182,12 +186,22 @@ begin
 
             -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
             if not IS_LOAD_QUEUE then
-                isSelected <= --compareAddressInput.full and isNonzero(olderSQ);
-                              isSelected_Early;
                 isSelected_Early <= compareAddressEarlyInput.full and isNonzero(olderSQ_Early);
-            else
-                isSelected <= compareAddressInput.full and isNonzero(newerLQ);
             end if;
+
+            isSelected <= isSelectedNext;
+
+                -- pragma synthesis off
+                if isSelectedNext = '1' then
+                    if DB_LSQ_TRACKING then
+                        report "";
+                        report "DEBUG: Store FW(" & boolean'image(IS_LOAD_QUEUE) & "): seqNum " & integer'image(slv2u(compareAddressInput.dbInfo.seqNum))
+                                 & " from entry " & integer'image(slv2u(pSelect));
+                        report "";
+                    end if;
+                end if;
+                -- pragma synthesis on
+
 
             selectedEntry <= queueContent(p2i(pSelect, QUEUE_SIZE));
             selectedValue <= storeValues(p2i(pSelect, QUEUE_SIZE));
@@ -237,7 +251,8 @@ begin
     selectedOutput <= getDrainOutput(selectedEntry, selectedAddress, selectedValue);    
         selectedOutput_E <= getDrainOutput(selectedEntry_E, selectedAddress_E, selectedValue_E);    
 
-    allowDrain <= '1';
+    allowDrain <= --'1';
+                    not committedEmptySig;
     drainOutput <= getDrainOutput(drainEntry, drainAddress, drainValue);   
 
 
@@ -293,7 +308,7 @@ begin
     	nAllocNext <= getNumFull(pStartNext, pRenamedNext, QUEUE_PTR_SIZE);
 
 	    nInRe <= i2slv(countOnes(renameMask), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
-        nOut <= nCommitted when committing = '1' else (others => '0');
+        nOut <= nCommitted when committing = '1' else (others => '0'); -- TODO: use nCommittedEffective? also UNUSED
     end generate;
     
     STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
@@ -310,7 +325,7 @@ begin
     nCommittedEffective <= i2slv(countOnes(commitEffectiveMask), SMALL_NUMBER_SIZE);
 
     drainEqual <= bool2std(pStart = pDrain);
-    drainReq <= not drainEqual;
+    drainReq <= not drainEqual  and allowDrain;
 
 
     -- Acc sigs
@@ -341,16 +356,19 @@ begin
         selectedOutputSig.target <= selectedOutput.target;
         selectedOutputSig.nip <= selectedOutput.nip;
 
-        committedOutputSig.controlInfo.full <= isDrainingPrev and allowDrain;
+        committedOutputSig.controlInfo.full <= isDrainingPrev;-- and allowDrain;
         
         committedOutputSig.op <= drainOutput.op;
         committedOutputSig.target <= drainOutput.target;
         committedOutputSig.nip <= drainOutput.nip;
     end generate;
 
+	committedEmptySig <= bool2std(pStart = pDrainPrev);
+
+
 	-- D. output (ctrl)
     committedDataOut <= committedOutputSig;
-	committedEmpty <= bool2std(pStart = pDrainPrev);
+    committedEmpty <= committedEmptySig;
 	committedSending <= isDrainingPrev;
 
 

@@ -1,4 +1,4 @@
-	jl  r31, $f1
+	jl  r31, $func1
 	add_i r0, r0, 0
 	add_i r0, r0, 0
 	add_i r0, r0, 0

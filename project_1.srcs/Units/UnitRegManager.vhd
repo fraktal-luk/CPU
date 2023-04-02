@@ -363,6 +363,25 @@ architecture Behavioral of UnitRegManager is
 
     signal inputRenameInfoInt, inputRenameInfoFloat, resultRenameInfoInt, resultRenameInfoFloat, storedRenameInfoInt, storedRenameInfoFloat,
                       commitArgInfoIntDelayed, commitArgInfoFloatDelayed: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+                      
+                      
+                      
+        procedure DB_trackSeqNum(renamed: InstructionSlotArray) is
+        begin
+            -- pragma synthesis off
+            if DB_OP_TRACKING then
+                for i in renamed'range loop
+                    if renamed(i).ins.dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                        report "";
+                        report "DEBUG: Tracked seqNum renamed: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                        report "";
+                        
+                        return;
+                    end if;
+                end loop;
+            end if;
+            -- pragma synthesis on
+        end procedure;
 begin
 
             commitGroupCtrIn <= commitGroupCtr;
@@ -435,6 +454,9 @@ begin
             if frontLastSending = '1' then
                 renameFull <= '1';
                 renamedDataLivingPre <= renamedBase;
+                
+                DB_trackSeqNum(renamedBase);
+                
             elsif renamedSendingSig = '1' then
                 renameFull <= '0';
             end if;
@@ -603,5 +625,57 @@ begin
     intStoreMaskRe <= getIntStoreMask1(renamedBase);
     floatStoreMaskRe <= getFloatStoreMask1(renamedBase);
     
-    renameGroupCtrNextOut <= renameGroupCtrNext;           
+    renameGroupCtrNextOut <= renameGroupCtrNext;
+    
+    RENAME_DB: block
+        signal gapSig: std_logic := '0';
+        signal gapFirst, gapLast: Word := (others => 'U');
+        signal lastSeqNum: Word := (others => '0');
+    begin
+    
+        COMMON_SYNCHRONOUS: process(clk)
+            procedure DB_handleGroup(ia: BufferEntryArray; signal lastSeqNum: inout Word; signal gapSig: out std_logic) is--; signal gapSig: out std_logic) is
+                variable any: boolean := false;
+                variable firstNewSeqNum, lastNewSeqNum, gap: Word := (others => '0');
+                
+            begin
+                -- pragma synthesis off
+            
+                for i in 0 to PIPE_WIDTH-1 loop
+                    if ia(i).full = '1' then
+                        if not any then
+                            firstNewSeqNum := ia(i).dbInfo.seqNum;
+                        end if;
+                        lastNewSeqNum := ia(i).dbInfo.seqNum;
+                        any := true;
+                    end if;
+                end loop;
+                
+                gap := sub(firstNewSeqNum, lastSeqNum);
+                if slv2u(gap) /= 1 then
+                    gapSig <= '1';
+                    gapFirst <= addInt(lastSeqNum, 1);
+                    gapLast <= addInt(firstNewSeqNum, -1);
+                else
+                    gapSig <= '0';
+                    gapFirst <= (others => 'U');
+                    gapLast <= (others => 'U');
+                end if;
+                
+                lastSeqNum <= lastNewSeqNum;
+                
+                -- pragma synthesis on
+            end procedure;
+        begin
+            if rising_edge(clk) then
+               if frontSendingIn = '1' then
+                   
+                   -- DEBUG
+                   --robDataCommitted <= robDataCommittedNext;
+                   DB_handleGroup(frontData, lastSeqNum, gapSig);
+               end if;
+            end if;
+        end process;       
+    
+    end block;          
 end Behavioral;

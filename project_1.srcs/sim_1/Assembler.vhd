@@ -36,8 +36,22 @@ package Assembler is
 
 constant MAX_LABEL_SIZE: natural := 30;
 
+
+constant PROGRAM_BUFFER_SIZE: natural := 1000;
+
 type GroupBuffer is array(0 to 4) of string(1 to MAX_LABEL_SIZE);
-type ProgramBuffer is array(0 to 999) of GroupBuffer;
+type ProgramBuffer is array(0 to PROGRAM_BUFFER_SIZE-1) of GroupBuffer;
+
+type CodeBuffer is record
+    size: natural;
+    words: ProgramBuffer;
+end record;
+
+type WordBuffer is record
+    size: natural;
+    words: WordArray(0 to 1023);
+end record;
+
 
 type LabelArray is array(integer range <>) of string(1 to MAX_LABEL_SIZE);
 constant EMPTY_LABEL_ARRAY: LabelArray(0 to 0) := (others => (others => ' '));
@@ -55,14 +69,15 @@ procedure printXrefArray(xa: XrefArray);
 function reg2str(n: natural; fp: boolean) return string;
 
 function parseInstructionString(str: string) return GroupBuffer; -- TEMP!
-function readSourceFile(name: string) return ProgramBuffer;
+function readSourceFile(name: string) return CodeBuffer;
 
-procedure processProgram(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray);
+procedure processProgram(p: in CodeBuffer; machineCodeBuf: out WordBuffer; imports, outExports: out XrefArray);
 function asm(str: string) return Word;
 
 function disasmWithAddress(a: natural; w: Word) return string;
 function disasmWord(w: Word) return string;
 
+procedure disasmToFile(name: string; arr: WordArray; n: natural);
 procedure disasmToFile(name: string; arr: WordArray);
 
 function matchXrefs(imp, exp: XrefArray) return IntArray;
@@ -144,7 +159,7 @@ begin
 end function;
 
 
-function readSourceFile(name: string) return ProgramBuffer is
+function readSourceFile(name: string) return CodeBuffer is
     file src: text open read_mode is name;
     variable ln: line;
     variable str: string(1 to 100);
@@ -153,7 +168,7 @@ function readSourceFile(name: string) return ProgramBuffer is
     variable lineNum, ind, grp, blockStart: integer := 0;
     variable labelFound: boolean := false;
     variable program: ProgramBuffer := (others => (others => (others => cr)));
-begin    
+begin
     loop
         ln := null;
         readline(src, ln);
@@ -180,7 +195,7 @@ begin
         lineNum := lineNum + 1;
     end loop;
     
-    return program;
+    return (lineNum, program);
 end function;
 
 
@@ -330,31 +345,33 @@ begin
 end function;
 
 
-procedure processProgram(p: in ProgramBuffer; machineCode: out WordArray; imports, outExports: out XrefArray) is
+procedure processProgram(p: in CodeBuffer; machineCodeBuf: out WordBuffer; imports, outExports: out XrefArray) is
     variable insIndex, procIndex: integer := 0; -- Actual number of instruction
-    variable labels, exports: LabelArray(0 to p'length-1) := (others => (others => cr));
-    variable startOffsets, endOffsets: IntArray(0 to p'length-1) := (others => -1);
+    variable labels, exports: LabelArray(0 to p.words'length-1) := (others => (others => cr));
+    variable startOffsets, endOffsets: IntArray(0 to p.words'length-1) := (others => -1);
     variable pSqueezed: ProgramBuffer := (others => (others => (others => cr))); 
-    variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext2, 0, 0, error, 0, 0));
+    --variable commands: WordArray(0 to p'length-1) := (others => ins655655(ext2, 0, 0, error, 0, 0));
+    variable commands: WordArray(0 to 1023) := (others => ins655655(ext2, 0, 0, error, 0, 0));
     variable tmpStr: string(1 to MAX_LABEL_SIZE) :=(others => ' ');
     variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
     variable tmpHasImport: boolean := false;
     
     variable ne, ni: natural := 0;
 begin
-    for i in 0 to p'length-1 loop
-        if p(i)(0)(1) = '@' then -- Keyword
-            tmpStr(1 to  p(i)(0)'length-1) := p(i)(0)(2 to p(i)(0)'length);
+    for i in 0 to --p.words'length-1 loop
+                    p.size-1 loop
+        if p.words(i)(0)(1) = '@' then -- Keyword
+            tmpStr(1 to  p.words(i)(0)'length-1) := p.words(i)(0)(2 to p.words(i)(0)'length);
             -- when proc
             if matches(tmpStr, "proc") then
                 -- add name to labels
                 -- add name to export
                 -- add insIndex to offsets
-                labels(insIndex)(1 to 10) := p(i)(1);
-                exports(insIndex)(2 to 11) := p(i)(1);
+                labels(insIndex)(1 to 10) := p.words(i)(1);
+                exports(insIndex)(2 to 11) := p.words(i)(1);
                 exports(insIndex)(1) := '$';
                 startOffsets(procIndex) := insIndex;
-                outExports(ne) := (new string'('$' & tmpStrip(p(i)(1))), 4*insIndex);
+                outExports(ne) := (new string'('$' & tmpStrip(p.words(i)(1))), 4*insIndex);
                 ne := ne + 1;
             elsif matches(tmpStr, "end") then
                 -- ignore
@@ -362,18 +379,19 @@ begin
                 endOffsets(procIndex) := insIndex;
                 procIndex := procIndex + 1;
             end if;
-        elsif p(i)(0)(1) = '$' then -- label
-           labels(insIndex)(1 to 10) := p(i)(0);            
-        elsif p(i)(0)(1) = cr then -- the line is empty
+        elsif p.words(i)(0)(1) = '$' then -- label
+           labels(insIndex)(1 to 10) := p.words(i)(0);            
+        elsif p.words(i)(0)(1) = cr then -- the line is empty
            null;
         else -- instruction
-           pSqueezed(insIndex) := p(i);
+           pSqueezed(insIndex) := p.words(i);
            insIndex := insIndex + 1;  
         end if;
         
     end loop;
-    
-    for i in 0 to p'length-1 loop
+
+    for i in 0 to --p.words'length-1 loop
+                   insIndex loop 
         processInstruction(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true, commands(i), tmpHasImport, tmpImport);
         if tmpHasImport then
             commands(i) := fillOffset(commands(i), i, tmpImport, labels, EMPTY_LABEL_ARRAY);
@@ -382,7 +400,10 @@ begin
         end if;
     end loop; 
 
-    machineCode := commands;
+    --machineCode := commands(0 to p.words'length-1);
+    --machineCodeBuf.words := (others => ins655655(ext2, 0, 0, error, 0, 0));
+    machineCodeBuf.words := commands;
+    machineCodeBuf.size := insIndex;
 end procedure;
 
 
@@ -433,17 +454,29 @@ begin
 end function;
 
 
+procedure disasmToFile(name: string; arr: WordArray; n: natural) is
+    file outFile: text open write_mode is name;
+    variable outputLine: line;
+    variable tmpStr: string(1 to 51);
+begin
+    for i in 0 to n-1 loop
+       tmpStr := disasmWithAddress(4*i, arr(i));
+       write(outputLine, tmpStr); 
+       writeline(outFile, outputLine);
+    end loop;
+end procedure;
+
 procedure disasmToFile(name: string; arr: WordArray) is
     file outFile: text open write_mode is name;
     variable outputLine: line;
     variable tmpStr: string(1 to 51);
 begin
-    for i in 0 to arr'length-1 loop 
-       tmpStr := disasmWithAddress(4*i, arr(i));
-       write(outputLine, tmpStr); 
-       writeline(outFile, outputLine);
-    end loop;
-
+--    for i in 0 to arr'length-1 loop
+--       tmpStr := disasmWithAddress(4*i, arr(i));
+--       write(outputLine, tmpStr); 
+--       writeline(outFile, outputLine);
+--    end loop;
+    disasmToFile(name, arr, arr'length-1);
 end procedure;
 
 

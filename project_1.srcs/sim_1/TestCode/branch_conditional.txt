@@ -1,21 +1,16 @@
 $start
 	add_i r8, r0, 200
 	add_i r5, r0, 0
-	add_r r0, r0, r0
-	add_r r0, r0, r0
-
 	ja $L1
-	ja $error
-	ja $error
-	ja $error
-		
+	add_i r0, r0, 0
+
 $error
     sys error
 $check	
 	sys call
 	ja $error
 	ja $error
-	
+
 $L1
 	add_i r5, r0, 11
 	jz_i  r5, $error
@@ -27,7 +22,7 @@ $L3
 	jz_i  r1, $error
 	add_i r1, r1, 1
 	jnz_i r1, $L4
-	
+
 $L2
 	add_r r8, r0, r0
 	add_r r1, r0, r0
@@ -39,16 +34,6 @@ $L5
 	add_i r10, r10, -1 ; r10--
 	ja $L5
 
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-	jnz_i r8, $error
-	
 	jnz_i r8, $error	
 	jnz_i r8, $error	
 	jnz_i r8, $error

@@ -190,6 +190,14 @@ begin
                 updateDynamicContentBranch(dynamicContent, branchControl.full, branchControl, execSigsMain(0).tag);
                 updateDynamicContentMemEvent(dynamicContent, execSigsMain(2).full, memoryControl, execSigsMain(2).tag);
 
+                --DB_trackUpdateSeqNum(execSigsMain);
+                --DB_trackUpdateSeqNum(execSigsSec);
+
+                if lateEventSignal = '1' then
+                    flushDynamicContent(dynamicContent);
+                    --DB_trackCompleteFlush(dynamicContent);
+                end if;
+
                 -- Write inputs
                 if prevSending = '1' then                    
                     writeStaticInput(staticContent, staticInput, endPtr);
@@ -197,6 +205,8 @@ begin
 
                     writeDynamicInput(dynamicContent, dynamicInput, endPtr);
                     writeDynamicGroupInput(dynamicGroupContent, dynamicGroupInput, endPtr);
+                    
+                    --DB_trackInputSeqNum(dynamicInput);
                     
                     serialMemContent(p2i(endPtr, ROB_SIZE)) <= serialInput;
                 end if;
@@ -212,7 +222,12 @@ begin
                 
                 staticOutputDB <= staticOutput_PreDB;
  
-                outputCompleted <= outputCompleted_Pre;             
+                outputCompleted <= outputCompleted_Pre;
+                
+                if isSending = '1' then
+                    removeGroup(dynamicContent, startPtr);
+                    --DB_trackInputSeqNum(dynamicOutput);
+                end if;             
             end if;
         end process;
 

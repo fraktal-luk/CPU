@@ -293,7 +293,7 @@ type StaticInfo is record
 end record;
 
 
-type StaticInfoArray is array(natural range <>) of StaticInfo;
+--type StaticInfoArray is array(natural range <>) of StaticInfo;
 
 -- Scheduler structure
 
@@ -305,11 +305,20 @@ type EntryStatus is record
     stageCtr: SmallNumber;
 end record;
 
+type IqState is (empty, active, issued, freed);
+
+type IqStateArray is array(natural range <>) of IqState;
+
+type IqEvent is (none, insert, kill, issue, retract, retire);
+
+type IqEventArray is array(natural range <>) of IqEvent;
 
 type DynamicInfo is record
     full: std_logic;
     
     status: EntryStatus;
+    currentState: IqState; -- DB
+    lastEvent: IqEvent; -- DB
 
     renameIndex: InsTag;
 
@@ -321,7 +330,7 @@ type DynamicInfo is record
 end record;
 
 
-type DynamicInfoArray is array(natural range <>) of DynamicInfo;
+--type DynamicInfoArray is array(natural range <>) of DynamicInfo;
 
 -- Scheduler structure
 
@@ -619,6 +628,8 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     full => '0',
 
     status => DEFAULT_ENTRY_STATUS,
+    currentState => empty,
+    lastEvent => none,
 
     renameIndex => (others => '0'),
     intDestSel => '0',

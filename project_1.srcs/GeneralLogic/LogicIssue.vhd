@@ -1,7 +1,5 @@
 --
 
---
-
 library IEEE;
 use IEEE.STD_LOGIC_1164.all;
 
@@ -25,7 +23,6 @@ constant IQ_HOLD_TIME: natural := 3;
 
 
 -- Scheduler transient
-
 type WakeupStruct is record
     argLocsPipe: SmallNumber;
     argSrc: SmallNumber;
@@ -38,47 +35,42 @@ end record;
 
 constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0', (others => '0'), (others => '0'), sn(0), '0');
 
-    -- struct for experimental code
-    type ArgWakeup is record
-        active: std_logic;
-        mode: WakeupMode;
-        producer: InsTag;
-        iqTag: SmallNumber;
+-- struct for experimental code
+type ArgWakeup is record
+    active: std_logic;
+    mode: WakeupMode;
+    producer: InsTag;
+    iqTag: SmallNumber;
 
-        match: std_logic;
-        pipe:  SmallNumber;
-        stage: SmallNumber;
-    end record;
+    match: std_logic;
+    pipe:  SmallNumber;
+    stage: SmallNumber;
+end record;
 
-    type WakeupInfo is record
-        active: std_logic; -- if happening this cycle
-        arg0: ArgWakeup;
-        arg1: ArgWakeup;
-    end record;
+type WakeupInfo is record
+    active: std_logic; -- if happening this cycle
+    arg0: ArgWakeup;
+    arg1: ArgWakeup;
+end record;
 
-    type WakeupInfoArray is array(natural range <>) of WakeupInfo;
+type WakeupInfoArray is array(natural range <>) of WakeupInfo;
 
 
 -- CONFIG
-
 type SchedulerUpdateConfig is record
     dynamic: boolean;
-    --selection: boolean;
     fp: boolean;
     ignoreMemFail: boolean;
     fwModes: ForwardingModeArray(0 to 2);
     matchIQ: boolean;
-    --matchNonzero: boolean;
 end record;
 
 constant DEFUALT_SCHEDULER_UPDATE_CONFIG: SchedulerUpdateConfig := (
     dynamic => false,
-    --selection => false,
     fp => false,
     ignoreMemFail => false,
     fwModes => FORWARDING_MODES_NONE,
     matchIQ => false
-    --matchNonzero => false
 );
 
 
@@ -107,10 +99,6 @@ function getFastWakeups_N2(content: SchedulerInfoArray; bypass: BypassState; con
 
 function getInitWakeups(content: SchedulerInfoArray; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
 
--- experimental
-function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup;
-function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray;
-
 
 function updateSchedulerArray_N(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfoArray;
@@ -127,8 +115,8 @@ return SchedulerInfoArray;
 function iqNext_NS_2(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
 return SchedulerInfoArray;
 
-function updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D;
 
+function updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D;
 
 
 -- issue
@@ -144,6 +132,8 @@ function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) 
 -- Issue stage
 function getDispatchArgValues_Is(input: SchedulerState; prevSending: std_logic) return SchedulerState;
 function updateDispatchArgs_Is(st: SchedulerState) return SchedulerState;
+function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState;
+
 
 -- Reg read stage
 function getDispatchArgValues_RR(input: SchedulerState;
@@ -154,51 +144,28 @@ return SchedulerState;
 
 function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false) return SchedulerState;
 
-    type SlotControl is record
-        full: std_logic;
-        active: std_logic;
-        issued: std_logic;
-        freed: std_logic;
-        killed: std_logic;
-            killed_T: std_logic;
-        trial: std_logic;
-            trial_T: std_logic;
-        trialUpdated: std_logic;
-        living: std_logic;
-        ready: std_logic;
-        readyFull: std_logic;
-        readyLiving: std_logic;
-        selected: std_logic;
-    end record;
-    
-    constant DEFAULT_SLOT_CONTROL: SlotControl := (others => '0');
-    
-    type SlotControlArray is array(natural range <>) of SlotControl;
-----------------------------------------------
-    function getTrialMask(content: SchedulerInfoArray; events: EventState) return std_logic_vector;
+
+function getTrialMask(content: SchedulerInfoArray; events: EventState) return std_logic_vector;
+function getReadyMask(content: SchedulerInfoArray) return std_logic_vector;
+function getFullMask(content: SchedulerInfoArray) return std_logic_vector;
+function getFreedMask(content: SchedulerInfoArray) return std_logic_vector;
+function getTrialUpdatedMask(content: SchedulerInfoArray) return std_logic_vector;
 
 
-    function getControlSignals(content: SchedulerInfoArray; events: EventState) return SlotControlArray;
-    function getFullVec(arr: SlotControlArray) return std_logic_vector;
-    function getLivingVec(arr: SlotControlArray) return std_logic_vector;
-    function getActiveVec(arr: SlotControlArray) return std_logic_vector;
-    function getIssuedVec(arr: SlotControlArray) return std_logic_vector;
-    function getFreedVec(arr: SlotControlArray) return std_logic_vector;
-    function getKilledVec(arr: SlotControlArray) return std_logic_vector;
-        function getKilledVec_T(arr: SlotControlArray) return std_logic_vector;
-    function getTrialVec(arr: SlotControlArray) return std_logic_vector;
-        function getTrialVec_T(arr: SlotControlArray) return std_logic_vector;
-    function getTrialUpdatedVec(arr: SlotControlArray) return std_logic_vector;
-    function getReadyVec(arr: SlotControlArray) return std_logic_vector;
-    function getReadyFullVec(arr: SlotControlArray) return std_logic_vector;
-    function getReadyLiveVec(arr: SlotControlArray) return std_logic_vector;
-    function getSelectedVec(arr: SlotControlArray) return std_logic_vector;
-------------------------------------------
+-- Debug functions
+function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency;
+function DB_incCyclesWaiting(dbd: DbDependency) return DbDependency;
+function DB_incCyclesReady(dbd: DbDependency) return DbDependency;
 
-    -- Debug functions
-    function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency;
-    function DB_incCyclesWaiting(dbd: DbDependency) return DbDependency;
-    function DB_incCyclesReady(dbd: DbDependency) return DbDependency;
+
+function getLastEvents(queueContent: SchedulerInfoArray) return IqEventArray;
+function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray;
+procedure DB_reportEvents(content: SchedulerInfoArray);
+
+
+-- experimental, don't export
+--function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup;
+--function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray;
 
 end LogicIssue;
 
@@ -438,25 +405,6 @@ package body LogicIssue is
         end case;            
     end function;
 
-    function setMatch(matchVec: std_logic_vector; p: natural; stage: integer; fc: ForwardingComparisons) return std_logic_vector is
-        variable res: std_logic_vector(matchVec'range) := matchVec;
-    begin
-        case stage is
-            when -3 =>
-                res(p) := fc.cmpM3(p);
-            when -2 =>
-                res(p) := fc.cmpM2(p);
-            when -1 =>
-                res(p) := fc.cmpM1(p);
-            when 0 =>
-                res(p) := fc.cmp0(p);
-            when 1 =>
-                res(p) := fc.cmp1(p);
-            when others =>
-                res(p) := '0';
-        end case;
-        return res;
-    end function;
 
     function tmpMin(a, b: integer) return integer is
     begin
@@ -465,6 +413,18 @@ package body LogicIssue is
         else
             return a;
         end if;
+    end function;
+
+    function TMP_incActiveCounter(ctr: SmallNumber) return SmallNumber is
+    begin
+        case ctr(1 downto 0) is
+            when "00" =>
+                return "00000001";
+--            when "01" =>
+--                return "00000010";               
+            when others =>
+                return "00000010";
+        end case;            
     end function;
 
 
@@ -480,7 +440,8 @@ package body LogicIssue is
     function updateArgInfo_A(argState: ArgumentState) return ArgumentState is
         variable res: ArgumentState := argState;  
     begin
-        res.activeCounter := addIntTrunc(res.activeCounter, 1, 2);
+        res.activeCounter := --addIntTrunc(res.activeCounter, 1, 2);
+                                TMP_incActiveCounter(res.activeCounter);
         res.srcStage := TMP_incSrcStage(res.srcStage);
         return res;
     end function;
@@ -698,146 +659,9 @@ begin
 end function;
 
 
--------------------------------
--- wups experimental
-    function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup is
-        variable res: ArgWakeup;
-        variable mode: WakeupMode := NONE;
-        constant N_SRCS: natural := MODES'length(2);
-        variable matched, matchedM3, matchedM2, matchedM1: std_logic := '0';
-        variable iqTagFull, iqTagFullM2, iqTagFullM1: SmallNumber := sn(0);
-    begin
-        for i in 0 to N_SRCS-1 loop
-            mode := MODES(MODE_IND, i);
-            
-            case mode is
-                when FAST =>
-                    iqTagFull := fni.iqTagsM2(i);
-                    iqTagFull := iqTagFull or sn(16*(1+i));
-                    matched := bool2std(argState.iqTag = iqTagFull);
-                    if (matched and argState.waiting) = '1' then
-                        res.active := '1';
-                        res.mode := FAST;
-                        --res.producer := 
-                        res.iqTag := iqTagFull;
-                        res.match := '1';
-                        res.pipe := sn(i);
-                        res.stage := X"00";
-                    end if;
-                    
-                when SLOW =>
-                    matched := bool2std(argState.reg = fni.nextTagsM3(i));
-                    if (matched and argState.waiting) = '1' then
-                        res.active := '1';
-                        res.mode := SLOW;
-                        --res.producer := 
-                        res.iqTag := fni.iqTagsM3(i);
-                        res.match := '1';
-                        res.pipe := sn(i);
-                        res.stage := X"03";
-                    end if;
-                    
-                when REG =>
-                    matched := bool2std(argState.reg = fni.tags0(i));
-                    if (matched and argState.waiting) = '1' then
-                        res.active := '1';
-                        res.mode := REG;
-                        --res.producer := 
-                        res.iqTag := fni.iqTags0(i);
-                        res.match := '1';
-                        res.pipe := sn(i);
-                        res.stage := X"02";
-                    end if;
-                    
-                when INIT_FAST => ------------------------------------------------
-                    iqTagFullM2 := fni.iqTagsM2(i);
-                    iqTagFullM2 := iqTagFull or sn(16*(1+i));
-                    matchedM2 := bool2std(argState.iqTag = iqTagFullM2);
-                    iqTagFullM1 := fni.iqTagsM1(i);
-                    iqTagFullM1 := iqTagFullM1 or sn(16*(1+i));
-                    matchedM1 := bool2std(argState.iqTag = iqTagFullM1);
-                    matched := matchedM2 or matchedM1;
-                    if (matched and argState.waiting) = '1' then
-                        res.active := '1';
-                        res.mode := INIT_FAST;
-                        --res.producer := 
-                        res.match := '1';
-                        res.pipe := sn(i);
-                        
-                        if matchedM1 = '1' then
-                            res.iqTag := iqTagFullM1;
-                            res.stage := X"01";
-                        else
-                            res.iqTag := iqTagFullM2;
-                            res.stage := X"00";
-                        end if;
-                    end if;
-
-                when INIT_SLOW => -----------------------------------------------
-                    matchedM3 := bool2std(argState.reg = fni.nextTagsM3(i));
-                    matchedM2 := bool2std(argState.reg = fni.nextTagsM2(i));
-                    matchedM1 := bool2std(argState.reg = fni.nextTagsM1(i));
-                    matched := matchedM3 or matchedM2 or matchedM1; 
-                    if (matched and argState.waiting) = '1' then
-                        res.active := '1';
-                        res.mode := INIT_SLOW;
-                        --res.producer := 
-                        res.match := '1';
-                        res.pipe := sn(i);
-                        
-                        if matchedM1 = '1' then
-                            res.iqTag := fni.iqTagsM1(i);
-                            res.stage := X"01";
-                        elsif matchedM2 = '1' then
-                            res.iqTag := fni.iqTagsM2(i);
-                            res.stage := X"00";                      
-                        else
-                            res.iqTag := fni.iqTagsM3(i);
-                            res.stage := X"03";
-                        end if;
-                    end if;
-
-                when INIT_REG => ------------------------------------------------
-                    matched := bool2std(argState.reg = fni.tags0(i) or argState.reg = fni.tags0(i));
-                    if (matched and argState.waiting) = '1' then
-                        res.active := '1';
-                        res.mode := INIT_REG;
-                        --res.producer := 
-                        res.iqTag := fni.iqTags0(i);
-                        res.match := '1';
-                        res.pipe := sn(i);
-                        res.stage := X"02";
-                    end if;                        
-
-                when CONST =>
-                    res.mode := CONST;
-
-                when others =>
-            end case;
-
-        end loop;
-        return res;
-    end function;
-
-    function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray is
-        constant LEN: natural := content'length; 
-        variable res: WakeupInfoArray(content'range);
-    begin
-
-        for i in 0 to LEN-1 loop
-            res(i).arg0 := getWakeup(content(i).dynamic.argStates(0), fni, WAKEUP_SPEC, 0);
-            res(i).arg1 := getWakeup(content(i).dynamic.argStates(1), fni, WAKEUP_SPEC, 1);
-            res(i).active := res(i).arg0.active or res(i).arg1.active;
-        end loop;
-        
-        return res;
-    end function;
-----------------------------------------------
-
-
 ---------------------------
 -- state handling internal
-    function removeEntry(entry: SchedulerInfo; freed: std_logic) return SchedulerInfo is
+    function removeEntry(entry: SchedulerInfo) return SchedulerInfo is
         variable res: SchedulerInfo := entry;
     begin
         res.dynamic.full := '0';
@@ -937,19 +761,53 @@ end function;
         constant LEN: natural := content'length;
         variable res: SchedulerInfoArray(content'range) := content;
     begin
-            for i in 0 to PIPE_WIDTH-1 loop
-                for k in 0 to LEN-1 loop
-                    if insertionLocs(k, i) = '1' then
-                        res(k) := newArr(i);
-                        res(k).dynamic.status.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
-                        exit;
-                    end if;
-                end loop;
+        for i in 0 to PIPE_WIDTH-1 loop
+            for k in 0 to LEN-1 loop
+                if insertionLocs(k, i) = '1' then
+                    res(k) := newArr(i);
+                    res(k).dynamic.status.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
+                    res(k).dynamic.currentState := active;
+                    res(k).dynamic.lastEvent := insert;
+                    exit;
+                end if;
             end loop;
+        end loop;
+        
         return res;
     end function;
 
+        procedure DB_reportEvents(content: SchedulerInfoArray) is
+        begin        
+            -- pragma synthesis off
+            for i in 0 to content'length-1 loop
+                if DB_OP_TRACKING and content(i).static.dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                    report "";
+                    
+                    case content(i).dynamic.lastEvent is
+                        when insert =>
+                            report "DEBUG: Tracked seqNum inserted to IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                        when kill =>
+                            report "DEBUG: Tracked seqNum kill in IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                        when issue =>
+                            report "DEBUG: Tracked seqNum issued from IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                        when retract =>
+                            report "DEBUG: Tracked seqNum pulled back to IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                        when retire =>
+                            -- problem: here dbInfo is already cleared so this is never reached
+                            report "DEBUG: Tracked seqNum retired from IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                        when others =>
+                    end case;
+                    
+                    report "";
+                    
+                    exit;
+                end if;                
+            end loop;
+            -- pragma synthesis on
+        end procedure;
+    
 
+    -- TODO: DB?
     function handleIqDbInfo(queueContent: SchedulerInfoArray) return SchedulerInfoArray is
         constant LEN: natural := queueContent'length;
         variable res: SchedulerInfoArray(queueContent'range) := queueContent;    
@@ -978,23 +836,26 @@ end function;
     end function;
 
 
-
+    -- mark issued/retracted, remove issued or killed
     function iqNext_NS(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail: std_logic)
     return SchedulerInfoArray is
         constant LEN: natural := queueContent'length;
         variable res: SchedulerInfoArray(queueContent'range) := queueContent;
-        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
     begin
         for i in 0 to LEN-1 loop
+            res(i).dynamic.lastEvent := none;
             res(i).dynamic.status.freed := '0'; -- This is set for 1 cycle when freeing
 
             if queueContent(i).dynamic.status.issued = '1' then
-                -- Remove after successful issue
-                if slv2u(res(i).dynamic.status.stageCtr) = IQ_HOLD_TIME - 1   then
-                    res(i) := removeEntry(res(i), '1');
+                if slv2u(res(i).dynamic.status.stageCtr) = IQ_HOLD_TIME - 1   then  -- Remove after successful issue
+                    res(i) := removeEntry(res(i));
                     res(i).dynamic.status.freed := '1';
-                elsif memFail = '1' and queueContent(i).dynamic.status.stageCtr(1 downto 0) = "00" then
+                    res(i).dynamic.currentState := empty;
+                    res(i).dynamic.lastEvent := retire;
+                elsif memFail = '1' and queueContent(i).dynamic.status.stageCtr(1 downto 0) = "00" then -- Retract
                     res(i) := pullbackEntry(res(i));
+                    res(i).dynamic.currentState := active;
+                    res(i).dynamic.lastEvent := retract;
                 else
                     res(i) := updateIssuedEntry(res(i));
                 end if;
@@ -1003,15 +864,18 @@ end function;
             -- set issued
             if (selMask(i) and sends) = '1' then
                 res(i) := issueEntry(res(i));
+                res(i).dynamic.currentState := issued;
+                res(i).dynamic.lastEvent := issue;
             end if;
 
             -- flush on event
-            if killMask(i) = '1' then -- the same as at removing successfully issued?
-                res(i) := removeEntry(res(i), '0');
+            if killMask(i) = '1' then
+                res(i) := removeEntry(res(i));
+                res(i).dynamic.currentState := empty;
+                res(i).dynamic.lastEvent := kill;
             end if;
 
-             -- set age comparison for possible subsequent flush
-             -- this is done regardless of other parts of state      
+             -- Set age comparison for possible subsequent flush. This is done regardless of other parts of state      
              res(i).dynamic.status.trial := trialMask(i);        
 
              res(i).dynamic.status.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
@@ -1021,21 +885,41 @@ end function;
     end function;
 
 
-        function iqNext_NS_2(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
-        return SchedulerInfoArray is
-            constant LEN: natural := queueContent'length;
-            variable res: SchedulerInfoArray(queueContent'range) := queueContent;
-            variable newArr: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputData;                
-            variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+    -- Insert new elements, update db info
+    function iqNext_NS_2(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
+    return SchedulerInfoArray is
+        constant LEN: natural := queueContent'length;
+        variable res: SchedulerInfoArray(queueContent'range) := queueContent;
+        variable newArr: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputData;                
+        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+    begin
+        newArr := inputData;
+           
+        if prevSending = '1' then
+            res := insertElements(res, newArr, insertionLocs);
+        end if;
+
+        res := handleIqDbInfo(res);
+
+        return res;
+    end function;
+
+
+        function getLastEvents(queueContent: SchedulerInfoArray) return IqEventArray is
+            variable res: IqEventArray(queueContent'range) := (others => none);
         begin
-            newArr := inputData;
-                        
-            if prevSending = '1' then
-                res := insertElements(res, newArr, insertionLocs);
-            end if;
-    
-            res := handleIqDbInfo(res);
-    
+            for i in res'range loop
+                res(i) := queueContent(i).dynamic.lastEvent;
+            end loop;
+            return res;
+        end function;
+
+        function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray is
+            variable res: IqStateArray(queueContent'range) := (others => empty);
+        begin
+            for i in res'range loop
+                res(i) := queueContent(i).dynamic.currentState;
+            end loop;
             return res;
         end function;
 
@@ -1177,6 +1061,17 @@ end function;
         end loop;
         
         res := orSchedEntrySlot(a, b);
+        
+            -- Set DB info
+            -- pragma synthesis off
+            for i in 0 to QUEUE_SIZE_EXT-1 loop
+                if selMask(i) = '1' then
+                    res.static.dbInfo := inputElems(i).static.dbInfo;
+                    exit;
+                end if;
+            end loop;
+            -- pragma synthesis on
+
         return res;
     end function;
 
@@ -1217,12 +1112,11 @@ end function;
         variable res: SchedulerState := input;
     begin
         res.full := prevSending;
-        if prevSending = '0' --or (input.argSpec.intDestSel = '0' and input.argSpec.floatDestSel = '0')
-        then
+        if prevSending = '0' then
            res.argSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
            res.destTag := (others => '0');
         end if;
-    
+
         return res;
     end function;
 
@@ -1253,7 +1147,27 @@ end function;
         return res;
     
     end function;
-    
+
+        function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState is
+            variable res: SchedulerState := st;
+        begin
+            res.full := st.full and not (ctSigs.cancelled or ctSigs.killFollowerNext);
+
+            res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
+            res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
+        
+            if res.argSrc(0)(1) /= '1' then
+                res.argSpec.args(0) := (others => '0');
+            end if;
+        
+            if res.argSrc(1)(1) /= '1' or res.st.zero(1) = '1' then
+                res.argSpec.args(1) := (others => '0');
+            end if;
+            
+            return res;
+        
+        end function;
+
     
     function getDispatchArgValues_RR(input: SchedulerState;
                                      prevSending: std_logic;
@@ -1335,171 +1249,41 @@ end function;
         return res;
     end function;
 
-    function getControlSignals(content: SchedulerInfoArray; events: EventState) return SlotControlArray is
-        variable res: SlotControlArray(content'range);        
-        variable readyFullVec, selectedVec: std_logic_vector(content'range) := (others => '0');
-    begin
-        for i in res'range loop        
-            res(i).full := content(i).dynamic.full;
-            res(i).active := content(i).dynamic.status.active;
-            res(i).issued := content(i).dynamic.status.issued;
-            res(i).freed := content(i).dynamic.status.freed;
-
-            res(i).trial := compareTagBefore(events.preExecTags.renameIndex, content(i).dynamic.renameIndex);
-                                         --   and content(i).dynamic.full;
-           --es(i).trial_T := compareIndBefore(events.preExecTags.bqPointerSeq, content(i).static.tags.bqPointerSeq, 6);
-
-            if false then -- Use bqPointerSeq to flush IQ
-               res(i).trial := res(i).trial_T;
-            end if;
-
-            res(i).trialUpdated := content(i).dynamic.status.trial;
-                                      --  and content(i).dynamic.full;
-            res(i).killed := (res(i).trialUpdated and events.execEvent) or events.lateEvent;
-            res(i).living := res(i).full and not res(i).killed;
-
-            res(i).ready := not content(i).dynamic.argStates(0).waiting and not content(i).dynamic.argStates(1).waiting and content(i).dynamic.status.active;          
-            res(i).readyFull := res(i).ready;
-            res(i).readyLiving := res(i).ready and res(i).living;
-
-            readyFullVec(i) := res(i).readyFull;          
-        end loop;
-        
-        selectedVec := getFirstOne(readyFullVec);
-        
-        for i in res'range loop
-            res(i).selected := selectedVec(i);
-        end loop;
-        
-        return res;
-    end function;
-
-    function getFullVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
+    function getReadyMask(content: SchedulerInfoArray) return std_logic_vector is
+        variable res: std_logic_vector(content'range) := (others => '0');        
     begin
         for i in res'range loop
-            res(i) := arr(i).full;
+            res(i) := not content(i).dynamic.argStates(0).waiting and not content(i).dynamic.argStates(1).waiting and content(i).dynamic.status.active;
         end loop;
         return res;
     end function;
 
-    function getLivingVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
+    function getFullMask(content: SchedulerInfoArray) return std_logic_vector is
+        variable res: std_logic_vector(content'range) := (others => '0');        
     begin
         for i in res'range loop
-            res(i) := arr(i).living;
+            res(i) := content(i).dynamic.full;
         end loop;
         return res;
     end function;
 
-    function getActiveVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
+    function getFreedMask(content: SchedulerInfoArray) return std_logic_vector is
+        variable res: std_logic_vector(content'range) := (others => '0');        
     begin
         for i in res'range loop
-            res(i) := arr(i).active;
-        end loop;
-        return res;
-    end function;
-    
-    function getIssuedVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).issued;
-        end loop;
-        return res;
-    end function;
-    
-    function getFreedVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).freed;
+            res(i) := content(i).dynamic.status.freed;
         end loop;
         return res;
     end function;
 
-    function getKilledVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
+    function getTrialUpdatedMask(content: SchedulerInfoArray) return std_logic_vector is
+        variable res: std_logic_vector(content'range) := (others => '0');        
     begin
         for i in res'range loop
-            res(i) := arr(i).killed;
+            res(i) := content(i).dynamic.status.trial;
         end loop;
         return res;
     end function;
-
-        function getKilledVec_T(arr: SlotControlArray) return std_logic_vector is
-            variable res: std_logic_vector(arr'range) := (others => '0');
-        begin
-            for i in res'range loop
-                res(i) := arr(i).killed_T;
-            end loop;
-            return res;
-        end function;
-
-    function getTrialVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).trial;
-        end loop;
-        return res;
-    end function;
-
-        function getTrialVec_T(arr: SlotControlArray) return std_logic_vector is
-            variable res: std_logic_vector(arr'range) := (others => '0');
-        begin
-            for i in res'range loop
-                res(i) := arr(i).trial_T;
-            end loop;
-            return res;
-        end function;
-
-    function getTrialUpdatedVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).trialUpdated;
-        end loop;
-        return res;
-    end function;
-    
-    function getReadyVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).ready;
-        end loop;
-        return res;
-    end function;
-
-    function getReadyFullVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).readyFull;
-        end loop;
-        return res;
-    end function;
-    
-    function getReadyLiveVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).readyLiving;
-        end loop;
-        return res;
-    end function;    
-    
-    function getSelectedVec(arr: SlotControlArray) return std_logic_vector is
-        variable res: std_logic_vector(arr'range) := (others => '0');
-    begin
-        for i in res'range loop
-            res(i) := arr(i).selected;
-        end loop;
-        return res;
-    end function;
-
 
 
     -- Debug functions
@@ -1531,5 +1315,144 @@ end function;
         -- pragma synthesis on
         return res;
     end function;
+
+
+
+-------------------------------
+-- wups experimental
+    function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup is
+        variable res: ArgWakeup;
+        variable mode: WakeupMode := NONE;
+        constant N_SRCS: natural := MODES'length(2);
+        variable matched, matchedM3, matchedM2, matchedM1: std_logic := '0';
+        variable iqTagFull, iqTagFullM2, iqTagFullM1: SmallNumber := sn(0);
+    begin
+        for i in 0 to N_SRCS-1 loop
+            mode := MODES(MODE_IND, i);
+            
+            case mode is
+                when FAST =>
+                    iqTagFull := fni.iqTagsM2(i);
+                    iqTagFull := iqTagFull or sn(16*(1+i));
+                    matched := bool2std(argState.iqTag = iqTagFull);
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := FAST;
+                        --res.producer := 
+                        res.iqTag := iqTagFull;
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        res.stage := X"00";
+                    end if;
+                    
+                when SLOW =>
+                    matched := bool2std(argState.reg = fni.nextTagsM3(i));
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := SLOW;
+                        --res.producer := 
+                        res.iqTag := fni.iqTagsM3(i);
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        res.stage := X"03";
+                    end if;
+                    
+                when REG =>
+                    matched := bool2std(argState.reg = fni.tags0(i));
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := REG;
+                        --res.producer := 
+                        res.iqTag := fni.iqTags0(i);
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        res.stage := X"02";
+                    end if;
+                    
+                when INIT_FAST => ------------------------------------------------
+                    iqTagFullM2 := fni.iqTagsM2(i);
+                    iqTagFullM2 := iqTagFull or sn(16*(1+i));
+                    matchedM2 := bool2std(argState.iqTag = iqTagFullM2);
+                    iqTagFullM1 := fni.iqTagsM1(i);
+                    iqTagFullM1 := iqTagFullM1 or sn(16*(1+i));
+                    matchedM1 := bool2std(argState.iqTag = iqTagFullM1);
+                    matched := matchedM2 or matchedM1;
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := INIT_FAST;
+                        --res.producer := 
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        
+                        if matchedM1 = '1' then
+                            res.iqTag := iqTagFullM1;
+                            res.stage := X"01";
+                        else
+                            res.iqTag := iqTagFullM2;
+                            res.stage := X"00";
+                        end if;
+                    end if;
+
+                when INIT_SLOW => -----------------------------------------------
+                    matchedM3 := bool2std(argState.reg = fni.nextTagsM3(i));
+                    matchedM2 := bool2std(argState.reg = fni.nextTagsM2(i));
+                    matchedM1 := bool2std(argState.reg = fni.nextTagsM1(i));
+                    matched := matchedM3 or matchedM2 or matchedM1; 
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := INIT_SLOW;
+                        --res.producer := 
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        
+                        if matchedM1 = '1' then
+                            res.iqTag := fni.iqTagsM1(i);
+                            res.stage := X"01";
+                        elsif matchedM2 = '1' then
+                            res.iqTag := fni.iqTagsM2(i);
+                            res.stage := X"00";                      
+                        else
+                            res.iqTag := fni.iqTagsM3(i);
+                            res.stage := X"03";
+                        end if;
+                    end if;
+
+                when INIT_REG => ------------------------------------------------
+                    matched := bool2std(argState.reg = fni.tags0(i) or argState.reg = fni.tags0(i));
+                    if (matched and argState.waiting) = '1' then
+                        res.active := '1';
+                        res.mode := INIT_REG;
+                        --res.producer := 
+                        res.iqTag := fni.iqTags0(i);
+                        res.match := '1';
+                        res.pipe := sn(i);
+                        res.stage := X"02";
+                    end if;                        
+
+                when CONST =>
+                    res.mode := CONST;
+
+                when others =>
+            end case;
+
+        end loop;
+        return res;
+    end function;
+
+    function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray is
+        constant LEN: natural := content'length; 
+        variable res: WakeupInfoArray(content'range);
+    begin
+
+        for i in 0 to LEN-1 loop
+            res(i).arg0 := getWakeup(content(i).dynamic.argStates(0), fni, WAKEUP_SPEC, 0);
+            res(i).arg1 := getWakeup(content(i).dynamic.argStates(1), fni, WAKEUP_SPEC, 1);
+            res(i).active := res(i).arg0.active or res(i).arg1.active;
+        end loop;
+        
+        return res;
+    end function;
+----------------------------------------------
+
 
 end LogicIssue;

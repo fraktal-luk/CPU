@@ -215,6 +215,9 @@ function TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f: ExecResult;
                            resOutSQ: ExecResult)
 return ControlPacket;
 
+function selectOrdered(ar: ExecResultArray) return ExecResult;
+
+
 end package;
 
 
@@ -784,6 +787,7 @@ function makeExecResult(isl: SchedulerState) return ExecResult is
     variable res: ExecResult := DEFAULT_EXEC_RESULT;
 begin
     res.full := isl.full;
+    res.dbInfo := isl.st.dbInfo;
     res.tag := isl.st.tags.renameIndex;
     res.dest := isl.argSpec.dest;
 
@@ -794,6 +798,7 @@ function makeExecResult_N(isl: SchedulerState) return ExecResult_N is
     variable res: ExecResult_N := DEFAULT_EXEC_RESULT_N;
 begin
     res.full := isl.full;
+    res.dbInfo := isl.st.dbInfo;
     res.tag := isl.st.tags.renameIndex;
     res.iqTag := isl.destTag;
     res.dest := isl.argSpec.dest;
@@ -839,7 +844,7 @@ end function;
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult is
     variable res: ExecResult := er;
 begin
-    res.full := er.full and not (fail and bool2std(ENABLE_MQ));
+    res.full := er.full and not fail;
     res.failed := er.full and fail;
     res.value := memResult;
     return res;
@@ -859,6 +864,8 @@ function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecR
     variable res: SchedulerState := DEFAULT_SCHED_STATE;
 begin
     res.full := mqRegReadSending;
+    res.st.dbInfo := mqReexecCtrlRR.dbInfo;
+    
     res.st.operation := mqReexecCtrlRR.op;
     res.st.tags := mqReexecCtrlRR.tags;
     
@@ -897,5 +904,15 @@ begin
     return res;
 end function;
 
+function selectOrdered(ar: ExecResultArray) return ExecResult is
+begin
+    for i in ar'low to ar'high-1 loop
+        if ar(i).full = '1' then
+            return ar(i);
+        end if;
+    end loop;
+    return ar(ar'high);
+end function;
+            
 
 end package body;

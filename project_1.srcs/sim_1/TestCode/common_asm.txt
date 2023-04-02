@@ -4,7 +4,7 @@ $label0
 	ldi_i r7, r8, 28
 	
 	ja  $label0
-@proc f1
+@proc func1
 	jz_r r0, r0, r31
 @end
 

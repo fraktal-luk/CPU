@@ -85,12 +85,12 @@ architecture Behavioral of UnitSequencer is
 
     signal pcNew, pcCurrent, pcNext: Mword := (others => '0');        
     signal sendingToPC, sendingOutPC, acceptingOutPC, sendingToLastEffective, running,
-           eventOccurred, killPC, eventCommitted, intCommitted, intSuppressed, lateEventSending, dbtrapOn, restartPC,    
+           eventOccurred, killPC, eventCommitted, intCommitted, intSuppressed, lateEventSending, dbtrapOn, restartPC, jumpWatchMatch,
            sendingToLateCausing, committingEvent, sendingToCommit, sendingOutCommit, commitLocked, fullPC, fullLateCausing: std_logic := '0';
 
     signal commitGroupCtr, commitGroupCtrNext: InsTag := INITIAL_GROUP_TAG;
     signal commitGroupCtrInc, commitGroupCtrIncNext: InsTag := INITIAL_GROUP_TAG_INC;
-    signal commitCtr, commitCtrNext, cycleCtr: Word := (others => '0');
+    signal commitCtr, commitCtrNext, cycleCtr, lastSeqNum: Word := (others => '0');
 
     signal stageDataLateCausingIn, stageDataLastEffectiveInA: ControlPacket := DEFAULT_CONTROL_PACKET;
 
@@ -108,12 +108,16 @@ architecture Behavioral of UnitSequencer is
     alias savedStateExc is sysRegArray(4);
     alias savedStateInt is sysRegArray(5);
     
-    signal pcDbInfo, dbInfo_0, dbInfo_1, dbInfo_2: InstructionDebugInfo := DEFAULT_DEBUG_INFO;
+    alias jumpWatchTarget is sysRegArray(30);
+    alias jumpWatchAdr is sysRegArray(31);
+    
+    signal pcDbInfo --, dbInfo_0, dbInfo_1, dbInfo_2
+    : InstructionDebugInfo := DEFAULT_DEBUG_INFO;
     
     constant HAS_RESET_SEQ: std_logic := '0';
     constant HAS_EN_SEQ: std_logic := '0';
 
-      signal robDataCommitted: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
+      signal robDataCommitted, robDataCommittedNext: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 
       signal  ch0, ch1, ch2, ch3, ch4, ch5: std_logic := '0';
 begin
@@ -164,7 +168,7 @@ begin
     pcNext <= getNextPC(pcCurrent, (others => '0'), '0');
     
     SYS_REGS: block
-        signal sysStoreAllow: std_logic := '0';
+        signal sysStoreAllow, jumpDbMatch, jumpHwMatch: std_logic := '0';
         signal sysStoreAddress: slv5 := (others => '0');
         signal sysStoreValue: Mword := (others => '0');
         signal excInfoUpdate, intInfoUpdate: std_logic := '0';
@@ -178,8 +182,11 @@ begin
                                         and not lateCausingCt.hasInterrupt;
         intInfoUpdate <= lateEventSending and lateCausingCt.hasInterrupt;
     
+        jumpHwMatch <= '0' and bool2std(stageDataLastEffectiveInA.target = jumpWatchTarget);
+        jumpDbMatch <= bool2std(DB_ENABLE_JUMP_WATCH and stageDataLastEffectiveInA.target = DB_JUMP_WATCH_TARGET);
+    
         CLOCKED: process(clk)
-        begin                    
+        begin
             if rising_edge(clk) then
                 -- Reading sys regs
                 sysRegReadValue <= sysRegArray(slv2u(sysRegReadSel));            
@@ -205,7 +212,15 @@ begin
                     linkRegInt <= lateCausingIP;
                     savedStateInt <= currentState;
                 end if;
-                
+
+                jumpWatchMatch <= '0'; -- Cleared by default, set for 1 cycle if happens
+                if sendingToLastEffective = '1' then
+                    if stageDataLastEffectiveInA.controlInfo.confirmedBranch = '1' and (jumpHwMatch = '1' or jumpDbMatch = '1')  then
+                        jumpWatchAdr <= addInt(lastEffectiveTarget, 4*countOnes(extractFullMask(robData))-4);
+                        jumpWatchMatch <= '1';
+                    end if;
+                end if;
+
                 -- Enforcing content of read-only registers
                 sysRegArray(0) <= (others => '1');--PROCESSOR_ID;
 
@@ -213,7 +228,7 @@ begin
                 currentState(15 downto 10) <= (others => '0'); -- bits of state reg always set to 0
                 currentState(7 downto 2) <= (others => '0');               
                 -- Only some number of system regs exists        
-                for i in 6 to 31 loop
+                for i in 6 to 29 loop
                     sysRegArray(i) <= (others => '0');
                 end loop;                
             end if;    
@@ -239,22 +254,83 @@ begin
     commitGroupCtrNext <= commitGroupCtrInc when sendingToCommit = '1' else commitGroupCtr;
     commitGroupCtrIncNext <= addInt(commitGroupCtrInc, PIPE_WIDTH) when sendingToCommit = '1' else commitGroupCtrInc;
 
-    COMMON_SYNCHRONOUS: process(clk)     
-    begin
-        if rising_edge(clk) then
-           commitGroupCtr <= commitGroupCtrNext;
-           commitGroupCtrInc <= commitGroupCtrIncNext;
-           commitCtr <= commitCtrNext;
+    robDataCommittedNext <= assignCommitNumbers(robData, commitCtr);
 
-           if sendingFromROB = '1' then
-               specialOp <= robSpecial;
-               
-                -- DEBUG
-                robDataCommitted <= assignCommitNumbers(robData, commitCtr);
-           end if;        
-        end if;
-    end process;        
+
+    COMMIT_DB: block
+        signal gapSig: std_logic := '0';
+        signal gapFirst, gapLast: Word := (others => 'U');
+    begin
     
+        COMMON_SYNCHRONOUS: process(clk)
+            procedure DB_handleGroup(ia: ControlPacketArray; signal lastSeqNum: inout Word; signal gapSig: out std_logic) is--; signal gapSig: out std_logic) is
+                variable any: boolean := false;
+                variable firstNewSeqNum, lastNewSeqNum, gap: Word := (others => '0');
+                
+            begin
+                -- pragma synthesis off
+            
+                for i in 0 to PIPE_WIDTH-1 loop
+                    if ia(i).controlInfo.full = '1' then
+                        if not any then
+                            firstNewSeqNum := ia(i).dbInfo.seqNum;
+                        end if;
+                        lastNewSeqNum := ia(i).dbInfo.seqNum;
+                        any := true;
+                    end if;
+                end loop;
+                
+                gap := sub(firstNewSeqNum, lastSeqNum);
+                if slv2u(gap) /= 1 then
+                    gapSig <= '1';
+                    gapFirst <= addInt(lastSeqNum, 1);
+                    gapLast <= addInt(firstNewSeqNum, -1);
+                else
+                    gapSig <= '0';
+                    gapFirst <= (others => 'U');
+                    gapLast <= (others => 'U');
+                end if;
+                
+                lastSeqNum <= lastNewSeqNum;
+                
+                -- pragma synthesis on
+            end procedure;
+            
+            procedure DB_trackSeqNum(ia: ControlPacketArray) is
+            begin
+                -- pragma synthesis off
+                if DB_OP_TRACKING then
+                    for i in ia'range loop
+                        if ia(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                            report "";
+                            report "DEBUG: Tracked seqNum committed: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                            report "";
+                            
+                            return;
+                        end if;
+                    end loop;
+                end if;
+                -- pragma synthesis on
+            end procedure;
+        begin
+            if rising_edge(clk) then
+               commitGroupCtr <= commitGroupCtrNext;
+               commitGroupCtrInc <= commitGroupCtrIncNext;
+               commitCtr <= commitCtrNext;
+    
+               if sendingFromROB = '1' then
+                   specialOp <= robSpecial;
+                   
+                   -- DEBUG
+                   robDataCommitted <= robDataCommittedNext;
+                   DB_handleGroup(robDataCommittedNext, lastSeqNum, gapSig);
+                   DB_trackSeqNum(robDataCommittedNext);
+               end if;        
+            end if;
+        end process;       
+    
+    end block;
+
 
     EVENT_HANDLING: block
     begin
@@ -277,8 +353,21 @@ begin
         committingEvent <= sendingToCommit and anyEvent(robData);
     
         EVENT_INCOMING: process(clk)
+            -- TODO: now there's no ControlPacket to pass here, create it
+            procedure DB_reportLateEvent(cp: ControlPacket) is
+            begin
+                -- pragma synthesis off
+                if DB_BRANCH_EXEC_TRACKING and cp.controlInfo.full = '1' and cp.controlInfo.newEvent = '1' then
+                    report "";
+                    report "DEBUG: late event: " & natural'image(slv2u(cp.dbInfo.seqNum));
+                    report "";
+                    report "";
+                end if;
+                -- pragma synthesis on
+            end procedure;
         begin
             if rising_edge(clk) then
+            
                 if sendingToLateCausing = '1' then
                     eventCommitted <= '0';
                     intCommitted <= '0';

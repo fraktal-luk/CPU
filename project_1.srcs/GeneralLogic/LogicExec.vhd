@@ -86,6 +86,7 @@ package body LogicExec is
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
 		variable targetEqual: std_logic := '0';
 	begin
+	    res.dbInfo := st.st.dbInfo;
         res.tags := st.st.tags;
 
         res.controlInfo.full := sending;
@@ -165,6 +166,8 @@ package body LogicExec is
 		variable ov, carry, cl, cm0, cm1: std_logic := '0';
 	    variable shiftInput, rotated, shiftOutput: Dword := (others => '0');
 	begin
+	   res.dbInfo := st.st.dbInfo;
+	
 		arg0 := st.args(0);
 		arg1 := st.args(1);
 		arg2 := st.args(2);
@@ -329,6 +332,7 @@ package body LogicExec is
         adr := add(st.args(0), st.args(1));
 
         res.full := full;
+        res.dbInfo := st.st.dbInfo;
         res.tag := st.st.tags.renameIndex;
         res.dest := st.argSpec.dest;        
         res.value := adr;
