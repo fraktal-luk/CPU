@@ -50,7 +50,7 @@ type ExecFunc is (
 --------------
 type SubpipeType is (None, ALU, Mem, FP);
 
-type ArithOp is (opAnd, opOr, opXor, opAdd, opSub, opShl, opSha, opRot, opJz, opJnz, opJ, opMul, opMulHS, opMulHU, opDiv);
+type ArithOp is (opAnd, opOr, opXor, opAdd, opSub, opShl, opSha, opRot, opJz, opJnz, opJ, opMul, opMulHS, opMulHU, opDivU, opDivS, opRemU, opRemS);
 
 type MemOp is (opLoad, opStore, opLoadSys, opStoreSys);
 

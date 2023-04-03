@@ -570,7 +570,8 @@ begin
 
                    constant CFG_MUL: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
 
-                   signal dataToMul, dataMulE0, dataMulE1, dataMulE2: ExecResult := DEFAULT_EXEC_RESULT;
+                   signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
+                   signal isDiv: std_logic := '0';
                 begin
                     wups <= getInitWakeups(schedInfoA, bypassInt, CFG_MUL);
 
@@ -631,14 +632,20 @@ begin
                     controlI1_RR.tags <= slotRegReadI1.st.tags;
 
                     dataToMul <= executeMulE0(slotRegReadI1.full and not outSigsI1.killFollower, slotRegReadI1, bqSelected.nip);
+                        isDiv <= bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opDivS
+                                       or slotRegReadI1.st.operation.arith = opRemU or slotRegReadI1.st.operation.arith = opRemS);
 
                     subpipeI1_E0 <= dataMulE0;
-                    subpipeI1_E1 <= dataMulE1;
+                    subpipeI1_E1 <= dataMulE1;  -- signals result tag
                     subpipeI1_E2 <= dataMulE2;
 
                     process (clk)
                     begin
                         if rising_edge(clk) then
+                            if (slotRegReadI1.full and not outSigsI1.killFollower and isDiv) = '1' then
+                                --divSlot <= slotRegReadI1;
+                            end if;
+                        
                             dataMulE0 <= dataToMul;
                             dataMulE1 <= dataMulE0;
                             dataMulE2 <= dataMulE1;

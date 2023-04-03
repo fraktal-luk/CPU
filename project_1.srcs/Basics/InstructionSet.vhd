@@ -67,7 +67,8 @@ type Opcode2 is (none,
                 intAdd, intSub,  
                 
                 intMul, intMulHU, intMulHS,
-                
+                intDivU, intDivS,
+                intRemU, intRemS,
                 
                 floatMove,
                   
@@ -205,7 +206,9 @@ constant FormatList: FormatAssignments(undef to sys_send) :=
     mulh_u => Int2R,
     div_s => Int2R,
     div_u => Int2R,
-    
+    rem_s => Int2R,
+    rem_u => Int2R,
+
     mov_f => Float1R,
     or_f => Float2R,    -- Float operations
     
@@ -266,6 +269,8 @@ type Operation is (none,
                     intAnd, intOr, intXor,
                     intAdd, intSub,
                     intMul, intMulHU, intMulHS,
+                    intDivU, intDivS,
+                    intRemU, intRemS,
                     
                     intShiftLogical, intShiftArith, intRotate,
                     
@@ -534,6 +539,12 @@ constant TableIntMul: OpcodeTable2 := (
     0 => (intMul,   intMul,  mult),
     1 => (intMulHU, intMulHU, mulh_u),
     2 => (intMulHS, intMulHS,  mulh_s),
+    
+    8 => (intDivU, intDivU, div_u),
+    9 => (intDivS, intDivS, div_s),
+    10 => (intRemU, intRemU, rem_u),
+    11 => (intRemS, intRemS, rem_s),
+
     others => (none, none, undef)
 );
 

@@ -24,7 +24,7 @@ constant PTR_MASK_SN_LONG: SmallNumber := i2slv(2*ROB_SIZE-1, SMALL_NUMBER_SIZE)
 constant ROB_PTR_SIZE: natural := countOnes(PTR_MASK_SN);	
     
 type StaticGroupInfo is record
-    specialOp: std_logic_vector(3 downto 0); -- TMP
+    specialOp: std_logic_vector(OP_VALUE_BITS-1 downto 0); -- TODO: make it independent of number of ops which are not relevant here
     useBQ:      std_logic; -- Maybe only here?
 end record;
 
@@ -278,8 +278,8 @@ end function;
 function serializeStaticGroupInfo(info: StaticGroupInfo) return std_logic_vector is
     variable res: Byte := (others => '0');
 begin
-    res(3 downto 0) := info.specialOp; -- CAREFUL: temporary num of bits
-    res(4) := info.useBQ;
+    res(OP_VALUE_BITS-1 downto 0) := info.specialOp;
+    res(OP_VALUE_BITS) := info.useBQ;
     return res;
 end function;
 
@@ -322,8 +322,8 @@ function deserializeStaticGroupInfo(v: std_logic_vector) return StaticGroupInfo 
     variable res: StaticGroupInfo;
     variable b: Byte := "00" & v(PIPE_WIDTH*18 + 6 - 1 downto PIPE_WIDTH*18);
 begin
-    res.specialOp := b(3 downto 0);
-    res.useBQ := b(4);
+    res.specialOp := b(OP_VALUE_BITS-1 downto 0);
+    res.useBQ := b(OP_VALUE_BITS);
     return res;
 end function;
 
