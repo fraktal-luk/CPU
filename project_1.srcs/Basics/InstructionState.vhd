@@ -299,6 +299,7 @@ end record;
 
 type EntryStatus is record
     active: std_logic;
+    suspend: std_logic;
     issued: std_logic;
     freed: std_logic;
     trial: std_logic;
@@ -618,6 +619,7 @@ constant DEFAULT_ARG_STATE: ArgumentState := DEFAULT_ARGUMENT_STATE;
 
 constant DEFAULT_ENTRY_STATUS: EntryStatus := (
     active => '0',
+    suspend => '0',
     issued => '0',
     freed => '0',
     trial => '0',

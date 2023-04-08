@@ -487,6 +487,7 @@ begin
                 TMP_newTags => TMP_aluTags,
                 bypass => bypassInt,
                 nextAccepting => allowIssueI0,
+                    unlockDiv => '0',
                 schedulerOut => slotSelI0,
                 outputSignals => outSigsI0, 
                 dbState => dbState
@@ -571,7 +572,9 @@ begin
                    constant CFG_MUL: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
 
                    signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
-                   signal isDiv: std_logic := '0';
+                   signal isDivIssue, isDivRR, divUnlock, divResultSending, divResultSent, divResultSent2, divReady, remReady: std_logic := '0';
+                   signal mulResult: Word := (others => '0');
+                   signal quotValue, remValue: Word := (others => '0');
                 begin
                     wups <= getInitWakeups(schedInfoA, bypassInt, CFG_MUL);
 
@@ -602,6 +605,7 @@ begin
                         TMP_newTags => TMP_mulTags,
                         bypass => bypassInt,
                         nextAccepting => allowIssueI1,
+                                            unlockDiv => divUnlock,
                         events => events,
                         schedulerOut => slotSelI1,
                         outputSignals => outSigsI1,
@@ -631,26 +635,142 @@ begin
                     controlI1_RR.op <= slotRegReadI1.st.operation;
                     controlI1_RR.tags <= slotRegReadI1.st.tags;
 
-                    dataToMul <= executeMulE0(slotRegReadI1.full and not outSigsI1.killFollower, slotRegReadI1, bqSelected.nip);
-                        isDiv <= bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opDivS
+                    -- This must mux issued multiply with div result
+                    dataToMul <= divSlot when divResultSending = '1'
+                            else executeMulE0(slotRegReadI1.full and not outSigsI1.killFollower, slotRegReadI1, bqSelected.nip);
+
+                        isDivIssue <= bool2std(slotIssueI1.st.operation.arith = opDivU or slotIssueI1.st.operation.arith = opDivS
+                                   or slotIssueI1.st.operation.arith = opRemU or slotIssueI1.st.operation.arith = opRemS);
+                        isDivRR <= bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opDivS
                                        or slotRegReadI1.st.operation.arith = opRemU or slotRegReadI1.st.operation.arith = opRemS);
 
                     subpipeI1_E0 <= dataMulE0;
                     subpipeI1_E1 <= dataMulE1;  -- signals result tag
-                    subpipeI1_E2 <= dataMulE2;
+                    subpipeI1_E2 <= setMemFail(dataMulE2, '0', mulResult);
 
                     process (clk)
+                        
                     begin
                         if rising_edge(clk) then
-                            if (slotRegReadI1.full and not outSigsI1.killFollower and isDiv) = '1' then
-                                --divSlot <= slotRegReadI1;
-                            end if;
-                        
                             dataMulE0 <= dataToMul;
                             dataMulE1 <= dataMulE0;
                             dataMulE2 <= dataMulE1;
+                            
+                            divResultSent <= divResultSending;
+                            divResultSent2 <= divResultSent;
                         end if;
                     end process;
+
+
+                    MULTIPLIER: block
+                        signal res, res0, res1, res2, divRes: Word := (others => '0');
+                    begin
+                        process (clk)
+                        begin
+                            if rising_edge(clk) then
+                                res0 <= work.Arith.multiply(slotRegReadI1.args(0), slotRegReadI1.args(1));
+                                
+                                if divReady = '1' then
+                                   divRes <= quotValue;
+                                else
+                                   divRes <= remValue;
+                                end if;
+                                
+                                    res1 <= res0;
+                                
+                                if divResultSent2 = '1' then
+                                    res2 <= divRes;
+                                else
+                                    res2 <= res1;
+                                end if;
+                            end if;
+                        end process;
+                        
+                        mulResult <= res2;
+                    end block;
+                    
+
+                    DIVIDER: block
+                        signal divFull, divSending, divPrepareSend, divAllowed, divMaybeIssued, divIssued, divRR, trialled, kill,
+                                usingDiv, usingRem: std_logic := '0';
+                        signal divTime: SmallNumber := sn(0);
+                        
+                        signal sum, diff, result: Word := (others => '0');
+                        signal diffE: std_logic_vector(32 downto 0) := (others => '0');
+                        signal divisor: Dword := (others => '0');
+                        signal sign, upperNZ: std_logic := '0';
+                    begin
+                            upperNZ <= isNonzero(divisor(63 downto 32));
+                            diffE <= subExt(sum, divisor(31 downto 0), '0');
+                            diff <= diffE(31 downto 0);
+                            sign <= diffE(32);
+                        
+                        divIssued <= slotIssueI1.full and isDivIssue;
+                            divSending <= divFull and bool2std(slv2u(divTime) = 33) and not kill; -- TMP value
+                            divPrepareSend <= divFull and bool2std(slv2u(divTime) = 31); -- TMP value
+
+                        divUnlock <= not (divAllowed and allowIssueI1) and not divIssued and not divRR and not divFull;
+
+                            kill <= (trialled and events.execEvent) or events.lateEvent;
+
+                        process (clk)
+                        begin
+                            if rising_edge(clk) then
+                                divReady <= '0';
+                                remReady <= '0';
+                            
+                                divAllowed <= divUnlock;
+                                divMaybeIssued <= divAllowed and allowIssueI1;
+                                
+                                divRR <= divIssued and not outSigsI1.killFollowerNext;
+                            
+                                trialled <= compareTagBefore(events.preExecTags.renameIndex, divSlot.tag);
+                            
+                                if divSending = '1' then
+                                    assert divIssued /= '1' report "Division overwrite!";
+                                    assert (divSending and slotRegReadI1.full) /= '1' report "Div result collided with issue!";
+                                
+                                    divFull <= '0';
+                                        divSlot.dbInfo <= DEFAULT_DEBUG_INFO;
+             
+                                    quotValue <= result;
+                                    remValue <= sum;
+                                    divReady <= usingDiv;
+                                    remReady <= usingRem;
+                                    usingDiv <= '0';
+                                    usingRem <= '0';
+                                elsif (slotRegReadI1.full and not outSigsI1.killFollower and isDivRR) = '1' then
+                                    divFull <= '1';
+                                    divTime <= sn(0);
+                                    divSlot <= makeExecResult(slotRegReadI1);
+                                        
+                                        usingDiv <= bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opDivS);
+                                        usingRem <= bool2std(slotRegReadI1.st.operation.arith = opRemU or slotRegReadI1.st.operation.arith = opRemS);
+
+                                        result <= (others => '0');
+                                        sum <= slotRegReadI1.args(0);
+                                        divisor <= slotRegReadI1.args(1) & X"00000000";
+                                else
+                                    divTime <= addInt(divTime, 1);
+                                        
+                                        result <= result(30 downto 0) & (not sign and not upperNZ);
+                                        if (not sign and not upperNZ) = '1' then
+                                            sum <= diff;
+                                        end if;    
+                                        divisor <= '0' & divisor(63 downto 1);    
+                                end if;
+                                
+                                if kill = '1' then
+                                    divFull <= '0';
+                                        divSlot.dbInfo <= DEFAULT_DEBUG_INFO;
+                                end if;
+
+                            end if;
+                        end process;
+                        
+                        lockIssueI1 <= divPrepareSend;
+                        divResultSending <= divSending;
+                    end block;
 
                 end block;
             end generate;
@@ -706,6 +826,7 @@ begin
                 TMP_newTags => TMP_memTags,
                 bypass => bypassInt,
                 nextAccepting => allowIssueM0,
+                                    unlockDiv => '0',
                 events => events,
                 schedulerOut => slotSelM0,
                 outputSignals => outSigsM0,            
@@ -888,6 +1009,7 @@ begin
                 TMP_newTags => TMP_sviTags,
                 bypass => bypassIntSV,
                 nextAccepting => allowIssueStoreDataInt,
+                                    unlockDiv => '0',
                 events => events,
                 schedulerOut => slotSelIntSV,
                 outputSignals => outSigsSVI,
@@ -960,6 +1082,7 @@ begin
                     TMP_newTags => TMP_svfTags,
                     bypass => bypassFloatSV,
                     nextAccepting => allowIssueStoreDataFP,
+                                        unlockDiv => '0',
                     events => events,
                     schedulerOut => slotSelFloatSV,              
                     outputSignals => outSigsSVF,
@@ -1034,6 +1157,7 @@ begin
                 TMP_newTags => TMP_fpTags,
                 bypass => bypassFloat,
                 nextAccepting => allowIssueF0,
+                                    unlockDiv => '0',
                 events => events,
                 schedulerOut => slotSelF0,
                 outputSignals => outSigsF0,

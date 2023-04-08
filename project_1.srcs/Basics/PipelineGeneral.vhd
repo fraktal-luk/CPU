@@ -217,6 +217,7 @@ return ControlPacket;
 
 function selectOrdered(ar: ExecResultArray) return ExecResult;
 
+function isDivOp(op: SpecificOp) return std_logic;
 
 end package;
 
@@ -913,6 +914,12 @@ begin
     end loop;
     return ar(ar'high);
 end function;
-            
+
+function isDivOp(op: SpecificOp) return std_logic is
+begin
+    return bool2std(op.subpipe = ALU
+                    and (op.arith = opDivU or op.arith = opDivS or op.arith = opRemU or op.arith = opRemS));
+end function;
+
 
 end package body;

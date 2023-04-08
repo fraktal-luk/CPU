@@ -289,10 +289,16 @@ package body LogicExec is
 		arg2 := st.args(2);
 
         result := arg0 xor arg1;
-		
-		res.full := full;
+
+        res.dbInfo := st.st.dbInfo; 
+
+		res.full := full and not isDivOp(st.st.operation);
 		res.tag := st.st.tags.renameIndex;
 		res.dest := st.argSpec.dest;
+		      if isDivOp(st.st.operation) = '1' then
+		          res.dbInfo := DEFAULT_DEBUG_INFO;
+		          res.dest := (others => '0');
+		      end if;
 		res.value := result;
 		return res;
 	end function;

@@ -45,7 +45,8 @@ entity IssueQueue is
         accept: out std_logic;
 
 		nextAccepting: in std_logic;
-
+            unlockDiv: in std_logic;
+            
 		events: in EventState;
 
         bypass: in BypassState;
@@ -120,7 +121,7 @@ begin
 
     freedMask <= getFreedMask(queueContent);
     fullMask <= getFullMask(queueContent);
-        
+
     QUEUE_CTRL: block
         signal sendingTrial: std_logic := '0';
         signal trialMask, trialUpdatedMask, killMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
@@ -135,7 +136,7 @@ begin
         queueContentUpdated <= updateSchedulerArray_N(queueContent, wups, memFail, CFG_WAIT);
         queueContentUpdated_2 <= iqNext_NS(queueContentUpdated, sends,
                                     killMask, trialMask, selMask,
-                                    memFail);
+                                    memFail, unlockDiv);
 
         sendingTrial <= isNonzero(selMask and trialUpdatedMask);
         sendingKilled <= (sendingTrial and events.execEvent) or events.lateEvent;
