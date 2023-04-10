@@ -30,6 +30,7 @@ procedure addExtNewP(a, b: Word; carryIn: std_logic; res0, res1: out Word; cl, c
 
 
 function multiply(a, b: Word) return Word;
+function multiplyLong(a, b: Word; sgA, sgB: std_logic) return Dword;
 
 end Arith;
 
@@ -342,6 +343,20 @@ begin
     bu := unsigned(b);
     cu := au * bu;
     res := Word(cu(31 downto 0));
+
+    return res;
+end function;
+
+function multiplyLong(a, b: Word; sgA, sgB: std_logic) return Dword is
+    use ieee.std_logic_arith.all;
+    variable res: Dword := (others => '0');
+    variable au, bu: signed(32 downto 0);
+    variable cu: signed(65 downto 0);
+begin
+    au := signed(sgA & a);
+    bu := signed(sgB & b);
+    cu := au * bu;
+    res := Dword(cu(63 downto 0));
 
     return res;
 end function;

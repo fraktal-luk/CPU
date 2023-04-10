@@ -663,12 +663,24 @@ begin
 
 
                     MULTIPLIER: block
-                        signal res, res0, res1, res2, divRes: Word := (others => '0');
+                        signal res, res0, res1, res2, divRes, arg0, arg1: Word := (others => '0');
+                        signal resLong1: Dword := (others => '0');
+                        signal sgA, sgB, isLow: std_logic := '0';
                     begin
                         process (clk)
                         begin
                             if rising_edge(clk) then
-                                res0 <= work.Arith.multiply(slotRegReadI1.args(0), slotRegReadI1.args(1));
+                                arg0 <= slotRegReadI1.args(0);
+                                arg1 <= slotRegReadI1.args(1);
+                                    isLow <= bool2std(slotRegReadI1.st.operation.arith = opMul);
+                                    if slotRegReadI1.st.operation.arith = opMulHS then
+                                        sgA <= slotRegReadI1.args(0)(31);
+                                        sgB <= slotRegReadI1.args(1)(31);
+                                    else
+                                        sgA <= '0';
+                                        sgB <= '0';
+                                    end if;
+                                --res0 <= work.Arith.multiply(slotRegReadI1.args(0), slotRegReadI1.args(1));
                                 
                                 if divReady = '1' then
                                    divRes <= quotValue;
@@ -676,12 +688,15 @@ begin
                                    divRes <= remValue;
                                 end if;
                                 
-                                    res1 <= res0;
-                                
+                                    res1 <= --res0;
+                                            work.Arith.multiply(arg0, arg1);
+                                    resLong1 <= work.Arith.multiplyLong(arg0, arg1, sgA, sgB);
                                 if divResultSent2 = '1' then
                                     res2 <= divRes;
+                                elsif isLow /= '1' then
+                                    res2 <= resLong1(63 downto 32);
                                 else
-                                    res2 <= res1;
+                                    res2 <= resLong1(31 downto 0);
                                 end if;
                             end if;
                         end process;
