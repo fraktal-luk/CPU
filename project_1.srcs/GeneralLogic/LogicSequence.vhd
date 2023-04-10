@@ -112,7 +112,7 @@ begin
         elsif specialOp.system = opCall then
             target := CALL_BASE; -- TEMP			    
         end if;
-    end if;		
+    end if;
 
     res.controlInfo := ct;
     res.ip := commitTarget;

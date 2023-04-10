@@ -368,7 +368,11 @@ BEGIN
 
                 -- Reset handler
                 setInstruction(programMemory2, RESET_BASE, "ja -512");
-                
+
+                -- Error handler
+                setInstruction(programMemory2, EXC_BASE, "sys error");
+                setInstruction(programMemory2, addInt(EXC_BASE, 4), "ja 0");
+
                 -- Call handler
                 setInstruction(programMemory2, CALL_BASE, "sys send");
                 setInstruction(programMemory2, addInt(CALL_BASE, 4), "ja 0");
@@ -450,7 +454,10 @@ BEGIN
               --testProgram2(slv2u(RESET_BASE)/4) <=     asm("ja -512");       
               setInstruction(programMemory2, RESET_BASE, "ja -512");
 
-              
+              -- Error handler
+	  	      setInstruction(programMemory2, EXC_BASE, "sys error");
+	  	      setInstruction(programMemory2, addInt(EXC_BASE, 4), "ja 0");
+	  	        
               -- Call handler - special
               --testProgram2(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");  
               --testProgram2(slv2u(CALL_BASE)/4 + 1) <= asm("sys rete");
@@ -487,6 +494,10 @@ BEGIN
               -- Reset handler
               --testProgram2(slv2u(RESET_BASE)/4) <=     asm("ja -512");
               setInstruction(programMemory2, RESET_BASE, "ja -512");
+
+              -- Error handler
+	  	      setInstruction(programMemory2, EXC_BASE, "sys error");
+	  	      setInstruction(programMemory2, addInt(EXC_BASE, 4), "ja 0");
 
               -- Call handler - special
               --testProgram2(slv2u(CALL_BASE)/4) <=     asm("add_i r20, r0, 55");

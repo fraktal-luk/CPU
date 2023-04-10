@@ -10,8 +10,8 @@
 ;a_tmp_sf4
 ;shifts
 mul
-;div
 ;mul_div
+;div
 branches
 branches2
 branch_link
