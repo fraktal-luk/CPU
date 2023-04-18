@@ -325,7 +325,7 @@ begin
         res := a(n-1 downto 0);
     else
         res(LEN-1 downto 0) := a;
-        res(LEN-1 downto n) := (others => a(n-1));
+        res(n-1 downto LEN) := (others => a(LEN-1));
     end if;
     
     return res;
