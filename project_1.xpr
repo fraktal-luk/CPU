@@ -33,7 +33,7 @@
     <Option Name="EnableBDX" Val="FALSE"/>
     <Option Name="DSAVendor" Val="xilinx"/>
     <Option Name="DSANumComputeUnits" Val="60"/>
-    <Option Name="WTXSimLaunchSim" Val="14724"/>
+    <Option Name="WTXSimLaunchSim" Val="14843"/>
     <Option Name="WTModelSimLaunchSim" Val="0"/>
     <Option Name="WTQuestaLaunchSim" Val="0"/>
     <Option Name="WTIesLaunchSim" Val="0"/>
@@ -388,6 +388,7 @@
       <File Path="$PSRCDIR/sim_1/TestCode/a_tmp_sf4.txt"/>
       <File Path="$PSRCDIR/sim_1/TestCode/mul_div.txt"/>
       <File Path="$PSRCDIR/sim_1/TestCode/div.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/div_s.txt"/>
       <Config>
         <Option Name="DesignMode" Val="RTL"/>
         <Option Name="TopModule" Val="CoreTB"/>
@@ -450,12 +451,12 @@
         <StratHandle Name="Flow_PerfOptimized_high" Flow="Vivado Synthesis 2018"/>
         <Step Id="synth_design">
           <Option Id="ResourceSharing">2</Option>
-          <Option Id="FsmExtraction">1</Option>
-          <Option Id="KeepEquivalentRegisters">1</Option>
           <Option Id="RepFanoutThreshold">400</Option>
-          <Option Id="NoCombineLuts">1</Option>
-          <Option Id="FlattenHierarchy">1</Option>
           <Option Id="ShregMinSize">5</Option>
+          <Option Id="FsmExtraction">1</Option>
+          <Option Id="FlattenHierarchy">1</Option>
+          <Option Id="KeepEquivalentRegisters">1</Option>
+          <Option Id="NoCombineLuts">1</Option>
           <Option Id="ReTiming">1</Option>
         </Step>
       </Strategy>

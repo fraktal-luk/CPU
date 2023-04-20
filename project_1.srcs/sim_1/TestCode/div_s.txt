@@ -1,0 +1,63 @@
+$start
+
+	; +/+
+	add_i r1, r0, 55
+	add_i r2, r0, 17
+	div_s r3, r1, r2
+	rem_s r4, r1, r2
+
+	add_i r5, r3, -3
+	;jnz_i r5, $error
+	add_i r6, r4, -4
+	;jnz_i r6, $error
+
+	; -/+
+	add_i r1, r0, -60
+	add_i r2, r0, 11
+	div_s r3, r1, r2
+	rem_s r4, r1, r2
+
+	add_i r5, r3, 6
+	;jnz_i r5, $error
+	add_i r6, r4, -6
+	;jnz_i r6, $error
+
+	; +/-
+	add_i r1, r0, 998
+	add_i r2, r0, -333
+	div_s r3, r1, r2
+	rem_s r4, r1, r2
+	
+	add_i r5, r3, 3
+	;jnz_i r5, $error
+	add_i r6, r4, 1
+	;jnz_i r6, $error
+	
+	; -/-
+	add_i r1, r0, -137
+	add_i r2, r0, -11
+	div_s r3, r1, r2
+	rem_s r4, r1, r2
+	
+	add_i r5, r3, -12
+	;jnz_i r5, $error
+	add_i r6, r4, 5
+	;jnz_i r6, $error
+
+
+	add_i r1, r0, 3
+	add_i r31, r0, 1
+
+	div_s r30, r0, r1
+	div_s r30, r31, r1
+
+
+	add_i r1, r0, -1
+	add_i r31, r0, 1
+
+	div_s r30, r0, r1
+	div_s r30, r31, r1
+
+	sys call
+$error
+    sys error

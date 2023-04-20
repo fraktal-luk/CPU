@@ -886,10 +886,13 @@ end function;
              res(i).dynamic.status.trial := trialMask(i);        
 
 
-                    if sends = '1' and res(i).dynamic.status.active = '1' and isDivOp(res(i).static.operation) = '1' then
+                    if sends = '1' --and res(i).dynamic.status.active = '1'
+                                    and res(i).dynamic.full = '1'
+                                    and res(i).dynamic.status.issued /= '1'
+                                    and isDivOp(res(i).static.operation) = '1' then
                         res(i).dynamic.status.active := '0';
                         res(i).dynamic.status.suspend := '1';
-                    elsif unlockDiv = '1' and res(i).dynamic.status.suspend = '1' and isDivOp(res(i).static.operation) = '1' then
+                    elsif unlockDiv = '1' and res(i).dynamic.full = '1' and res(i).dynamic.status.suspend = '1' and isDivOp(res(i).static.operation) = '1' then
                         res(i).dynamic.status.active := '1';
                         res(i).dynamic.status.suspend := '0';
                     end if;
