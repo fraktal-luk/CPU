@@ -685,7 +685,7 @@ begin
                                     end if;
 
                                     if isDivRR = '1' then
-                                        if slotRegReadI1.st.operation.arith = opDivU then
+                                        if (slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opRemU) then
                                             signSel0 <= '0';
                                             signSel1 <= '0';
                                         else
@@ -728,7 +728,8 @@ begin
                                             work.Arith.multiply(arg0, arg1);
                                     resLong1 <= work.Arith.multiplyLong(arg0, arg1, sgA, sgB);
                                 if divResultSent2 = '1' then
-                                    res2 <= divRes;
+                                    res2 <= --divRes;
+                                            divRes_N;
                                 elsif isLow1 /= '1' then
                                     res2 <= resLong1(63 downto 32);
                                 else
@@ -742,10 +743,11 @@ begin
 
 
                     DIVIDER: block
-                        signal divFull, divSending, divPrepareSend, divAllowed, divMaybeIssued, divIssued, divRR, trialled, kill, usingDiv, usingRem: std_logic := '0';
+                        signal divFull, divSending, divPrepareSend, divAllowed, divMaybeIssued, divIssued, divRR, trialled, kill, usingDiv, usingRem, isUnsigned: std_logic := '0';
                         signal divTime: SmallNumber := sn(0);
 
-                        signal sum, diff, result: Word := (others => '0');
+                        signal sum, 
+                                diff, result: Word := (others => '0');
                         signal sumLong, diffLong: Dword := (others => '0');
                         signal diffE: std_logic_vector(32 downto 0) := (others => '0');
                         signal divisor, divisorS: Dword := (others => '0');
@@ -803,11 +805,13 @@ begin
 
                                     usingDiv <= bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opDivS);
                                     usingRem <= bool2std(slotRegReadI1.st.operation.arith = opRemU or slotRegReadI1.st.operation.arith = opRemS);
+                                    isUnsigned <= bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opRemU);
 
                                     result <= (others => '0');
                                     sum <= slotRegReadI1.args(0);
                                     sumLong <= X"00000000" & slotRegReadI1.args(0);
                                     divisor <= '0' & slotRegReadI1.args(1) & "000" & X"0000000";
+                                 
                                     divisorS <= slotRegReadI1.args(1)(31) & slotRegReadI1.args(1) & "000" & X"0000000";
                                 else
                                     divTime <= addInt(divTime, 1);
@@ -818,7 +822,7 @@ begin
                                         sumLong <= diffLong;
                                     end if;
                                     divisor <= '0' & divisor(63 downto 1);    
-                                    divisorS <= divisorS(63) & divisorS(63 downto 1);    
+                                    divisorS <= (divisorS(63) and not isUnsigned) & divisorS(63 downto 1);    
                                 end if;
 
                                 if kill = '1' then
@@ -838,7 +842,7 @@ begin
                                 else sub(sum00, divisorS);
                         new00 <= --isNonzero(divTime) 
                                     '1'
-                                 and cmpGeS(sum00, divisorS);
+                                 and ((cmpGeS(sum00, divisorS) and not isUnsigned) or (cmpGeU(sum00, divisorS) and isUnsigned));
 
                         diff10 <=    add(sum10, divisorS) when isNonzero(divTime) /= '1'
                                 else sub(sum10, divisorS);
@@ -848,8 +852,6 @@ begin
                                 else sub(sum01, divisorS);
                         new01 <= (not isNonzero(divTime) and isNonzero(sum01)) or 
                                     cmpLeS(sum01, divisorS);
---                            new01 <= (not isNonzero(divTime) and cmpGeS(sum01, divisorS)) or 
---                                         (isNonzero(divTime) and cmpLeS(sum01, divisorS));
                                                     
                         diff11 <=    add(sum11, divisorS) when isNonzero(divTime) /= '1'
                                 else sub(sum11, divisorS);

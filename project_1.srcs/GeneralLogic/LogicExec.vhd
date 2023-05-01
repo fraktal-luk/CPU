@@ -72,7 +72,7 @@ package body LogicExec is
 
 	function resolveBranchCondition(ss: SchedulerState; op: ArithOp; ac: AluControl) return std_logic is
 		constant isZero: std_logic := not isNonzero(ss.args(0));
-	begin			
+	begin
 		return ac.jumpType(1) or (ac.jumpType(0) xor isZero);
 	end function;
 
