@@ -574,7 +574,7 @@ begin
                    signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
                    signal isDivIssue, isDivRR, divUnlock, divResultSending, divResultSent, divResultSent2, divReady, remReady: std_logic := '0';
                    signal mulResult: Word := (others => '0');
-                   signal quotValue, remValue: Word := (others => '0');
+                   --signal quotValue, remValue: Word := (others => '0');
                    
                                                signal quot00, quot10, quot01, quot11, rem00, rem10, rem01, rem11: Word;
 
@@ -666,7 +666,7 @@ begin
 
 
                     MULTIPLIER: block
-                        signal res, res0, res1, res2, divRes, divRes_N, arg0, arg1: Word := (others => '0');
+                        signal res2, divRes_N, arg0, arg1: Word := (others => '0');
                         signal resLong1: Dword := (others => '0');
                         signal sgA, sgB, isLow0, isLow1, signSel0, signSel1: std_logic := '0';
                     begin
@@ -693,11 +693,9 @@ begin
                                             signSel1 <= slotRegReadI1.args(1)(31);
                                         end if;
                                     end if;
-                                --res0 <= work.Arith.multiply(slotRegReadI1.args(0), slotRegReadI1.args(1));
 
                                 if divReady = '1' then
-                                   divRes <= quotValue;
-                                        
+
                                    if (signSel0 and signSel1) = '1' then
                                        divRes_N <= quot11; 
                                    elsif (signSel0 and not signSel1) = '1' then
@@ -708,10 +706,7 @@ begin
                                        divRes_N <= quot00; 
                                    end if;
                                    
-                                --else --
-                                elsif remReady = '1' then
-                                   divRes <= remValue;
-                                   
+                                elsif remReady = '1' then                                   
                                    if (signSel0 and signSel1) = '1' then
                                        divRes_N <= rem11; 
                                    elsif (signSel0 and not signSel1) = '1' then
@@ -722,14 +717,10 @@ begin
                                        divRes_N <= rem00; 
                                    end if;
                                 end if;
-                                    
                                     isLow1 <= isLow0;
-                                    res1 <= --res0;
-                                            work.Arith.multiply(arg0, arg1);
                                     resLong1 <= work.Arith.multiplyLong(arg0, arg1, sgA, sgB);
                                 if divResultSent2 = '1' then
-                                    res2 <= --divRes;
-                                            divRes_N;
+                                    res2 <= divRes_N;
                                 elsif isLow1 /= '1' then
                                     res2 <= resLong1(63 downto 32);
                                 else
@@ -746,24 +737,11 @@ begin
                         signal divFull, divSending, divPrepareSend, divAllowed, divMaybeIssued, divIssued, divRR, trialled, kill, usingDiv, usingRem, isUnsigned: std_logic := '0';
                         signal divTime: SmallNumber := sn(0);
 
-                        signal sum, 
-                                diff, result: Word := (others => '0');
-                        signal sumLong, diffLong: Dword := (others => '0');
-                        signal diffE: std_logic_vector(32 downto 0) := (others => '0');
-                        signal divisor, divisorS: Dword := (others => '0');
-                        signal sign, upperNZ: std_logic := '0';
-                        
-                            signal sum00, sum10, sum01, sum11, diff00, diff10, diff01, diff11: Dword := (others => '0');
-                            signal result00, result10, result01, result11: Word := (others => '0');
-                            signal new00, new10, new01, new11: std_logic := '0';
-                            
+                        signal divisorS: Dword := (others => '0');
+                        signal sum00, sum10, sum01, sum11, diff00, diff10, diff01, diff11: Dword := (others => '0');
+                        signal result00, result10, result01, result11: Word := (others => '0');
+                        signal new00, new10, new01, new11: std_logic := '0'; 
                     begin
-                        upperNZ <= isNonzero(divisor(63 downto 32));
-                        diffE <= subExt(sum, divisor(31 downto 0), '0');
-                        diff <= diffE(31 downto 0);
-                        diffLong <= sub(sumLong, divisor);
-                        sign <= diffE(32);
-
                         divIssued <= slotIssueI1.full and isDivIssue;
                         divSending <= divFull and bool2std(slv2u(divTime) = 32) and not kill; -- TMP value
                         divPrepareSend <= divFull and bool2std(slv2u(divTime) = 30); -- TMP value
@@ -792,8 +770,6 @@ begin
                                     divFull <= '0';
                                         divSlot.dbInfo <= DEFAULT_DEBUG_INFO;
 
-                                    quotValue <= result;
-                                    remValue <= sum;
                                     divReady <= usingDiv;
                                     remReady <= usingRem;
                                     usingDiv <= '0';
@@ -807,21 +783,10 @@ begin
                                     usingRem <= bool2std(slotRegReadI1.st.operation.arith = opRemU or slotRegReadI1.st.operation.arith = opRemS);
                                     isUnsigned <= bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opRemU);
 
-                                    result <= (others => '0');
-                                    sum <= slotRegReadI1.args(0);
-                                    sumLong <= X"00000000" & slotRegReadI1.args(0);
-                                    divisor <= '0' & slotRegReadI1.args(1) & "000" & X"0000000";
-                                 
                                     divisorS <= slotRegReadI1.args(1)(31) & slotRegReadI1.args(1) & "000" & X"0000000";
                                 else
                                     divTime <= addInt(divTime, 1);
 
-                                    result <= result(30 downto 0) & (not sign and not upperNZ);
-                                    if (not sign and not upperNZ) = '1' then
-                                        sum <= diff;
-                                        sumLong <= diffLong;
-                                    end if;
-                                    divisor <= '0' & divisor(63 downto 1);    
                                     divisorS <= (divisorS(63) and not isUnsigned) & divisorS(63 downto 1);    
                                 end if;
 
@@ -886,29 +851,21 @@ begin
                                     result11 <= (others => '0');
                                     sum11 <= X"ffffffff" & slotRegReadI1.args(0);
                                     
-                                        if slotRegReadI1.args(0)(31) = '1' then
-                                            --sum00 <= (others => 'U');
-                                            --sum01 <= (others => 'U');
-                                            result00 <= (others => 'U');
-                                            result01 <= (others => 'U');
-                                        else
-                                            --sum11 <= (others => 'U');
-                                            --sum10 <= (others => 'U');
-                                            result11 <= (others => 'U');
-                                            result10 <= (others => 'U');
-                                        end if;
+--                                        if slotRegReadI1.args(0)(31) = '1' then
+--                                            result00 <= (others => 'U');
+--                                            result01 <= (others => 'U');
+--                                        else
+--                                            result11 <= (others => 'U');
+--                                            result10 <= (others => 'U');
+--                                        end if;
 
-                                        if slotRegReadI1.args(1)(31) = '1' then
-                                            --sum00 <= (others => 'U');
-                                            --sum10 <= (others => 'U');
-                                            result00 <= (others => 'U');
-                                            result10 <= (others => 'U');
-                                        else
-                                            --sum11 <= (others => 'U');
-                                            --sum01 <= (others => 'U');
-                                            result11 <= (others => 'U');
-                                            result01 <= (others => 'U');
-                                        end if;
+--                                        if slotRegReadI1.args(1)(31) = '1' then
+--                                            result00 <= (others => 'U');
+--                                            result10 <= (others => 'U');
+--                                        else
+--                                            result11 <= (others => 'U');
+--                                            result01 <= (others => 'U');
+--                                        end if;
                                 else
                                     result00 <= result00(30 downto 0) & new00;
                                     if new00 = '1' then
@@ -935,85 +892,6 @@ begin
                         end process;
 
                     end block;
-
-
-                            DIVIDER_US: block
-                                signal divFull, divSending, divPrepareSend, divAllowed, divMaybeIssued, divIssued, divRR, trialled, kill, usingDiv, usingRem: std_logic := '0';
-                                signal divTime: SmallNumber := sn(0);
-                                
-                                signal result: Word := (others => '0');
-                                signal diffE: std_logic_vector(64 downto 0) := (others => '0');
-                                signal sumLong, diffLong, divisor: Dword := (others => '0');
-                                signal divReady_N, remReady_N, newBit: std_logic := '0';
-                                
-                                signal quotValue_N, remValue_N: Word;
-                            begin
-                                diffE <=     addExt(sumLong, divisor, '0') when isNonzero(divTime) /= '1'
-                                        else subExt(sumLong, divisor, '0');
-                                diffLong <= diffE(63 downto 0);
-
-                                divIssued <= slotIssueI1.full and isDivIssue;
-                                divSending <= divFull and bool2std(slv2u(divTime) = 32) and not kill; -- TMP value
-                                divPrepareSend <= divFull and bool2std(slv2u(divTime) = 30); -- TMP value
-            
-                                kill <= (trialled and events.execEvent) or events.lateEvent;
-    
-                                newBit <= (not isNonzero(divTime)) or cmpLeS(sumLong, divisor);
-
-                                process (clk)
-                                begin
-                                    if rising_edge(clk) then
-                                        divReady_N <= '0';
-                                        remReady_N <= '0';
-                                    
-                                        divAllowed <= divUnlock;
-                                        divMaybeIssued <= divAllowed and allowIssueI1;
-                                        
-                                        divRR <= divIssued and not outSigsI1.killFollowerNext;
-                                    
-                                        trialled <= compareTagBefore(events.preExecTags.renameIndex, divSlot.tag);
-                                    
-                                        if divSending = '1' then
-                                            assert divIssued /= '1' report "Division overwrite!";
-                                            assert (divSending and slotRegReadI1.full) /= '1' report "Div result collided with issue!";
-                                        
-                                            divFull <= '0';
-                     
-                                            quotValue_N <= result;
-                                            remValue_N <= sumLong(31 downto 0);
-                                            divReady_N <= usingDiv;
-                                            remReady_N <= usingRem;
-                                            usingDiv <= '0';
-                                            usingRem <= '0';
-                                        elsif (slotRegReadI1.full and not outSigsI1.killFollower and isDivRR) = '1' then
-                                            divFull <= '1';
-                                            divTime <= sn(0);
-
-                                            usingDiv <= bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opDivS);
-                                            usingRem <= bool2std(slotRegReadI1.st.operation.arith = opRemU or slotRegReadI1.st.operation.arith = opRemS);
-    
-                                            result <= (others => '0');
-                                            sumLong <= signExtend(slotRegReadI1.args(0), 64);
-                                            divisor <= slotRegReadI1.args(1)(31) & slotRegReadI1.args(1) & X"0000000" & "000";
-                                        else
-                                            divTime <= addInt(divTime, 1);
-
-                                            result <= result(30 downto 0) & newBit;
-                                            if (newBit) = '1' then
-                                                sumLong <= diffLong;
-                                            end if;
-                                            divisor <= '1' & divisor(63 downto 1);    
-                                        end if;
-                                        
-                                        if kill = '1' then
-                                            divFull <= '0';
-                                        end if;
-        
-                                    end if;
-                                end process;
-
-                            end block;
-
 
                 end block;
             end generate;
