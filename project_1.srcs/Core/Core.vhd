@@ -738,7 +738,8 @@ begin
                         signal divTime: SmallNumber := sn(0);
 
                         signal divisorS: Dword := (others => '0');
-                        signal sum00, sum10, sum01, sum11, diff00, diff10, diff01, diff11: Dword := (others => '0');
+                        signal sum00, sum10, sum01, sum11, diff00, diff10, diff01, diff11,
+                                      sum10_A, sum11_A  : Dword := (others => '0');
                         signal result00, result10, result01, result11: Word := (others => '0');
                         signal new00, new10, new01, new11: std_logic := '0'; 
                     begin
@@ -782,12 +783,8 @@ begin
                                     usingDiv <= bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opDivS);
                                     usingRem <= bool2std(slotRegReadI1.st.operation.arith = opRemU or slotRegReadI1.st.operation.arith = opRemS);
                                     isUnsigned <= bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opRemU);
-
-                                    divisorS <= slotRegReadI1.args(1)(31) & slotRegReadI1.args(1) & "000" & X"0000000";
                                 else
                                     divTime <= addInt(divTime, 1);
-
-                                    divisorS <= (divisorS(63) and not isUnsigned) & divisorS(63 downto 1);    
                                 end if;
 
                                 if kill = '1' then
@@ -840,32 +837,24 @@ begin
                                     rem11  <= sum11(31 downto 0);
                                 elsif (slotRegReadI1.full and not outSigsI1.killFollower and isDivRR) = '1' then
                                     result00 <= (others => '0');
-                                    sum00 <= X"00000000" & slotRegReadI1.args(0);
-
+                                    sum00 <= -- X"00000000" & slotRegReadI1.args(0);
+                                            zeroExtend(slotRegReadI1.args(0), 64);
                                     result10 <= (others => '0');
-                                    sum10 <= X"ffffffff" & slotRegReadI1.args(0);
-                                    
-                                    result01 <= (others => '0');
-                                    sum01 <= X"00000000" & slotRegReadI1.args(0);
-                                    
-                                    result11 <= (others => '0');
-                                    sum11 <= X"ffffffff" & slotRegReadI1.args(0);
-                                    
---                                        if slotRegReadI1.args(0)(31) = '1' then
---                                            result00 <= (others => 'U');
---                                            result01 <= (others => 'U');
---                                        else
---                                            result11 <= (others => 'U');
---                                            result10 <= (others => 'U');
---                                        end if;
+                                    sum10 <= --X"ffffffff" & slotRegReadI1.args(0);
+                                            signExtend(slotRegReadI1.args(0), 64);
+                                        sum10_A <= signExtend(slotRegReadI1.args(0), 64);
 
---                                        if slotRegReadI1.args(1)(31) = '1' then
---                                            result00 <= (others => 'U');
---                                            result10 <= (others => 'U');
---                                        else
---                                            result11 <= (others => 'U');
---                                            result01 <= (others => 'U');
---                                        end if;
+                                    result01 <= (others => '0');
+                                    sum01 <=-- X"00000000" & slotRegReadI1.args(0);
+                                                signExtend(slotRegReadI1.args(0), 64);
+
+                                    result11 <= (others => '0');
+                                    sum11 <= --X"ffffffff" & slotRegReadI1.args(0);
+                                            signExtend(slotRegReadI1.args(0), 64);
+                                        sum11_A <= signExtend(slotRegReadI1.args(0), 64);
+
+                                    divisorS <= slotRegReadI1.args(1)(31) & slotRegReadI1.args(1) & "000" & X"0000000";
+
                                 else
                                     result00 <= result00(30 downto 0) & new00;
                                     if new00 = '1' then
@@ -886,6 +875,8 @@ begin
                                     if new11 = '1' then
                                         sum11 <= diff11;
                                     end if;
+
+                                    divisorS <= (divisorS(63) and not isUnsigned) & divisorS(63 downto 1);    
                                 end if;
 
                             end if;

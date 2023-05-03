@@ -12,7 +12,7 @@ package CoreConfig is
 constant CLEAR_DEBUG_INFO: boolean := true;
 constant VIEW_ON: boolean := false;
 
-constant DB_ENABLE: boolean := true;
+constant DB_ENABLE: boolean := false;
 constant DB_LOG_EVENTS: boolean := false;-- false;
 
 
@@ -35,7 +35,7 @@ constant ALIGN_BITS: natural := LOG2_PIPE_WIDTH + 2;
 constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');    
 
 
-constant ENABLE_FP: boolean := false; --true;
+constant ENABLE_FP: boolean := true;
 constant ENABLE_FAST_WAKEUP: boolean := true;
 
 constant QQQ: natural := 1; -- 1: remove src2, 0: don't
