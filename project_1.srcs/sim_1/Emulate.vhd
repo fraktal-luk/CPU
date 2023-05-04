@@ -123,6 +123,8 @@ type AbstractOperation is (
     mulhu,
     divs,
     divu,
+    rems,
+    remu,
     
     ldi,
     sti,
@@ -181,7 +183,11 @@ constant OP_TABLE: OpTable(ProcMnemonic'left to ProcMnemonic'right) := (
         mult => (DESC_INT, mul),
         mulh_u => (DESC_INT, mulhu),
         mulh_s => (DESC_INT, mulhs),
-    
+        div_u => (DESC_INT, divu),
+        div_s => (DESC_INT, divs),
+        rem_u => (DESC_INT, remu),
+        rem_s => (DESC_INT, rems),
+        
     ja =>    (DESC_JUMP, j),
     jl =>    (DESC_JUMP, jl),
     jz_i =>  (DESC_JUMP, jz),
@@ -526,6 +532,47 @@ begin
     end if;
 end procedure;
 
+
+    
+function multiplyWords(a, b: Word; signed: boolean := false) return Dword is
+    variable res, shifted: Dword := (others => '0');
+begin
+    shifted(31 downto 0) := b;
+    for i in 0 to 30 loop
+        if a(i) = '1' then
+            res := add(res, shifted);
+        end if;
+        shifted := shifted(62 downto 0) & '0';
+    end loop;
+
+    if a(31) = '1' then
+        if signed then
+            res := sub(res, shifted);
+        else
+            res := add(res, shifted);
+        end if;
+    end if;
+    
+    return res;
+end function;    
+
+function multiplyLow(a, b: Word) return Word is
+    variable res: Word := (others => '0');
+    variable longRes: Dword := multiplyWords(a, b);
+begin
+    res := longRes(31 downto 0);
+    return res;
+end function; 
+
+function multiplyHigh(a, b: Word; signed: boolean := false) return Word is
+    variable res: Word := (others => '0');
+    variable longRes: Dword := multiplyWords(a, b, signed);
+begin
+    res := longRes(63 downto 32);
+    return res;
+end function;
+
+
 procedure performCalculation(intArgs: in MwordArray; fpArgs: in MwordArray; incrementedIP: in Mword; aop: in AbstractOperation; intResult: out Mword; fpResult: out Mword; outFlags: out std_logic_vector(0 to 2)) is
     constant ia0: Mword := intArgs(0);
     constant ia1: Mword := intArgs(1);
@@ -548,8 +595,15 @@ begin
         when add => intResult := add(ia0, ia1);
         when sub => intResult := sub(ia0, ia1);
         
-        when mul | mulhs | mulhu => intResult := (others => '0'); -- TODO
-        
+        when mul => intResult := multiplyLow(ia0, ia1); 
+        when mulhu => intResult := multiplyHigh(ia0, ia1);
+        when mulhs => intResult := multiplyHigh(ia0, ia1, true);
+
+            when divu => intResult := (others => '0');
+            when divs => intResult := (others => '0');
+            when remu => intResult := (others => '0');
+            when rems => intResult := (others => '0');
+
         when j | jl | jz | jnz => intResult := incrementedIP;
         
         -- FP

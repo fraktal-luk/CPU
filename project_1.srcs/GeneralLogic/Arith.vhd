@@ -28,6 +28,10 @@ function fillLeft64(a: Dword; b: slv6; val: std_logic) return Dword;
 function addExtNew(a, b: Word; carryIn: std_logic) return Word;
 procedure addExtNewP(a, b: Word; carryIn: std_logic; res0, res1: out Word; cl, cm0, cm1: out std_logic);
 
+
+function multiply(a, b: Word) return Word;
+function multiplyLong(a, b: Word; sgA, sgB: std_logic) return Dword;
+
 end Arith;
 
 
@@ -328,5 +332,33 @@ begin
     res1(31 downto 20) := hi1(31 downto 20);
     
 end procedure;
+
+function multiply(a, b: Word) return Word is
+    use ieee.std_logic_arith.all;
+    variable res: Word := (others => '0');
+    variable au, bu: unsigned(31 downto 0);
+    variable cu: unsigned(63 downto 0);
+begin
+    au := unsigned(a);
+    bu := unsigned(b);
+    cu := au * bu;
+    res := Word(cu(31 downto 0));
+
+    return res;
+end function;
+
+function multiplyLong(a, b: Word; sgA, sgB: std_logic) return Dword is
+    use ieee.std_logic_arith.all;
+    variable res: Dword := (others => '0');
+    variable au, bu: signed(32 downto 0);
+    variable cu: signed(65 downto 0);
+begin
+    au := signed(sgA & a);
+    bu := signed(sgB & b);
+    cu := au * bu;
+    res := Dword(cu(63 downto 0));
+
+    return res;
+end function;
 
 end Arith;

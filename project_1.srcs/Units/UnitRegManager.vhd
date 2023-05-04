@@ -150,6 +150,10 @@ architecture Behavioral of UnitRegManager is
                 if      insVec(i).ins.specificOperation.arith = opMul
                      or insVec(i).ins.specificOperation.arith = opMulhU
                      or insVec(i).ins.specificOperation.arith = opMulhS
+                     or insVec(i).ins.specificOperation.arith = opDivU
+                     or insVec(i).ins.specificOperation.arith = opDivS                     
+                     or insVec(i).ins.specificOperation.arith = opRemU
+                     or insVec(i).ins.specificOperation.arith = opRemS
                 then
                     res(i).ins.dispatchInfo.useMul := '1';
                 else

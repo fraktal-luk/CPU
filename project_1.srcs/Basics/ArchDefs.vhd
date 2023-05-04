@@ -74,6 +74,7 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
     mult, 
         mulh_s, mulh_u,
     div_s, div_u,
+    rem_s, rem_u,
     
     mov_f, or_f,    -- Float operations
     

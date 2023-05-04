@@ -109,7 +109,7 @@ return SchedulerInfoArray;
   
 function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray;
 
-function iqNext_NS(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail: std_logic)
+function iqNext_NS(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
 return SchedulerInfoArray;
 
 function iqNext_NS_2(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
@@ -269,7 +269,9 @@ package body LogicIssue is
     begin
         res.full := isl.full;
 
-        res.status.active := res.full;
+        res.status.active := res.full
+                                        and not isDivOp(stInfo.operation);
+            res.status.suspend := res.full and isDivOp(stInfo.operation);
 
         res.renameIndex := isl.ins.tags.renameIndex;
 
@@ -668,6 +670,7 @@ end function;
 
         res.dynamic.status.issued := '0';
         res.dynamic.status.active := '0';
+            res.dynamic.status.suspend := '0';
         res.dynamic.status.stageCtr := sn(0);
         return res;
     end function;
@@ -676,7 +679,10 @@ end function;
         variable res: SchedulerInfo := entry;
     begin
         res.dynamic.status.issued := '0';
-        res.dynamic.status.active := '1';
+        res.dynamic.status.active := '1'
+                                            and not isDivOp(res.static.operation);
+                res.dynamic.status.suspend := '1'
+                                                   and isDivOp(res.static.operation);
         res.dynamic.status.stageCtr := sn(0);
         return res;
     end function;
@@ -693,6 +699,7 @@ end function;
     begin
         res.dynamic.status.issued := '1';
         res.dynamic.status.active := '0';
+            res.dynamic.status.suspend := '0';
         res.dynamic.status.stageCtr := sn(0);
         return res;
     end function;
@@ -837,7 +844,7 @@ end function;
 
 
     -- mark issued/retracted, remove issued or killed
-    function iqNext_NS(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail: std_logic)
+    function iqNext_NS(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
     return SchedulerInfoArray is
         constant LEN: natural := queueContent'length;
         variable res: SchedulerInfoArray(queueContent'range) := queueContent;
@@ -877,6 +884,18 @@ end function;
 
              -- Set age comparison for possible subsequent flush. This is done regardless of other parts of state      
              res(i).dynamic.status.trial := trialMask(i);        
+
+
+                    if sends = '1' --and res(i).dynamic.status.active = '1'
+                                    and res(i).dynamic.full = '1'
+                                    and res(i).dynamic.status.issued /= '1'
+                                    and isDivOp(res(i).static.operation) = '1' then
+                        res(i).dynamic.status.active := '0';
+                        res(i).dynamic.status.suspend := '1';
+                    elsif unlockDiv = '1' and res(i).dynamic.full = '1' and res(i).dynamic.status.suspend = '1' and isDivOp(res(i).static.operation) = '1' then
+                        res(i).dynamic.status.active := '1';
+                        res(i).dynamic.status.suspend := '0';
+                    end if;
 
              res(i).dynamic.status.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
         end loop;

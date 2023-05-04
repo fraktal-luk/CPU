@@ -105,6 +105,14 @@ begin
                 aluOp := opMulHU;
             elsif op2 = "00010" then
                 aluOp := opMulHS;
+            elsif op2 = "01000" then
+                aluOp := opDivU;
+            elsif op2 = "01001" then
+                aluOp := opDivS;
+            elsif op2 = "01010" then
+                aluOp := opRemU;
+            elsif op2 = "01011" then
+                aluOp := opRemS;
             else 
                 isUndef := true;
             end if;
