@@ -218,6 +218,7 @@ return ControlPacket;
 function selectOrdered(ar: ExecResultArray) return ExecResult;
 
 function isDivOp(op: SpecificOp) return std_logic;
+function usesDivider(ss: SchedulerState) return std_logic;
 
 end package;
 
@@ -921,5 +922,9 @@ begin
                     and (op.arith = opDivU or op.arith = opDivS or op.arith = opRemU or op.arith = opRemS));
 end function;
 
+function usesDivider(ss: SchedulerState) return std_logic is
+begin
+   return bool2std(ss.st.operation.arith = opDivU or ss.st.operation.arith = opDivS or ss.st.operation.arith = opRemU or ss.st.operation.arith = opRemS);
+end function;
 
 end package body;

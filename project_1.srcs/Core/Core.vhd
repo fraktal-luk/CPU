@@ -573,11 +573,7 @@ begin
 
                    signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
                    signal isDivIssue, isDivRR, divUnlock, divResultSending, divResultSent, divResultSent2, divReady, remReady: std_logic := '0';
-                   signal mulResult: Word := (others => '0');
-                   --signal quotValue, remValue: Word := (others => '0');
-                   
-                                               signal quot00, quot10, quot01, quot11, rem00, rem10, rem01, rem11: Word;
-
+                   signal mulResult, quot00, quot10, quot01, quot11, rem00, rem10, rem01, rem11: Word := (others => '0');
                 begin
                     wups <= getInitWakeups(schedInfoA, bypassInt, CFG_MUL);
 
@@ -642,17 +638,12 @@ begin
                     dataToMul <= divSlot when divResultSending = '1'
                             else executeMulE0(slotRegReadI1.full and not outSigsI1.killFollower, slotRegReadI1, bqSelected.nip);
 
-                        isDivIssue <= bool2std(slotIssueI1.st.operation.arith = opDivU or slotIssueI1.st.operation.arith = opDivS
-                                   or slotIssueI1.st.operation.arith = opRemU or slotIssueI1.st.operation.arith = opRemS);
-                        isDivRR <= slotRegReadI1.full and bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opDivS
-                                       or slotRegReadI1.st.operation.arith = opRemU or slotRegReadI1.st.operation.arith = opRemS);
-
+                    -- Intfs?
                     subpipeI1_E0 <= dataMulE0;
                     subpipeI1_E1 <= dataMulE1;  -- signals result tag
                     subpipeI1_E2 <= setMemFail(dataMulE2, '0', mulResult);
 
                     process (clk)
-                        
                     begin
                         if rising_edge(clk) then
                             dataMulE0 <= dataToMul;
@@ -665,34 +656,46 @@ begin
                     end process;
 
 
-                    MULTIPLIER: block
-                        signal res2, divRes_N, arg0, arg1: Word := (others => '0');
-                        signal resLong1: Dword := (others => '0');
-                        signal sgA, sgB, isLow0, isLow1, signSel0, signSel1: std_logic := '0';
+                    MULTIPLIER_DIVIDER: block
+                        signal divFull, divSending, divPrepareSend, divAllowed, divMaybeIssued, divIssued, divRR, trialled, kill, usingDiv, usingRem, isUnsigned,
+                               new00, new10, new01, new11, sgA, sgB, isLow0, isLow1, signSel0, signSel1: std_logic := '0';
+                        signal divTime: SmallNumber := sn(0);
+                        signal resLong1, divisorS, sum00, sum10, sum01, sum11, diff00, diff10, diff01, diff11: Dword := (others => '0');
+                        signal result00, result10, result01, result11, res2, divRes_N, arg0, arg1: Word := (others => '0');
                     begin
+                        isDivIssue <= usesDivider(slotIssueI1);
+                        isDivRR <= slotRegReadI1.full and usesDivider(slotRegReadI1);
+                    
                         process (clk)
                         begin
                             if rising_edge(clk) then
                                 arg0 <= slotRegReadI1.args(0);
                                 arg1 <= slotRegReadI1.args(1);
-                                    isLow0 <= bool2std(slotRegReadI1.st.operation.arith = opMul);
-                                    if slotRegReadI1.st.operation.arith = opMulHS then
-                                        sgA <= slotRegReadI1.args(0)(31);
-                                        sgB <= slotRegReadI1.args(1)(31);
-                                    else
-                                        sgA <= '0';
-                                        sgB <= '0';
-                                    end if;
 
-                                    if isDivRR = '1' then
-                                        if (slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opRemU) then
-                                            signSel0 <= '0';
-                                            signSel1 <= '0';
-                                        else
-                                            signSel0 <= slotRegReadI1.args(0)(31);
-                                            signSel1 <= slotRegReadI1.args(1)(31);
-                                        end if;
-                                    end if;
+                                isLow0 <= bool2std(slotRegReadI1.st.operation.arith = opMul);
+--                                if slotRegReadI1.st.operation.arith = opMulHS then
+--                                    sgA <= slotRegReadI1.args(0)(31);
+--                                    sgB <= slotRegReadI1.args(1)(31);
+--                                else
+--                                    sgA <= '0';
+--                                    sgB <= '0';
+--                                end if;
+
+                                sgA <= slotRegReadI1.args(0)(31) and bool2std(slotRegReadI1.st.operation.arith = opMulHS);
+                                sgB <= slotRegReadI1.args(1)(31) and bool2std(slotRegReadI1.st.operation.arith = opMulHS);
+
+                                if isDivRR = '1' then
+--                                    if (slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opRemU) then
+--                                        signSel0 <= '0';
+--                                        signSel1 <= '0';
+--                                    else
+--                                        signSel0 <= slotRegReadI1.args(0)(31);
+--                                        signSel1 <= slotRegReadI1.args(1)(31);
+--                                    end if;
+                                    
+                                    signSel0 <= slotRegReadI1.args(0)(31) and not bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opRemU);
+                                    signSel1 <= slotRegReadI1.args(1)(31) and not bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opRemU);
+                                end if;
 
                                 if divReady = '1' then
 
@@ -705,7 +708,7 @@ begin
                                    else
                                        divRes_N <= quot00; 
                                    end if;
-                                   
+
                                 elsif remReady = '1' then                                   
                                    if (signSel0 and signSel1) = '1' then
                                        divRes_N <= rem11; 
@@ -728,27 +731,24 @@ begin
                                 end if;
                             end if;
                         end process;
-                        
+
                         mulResult <= res2;
-                    end block;
+
+                        -- Intf
+                        divResultSending <= divSending;
+                        
+                        -- Intf
+                        lockIssueI1 <= divPrepareSend;
 
 
-                    DIVIDER: block
-                        signal divFull, divSending, divPrepareSend, divAllowed, divMaybeIssued, divIssued, divRR, trialled, kill, usingDiv, usingRem, isUnsigned: std_logic := '0';
-                        signal divTime: SmallNumber := sn(0);
-
-                        signal divisorS: Dword := (others => '0');
-                        signal sum00, sum10, sum01, sum11, diff00, diff10, diff01, diff11,
-                                      sum10_A, sum11_A  : Dword := (others => '0');
-                        signal result00, result10, result01, result11: Word := (others => '0');
-                        signal new00, new10, new01, new11: std_logic := '0'; 
-                    begin
                         divIssued <= slotIssueI1.full and isDivIssue;
                         divSending <= divFull and bool2std(slv2u(divTime) = 32) and not kill; -- TMP value
                         divPrepareSend <= divFull and bool2std(slv2u(divTime) = 30); -- TMP value
 
+                        -- Intf
                         divUnlock <= not (divAllowed and allowIssueI1) and not divIssued and not divRR and not divFull;
-
+                        
+                        -- src: events
                         kill <= (trialled and events.execEvent) or events.lateEvent;
 
                         process (clk)
@@ -795,9 +795,6 @@ begin
                             end if;
                         end process;
 
-                        lockIssueI1 <= divPrepareSend;
-                        divResultSending <= divSending;
-
                         
                         diff00 <=    add(sum00, divisorS) when --isNonzero(divTime) /= '1'
                                                                false
@@ -842,7 +839,7 @@ begin
                                     result10 <= (others => '0');
                                     sum10 <= --X"ffffffff" & slotRegReadI1.args(0);
                                             signExtend(slotRegReadI1.args(0), 64);
-                                        sum10_A <= signExtend(slotRegReadI1.args(0), 64);
+                                    --    sum10_A <= signExtend(slotRegReadI1.args(0), 64);
 
                                     result01 <= (others => '0');
                                     sum01 <=-- X"00000000" & slotRegReadI1.args(0);
@@ -851,7 +848,7 @@ begin
                                     result11 <= (others => '0');
                                     sum11 <= --X"ffffffff" & slotRegReadI1.args(0);
                                             signExtend(slotRegReadI1.args(0), 64);
-                                        sum11_A <= signExtend(slotRegReadI1.args(0), 64);
+                                    --    sum11_A <= signExtend(slotRegReadI1.args(0), 64);
 
                                     divisorS <= slotRegReadI1.args(1)(31) & slotRegReadI1.args(1) & "000" & X"0000000";
 
@@ -899,7 +896,7 @@ begin
             use work.LogicIssue.all;
 
             signal outSigsM0: IssueQueueSignals := (others => '0');
-       
+
             signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
             signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
 
