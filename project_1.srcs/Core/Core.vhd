@@ -390,12 +390,14 @@ begin
        -- Issue control 
        signal issuedStoreDataInt, issuedStoreDataFP, allowIssueStoreDataInt, lockIssueSVI, lockIssueSVF, allowIssueStoreDataFP, allowIssueStageStoreDataFP,
               memSubpipeSent, mulSubpipeSent, mulSubpipeAtE0, fp0subpipeSelected, mulSubpipeSelected,
-              lockIssueI0, allowIssueI0, lockIssueI1, allowIssueI1, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, intWriteConflict,
+              lockIssueI0, allowIssueI0, lockIssueI1, lockIssueI1_Alt, allowIssueI1, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, intWriteConflict,
               storeValueCollision1, storeValueCollision2, cancelledSVI1,
               memFail, memDepFail, prevMemDepFail: std_logic := '0';  
 
        signal subpipeI0_Issue, subpipeI0_RegRead, subpipeI0_E0,                                    subpipeI0_D0,
               subpipeI1_Issue, subpipeI1_RegRead, subpipeI1_E0,  subpipeI1_E1,    subpipeI1_E2,    subpipeI1_D0,  subpipeI1_D1,
+              
+                                                                                  subpipeI1_E2_Alt,
               
               subpipeM0_Issue, subpipeM0_RegRead, subpipeM0_E0,  subpipeM0_E1,    subpipeM0_E2,
                                    subpipeM0_RRi, subpipeM0_E0i, subpipeM0_E1i,   subpipeM0_E2i,   subpipeM0_D0i,-- subpipeM0_D1i,
@@ -572,7 +574,7 @@ begin
                    constant CFG_MUL: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
 
                    signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
-                   signal isDivIssue, isDivRR, divUnlock, divResultSending, divResultSent, divResultSent2, divReady, remReady, sendingToMultiplier: std_logic := '0';
+                   signal divUnlock, divResultSending, divResultSent, divResultSent2, divReady, remReady, sendingToMultiplier: std_logic := '0';
                    signal mulResult, quot00, quot10, quot01, quot11, rem00, rem10, rem01, rem11: Word := (others => '0');
                 begin
                     wups <= getInitWakeups(schedInfoA, bypassInt, CFG_MUL);
@@ -634,7 +636,7 @@ begin
                     -- Intf IN
                     sendingToMultiplier <= slotRegReadI1.full and not outSigsI1.killFollower;
 
-                    -- Intf: slotRegReadI1
+                    -- src: slotRegReadI1
 
                     -- This must mux issued multiply with div result
                     dataToMul <= divSlot when divResultSending = '1'
@@ -653,12 +655,16 @@ begin
                     end process;
 
                     -- Intfs?
+                    -- CAREFUL: these 2 are redundant
                     subpipeI1_E0 <= dataMulE0;
                     subpipeI1_E1 <= dataMulE1;  -- signals result tag
-                    subpipeI1_E2 <= setMemFail(dataMulE2, '0', mulResult);
+                    
+                    subpipeI1_E2 <= --setMemFail(dataMulE2, '0', mulResult);
+                                    subpipeI1_E2_Alt;
 
 
                     MULTIPLIER_DIVIDER: block
+                        signal isDivIssue, isDivRR: std_logic := '0';
                         signal divFull, divSending, divPrepareSend, divAllowed, divMaybeIssued, divIssued, divRR, trialled, kill, usingDiv, usingRem, isUnsigned,
                                new00, new10, new01, new11, sgA, sgB, isLow0, isLow1, signSel0, signSel1: std_logic := '0';
                         signal divTime: SmallNumber := sn(0);
@@ -727,10 +733,11 @@ begin
                         divResultSending <= divSending;
 
                         -- Intf
-                        lockIssueI1 <= divPrepareSend;
+                        lockIssueI1 <= --divPrepareSend;
+                                       lockIssueI1_Alt;
 
 
-                        divIssued <= slotIssueI1.full and isDivIssue;
+                        divIssued <= slotIssueI1.full and isDivIssue; -- Speculative because it doesn't take into account kill signals?
                         divSending <= divFull and bool2std(slv2u(divTime) = 32) and not kill; -- TMP value
                         divPrepareSend <= divFull and bool2std(slv2u(divTime) = 30); -- TMP value
 
@@ -865,6 +872,27 @@ begin
 
                     end block;
 
+                    MUL_DIV: entity work.MultiplierDivider
+                    port map (
+                        clk => clk,
+
+                        prevSending => sendingToMultiplier,
+                        input => slotRegReadI1,
+
+                            allowIssueI1 => allowIssueI1,
+                            killFollowerNext => outSigsI1.killFollowerNext,
+                            
+                        events => events,
+                        
+                            lockIssueI1_Alt => lockIssueI1_Alt,
+
+                        sending => open,
+                        output => subpipeI1_E2_Alt
+                    );
+
+                            ch0 <= bool2std(lockIssueI1_Alt = lockIssueI1);
+                            ch1 <= bool2std(subpipeI1_E2_Alt = subpipeI1_E2);
+        
                 end block;
             end generate;
 
