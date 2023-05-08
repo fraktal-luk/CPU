@@ -25,13 +25,13 @@ entity MultiplierDivider is
         
         events: in EventState;
         
-            lockIssueI1_Alt: out std_logic;
+        lockIssueI1_Alt: out std_logic;
         
         sending: out std_logic;
         divUnlock_Alt: out std_logic;
         
-                outStage0: out ExecResult;
-                outStage1: out ExecResult;
+        outStage0: out ExecResult;
+        outStage1: out ExecResult;
 
         output: out ExecResult
     );
@@ -40,52 +40,55 @@ end MultiplierDivider;
 
 
 architecture Behavioral of MultiplierDivider is
-       signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
-       signal divUnlock,
-                 divResultSending, divResultSent, divResultSent2, divReady, remReady: std_logic := '0';
-       signal mulResult, quot00, quot10, quot01, quot11, rem00, rem10, rem01, rem11: Word := (others => '0');
-
+    signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
+    signal trialled, kill, divUnlock, divPrepareSend, divResultSending, divResultSent, divResultSent2, divReady, remReady: std_logic := '0';
+    signal mulResult, quot00, quot10, quot01, quot11, rem00, rem10, rem01, rem11: Word := (others => '0');
 begin
 
+    kill <= (trialled and events.execEvent) or events.lateEvent;
 
-                    -- This must mux issued multiply with div result
-                    dataToMul <= divSlot when divResultSending = '1'
-                            else prepareMultiply(prevSending, input);
+    -- This must mux issued multiply with div result
+    dataToMul <= divSlot when divResultSending = '1'
+            else prepareMultiply(prevSending, input);
 
-                    process (clk)
-                    begin
-                        if rising_edge(clk) then
-                            dataMulE0 <= dataToMul;
-                            dataMulE1 <= dataMulE0;
-                            dataMulE2 <= dataMulE1;
-                            
-                            divResultSent <= divResultSending;
-                            divResultSent2 <= divResultSent;
-                        end if;
-                    end process;
-
-                    -- Intfs?
-                    outStage0 <= dataMulE0;
-                    outStage1 <= dataMulE1;  -- signals result tag
-                    --subpipeI1_E2 <= setMemFail(dataMulE2, '0', mulResult);
+    process (clk)
+    begin
+        if rising_edge(clk) then
+            dataMulE0 <= dataToMul;
+            dataMulE1 <= dataMulE0;
+            dataMulE2 <= dataMulE1;
+            
+            divResultSent <= divResultSending;
+            divResultSent2 <= divResultSent;
+        end if;
+    end process;
 
 
     EEEEEE: block
-        signal isDivIssue, isDivRR: std_logic := '0';
-
-        signal divFull, divSending, divPrepareSend, divAllowed, divMaybeIssued, divIssued, divRR, trialled, kill, usingDiv, usingRem, isUnsigned,
+        signal divAllowed, sendingDivIssued, sendingDivRR, divRR, divFull, usingDiv, usingRem, isUnsigned,
                new00, new10, new01, new11, sgA, sgB, isLow0, isLow1, signSel0, signSel1: std_logic := '0';
         signal divTime: SmallNumber := sn(0);
         signal resLong1, divisorS, sum00, sum10, sum01, sum11, diff00, diff10, diff01, diff11: Dword := (others => '0');
-        signal result00, result10, result01, result11, res2, divRes_N, arg0, arg1: Word := (others => '0');
+        signal result00, result10, result01, result11, divRes, divQuot, divRem, arg0, arg1: Word := (others => '0');
     begin
-        isDivIssue <= usesDivider(preInput);
-        isDivRR <= --slotRegReadI1.full and 
-                    usesDivider(input);
 
-        process (clk)
+           divQuot <= quot11 when (signSel0 and signSel1) = '1'
+                else  quot10 when (signSel0 and not signSel1) = '1'
+                else  quot01 when (not signSel0 and signSel1) = '1'
+                else  quot00 when (not signSel0 and not signSel1) = '1';
+
+           divRem <= rem11 when (signSel0 and signSel1) = '1'
+                else rem10 when (signSel0 and not signSel1) = '1'
+                else rem01 when (not signSel0 and signSel1) = '1'
+                else rem00 when (not signSel0 and not signSel1) = '1';
+
+        sendingDivIssued <= preInput.full and usesDivider(preInput); -- Speculative because it doesn't take into account kill signals?
+        sendingDivRR <= prevSending and usesDivider(input);
+
+        MAIN: process (clk)
         begin
             if rising_edge(clk) then
+                -- stage E0
                 isLow0 <= bool2std(input.st.operation.arith = opMul);
 
                 arg0 <= input.args(0);
@@ -94,106 +97,100 @@ begin
                 sgA <= input.args(0)(31) and bool2std(input.st.operation.arith = opMulHS);
                 sgB <= input.args(1)(31) and bool2std(input.st.operation.arith = opMulHS);
 
-                if (prevSending and isDivRR) = '1' then
+                if sendingDivRR = '1' then
                     signSel0 <= input.args(0)(31) and not bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
                     signSel1 <= input.args(1)(31) and not bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
                 end if;
 
-                if divReady = '1' then
-                   if (signSel0 and signSel1) = '1' then
-                       divRes_N <= quot11; 
-                   elsif (signSel0 and not signSel1) = '1' then
-                       divRes_N <= quot10; 
-                   elsif (not signSel0 and signSel1) = '1' then
-                       divRes_N <= quot01; 
-                   else
-                       divRes_N <= quot00; 
-                   end if;
 
-                elsif remReady = '1' then                                   
-                   if (signSel0 and signSel1) = '1' then
-                       divRes_N <= rem11; 
-                   elsif (signSel0 and not signSel1) = '1' then
-                       divRes_N <= rem10; 
-                   elsif (not signSel0 and signSel1) = '1' then
-                       divRes_N <= rem01; 
-                   else
-                       divRes_N <= rem00; 
-                   end if;
+                -- stage E1
+                if divReady = '1' then
+      
+--                   if (signSel0 and signSel1) = '1' then
+--                       divRes <= quot11; 
+--                   elsif (signSel0 and not signSel1) = '1' then
+--                       divRes <= quot10; 
+--                   elsif (not signSel0 and signSel1) = '1' then
+--                       divRes <= quot01; 
+--                   else
+--                       divRes <= quot00; 
+--                   end if;
+                   
+                   divRes <= divQuot;
+                elsif remReady = '1' then
+                              
+--                   if (signSel0 and signSel1) = '1' then
+--                       divRes <= rem11; 
+--                   elsif (signSel0 and not signSel1) = '1' then
+--                       divRes <= rem10; 
+--                   elsif (not signSel0 and signSel1) = '1' then
+--                       divRes <= rem01; 
+--                   else
+--                       divRes <= rem00; 
+--                   end if;
+                   
+                   divRes <= divRem;
                 end if;
 
                 isLow1 <= isLow0;
                 resLong1 <= work.Arith.multiplyLong(arg0, arg1, sgA, sgB);
 
+
+                -- stage E2
                 if divResultSent2 = '1' then
-                    res2 <= divRes_N;
+                    mulResult <= divRes;
                 elsif isLow1 /= '1' then
-                    res2 <= resLong1(63 downto 32);
+                    mulResult <= resLong1(63 downto 32);
                 else
-                    res2 <= resLong1(31 downto 0);
+                    mulResult <= resLong1(31 downto 0);
                 end if;
             end if;
         end process;
 
-        mulResult <= res2;
-
-        -- Intf
-        divResultSending <= divSending;
-
-        -- Intf
-        lockIssueI1_Alt <= divPrepareSend;
 
 
-        divIssued <= preInput.full and isDivIssue; -- Speculative because it doesn't take into account kill signals?
-        divSending <= divFull and bool2std(slv2u(divTime) = 32) and not kill; -- TMP value
+
+        divResultSending <= divFull and bool2std(slv2u(divTime) = 32) and not kill; -- TMP value
         divPrepareSend <= divFull and bool2std(slv2u(divTime) = 30); -- TMP value
 
-        -- Intf
-        divUnlock_Alt <= divUnlock;
-        divUnlock <= not (divAllowed and allowIssueI1) and not divIssued and not divRR and not divFull;
+        divUnlock <= not (divAllowed and allowIssueI1) and not sendingDivIssued and not divRR and not divFull;
 
-        -- src: events
-        kill <= (trialled and events.execEvent) or events.lateEvent;
 
-        process (clk)
+        DIVIDER_STATE: process (clk)
         begin
             if rising_edge(clk) then
-                divReady <= '0';
-                remReady <= '0';
+                divReady <= usingDiv and divResultSending;
+                remReady <= usingRem and divResultSending;
 
                 divAllowed <= divUnlock;
-                divMaybeIssued <= divAllowed and allowIssueI1;
 
-                divRR <= divIssued and not killFollowerNext;
+                divRR <= sendingDivIssued and not killFollowerNext;
 
                 trialled <= compareTagBefore(events.preExecTags.renameIndex, divSlot.tag);
 
-                if divSending = '1' then
-                    assert divIssued /= '1' report "Division overwrite!";
-                    assert (divSending and input.full) /= '1' report "Div result collided with issue!";
+                if divResultSending = '1' then
+                    assert sendingDivIssued /= '1' report "Division overwrite!";
+                    assert (divResultSending and input.full) /= '1' report "Div result collided with issue!";
+                end if;
 
+                if divResultSending = '1' or kill = '1' then
                     divFull <= '0';
                         divSlot.dbInfo <= DEFAULT_DEBUG_INFO;
 
-                    divReady <= usingDiv;
-                    remReady <= usingRem;
                     usingDiv <= '0';
                     usingRem <= '0';
-                elsif (prevSending and isDivRR) = '1' then
+                elsif sendingDivRR = '1' then
                     divFull <= '1';
-                    divTime <= sn(0);
                     divSlot <= makeExecResult(input);
+
+                    divTime <= sn(0);
 
                     usingDiv <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opDivS);
                     usingRem <= bool2std(input.st.operation.arith = opRemU or input.st.operation.arith = opRemS);
+
                     isUnsigned <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
                 else
                     divTime <= addInt(divTime, 1);
-                end if;
-
-                if kill = '1' then
-                    divFull <= '0';
-                        divSlot.dbInfo <= DEFAULT_DEBUG_INFO;
                 end if;
 
             end if;
@@ -220,11 +217,11 @@ begin
                 else sub(sum11, divisorS);
         new11 <= isNonzero(divTime) and cmpLeS(sum11, divisorS);
 
-        process (clk)
+        DIVISION_VARIANTS: process (clk)
         begin
             if rising_edge(clk) then
 
-                if divSending = '1' then
+                if divResultSending = '1' then
                     quot00 <= result00;
                     rem00  <= sum00(31 downto 0);
 
@@ -236,7 +233,7 @@ begin
                     
                     quot11 <= result11;
                     rem11  <= sum11(31 downto 0);
-                elsif (prevSending and isDivRR) = '1' then
+                elsif sendingDivRR = '1' then
                     result00 <= (others => '0');
                     sum00 <= zeroExtend(input.args(0), 64);
 
@@ -280,6 +277,12 @@ begin
 
     end block;
 
+
+    lockIssueI1_Alt <= divPrepareSend;
+    divUnlock_Alt <= divUnlock;
+
+    outStage0 <= dataMulE0;
+    outStage1 <= dataMulE1;  -- signals result tag
     output <= setMemFail(dataMulE2, '0', mulResult);
 
 end Behavioral;
