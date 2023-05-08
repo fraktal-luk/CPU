@@ -569,13 +569,9 @@ begin
                    signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
                    signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
 
-                   --signal controlI1_RR, controlToI1_E0: ControlPacket := DEFAULT_CONTROL_PACKET;
-
                    constant CFG_MUL: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
 
-                   signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
-                   signal divUnlock, divResultSending, divResultSent, divResultSent2, divReady, remReady, sendingToMultiplier: std_logic := '0';
-                   signal mulResult, quot00, quot10, quot01, quot11, rem00, rem10, rem01, rem11: Word := (others => '0');
+                   signal divUnlock, divUnlock_Alt, sendingToMultiplier: std_logic := '0';
                 begin
                     wups <= getInitWakeups(schedInfoA, bypassInt, CFG_MUL);
 
@@ -632,266 +628,35 @@ begin
                         subpipeI1_RegRead <= makeExecResult(slotRegReadI1);
                     end block;
 
-
-                    -- Intf IN
                     sendingToMultiplier <= slotRegReadI1.full and not outSigsI1.killFollower;
-
-                    -- src: slotRegReadI1
-
-                    -- This must mux issued multiply with div result
-                    dataToMul <= divSlot when divResultSending = '1'
-                            else prepareMultiply(sendingToMultiplier, slotRegReadI1);
-
-                    process (clk)
-                    begin
-                        if rising_edge(clk) then
-                            dataMulE0 <= dataToMul;
-                            dataMulE1 <= dataMulE0;
-                            dataMulE2 <= dataMulE1;
-                            
-                            divResultSent <= divResultSending;
-                            divResultSent2 <= divResultSent;
-                        end if;
-                    end process;
-
-                    -- Intfs?
-                    -- CAREFUL: these 2 are redundant
-                    subpipeI1_E0 <= dataMulE0;
-                    subpipeI1_E1 <= dataMulE1;  -- signals result tag
                     
-                    subpipeI1_E2 <= --setMemFail(dataMulE2, '0', mulResult);
-                                    subpipeI1_E2_Alt;
+                    subpipeI1_E2 <= subpipeI1_E2_Alt;
+                    lockIssueI1 <= lockIssueI1_Alt;
 
-
-                    MULTIPLIER_DIVIDER: block
-                        signal isDivIssue, isDivRR: std_logic := '0';
-                        signal divFull, divSending, divPrepareSend, divAllowed, divMaybeIssued, divIssued, divRR, trialled, kill, usingDiv, usingRem, isUnsigned,
-                               new00, new10, new01, new11, sgA, sgB, isLow0, isLow1, signSel0, signSel1: std_logic := '0';
-                        signal divTime: SmallNumber := sn(0);
-                        signal resLong1, divisorS, sum00, sum10, sum01, sum11, diff00, diff10, diff01, diff11: Dword := (others => '0');
-                        signal result00, result10, result01, result11, res2, divRes_N, arg0, arg1: Word := (others => '0');
-                    begin
-                        isDivIssue <= usesDivider(slotIssueI1);
-                        isDivRR <= --slotRegReadI1.full and 
-                                    usesDivider(slotRegReadI1);
-
-                        process (clk)
-                        begin
-                            if rising_edge(clk) then
-                                isLow0 <= bool2std(slotRegReadI1.st.operation.arith = opMul);
-
-                                arg0 <= slotRegReadI1.args(0);
-                                arg1 <= slotRegReadI1.args(1);
-
-                                sgA <= slotRegReadI1.args(0)(31) and bool2std(slotRegReadI1.st.operation.arith = opMulHS);
-                                sgB <= slotRegReadI1.args(1)(31) and bool2std(slotRegReadI1.st.operation.arith = opMulHS);
-
-                                if (sendingToMultiplier and isDivRR) = '1' then
-                                    signSel0 <= slotRegReadI1.args(0)(31) and not bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opRemU);
-                                    signSel1 <= slotRegReadI1.args(1)(31) and not bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opRemU);
-                                end if;
-
-                                if divReady = '1' then
-                                   if (signSel0 and signSel1) = '1' then
-                                       divRes_N <= quot11; 
-                                   elsif (signSel0 and not signSel1) = '1' then
-                                       divRes_N <= quot10; 
-                                   elsif (not signSel0 and signSel1) = '1' then
-                                       divRes_N <= quot01; 
-                                   else
-                                       divRes_N <= quot00; 
-                                   end if;
-
-                                elsif remReady = '1' then                                   
-                                   if (signSel0 and signSel1) = '1' then
-                                       divRes_N <= rem11; 
-                                   elsif (signSel0 and not signSel1) = '1' then
-                                       divRes_N <= rem10; 
-                                   elsif (not signSel0 and signSel1) = '1' then
-                                       divRes_N <= rem01; 
-                                   else
-                                       divRes_N <= rem00; 
-                                   end if;
-                                end if;
-
-                                isLow1 <= isLow0;
-                                resLong1 <= work.Arith.multiplyLong(arg0, arg1, sgA, sgB);
-
-                                if divResultSent2 = '1' then
-                                    res2 <= divRes_N;
-                                elsif isLow1 /= '1' then
-                                    res2 <= resLong1(63 downto 32);
-                                else
-                                    res2 <= resLong1(31 downto 0);
-                                end if;
-                            end if;
-                        end process;
-
-                        mulResult <= res2;
-
-                        -- Intf
-                        divResultSending <= divSending;
-
-                        -- Intf
-                        lockIssueI1 <= --divPrepareSend;
-                                       lockIssueI1_Alt;
-
-
-                        divIssued <= slotIssueI1.full and isDivIssue; -- Speculative because it doesn't take into account kill signals?
-                        divSending <= divFull and bool2std(slv2u(divTime) = 32) and not kill; -- TMP value
-                        divPrepareSend <= divFull and bool2std(slv2u(divTime) = 30); -- TMP value
-
-                        -- Intf
-                        divUnlock <= not (divAllowed and allowIssueI1) and not divIssued and not divRR and not divFull;
-
-                        -- src: events
-                        kill <= (trialled and events.execEvent) or events.lateEvent;
-
-                        process (clk)
-                        begin
-                            if rising_edge(clk) then
-                                divReady <= '0';
-                                remReady <= '0';
-
-                                divAllowed <= divUnlock;
-                                divMaybeIssued <= divAllowed and allowIssueI1;
-
-                                divRR <= divIssued and not outSigsI1.killFollowerNext;
-
-                                trialled <= compareTagBefore(events.preExecTags.renameIndex, divSlot.tag);
-
-                                if divSending = '1' then
-                                    assert divIssued /= '1' report "Division overwrite!";
-                                    assert (divSending and slotRegReadI1.full) /= '1' report "Div result collided with issue!";
-
-                                    divFull <= '0';
-                                        divSlot.dbInfo <= DEFAULT_DEBUG_INFO;
-
-                                    divReady <= usingDiv;
-                                    remReady <= usingRem;
-                                    usingDiv <= '0';
-                                    usingRem <= '0';
-                                elsif (sendingToMultiplier and isDivRR) = '1' then
-                                    divFull <= '1';
-                                    divTime <= sn(0);
-                                    divSlot <= makeExecResult(slotRegReadI1);
-
-                                    usingDiv <= bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opDivS);
-                                    usingRem <= bool2std(slotRegReadI1.st.operation.arith = opRemU or slotRegReadI1.st.operation.arith = opRemS);
-                                    isUnsigned <= bool2std(slotRegReadI1.st.operation.arith = opDivU or slotRegReadI1.st.operation.arith = opRemU);
-                                else
-                                    divTime <= addInt(divTime, 1);
-                                end if;
-
-                                if kill = '1' then
-                                    divFull <= '0';
-                                        divSlot.dbInfo <= DEFAULT_DEBUG_INFO;
-                                end if;
-
-                            end if;
-                        end process;
-
-                        
-                        diff00 <=    add(sum00, divisorS) when --isNonzero(divTime) /= '1'
-                                                               false
-                                else sub(sum00, divisorS);
-                        new00 <= --isNonzero(divTime) 
-                                    '1'
-                                 and ((cmpGeS(sum00, divisorS) and not isUnsigned) or (cmpGeU(sum00, divisorS) and isUnsigned));
-
-                        diff10 <=    add(sum10, divisorS) when isNonzero(divTime) /= '1'
-                                else sub(sum10, divisorS);
-                        new10 <= not isNonzero(divTime) or cmpGeS(sum10, divisorS);
-
-                        diff01 <=    add(sum01, divisorS) when isNonzero(divTime) /= '1'
-                                else sub(sum01, divisorS);
-                        new01 <= (not isNonzero(divTime) and isNonzero(sum01)) or 
-                                    cmpLeS(sum01, divisorS);
-                                                    
-                        diff11 <=    add(sum11, divisorS) when isNonzero(divTime) /= '1'
-                                else sub(sum11, divisorS);
-                        new11 <= isNonzero(divTime) and cmpLeS(sum11, divisorS);
-
-                        process (clk)
-                        begin
-                            if rising_edge(clk) then
-
-                                if divSending = '1' then
-                                    quot00 <= result00;
-                                    rem00  <= sum00(31 downto 0);
-
-                                    quot10 <= result10;
-                                    rem10  <= sum10(31 downto 0);
-                                    
-                                    quot01 <= result01;
-                                    rem01  <= sum01(31 downto 0);
-                                    
-                                    quot11 <= result11;
-                                    rem11  <= sum11(31 downto 0);
-                                elsif (sendingToMultiplier and isDivRR) = '1' then
-                                    result00 <= (others => '0');
-                                    sum00 <= zeroExtend(slotRegReadI1.args(0), 64);
-
-                                    result10 <= (others => '0');
-                                    sum10 <= signExtend(slotRegReadI1.args(0), 64);
-
-                                    result01 <= (others => '0');
-                                    sum01 <= signExtend(slotRegReadI1.args(0), 64);
-
-                                    result11 <= (others => '0');
-                                    sum11 <= signExtend(slotRegReadI1.args(0), 64);
-
-                                    divisorS <= slotRegReadI1.args(1)(31) & slotRegReadI1.args(1) & "000" & X"0000000";
-
-                                else
-                                    result00 <= result00(30 downto 0) & new00;
-                                    if new00 = '1' then
-                                        sum00 <= diff00;
-                                    end if;
-                                    
-                                    result10 <= result10(30 downto 0) & new10;
-                                    if new10 = '1' then
-                                        sum10 <= diff10;
-                                    end if;
-                                    
-                                    result01 <= result01(30 downto 0) & new01;
-                                    if new01 = '1' then
-                                        sum01 <= diff01;
-                                    end if;
-                                    
-                                    result11 <= result11(30 downto 0) & new11;
-                                    if new11 = '1' then
-                                        sum11 <= diff11;
-                                    end if;
-
-                                    divisorS <= (divisorS(63) and not isUnsigned) & divisorS(63 downto 1);    
-                                end if;
-
-                            end if;
-                        end process;
-
-                    end block;
+                    divUnlock <= divUnlock_Alt;
 
                     MUL_DIV: entity work.MultiplierDivider
                     port map (
                         clk => clk,
 
                         prevSending => sendingToMultiplier,
+                        preInput => slotIssueI1,
                         input => slotRegReadI1,
 
-                            allowIssueI1 => allowIssueI1,
-                            killFollowerNext => outSigsI1.killFollowerNext,
-                            
+                        allowIssueI1 => allowIssueI1,
+                        killFollowerNext => outSigsI1.killFollowerNext,
+
                         events => events,
                         
-                            lockIssueI1_Alt => lockIssueI1_Alt,
+                        lockIssueI1_Alt => lockIssueI1_Alt,
 
                         sending => open,
+                        divUnlock_Alt => divUnlock_Alt,
+                        
+                        outStage0 => subpipeI1_E0,
+                        outStage1 => subpipeI1_E1,
                         output => subpipeI1_E2_Alt
                     );
-
-                            ch0 <= bool2std(lockIssueI1_Alt = lockIssueI1);
-                            ch1 <= bool2std(subpipeI1_E2_Alt = subpipeI1_E2);
         
                 end block;
             end generate;

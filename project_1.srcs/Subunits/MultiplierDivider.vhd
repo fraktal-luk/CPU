@@ -17,6 +17,7 @@ entity MultiplierDivider is
         clk : in STD_LOGIC;
 
         prevSending: in std_logic;
+        preInput: in SchedulerState;
         input: in SchedulerState;
         
         allowIssueI1: in std_logic;
@@ -27,6 +28,11 @@ entity MultiplierDivider is
             lockIssueI1_Alt: out std_logic;
         
         sending: out std_logic;
+        divUnlock_Alt: out std_logic;
+        
+                outStage0: out ExecResult;
+                outStage1: out ExecResult;
+
         output: out ExecResult
     );
 end MultiplierDivider;
@@ -35,7 +41,8 @@ end MultiplierDivider;
 
 architecture Behavioral of MultiplierDivider is
        signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
-       signal divUnlock, divResultSending, divResultSent, divResultSent2, divReady, remReady: std_logic := '0';
+       signal divUnlock,
+                 divResultSending, divResultSent, divResultSent2, divReady, remReady: std_logic := '0';
        signal mulResult, quot00, quot10, quot01, quot11, rem00, rem10, rem01, rem11: Word := (others => '0');
 
 begin
@@ -58,8 +65,8 @@ begin
                     end process;
 
                     -- Intfs?
-                    --subpipeI1_E0 <= dataMulE0;
-                    --subpipeI1_E1 <= dataMulE1;  -- signals result tag
+                    outStage0 <= dataMulE0;
+                    outStage1 <= dataMulE1;  -- signals result tag
                     --subpipeI1_E2 <= setMemFail(dataMulE2, '0', mulResult);
 
 
@@ -72,7 +79,7 @@ begin
         signal resLong1, divisorS, sum00, sum10, sum01, sum11, diff00, diff10, diff01, diff11: Dword := (others => '0');
         signal result00, result10, result01, result11, res2, divRes_N, arg0, arg1: Word := (others => '0');
     begin
-        isDivIssue <= usesDivider(input);
+        isDivIssue <= usesDivider(preInput);
         isDivRR <= --slotRegReadI1.full and 
                     usesDivider(input);
 
@@ -137,11 +144,12 @@ begin
         lockIssueI1_Alt <= divPrepareSend;
 
 
-        divIssued <= input.full and isDivIssue; -- Speculative because it doesn't take into account kill signals?
+        divIssued <= preInput.full and isDivIssue; -- Speculative because it doesn't take into account kill signals?
         divSending <= divFull and bool2std(slv2u(divTime) = 32) and not kill; -- TMP value
         divPrepareSend <= divFull and bool2std(slv2u(divTime) = 30); -- TMP value
 
         -- Intf
+        divUnlock_Alt <= divUnlock;
         divUnlock <= not (divAllowed and allowIssueI1) and not divIssued and not divRR and not divFull;
 
         -- src: events
