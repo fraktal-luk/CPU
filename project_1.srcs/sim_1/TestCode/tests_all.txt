@@ -8,7 +8,7 @@
 ;a_tmp_sf2
 ;a_tmp_sf3
 ;a_tmp_sf4
-shifts
+;shifts
 mul
 div_s
 div
