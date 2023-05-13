@@ -340,59 +340,62 @@ package body LogicIssue is
 
 --------------------------------------------------
 -- internal use
-    function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector is
-        variable res: std_logic_vector(list'range) := (others => '0');
-    begin
-        for i in list'range loop
-            if tag(PHYS_REG_BITS-1 downto 0) = list(i)(PHYS_REG_BITS-1 downto 0)
-                 --   and isNonzero(tag) = '1' 
-            then
-                res(i) := '1';
-            end if;
-        end loop;
-        return res;
-    end function;
+        -- UNUSED?
+        function findRegTag(tag: SmallNumber; list: PhysNameArray) return std_logic_vector is
+            variable res: std_logic_vector(list'range) := (others => '0');
+        begin
+            for i in list'range loop
+                if tag(PHYS_REG_BITS-1 downto 0) = list(i)(PHYS_REG_BITS-1 downto 0)
+                     --   and isNonzero(tag) = '1' 
+                then
+                    res(i) := '1';
+                end if;
+            end loop;
+            return res;
+        end function;
 
-    function findIqTag(tag: SmallNumber; list: SmallNumberArray) return std_logic_vector is
-        variable res: std_logic_vector(list'range) := (others => '0');
-        variable candidate: SmallNumber := sn(0);
-        variable iqSelector: SmallNumber := sn(0);
-    begin
-        for i in list'range loop
-            candidate := list(i) and X"0f";
-            iqSelector := sn(16*(1+i));
-            candidate := candidate or iqSelector;
-            if tag(5 downto 0) = candidate(5 downto 0) and list(i)(7) /= '1' then
-                res(i) := '1';
-            end if;
-        end loop;
-        return res;
-    end function;
+        -- UNUSED?
+        function findIqTag(tag: SmallNumber; list: SmallNumberArray) return std_logic_vector is
+            variable res: std_logic_vector(list'range) := (others => '0');
+            variable candidate: SmallNumber := sn(0);
+            variable iqSelector: SmallNumber := sn(0);
+        begin
+            for i in list'range loop
+                candidate := list(i) and X"0f";
+                iqSelector := sn(16*(1+i));
+                candidate := candidate or iqSelector;
+                if tag(5 downto 0) = candidate(5 downto 0) and list(i)(7) /= '1' then
+                    res(i) := '1';
+                end if;
+            end loop;
+            return res;
+        end function;
 
-    function findForwardingMatch(info: SchedulerInfo; arg: natural; fni: ForwardingInfo; matchIQ: boolean) return ForwardingComparisons is
-        variable res: ForwardingComparisons := DEFAULT_FORWARDING_COMPARISONS;
+--    -- UNUSED
+--    function findForwardingMatch(info: SchedulerInfo; arg: natural; fni: ForwardingInfo; matchIQ: boolean) return ForwardingComparisons is
+--        variable res: ForwardingComparisons := DEFAULT_FORWARDING_COMPARISONS;
         
-        constant arg0: PhysName := info.dynamic.argStates(arg).reg;        
-        constant tag0: SmallNumber := info.dynamic.argStates(arg).iqTag;
-    begin
-        if not matchIQ then
-            res.reg   := '0';
-            res.cmp1  := findRegTag(arg0, fni.tags1);
-            res.cmp0  := findRegTag(arg0, fni.tags0);        
-            res.cmpM1 := findRegTag(arg0, fni.nextTagsM1);
-            res.cmpM2 := findRegTag(arg0, fni.nextTagsM2);        
-            res.cmpM3 := findRegTag(arg0, fni.nextTagsM3);
-        else
-            res.reg   := '0';
-            res.cmp1  := findIqTag(tag0, fni.iqTags1);
-            res.cmp0  := findIqTag(tag0, fni.iqTags0);        
-            res.cmpM1 := findIqTag(tag0, fni.iqTagsM1);
-            res.cmpM2 := findIqTag(tag0, fni.iqTagsM2);        
-            res.cmpM3 := findIqTag(tag0, fni.iqTagsM3);
-        end if;
+--        constant arg0: PhysName := info.dynamic.argStates(arg).reg;        
+--        constant tag0: SmallNumber := info.dynamic.argStates(arg).iqTag;
+--    begin
+--        if not matchIQ then
+--            res.reg   := '0';
+--            res.cmp1  := findRegTag(arg0, fni.tags1);
+--            res.cmp0  := findRegTag(arg0, fni.tags0);        
+--            res.cmpM1 := findRegTag(arg0, fni.nextTagsM1);
+--            res.cmpM2 := findRegTag(arg0, fni.nextTagsM2);        
+--            res.cmpM3 := findRegTag(arg0, fni.nextTagsM3);
+--        else
+--            res.reg   := '0';
+--            res.cmp1  := findIqTag(tag0, fni.iqTags1);
+--            res.cmp0  := findIqTag(tag0, fni.iqTags0);        
+--            res.cmpM1 := findIqTag(tag0, fni.iqTagsM1);
+--            res.cmpM2 := findIqTag(tag0, fni.iqTagsM2);        
+--            res.cmpM3 := findIqTag(tag0, fni.iqTagsM3);
+--        end if;
 
-        return res;
-    end function;
+--        return res;
+--    end function;
 
 
     function TMP_incSrcStage(stage: SmallNumber) return SmallNumber is
@@ -426,7 +429,7 @@ package body LogicIssue is
 --                return "00000010";               
             when others =>
                 return "00000010";
-        end case;            
+        end case;
     end function;
 
 
@@ -517,6 +520,7 @@ begin
             next;
         end if;
 
+            -- Using .dest (phys reg)
         if bypass.obj(p).dest(PHYS_REG_BITS-1 downto 0) = arg(PHYS_REG_BITS-1 downto 0) then
         --if bypass.objTags(p) = argTag then
             res.match := '1';
@@ -547,6 +551,7 @@ begin
         end if;
 
         --if bypass.obj(p).dest(PHYS_REG_BITS-1 downto 0) = arg(PHYS_REG_BITS-1 downto 0) then
+            -- Using iqTags
         if bypass.objTags(p)(4 downto 0) = argTag(4 downto 0) then
             res.match := '1';
             res.argLocsPipe(2 downto 0) := i2slv(p, 3);
@@ -783,6 +788,8 @@ end function;
         return res;
     end function;
 
+
+        -- DB
         procedure DB_reportEvents(content: SchedulerInfoArray) is
         begin        
             -- pragma synthesis off
@@ -923,7 +930,8 @@ end function;
         return res;
     end function;
 
-
+        
+        -- DB? --------------------
         function getLastEvents(queueContent: SchedulerInfoArray) return IqEventArray is
             variable res: IqEventArray(queueContent'range) := (others => none);
         begin
@@ -941,7 +949,7 @@ end function;
             end loop;
             return res;
         end function;
-
+        ------------------
 
     function updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D is
         constant QUEUE_SIZE_EXT: natural := fullMask'length;
@@ -982,64 +990,6 @@ end function;
         return res;
     end function;
 
-    
-    function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo is
-        variable res: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
-    begin
-    
-        if a.static.operation.subpipe /= None then
-            res.static.operation.subpipe := a.static.operation.subpipe;  
-        else
-            res.static.operation.subpipe := b.static.operation.subpipe;
-        end if;
-        res.static.operation.bits := a.static.operation.bits or b.static.operation.bits;
-        res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
-        res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
-        res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
-    
-        res.static.branchIns := a.static.branchIns or b.static.branchIns;
-        
-        res.static.tags.renameIndex := a.static.tags.renameIndex or b.static.tags.renameIndex;
-        res.static.tags.bqPointer := a.static.tags.bqPointer or b.static.tags.bqPointer;
-        res.static.tags.sqPointer := a.static.tags.sqPointer or b.static.tags.sqPointer;
-        res.static.tags.lqPointer := a.static.tags.lqPointer or b.static.tags.lqPointer;   
-        res.static.tags.bqPointerSeq := a.static.tags.bqPointerSeq or b.static.tags.bqPointerSeq;
-            
-        res.static.immediate :=  a.static.immediate or b.static.immediate;
-        res.static.immValue :=  a.static.immValue or b.static.immValue;
-        res.static.zero :=  a.static.zero or b.static.zero;
-        
-    
-        res.dynamic.full := a.dynamic.full or b.dynamic.full;
-
-        res.dynamic.status.active := a.dynamic.status.active or b.dynamic.status.active;
-        res.dynamic.status.issued := a.dynamic.status.issued or b.dynamic.status.issued;
-        res.dynamic.status.trial := a.dynamic.status.trial or b.dynamic.status.trial;
-        
-        res.dynamic.renameIndex := a.dynamic.renameIndex or b.dynamic.renameIndex;
-
-        res.dynamic.dest := a.dynamic.dest or b.dynamic.dest;
-        res.dynamic.intDestSel := a.dynamic.intDestSel or b.dynamic.intDestSel;
-        res.dynamic.floatDestSel := a.dynamic.floatDestSel or b.dynamic.floatDestSel;
-
-        for i in 0 to 2 loop
-            res.dynamic.argStates(i).used := a.dynamic.argStates(i).used or b.dynamic.argStates(i).used;
-            res.dynamic.argStates(i).reg := a.dynamic.argStates(i).reg or b.dynamic.argStates(i).reg;
-            res.dynamic.argStates(i).zero := a.dynamic.argStates(i).used or b.dynamic.argStates(i).zero;
-            res.dynamic.argStates(i).imm := a.dynamic.argStates(i).imm or b.dynamic.argStates(i).imm;
-            res.dynamic.argStates(i).value := a.dynamic.argStates(i).value or b.dynamic.argStates(i).value;
-
-            res.dynamic.argStates(i).canFail := a.dynamic.argStates(i).canFail or b.dynamic.argStates(i).canFail;
-            res.dynamic.argStates(i).waiting := a.dynamic.argStates(i).waiting or b.dynamic.argStates(i).waiting;
-            res.dynamic.argStates(i).stored := a.dynamic.argStates(i).stored or b.dynamic.argStates(i).stored;
-
-            res.dynamic.argStates(i).srcPipe := a.dynamic.argStates(i).srcPipe or b.dynamic.argStates(i).srcPipe;
-            res.dynamic.argStates(i).srcStage := a.dynamic.argStates(i).srcStage or b.dynamic.argStates(i).srcStage;
-        end loop;
-        
-        return res;
-    end function;
-
 
     function getSelMask(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector is
         constant QUEUE_SIZE_EXT: natural := readyMask'length;
@@ -1061,39 +1011,6 @@ end function;
              
         return res;
     end function;
-
-    
-    function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return SchedulerInfo is
-        constant QUEUE_SIZE_EXT: natural := inputElems'length;
-        variable res, a, b: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
-        variable maskedQueue: SchedulerInfoArray(inputElems'range) := (others => DEFAULT_SCHEDULER_INFO);
-    begin
-        for i in 0 to QUEUE_SIZE_EXT-1 loop
-            if selMask(i) = '1' then
-                maskedQueue(i) := inputElems(i);
-            end if;
-        end loop;
-    
-        for i in 0 to QUEUE_SIZE_EXT/2-1 loop
-            a := orSchedEntrySlot(a, maskedQueue(i));
-            b := orSchedEntrySlot(b, maskedQueue(i + QUEUE_SIZE_EXT/2));
-        end loop;
-        
-        res := orSchedEntrySlot(a, b);
-        
-            -- Set DB info
-            -- pragma synthesis off
-            for i in 0 to QUEUE_SIZE_EXT-1 loop
-                if selMask(i) = '1' then
-                    res.static.dbInfo := inputElems(i).static.dbInfo;
-                    exit;
-                end if;
-            end loop;
-            -- pragma synthesis on
-
-        return res;
-    end function;
-
 
 	-- issue
     function getSchedEntrySlot(info: SchedulerInfo; full: std_logic; iqTag: SmallNumber) return SchedulerState is
@@ -1256,7 +1173,6 @@ end function;
         return res;
     end function;
 
-
 --------------------------------------------
 
     function getTrialMask(content: SchedulerInfoArray; events: EventState) return std_logic_vector is
@@ -1336,6 +1252,95 @@ end function;
     end function;
 
 
+    
+    function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo is
+        variable res: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+    begin
+    
+        if a.static.operation.subpipe /= None then
+            res.static.operation.subpipe := a.static.operation.subpipe;  
+        else
+            res.static.operation.subpipe := b.static.operation.subpipe;
+        end if;
+        res.static.operation.bits := a.static.operation.bits or b.static.operation.bits;
+        res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
+        res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
+        res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
+    
+        res.static.branchIns := a.static.branchIns or b.static.branchIns;
+        
+        res.static.tags.renameIndex := a.static.tags.renameIndex or b.static.tags.renameIndex;
+        res.static.tags.bqPointer := a.static.tags.bqPointer or b.static.tags.bqPointer;
+        res.static.tags.sqPointer := a.static.tags.sqPointer or b.static.tags.sqPointer;
+        res.static.tags.lqPointer := a.static.tags.lqPointer or b.static.tags.lqPointer;   
+        res.static.tags.bqPointerSeq := a.static.tags.bqPointerSeq or b.static.tags.bqPointerSeq;
+            
+        res.static.immediate :=  a.static.immediate or b.static.immediate;
+        res.static.immValue :=  a.static.immValue or b.static.immValue;
+        res.static.zero :=  a.static.zero or b.static.zero;
+        
+    
+        res.dynamic.full := a.dynamic.full or b.dynamic.full;
+
+        res.dynamic.status.active := a.dynamic.status.active or b.dynamic.status.active;
+        res.dynamic.status.issued := a.dynamic.status.issued or b.dynamic.status.issued;
+        res.dynamic.status.trial := a.dynamic.status.trial or b.dynamic.status.trial;
+        
+        res.dynamic.renameIndex := a.dynamic.renameIndex or b.dynamic.renameIndex;
+
+        res.dynamic.dest := a.dynamic.dest or b.dynamic.dest;
+        res.dynamic.intDestSel := a.dynamic.intDestSel or b.dynamic.intDestSel;
+        res.dynamic.floatDestSel := a.dynamic.floatDestSel or b.dynamic.floatDestSel;
+
+        for i in 0 to 2 loop
+            res.dynamic.argStates(i).used := a.dynamic.argStates(i).used or b.dynamic.argStates(i).used;
+            res.dynamic.argStates(i).reg := a.dynamic.argStates(i).reg or b.dynamic.argStates(i).reg;
+            res.dynamic.argStates(i).zero := a.dynamic.argStates(i).used or b.dynamic.argStates(i).zero;
+            res.dynamic.argStates(i).imm := a.dynamic.argStates(i).imm or b.dynamic.argStates(i).imm;
+            res.dynamic.argStates(i).value := a.dynamic.argStates(i).value or b.dynamic.argStates(i).value;
+
+            res.dynamic.argStates(i).canFail := a.dynamic.argStates(i).canFail or b.dynamic.argStates(i).canFail;
+            res.dynamic.argStates(i).waiting := a.dynamic.argStates(i).waiting or b.dynamic.argStates(i).waiting;
+            res.dynamic.argStates(i).stored := a.dynamic.argStates(i).stored or b.dynamic.argStates(i).stored;
+
+            res.dynamic.argStates(i).srcPipe := a.dynamic.argStates(i).srcPipe or b.dynamic.argStates(i).srcPipe;
+            res.dynamic.argStates(i).srcStage := a.dynamic.argStates(i).srcStage or b.dynamic.argStates(i).srcStage;
+        end loop;
+        
+        return res;
+    end function;
+
+    
+    function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return SchedulerInfo is
+        constant QUEUE_SIZE_EXT: natural := inputElems'length;
+        variable res, a, b: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+        variable maskedQueue: SchedulerInfoArray(inputElems'range) := (others => DEFAULT_SCHEDULER_INFO);
+    begin
+        for i in 0 to QUEUE_SIZE_EXT-1 loop
+            if selMask(i) = '1' then
+                maskedQueue(i) := inputElems(i);
+            end if;
+        end loop;
+    
+        for i in 0 to QUEUE_SIZE_EXT/2-1 loop
+            a := orSchedEntrySlot(a, maskedQueue(i));
+            b := orSchedEntrySlot(b, maskedQueue(i + QUEUE_SIZE_EXT/2));
+        end loop;
+        
+        res := orSchedEntrySlot(a, b);
+        
+        -- Set DB info
+        -- pragma synthesis off
+        for i in 0 to QUEUE_SIZE_EXT-1 loop
+            if selMask(i) = '1' then
+                res.static.dbInfo := inputElems(i).static.dbInfo;
+                exit;
+            end if;
+        end loop;
+        -- pragma synthesis on
+
+        return res;
+    end function;
 
 -------------------------------
 -- wups experimental

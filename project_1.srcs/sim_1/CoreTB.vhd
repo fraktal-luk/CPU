@@ -551,7 +551,96 @@ BEGIN
       signal cpuState2: CoreState := INIT_CORE_STATE;
       signal dataMemory2: ByteArray(0 to 4095);
       signal currentInstruction2: Instruction;
+      
+            signal dummyDiv, dummyRem, da, db: Word;
   begin
+  
+            process
+                variable dd, dr: Word;
+            begin
+                cycle;
+
+                   da <= X"ffffffff";
+                   db <= X"ffffffff";
+                cycle;
+                   work.Emulate.divRem(da, db, false, dd, dr);
+                   dummyDiv <= dd;
+                   dummyRem <= dr;
+                    --------------------
+                    
+                   da <= X"00000004";
+                      db <= X"00000002";
+                  cycle;
+                     work.Emulate.divRem(da, db, false, dd, dr);
+                     dummyDiv <= dd;
+                     dummyRem <= dr;
+                      --------------------
+                    
+                   da <= X"ffffffff";
+                     db <= X"80000000";
+                 cycle;
+                    work.Emulate.divRem(da, db, false, dd, dr);
+                    dummyDiv <= dd;
+                    dummyRem <= dr;
+                     --------------------
+                     
+                   da <= X"80000003";
+                     db <= X"40000000";
+                  cycle;
+                     work.Emulate.divRem(da, db, false, dd, dr);
+                     dummyDiv <= dd;
+                     dummyRem <= dr;
+                      --------------------
+
+                     
+                   da <= X"0000002b";
+                     db <= X"00000008";
+                  cycle;
+                     work.Emulate.divRem(da, db, false, dd, dr);
+                     dummyDiv <= dd;
+                     dummyRem <= dr;
+                      --------------------
+
+
+                   da <= X"80000000";
+                     db <= X"40000000";
+                  cycle;
+                     work.Emulate.divRem(da, db, true, dd, dr);
+                     dummyDiv <= dd;
+                     dummyRem <= dr;
+                      --------------------
+
+
+                   da <= X"00000008";
+                     db <= X"fffffffe";
+                  cycle;
+                     work.Emulate.divRem(da, db, true, dd, dr);
+                     dummyDiv <= dd;
+                     dummyRem <= dr;
+                      --------------------
+                      
+
+                     da <= X"ffffffff";
+                       db <= X"00000007";
+                    cycle;
+                       work.Emulate.divRem(da, db, true, dd, dr);
+                       dummyDiv <= dd;
+                       dummyRem <= dr;
+                        --------------------
+                cycle;
+                
+                cycle;
+                
+                
+                cycle;
+                
+                
+                cycle;
+                
+                    wait;
+            end process;
+  
+  
         TMP_EMUL: process (clk)
             type EmulState is (ready, prepare, running);
             variable state: EmulState := ready;

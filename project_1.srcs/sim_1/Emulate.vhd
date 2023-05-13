@@ -14,6 +14,9 @@ use work.CpuText.all;
 
 package Emulate is
 
+        procedure divRem(a, b: Word; signed: boolean; quot, rm: out Word);
+
+
 function memReadWord(memory: ByteArray; address: Mword) return Mword;
 function memReadDword(memory: ByteArray; address: Mword) return Mword;
 function memReadMword(memory: ByteArray; address: Mword) return Mword;
@@ -537,7 +540,12 @@ end procedure;
 function multiplyWords(a, b: Word; signed: boolean := false) return Dword is
     variable res, shifted: Dword := (others => '0');
 begin
-    shifted(31 downto 0) := b;
+    if signed then
+        shifted := signExtend(b, 64);
+    else
+        shifted := zeroExtend(b, 64);
+    end if;
+    
     for i in 0 to 30 loop
         if a(i) = '1' then
             res := add(res, shifted);
@@ -554,7 +562,7 @@ begin
     end if;
     
     return res;
-end function;    
+end function;
 
 function multiplyLow(a, b: Word) return Word is
     variable res: Word := (others => '0');
@@ -573,6 +581,148 @@ begin
 end function;
 
 
+
+function shiftLeft(w: Word; sh: natural) return Word is
+    variable d: Dword := w & X"00000000";
+begin
+    return d(63-sh downto 32-sh);
+end function;
+
+function shiftRightLogical(w: Word; sh: natural) return Word is
+    variable d: Dword := zeroExtend(w, 64);
+begin
+    return d(31+sh downto sh);
+end function;
+
+function shiftRightArithmetic(w: Word; sh: natural) return Word is
+    variable d: Dword := signExtend(w, 64);
+begin
+    return d(31+sh downto sh);
+end function;
+
+
+procedure divRemU(a, b: Word; quot, rm: out Word) is
+    variable aRem, bSh, result: Word := (others => '0');
+    variable highA, highB, dlZ, k, resultIndex: natural := 0;
+
+begin
+    aRem := a;
+
+    if isNonzero(b) /= '1' then
+        quot := (others => 'U');
+        rm := (others => 'U');
+        return;
+    end if;
+
+    if isNonzero(aRem) /= '1' then
+        quot := (others => '0');
+        rm := (others => '0');
+        return;
+    end if;
+
+    quot := (others => '0');
+
+    for i in 31 downto 0 loop
+        if aRem(i) = '1' then
+            highA := i;
+            exit;
+        end if;
+    end loop;
+
+    for i in 31 downto 0 loop
+        if b(i) = '1' then
+            highB := i;
+            exit;
+        end if;
+    end loop;
+    
+    if highB > highA then
+        quot := (others => '0');
+        rm := aRem;
+        return;
+    end if;
+
+    -- Highest possible result bit:
+    resultIndex := highA - highB;
+
+    bSh := shiftLeft(b, resultIndex);
+    loop
+        if cmpGeU(aRem, bSh) = '1' then
+            aRem := sub(aRem, bSh);
+            result(resultIndex) := '1';
+        end if;
+        
+        if resultIndex = 0 then
+            exit;
+        end if;
+        bSh := shiftRightLogical(bSh, 1);
+        resultIndex := resultIndex - 1;
+    end loop;
+    
+    quot := result;
+    rm := aRem;
+
+end procedure;
+
+
+
+procedure divRem(a, b: Word; signed: boolean; quot, rm: out Word) is
+    variable sgA, sgB: std_logic := '0';
+    variable aU, bU, qU, rU: Word := (others => '0');
+begin
+    sgA := a(31) and bool2std(signed);
+    sgB := b(31) and bool2std(signed);
+    
+    if sgA = '1' then
+        aU := minus(a);
+    else
+        aU := a;
+    end if;
+
+    if sgB = '1' then
+        bU := minus(b);
+    else
+        bU := b;
+    end if;
+    
+    divRemU(aU, bU, qU, rU);
+    
+    if (sgA xor sgB) = '1' then
+        qU := minus(qU);
+    end if;
+    
+    if sgA = '1' then
+        rU := minus(rU);
+    end if;
+    
+        if isNonzero(rU) = '1' and (sgA xor sgB) = '1' then
+            qU := addInt(qU, -1);
+            rU := add(rU, b);
+        end if;
+   -- end if;
+
+    quot := qU;
+    rm := rU;
+end procedure;
+
+
+function divide(a, b: Word; signed: boolean) return Word is
+    variable res: Word := (others => '0');
+    variable quot, rm: Word := (others => '0');
+begin
+    divRem(a, b, signed, quot, rm);
+    return quot;
+end function;
+
+function remainder(a, b: Word; signed: boolean) return Word is
+    variable res: Word := (others => '0');
+    variable quot, rm: Word := (others => '0');
+begin
+    divRem(a, b, signed, quot, rm);
+    return rm;
+end function;
+
+
 procedure performCalculation(intArgs: in MwordArray; fpArgs: in MwordArray; incrementedIP: in Mword; aop: in AbstractOperation; intResult: out Mword; fpResult: out Mword; outFlags: out std_logic_vector(0 to 2)) is
     constant ia0: Mword := intArgs(0);
     constant ia1: Mword := intArgs(1);
@@ -580,6 +730,8 @@ procedure performCalculation(intArgs: in MwordArray; fpArgs: in MwordArray; incr
     constant fa0: Mword := fpArgs(0);
     constant fa1: Mword := fpArgs(1);
     constant fa2: Mword := fpArgs(2);
+    
+    variable vDiv, vRem: Word;
 begin
     intResult := (others => 'U');
     fpResult := (others => 'U');
@@ -599,10 +751,21 @@ begin
         when mulhu => intResult := multiplyHigh(ia0, ia1);
         when mulhs => intResult := multiplyHigh(ia0, ia1, true);
 
-            when divu => intResult := (others => '0');
-            when divs => intResult := (others => '0');
-            when remu => intResult := (others => '0');
-            when rems => intResult := (others => '0');
+        when divu =>
+            divRem(ia0, ia1, false, vDiv, vRem);
+            intResult := vDiv;
+            
+        when divs =>
+            divRem(ia0, ia1, true, vDiv, vRem);
+            intResult := vDiv;
+        
+        when remu =>
+            divRem(ia0, ia1, false, vDiv, vRem);
+            intResult := vRem;
+        
+        when rems => 
+            divRem(ia0, ia1, true, vDiv, vRem);
+            intResult := vRem;
 
         when j | jl | jz | jnz => intResult := incrementedIP;
         
