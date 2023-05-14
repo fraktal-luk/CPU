@@ -19,7 +19,9 @@ type ExecUnit is (General, ALU, MAC, Divide, Jump, Memory, System, FPU );
 type ExecFunc is (
                 unknown,
 
-                arithAdd, arithSub, arithSha,
+                arithAdd, 
+                    arithAddH,
+                arithSub, arithSha,
                 logicAnd, logicOr, logicShl,
                 
                 mulS, mulU, 
@@ -50,7 +52,7 @@ type ExecFunc is (
 --------------
 type SubpipeType is (None, ALU, Mem, FP);
 
-type ArithOp is (opAnd, opOr, opXor, opAdd, opSub, opShl, opSha, opRot, opJz, opJnz, opJ, opMul, opMulHS, opMulHU, opDivU, opDivS, opRemU, opRemS);
+type ArithOp is (opAnd, opOr, opXor, opAdd, opAddH, opSub, opShl, opSha, opRot, opJz, opJnz, opJ, opMul, opMulHS, opMulHU, opDivU, opDivS, opRemU, opRemS);
 
 type MemOp is (opLoad, opStore, opLoadSys, opStoreSys);
 
@@ -83,12 +85,12 @@ constant DEFAULT_SPECIFIC_OP: SpecificOp := (
     memory => opLoad,
     float => opMove,
     system => opNone);
-                                        
+
 function sop(sub: SubpipeType; func: ArithOp) return SpecificOp;
 function sop(sub: SubpipeType; func: MemOp) return SpecificOp;
 function sop(sub: SubpipeType; func: FpOp) return SpecificOp;
 function sop(sub: SubpipeType; func: SysOp) return SpecificOp;
-                                                
+ 
 ---------------
 
 constant TAG_SIZE: integer := 7 + LOG2_PIPE_WIDTH;

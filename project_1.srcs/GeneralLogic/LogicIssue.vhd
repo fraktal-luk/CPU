@@ -202,7 +202,7 @@ package body LogicIssue is
         constant QUEUE_SIZE_EXT: natural := fullMask'length;
         variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
         variable cnt: natural := 0;
-        constant N_BANKS: natural := 4;
+        constant N_BANKS: natural := PIPE_WIDTH;
         constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
     begin
        for b in 0 to N_BANKS-1 loop
@@ -1131,6 +1131,11 @@ end function;
             if USE_IMM then
                 res.args(1)(31 downto 16) := (others => res.st.immValue(15));
                 res.args(1)(15 downto 0) := res.st.immValue;
+                
+                if res.st.operation.arith = opAddH then
+                    res.args(1)(31 downto 16) := res.st.immValue;
+                    res.args(1)(15 downto 0) := (others => '0');
+                end if;
             else
                 res.args(1) := (others => '0');
             end if;

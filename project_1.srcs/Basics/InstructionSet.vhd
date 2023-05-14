@@ -268,6 +268,7 @@ type Operation is (none,
                     
                     intAnd, intOr, intXor,
                     intAdd, intSub,
+                    intAddH,
                     intMul, intMulHU, intMulHS,
                     intDivU, intDivS,
                     intRemU, intRemS,
@@ -436,7 +437,7 @@ constant MainTable: OpcodeTable0 := (
     
     
     16 => (addI, intAdd, intImm16, add_i),
-    17 => (addH, intAdd, intImm16, add_h),
+    17 => (addH, intAddH, intImm16, add_h),
     
     20 => (intLoadW16, intLoadW, intImm16, ldi_i),
     21 => (intStoreW16, intStoreW, intStore16, sti_i),

@@ -3,5 +3,8 @@
 	add_i r0, r0, 0
 	add_i r0, r0, 0
 
+		add_h r1, r0, 3
+		add_h r2, r0, 1
+
 	sys call
 	sys error

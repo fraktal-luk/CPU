@@ -236,7 +236,7 @@ package body LogicExec is
         variable ac: AluControl := DEFAULT_ALU_CONTROL; 
     begin
         case op is
-            when opAdd =>
+            when opAdd | opAddH =>
                 ac.adder := '1';
             when opSub =>
                 ac.adder := '1';

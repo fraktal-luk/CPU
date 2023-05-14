@@ -62,7 +62,7 @@ begin
     if op0 = "010000" then
         aluOp := opAdd;
     elsif op0 = "010001" then
-        aluOp := opAdd;
+        aluOp := opAddH;
     elsif op0 = "001000" then
         aluOp := opJ;
     elsif op0 = "001001" then
