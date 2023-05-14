@@ -60,7 +60,8 @@ end IssueQueue;
 
 
 architecture Behavioral of IssueQueue is
-    constant N_BANKS: natural := 4;
+    constant N_BANKS: natural := --4;
+                                PIPE_WIDTH;
     constant BANK_SIZE: natural := IQ_SIZE / N_BANKS;
 
     constant CFG_WAIT: SchedulerUpdateConfig := (false, false, IGNORE_MEM_FAIL, FORWARDING_D, false);

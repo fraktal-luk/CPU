@@ -38,14 +38,18 @@ architecture Behavioral of RegisterReadyTable is
     constant WIDTH: natural := WRITE_WIDTH;
     
     signal readyTableClearAllow: std_logic := '0';
-    signal readyTableClearSel: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-    
+    signal readyTableClearSel: --std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+                                std_logic_vector(0 to 3) := (others => '0');
     signal altMask: std_logic_vector(0 to WRITE_WIDTH-1) := (others => '0');
     signal altDests: PhysNameArray(0 to WRITE_WIDTH-1) := (others => (others => '0'));
 
     subtype MatchVec is std_logic_vector(0 to 15);
     type MatchMat is array(0 to 3) of matchVec;
     type MaskLH is array(0 to 1) of std_logic_vector(0 to N_PHYSICAL_REGS-1);
+
+		signal newPhysDestsW: PhysNameArray(0 to 3) := (others => (others => '0'));
+		signal newPhysSourcesW: PhysNameArray(0 to 11) := (others => (others => '0'));
+
 
     function extractReadyRegBits(bits: std_logic_vector; args: PhysNameArray) return std_logic_vector is
         variable res: std_logic_vector(0 to args'length-1) := (others => '0'); -- 31) := (others=>'0');
@@ -158,10 +162,15 @@ architecture Behavioral of RegisterReadyTable is
 
     signal ch0, ch1: std_logic := '0';
 begin
-    selMask0 <= getSelMask(newPhysDests(0), readyTableClearSel(0), readyTableClearAllow);
-    selMask1 <= getSelMask(newPhysDests(1), readyTableClearSel(1), readyTableClearAllow);
-    selMask2 <= getSelMask(newPhysDests(2), readyTableClearSel(2), readyTableClearAllow);
-    selMask3 <= getSelMask(newPhysDests(3), readyTableClearSel(3), readyTableClearAllow);
+        WIDTH_MATCHING: for i in 0 to PIPE_WIDTH-1 generate
+            newPhysDestsW(i) <= newPhysDests(i);
+            newPhysSourcesW(3*i to 3*i + 2) <= newPhysSources(3*i to 3*i + 2);
+        end generate;
+
+    selMask0 <= getSelMask(newPhysDestsW(0), readyTableClearSel(0), readyTableClearAllow);
+    selMask1 <= getSelMask(newPhysDestsW(1), readyTableClearSel(1), readyTableClearAllow);
+    selMask2 <= getSelMask(newPhysDestsW(2), readyTableClearSel(2), readyTableClearAllow);
+    selMask3 <= getSelMask(newPhysDestsW(3), readyTableClearSel(3), readyTableClearAllow);
     selMaskS <= getSelMask(altDests(0), altMask(0), '1');
 
     readyTableClearAllow <= sendingToReserve; -- for ready table

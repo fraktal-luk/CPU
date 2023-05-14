@@ -153,6 +153,22 @@ begin
 	    signal decodedEA: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 
         signal decodeCounter, decodeCounterNext: Word := (others => '0'); -- DB
+        
+        function shiftLine(fetchedLine: WordArray; shift: SmallNumber) return WordArray is
+            variable res: WordArray(0 to FETCH_WIDTH-1) := fetchedLine;
+            variable sh: natural := slv2u(shift(LOG2_PIPE_WIDTH-1 downto 0));
+        begin
+            for i in 0 to FETCH_WIDTH-1 loop
+                if i + sh > FETCH_WIDTH-1 then
+                    res(i) := fetchedLine(FETCH_WIDTH-1);
+                else
+                    res(i) := fetchedLine(i + sh);
+                end if;
+            end loop;
+
+            return res;
+        end function;
+
 	begin
         decodeCounterNext <= addInt(decodeCounter, countOnes(extractFullMask(dataToIbuffer))) when sendingToBuffer = '1' else decodeCounter;
 
@@ -168,11 +184,13 @@ begin
         groupShift(1 downto 0) <= predictedAddress(3 downto 2);
         nW <= slv2u(earlyBranchIn.tags.bqPointer) + 1 - slv2u(groupShift);
 
-        fetchedLine1_Sh <= fetchedLine1                                                               when groupShift(1 downto 0) = "00"
-                    else   fetchedLine1(1 to 3) & fetchedLine1(3)                                     when groupShift(1 downto 0) = "01"
-                    else   fetchedLine1(2 to 3) & fetchedLine1(3) & fetchedLine1(3)                   when groupShift(1 downto 0) = "10"
-                    else   fetchedLine1(3 to 3) & fetchedLine1(3) & fetchedLine1(3) & fetchedLine1(3) when groupShift(1 downto 0) = "11";
-
+--        fetchedLine1_Sh2 <= fetchedLine1                                                               when groupShift(1 downto 0) = "00"
+--                    else   fetchedLine1(1 to 3) & fetchedLine1(3)                                     when groupShift(1 downto 0) = "01"
+--                    else   fetchedLine1(2 to 3) & fetchedLine1(3) & fetchedLine1(3)                   when groupShift(1 downto 0) = "10"
+--                    else   fetchedLine1(3 to 3) & fetchedLine1(3) & fetchedLine1(3) & fetchedLine1(3) when groupShift(1 downto 0) = "11";
+        
+        fetchedLine1_Sh <= shiftLine(fetchedLine1, groupShift);
+        
         decodedEA <= decodeGroup(fetchedLine1_Sh, nW, predictedAddress, stageDataOutFetch1);
         dataToIbuffer <= assignSeqNum(decodedEA, decodeCounter, stageDataOutFetch1); -- TODO: DB (decodeCounter incremented per instruction)
 

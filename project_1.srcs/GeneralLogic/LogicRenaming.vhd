@@ -411,7 +411,7 @@ begin
     end if;
     
     if putAllow = '1' then
-        for i in 0 to 3 loop
+        for i in 0 to PIPE_WIDTH-1 loop
             listExt(slv2u(numReduced) + i) := input(i);
         end loop;
     end if;

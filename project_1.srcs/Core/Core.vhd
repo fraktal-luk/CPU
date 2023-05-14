@@ -381,8 +381,8 @@ begin
                         : SchedulerState := DEFAULT_SCHED_STATE;
 
        signal regValsI0, regValsI1, regValsM0, regValsS0, regValsE, regValsFloatA, regValsFloatB, regValsFloatC, regValsFS0, regValsF0: MwordArray(0 to 2) := (others => (others => '0'));
-       signal readyRegFlagsInt_Early, readyRegFlagsInt_Early_Mem, readyRegFlagsInt_C, readyRegFlagsFloat_Early, readyRegFlagsInt_T, readyRegFlagsFloat_T,
-              readyRegFlagsIntNext_Early, readyRegFlagsIntNext_C, readyRegFlagsSV, readyRegFlagsFloatNext_Early, readyRegFlagsFloatSV
+       signal readyRegFlagsInt_Early, readyRegFlagsInt_Early_Mem, readyRegFlagsInt_Early_Mem2, readyRegFlagsInt_C, readyRegFlagsFloat_Early, readyRegFlagsInt_T, readyRegFlagsFloat_T,
+              readyRegFlagsIntNext_Early, readyRegFlagsIntNext_C, readyRegFlagsSV, readyRegFlagsSV2, readyRegFlagsFloatNext_Early, readyRegFlagsFloatSV, readyRegFlagsFloatSV2
               : std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
        signal newIntSources, newFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
@@ -661,14 +661,30 @@ begin
                 end block;
             end generate;
 
-
-            readyRegFlagsInt_Early_Mem <= --readyRegFlagsInt_Early;
-                                          (readyRegFlagsInt_Early(0), readyRegFlagsInt_Early(1 + QQQ), readyRegFlagsInt_Early(2 - QQQ),
-                                           readyRegFlagsInt_Early(3), readyRegFlagsInt_Early(4 + QQQ), readyRegFlagsInt_Early(5 - QQQ),
-                                           readyRegFlagsInt_Early(6), readyRegFlagsInt_Early(7 + QQQ), readyRegFlagsInt_Early(8 - QQQ),
-                                           readyRegFlagsInt_Early(9), readyRegFlagsInt_Early(10 + QQQ), readyRegFlagsInt_Early(11 - QQQ)
-                                            );
-
+            
+            TMP_REORDER_MEM: block
+                function reorder(flags: std_logic_vector) return std_logic_vector is
+                    variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := flags;
+                begin
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        res(3*i + 1) := flags(3*i + 1 + QQQ);
+                        res(3*i + 2) := flags(3*i + 2 - QQQ);
+                    end loop;
+                    
+                    return res;
+                end function;
+                
+            begin
+--                readyRegFlagsInt_Early_Mem2 <= --readyRegFlagsInt_Early;
+--                                              (readyRegFlagsInt_Early(0), readyRegFlagsInt_Early(1 + QQQ), readyRegFlagsInt_Early(2 - QQQ),
+--                                               readyRegFlagsInt_Early(3), readyRegFlagsInt_Early(4 + QQQ), readyRegFlagsInt_Early(5 - QQQ),
+--                                               readyRegFlagsInt_Early(6), readyRegFlagsInt_Early(7 + QQQ), readyRegFlagsInt_Early(8 - QQQ),
+--                                               readyRegFlagsInt_Early(9), readyRegFlagsInt_Early(10 + QQQ), readyRegFlagsInt_Early(11 - QQQ)
+--                                                );
+                readyRegFlagsInt_Early_Mem <= reorder(readyRegFlagsInt_Early);
+                ch0 <= bool2std(readyRegFlagsInt_Early_Mem = readyRegFlagsInt_Early_Mem2);
+            end block;
+            
         SUBPIPE_MEM: block
             use work.LogicIssue.all;
 
@@ -854,6 +870,18 @@ begin
             signal stateExecStoreValue: SchedulerState := DEFAULT_SCHED_STATE;
             
             signal sendingToStoreWrite, sendingToStoreWriteInt, sendingToStoreWriteFloat: std_logic := '0';
+            
+                function reorder(flags: std_logic_vector) return std_logic_vector is
+                    variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := flags;
+                begin
+                    for i in 0 to PIPE_WIDTH-1 loop
+                        res(3*i) := flags(3*i + 2 - QQQ);
+                        res(3*i + 1) := '0';
+                        res(3*i + 2) := '0';
+                    end loop;
+                    
+                    return res;
+                end function;
         begin
             wupsInt <= getInitWakeups(schedInfoIntA, bypassIntSV, CFG_SVI);
             wupsFloat <= getInitWakeups(schedInfoFloatA, bypassFloatSV, CFG_SVF);
@@ -867,11 +895,12 @@ begin
             schedInfoUpdatedFloatU <= prepareNewArr( schedInfoUpdatedFloatA, readyRegFlagsFloatSV );
 
 
-            readyRegFlagsSV <= (readyRegFlagsInt_Early(2 - QQQ), '0', '0',
-                                readyRegFlagsInt_Early(5 - QQQ), '0', '0',
-                                readyRegFlagsInt_Early(8 - QQQ), '0', '0',
-                                readyRegFlagsInt_Early(11 - QQQ), '0', '0');
-                                
+--            readyRegFlagsSV2 <= (readyRegFlagsInt_Early(2 - QQQ), '0', '0',
+--                                readyRegFlagsInt_Early(5 - QQQ), '0', '0',
+--                                readyRegFlagsInt_Early(8 - QQQ), '0', '0',
+--                                readyRegFlagsInt_Early(11 - QQQ), '0', '0');
+                readyRegFlagsSV <= reorder(readyRegFlagsInt_Early);
+            
             IQUEUE_SV: entity work.IssueQueue(Behavioral)
             generic map(
                 NAME => "SVI",
@@ -940,10 +969,14 @@ begin
             sendingToStoreWriteInt <= slotRegReadIntSV.full and not outSigsSVI.killFollower;
 
             ------------------------------------
-            readyRegFlagsFloatSV <= (readyRegFlagsFloat_Early(2 - QQQ), '0', '0',
-                                     readyRegFlagsFloat_Early(5 - QQQ), '0', '0',
-                                     readyRegFlagsFloat_Early(8 - QQQ), '0', '0',
-                                     readyRegFlagsFloat_Early(11 - QQQ), '0', '0');
+--            readyRegFlagsFloatSV2 <= (readyRegFlagsFloat_Early(2 - QQQ), '0', '0',
+--                                     readyRegFlagsFloat_Early(5 - QQQ), '0', '0',
+--                                     readyRegFlagsFloat_Early(8 - QQQ), '0', '0',
+--                                     readyRegFlagsFloat_Early(11 - QQQ), '0', '0');
+                            readyRegFlagsFloatSV <= reorder(readyRegFlagsFloat_Early);
+            
+                ch1 <= bool2std(readyRegFlagsSV2 = readyRegFlagsSV);
+                ch2 <= bool2std(readyRegFlagsFloatSV2 = readyRegFlagsFloatSV);
             
             FP_STORE_IQ: if ENABLE_FP generate
                 IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)
@@ -1305,15 +1338,21 @@ begin
              readyRegFlagsFloat_T <= updateArgStatesFloat(renamedArgsInt, renamedArgsFloat, readyRegFlagsFloatNext_Early);
         end generate;
 
-        readyRegFlagsInt_Early(0 to 2 - QQQ) <= readyRegFlagsIntNext_Early(0 to 2 - QQQ);
-        readyRegFlagsInt_Early(3 to 5 - QQQ) <= readyRegFlagsIntNext_Early(3 to 5 - QQQ);
-        readyRegFlagsInt_Early(6 to 8 - QQQ) <= readyRegFlagsIntNext_Early(6 to 8 - QQQ);
-        readyRegFlagsInt_Early(9 to 11 - QQQ) <= readyRegFlagsIntNext_Early(9 to 11 - QQQ);
-        
-        readyRegFlagsFloat_Early(0 to 2 - QQQ) <= readyRegFlagsFloatNext_Early(0 to 2 - QQQ);
-        readyRegFlagsFloat_Early(3 to 5 - QQQ) <= readyRegFlagsFloatNext_Early(3 to 5 - QQQ);
-        readyRegFlagsFloat_Early(6 to 8 - QQQ) <= readyRegFlagsFloatNext_Early(6 to 8 - QQQ);
-        readyRegFlagsFloat_Early(9 to 11 - QQQ) <= readyRegFlagsFloatNext_Early(9 to 11 - QQQ);
+        RR_FLAGS_TEMP: for i in 0 to PIPE_WIDTH-1 generate
+            readyRegFlagsInt_Early(3*i to 3*i + 2 - QQQ) <= readyRegFlagsIntNext_Early(3*i to 3*i + 2 - QQQ);
+            
+            readyRegFlagsFloat_Early(3*i to 3*i + 2 - QQQ) <= readyRegFlagsFloatNext_Early(3*i to 3*i + 2 - QQQ);
+        end generate;
+
+--            readyRegFlagsInt_Early(0 to 2 - QQQ) <= readyRegFlagsIntNext_Early(0 to 2 - QQQ);
+--            readyRegFlagsInt_Early(3 to 5 - QQQ) <= readyRegFlagsIntNext_Early(3 to 5 - QQQ);
+--            readyRegFlagsInt_Early(6 to 8 - QQQ) <= readyRegFlagsIntNext_Early(6 to 8 - QQQ);
+--            readyRegFlagsInt_Early(9 to 11 - QQQ) <= readyRegFlagsIntNext_Early(9 to 11 - QQQ);
+            
+--            readyRegFlagsFloat_Early(0 to 2 - QQQ) <= readyRegFlagsFloatNext_Early(0 to 2 - QQQ);
+--            readyRegFlagsFloat_Early(3 to 5 - QQQ) <= readyRegFlagsFloatNext_Early(3 to 5 - QQQ);
+--            readyRegFlagsFloat_Early(6 to 8 - QQQ) <= readyRegFlagsFloatNext_Early(6 to 8 - QQQ);
+--            readyRegFlagsFloat_Early(9 to 11 - QQQ) <= readyRegFlagsFloatNext_Early(9 to 11 - QQQ);
 
         sysRegSending <= sysRegRead;
 
