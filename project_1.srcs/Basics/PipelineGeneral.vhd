@@ -231,7 +231,7 @@ function iqInds2tags(inds: SmallNumberArray) return SmallNumberArray is
 begin
     for i in 0 to RENAME_W-1 loop 
         lane := sn(i);
-        res(i)(SMALL_NUMBER_SIZE-1 downto 2) := inds(i)(SMALL_NUMBER_SIZE-3 downto 0);
+        res(i)(SMALL_NUMBER_SIZE-3+LOG2_PIPE_WIDTH downto LOG2_PIPE_WIDTH) := inds(i)(SMALL_NUMBER_SIZE-3 downto 0);
         res(i) := res(i) or lane;
     end loop;
     return res;

@@ -134,18 +134,38 @@ begin
     return res;
 end function;
 
+function extendMask(v: std_logic_vector) return std_logic_vector is
+    variable res: std_logic_vector(0 to 3) := (others => '0');
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := v(i);
+    end loop;
+    return res;
+end function;
+
+function extendRegList(pa: PhysNameArray) return PhysNameArray is
+    variable res: PhysNameArray(0 to 3) := (others => (others => '0'));
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := pa(i);
+    end loop;
+    return res;
+end function;
+
 function getSelection(pa: PhysNameArray; st: PhysName; reserve: std_logic_vector; sa: std_logic_vector; rew: std_logic) return PhysName is
     variable res: PhysName;
     variable sel: std_logic_vector(1 downto 0) := (others => '0');        
-    constant resVec: PhysNameArray(0 to 3) := pa;
-    constant r0: std_logic := reserve(0);
-    constant r1: std_logic := reserve(1);
-    constant r2: std_logic := reserve(2);
-    constant r3: std_logic := reserve(3);
-    constant s0: std_logic := sa(0);  
-    constant s1: std_logic := sa(1);  
-    constant s2: std_logic := sa(2);  
-    constant s3: std_logic := sa(3);  
+    constant resVec: PhysNameArray(0 to 3) := extendRegList(pa);
+    constant reserveE: std_logic_vector(0 to 3) := extendMask(reserve);
+    constant r0: std_logic := reserveE(0);
+    constant r1: std_logic := reserveE(1);
+    constant r2: std_logic := reserveE(2);
+    constant r3: std_logic := reserveE(3);
+    constant saE: std_logic_vector(0 to 3) := extendMask(sa);
+    constant s0: std_logic := saE(0);
+    constant s1: std_logic := saE(1);
+    constant s2: std_logic := saE(2);
+    constant s3: std_logic := saE(3);
 begin   
     if (s3 and r2 and r1 and r0) = '1' then
         sel := "11";
@@ -183,13 +203,16 @@ function getNextMap(content, stable: PhysNameArray; inputArr: PhysNameArray; res
 return PhysNameArray is
     variable res: PhysNameArray(0 to 31) := content;--(others => (others => '0'));
     variable enMask: std_logic_vector(0 to 31) := (others => '0');
-    variable sa: std_logic_vector(0 to PIPE_WIDTH-1);
+    variable sa: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 begin
     for i in 0 to 31 loop
-        enMask(i) :=  (sending and (sm(0)(i) or sm(1)(i) or sm(2)(i) or sm(3)(i))) 
+        for k in 0 to PIPE_WIDTH-1 loop
+        --sa := (sm(0)(i), sm(1)(i), sm(2)(i), sm(3)(i));
+            sa(k) := sm(k)(i);
+        end loop;
+
+        enMask(i) :=  (sending and isNonzero(sa))--  (sa(0)(i) or sa(1)(i) or sa(2)(i) or sa(3)(i))) 
                     or rew;
-        
-        sa := (sm(0)(i), sm(1)(i), sm(2)(i), sm(3)(i));
         
         if enMask(i) = '1' then
             res(i) := getSelection(inputArr, stable(i), reserve, sa, rew);
@@ -358,13 +381,13 @@ begin
         res := subSN(sn(0), tmpTag2);
     end if;
     
-    if freeListTakeAllow = '1' and freeListRewind = '0' then
+    if freeListTakeAllow = '1' and freeListRewind = '0' then -- NOTE: this is exclusive with previous 'if'; so logic could be simplified?
         res := subSN(res, nTaken);
     end if;
     
     if freeListRewind = '0' then
          if cmpLeS(res, 4) = '1' and memRead = '1' then
-             res := addInt(res, 4); 
+             res := addInt(res, 4);
          end if;               
     end if;
 

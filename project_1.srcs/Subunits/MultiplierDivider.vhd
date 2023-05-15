@@ -217,7 +217,9 @@ begin
                     
                     quot11 <= result11;
                     rem11  <= sum11(31 downto 0);
-                elsif sendingDivRR = '1' then
+                end if;
+                    
+                if sendingDivRR = '1' then
                     isUnsigned <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
                     signSel0 <= input.args(0)(31) and not bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
                     signSel1 <= input.args(1)(31) and not bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);

@@ -12,16 +12,16 @@ package CoreConfig is
 constant CLEAR_DEBUG_INFO: boolean := true;
 constant VIEW_ON: boolean := false;
 
-constant DB_ENABLE: boolean := true;
-constant DB_LOG_EVENTS: boolean := true;-- false;
+constant DB_ENABLE: boolean := false;
+constant DB_LOG_EVENTS: boolean := false;-- false;
 
 
     constant DEBUG_LOG_COMMITTED: boolean := false;
 
-    constant DB_OP_TRACKING: boolean := true;
+    constant DB_OP_TRACKING: boolean := false;
     constant DB_TRACKED_SEQ_NUM: Word := X"00000015";
 
-    constant DB_LSQ_TRACKING: boolean := true;
+    constant DB_LSQ_TRACKING: boolean := false;
     constant DB_BRANCH_EXEC_TRACKING: boolean := false;
 
     constant DB_ENABLE_JUMP_WATCH: boolean := false;
@@ -29,7 +29,7 @@ constant DB_LOG_EVENTS: boolean := true;-- false;
 
 --constant SYNTH_CHECK: boolean := checkSynthesis;
 
-constant LOG2_PIPE_WIDTH: natural := 0 + 2;
+constant LOG2_PIPE_WIDTH: natural := 2 - 0;
 constant PIPE_WIDTH: positive := 2**LOG2_PIPE_WIDTH;
 constant ALIGN_BITS: natural := LOG2_PIPE_WIDTH + 2;
 constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');    
@@ -58,7 +58,7 @@ constant USE_LINE_PREDICTOR: boolean := true;
 
 constant CLEAR_DEST_SEL_ON_EMPTY: boolean := false; -- When op gets empty, sets *DestSel to 0
 
-constant PHYS_REG_BITS: natural := 6 + LOG2_PIPE_WIDTH;
+constant PHYS_REG_BITS: natural := 6 + 2; --LOG2_PIPE_WIDTH;
 
 constant PHYS_REG_BITS_EFFECTIVE: natural := PHYS_REG_BITS - 1;
 

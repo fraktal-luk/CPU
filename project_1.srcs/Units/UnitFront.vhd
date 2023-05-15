@@ -183,7 +183,9 @@ begin
 
         earlyBranchIn <= getEarlyEvent(fetchedLine1, stageDataOutFetch1.target, predictedAddress, fetchStall, sendingOutFetch1);
 
-        groupShift(1 downto 0) <= predictedAddress(3 downto 2);
+        -- ALIGN_BITS-1 downto 0               ALIGN_BITS+1 downto 2
+        groupShift(LOG2_PIPE_WIDTH-1 downto 0) <= predictedAddress(LOG2_PIPE_WIDTH+1 downto 2);
+        --groupShift(1 downto 0) <= predictedAddress(3 downto 2);
         nW <= slv2u(earlyBranchIn.tags.bqPointer) + 1 - slv2u(groupShift);
 
 --        fetchedLine1_Sh2 <= fetchedLine1                                                               when groupShift(1 downto 0) = "00"

@@ -101,8 +101,9 @@ begin
         branchIns(i) := regularJump or longJump(i) or jumpReg;
 	end loop;
 
-    res.tags.bqPointer := sn(3); -- CAREFUL, TMP: here used to indicate index of taken branch within fetch group
-
+    res.tags.bqPointer := --sn(3); -- CAREFUL, TMP: here used to indicate index of taken branch within fetch group
+                          sn(FETCH_WIDTH-1);
+                        
     -- Find if any branch predicted
     for i in 0 to FETCH_WIDTH-1 loop
         if partMask(i) = '1' and branchIns(i) = '1' and predictedTaken(i) = '1' then
