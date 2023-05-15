@@ -25,7 +25,7 @@ entity UnitFront is
 		  
 		frontAccepting: out std_logic;
 
-		bpAccepting: in std_logic;
+		bqAccepting: in std_logic;
 		bpSending: out std_logic;
         bpData: out ControlPacketArray(0 to FETCH_WIDTH-1);
 
@@ -75,7 +75,9 @@ architecture Behavioral of UnitFront is
                for i in arr'range loop
                    if arr(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
                        report "";
-                       report "DEBUG: Tracked seqNum assigned: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                       report "DEBUG: Tracked seqNum assigned: " & --integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                                                                            work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
                        report "";
                    end if;
                end loop;
@@ -217,7 +219,7 @@ begin
 	);
 
 
-	fetchStall <= sendingOutFetch1 and (not bufferAccepting or not bpAccepting);
+	fetchStall <= sendingOutFetch1 and (not bufferAccepting or not bqAccepting);
 
 	frontBranchEvent <= earlyBranchOut.controlInfo.newEvent and earlyBranchSending;
     frontTarget <= earlyBranchOut.target;

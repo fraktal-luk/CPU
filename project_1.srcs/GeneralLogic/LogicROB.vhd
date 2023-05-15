@@ -375,7 +375,9 @@ begin
          -- pragma synthesis off
         if DB_OP_TRACKING and input(i).full = '1' and input(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
             report "";
-            report "DEBUG: Tracked seqNum written into ROB: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+            report "DEBUG: Tracked seqNum written into ROB: " & --integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                                                               work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
             report "";
         end if;
         -- pragma synthesis on
@@ -442,7 +444,9 @@ begin
             -- pragma synthesis off
             if DB_OP_TRACKING and content(groupInd, opInd).full = '1' and content(groupInd, opInd).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
                 report "";
-                report "DEBUG: Tracked seqNum completed in ROB cluster " & integer'image(CLUSTER) & ": " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                report "DEBUG: Tracked seqNum completed in ROB cluster " & integer'image(CLUSTER) & ": " & --integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                                                                                                           work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
                 report "";
             end if;
             -- pragma synthesis on   
@@ -470,7 +474,9 @@ begin
             -- pragma synthesis off
             if DB_OP_TRACKING and content(groupInd, i).full = '1' and content(groupInd, i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
                 report "";
-                report "DEBUG: Tracked seqNum killed in ROB: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                report "DEBUG: Tracked seqNum killed in ROB: " & --integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                                                                 work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
                 report "";
             end if;
             -- pragma synthesis on
@@ -551,7 +557,9 @@ begin
             -- pragma synthesis off
             if DB_OP_TRACKING and content(groupInd, i).full = '1' and content(groupInd, i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
                 report "";
-                report "DEBUG: Tracked seqNum flushed from ROB: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                report "DEBUG: Tracked seqNum flushed from ROB: " & --integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                                                                    work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
                 report "";
             end if;
             -- pragma synthesis on
@@ -568,7 +576,9 @@ begin
         -- pragma synthesis off
         if DB_OP_TRACKING and content(p2i(ptr, content'length), i).full = '1' and content(p2i(ptr, content'length), i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
             report "";
-            report "DEBUG: Tracked seqNum leaves ROB: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+            report "DEBUG: Tracked seqNum leaves ROB: " & --integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                                                                 work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
             report "";
         end if;
         -- pragma synthesis on

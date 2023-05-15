@@ -242,6 +242,7 @@ begin
 
             process (clk)
                 use std.textio.all;
+                use work.CpuText.all;
                 use work.Assembler.all;
     
                 function getArgString(argState: ArgumentState) return string is
@@ -264,19 +265,52 @@ begin
     
                 end function;
     
+                
+                function vec2digit(v: std_logic_vector(3 downto 0)) return character is
+                    constant DIGITS: string := "0123456789abcdef";
+                begin
+                    return DIGITS(1 + slv2u(v));
+                end function;
+
+                -- CAREFUL: here we assume bit order is big endian
+                function hexString(v: std_logic_vector) return string is
+                    constant BIT_LEN: natural := v'length;
+                    constant HEX_LEN: natural := (BIT_LEN+3)/4;        
+                    --constant SHORTFALL: natural := 4*HEX_LEN - BIT_LEN;
+                    variable res: string(1 to HEX_LEN) := (others => '0');
+                    variable digit: character := ' ';
+                    variable rightIndex: natural := 0;
+                begin
+                    for strIndex in 0 to HEX_LEN-1 loop
+                        rightIndex := 4*strIndex;
+                    
+                        digit := vec2digit(v(rightIndex+3 downto rightIndex));
+                        res(HEX_LEN-strIndex) := digit;
+                    end loop;
+
+                    rightIndex := 4*(HEX_LEN-1);
+                    res(1) := vec2digit(v(v'left downto rightIndex));
+                
+                    return res;
+                end function;
+
                 procedure printContent is
                    file outFile: text open write_mode is "issue_queue" & NAME & ".txt";
                    variable preRow, currentLine: line := null;
                 begin
                     for i in 0 to IQ_SIZE-1 loop
                         currentLine := null;
-                        write(currentLine, natural'image(i) & ":  ");
+                        write(currentLine, natural'image(i) & ": ");
                         if queueContent(i).dynamic.full /= '1' then
                             writeline(outFile, currentLine);
                             next;
                         end if;
     
-                        write(currentLine, natural'image(slv2u(queueContent(i).dynamic.renameIndex)));
+                        write(currentLine, slv2hex(queueContent(i).static.dbInfo.seqNum));
+                        write(currentLine, string'(": "));
+
+                        write(currentLine, --natural'image(slv2u(queueContent(i).dynamic.renameIndex)));
+                                           slv2hex(queueContent(i).dynamic.renameIndex));
                         write(currentLine, string'(", "));
                         write(currentLine, std_logic'image(queueContent(i).dynamic.status.issued));
                         write(currentLine, string'(", "));

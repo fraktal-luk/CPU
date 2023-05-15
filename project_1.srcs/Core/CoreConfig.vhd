@@ -12,16 +12,16 @@ package CoreConfig is
 constant CLEAR_DEBUG_INFO: boolean := true;
 constant VIEW_ON: boolean := false;
 
-constant DB_ENABLE: boolean := false;
-constant DB_LOG_EVENTS: boolean := false;-- false;
+constant DB_ENABLE: boolean := true;
+constant DB_LOG_EVENTS: boolean := true;-- false;
 
 
     constant DEBUG_LOG_COMMITTED: boolean := false;
 
-    constant DB_OP_TRACKING: boolean := false;
-    constant DB_TRACKED_SEQ_NUM: Word := X"0000000b";
+    constant DB_OP_TRACKING: boolean := true;
+    constant DB_TRACKED_SEQ_NUM: Word := X"00000015";
 
-    constant DB_LSQ_TRACKING: boolean := false;
+    constant DB_LSQ_TRACKING: boolean := true;
     constant DB_BRANCH_EXEC_TRACKING: boolean := false;
 
     constant DB_ENABLE_JUMP_WATCH: boolean := false;

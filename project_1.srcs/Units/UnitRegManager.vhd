@@ -377,7 +377,9 @@ architecture Behavioral of UnitRegManager is
                 for i in renamed'range loop
                     if renamed(i).ins.dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
                         report "";
-                        report "DEBUG: Tracked seqNum renamed: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                        report "DEBUG: Tracked seqNum renamed: " & --integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                                                                             work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
                         report "";
                         
                         return;

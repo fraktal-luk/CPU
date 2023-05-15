@@ -791,28 +791,28 @@ end function;
 
         -- DB
         procedure DB_reportEvents(content: SchedulerInfoArray) is
-        begin        
+            use work.CpuText.all;
+        begin
             -- pragma synthesis off
+            
             for i in 0 to content'length-1 loop
                 if DB_OP_TRACKING and content(i).static.dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
-                    report "";
                     
                     case content(i).dynamic.lastEvent is
                         when insert =>
-                            report "DEBUG: Tracked seqNum inserted to IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                            report "DEBUG: Tracked seqNum inserted to IQ: " & --integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                                                                              slv2hex(DB_TRACKED_SEQ_NUM);
                         when kill =>
-                            report "DEBUG: Tracked seqNum kill in IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                            report "DEBUG: Tracked seqNum kill in IQ: " & slv2hex(DB_TRACKED_SEQ_NUM);
                         when issue =>
-                            report "DEBUG: Tracked seqNum issued from IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                            report "DEBUG: Tracked seqNum issued from IQ: " & slv2hex(DB_TRACKED_SEQ_NUM);
                         when retract =>
-                            report "DEBUG: Tracked seqNum pulled back to IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                            report "DEBUG: Tracked seqNum pulled back to IQ: " & slv2hex(DB_TRACKED_SEQ_NUM);
                         when retire =>
                             -- problem: here dbInfo is already cleared so this is never reached
-                            report "DEBUG: Tracked seqNum retired from IQ: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                            report "DEBUG: Tracked seqNum retired from IQ: " & slv2hex(DB_TRACKED_SEQ_NUM);
                         when others =>
                     end case;
-                    
-                    report "";
                     
                     exit;
                 end if;                

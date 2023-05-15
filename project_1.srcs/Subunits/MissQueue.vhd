@@ -233,7 +233,8 @@ begin
                         -- pragma synthesis off
                         if DB_OP_TRACKING and queueContent(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
                             report "";
-                            report "DEBUG: put to MQ: " & natural'image(slv2u(queueContent(i).dbInfo.seqNum));
+                            report "DEBUG: put to MQ: " & --natural'image(slv2u(queueContent(i).dbInfo.seqNum));
+                                                          work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
                             report "";
                         end if;
                         -- pragma synthesis on
@@ -257,7 +258,8 @@ begin
                     -- pragma synthesis off
                     if DB_OP_TRACKING and queueContent(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
                         report "";
-                        report "DEBUG: flushed from MQ: " & natural'image(slv2u(queueContent(i).dbInfo.seqNum));
+                        report "DEBUG: flushed from MQ: " & --natural'image(slv2u(queueContent(i).dbInfo.seqNum));
+                                                            work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
                         report "";
                     end if;
                     -- pragma synthesis on
@@ -281,7 +283,8 @@ begin
                 -- pragma synthesis off
                 if DB_OP_TRACKING and queueContent(p2i(selPtr3, QUEUE_SIZE)).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
                     report "";
-                    report "DEBUG: sent from MQ: " & natural'image(slv2u(queueContent(p2i(selPtr3, QUEUE_SIZE)).dbInfo.seqNum));
+                    report "DEBUG: sent from MQ: " & --natural'image(slv2u(queueContent(p2i(selPtr3, QUEUE_SIZE)).dbInfo.seqNum));
+                                                     work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
                     report "";
                 end if;
                 -- pragma synthesis on

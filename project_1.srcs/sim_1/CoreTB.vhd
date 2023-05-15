@@ -41,7 +41,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal testToDo, testDone, testFail: std_logic := '0';
     
     
-    signal simDone, emulDone: std_logic := '1';
+    --signal simDone, emulDone: std_logic := '1';
         
     signal emulReady: std_logic := '0';
     
@@ -652,7 +652,7 @@ BEGIN
                 case state is
                     when ready =>
                         if resetDataMem = '1' then
-                            emulDone <= '0';
+                            --emulDone <= '0';
                             state := prepare;
                           
                             currentInstruction2 <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);

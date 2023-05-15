@@ -292,13 +292,15 @@ begin
         
         process (clk)
             use std.textio.all;
+            use work.CpuText.all;
             use work.Assembler.all;
     
             function getDynamicContentString(dyn: DynamicOpInfo) return string is
                 variable res: line;
             begin
                 if dyn.full = '1' then
-                    write(res, natural'image(slv2u(dyn.dbInfo.tag)));
+                    write(res, --natural'image(slv2u(dyn.dbInfo.tag)));
+                               slv2hex(dyn.dbInfo.tag));
                     write(res, string'(": "));
                     write(res, std_logic'image(dyn.completed0));
                     if dyn.secCluster = '1' then

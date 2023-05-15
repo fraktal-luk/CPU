@@ -303,7 +303,9 @@ begin
                     for i in ia'range loop
                         if ia(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
                             report "";
-                            report "DEBUG: Tracked seqNum committed: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                            report "DEBUG: Tracked seqNum committed: " & --integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                                                                         work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
                             report "";
                             
                             return;

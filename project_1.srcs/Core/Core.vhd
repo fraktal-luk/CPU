@@ -62,7 +62,7 @@ end Core;
 
 architecture Behavioral of Core is
 
-    signal frontAccepting, bpAccepting, bpSending, renameAllow, frontGroupSend, frontSendAllow, canSendRename, robSending,
+    signal frontAccepting, bpSending, renameAllow, frontGroupSend, frontSendAllow, canSendRename, robSending,
            renameSendingBr, renamedSending, commitAccepting, frontEventSignal, bqAccepting, execEventSignalE0, execEventSignalE1, lateEventSignal, lateEventSetPC,
            allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
            mqReady, mqRegReadSending, sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
@@ -185,6 +185,8 @@ begin
     iadr <= pcData.ip;
     iadrvalid <= pcData.controlInfo.full;
 
+
+
 	UNIT_FRONT: entity work.UnitFront(Behavioral)
     port map(
         clk => clk, reset => '0', en => '0',
@@ -194,7 +196,7 @@ begin
         pcDataIn => pcData,
         frontAccepting => frontAccepting,
     
-        bpAccepting => bqAccepting,
+        bqAccepting => bqAccepting,
         bpSending => bpSending,
         bpData => bpData,
 
@@ -1615,14 +1617,14 @@ begin
         signal stallDetected, stallDetectedPrev, stallAction: std_logic := '0';
         file eventLog: text open write_mode is "event_log.txt";
     begin
-        watchdogCountNext <= watchdogCount + 1 when std2bool(robSending or renamedSending) else 0;
+        watchdogCountNext <= watchdogCount + 1 when not std2bool(robSending or renamedSending) else 0;
     
         MONITOR: process (clk)
         begin
             if rising_edge(clk) then
                 cycleCount <= cycleCount + 1;
                 watchdogCount <= watchdogCountNext;
-                stallDetected <= bool2std(watchdogCount = 50);                
+                stallDetected <= bool2std(watchdogCount = 57);
 
                 if DB_LOG_EVENTS then
                     logEvent(eventLog, lateEventSignal, execEventSignalE0, frontEventSignal, stallDetected, cycleCount);
