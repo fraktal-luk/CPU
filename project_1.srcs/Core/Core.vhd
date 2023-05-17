@@ -506,7 +506,7 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelI0, outSigsI0.sending), events);
+                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelI0, outSigsI0), events);
                         argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueI0, slotIssueI0.full, valuesInt0, valuesInt1, true, false), events);
                         unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.st.operation.arith);
                     end if;
@@ -620,7 +620,7 @@ begin
                         process (clk)
                         begin
                             if rising_edge(clk) then
-                                argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelI1, outSigsI1.sending), events);
+                                argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelI1, outSigsI1), events);
                                 argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueI1, slotIssueI1.full, valuesInt0, valuesInt1, true, false), events);
                             end if;
                         end process;
@@ -749,7 +749,7 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelM0, outSigsM0.sending), events);
+                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelM0, outSigsM0), events);
                         argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueM0, slotIssueM0.full, valuesInt0, valuesInt1, true, false, true), events);
                     end if;
                 end process;
@@ -954,7 +954,7 @@ begin
                 begin
                     if rising_edge(clk) then
                         if allowIssueStoreDataInt = '1' then -- nextAccepting
-                            argStateI <= getDispatchArgValues_Is(slotSelIntSV, outSigsSVI.sending);
+                            argStateI <= getDispatchArgValues_Is(slotSelIntSV, outSigsSVI);
                         end if;
                         
                         if events.lateEvent = '1' then
@@ -1023,7 +1023,7 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelFloatSV, outSigsSVF.sending), events);
+                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelFloatSV, outSigsSVF), events);
                         argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueFloatSV, slotIssueFloatSV.full, valuesFloat0, valuesFloat1, false, true), events);
                     end if;
                 end process;
@@ -1099,7 +1099,7 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelF0, outSigsF0.sending), events);
+                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelF0, outSigsF0), events);
                         argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueF0, slotIssueF0.full, valuesFloat0, valuesFloat1, false, false), events); 
                     end if;
                 end process;

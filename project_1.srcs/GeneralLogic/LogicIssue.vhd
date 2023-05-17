@@ -126,11 +126,13 @@ function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) 
 
 function getSchedEntrySlot(info: SchedulerInfo; full: std_logic; iqTag: SmallNumber) return SchedulerState;
 function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
-function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) return SchedulerState;
+--function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) return SchedulerState;
 
 
 -- Issue stage
-function getDispatchArgValues_Is(input: SchedulerState; prevSending: std_logic) return SchedulerState;
+--function getDispatchArgValues_Is(input: SchedulerState; prevSending: std_logic) return SchedulerState;
+function getDispatchArgValues_Is(input: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState;
+    
 function updateDispatchArgs_Is(st: SchedulerState) return SchedulerState;
 function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState;
 
@@ -1044,11 +1046,10 @@ end function;
     end function;
     
     -- issue
-    function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) return SchedulerState is
+    function TMP_clearDestIfEmpty(input: SchedulerState) return SchedulerState is
         variable res: SchedulerState := input;
     begin
-        res.full := prevSending;
-        if prevSending = '0' then
+        if res.full /= '1' then
            res.argSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
            res.destTag := (others => '0');
         end if;
@@ -1056,9 +1057,29 @@ end function;
         return res;
     end function;
 
-    function getDispatchArgValues_Is(input: SchedulerState; prevSending: std_logic) return SchedulerState is
-        variable res: SchedulerState := TMP_prepareDispatchSlot(input, prevSending);
+--    function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) return SchedulerState is
+--        variable res: SchedulerState := input;
+--    begin
+--        res.full := prevSending;
+----        if prevSending = '0' then
+----           res.argSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
+----           res.destTag := (others => '0');
+----        end if;
+
+--        res := TMP_clearDestIfEmpty(res);
+
+--        return res;
+--    end function;
+
+    --function getDispatchArgValues_Is(input: SchedulerState; prevSending: std_logic) return SchedulerState is
+    function getDispatchArgValues_Is(input: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState is
+        --variable res: SchedulerState := TMP_prepareDispatchSlot(input, prevSending);
+        variable res: SchedulerState := --TMP_prepareDispatchSlot(input, ctSigs.sending);
+                                        input;
     begin
+        res.full := ctSigs.sending;
+        res := TMP_clearDestIfEmpty(res);
+
         if IMM_AS_REG then
             res.st.immValue(PhysName'length-2 downto 0) := res.argSpec.args(1)(6 downto 0);
         end if;
@@ -1084,10 +1105,17 @@ end function;
     
     end function;
 
-        function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState is
+        function TMP_applyKill(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState is
             variable res: SchedulerState := st;
         begin
             res.full := st.full and not (ctSigs.cancelled or ctSigs.killFollowerNext);
+            return res;
+        end function;
+
+        function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState is
+            variable res: SchedulerState := st;
+        begin
+            --res.full := st.full and not (ctSigs.cancelled or ctSigs.killFollowerNext);
 
             res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
             res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
@@ -1099,9 +1127,9 @@ end function;
             if res.argSrc(1)(1) /= '1' or res.st.zero(1) = '1' then
                 res.argSpec.args(1) := (others => '0');
             end if;
-            
+
+            res := TMP_applyKill(res, ctSigs);
             return res;
-        
         end function;
 
     
@@ -1110,13 +1138,16 @@ end function;
                                      vals0, vals1: MwordArray;
                                      USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
     return SchedulerState is
-        variable res: SchedulerState := TMP_prepareDispatchSlot(input, prevSending);
+        variable res: SchedulerState := --TMP_prepareDispatchSlot(input, prevSending);
+                                        input;
     begin
-    
+        res.full := prevSending;
+        res := TMP_clearDestIfEmpty(res);
+
         if REGS_ONLY then
             return res;    
         end if;
-    
+
         if res.st.zero(0) = '1' then
             res.args(0) := (others => '0');
         elsif res.argSrc(0)(1 downto 0) = "00" then
