@@ -126,20 +126,24 @@ function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) 
 
 function getSchedEntrySlot(info: SchedulerInfo; full: std_logic; iqTag: SmallNumber) return SchedulerState;
 function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
---function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) return SchedulerState;
 
 
 -- Issue stage
---function getDispatchArgValues_Is(input: SchedulerState; prevSending: std_logic) return SchedulerState;
 function getDispatchArgValues_Is(input: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState;
     
-function updateDispatchArgs_Is(st: SchedulerState) return SchedulerState;
+function updateDispatchArgs_Is_O(st: SchedulerState) return SchedulerState;
 function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState;
 
 
 -- Reg read stage
-function getDispatchArgValues_RR(input: SchedulerState;
+function getDispatchArgValues_RR_O(input: SchedulerState;
                                  prevSending: std_logic;
+                                 vals0, vals1: MwordArray;
+                                 USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
+return SchedulerState;
+
+function getDispatchArgValues_RR_N(input: SchedulerState;
+                                 --prevSending: std_logic;
                                  vals0, vals1: MwordArray;
                                  USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
 return SchedulerState;
@@ -207,7 +211,7 @@ package body LogicIssue is
         constant N_BANKS: natural := PIPE_WIDTH;
         constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
     begin
-       for b in 0 to N_BANKS-1 loop
+        for b in 0 to N_BANKS-1 loop
             res(slv2u(tags(b)) * N_BANKS + b, b) := newArr(b).dynamic.full;
         end loop;
 
@@ -224,9 +228,7 @@ package body LogicIssue is
         end loop;
 
         rrfFull := rm and rrf;
-
         res := restoreRenameIndex(updateRR(input, rrfFull));
-   
         return res;
     end function;	
 		
@@ -372,33 +374,6 @@ package body LogicIssue is
             end loop;
             return res;
         end function;
-
---    -- UNUSED
---    function findForwardingMatch(info: SchedulerInfo; arg: natural; fni: ForwardingInfo; matchIQ: boolean) return ForwardingComparisons is
---        variable res: ForwardingComparisons := DEFAULT_FORWARDING_COMPARISONS;
-        
---        constant arg0: PhysName := info.dynamic.argStates(arg).reg;        
---        constant tag0: SmallNumber := info.dynamic.argStates(arg).iqTag;
---    begin
---        if not matchIQ then
---            res.reg   := '0';
---            res.cmp1  := findRegTag(arg0, fni.tags1);
---            res.cmp0  := findRegTag(arg0, fni.tags0);        
---            res.cmpM1 := findRegTag(arg0, fni.nextTagsM1);
---            res.cmpM2 := findRegTag(arg0, fni.nextTagsM2);        
---            res.cmpM3 := findRegTag(arg0, fni.nextTagsM3);
---        else
---            res.reg   := '0';
---            res.cmp1  := findIqTag(tag0, fni.iqTags1);
---            res.cmp0  := findIqTag(tag0, fni.iqTags0);        
---            res.cmpM1 := findIqTag(tag0, fni.iqTagsM1);
---            res.cmpM2 := findIqTag(tag0, fni.iqTagsM2);        
---            res.cmpM3 := findIqTag(tag0, fni.iqTagsM3);
---        end if;
-
---        return res;
---    end function;
-
 
     function TMP_incSrcStage(stage: SmallNumber) return SmallNumber is
     begin
@@ -1057,25 +1032,9 @@ end function;
         return res;
     end function;
 
---    function TMP_prepareDispatchSlot(input: SchedulerState; prevSending: std_logic) return SchedulerState is
---        variable res: SchedulerState := input;
---    begin
---        res.full := prevSending;
-----        if prevSending = '0' then
-----           res.argSpec.dest := PHYS_NAME_NONE; -- Don't allow false notifications of args
-----           res.destTag := (others => '0');
-----        end if;
 
---        res := TMP_clearDestIfEmpty(res);
-
---        return res;
---    end function;
-
-    --function getDispatchArgValues_Is(input: SchedulerState; prevSending: std_logic) return SchedulerState is
     function getDispatchArgValues_Is(input: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState is
-        --variable res: SchedulerState := TMP_prepareDispatchSlot(input, prevSending);
-        variable res: SchedulerState := --TMP_prepareDispatchSlot(input, ctSigs.sending);
-                                        input;
+        variable res: SchedulerState := input;
     begin
         res.full := ctSigs.sending;
         res := TMP_clearDestIfEmpty(res);
@@ -1087,7 +1046,7 @@ end function;
         return res;
     end function;
     
-    function updateDispatchArgs_Is(st: SchedulerState) return SchedulerState is
+    function updateDispatchArgs_Is_O(st: SchedulerState) return SchedulerState is
         variable res: SchedulerState := st;
     begin
         res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
@@ -1115,8 +1074,6 @@ end function;
         function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState is
             variable res: SchedulerState := st;
         begin
-            --res.full := st.full and not (ctSigs.cancelled or ctSigs.killFollowerNext);
-
             res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
             res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
         
@@ -1132,14 +1089,13 @@ end function;
             return res;
         end function;
 
-    
+
     function getDispatchArgValues_RR(input: SchedulerState;
                                      prevSending: std_logic;
                                      vals0, vals1: MwordArray;
                                      USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
     return SchedulerState is
-        variable res: SchedulerState := --TMP_prepareDispatchSlot(input, prevSending);
-                                        input;
+        variable res: SchedulerState := input;
     begin
         res.full := prevSending;
         res := TMP_clearDestIfEmpty(res);
@@ -1180,6 +1136,29 @@ end function;
         
         return res;
     end function;
+
+        function getDispatchArgValues_RR_N(input: SchedulerState;
+                                         --prevSending: std_logic;
+                                         vals0, vals1: MwordArray;
+                                         USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
+        return SchedulerState is
+            variable res: SchedulerState := input;
+        begin
+            res := getDispatchArgValues_RR(res, res.full, vals0, vals1, USE_IMM, REGS_ONLY, IMM_ONLY_1);
+            return res;
+        end function;
+    
+    
+        function getDispatchArgValues_RR_O(input: SchedulerState;
+                                         prevSending: std_logic;
+                                         vals0, vals1: MwordArray;
+                                         USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
+        return SchedulerState is
+            variable res: SchedulerState := input;
+        begin
+            res := getDispatchArgValues_RR(res, prevSending, vals0, vals1, USE_IMM, REGS_ONLY, IMM_ONLY_1);
+            return res;
+        end function;
     
     
     function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)

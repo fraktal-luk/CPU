@@ -449,6 +449,7 @@ begin
 
         SUBPIPE_ALU: block
             use work.LogicIssue.all;
+            use work.LogicArgRead.all;
 
             signal outSigsI0: IssueQueueSignals := (others => '0');
 
@@ -497,7 +498,8 @@ begin
             );
 
             TMP_ISSUE_I0: block
-                use work.LogicIssue.all;
+                --use work.LogicIssue.all;
+                --use work.LogicArgRead.all;
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
                 slotIssueI0 <= updateDispatchArgs_Is_N(argStateI, outSigsI0);
@@ -507,7 +509,7 @@ begin
                 begin
                     if rising_edge(clk) then
                         argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelI0, outSigsI0), events);
-                        argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueI0, slotIssueI0.full, valuesInt0, valuesInt1, true, false), events);
+                        argStateR <= TMP_clearFull(getDispatchArgValues_RR_N(slotIssueI0, valuesInt0, valuesInt1, true, false), events);
                         unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.st.operation.arith);
                     end if;
                 end process;
@@ -564,6 +566,7 @@ begin
             MUL_BLOCK: if true generate
                 SUBPIPE_MUL: block
                    use work.LogicIssue.all;
+                   use work.LogicArgRead.all;
 
                    signal outSigsI1: IssueQueueSignals := (others => '0');
 
@@ -611,7 +614,8 @@ begin
                     );
 
                     TMP_ISSUE_I1: block
-                        use work.LogicIssue.all;
+                        --use work.LogicIssue.all;
+                        --use work.LogicArgRead.all;
                         signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
                     begin
                         slotIssueI1 <= updateDispatchArgs_Is_N(argStateI, outSigsI1);
@@ -621,7 +625,7 @@ begin
                         begin
                             if rising_edge(clk) then
                                 argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelI1, outSigsI1), events);
-                                argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueI1, slotIssueI1.full, valuesInt0, valuesInt1, true, false), events);
+                                argStateR <= TMP_clearFull(getDispatchArgValues_RR_N(slotIssueI1, valuesInt0, valuesInt1, true, false), events);
                             end if;
                         end process;
 
@@ -691,6 +695,7 @@ begin
             
         SUBPIPE_MEM: block
             use work.LogicIssue.all;
+            use work.LogicArgRead.all;
 
             signal outSigsM0: IssueQueueSignals := (others => '0');
 
@@ -740,7 +745,8 @@ begin
             );
 
             TMP_ISSUE_M0: block
-                use work.LogicIssue.all;
+                --use work.LogicIssue.all;
+                --use work.LogicArgRead.all;
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
                 slotIssueM0 <= updateDispatchArgs_Is_N(argStateI, outSigsM0);
@@ -750,7 +756,7 @@ begin
                 begin
                     if rising_edge(clk) then
                         argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelM0, outSigsM0), events);
-                        argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueM0, slotIssueM0.full, valuesInt0, valuesInt1, true, false, true), events);
+                        argStateR <= TMP_clearFull(getDispatchArgValues_RR_N(slotIssueM0, valuesInt0, valuesInt1, true, false, true), events);
                     end if;
                 end process;
 
@@ -860,6 +866,7 @@ begin
 
         SUBPIPES_STORE_VALUE: block
             use work.LogicIssue.all;
+            use work.LogicArgRead.all;
        
             signal sendingToRegReadI, sendingToRegReadF, sendingToRegReadIntSV-- sendingToRegReadFloatSV
             : std_logic := '0';
@@ -937,12 +944,13 @@ begin
 
 
             TMP_ISSUE_SVI: block
-                use work.LogicIssue.all;
+                --use work.LogicIssue.all;
+                --use work.LogicArgRead.all;
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
 
                 -- Reg
-                slotIssueIntSV <= updateDispatchArgs_Is(argStateI);
+                slotIssueIntSV <= updateDispatchArgs_Is_O(argStateI);
                 -- pseudo interface
                 
                        cancelledSVI1 <= outSigsSVI.cancelled or (storeValueCollision2 and killFollower(outSigsSVI.trialPrev2, events)); -- If stalled, it stayed here but kill sig moved to next stage
@@ -962,7 +970,7 @@ begin
                         end if;
     
                         if true then -- nextAccepting
-                            argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueIntSV, sendingToRegReadIntSV, valuesInt0, valuesInt1, false, true), events);
+                            argStateR <= TMP_clearFull(getDispatchArgValues_RR_O(slotIssueIntSV, sendingToRegReadIntSV, valuesInt0, valuesInt1, false, true), events);
                         end if;
  
                     end if;
@@ -1014,7 +1022,8 @@ begin
             end generate;
 
             TMP_ISSUE_SVF: block
-                use work.LogicIssue.all;
+                --use work.LogicIssue.all;
+                --use work.LogicArgRead.all;
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
                 slotIssueFloatSV <= updateDispatchArgs_Is_N(argStateI, outSigsSVF);
@@ -1024,7 +1033,7 @@ begin
                 begin
                     if rising_edge(clk) then
                         argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelFloatSV, outSigsSVF), events);
-                        argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueFloatSV, slotIssueFloatSV.full, valuesFloat0, valuesFloat1, false, true), events);
+                        argStateR <= TMP_clearFull(getDispatchArgValues_RR_N(slotIssueFloatSV, valuesFloat0, valuesFloat1, false, true), events);
                     end if;
                 end process;
             end block;
@@ -1043,7 +1052,8 @@ begin
 
         SUBPIPE_FP0: if ENABLE_FP generate
             use work.LogicIssue.all;
-            
+            use work.LogicArgRead.all;
+
             signal outSigsF0: IssueQueueSignals := (others => '0');
 
             signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1);
@@ -1089,7 +1099,8 @@ begin
            
 
             TMP_ISSUE_F0: block
-                use work.LogicIssue.all;
+                --use work.LogicIssue.all;
+                --use work.LogicArgRead.all;
 
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin    
@@ -1100,7 +1111,7 @@ begin
                 begin
                     if rising_edge(clk) then
                         argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelF0, outSigsF0), events);
-                        argStateR <= TMP_clearFull(getDispatchArgValues_RR(slotIssueF0, slotIssueF0.full, valuesFloat0, valuesFloat1, false, false), events); 
+                        argStateR <= TMP_clearFull(getDispatchArgValues_RR_N(slotIssueF0, valuesFloat0, valuesFloat1, false, false), events); 
                     end if;
                 end process;
     
