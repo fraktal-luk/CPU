@@ -420,17 +420,6 @@ begin
 
         signal issueTagI0: SmallNumber := sn(0);
 
-
-        function TMP_clearFull(ss: SchedulerState; evts: EventState) return SchedulerState is
-            variable res: SchedulerState := ss;
-        begin
-            if evts.lateEvent = '1' then
-                res.full := '0';
-            end if;
-            
-            return res;
-        end function;
-
             signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';              
     begin
         newIntSources <= TMP_getPhysicalArgsNew(renamedArgsInt);
@@ -508,8 +497,8 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelI0, outSigsI0), events);
-                        argStateR <= TMP_clearFull(getDispatchArgValues_RR_N(slotIssueI0, valuesInt0, valuesInt1, true, false), events);
+                        argStateI <= TMP_clearFull_DUMMY(getDispatchArgValues_Is(slotSelI0, outSigsI0, events), events);
+                        argStateR <= TMP_clearFull_DUMMY(getDispatchArgValues_RR_N(slotIssueI0, events, valuesInt0, valuesInt1, true, false), events);
                         unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.st.operation.arith);
                     end if;
                 end process;
@@ -624,8 +613,8 @@ begin
                         process (clk)
                         begin
                             if rising_edge(clk) then
-                                argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelI1, outSigsI1), events);
-                                argStateR <= TMP_clearFull(getDispatchArgValues_RR_N(slotIssueI1, valuesInt0, valuesInt1, true, false), events);
+                                argStateI <= TMP_clearFull_DUMMY(getDispatchArgValues_Is(slotSelI1, outSigsI1, events), events);
+                                argStateR <= TMP_clearFull_DUMMY(getDispatchArgValues_RR_N(slotIssueI1, events, valuesInt0, valuesInt1, true, false), events);
                             end if;
                         end process;
 
@@ -755,8 +744,8 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelM0, outSigsM0), events);
-                        argStateR <= TMP_clearFull(getDispatchArgValues_RR_N(slotIssueM0, valuesInt0, valuesInt1, true, false, true), events);
+                        argStateI <= TMP_clearFull_DUMMY(getDispatchArgValues_Is(slotSelM0, outSigsM0, events), events);
+                        argStateR <= TMP_clearFull_DUMMY(getDispatchArgValues_RR_N(slotIssueM0, events, valuesInt0, valuesInt1, true, false, true), events);
                     end if;
                 end process;
 
@@ -950,7 +939,7 @@ begin
             begin
 
                 -- Reg
-                slotIssueIntSV <= updateDispatchArgs_Is_O(argStateI);
+                slotIssueIntSV <= updateDispatchArgs_Is_O(argStateI, outSigsSVI);
                 -- pseudo interface
                 
                        cancelledSVI1 <= outSigsSVI.cancelled or (storeValueCollision2 and killFollower(outSigsSVI.trialPrev2, events)); -- If stalled, it stayed here but kill sig moved to next stage
@@ -962,7 +951,10 @@ begin
                 begin
                     if rising_edge(clk) then
                         if allowIssueStoreDataInt = '1' then -- nextAccepting
-                            argStateI <= getDispatchArgValues_Is(slotSelIntSV, outSigsSVI);
+                            argStateI <= TMP_clearFull_DUMMY( 
+                                                          getDispatchArgValues_Is(slotSelIntSV, outSigsSVI, events),
+                                                          events 
+                                                        );
                         end if;
                         
                         if events.lateEvent = '1' then
@@ -970,7 +962,7 @@ begin
                         end if;
     
                         if true then -- nextAccepting
-                            argStateR <= TMP_clearFull(getDispatchArgValues_RR_O(slotIssueIntSV, sendingToRegReadIntSV, valuesInt0, valuesInt1, false, true), events);
+                            argStateR <= TMP_clearFull_DUMMY(getDispatchArgValues_RR_O(slotIssueIntSV, sendingToRegReadIntSV, events, valuesInt0, valuesInt1, false, true), events);
                         end if;
  
                     end if;
@@ -987,8 +979,8 @@ begin
 --                                     readyRegFlagsFloat_Early(11 - QQQ), '0', '0');
                             readyRegFlagsFloatSV <= reorder(readyRegFlagsFloat_Early);
             
-                ch1 <= bool2std(readyRegFlagsSV2 = readyRegFlagsSV);
-                ch2 <= bool2std(readyRegFlagsFloatSV2 = readyRegFlagsFloatSV);
+             --   ch1 <= bool2std(readyRegFlagsSV2 = readyRegFlagsSV);
+            --    ch2 <= bool2std(readyRegFlagsFloatSV2 = readyRegFlagsFloatSV);
             
             FP_STORE_IQ: if ENABLE_FP generate
                 IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)
@@ -1032,8 +1024,8 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelFloatSV, outSigsSVF), events);
-                        argStateR <= TMP_clearFull(getDispatchArgValues_RR_N(slotIssueFloatSV, valuesFloat0, valuesFloat1, false, true), events);
+                        argStateI <= TMP_clearFull_DUMMY(getDispatchArgValues_Is(slotSelFloatSV, outSigsSVF, events), events);
+                        argStateR <= TMP_clearFull_DUMMY(getDispatchArgValues_RR_N(slotIssueFloatSV, events, valuesFloat0, valuesFloat1, false, true), events);
                     end if;
                 end process;
             end block;
@@ -1110,8 +1102,8 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateI <= TMP_clearFull(getDispatchArgValues_Is(slotSelF0, outSigsF0), events);
-                        argStateR <= TMP_clearFull(getDispatchArgValues_RR_N(slotIssueF0, valuesFloat0, valuesFloat1, false, false), events); 
+                        argStateI <= TMP_clearFull_DUMMY(getDispatchArgValues_Is(slotSelF0, outSigsF0, events), events);
+                        argStateR <= TMP_clearFull_DUMMY(getDispatchArgValues_RR_N(slotIssueF0, events, valuesFloat0, valuesFloat1, false, false), events); 
                     end if;
                 end process;
     
