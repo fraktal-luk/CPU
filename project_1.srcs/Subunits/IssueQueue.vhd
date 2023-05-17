@@ -208,11 +208,13 @@ begin
         end if;
     end process;
 
-    outputSignals <=   (empty => '0',
-                        ready => '0',
+    outputSignals <=   (--empty => '0',
+                        --ready => '0',
                         sending => sends,
                         cancelled => sentKilled or memFail, --
-                        killFollower => (sentTrial2_T and events.execEvent) or events.lateEvent,
+                            trialPrev2 => sentTrial2_T,   
+                            trialPrev1 => sentTrial1_T,
+                        --killFollower => (sentTrial2_T and events.execEvent) or events.lateEvent,
                         killFollowerNext => (sentTrial1_T and events.execEvent) or events.lateEvent
                         );
 

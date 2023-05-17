@@ -32,13 +32,21 @@ function makeExecResult_N(er: ExecResult; iqTag: SmallNumber) return ExecResult_
 
 
 type IssueQueueSignals is record
-    empty: std_logic;
-    ready: std_logic;
+    --empty: std_logic;
+    --ready: std_logic;
     sending: std_logic;
     cancelled: std_logic;
-    killFollower: std_logic;
+        trialPrev1: std_logic;
+        trialPrev2: std_logic;
+    --killFollower: std_logic;
     killFollowerNext: std_logic;
 end record;
+
+constant DEFAULT_ISSUE_QUEUE_SIGNALS: IssueQueueSignals := (
+    others => '0'
+);
+
+function killFollower(trial: std_logic; events: EventState) return std_logic;
 
 
 type RegisterState is record
@@ -224,6 +232,12 @@ end package;
 
 
 package body PipelineGeneral is
+
+function killFollower(trial: std_logic; events: EventState) return std_logic is
+begin
+    return (trial and events.execEvent) or events.lateEvent;
+end function;
+
 
 function iqInds2tags(inds: SmallNumberArray) return SmallNumberArray is
     variable res: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));

@@ -116,7 +116,6 @@ architecture Behavioral of Core is
                 
         signal TMP_renamedDests: SmallNumberArray(0 to RENAME_W-1) := (others => (others => '0'));
         signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
-
 begin
 
     intSignal <= int0 or int1;
@@ -523,8 +522,8 @@ begin
                 bqCompareEarly.tag <= slotIssueI0.st.tags.renameIndex;
                 bqCompareEarly.dest <= slotIssueI0.st.tags.bqPointer;
             end block;
-
-            dataToAlu <= executeAlu(slotRegReadI0.full and not outSigsI0.killFollower, slotRegReadI0, bqSelected.nip, dataToBranch.controlInfo, unfoldedAluOp);
+                                         --   killFollower => (sentTrial2_T and events.execEvent) or events.lateEvent
+            dataToAlu <= executeAlu(slotRegReadI0.full and not killFollower(outSigsI0.trialPrev2, events), slotRegReadI0, bqSelected.nip, dataToBranch.controlInfo, unfoldedAluOp);
             process (clk)
             begin
                 if rising_edge(clk) then
@@ -532,7 +531,7 @@ begin
                 end if;
             end process;
 
-            dataToBranch <= basicBranch(slotRegReadI0.full and not outSigsI0.killFollower and not lateEventSignal and slotRegReadI0.st.branchIns,
+            dataToBranch <= basicBranch(slotRegReadI0.full and not killFollower(outSigsI0.trialPrev2, events) and not lateEventSignal and slotRegReadI0.st.branchIns,
                                         slotRegReadI0,
                                         bqSelected.tags, bqSelected.controlInfo, bqSelected.target, bqSelected.nip,                            
                                         unfoldedAluOp);
@@ -573,7 +572,7 @@ begin
 
                    constant CFG_MUL: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
 
-                   signal divUnlock, divUnlock_Alt, sendingToMultiplier: std_logic := '0';
+                   signal divUnlock, divUnlock_Alt, sendingToMultiplier, killFollowerNextI1: std_logic := '0';
                 begin
                     wups <= getInitWakeups(schedInfoA, bypassInt, CFG_MUL);
 
@@ -630,12 +629,15 @@ begin
                         subpipeI1_RegRead <= makeExecResult(slotRegReadI1);
                     end block;
 
-                    sendingToMultiplier <= slotRegReadI1.full and not outSigsI1.killFollower;
+                    sendingToMultiplier <= slotRegReadI1.full and not --outSigsI1.killFollower;
+                                                                      killFollower(outSigsI1.trialPrev2, events);
                     
                     subpipeI1_E2 <= subpipeI1_E2_Alt;
                     lockIssueI1 <= lockIssueI1_Alt;
 
                     divUnlock <= divUnlock_Alt;
+
+                        killFollowerNextI1 <= killFollower(outSigsI1.trialPrev1, events);
 
                     MUL_DIV: entity work.MultiplierDivider
                     port map (
@@ -646,7 +648,7 @@ begin
                         input => slotRegReadI1,
 
                         allowIssueI1 => allowIssueI1,
-                        killFollowerNext => outSigsI1.killFollowerNext,
+                        killFollowerNext => killFollowerNextI1,--outSigsI1.killFollowerNext,
 
                         events => events,
                         
@@ -767,7 +769,7 @@ begin
 
             ----------------------------
             -- Single packet of information for E0
-            resultToM0_E0 <= calcEffectiveAddress(slotRegReadM0.full and not outSigsM0.killFollower and not lateEventSignal, slotRegReadM0, mqRegReadSending);
+            resultToM0_E0 <= calcEffectiveAddress(slotRegReadM0.full and not killFollower(outSigsM0.trialPrev2, events) and not lateEventSignal, slotRegReadM0, mqRegReadSending);
             resultToM0_E0i <= updateMemDest(resultToM0_E0, slotRegReadM0.argSpec.intDestSel);
             resultToM0_E0f <= updateMemDest(resultToM0_E0, slotRegReadM0.argSpec.floatDestSel);
 
@@ -943,8 +945,8 @@ begin
                 slotIssueIntSV <= updateDispatchArgs_Is(argStateI);
                 -- pseudo interface
                 
-                       cancelledSVI1 <= outSigsSVI.cancelled or (storeValueCollision2 and outSigsSVI.killFollower); -- If stalled, it stayed here but kill sig moved to next stage
-                sendingToRegReadIntSV <= slotIssueIntSV.full and not (cancelledSVI1 or outSigsSVI.killFollowerNext);
+                       cancelledSVI1 <= outSigsSVI.cancelled or (storeValueCollision2 and killFollower(outSigsSVI.trialPrev2, events)); -- If stalled, it stayed here but kill sig moved to next stage
+                sendingToRegReadIntSV <= slotIssueIntSV.full and not (cancelledSVI1 or killFollower(outSigsSVI.trialPrev1, events));--outSigsSVI.killFollowerNext);
                 -- Reg
                 slotRegReadIntSV <= updateDispatchArgs_RR(argStateR, valuesInt0, regValsS0, true);
     
@@ -968,7 +970,7 @@ begin
 
             end block;
 
-            sendingToStoreWriteInt <= slotRegReadIntSV.full and not outSigsSVI.killFollower;
+            sendingToStoreWriteInt <= slotRegReadIntSV.full and not killFollower(outSigsSVI.trialPrev2, events);--outSigsSVI.killFollower;
 
             ------------------------------------
 --            readyRegFlagsFloatSV2 <= (readyRegFlagsFloat_Early(2 - QQQ), '0', '0',
@@ -1027,7 +1029,7 @@ begin
                 end process;
             end block;
 
-            sendingToStoreWriteFloat <= slotRegReadFloatSV.full and not outSigsSVF.killFollower;
+            sendingToStoreWriteFloat <= slotRegReadFloatSV.full and not killFollower(outSigsSVF.trialPrev2, events);--outSigsSVF.killFollower;
 
             stateExecStoreValue <= slotRegReadFloatSV when slotRegReadFloatSV.full = '1' else slotRegReadIntSV;
             sendingToStoreWrite <= sendingToStoreWriteInt or sendingToStoreWriteFloat;
@@ -1106,7 +1108,7 @@ begin
                 subpipeF0_RegRead <= makeExecResult(slotRegReadF0);
             end block;
 
-            subpipeF0_RRu.full <= slotRegReadF0.full and not outSigsF0.killFollower;
+            subpipeF0_RRu.full <= slotRegReadF0.full and not killFollower(outSigsF0.trialPrev2, events);--outSigsF0.killFollower;
             subpipeF0_RRu.tag <= slotRegReadF0.st.tags.renameIndex;
             subpipeF0_RRu.dest <= slotRegReadF0.argSpec.dest;
             subpipeF0_RRu.value <= executeFpu(slotRegReadF0);
