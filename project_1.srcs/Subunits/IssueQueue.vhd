@@ -25,7 +25,8 @@ entity IssueQueue is
 		FORWARDING: ForwardingModeArray(0 to 2) := (others => (-100, false));  -- Can be used immediately
 		FORWARDING_D: ForwardingModeArray(0 to 2) := (others => (-100, false)); -- Can be used with 1 cycle delay
 		IGNORE_MEM_FAIL: boolean := false;
-		      WAKEUP_SPEC: WakeupSpec := DEFAULT_WAKEUP_SPEC
+		      WAKEUP_SPEC: WakeupSpec := DEFAULT_WAKEUP_SPEC;
+		      WTF_MEM_FAIL: std_logic := '1'
 	);
 	port(
 		clk: in std_logic;
@@ -211,11 +212,12 @@ begin
     outputSignals <=   (--empty => '0',
                         --ready => '0',
                         sending => sends,
-                        cancelled => sentKilled or memFail, --
-                            trialPrev2 => sentTrial2_T,   
+                            sentKilled => sentKilled,
                             trialPrev1 => sentTrial1_T,
+                            trialPrev2 => sentTrial2_T ,
                         --killFollower => (sentTrial2_T and events.execEvent) or events.lateEvent,
-                        killFollowerNext => (sentTrial1_T and events.execEvent) or events.lateEvent
+                     --   killFollowerNext => (sentTrial1_T and events.execEvent) or events.lateEvent
+                                             cancelled_D => sentKilled or (memFail)
                         );
 
     COUNTERS_SYNCHRONOUS: process(clk)

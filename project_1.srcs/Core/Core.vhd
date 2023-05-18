@@ -463,7 +463,8 @@ begin
                 IQ_SIZE => IQ_SIZE_I0,
                 FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
-                    WAKEUP_SPEC => WAKEUP_SPEC_I0
+                    WAKEUP_SPEC => WAKEUP_SPEC_I0,
+                        WTF_MEM_FAIL => '0'
             )
             port map(
                 clk => clk, reset => '0', en => '0', events => events,
@@ -487,8 +488,6 @@ begin
             );
 
             TMP_ISSUE_I0: block
-                --use work.LogicIssue.all;
-                --use work.LogicArgRead.all;
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
                 slotIssueI0 <= updateDispatchArgs_Is_N(argStateI, outSigsI0, events);
@@ -513,7 +512,7 @@ begin
                 bqCompareEarly.tag <= slotIssueI0.st.tags.renameIndex;
                 bqCompareEarly.dest <= slotIssueI0.st.tags.bqPointer;
             end block;
-                                         --   killFollower => (sentTrial2_T and events.execEvent) or events.lateEvent
+
             dataToAlu <= executeAlu(slotRegReadI0.full and not killFollower(outSigsI0.trialPrev2, events), slotRegReadI0, bqSelected.nip, dataToBranch.controlInfo, unfoldedAluOp);
             process (clk)
             begin
@@ -577,7 +576,8 @@ begin
                         NAME => "I1",
                         IQ_SIZE => IQ_SIZE_I0,
                         FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-                        FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
+                        FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
+                                                WTF_MEM_FAIL => '0'
                     )
                     port map(
                         clk => clk, reset => '0', en => '0',
@@ -603,8 +603,6 @@ begin
                     );
 
                     TMP_ISSUE_I1: block
-                        --use work.LogicIssue.all;
-                        --use work.LogicArgRead.all;
                         signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
                     begin
                         slotIssueI1 <= updateDispatchArgs_Is_N(argStateI, outSigsI1, events);
@@ -622,15 +620,14 @@ begin
                         subpipeI1_RegRead <= makeExecResult(slotRegReadI1);
                     end block;
 
-                    sendingToMultiplier <= slotRegReadI1.full and not --outSigsI1.killFollower;
-                                                                      killFollower(outSigsI1.trialPrev2, events);
+                    sendingToMultiplier <= slotRegReadI1.full and not killFollower(outSigsI1.trialPrev2, events);
                     
                     subpipeI1_E2 <= subpipeI1_E2_Alt;
                     lockIssueI1 <= lockIssueI1_Alt;
 
                     divUnlock <= divUnlock_Alt;
 
-                        killFollowerNextI1 <= killFollower(outSigsI1.trialPrev1, events);
+                    killFollowerNextI1 <= killFollower(outSigsI1.trialPrev1, events);
 
                     MUL_DIV: entity work.MultiplierDivider
                     port map (
@@ -641,7 +638,7 @@ begin
                         input => slotRegReadI1,
 
                         allowIssueI1 => allowIssueI1,
-                        killFollowerNext => killFollowerNextI1,--outSigsI1.killFollowerNext,
+                        killFollowerNext => killFollowerNextI1,
 
                         events => events,
                         
@@ -672,14 +669,7 @@ begin
                 end function;
                 
             begin
---                readyRegFlagsInt_Early_Mem2 <= --readyRegFlagsInt_Early;
---                                              (readyRegFlagsInt_Early(0), readyRegFlagsInt_Early(1 + QQQ), readyRegFlagsInt_Early(2 - QQQ),
---                                               readyRegFlagsInt_Early(3), readyRegFlagsInt_Early(4 + QQQ), readyRegFlagsInt_Early(5 - QQQ),
---                                               readyRegFlagsInt_Early(6), readyRegFlagsInt_Early(7 + QQQ), readyRegFlagsInt_Early(8 - QQQ),
---                                               readyRegFlagsInt_Early(9), readyRegFlagsInt_Early(10 + QQQ), readyRegFlagsInt_Early(11 - QQQ)
---                                                );
                 readyRegFlagsInt_Early_Mem <= reorder(readyRegFlagsInt_Early);
-                ch0 <= bool2std(readyRegFlagsInt_Early_Mem = readyRegFlagsInt_Early_Mem2);
             end block;
             
         SUBPIPE_MEM: block
@@ -708,7 +698,8 @@ begin
                NAME => "M0",
                IQ_SIZE => IQ_SIZE_M0,
                FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-               FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
+               FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
+                                       WTF_MEM_FAIL => '1'
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -734,8 +725,6 @@ begin
             );
 
             TMP_ISSUE_M0: block
-                --use work.LogicIssue.all;
-                --use work.LogicArgRead.all;
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
                 slotIssueM0 <= updateDispatchArgs_Is_N(argStateI, outSigsM0, events);
@@ -752,7 +741,6 @@ begin
                 subpipeM0_Issue <= makeExecResult(slotIssueM0);
                 subpipeM0_RegRead <= makeExecResult(slotRegReadM0);               
             end block;
-
 
             ---------------------------------------------
             -- RR --
@@ -781,7 +769,6 @@ begin
             -- E0 -- 
             memAddressInput <= subpipeM0_E0;  -- Interface LSQ
 
-
             --------------------------------------------------------
             -- E1 --
             
@@ -807,7 +794,6 @@ begin
                 ctrlE1u.controlInfo <= memoryCtrlPre;
 
                 memoryMissed <= ctrlE1u.controlInfo.dataMiss or ctrlE1u.controlInfo.sqMiss;
-                                --not memLoadReady;
     
                 subpipeM0_E1_u <= setMemFail(subpipeM0_E1, memoryMissed and bool2std(ENABLE_MQ), memResult);     
                 subpipeM0_E1i_u <= setMemFail(subpipeM0_E1i, memoryMissed and bool2std(ENABLE_MQ), memResult);
@@ -857,9 +843,7 @@ begin
             use work.LogicIssue.all;
             use work.LogicArgRead.all;
        
-            signal --sendingToRegReadI, sendingToRegReadF, 
-                    sendingToRegReadIntSV-- sendingToRegReadFloatSV
-            : std_logic := '0';
+            signal sendingToRegReadIntSV: std_logic := '0';
             signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoUpdatedIntU, schedInfoFloatA, schedInfoUpdatedFloatA, schedInfoUpdatedFloatU: SchedulerInfoArray(0 to PIPE_WIDTH-1)
                         := (others => DEFAULT_SCHEDULER_INFO);
 
@@ -896,11 +880,7 @@ begin
             schedInfoUpdatedFloatU <= prepareNewArr( schedInfoUpdatedFloatA, readyRegFlagsFloatSV );
 
 
---            readyRegFlagsSV2 <= (readyRegFlagsInt_Early(2 - QQQ), '0', '0',
---                                readyRegFlagsInt_Early(5 - QQQ), '0', '0',
---                                readyRegFlagsInt_Early(8 - QQQ), '0', '0',
---                                readyRegFlagsInt_Early(11 - QQQ), '0', '0');
-                readyRegFlagsSV <= reorder(readyRegFlagsInt_Early);
+            readyRegFlagsSV <= reorder(readyRegFlagsInt_Early);
             
             IQUEUE_SV: entity work.IssueQueue(Behavioral)
             generic map(
@@ -934,8 +914,6 @@ begin
 
 
             TMP_ISSUE_SVI: block
-                --use work.LogicIssue.all;
-                --use work.LogicArgRead.all;
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
 
@@ -943,7 +921,10 @@ begin
                 slotIssueIntSV <= updateDispatchArgs_Is_N(argStateI, outSigsSVI, events);
                 -- pseudo interface
                 
-                       cancelledSVI1 <= (outSigsSVI.cancelled or memFail) or (storeValueCollision2 and killFollower(outSigsSVI.trialPrev2, events)); -- If stalled, it stayed here but kill sig moved to next stage
+                cancelledSVI1 <= (--outSigsSVI.cancelled or memFail
+                                    outSigsSVI.sentKilled or memFail
+                                                        ) 
+                                            or (storeValueCollision2 and killFollower(outSigsSVI.trialPrev2, events)); -- If stalled, it stayed here but kill sig moved to next stage
                 sendingToRegReadIntSV <= slotIssueIntSV.full and not (cancelledSVI1 or killFollower(outSigsSVI.trialPrev1, events));--outSigsSVI.killFollowerNext);
                 -- Reg
                 slotRegReadIntSV <= updateDispatchArgs_RR(argStateR, valuesInt0, regValsS0, true);
@@ -952,10 +933,7 @@ begin
                 begin
                     if rising_edge(clk) then
                         if allowIssueStoreDataInt = '1' then -- nextAccepting
-                            argStateI <= TMP_clearFull_DUMMY( 
-                                                          getDispatchArgValues_Is(slotSelIntSV, outSigsSVI, events),
-                                                          events 
-                                                        );
+                            argStateI <= TMP_clearFull_DUMMY(getDispatchArgValues_Is(slotSelIntSV, outSigsSVI, events), events);
                         end if;
                         
                         if events.lateEvent = '1' then
@@ -971,18 +949,10 @@ begin
 
             end block;
 
-            sendingToStoreWriteInt <= slotRegReadIntSV.full and not killFollower(outSigsSVI.trialPrev2, events);--outSigsSVI.killFollower;
+            sendingToStoreWriteInt <= slotRegReadIntSV.full and not killFollower(outSigsSVI.trialPrev2, events);
 
-            ------------------------------------
---            readyRegFlagsFloatSV2 <= (readyRegFlagsFloat_Early(2 - QQQ), '0', '0',
---                                     readyRegFlagsFloat_Early(5 - QQQ), '0', '0',
---                                     readyRegFlagsFloat_Early(8 - QQQ), '0', '0',
---                                     readyRegFlagsFloat_Early(11 - QQQ), '0', '0');
-                            readyRegFlagsFloatSV <= reorder(readyRegFlagsFloat_Early);
-            
-             --   ch1 <= bool2std(readyRegFlagsSV2 = readyRegFlagsSV);
-            --    ch2 <= bool2std(readyRegFlagsFloatSV2 = readyRegFlagsFloatSV);
-            
+            readyRegFlagsFloatSV <= reorder(readyRegFlagsFloat_Early);
+
             FP_STORE_IQ: if ENABLE_FP generate
                 IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)
                 generic map(
@@ -1011,12 +981,10 @@ begin
                     schedulerOut => slotSelFloatSV,              
                     outputSignals => outSigsSVF,
                     dbState => dbState
-                );       
+                );
             end generate;
 
             TMP_ISSUE_SVF: block
-                --use work.LogicIssue.all;
-                --use work.LogicArgRead.all;
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
                 slotIssueFloatSV <= updateDispatchArgs_Is_N(argStateI, outSigsSVF, events);
@@ -1092,9 +1060,6 @@ begin
            
 
             TMP_ISSUE_F0: block
-                --use work.LogicIssue.all;
-                --use work.LogicArgRead.all;
-
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin    
                 slotIssueF0 <= updateDispatchArgs_Is_N(argStateI, outSigsF0, events);
@@ -1197,25 +1162,25 @@ begin
 
         execOutSec(2) <= sqValueResultRR;
 
-                    bypassInt <= makeBypassInt((subpipeI0_Issue, subpipeI1_E1, subpipeM0_RegRead),
-                                               (subpipeI0_RegRead, subpipeI1_E2, subpipeM0_E0i) ,
-                                               (DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, subpipeM0_E1i),
-                                                issueTagI0, memFail);
+            bypassInt <= makeBypassInt((subpipeI0_Issue, subpipeI1_E1, subpipeM0_RegRead),
+                                       (subpipeI0_RegRead, subpipeI1_E2, subpipeM0_E0i) ,
+                                       (DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, subpipeM0_E1i),
+                                        issueTagI0, memFail);
 
-                    bypassIntSV <= makeBypassIntSV((subpipeI0_E0, subpipeI1_D0, subpipeM0_E2i),
-                                                   (subpipeI0_D0, subpipeI1_D1, subpipeM0_D0i) ,
-                                                   (others => DEFAULT_EXEC_RESULT),
-                                                    sn(0), memFail);
+            bypassIntSV <= makeBypassIntSV((subpipeI0_E0, subpipeI1_D0, subpipeM0_E2i),
+                                           (subpipeI0_D0, subpipeI1_D1, subpipeM0_D0i) ,
+                                           (others => DEFAULT_EXEC_RESULT),
+                                            sn(0), memFail);
 
-                     bypassFloat <= makeBypassFloat((subpipeF0_RegRead, DEFAULT_EXEC_RESULT, subpipeM0_E2f),
-                                                    (subpipeF0_E0, DEFAULT_EXEC_RESULT, subpipeM0_D0f) ,
-                                                    (subpipeF0_E1, DEFAULT_EXEC_RESULT, subpipeM0_D1f),
-                                                    sn(0), memFail);
+             bypassFloat <= makeBypassFloat((subpipeF0_RegRead, DEFAULT_EXEC_RESULT, subpipeM0_E2f),
+                                            (subpipeF0_E0, DEFAULT_EXEC_RESULT, subpipeM0_D0f) ,
+                                            (subpipeF0_E1, DEFAULT_EXEC_RESULT, subpipeM0_D1f),
+                                            sn(0), memFail);
 
-                    bypassFloatSV <= makeBypassFloatSV((subpipeF0_E2, DEFAULT_EXEC_RESULT, subpipeM0_D0f),
-                                                       (subpipeF0_D0, DEFAULT_EXEC_RESULT, subpipeM0_D1f) ,
-                                                       (others => DEFAULT_EXEC_RESULT),
-                                                        sn(0), memFail);
+            bypassFloatSV <= makeBypassFloatSV((subpipeF0_E2, DEFAULT_EXEC_RESULT, subpipeM0_D0f),
+                                               (subpipeF0_D0, DEFAULT_EXEC_RESULT, subpipeM0_D1f) ,
+                                               (others => DEFAULT_EXEC_RESULT),
+                                                sn(0), memFail);
             
             FNI_VALUES: block
                 signal fni, fniFloat: ForwardingInfo := DEFAULT_FORWARDING_INFO;
@@ -1223,13 +1188,13 @@ begin
                 fni <= buildForwardingNetwork(subpipeI0_E0,        subpipeI0_D0,
                                               subpipeI1_D0,        subpipeI1_D1,
                                               subpipeM0_E2i,       subpipeM0_D0i,
-                                              memFail, memDepFail
+                                              '0', '0' --memFail, memDepFail
                                              );
 
                 fniFloat <= buildForwardingNetworkFP(subpipeF0_E2,        subpipeF0_D0,
                                                      DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT,
                                                      subpipeM0_D0f,       subpipeM0_D1f,
-                                                     memFail, memDepFail
+                                                     '0', '0' --memFail, memDepFail
                                                     );
 
                 valuesInt0 <= fni.values0;
@@ -1342,25 +1307,13 @@ begin
 
         SRC_LATE_OVERRIDE: if true generate
              readyRegFlagsInt_T <= updateArgStates(renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext_Early);
-              --         readyRegFlagsInt_C <= updateArgStates(renamedDataLivingRe_C, renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext_C);
              readyRegFlagsFloat_T <= updateArgStatesFloat(renamedArgsInt, renamedArgsFloat, readyRegFlagsFloatNext_Early);
         end generate;
 
         RR_FLAGS_TEMP: for i in 0 to PIPE_WIDTH-1 generate
             readyRegFlagsInt_Early(3*i to 3*i + 2 - QQQ) <= readyRegFlagsIntNext_Early(3*i to 3*i + 2 - QQQ);
-            
             readyRegFlagsFloat_Early(3*i to 3*i + 2 - QQQ) <= readyRegFlagsFloatNext_Early(3*i to 3*i + 2 - QQQ);
         end generate;
-
---            readyRegFlagsInt_Early(0 to 2 - QQQ) <= readyRegFlagsIntNext_Early(0 to 2 - QQQ);
---            readyRegFlagsInt_Early(3 to 5 - QQQ) <= readyRegFlagsIntNext_Early(3 to 5 - QQQ);
---            readyRegFlagsInt_Early(6 to 8 - QQQ) <= readyRegFlagsIntNext_Early(6 to 8 - QQQ);
---            readyRegFlagsInt_Early(9 to 11 - QQQ) <= readyRegFlagsIntNext_Early(9 to 11 - QQQ);
-            
---            readyRegFlagsFloat_Early(0 to 2 - QQQ) <= readyRegFlagsFloatNext_Early(0 to 2 - QQQ);
---            readyRegFlagsFloat_Early(3 to 5 - QQQ) <= readyRegFlagsFloatNext_Early(3 to 5 - QQQ);
---            readyRegFlagsFloat_Early(6 to 8 - QQQ) <= readyRegFlagsFloatNext_Early(6 to 8 - QQQ);
---            readyRegFlagsFloat_Early(9 to 11 - QQQ) <= readyRegFlagsFloatNext_Early(9 to 11 - QQQ);
 
         sysRegSending <= sysRegRead;
 

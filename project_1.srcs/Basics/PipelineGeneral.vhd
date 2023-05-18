@@ -60,11 +60,12 @@ type IssueQueueSignals is record
     --empty: std_logic;
     --ready: std_logic;
     sending: std_logic;
-    cancelled: std_logic;
+        sentKilled: std_logic;
         trialPrev1: std_logic;
         trialPrev2: std_logic;
     --killFollower: std_logic;
-    killFollowerNext: std_logic;
+    --killFollowerNext: std_logic;
+        cancelled_D: std_logic;
 end record;
 
 constant DEFAULT_ISSUE_QUEUE_SIGNALS: IssueQueueSignals := (
