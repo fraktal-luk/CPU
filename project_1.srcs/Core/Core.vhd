@@ -65,7 +65,7 @@ architecture Behavioral of Core is
     signal frontAccepting, bpSending, renameAllow, frontGroupSend, frontSendAllow, canSendRename, robSending,
            renameSendingBr, renamedSending, commitAccepting, frontEventSignal, bqAccepting, execEventSignalE0, execEventSignalE1, lateEventSignal, lateEventSetPC,
            allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
-           mqReady, mqRegReadSending, sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal
+           mqReady, mqRegReadSending, sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, memFail
            : std_logic := '0';
 
     signal renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -88,7 +88,6 @@ architecture Behavioral of Core is
     signal sysRegReadSel: slv5 := (others => '0');
 
     signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
-    signal events: EventState := DEFAULT_EVENT_STATE;
     signal specialOp, specialOutROB: SpecificOp := DEFAULT_SPECIFIC_OP;
     signal branchCtrl, memoryCtrlE2: InstructionControlInfo := DEFAULT_CONTROL_INFO;
 
@@ -105,6 +104,7 @@ architecture Behavioral of Core is
 
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
 
+    signal events: EventState := DEFAULT_EVENT_STATE;
     signal dbState: DbCoreState := DEFAULT_DB_STATE;
 
         signal TMP_aluTags, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags,
@@ -128,7 +128,7 @@ begin
     sysRegRead <= memoryRead.full;
 
 
-    events <= (lateEventSignal, execEventSignalE0, dataToBranch.tags, execEvent, lateEvent);
+    events <= (lateEventSignal, execEventSignalE0, dataToBranch.tags, execEvent, lateEvent, memFail);
 
     execEvent <= (DEFAULT_DEBUG_INFO, execEventSignalE0, '0', branchResultE0.tags.renameIndex, branchResultE0.tags.bqPointerSeq, branchResultE0.target);
     dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'),
@@ -393,7 +393,7 @@ begin
               memSubpipeSent, mulSubpipeSent, mulSubpipeAtE0, fp0subpipeSelected, mulSubpipeSelected,
               lockIssueI0, allowIssueI0, lockIssueI1, lockIssueI1_Alt, allowIssueI1, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0, intWriteConflict,
               storeValueCollision1, storeValueCollision2, cancelledSVI1,
-              memFail, memDepFail, prevMemDepFail: std_logic := '0';  
+              memDepFail, prevMemDepFail: std_logic := '0';  
 
        signal subpipeI0_Issue, subpipeI0_RegRead, subpipeI0_E0,                                    subpipeI0_D0,
               subpipeI1_Issue, subpipeI1_RegRead, subpipeI1_E0,  subpipeI1_E1,    subpipeI1_E2,    subpipeI1_D0,  subpipeI1_D1,
@@ -491,7 +491,7 @@ begin
                 --use work.LogicArgRead.all;
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                slotIssueI0 <= updateDispatchArgs_Is_N(argStateI, outSigsI0);
+                slotIssueI0 <= updateDispatchArgs_Is_N(argStateI, outSigsI0, events);
                 slotRegReadI0 <= updateDispatchArgs_RR(argStateR, valuesInt0, regValsI0, false); -- TODO: include outSigs (.killFollower)? 
 
                 process (clk)
@@ -607,7 +607,7 @@ begin
                         --use work.LogicArgRead.all;
                         signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
                     begin
-                        slotIssueI1 <= updateDispatchArgs_Is_N(argStateI, outSigsI1);
+                        slotIssueI1 <= updateDispatchArgs_Is_N(argStateI, outSigsI1, events);
                         slotRegReadI1 <= updateDispatchArgs_RR(argStateR, valuesInt0, regValsI1, false);
 
                         process (clk)
@@ -738,7 +738,7 @@ begin
                 --use work.LogicArgRead.all;
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                slotIssueM0 <= updateDispatchArgs_Is_N(argStateI, outSigsM0);
+                slotIssueM0 <= updateDispatchArgs_Is_N(argStateI, outSigsM0, events);
                 slotRegReadM0iq <= updateDispatchArgs_RR(argStateR, valuesInt0, regValsM0, false, true);
 
                 process (clk)
@@ -857,7 +857,8 @@ begin
             use work.LogicIssue.all;
             use work.LogicArgRead.all;
        
-            signal sendingToRegReadI, sendingToRegReadF, sendingToRegReadIntSV-- sendingToRegReadFloatSV
+            signal --sendingToRegReadI, sendingToRegReadF, 
+                    sendingToRegReadIntSV-- sendingToRegReadFloatSV
             : std_logic := '0';
             signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoUpdatedIntU, schedInfoFloatA, schedInfoUpdatedFloatA, schedInfoUpdatedFloatU: SchedulerInfoArray(0 to PIPE_WIDTH-1)
                         := (others => DEFAULT_SCHEDULER_INFO);
@@ -939,10 +940,10 @@ begin
             begin
 
                 -- Reg
-                slotIssueIntSV <= updateDispatchArgs_Is_O(argStateI, outSigsSVI);
+                slotIssueIntSV <= updateDispatchArgs_Is_N(argStateI, outSigsSVI, events);
                 -- pseudo interface
                 
-                       cancelledSVI1 <= outSigsSVI.cancelled or (storeValueCollision2 and killFollower(outSigsSVI.trialPrev2, events)); -- If stalled, it stayed here but kill sig moved to next stage
+                       cancelledSVI1 <= (outSigsSVI.cancelled or memFail) or (storeValueCollision2 and killFollower(outSigsSVI.trialPrev2, events)); -- If stalled, it stayed here but kill sig moved to next stage
                 sendingToRegReadIntSV <= slotIssueIntSV.full and not (cancelledSVI1 or killFollower(outSigsSVI.trialPrev1, events));--outSigsSVI.killFollowerNext);
                 -- Reg
                 slotRegReadIntSV <= updateDispatchArgs_RR(argStateR, valuesInt0, regValsS0, true);
@@ -1018,7 +1019,7 @@ begin
                 --use work.LogicArgRead.all;
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                slotIssueFloatSV <= updateDispatchArgs_Is_N(argStateI, outSigsSVF);
+                slotIssueFloatSV <= updateDispatchArgs_Is_N(argStateI, outSigsSVF, events);
                 slotRegReadFloatSV <= updateDispatchArgs_RR(argStateR, valuesFloat0, regValsFS0, true);
     
                 process (clk)
@@ -1096,7 +1097,7 @@ begin
 
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin    
-                slotIssueF0 <= updateDispatchArgs_Is_N(argStateI, outSigsF0);
+                slotIssueF0 <= updateDispatchArgs_Is_N(argStateI, outSigsF0, events);
                 slotRegReadF0 <= updateDispatchArgs_RR(argStateR, valuesFloat0, regValsF0, false);
     
                 process (clk)

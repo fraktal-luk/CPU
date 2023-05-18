@@ -393,19 +393,6 @@ end record;
 type ExecResultArray is array(integer range <>) of ExecResult;
 
 
-type EventState is record
-    lateEvent: std_logic;
-    execEvent: std_logic;
-    preExecTags: InstructionTags;
-    execCausing: ExecResult;
-    lateCausing: ExecResult;
-end record;
-
-type DbCoreState is record
-    dummy: DummyType;
-    dbSignal: std_logic;
-end record;
-
 type BufferEntryArray is array(0 to PIPE_WIDTH-1) of BufferEntry;
 type BufferEntryArray2D is array(0 to IBUFFER_SIZE-1, 0 to PIPE_WIDTH-1) of BufferEntry;
 
@@ -577,16 +564,6 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       );
 
 constant DEFAULT_SCHED_STATE: SchedulerState := DEFAULT_SCHEDULER_STATE;
-
-constant DEFAULT_EVENT_STATE: EventState := (
-    '0',
-    '0',
-    DEFAULT_INSTRUCTION_TAGS,
-    DEFAULT_EXEC_RESULT,
-    DEFAULT_EXEC_RESULT
-    );
-
-constant DEFAULT_DB_STATE: DbCoreState := (dummy => DUMMY_VALUE, dbSignal => '0');
 
 
 constant DEFAULT_DB_DEPENDENCY: DbDependency := (

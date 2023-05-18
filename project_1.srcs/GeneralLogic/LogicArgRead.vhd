@@ -24,8 +24,8 @@ package LogicArgRead is
     ----------------------------------------
     function getDispatchArgValues_Is(input: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
         
-    function updateDispatchArgs_Is_O(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState;
-    function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState;
+--    function updateDispatchArgs_Is_O(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState;
+    function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
     
     
     -- Reg read stage
@@ -88,9 +88,9 @@ package body LogicArgRead is
         res.full := ctSigs.sending;
         res := TMP_clearDestIfEmpty(res);
         
-            if IMM_AS_REG then
-              --  res.st.immValue(PhysName'length-2 downto 0) := res.argSpec.args(1)(6 downto 0);
-            end if;
+--            if IMM_AS_REG then
+--              --  res.st.immValue(PhysName'length-2 downto 0) := res.argSpec.args(1)(6 downto 0);
+--            end if;
         
         --res := TMP_clearFull(res, events);
         if events.lateEvent = '1' then
@@ -98,33 +98,16 @@ package body LogicArgRead is
         end if;
         return res;
     end function;
-    
-    function updateDispatchArgs_Is_O(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState is
-        variable res: SchedulerState := st;
-    begin
-        res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
-        res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
-    
-        if res.argSrc(0)(1) /= '1' then
-            res.argSpec.args(0) := (others => '0');
-        end if;
-    
-        if res.argSrc(1)(1) /= '1' or res.st.zero(1) = '1' then
-            res.argSpec.args(1) := (others => '0');
-        end if;
-        
-        return res;
-    
-    end function;
 
-        function TMP_applyKill(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState is
-            variable res: SchedulerState := st;
-        begin
-            res.full := st.full and not (ctSigs.cancelled or ctSigs.killFollowerNext);
-            return res;
-        end function;
 
-        function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals) return SchedulerState is
+--        function TMP_applyKill(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState is
+--            variable res: SchedulerState := st;
+--        begin
+--            res.full := st.full and not (ctSigs.cancelled or events.memFail or ctSigs.killFollowerNext);
+--            return res;
+--        end function;
+    
+        function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState is
             variable res: SchedulerState := st;
         begin
             res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
@@ -138,7 +121,8 @@ package body LogicArgRead is
                 res.argSpec.args(1) := (others => '0');
             end if;
 
-            res := TMP_applyKill(res, ctSigs);
+            --res := TMP_applyKill(res, ctSigs, events);
+            res.full := res.full and not (ctSigs.cancelled or events.memFail or ctSigs.killFollowerNext);
             return res;
         end function;
 

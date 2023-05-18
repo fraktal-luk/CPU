@@ -16,6 +16,31 @@ package PipelineGeneral is
 
 type slv2D is array(natural range <>, natural range <>) of std_logic;
 
+type EventState is record
+    lateEvent: std_logic;
+    execEvent: std_logic;
+    preExecTags: InstructionTags;
+    execCausing: ExecResult;
+    lateCausing: ExecResult;
+    memFail: std_logic;
+end record;
+
+type DbCoreState is record
+    dummy: DummyType;
+    dbSignal: std_logic;
+end record;
+
+constant DEFAULT_EVENT_STATE: EventState := (
+    '0',
+    '0',
+    DEFAULT_INSTRUCTION_TAGS,
+    DEFAULT_EXEC_RESULT,
+    DEFAULT_EXEC_RESULT,
+    '0'
+    );
+
+constant DEFAULT_DB_STATE: DbCoreState := (dummy => DUMMY_VALUE, dbSignal => '0');
+
 
 function sn(n: integer) return SmallNumber;
 
