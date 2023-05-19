@@ -77,10 +77,7 @@ architecture Behavioral of IssueQueue is
 
     signal fullMask, freedMask, readyMask, selMask, selMask1, selMask2: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
-    signal anyReadyFull, sends, sendingKilled, sentKilled, sentTrial1_T, sentTrial2_T: std_logic := '0';
-
-    -- DB?
-    --signal wa: WakeupInfoArray(0 to IQ_SIZE-1);
+    signal anyReadyFull, sends, sendingKilled, sentKilled, sentTrial1, sentTrial2: std_logic := '0';
 
     signal TMP_tags: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
 
@@ -143,8 +140,8 @@ begin
         sendingTrial <= isNonzero(selMask and trialUpdatedMask);
         sendingKilled <= (sendingTrial and events.execEvent) or events.lateEvent;
 
-        sentTrial1_T <= isNonzero(selMask1 and trialUpdatedMask);
-        sentTrial2_T <= isNonzero(selMask2 and trialUpdatedMask);
+        sentTrial1 <= isNonzero(selMask1 and trialUpdatedMask);
+        sentTrial2 <= isNonzero(selMask2 and trialUpdatedMask);
     end block;
 
 
@@ -209,15 +206,13 @@ begin
         end if;
     end process;
 
-    outputSignals <=   (--empty => '0',
-                        --ready => '0',
+    outputSignals <=   (
                         sending => sends,
-                            sentKilled => sentKilled,
-                            trialPrev1 => sentTrial1_T,
-                            trialPrev2 => sentTrial2_T ,
-                        --killFollower => (sentTrial2_T and events.execEvent) or events.lateEvent,
-                     --   killFollowerNext => (sentTrial1_T and events.execEvent) or events.lateEvent
-                                             cancelled_D => sentKilled or (memFail)
+                        sentKilled => sentKilled,
+                        trialPrev1 => sentTrial1,
+                        trialPrev2 => sentTrial2
+                        ,
+                           cancelled_D => sentKilled or (memFail)
                         );
 
     COUNTERS_SYNCHRONOUS: process(clk)

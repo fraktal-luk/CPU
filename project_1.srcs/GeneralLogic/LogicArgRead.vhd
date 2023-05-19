@@ -16,11 +16,9 @@ use work.ForwardingNetwork.all;
 
 package LogicArgRead is
 
-    function TMP_clearFull_DUMMY(ss: SchedulerState; evts: EventState) return SchedulerState;
-
     -- Issue stage
     function getDispatchArgValues_Is(input: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
-    function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
+    function updateDispatchArgs_Is(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
     
     
     -- Reg read stage
@@ -37,21 +35,14 @@ package LogicArgRead is
                                      USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
     return SchedulerState;
     
-    function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false) return SchedulerState;
+    function updateDispatchArgs_RR(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
+    return SchedulerState;
 
 end LogicArgRead;
 
 
 package body LogicArgRead is
 
-        
-    function TMP_clearFull_DUMMY(ss: SchedulerState; evts: EventState) return SchedulerState is
-        variable res: SchedulerState := ss;
-    begin            
-        return res;
-    end function;
-
-    -- issue
     function TMP_clearDestIfEmpty(input: SchedulerState) return SchedulerState is
         variable res: SchedulerState := input;
     begin
@@ -79,7 +70,7 @@ package body LogicArgRead is
 
 
 
-    function updateDispatchArgs_Is_N(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState is
+    function updateDispatchArgs_Is(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState is
         variable res: SchedulerState := st;
     begin
         res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
@@ -93,15 +84,15 @@ package body LogicArgRead is
             res.argSpec.args(1) := (others => '0');
         end if;
 
-        --res.full := res.full and not (ctSigs.cancelled or events.memFail or ctSigs.killFollowerNext);
-        res.full := res.full and not (ctSigs.sentKilled or events.memFail or --ctSigs.killFollowerNext);
-                                                                              killFollower(ctSigs.trialPrev1, events)      );
+        res.full := res.full and not (events.memFail or ctSigs.sentKilled or killFollower(ctSigs.trialPrev1, events));
         return res;
     end function;
 
 
-    function getDispatchArgValues_RR(input: SchedulerState;
+
+    function getDispatchArgValues_RR_O(input: SchedulerState;
                                      prevSending: std_logic;
+                                     events: EventState;
                                      vals0, vals1: MwordArray;
                                      USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
     return SchedulerState is
@@ -143,7 +134,11 @@ package body LogicArgRead is
         else
             res.args(1) := (others => '0');
         end if;
-        
+
+        if events.lateEvent = '1' then
+            res.full := '0';
+        end if;
+
         return res;
     end function;
 
@@ -154,29 +149,14 @@ package body LogicArgRead is
     return SchedulerState is
         variable res: SchedulerState := input;
     begin
-        res := getDispatchArgValues_RR(res, res.full, vals0, vals1, USE_IMM, REGS_ONLY, IMM_ONLY_1);
-        if events.lateEvent = '1' then
-            res.full := '0';
-        end if;
+        res := getDispatchArgValues_RR_O(res, res.full, events, vals0, vals1, USE_IMM, REGS_ONLY, IMM_ONLY_1);
         return res;
     end function;
 
-    function getDispatchArgValues_RR_O(input: SchedulerState;
-                                     prevSending: std_logic;
-                                     events: EventState;
-                                     vals0, vals1: MwordArray;
-                                     USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
-    return SchedulerState is
-        variable res: SchedulerState := input;
-    begin
-        res := getDispatchArgValues_RR(res, prevSending, vals0, vals1, USE_IMM, REGS_ONLY, IMM_ONLY_1);
-        if events.lateEvent = '1' then
-            res.full := '0';
-        end if;
-        return res;
-    end function;
-    
-    function updateDispatchArgs_RR(st: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
+
+
+
+    function updateDispatchArgs_RR(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
     return SchedulerState is
         variable res: SchedulerState := st;
     begin
@@ -185,13 +165,13 @@ package body LogicArgRead is
             res.args(1) := regValues(1);
             return res;
         end if;
-    
+
         if res.readNew(0) = '1' then
             res.args(0) := vals(slv2u(res.argLocsPipe(0)(1 downto 0)));
         else
             res.args(0) := res.args(0) or regValues(0);
         end if;
-    
+
         if IMM_ONLY_1 then
             null; -- don't read FN or registers
         elsif res.readNew(1) = '1' then
@@ -199,6 +179,8 @@ package body LogicArgRead is
         else
             res.args(1) := res.args(1) or regValues(1);
         end if;
+
+            res.full := res.full and not killFollower(ctSigs.trialPrev2, events);
 
         return res;
     end function;

@@ -32,9 +32,11 @@ package LogicExec is
 
     function getAluControl(op: ArithOp) return AluControl;
 
-	function basicBranch(sending: std_logic; st: SchedulerState; tags: InstructionTags;
-                         ctrl: InstructionControlInfo;
-                         target, result: Mword;
+	function basicBranch(sending: std_logic; st: SchedulerState;
+	                     bqControl: ControlPacket;
+	                     --tags: InstructionTags;
+                         --ctrl: InstructionControlInfo;
+                         --target, result: Mword;
                          ac: AluControl) return ControlPacket;
 
 	function executeAlu(full: std_logic; st: SchedulerState; link: Mword; ctrl: InstructionControlInfo;
@@ -44,6 +46,7 @@ package LogicExec is
 	function prepareMultiply(full: std_logic; st: SchedulerState) return ExecResult;
 	
 	function executeFpu(st: SchedulerState) return Mword;     
+    function TMP_fp(full: std_logic; ss: SchedulerState) return ExecResult;
 
     function mergeMemOp(stIQ, stMQ: SchedulerState; mqReady: std_logic) return SchedulerState;
 
@@ -76,15 +79,20 @@ package body LogicExec is
 		return ac.jumpType(1) or (ac.jumpType(0) xor isZero);
 	end function;
 
-	function basicBranch(sending: std_logic; st: SchedulerState; tags: InstructionTags;
-	                     ctrl: InstructionControlInfo;
-	                     target, result: Mword;
+	function basicBranch(sending: std_logic; st: SchedulerState;
+	                     bqControl: ControlPacket;
+	                     --tags: InstructionTags;
+	                     --ctrl: InstructionControlInfo;
+	                     --target, result: Mword;
 	                     ac: AluControl)
 	return ControlPacket is
 		variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 		variable branchTaken, targetMatch: std_logic := '0';
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
 		variable targetEqual: std_logic := '0';
+		constant ctrl: InstructionControlInfo := bqControl.controlInfo;
+		constant target: Mword := bqControl.target;
+		constant result: Mword := bqControl.nip;
 	begin
 	    res.dbInfo := st.st.dbInfo;
         res.tags := st.st.tags;
@@ -147,10 +155,10 @@ package body LogicExec is
 		res.target := trueTarget;
 		-- Return address
 		res.nip := result;
-		res.tags.intPointer := tags.intPointer;
-		res.tags.floatPointer := tags.floatPointer;
-    	res.tags.sqPointer := tags.sqPointer;
-	    res.tags.lqPointer := tags.lqPointer;		
+		res.tags.intPointer := bqControl. tags.intPointer;
+		res.tags.floatPointer := bqControl. tags.floatPointer;
+    	res.tags.sqPointer := bqControl. tags.sqPointer;
+	    res.tags.lqPointer := bqControl. tags.lqPointer;		
 		return res;
 	end function;
 
@@ -301,6 +309,17 @@ package body LogicExec is
 
 		return res;
 	end function;
+
+
+    function TMP_fp(full: std_logic; ss: SchedulerState) return ExecResult is
+        variable res: ExecResult := DEFAULT_EXEC_RESULT;
+    begin
+        res.full := full;
+        res.tag := ss.st.tags.renameIndex;
+        res.dest := ss.argSpec.dest;
+        res.value := executeFpu(ss);
+        return res;
+    end function;
 
 
     function mergeMemOp(stIQ, stMQ: SchedulerState; mqReady: std_logic) return SchedulerState is

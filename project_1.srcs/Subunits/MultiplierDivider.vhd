@@ -123,12 +123,8 @@ begin
     begin
         kill <= (trialled and events.execEvent) or events.lateEvent; -- move to division
 
-
-
-
         divPrepareSend <= divFull and bool2std(slv2u(divTime) = 30); -- TMP value
         divResultSending <= divFull and bool2std(slv2u(divTime) = 32) and not kill; -- TMP value
-
 
         DIVIDER_STATE: process (clk)
         begin

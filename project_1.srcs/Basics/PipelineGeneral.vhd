@@ -57,15 +57,11 @@ function makeExecResult_N(er: ExecResult; iqTag: SmallNumber) return ExecResult_
 
 
 type IssueQueueSignals is record
-    --empty: std_logic;
-    --ready: std_logic;
     sending: std_logic;
-        sentKilled: std_logic;
-        trialPrev1: std_logic;
-        trialPrev2: std_logic;
-    --killFollower: std_logic;
-    --killFollowerNext: std_logic;
-        cancelled_D: std_logic;
+    sentKilled: std_logic;
+    trialPrev1: std_logic;
+    trialPrev2: std_logic;
+    cancelled_D: std_logic;
 end record;
 
 constant DEFAULT_ISSUE_QUEUE_SIGNALS: IssueQueueSignals := (
@@ -91,31 +87,31 @@ type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
 constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
 
 
-    type ArgRenameState is record
-        sel: std_logic;
-        const: std_logic;
-        virtual: RegName;
-        physical: PhysName;
-        physicalStable: PhysName;
-        physicalNew: PhysName;
-        deps: std_logic_vector(0 to PIPE_WIDTH-1);
-        sourceStable: std_logic; 
-        sourceNew: std_logic; 
-        sourceReady: std_logic; 
-    end record;
+type ArgRenameState is record
+    sel: std_logic;
+    const: std_logic;
+    virtual: RegName;
+    physical: PhysName;
+    physicalStable: PhysName;
+    physicalNew: PhysName;
+    deps: std_logic_vector(0 to PIPE_WIDTH-1);
+    sourceStable: std_logic; 
+    sourceNew: std_logic; 
+    sourceReady: std_logic; 
+end record;
 
-    constant DEFAULT_ARG_RENAME_STATE: ArgRenameState := (
-        virtual => (others => '0'),
-        physical => (others => '0'),
-        physicalStable => (others => '0'),
-        physicalNew => (others => '0'),
-        deps => (others => '0'),
-        const => '1',
-        sourceStable => '1',
-        others => '0'
-    );
+constant DEFAULT_ARG_RENAME_STATE: ArgRenameState := (
+    virtual => (others => '0'),
+    physical => (others => '0'),
+    physicalStable => (others => '0'),
+    physicalNew => (others => '0'),
+    deps => (others => '0'),
+    const => '1',
+    sourceStable => '1',
+    others => '0'
+);
 
-    type ArgRenameStateArray is array(natural range <>) of ArgRenameState;
+type ArgRenameStateArray is array(natural range <>) of ArgRenameState;
 
 type RenameInfo is record
     dbInfo: InstructionDebugInfo;
@@ -622,7 +618,6 @@ function updateArgStates(riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_l
 begin
     for i in 0 to PIPE_WIDTH-1 loop
         for j in 0 to 2 loop
-            --res(3*i to 3*i + 2) := ((riaInt(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaInt(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
             res(3*i + j) := ((riaInt(i).argStates(j).sourceStable or readyRegFlags(3*i +j)) and not riaInt(i).argStates(j).sourceNew);-- and not riaFloat(i).sourcesNew);
         end loop;
     end loop;
@@ -634,7 +629,6 @@ function updateArgStatesFloat(riaInt, riaFloat: RenameInfoArray; readyRegFlags: 
 begin
     for i in 0 to PIPE_WIDTH-1 loop
         for j in 0 to 2 loop
-            --res(3*i to 3*i + 2) := ((riaFloat(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaFloat(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
             res(3*i + j) := ((riaFloat(i).argStates(j).sourceStable or readyRegFlags(3*i +j)) and not riaFloat(i).argStates(j).sourceNew);-- and not riaFloat(i).sourcesNew);
         end loop;
     end loop;
@@ -646,16 +640,10 @@ function replaceDests(insVec: InstructionSlotArray; ria: RenameInfoArray) return
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
     for i in res'range loop
-      --   res(i).ins.physicalArgSpec.intDestSel := ria(i).destSel and not ria(i).destSelFP;
-      --   res(i).ins.physicalArgSpec.floatDestSel := ria(i).destSelFP;
-         
-       --  res(i).ins.physicalArgSpec.dest := ria(i).physicalDest;
-            res(i).ins.dest_T := ria(i).physicalDest;
+        res(i).ins.dest_T := ria(i).physicalDest;
     end loop;
     return res;
 end function;
-
-
 
 
 function findDeps(ia: BufferEntryArray) return DependencyVec is
@@ -741,7 +729,6 @@ begin
     for i in res'range loop
         res(i).ins.specificOperation.float := FpOp'val(slv2u(res(i).ins.specificOperation.bits));
         res(i).ins.virtualArgSpec.intDestSel := '0';          
-        --res(i).ins.physicalArgSpec.intDestSel := '0';        
     end loop;
     return res;
 end function;
@@ -752,7 +739,6 @@ begin
     for i in res'range loop     
         res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
         res(i).ins.virtualArgSpec.floatDestSel := '0';          
-        --res(i).ins.physicalArgSpec.floatDestSel := '0';          
     end loop;  
     return res;
 end function;
@@ -763,7 +749,6 @@ begin
     for i in res'range loop     
         res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
         res(i).ins.virtualArgSpec.floatDestSel := '0';          
-        --res(i).ins.physicalArgSpec.floatDestSel := '0';          
     end loop;  
     return res;
 end function;
