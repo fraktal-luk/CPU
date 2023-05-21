@@ -17,10 +17,7 @@ use work.ForwardingNetwork.all;
 
 package LogicIssue is
 
---constant PHYS_NAME_NONE: PhysName := (others => '0');
-
 constant IQ_HOLD_TIME: natural := 3;
-
 
 -- Scheduler transient
 type WakeupStruct is record
@@ -76,6 +73,8 @@ constant DEFUALT_SCHEDULER_UPDATE_CONFIG: SchedulerUpdateConfig := (
 
 type WakeupStructArray2D is array(natural range <>, natural range <>) of WakeupStruct;
 
+type IqSelector is (I0, I1, M0, SVI, SVF, F0);
+
 ---------------------------------------------------------------------------------------------------------------------------------------
 -- Enqueue
 function getNewLocs_N(fullMask: std_logic_vector; tags: SmallNumberArray; newArr: SchedulerInfoArray) return slv2D;
@@ -85,8 +84,8 @@ function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri:
 function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo;
                                 TMP_renamedDest: SmallNumber; TMP_renamedSrcs: SmallNumberArray(0 to 2)) return DynamicInfo;
 
-function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray;
-                           TMP_renamedDests: SmallNumberArray; TMP_renamedSources: SmallNumberArray) return SchedulerInfoArray;
+function getIssueInfoArray(insVec: InstructionSlotArray; constant USE_IMM: boolean; ria: RenameInfoArray;
+                           TMP_renamedDests: SmallNumberArray; TMP_renamedSources: SmallNumberArray; iqSel: IqSelector) return SchedulerInfoArray;
 -------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -99,14 +98,15 @@ function getFastWakeups_N2(content: SchedulerInfoArray; bypass: BypassState; con
 
 function getInitWakeups(content: SchedulerInfoArray; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
 
-
 function updateSchedulerArray_N(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
+return SchedulerInfoArray;
+
+function updateOnDispatch(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; readyRegFlags: std_logic_vector; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfoArray;
 
 function updateSchedulerArray_S_NEW(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfoArray;
 
-  
 function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray;
 
 function iqNext_NS(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
@@ -115,8 +115,15 @@ return SchedulerInfoArray;
 function iqNext_NS_2(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
 return SchedulerInfoArray;
 
-
 function updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D;
+
+
+
+function getTrialMask(content: SchedulerInfoArray; events: EventState) return std_logic_vector;
+function getReadyMask(content: SchedulerInfoArray) return std_logic_vector;
+function getFullMask(content: SchedulerInfoArray) return std_logic_vector;
+function getFreedMask(content: SchedulerInfoArray) return std_logic_vector;
+function getTrialUpdatedMask(content: SchedulerInfoArray) return std_logic_vector;
 
 
 -- issue
@@ -126,15 +133,6 @@ function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) 
 
 function getSchedEntrySlot(info: SchedulerInfo; full: std_logic; iqTag: SmallNumber) return SchedulerState;
 function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
-
-
-
-
-function getTrialMask(content: SchedulerInfoArray; events: EventState) return std_logic_vector;
-function getReadyMask(content: SchedulerInfoArray) return std_logic_vector;
-function getFullMask(content: SchedulerInfoArray) return std_logic_vector;
-function getFreedMask(content: SchedulerInfoArray) return std_logic_vector;
-function getTrialUpdatedMask(content: SchedulerInfoArray) return std_logic_vector;
 
 
 -- Debug functions
@@ -303,16 +301,47 @@ package body LogicIssue is
     end function; 
 
 
-    function getIssueInfoArray(insVec: InstructionSlotArray; mask: std_logic_vector; constant USE_IMM: boolean; ria: RenameInfoArray;
-                                    TMP_renamedDests: SmallNumberArray; TMP_renamedSources: SmallNumberArray) return SchedulerInfoArray is
+    function getIssueInfoArray(insVec: InstructionSlotArray; constant USE_IMM: boolean; ria: RenameInfoArray;
+                                    TMP_renamedDests: SmallNumberArray; TMP_renamedSources: SmallNumberArray; iqSel: IqSelector) return SchedulerInfoArray is
         variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1);
         variable slot: InstructionSlot := DEFAULT_INS_SLOT;
         variable argInfo: RenameInfo := DEFAULT_RENAME_INFO;
+        
+        variable recoded: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+        variable mask_N: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+        variable ria_N: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
     begin
+            case iqSel is
+                when I0 =>
+                    recoded := TMP_recodeAlu(insVec);
+                    mask_N := getAluMask1(insVec);
+                    ria_N := removeArg2(ria);
+                when I1 =>
+                    recoded := TMP_recodeMul(insVec);
+                    mask_N := getMulMask1(insVec);
+                    ria_N := removeArg2(ria);
+                when M0 =>
+                    recoded := insVec;
+                    mask_N := getMemMask1(insVec);
+                    ria_N := removeArg2(swapArgs12(ria));
+                when SVI =>
+                    recoded := insVec;
+                    mask_N := getIntStoreMask1(insVec);
+                    ria_N := useStoreArg2(swapArgs12(ria));
+                when SVF =>
+                    recoded := insVec;
+                    mask_N := getFloatStoreMask1(insVec);
+                    ria_N := useStoreArg2(swapArgs12(ria));
+                when F0 =>
+                    recoded := TMP_recodeFP(insVec);
+                    mask_N := getFpMask1(insVec);
+                    ria_N := ria;
+            end case;
+    
         for i in res'range loop
-            argInfo := ria(i);
-            slot := insVec(i);
-            slot.full := mask(i);
+            argInfo := ria_N(i);
+            slot := recoded(i);
+            slot.full := mask_N(i);
             res(i).static := getIssueStaticInfo(slot, USE_IMM, argInfo);
             res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, argInfo, TMP_renamedDests(i), TMP_renamedSources(3*i to 3*i + 2));
         end loop;
@@ -666,7 +695,6 @@ end function;
     end function;
 -----------------------
 
-
     function updateSchedulerState_S_NEW(state: SchedulerInfo; wups: WakeupStructArray2D; k: natural)
     return SchedulerInfo is
         variable res: SchedulerInfo := state;
@@ -723,6 +751,18 @@ end function;
         end loop;    
         return res;
     end function;
+
+        function updateOnDispatch(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; readyRegFlags: std_logic_vector; memFail: std_logic; config: SchedulerUpdateConfig)
+        return SchedulerInfoArray is
+            variable res: SchedulerInfoArray(0 to schedArray'length-1);
+        begin
+            for i in schedArray'range loop
+                res(i) := updateSchedulerState_N(schedArray(i), wakeups, i, memFail, config);
+            end loop;    
+
+            res := prepareNewArr(res, readyRegFlags);
+            return res;
+        end function;
 
 
     function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray is
