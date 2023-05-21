@@ -77,7 +77,6 @@ type IqSelector is (I0, I1, M0, SVI, SVF, F0);
 
 ---------------------------------------------------------------------------------------------------------------------------------------
 -- Enqueue
-function getNewLocs_N(fullMask: std_logic_vector; tags: SmallNumberArray; newArr: SchedulerInfoArray) return slv2D;
 
 function prepareNewArr(input: SchedulerInfoArray; rrf: std_logic_vector) return SchedulerInfoArray;
 function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo; 
@@ -86,6 +85,8 @@ function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant 
 
 function getIssueInfoArray(insVec: InstructionSlotArray; constant USE_IMM: boolean; ria: RenameInfoArray;
                            TMP_renamedDests: SmallNumberArray; TMP_renamedSources: SmallNumberArray; iqSel: IqSelector) return SchedulerInfoArray;
+                           
+function getNewLocs_N(fullMask: std_logic_vector; tags: SmallNumberArray; newArr: SchedulerInfoArray) return slv2D;
 -------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -100,6 +101,10 @@ function getInitWakeups(content: SchedulerInfoArray; bypass: BypassState; config
 
 function updateSchedulerArray_N(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfoArray;
+
+
+--    function updateSchedulerState_N(state: SchedulerInfo; wups: WakeupStructArray2D; k: natural; memFail: std_logic; config: SchedulerUpdateConfig)
+--    return SchedulerInfo;
 
 function updateOnDispatch(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; readyRegFlags: std_logic_vector; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfoArray;
@@ -179,6 +184,172 @@ package body LogicIssue is
        end loop;
        return res;
     end function;
+    
+    function prepareNewArr(input: SchedulerInfoArray; rrf: std_logic_vector) return SchedulerInfoArray is
+        variable res: SchedulerInfoArray(input'range) := input;
+        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
+    begin
+        for j in 0 to PIPE_WIDTH-1 loop
+            rm(3*j to 3*j + 2) := (others => input(j).dynamic.full); 
+        end loop;
+
+        rrfFull := rm and rrf;
+        res := restoreRenameIndex(updateRR(input, rrfFull));
+        return res;
+    end function;
+    
+
+        function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo is
+            variable res: StaticInfo;
+        begin
+            res.dbInfo := isl.ins.dbInfo;
+    
+            res.operation := isl.ins.specificOperation;
+    
+            res.branchIns := isl.ins.typeInfo.branchIns;      
+    
+            res.tags := isl.ins.tags;
+    
+            res.immediate := isl.ins.constantArgs.immSel and bool2std(HAS_IMM);    
+            res.immValue := isl.ins.constantArgs.imm(15 downto 0);
+            
+            if HAS_IMM and isl.ins.constantArgs.immSel = '1' then    
+                if IMM_AS_REG then    
+                    if CLEAR_DEBUG_INFO then
+                        res.immValue(PhysName'length-2 downto 0) := (others => '0');
+                    end if;
+                end if;
+            end if;
+    
+            for i in 0 to 2 loop
+                res.zero(i) := ri.argStates(i).const;
+            end loop;
+            
+            if not HAS_IMM then
+                res.immediate := '0';            
+            end if;        
+                           
+            return res;
+        end function; 
+    
+    
+        function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo;
+                                        TMP_renamedDest: SmallNumber; TMP_renamedSrcs: SmallNumberArray(0 to 2)) return DynamicInfo is
+            variable res: DynamicInfo := DEFAULT_DYNAMIC_INFO;
+        begin
+            res.full := isl.full;
+    
+            res.status.active := res.full
+                                            and not isDivOp(stInfo.operation);
+                res.status.suspend := res.full and isDivOp(stInfo.operation);
+    
+            res.renameIndex := isl.ins.tags.renameIndex;
+    
+            res.intDestSel := ri.destSel and not ri.destSelFP;
+            res.floatDestSel := ri.destSelFP;
+            res.dest := ri.physicalDest;
+    
+            for i in 0 to 2 loop
+                res.argStates(i).dbDep := DB_setProducer(res.argStates(i).dbDep, ri.dbDepTags(i));
+            
+                res.argStates(i).used := ri.argStates(i).sel;
+                res.argStates(i).zero := ri.argStates(i).const;
+                res.argStates(i).reg := ri.argStates(i).physicalNew;
+                res.argStates(i).iqTag := TMP_renamedSrcs(i);
+    
+                -- Possibility to implement late allocation or advanced renaming schemes - delayed selection of args
+                if false then
+                    if ri.argStates(i).sourceNew = '1' then
+                        res.argStates(i).reg := ri.argStates(i).physicalNew;
+                    elsif ri.argStates(i).sourceStable = '1' then
+                        res.argStates(i).reg := ri.argStates(i).physicalStable;
+                    else
+                        res.argStates(i).reg := ri.argStates(i).physical;
+                    end if;
+                end if;
+    
+                if i = 1 then
+                    res.argStates(i).imm := stInfo.immediate;
+                    res.argStates(i).value := stInfo.immValue;
+                end if;
+    
+                res.argStates(i).canFail := '0';
+                res.argStates(i).waiting := not stInfo.zero(i);
+                res.argStates(i).stored := '0';
+    
+                res.argStates(i).srcPipe := (others => '0');
+                res.argStates(i).srcStage := "00000010";
+            end loop;
+    
+            if IMM_AS_REG and HAS_IMM and isl.ins.constantArgs.immSel = '1' then
+               res.argStates(1).reg := isl.ins.constantArgs.imm(PhysName'length-1 downto 0);
+               res.argStates(1).reg(7) := '0';
+            end if;
+              
+            return res;
+        end function; 
+    
+    
+        function getIssueInfoArray(insVec: InstructionSlotArray; constant USE_IMM: boolean; ria: RenameInfoArray;
+                                        TMP_renamedDests: SmallNumberArray; TMP_renamedSources: SmallNumberArray; iqSel: IqSelector) return SchedulerInfoArray is
+            variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1);
+            variable slot: InstructionSlot := DEFAULT_INS_SLOT;
+            variable argInfo: RenameInfo := DEFAULT_RENAME_INFO;
+            
+            variable recoded: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+            variable mask_N: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+            variable ria_N: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+        begin
+                case iqSel is
+                    when I0 =>
+                        recoded := TMP_recodeAlu(insVec);
+                        mask_N := getAluMask1(insVec);
+                        ria_N := removeArg2(ria);
+                    when I1 =>
+                        recoded := TMP_recodeMul(insVec);
+                        mask_N := getMulMask1(insVec);
+                        ria_N := removeArg2(ria);
+                    when M0 =>
+                        recoded := insVec;
+                        mask_N := getMemMask1(insVec);
+                        ria_N := removeArg2(swapArgs12(ria));
+                    when SVI =>
+                        recoded := insVec;
+                        mask_N := getIntStoreMask1(insVec);
+                        ria_N := useStoreArg2(swapArgs12(ria));
+                    when SVF =>
+                        recoded := insVec;
+                        mask_N := getFloatStoreMask1(insVec);
+                        ria_N := useStoreArg2(swapArgs12(ria));
+                    when F0 =>
+                        recoded := TMP_recodeFP(insVec);
+                        mask_N := getFpMask1(insVec);
+                        ria_N := ria;
+                end case;
+        
+            for i in res'range loop
+                argInfo := ria_N(i);
+                slot := recoded(i);
+                slot.full := mask_N(i);
+                res(i).static := getIssueStaticInfo(slot, USE_IMM, argInfo);
+                res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, argInfo, TMP_renamedDests(i), TMP_renamedSources(3*i to 3*i + 2));
+            end loop;
+            return res;    
+        end function;
+        
+        function updateOnDispatch(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; readyRegFlags: std_logic_vector; memFail: std_logic; config: SchedulerUpdateConfig)
+        return SchedulerInfoArray is
+            variable res: SchedulerInfoArray(0 to schedArray'length-1);
+        begin
+            for i in schedArray'range loop
+            --    res(i) := updateSchedulerState_N(schedArray(i), wakeups, i, memFail, config);
+            end loop;
+            res := updateSchedulerArray_N(schedArray, wakeups, memFail, config);
+
+            res := prepareNewArr(res, readyRegFlags);
+            return res;
+        end function;
+    -------------------------------------------------
 ------------------------------
     
     function getNewLocs_N(fullMask: std_logic_vector; tags: SmallNumberArray; newArr: SchedulerInfoArray) return slv2D is
@@ -196,158 +367,9 @@ package body LogicIssue is
     end function;
 
 
-    function prepareNewArr(input: SchedulerInfoArray; rrf: std_logic_vector) return SchedulerInfoArray is
-        variable res: SchedulerInfoArray(input'range) := input;
-        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
-    begin
-        for j in 0 to PIPE_WIDTH-1 loop
-            rm(3*j to 3*j + 2) := (others => input(j).dynamic.full); 
-        end loop;
 
-        rrfFull := rm and rrf;
-        res := restoreRenameIndex(updateRR(input, rrfFull));
-        return res;
-    end function;	
 		
-    
-    function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo is
-        variable res: StaticInfo;
-    begin
-        res.dbInfo := isl.ins.dbInfo;
 
-        res.operation := isl.ins.specificOperation;
-
-        res.branchIns := isl.ins.typeInfo.branchIns;      
-
-        res.tags := isl.ins.tags;
-
-        res.immediate := isl.ins.constantArgs.immSel and bool2std(HAS_IMM);    
-        res.immValue := isl.ins.constantArgs.imm(15 downto 0);
-        
-        if HAS_IMM and isl.ins.constantArgs.immSel = '1' then    
-            if IMM_AS_REG then    
-                if CLEAR_DEBUG_INFO then
-                    res.immValue(PhysName'length-2 downto 0) := (others => '0');
-                end if;
-            end if;
-        end if;
-
-        for i in 0 to 2 loop
-            res.zero(i) := ri.argStates(i).const;
-        end loop;
-        
-        if not HAS_IMM then
-            res.immediate := '0';            
-        end if;        
-                       
-        return res;
-    end function; 
-
-
-    function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo;
-                                    TMP_renamedDest: SmallNumber; TMP_renamedSrcs: SmallNumberArray(0 to 2)) return DynamicInfo is
-        variable res: DynamicInfo := DEFAULT_DYNAMIC_INFO;
-    begin
-        res.full := isl.full;
-
-        res.status.active := res.full
-                                        and not isDivOp(stInfo.operation);
-            res.status.suspend := res.full and isDivOp(stInfo.operation);
-
-        res.renameIndex := isl.ins.tags.renameIndex;
-
-        res.intDestSel := ri.destSel and not ri.destSelFP;
-        res.floatDestSel := ri.destSelFP;
-        res.dest := ri.physicalDest;
-
-        for i in 0 to 2 loop
-            res.argStates(i).dbDep := DB_setProducer(res.argStates(i).dbDep, ri.dbDepTags(i));
-        
-            res.argStates(i).used := ri.argStates(i).sel;
-            res.argStates(i).zero := ri.argStates(i).const;
-            res.argStates(i).reg := ri.argStates(i).physicalNew;
-            res.argStates(i).iqTag := TMP_renamedSrcs(i);
-
-            -- Possibility to implement late allocation or advanced renaming schemes - delayed selection of args
-            if false then
-                if ri.argStates(i).sourceNew = '1' then
-                    res.argStates(i).reg := ri.argStates(i).physicalNew;
-                elsif ri.argStates(i).sourceStable = '1' then
-                    res.argStates(i).reg := ri.argStates(i).physicalStable;
-                else
-                    res.argStates(i).reg := ri.argStates(i).physical;
-                end if;
-            end if;
-
-            if i = 1 then
-                res.argStates(i).imm := stInfo.immediate;
-                res.argStates(i).value := stInfo.immValue;
-            end if;
-
-            res.argStates(i).canFail := '0';
-            res.argStates(i).waiting := not stInfo.zero(i);
-            res.argStates(i).stored := '0';
-
-            res.argStates(i).srcPipe := (others => '0');
-            res.argStates(i).srcStage := "00000010";
-        end loop;
-
-        if IMM_AS_REG and HAS_IMM and isl.ins.constantArgs.immSel = '1' then
-           res.argStates(1).reg := isl.ins.constantArgs.imm(PhysName'length-1 downto 0);
-           res.argStates(1).reg(7) := '0';
-        end if;
-          
-        return res;
-    end function; 
-
-
-    function getIssueInfoArray(insVec: InstructionSlotArray; constant USE_IMM: boolean; ria: RenameInfoArray;
-                                    TMP_renamedDests: SmallNumberArray; TMP_renamedSources: SmallNumberArray; iqSel: IqSelector) return SchedulerInfoArray is
-        variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1);
-        variable slot: InstructionSlot := DEFAULT_INS_SLOT;
-        variable argInfo: RenameInfo := DEFAULT_RENAME_INFO;
-        
-        variable recoded: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-        variable mask_N: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
-        variable ria_N: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
-    begin
-            case iqSel is
-                when I0 =>
-                    recoded := TMP_recodeAlu(insVec);
-                    mask_N := getAluMask1(insVec);
-                    ria_N := removeArg2(ria);
-                when I1 =>
-                    recoded := TMP_recodeMul(insVec);
-                    mask_N := getMulMask1(insVec);
-                    ria_N := removeArg2(ria);
-                when M0 =>
-                    recoded := insVec;
-                    mask_N := getMemMask1(insVec);
-                    ria_N := removeArg2(swapArgs12(ria));
-                when SVI =>
-                    recoded := insVec;
-                    mask_N := getIntStoreMask1(insVec);
-                    ria_N := useStoreArg2(swapArgs12(ria));
-                when SVF =>
-                    recoded := insVec;
-                    mask_N := getFloatStoreMask1(insVec);
-                    ria_N := useStoreArg2(swapArgs12(ria));
-                when F0 =>
-                    recoded := TMP_recodeFP(insVec);
-                    mask_N := getFpMask1(insVec);
-                    ria_N := ria;
-            end case;
-    
-        for i in res'range loop
-            argInfo := ria_N(i);
-            slot := recoded(i);
-            slot.full := mask_N(i);
-            res(i).static := getIssueStaticInfo(slot, USE_IMM, argInfo);
-            res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, argInfo, TMP_renamedDests(i), TMP_renamedSources(3*i to 3*i + 2));
-        end loop;
-        return res;    
-    end function;
--------------------------------------------------
 
 
 --------------------------------------------------
@@ -752,17 +774,7 @@ end function;
         return res;
     end function;
 
-        function updateOnDispatch(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; readyRegFlags: std_logic_vector; memFail: std_logic; config: SchedulerUpdateConfig)
-        return SchedulerInfoArray is
-            variable res: SchedulerInfoArray(0 to schedArray'length-1);
-        begin
-            for i in schedArray'range loop
-                res(i) := updateSchedulerState_N(schedArray(i), wakeups, i, memFail, config);
-            end loop;    
 
-            res := prepareNewArr(res, readyRegFlags);
-            return res;
-        end function;
 
 
     function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray is

@@ -423,24 +423,18 @@ begin
 
             signal outSigsI0: IssueQueueSignals := (others => '0');
 
-            signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU, schedInfoUpdatedU_Alt: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
+            signal schedInfoA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
             signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
             signal dataToAlu: ExecResult := DEFAULT_EXEC_RESULT;           
 
             constant CFG_ALU: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
-            constant CFG_ALU_WAIT: SchedulerUpdateConfig := (false, false, false, FORWARDING_MODES_INT_D, false);
-            constant CFG_ALU_SEL: SchedulerUpdateConfig :=  (false, false, false, FORWARDING_MODES_INT, false);
+            constant CFG_ALU_WAIT: SchedulerUpdateConfig := (false, false, false, FORWARDING_MODES_INT_D, false); -- UNUSED
+            constant CFG_ALU_SEL: SchedulerUpdateConfig :=  (false, false, false, FORWARDING_MODES_INT, false);   -- UNUSED
         begin
             wups <= work.LogicIssue.getInitWakeups(schedInfoA, bypassInt, CFG_ALU);
 
             schedInfoA <= getIssueInfoArray(renamedDataLivingRe, true, renamedArgsInt, TMP_renamedDests, TMP_renamedSources, I0);
             schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, readyRegFlagsInt_Early, memFail, CFG_ALU);
-
-                schedInfoUpdatedA <= updateSchedulerArray_N(schedInfoA, wups, memFail, CFG_ALU);
-                schedInfoUpdatedU_Alt <= prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early );
-
-                ch0 <= bool2std(schedInfoUpdatedU_Alt = schedInfoUpdatedU);
-            
 
             IQUEUE_I0: entity work.IssueQueue(Behavioral)
             generic map(
@@ -539,7 +533,7 @@ begin
 
                signal outSigsI1: IssueQueueSignals := (others => '0');
 
-               signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
+               signal schedInfoA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
                signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
 
                signal divUnlock, divUnlock_Alt, killFollowerNextI1: std_logic := '0';
@@ -548,8 +542,7 @@ begin
                 wups <= getInitWakeups(schedInfoA, bypassInt, CFG_MUL);
 
                 schedInfoA <= getIssueInfoArray(renamedDataLivingRe, true, renamedArgsInt, TMP_renamedDests, TMP_renamedSources, I1);
-                schedInfoUpdatedA <= updateSchedulerArray_N(schedInfoA, wups, memFail, CFG_MUL);
-                schedInfoUpdatedU <= prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early );
+                schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, readyRegFlagsInt_Early, memFail, CFG_MUL);
 
                 IQUEUE_I1: entity work.IssueQueue(Behavioral)
                 generic map(
@@ -655,7 +648,7 @@ begin
 
             signal outSigsM0: IssueQueueSignals := (others => '0');
 
-            signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
+            signal schedInfoA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
             signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
 
             constant CFG_MEM: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
@@ -667,8 +660,7 @@ begin
             wups <= work.LogicIssue.getInitWakeups(schedInfoA, bypassInt, CFG_MEM);
 
             schedInfoA <= getIssueInfoArray(renamedDataLivingRe, true, renamedArgsMerged, TMP_renamedDests, TMP_renamedSources, M0);         
-            schedInfoUpdatedA <= updateSchedulerArray_N(schedInfoA, wups, memFail, CFG_MEM);
-            schedInfoUpdatedU <= prepareNewArr( schedInfoUpdatedA, readyRegFlagsInt_Early_Mem );
+            schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, readyRegFlagsInt_Early_Mem, memFail, CFG_MEM);
 
             IQUEUE_MEM: entity work.IssueQueue(Behavioral)
             generic map(
@@ -818,8 +810,7 @@ begin
             use work.LogicArgRead.all;
        
             signal sendingToRegReadIntSV, sendingToStoreWrite: std_logic := '0';
-            signal schedInfoIntA, schedInfoUpdatedIntA, schedInfoUpdatedIntU, schedInfoFloatA, schedInfoUpdatedFloatA, schedInfoUpdatedFloatU: SchedulerInfoArray(0 to PIPE_WIDTH-1)
-                        := (others => DEFAULT_SCHEDULER_INFO);
+            signal schedInfoIntA, schedInfoUpdatedIntU, schedInfoFloatA, schedInfoUpdatedFloatU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
 
             constant CFG_SVI: SchedulerUpdateConfig := (true, false, true, FORWARDING_MODES_SV_INT_D, false);
             constant CFG_SVF: SchedulerUpdateConfig := (true, true, true, FORWARDING_MODES_SV_FLOAT_D, false);
@@ -844,14 +835,10 @@ begin
             wupsFloat <= getInitWakeups(schedInfoFloatA, bypassFloatSV, CFG_SVF);
 
             schedInfoIntA <= getIssueInfoArray(renamedDataLivingRe, false, renamedArgsInt, TMP_renamedDests, TMP_renamedSources, SVI);
-            schedInfoUpdatedIntA <= updateSchedulerArray_N(schedInfoIntA, wupsInt, memFail, CFG_SVI);
+            schedInfoUpdatedIntU <= updateOnDispatch(schedInfoIntA, wupsInt, readyRegFlagsSV, memFail, CFG_SVI);
 
             schedInfoFloatA <= getIssueInfoArray(renamedDataLivingRe, false, renamedArgsFloat, TMP_renamedDests, TMP_renamedSources, SVF);
-            schedInfoUpdatedFloatA <= updateSchedulerArray_N(schedInfoFloatA, wupsFloat, memFail, CFG_SVF);
-
-            schedInfoUpdatedIntU <= prepareNewArr( schedInfoUpdatedIntA, readyRegFlagsSV );
-            schedInfoUpdatedFloatU <= prepareNewArr( schedInfoUpdatedFloatA, readyRegFlagsFloatSV );
-
+            schedInfoUpdatedFloatU <= updateOnDispatch(schedInfoFloatA, wupsFloat, readyRegFlagsFloatSV, memFail, CFG_SVF);
 
             readyRegFlagsSV <= reorder(readyRegFlagsInt_Early);
             
@@ -979,15 +966,14 @@ begin
             use work.LogicArgRead.all;
 
             signal outSigsF0: IssueQueueSignals := (others => '0');
-            signal schedInfoA, schedInfoUpdatedA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1);
+            signal schedInfoA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1);
             signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
             constant CFG_FP0: SchedulerUpdateConfig := (true, true, false, FORWARDING_MODES_FLOAT_D, false);
         begin
             wups <= getInitWakeups(schedInfoA, bypassFloat, CFG_FP0);
 
             schedInfoA <= getIssueInfoArray(renamedDataLivingRe, false, renamedArgsFloat, TMP_renamedDests, TMP_renamedSources, F0);
-            schedInfoUpdatedA <= updateSchedulerArray_N(schedInfoA, wups, memFail, CFG_FP0);
-            schedInfoUpdatedU <= prepareNewArr( schedInfoUpdatedA, readyRegFlagsFloat_Early );
+            schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, readyRegFlagsFloat_Early, memFail, CFG_FP0);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)
             generic map(
