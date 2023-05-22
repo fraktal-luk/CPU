@@ -114,10 +114,10 @@ return SchedulerInfoArray;
 
 function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray;
 
-function iqNext_NS(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
+function updateQueueState(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
 return SchedulerInfoArray;
 
-function iqNext_NS_2(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
+function storeInput(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
 return SchedulerInfoArray;
 
 function updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D;
@@ -207,7 +207,8 @@ package body LogicIssue is
             res.operation := isl.ins.specificOperation;
     
             res.branchIns := isl.ins.typeInfo.branchIns;      
-    
+                res.divIns := isDivOp(isl.ins.specificOperation);
+
             res.tags := isl.ins.tags;
     
             res.immediate := isl.ins.constantArgs.immSel and bool2std(HAS_IMM);    
@@ -228,7 +229,7 @@ package body LogicIssue is
             if not HAS_IMM then
                 res.immediate := '0';            
             end if;        
-                           
+
             return res;
         end function; 
     
@@ -238,11 +239,17 @@ package body LogicIssue is
             variable res: DynamicInfo := DEFAULT_DYNAMIC_INFO;
         begin
             res.full := isl.full;
-    
-            res.status.active := res.full
-                                            and not isDivOp(stInfo.operation);
-                res.status.suspend := res.full and isDivOp(stInfo.operation);
-    
+
+            res.status.trial := '1'; -- Must be 1 because it's younger than any Exec instruction
+            res.status.active := res.full and not stInfo.divIns;
+            res.status.suspend := res.full and stInfo.divIns;
+
+            if stInfo.divIns = '1' then
+                res.status.state := suspended;
+            else
+                res.status.state := active;
+            end if;
+
             res.renameIndex := isl.ins.tags.renameIndex;
     
             res.intDestSel := ri.destSel and not ri.destSelFP;
@@ -678,11 +685,15 @@ end function;
     function removeEntry(entry: SchedulerInfo) return SchedulerInfo is
         variable res: SchedulerInfo := entry;
     begin
+            res.dynamic.status.state := empty;
+          --  res.dynamic.currentState := empty;
+    
         res.dynamic.full := '0';
 
         res.dynamic.status.issued := '0';
         res.dynamic.status.active := '0';
-            res.dynamic.status.suspend := '0';
+        res.dynamic.status.suspend := '0';
+
         res.dynamic.status.stageCtr := sn(0);
         return res;
     end function;
@@ -690,28 +701,57 @@ end function;
     function pullbackEntry(entry: SchedulerInfo) return SchedulerInfo is
         variable res: SchedulerInfo := entry;
     begin
+            if --isDivOp(res.static.operation) = '1' then
+                res.static.divIns = '1' then
+                
+                res.dynamic.status.state := suspended;
+               -- res.dynamic.currentState := suspended;
+            else
+                res.dynamic.status.state := active;
+               -- res.dynamic.currentState := active;
+            end if;
+            
         res.dynamic.status.issued := '0';
-        res.dynamic.status.active := '1'
-                                            and not isDivOp(res.static.operation);
-                res.dynamic.status.suspend := '1'
-                                                   and isDivOp(res.static.operation);
+        res.dynamic.status.active := '1' and not --isDivOp(res.static.operation);
+                                                 res.static.divIns;
+        res.dynamic.status.suspend := '1' and --isDivOp(res.static.operation);
+                                              res.static.divIns;
+
         res.dynamic.status.stageCtr := sn(0);
         return res;
     end function;
     
+        function incStageCtr(ctr: SmallNumber) return SmallNumber is
+            
+        begin
+            case ctr(1 downto 0) is
+                when "00" => 
+                    return X"01";
+                when "01" =>
+                    return X"02";
+                when others =>
+                    return X"00";
+            end case;
+        end function;
+    
     function updateIssuedEntry(entry: SchedulerInfo) return SchedulerInfo is
         variable res: SchedulerInfo := entry;
     begin
-        res.dynamic.status.stageCtr := addInt(res.dynamic.status.stageCtr, 1);
+        res.dynamic.status.stageCtr := --addInt(res.dynamic.status.stageCtr, 1);
+                                        incStageCtr(res.dynamic.status.stageCtr);
         return res;
     end function;
     
     function issueEntry(entry: SchedulerInfo) return SchedulerInfo is
         variable res: SchedulerInfo := entry;
     begin
+            res.dynamic.status.state := issued;
+         --   res.dynamic.currentState := issued;
+    
         res.dynamic.status.issued := '1';
         res.dynamic.status.active := '0';
-            res.dynamic.status.suspend := '0';
+        res.dynamic.status.suspend := '0';
+
         res.dynamic.status.stageCtr := sn(0);
         return res;
     end function;
@@ -786,7 +826,7 @@ end function;
                 if insertionLocs(k, i) = '1' then
                     res(k) := newArr(i);
                     res(k).dynamic.status.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
-                    res(k).dynamic.currentState := active;
+                --    res(k).dynamic.currentState := active;
                     res(k).dynamic.lastEvent := insert;
                     exit;
                 end if;
@@ -827,7 +867,7 @@ end function;
             end loop;
             -- pragma synthesis on
         end procedure;
-    
+
 
     -- TODO: DB?
     function handleIqDbInfo(queueContent: SchedulerInfoArray) return SchedulerInfoArray is
@@ -859,7 +899,7 @@ end function;
 
 
     -- mark issued/retracted, remove issued or killed
-    function iqNext_NS(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
+    function updateQueueState(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
     return SchedulerInfoArray is
         constant LEN: natural := queueContent'length;
         variable res: SchedulerInfoArray(queueContent'range) := queueContent;
@@ -872,11 +912,9 @@ end function;
                 if slv2u(res(i).dynamic.status.stageCtr) = IQ_HOLD_TIME - 1   then  -- Remove after successful issue
                     res(i) := removeEntry(res(i));
                     res(i).dynamic.status.freed := '1';
-                    res(i).dynamic.currentState := empty;
                     res(i).dynamic.lastEvent := retire;
                 elsif memFail = '1' and queueContent(i).dynamic.status.stageCtr(1 downto 0) = "00" then -- Retract
                     res(i) := pullbackEntry(res(i));
-                    res(i).dynamic.currentState := active;
                     res(i).dynamic.lastEvent := retract;
                 else
                     res(i) := updateIssuedEntry(res(i));
@@ -886,31 +924,32 @@ end function;
             -- set issued
             if (selMask(i) and sends) = '1' then
                 res(i) := issueEntry(res(i));
-                res(i).dynamic.currentState := issued;
                 res(i).dynamic.lastEvent := issue;
             end if;
 
             -- flush on event
             if killMask(i) = '1' then
                 res(i) := removeEntry(res(i));
-                res(i).dynamic.currentState := empty;
                 res(i).dynamic.lastEvent := kill;
             end if;
 
              -- Set age comparison for possible subsequent flush. This is done regardless of other parts of state      
-             res(i).dynamic.status.trial := trialMask(i);        
+            res(i).dynamic.status.trial := trialMask(i);        
 
 
-                    if sends = '1' --and res(i).dynamic.status.active = '1'
-                                    and res(i).dynamic.full = '1'
-                                    and res(i).dynamic.status.issued /= '1'
-                                    and isDivOp(res(i).static.operation) = '1' then
-                        res(i).dynamic.status.active := '0';
-                        res(i).dynamic.status.suspend := '1';
-                    elsif unlockDiv = '1' and res(i).dynamic.full = '1' and res(i).dynamic.status.suspend = '1' and isDivOp(res(i).static.operation) = '1' then
-                        res(i).dynamic.status.active := '1';
-                        res(i).dynamic.status.suspend := '0';
-                    end if;
+                if sends = '1'
+                        and res(i).dynamic.status.issued /= '1'
+                        and res(i).dynamic.full = '1' and res(i).static.divIns = '1' then
+                    res(i).dynamic.status.active := '0';
+                    res(i).dynamic.status.suspend := '1';
+                    res(i).dynamic.status.state := suspended;
+                elsif unlockDiv = '1'
+                        and res(i).dynamic.status.suspend = '1'
+                        and res(i).dynamic.full = '1' and res(i).static.divIns = '1' then
+                    res(i).dynamic.status.active := '1';
+                    res(i).dynamic.status.suspend := '0';
+                    res(i).dynamic.status.state := active;
+                end if;
 
              res(i).dynamic.status.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
         end loop;
@@ -920,21 +959,15 @@ end function;
 
 
     -- Insert new elements, update db info
-    function iqNext_NS_2(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
+    function storeInput(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
     return SchedulerInfoArray is
-        constant LEN: natural := queueContent'length;
         variable res: SchedulerInfoArray(queueContent'range) := queueContent;
-        variable newArr: SchedulerInfoArray(0 to PIPE_WIDTH-1) := inputData;                
-        variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
     begin
-        newArr := inputData;
-           
         if prevSending = '1' then
-            res := insertElements(res, newArr, insertionLocs);
+            res := insertElements(res, inputData, insertionLocs);
         end if;
 
         res := handleIqDbInfo(res);
-
         return res;
     end function;
 
@@ -949,11 +982,20 @@ end function;
             return res;
         end function;
 
+--        function getCurrentStates_O(queueContent: SchedulerInfoArray) return IqStateArray is
+--            variable res: IqStateArray(queueContent'range) := (others => empty);
+--        begin
+--            for i in res'range loop
+--                res(i) := queueContent(i).dynamic.currentState;
+--            end loop;
+--            return res;
+--        end function;
+        
         function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray is
             variable res: IqStateArray(queueContent'range) := (others => empty);
         begin
             for i in res'range loop
-                res(i) := queueContent(i).dynamic.currentState;
+                res(i) := queueContent(i).dynamic.status.state;
             end loop;
             return res;
         end function;
@@ -1054,8 +1096,7 @@ end function;
 
         return res;
     end function;
-    
-    
+
 
 
     function getTrialMask(content: SchedulerInfoArray; events: EventState) return std_logic_vector is
@@ -1071,7 +1112,7 @@ end function;
         variable res: std_logic_vector(content'range) := (others => '0');        
     begin
         for i in res'range loop
-            res(i) := not content(i).dynamic.argStates(0).waiting and not content(i).dynamic.argStates(1).waiting and content(i).dynamic.status.active;
+            res(i) := content(i).dynamic.status.active and not content(i).dynamic.argStates(0).waiting and not content(i).dynamic.argStates(1).waiting;
         end loop;
         return res;
     end function;

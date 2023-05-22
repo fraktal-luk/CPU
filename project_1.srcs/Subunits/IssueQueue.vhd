@@ -75,7 +75,7 @@ architecture Behavioral of IssueQueue is
 
     signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
 
-    signal fullMask, freedMask, readyMask, selMask, selMask1, selMask2: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+    signal fullMask, killMask, freedMask, readyMask, selMask, selMask1, selMask2: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
     signal anyReadyFull, sends, sendingKilled, sentKilled, sentTrial1, sentTrial2: std_logic := '0';
 
@@ -123,22 +123,23 @@ begin
 
     QUEUE_CTRL: block
         signal sendingTrial: std_logic := '0';
-        signal trialMask, trialUpdatedMask, killMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+        signal trialMask, trialUpdatedMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
     begin
         trialMask <= getTrialMask(queueContent, events);
         trialUpdatedMask <= getTrialUpdatedMask(queueContent);
 
         killMask <=   (others => '1') when events.lateEvent = '1' 
-              else trialUpdatedMask  when events.execEvent = '1'
+              else trialUpdatedMask when events.execEvent = '1'
               else (others => '0');
-    
+
         queueContentUpdated <= updateSchedulerArray_N(queueContent, wups, memFail, CFG_WAIT);
-        queueContentUpdated_2 <= iqNext_NS(queueContentUpdated, sends,
-                                    killMask, trialMask, selMask,
-                                    memFail, unlockDiv);
+        queueContentUpdated_2 <= updateQueueState(queueContentUpdated, sends,
+                                                killMask, trialMask, selMask,
+                                                memFail, unlockDiv);
 
         sendingTrial <= isNonzero(selMask and trialUpdatedMask);
-        sendingKilled <= (sendingTrial and events.execEvent) or events.lateEvent;
+        sendingKilled <= --(sendingTrial and events.execEvent) or events.lateEvent;
+                            killFollower(sendingTrial, events);
 
         sentTrial1 <= isNonzero(selMask1 and trialUpdatedMask);
         sentTrial2 <= isNonzero(selMask2 and trialUpdatedMask);
@@ -146,16 +147,16 @@ begin
 
 
     insertionLocs <= getNewLocs_N(fullMask, TMP_tags, newArr);
-    queueContentNext <= iqNext_NS_2(queueContentUpdated_2, newArr, prevSendingOK, insertionLocs);
+    queueContentNext <= storeInput(queueContentUpdated_2, newArr, prevSendingOK, insertionLocs);
 
     ageMatrixNext <= updateAgeMatrix(ageMatrix, insertionLocs, fullMask);
+
 
     readyMask <= getReadyMask(queueContentUpdatedSel);
 
     -- Scalar signals
     anyReadyFull <= isNonzero(readyMask);
     sends <= anyReadyFull and nextAccepting;
-
 
     -- Selection for issue
     selMask <= getSelMask(readyMask, ageMatrix);
@@ -233,8 +234,29 @@ begin
     DEBUG_HANDLING: if DB_ENABLE generate
     
         DB_DATA: block
-            signal lastEvents: IqEventArray(0 to IQ_SIZE-1) := (others => none);
-            signal currentStates: IqStateArray(0 to IQ_SIZE-1) := (others => empty);
+            signal prevKillMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+            signal currentStates, prevStates: IqStateArray(0 to IQ_SIZE-1) := (others => empty);
+                signal queueContentPrev: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
+
+                signal lastEvents, lastEvents_N: IqEventArray(0 to IQ_SIZE-1) := (others => none);
+                function TMP_lastEvent(current, prev: SchedulerInfo; killed: std_logic) return IqEvent is
+                begin
+                    if killed = '1' and prev.dynamic.status.state /= empty then
+                        return kill;
+                    elsif current.dynamic.status.state = issued and prev.dynamic.status.state = active then
+                        return issue;
+                    elsif (current.dynamic.status.state = suspended or current.dynamic.status.state = active) and prev.dynamic.status.state = issued then
+                        return retract;
+                    elsif (current.dynamic.status.state = suspended or current.dynamic.status.state = active) and prev.dynamic.status.state = empty then
+                        return insert;
+                    elsif current.dynamic.status.state = empty and prev.dynamic.status.state = issued then
+                        return retire;
+                    else
+                        return none;
+                    end if;
+                    
+                    return none;
+                end function;
         begin
         
             currentStates <= getCurrentStates(queueContent);
@@ -324,13 +346,17 @@ begin
                         writeline(outFile, currentLine);
                     end loop;
                 end procedure;
-    
+            
             begin
     
                 if rising_edge(clk) then
-                
                     lastEvents <= getLastEvents(queueContentNext);
-                
+
+                    prevKillMask <= killMask;
+                    prevStates <= currentStates;
+                    queueContentPrev <= queueContent;
+
+
                     if DB_LOG_EVENTS then
                         if dbState.dbSignal = '1' then
                             report "IQ reporting ";
@@ -340,6 +366,11 @@ begin
                 end if;
             end process;
     
+            ALT_LAST_EVENTS: for i in 0 to IQ_SIZE-1 generate
+            --begin
+                lastEvents_N(i) <= TMP_lastEvent(queueContent(i), queueContentPrev(i), prevKillMask(i));
+                
+            end generate;
         end block;
 
     end generate;

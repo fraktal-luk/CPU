@@ -288,6 +288,7 @@ type StaticInfo is record
     dbInfo: InstructionDebugInfo;
     operation: SpecificOp;
     branchIns: std_logic;
+            divIns: std_logic;
     tags: InstructionTags;    
     immediate: std_logic;    
     immValue: Hword;
@@ -299,7 +300,11 @@ end record;
 
 -- Scheduler structure
 
+type EntryState is (empty, suspended, active, issued);
+
 type EntryStatus is record
+    state: EntryState;
+
     active: std_logic;
     suspend: std_logic;
     issued: std_logic;
@@ -308,11 +313,17 @@ type EntryStatus is record
     stageCtr: SmallNumber;
 end record;
 
-type IqState is (empty, active, issued, freed);
+--type IqState is (empty, active, issued, suspended, freed);
+subtype IqState is EntryState;
 
 type IqStateArray is array(natural range <>) of IqState;
 
-type IqEvent is (none, insert, kill, issue, retract, retire);
+type IqEvent is (none,
+                    insert, -- empty -> active/suspended
+                    kill,   --  killMask(i)
+                    issue,  -- active -> issued
+                    retract, -- issued -> active/suspended
+                    retire); -- issued -> empty and not killMask(i)
 
 type IqEventArray is array(natural range <>) of IqEvent;
 
@@ -320,7 +331,7 @@ type DynamicInfo is record
     full: std_logic;
     
     status: EntryStatus;
-    currentState: IqState; -- DB
+ --   currentState: IqState; -- DB
     lastEvent: IqEvent; -- DB
 
     renameIndex: InsTag;
@@ -432,6 +443,7 @@ constant DEFAULT_STATIC_INFO: StaticInfo := (
     dbInfo => DEFAULT_DEBUG_INFO,
     operation => DEFAULT_SPECIFIC_OP,
     branchIns => '0',
+        divIns => '0',
     tags => DEFAULT_INSTRUCTION_TAGS,
     immediate => '0',
     immValue => (others => '0'),
@@ -597,6 +609,8 @@ constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
 constant DEFAULT_ARG_STATE: ArgumentState := DEFAULT_ARGUMENT_STATE;
 
 constant DEFAULT_ENTRY_STATUS: EntryStatus := (
+    state => empty,
+
     active => '0',
     suspend => '0',
     issued => '0',
@@ -609,7 +623,7 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     full => '0',
 
     status => DEFAULT_ENTRY_STATUS,
-    currentState => empty,
+   -- currentState => empty,
     lastEvent => none,
 
     renameIndex => (others => '0'),
