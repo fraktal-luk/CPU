@@ -93,6 +93,10 @@ begin
                divRes <= divRem;
             end if;
 
+                if not TMP_ENABLE_DIV then
+                    divRes <= (others => '0');
+                end if;
+
             isLowE1 <= isLowE0;
             resLongE1 <= work.Arith.multiplyLong(arg0, arg1, sg0, sg1);
 

@@ -348,11 +348,7 @@ package body LogicIssue is
         return SchedulerInfoArray is
             variable res: SchedulerInfoArray(0 to schedArray'length-1);
         begin
-            for i in schedArray'range loop
-            --    res(i) := updateSchedulerState_N(schedArray(i), wakeups, i, memFail, config);
-            end loop;
             res := updateSchedulerArray_N(schedArray, wakeups, memFail, config);
-
             res := prepareNewArr(res, readyRegFlags);
             return res;
         end function;
@@ -459,8 +455,7 @@ package body LogicIssue is
     function updateArgInfo_A(argState: ArgumentState) return ArgumentState is
         variable res: ArgumentState := argState;  
     begin
-        res.activeCounter := --addIntTrunc(res.activeCounter, 1, 2);
-                                TMP_incActiveCounter(res.activeCounter);
+        res.activeCounter := TMP_incActiveCounter(res.activeCounter);
         res.srcStage := TMP_incSrcStage(res.srcStage);
         return res;
     end function;
@@ -595,6 +590,7 @@ begin
         if bypass.used(p) /= '1' then
             next;
         end if;
+
 
         if bypass.obj(p).dest(PHYS_REG_BITS-1 downto 0) = arg(PHYS_REG_BITS-1 downto 0) then
             res.match := '1';
@@ -778,7 +774,13 @@ end function;
     begin
         for a in 0 to 1 loop
             wakeups := wups(k, a);
-            res.dynamic.argStates(a) := updateArgInfo_A(res.dynamic.argStates(a));
+            res.dynamic.argStates(a) := updateArgInfo_A(res.dynamic.argStates(a));   -- AC: increments unconditionally
+
+                if res.dynamic.argStates(a).waiting /= '1' then
+                    res.dynamic.argStates(a).readyCtr := TMP_incActiveCounter(res.dynamic.argStates(a).readyCtr);
+                else
+                    res.dynamic.argStates(a).readyCtr := sn(0);
+                end if;
 
             if memFail = '1' and not config.ignoreMemFail then
             -- Resetting to waiting state
@@ -787,7 +789,7 @@ end function;
                 end if;
             else
             -- wakeup
-                res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wakeups);
+                res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wakeups);  -- AC: clears
             end if;
         end loop;
 
@@ -820,14 +822,24 @@ end function;
     function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray is
         constant LEN: natural := content'length;
         variable res: SchedulerInfoArray(content'range) := content;
+        variable newElement: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
     begin
         for i in 0 to PIPE_WIDTH-1 loop
             for k in 0 to LEN-1 loop
                 if insertionLocs(k, i) = '1' then
-                    res(k) := newArr(i);
-                    res(k).dynamic.status.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
+                
+                    newElement := newArr(i);
+                        newElement.dynamic.status.trial := '1';
+                        newElement.dynamic.lastEvent := insert;
+
+                            newElement.dynamic.status.issuedCtr := res(k).dynamic.status.issuedCtr;
+                            newElement.dynamic.argStates(0).readyCtr := res(k).dynamic.argStates(0).readyCtr;
+                            newElement.dynamic.argStates(1).readyCtr := res(k).dynamic.argStates(1).readyCtr;
+                            
+                    res(k) := newElement;
+                --    res(k).dynamic.status.trial := '1'; -- set by default because new elems are obviously younger than an issued branch. will be cleared next cycle if no more on trial
                 --    res(k).dynamic.currentState := active;
-                    res(k).dynamic.lastEvent := insert;
+                --    res(k).dynamic.lastEvent := insert;
                     exit;
                 end if;
             end loop;
@@ -907,29 +919,35 @@ end function;
         for i in 0 to LEN-1 loop
             res(i).dynamic.lastEvent := none;
             res(i).dynamic.status.freed := '0'; -- This is set for 1 cycle when freeing
+                
+                if queueContent(i).dynamic.status.issued = '1' then
+                    res(i).dynamic.status.issuedCtr := incStageCtr(res(i).dynamic.status.issuedCtr);
+                else
+                    res(i).dynamic.status.issuedCtr := sn(0);
+                end if;
 
             if queueContent(i).dynamic.status.issued = '1' then
                 if slv2u(res(i).dynamic.status.stageCtr) = IQ_HOLD_TIME - 1   then  -- Remove after successful issue
-                    res(i) := removeEntry(res(i));
+                    res(i) := removeEntry(res(i));              -- SC: clears
                     res(i).dynamic.status.freed := '1';
                     res(i).dynamic.lastEvent := retire;
                 elsif memFail = '1' and queueContent(i).dynamic.status.stageCtr(1 downto 0) = "00" then -- Retract
-                    res(i) := pullbackEntry(res(i));
+                    res(i) := pullbackEntry(res(i));            --- SC: clears
                     res(i).dynamic.lastEvent := retract;
                 else
-                    res(i) := updateIssuedEntry(res(i));
+                    res(i) := updateIssuedEntry(res(i));         -- SC: inc
                 end if;
             end if;
 
             -- set issued
             if (selMask(i) and sends) = '1' then
-                res(i) := issueEntry(res(i));
+                res(i) := issueEntry(res(i));                     -- SC: clears
                 res(i).dynamic.lastEvent := issue;
             end if;
 
             -- flush on event
             if killMask(i) = '1' then
-                res(i) := removeEntry(res(i));
+                res(i) := removeEntry(res(i));                   -- SC: clears
                 res(i).dynamic.lastEvent := kill;
             end if;
 
@@ -938,7 +956,7 @@ end function;
 
 
                 if sends = '1'
-                        and res(i).dynamic.status.issued /= '1'
+                        and res(i).dynamic.status.issued /= '1' -- TODO: chage to selMask(i)?
                         and res(i).dynamic.full = '1' and res(i).static.divIns = '1' then
                     res(i).dynamic.status.active := '0';
                     res(i).dynamic.status.suspend := '1';
