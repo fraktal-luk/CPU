@@ -90,6 +90,9 @@ function getNewLocs_N(fullMask: std_logic_vector; tags: SmallNumberArray; newArr
 -------------------------------------------------------------------------------------------------------------------------------------------
 
 
+            function TMP_getDbMask(schedArray: SchedulerInfoArray) return std_logic_vector;
+
+
 -- functions - updating
 
 -- API, enqueue and inside IQ
@@ -449,8 +452,19 @@ package body LogicIssue is
         if IS_FP then
             matchingCtr := sn(0);
         end if;
-        return bool2std(state.srcPipe(1 downto 0) = "10" and state.activeCounter = matchingCtr) and not state.zero and not state.waiting;
+        --return bool2std(state.srcPipe(1 downto 0) = "10" and state.activeCounter = matchingCtr) and not state.zero and not state.waiting;
+        return bool2std(state.srcPipe(1 downto 0) = "10" and state.readyCtr = matchingCtr) and not state.zero and not state.waiting;
     end function;
+
+           function dependsOnMemHit_Alt(state: ArgumentState; constant IS_FP: boolean) return std_logic is
+                variable matchingCtr: SmallNumber := sn(1);
+            begin
+                if IS_FP then
+                    matchingCtr := sn(0);
+                end if;
+                --return bool2std(state.srcPipe(1 downto 0) = "10" and state.activeCounter = matchingCtr) and not state.zero and not state.waiting;
+                return bool2std(state.srcPipe(1 downto 0) = "10" and state.readyCtr = matchingCtr) and not state.zero and not state.waiting;
+            end function;
 
     function updateArgInfo_A(argState: ArgumentState) return ArgumentState is
         variable res: ArgumentState := argState;  
@@ -812,11 +826,27 @@ end function;
     begin
         for i in schedArray'range loop
             res(i) := updateSchedulerState_N(schedArray(i), wakeups, i, memFail, config);
+
+--                    res(i).dynamic.db0 := dependsOnMemHit(res(i).dynamic.argStates(0), config.fp);
+--                    res(i).dynamic.db1 := dependsOnMemHit(res(i).dynamic.argStates(1), config.fp);
+--                    res(i).dynamic.db2 := dependsOnMemHit_Alt(res(i).dynamic.argStates(0), config.fp);
+--                    res(i).dynamic.db3 := dependsOnMemHit_Alt(res(i).dynamic.argStates(1), config.fp);
+                    
+--                    res(i).dynamic.db4 := res(i).dynamic.db0 xor res(i).dynamic.db2;
+--                    res(i).dynamic.db5 := res(i).dynamic.db1 xor res(i).dynamic.db3;
         end loop;    
         return res;
     end function;
 
-
+            function TMP_getDbMask(schedArray: SchedulerInfoArray) return std_logic_vector is
+                variable res: std_logic_vector(0 to schedArray'length-1) := (others => '0');
+            begin
+                for i in 0 to schedArray'length-1 loop
+                    res(i) := schedArray(i).dynamic.db0 xor schedArray(i).dynamic.db1;
+                end loop;
+                     
+                return res;
+            end function;
 
 
     function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray is
@@ -926,8 +956,13 @@ end function;
                     res(i).dynamic.status.issuedCtr := sn(0);
                 end if;
 
+
+                    res(i).dynamic.db0 := queueContent(i).dynamic.status.issued and bool2std(slv2u(res(i).dynamic.status.stageCtr) = IQ_HOLD_TIME - 1);
+                    res(i).dynamic.db1 := queueContent(i).dynamic.status.issued and bool2std(slv2u(queueContent(i).dynamic.status.issuedCtr) = IQ_HOLD_TIME - 1);
+
             if queueContent(i).dynamic.status.issued = '1' then
-                if slv2u(res(i).dynamic.status.stageCtr) = IQ_HOLD_TIME - 1   then  -- Remove after successful issue
+                --if slv2u(res(i).dynamic.status.stageCtr) = IQ_HOLD_TIME - 1   then  -- Remove after successful issue
+                if slv2u(queueContent(i).dynamic.status.stageCtr) = IQ_HOLD_TIME - 1   then  -- Remove after successful issue
                     res(i) := removeEntry(res(i));              -- SC: clears
                     res(i).dynamic.status.freed := '1';
                     res(i).dynamic.lastEvent := retire;

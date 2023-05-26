@@ -343,6 +343,8 @@ type DynamicInfo is record
     dest: PhysName;
 
     argStates: ArgumentStateArray(0 to 2);
+    
+        db0, db1, db2, db3, db4, db5: std_logic;
 end record;
 
 
@@ -634,7 +636,9 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     intDestSel => '0',
     floatDestSel => '0',
     dest => (others => '0'),
-    argStates => (others => DEFAULT_ARG_STATE)
+    argStates => (others => DEFAULT_ARG_STATE),
+    
+            db0 => '0', db1 => '0', db2 => '0', db3 => '0', db4 => '0', db5 => '0'
 );
 
 constant DEFAULT_SCHEDULER_INFO: SchedulerInfo := (

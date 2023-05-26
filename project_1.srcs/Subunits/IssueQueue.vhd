@@ -75,7 +75,7 @@ architecture Behavioral of IssueQueue is
 
     signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
 
-    signal fullMask, killMask, freedMask, readyMask, selMask, selMask1, selMask2: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+    signal fullMask, killMask, freedMask, readyMask, selMask, selMask1, selMask2,       dbMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
     signal anyReadyFull, sends, sendingKilled, sentKilled, sentTrial1, sentTrial2: std_logic := '0';
 
@@ -228,6 +228,8 @@ begin
             recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here    
         end if;
     end process;
+            
+            dbMask <= TMP_getDbMask(queueContentUpdated_2);
 
 
     -- pragma synthesis off
