@@ -29,13 +29,13 @@ constant DB_LOG_EVENTS: boolean := false;-- false;
 
 --constant SYNTH_CHECK: boolean := checkSynthesis;
 
-constant LOG2_PIPE_WIDTH: natural := 2 - 1;
+constant LOG2_PIPE_WIDTH: natural := 2 ;
 constant PIPE_WIDTH: positive := 2**LOG2_PIPE_WIDTH;
 constant ALIGN_BITS: natural := LOG2_PIPE_WIDTH + 2;
 constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');    
 
 
-    constant TMP_ENABLE_DIV: boolean := false;
+    constant TMP_ENABLE_DIV: boolean := true;
 
 constant ENABLE_FP: boolean := true;
 constant ENABLE_FAST_WAKEUP: boolean := true;

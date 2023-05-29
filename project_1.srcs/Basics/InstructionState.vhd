@@ -151,6 +151,7 @@ type ClassInfo_Dispatch is record
     storeFP: std_logic;
     useAlu: std_logic;
     useMul: std_logic;
+    useDiv: std_logic;
     useMem: std_logic;
     useFP: std_logic;
 end record;

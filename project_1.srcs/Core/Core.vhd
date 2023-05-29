@@ -116,6 +116,7 @@ architecture Behavioral of Core is
                 
         signal TMP_renamedDests: SmallNumberArray(0 to RENAME_W-1) := (others => (others => '0'));
         signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
+            signal memIssueFullIQ, memIssueFullMQ, memRegReadFull_N, lockIssueI0_NoMemFail, lockIssueI0_N, dividerSending: std_logic := '0';
 begin
 
     intSignal <= int0 or int1;
@@ -514,7 +515,8 @@ begin
                 end if;
             end process;
 
-                execEventSignalE0 <= branchResultE0.controlInfo.full and branchResultE0.controlInfo.newEvent;
+                execEventSignalE0 <= --branchResultE0.controlInfo.full and 
+                                        branchResultE0.controlInfo.newEvent;
                 execEvent <= (DEFAULT_DEBUG_INFO, execEventSignalE0, '0', branchResultE0.tags.renameIndex, branchResultE0.tags.bqPointerSeq, branchResultE0.target);
 
             bqUpdate.full <= branchResultE0.controlInfo.full;
@@ -615,7 +617,7 @@ begin
                     
                     lockIssueI1_Alt => lockIssueI1_Alt,
 
-                    sending => open,
+                    sending => dividerSending,
                     divUnlock_Alt => divUnlock_Alt,
                     
                     outStage0 => subpipeI1_E0,
@@ -775,9 +777,15 @@ begin
             end block;
 
             --------------------------------------------
+                  memIssueFullIQ <= slotIssueM0.full;
+                  memIssueFullMQ <= --slotIssueM0.full;
+                                      mqReexecCtrlIssue.controlInfo.full;  
             process (clk)
             begin
                 if rising_edge(clk) then
+                        
+                
+                
                     ctrlE0 <= controlToM0_E0;
                     subpipeM0_E0 <= resultToM0_E0;  -- mem out interface
                     subpipeM0_E0i <= resultToM0_E0i; -- common: tag, value; different: full, dest
@@ -1063,8 +1071,15 @@ begin
             if rising_edge(clk) then
                 storeValueCollision1 <= outSigsSVI.sending and outSigsSVF.sending;
                 storeValueCollision2 <= storeValueCollision1;
+                
+                
+                   memRegReadFull_N <= memIssueFullIQ or memIssueFullMQ;
+                   lockIssueI0_NoMemFail <= memIssueFullIQ or memIssueFullMQ or mulSubpipeSent or dividerSending;
             end if;
          end process;
+
+                ch0 <= bool2std(memRegReadFull_N = memSubpipeSent);
+                ch1 <= bool2std(lockIssueI0_N = lockIssueI0);
 
         lockIssueSVI <= storeValueCollision1 or memFail;
         lockIssueSVF <= storeValueCollision1 or memFail;
@@ -1076,7 +1091,9 @@ begin
         mulSubpipeSelected <= slotIssueI1.full;
         fp0subpipeSelected <= slotIssueF0.full;
 
-        lockIssueI0 <= memSubpipeSent or memFail or mulSubpipeAtE0;
+        lockIssueI0_N <= memSubpipeSent or memFail or mulSubpipeAtE0;
+                    lockIssueI0 <= lockIssueI0_NoMemFail or memFail;
+
 
         -- Issue locking:
         --     if F0 issued, to avoid WB collisions with FP load

@@ -34,9 +34,6 @@ package LogicExec is
 
 	function basicBranch(sending: std_logic; st: SchedulerState;
 	                     bqControl: ControlPacket;
-	                     --tags: InstructionTags;
-                         --ctrl: InstructionControlInfo;
-                         --target, result: Mword;
                          ac: AluControl) return ControlPacket;
 
 	function executeAlu(full: std_logic; st: SchedulerState; link: Mword; ctrl: InstructionControlInfo;
@@ -81,9 +78,6 @@ package body LogicExec is
 
 	function basicBranch(sending: std_logic; st: SchedulerState;
 	                     bqControl: ControlPacket;
-	                     --tags: InstructionTags;
-	                     --ctrl: InstructionControlInfo;
-	                     --target, result: Mword;
 	                     ac: AluControl)
 	return ControlPacket is
 		variable res: ControlPacket := DEFAULT_CONTROL_PACKET;

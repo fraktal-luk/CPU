@@ -210,8 +210,8 @@ package body LogicIssue is
             res.operation := isl.ins.specificOperation;
     
             res.branchIns := isl.ins.typeInfo.branchIns;      
-                res.divIns := isDivOp(isl.ins.specificOperation);
-
+                res.divIns := --isDivOp(isl.ins.specificOperation);
+                              isl.ins.dispatchInfo.useDiv;
             res.tags := isl.ins.tags;
     
             res.immediate := isl.ins.constantArgs.immSel and bool2std(HAS_IMM);    
@@ -962,11 +962,12 @@ end function;
 
             if queueContent(i).dynamic.status.issued = '1' then
                 --if slv2u(res(i).dynamic.status.stageCtr) = IQ_HOLD_TIME - 1   then  -- Remove after successful issue
-                if slv2u(queueContent(i).dynamic.status.stageCtr) = IQ_HOLD_TIME - 1   then  -- Remove after successful issue
+                if slv2u(queueContent(i).dynamic.status.issuedCtr) = IQ_HOLD_TIME - 1   then  -- Remove after successful issue
                     res(i) := removeEntry(res(i));              -- SC: clears
                     res(i).dynamic.status.freed := '1';
                     res(i).dynamic.lastEvent := retire;
-                elsif memFail = '1' and queueContent(i).dynamic.status.stageCtr(1 downto 0) = "00" then -- Retract
+                elsif memFail = '1' and --queueContent(i).dynamic.status.stageCtr(1 downto 0) = "00" then -- Retract
+                                        queueContent(i).dynamic.status.issuedCtr(1 downto 0) = "00" then
                     res(i) := pullbackEntry(res(i));            --- SC: clears
                     res(i).dynamic.lastEvent := retract;
                 else
@@ -1005,6 +1006,7 @@ end function;
                 end if;
 
              res(i).dynamic.status.stageCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
+             res(i).dynamic.status.issuedCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
         end loop;
 
         return res;

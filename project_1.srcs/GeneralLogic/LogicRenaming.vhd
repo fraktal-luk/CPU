@@ -49,7 +49,7 @@ return PhysNameArray;
 
 function getNumFrontNext(numFront, causingTag: SmallNumber; freeListRewind, freeListTakeAllow, memRead: std_logic; freeListTakeSel: std_logic_vector)
 return SmallNumber;
-function moveFrontList(list: PhysNameArray; numFront, numToTake: SmallNumber; input: PhysNameArray) return PhysNameArray;
+function moveFrontList(list: PhysNameArray; numFront, numToTake, numToTake_N: SmallNumber; input: PhysNameArray; allowTake: std_logic) return PhysNameArray;
 function moveBackList(list: PhysNameArray; canWriteBack, putAllow: std_logic; numReduced: SmallNumber; input: PhysNameArray) return PhysNameArray;
 
 function splitWord(w: Word) return PhysNameArray;
@@ -404,22 +404,48 @@ begin
     end loop;          
     return res;
 end function;
-        
-function moveFrontList(list: PhysNameArray; numFront, numToTake: SmallNumber; input: PhysNameArray) return PhysNameArray is
+
+
+function moveListImpl(list: PhysNameArray; diff: SmallNumber; input: PhysNameArray) return PhysNameArray is
     variable res: PhysNameArray(0 to 7) := list;          
-    variable listShifted: PhysNameArray(0 to 7) := (others => (others => '0'));
-    constant diff: SmallNumber := sub(numToTake, numFront);
+    --variable listShifted: PhysNameArray(0 to 7) := (others => (others => '0'));
+    --constant diff: SmallNumber := sub(numToTake, numFront);
     variable ind: SmallNumber := (others => '0');
-begin                
-    listShifted := nextShift(list, numToTake);
+begin
+    --listShifted := nextShift(list, numToTake);
     for i in 0 to 7 loop
         ind := addInt(diff, i);            
         if slv2s(ind) >= 0 then
             res(i) := input(slv2u(ind(1 downto 0)));
-        else 
-            res(i) := listShifted(i);                    
-        end if;    
+        else
+            res(i) := list(i);                    
+        end if;
     end loop;
+    return res;
+end function;
+
+
+function moveFrontList(list: PhysNameArray; numFront, numToTake, numToTake_N: SmallNumber; input: PhysNameArray; allowTake: std_logic) return PhysNameArray is
+    variable res: PhysNameArray(0 to 7) := list;          
+    variable listShifted: PhysNameArray(0 to 7) := (others => (others => '0'));
+    constant diff: SmallNumber := sub(numToTake_N, numFront);
+    constant diffZ: SmallNumber := sub(sn(0), numFront);
+    variable ind: SmallNumber := (others => '0');
+begin
+    listShifted := nextShift(list, numToTake);
+--    for i in 0 to 7 loop
+--        ind := addInt(diff, i);            
+--        if slv2s(ind) >= 0 then
+--            res(i) := input(slv2u(ind(1 downto 0)));
+--        else
+--            res(i) := listShifted(i);                    
+--        end if;
+--    end loop;
+    if allowTake = '1' then
+        res := moveListImpl(listShifted, diff, input);
+    else
+        res := moveListImpl(listShifted, diffZ, input);
+    end if;
     return res;
 end function;
 

@@ -275,4 +275,6 @@ begin
     outStage1 <= dataMulE1;  -- signals result tag
     output <= setMemFail(dataMulE2, '0', mulResult);
 
+        sending <= divResultSending;
+
 end Behavioral;

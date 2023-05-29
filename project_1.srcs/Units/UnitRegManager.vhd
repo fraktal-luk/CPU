@@ -144,17 +144,21 @@ architecture Behavioral of UnitRegManager is
 
     function classifyForDispatch(insVec: InstructionSlotArray) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+        variable div, mul: boolean := false;
     begin
         for i in 0 to PIPE_WIDTH-1 loop
+            div := insVec(i).ins.specificOperation.arith = opDivU
+                 or insVec(i).ins.specificOperation.arith = opDivS                     
+                 or insVec(i).ins.specificOperation.arith = opRemU
+                 or insVec(i).ins.specificOperation.arith = opRemS;
+            mul := insVec(i).ins.specificOperation.arith = opMul
+                  or insVec(i).ins.specificOperation.arith = opMulhU
+                  or insVec(i).ins.specificOperation.arith = opMulhS;
+        
+                res(i).ins.dispatchInfo.useDiv := bool2std(div and (insVec(i).ins.specificOperation.subpipe = ALU));
+            
             if (insVec(i).ins.specificOperation.subpipe = ALU) then
-                if      insVec(i).ins.specificOperation.arith = opMul
-                     or insVec(i).ins.specificOperation.arith = opMulhU
-                     or insVec(i).ins.specificOperation.arith = opMulhS
-                     or insVec(i).ins.specificOperation.arith = opDivU
-                     or insVec(i).ins.specificOperation.arith = opDivS                     
-                     or insVec(i).ins.specificOperation.arith = opRemU
-                     or insVec(i).ins.specificOperation.arith = opRemS
-                then
+                if mul or div then
                     res(i).ins.dispatchInfo.useMul := '1';
                 else
                     res(i).ins.dispatchInfo.useAlu := '1';
