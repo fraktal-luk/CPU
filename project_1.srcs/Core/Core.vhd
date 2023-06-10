@@ -65,7 +65,7 @@ architecture Behavioral of Core is
     signal frontAccepting, bpSending, renameAllow, frontGroupSend, frontSendAllow, canSendRename, robSending,
            renameSendingBr, renamedSending, commitAccepting, frontEventSignal, bqAccepting, execEventSignalE0, execEventSignalE1, lateEventSignal, lateEventSetPC,
            allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
-           mqReady, mqRegReadSending, sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, memFail
+           mqReady, mqIssueSending, mqRegReadSending, sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, memFail
            : std_logic := '0';
 
     signal renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -470,14 +470,14 @@ begin
             TMP_ISSUE_I0: block
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                slotIssueI0 <= updateDispatchArgs_Is(argStateI, outSigsI0, events);
-                slotRegReadI0 <= updateDispatchArgs_RR(argStateR, outSigsI0, events, valuesInt0, regValsI0, false);
+                slotIssueI0 <= updateIssueStage(argStateI, outSigsI0, events);
+                slotRegReadI0 <= updateRegReadStage(argStateR, outSigsI0, events, valuesInt0, regValsI0, false);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateI <= getDispatchArgValues_Is(slotSelI0, outSigsI0, events);
-                        argStateR <= getDispatchArgValues_RR_N(slotIssueI0, events, valuesInt0, valuesInt1, true, false);
+                        argStateI <= getIssueStage(slotSelI0, outSigsI0, events);
+                        argStateR <= getRegReadStage_N(slotIssueI0, events, valuesInt0, valuesInt1, true, false);
                         unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.st.operation.arith);
                     end if;
                 end process;
@@ -580,14 +580,14 @@ begin
                 TMP_ISSUE_I1: block
                     signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
                 begin
-                    slotIssueI1 <= updateDispatchArgs_Is(argStateI, outSigsI1, events);
-                    slotRegReadI1 <= updateDispatchArgs_RR(argStateR, outSigsI1, events, valuesInt0, regValsI1, false);
+                    slotIssueI1 <= updateIssueStage(argStateI, outSigsI1, events);
+                    slotRegReadI1 <= updateRegReadStage(argStateR, outSigsI1, events, valuesInt0, regValsI1, false);
 
                     process (clk)
                     begin
                         if rising_edge(clk) then
-                            argStateI <= getDispatchArgValues_Is(slotSelI1, outSigsI1, events);
-                            argStateR <= getDispatchArgValues_RR_N(slotIssueI1, events, valuesInt0, valuesInt1, true, false);
+                            argStateI <= getIssueStage(slotSelI1, outSigsI1, events);
+                            argStateR <= getRegReadStage_N(slotIssueI1, events, valuesInt0, valuesInt1, true, false);
                         end if;
                     end process;
 
@@ -656,7 +656,7 @@ begin
             constant CFG_MEM: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
 
             signal controlToM0_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
-            signal slotRegReadM0iq, slotRegReadM0mq: SchedulerState := DEFAULT_SCHED_STATE;
+            signal slotRegReadM0iq, slotRegReadM0_Merged,  slotIssueM0mq, slotIssueM0_Merged, slotRegReadM0mq: SchedulerState := DEFAULT_SCHED_STATE;
             signal resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
         begin
             wups <= work.LogicIssue.getInitWakeups(schedInfoA, bypassInt, CFG_MEM);
@@ -695,17 +695,24 @@ begin
                 dbState => dbState
             );
 
+                    mqIssueSending <= mqReexecCtrlIssue.controlInfo.full;
+                    slotIssueM0mq <= TMP_slotIssueM0mq(mqReexecCtrlIssue, mqReexecResIssue, mqIssueSending);
+
             TMP_ISSUE_M0: block
-                signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal argStateI, argStateR, argStateR_Merged: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                slotIssueM0 <= updateDispatchArgs_Is(argStateI, outSigsM0, events);
-                slotRegReadM0iq <= updateDispatchArgs_RR(argStateR, outSigsM0, events, valuesInt0, regValsM0, false, true);
+                slotIssueM0 <= updateIssueStage(argStateI, outSigsM0, events);
+                    slotIssueM0_Merged <= updateIssueStage_Merge(argStateI, slotIssueM0mq, outSigsM0, events);
+                
+                slotRegReadM0iq <= updateRegReadStage(argStateR, outSigsM0, events, valuesInt0, regValsM0, false, true);
+                    slotRegReadM0_Merged <= updateRegReadStage(argStateR_Merged, outSigsM0, events, valuesInt0, regValsM0, false, true);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateI <= getDispatchArgValues_Is(slotSelM0, outSigsM0, events);
-                        argStateR <= getDispatchArgValues_RR_N(slotIssueM0, events, valuesInt0, valuesInt1, true, false, true);
+                        argStateI <= getIssueStage(slotSelM0, outSigsM0, events);
+                        argStateR <= getRegReadStage_N(slotIssueM0, events, valuesInt0, valuesInt1, true, false, true);
+                            argStateR_Merged <= getRegReadStage_Merge(slotIssueM0, slotIssueM0.full, slotIssueM0mq, events, valuesInt0, valuesInt1, true, false, true);
                     end if;
                 end process;
 
@@ -719,8 +726,8 @@ begin
             slotRegReadM0mq <= TMP_slotRegReadM0mq(mqReexecCtrlRR, mqReexecResRR, mqRegReadSending);
 
             -- Merge IQ with MQ
-            slotRegReadM0 <= mergeMemOp(slotRegReadM0iq, slotRegReadM0mq, mqRegReadSending);
-
+            slotRegReadM0 <= --mergeMemOp(slotRegReadM0iq, slotRegReadM0mq, mqRegReadSending);
+                                slotRegReadM0_Merged;
             ----------------------------
             -- Single packet of information for E0
             resultToM0_E0 <= calcEffectiveAddress(slotRegReadM0.full, slotRegReadM0, mqRegReadSending);
@@ -884,27 +891,27 @@ begin
             TMP_ISSUE_SVI: block
                 signal argStateI, argStateI_P, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                slotIssueIntSV <= updateDispatchArgs_Is(argStateI, outSigsSVI, events);
+                slotIssueIntSV <= updateIssueStage(argStateI, outSigsSVI, events);
 
                 sendingToRegReadIntSV <= slotIssueIntSV.full and not (storeValueCollision2 and killFollower(outSigsSVI.trialPrev2, events));
 
                 -- Reg
-                slotRegReadIntSV <= updateDispatchArgs_RR(argStateR, outSigsSVI, events, valuesInt0, regValsS0, true);
+                slotRegReadIntSV <= updateRegReadStage(argStateR, outSigsSVI, events, valuesInt0, regValsS0, true);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
                         if allowIssueStoreDataInt = '1' then -- nextAccepting
-                            argStateI <= getDispatchArgValues_Is(slotSelIntSV, outSigsSVI, events);
+                            argStateI <= getIssueStage(slotSelIntSV, outSigsSVI, events);
                         end if;
                         
-                            argStateI_P <= getDispatchArgValues_Is(slotSelIntSV, outSigsSVI, events);
+                            argStateI_P <= getIssueStage(slotSelIntSV, outSigsSVI, events);
                         
                         if events.lateEvent = '1' then
                             argStateI.full <= '0';
                         end if;
 
-                        argStateR <= getDispatchArgValues_RR_O(slotIssueIntSV, sendingToRegReadIntSV, events, valuesInt0, valuesInt1, false, true);
+                        argStateR <= getRegReadStage_O(slotIssueIntSV, sendingToRegReadIntSV, events, valuesInt0, valuesInt1, false, true);
 
                     end if;
                 end process;
@@ -947,14 +954,14 @@ begin
             TMP_ISSUE_SVF: block
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                slotIssueFloatSV <= updateDispatchArgs_Is(argStateI, outSigsSVF, events);
-                slotRegReadFloatSV <= updateDispatchArgs_RR(argStateR, outSigsSVF, events, valuesFloat0, regValsFS0, true);
+                slotIssueFloatSV <= updateIssueStage(argStateI, outSigsSVF, events);
+                slotRegReadFloatSV <= updateRegReadStage(argStateR, outSigsSVF, events, valuesFloat0, regValsFS0, true);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateI <= getDispatchArgValues_Is(slotSelFloatSV, outSigsSVF, events);
-                        argStateR <= getDispatchArgValues_RR_N(slotIssueFloatSV, events, valuesFloat0, valuesFloat1, false, true);
+                        argStateI <= getIssueStage(slotSelFloatSV, outSigsSVF, events);
+                        argStateR <= getRegReadStage_N(slotIssueFloatSV, events, valuesFloat0, valuesFloat1, false, true);
                     end if;
                 end process;
             end block;
@@ -1017,14 +1024,14 @@ begin
             TMP_ISSUE_F0: block
                 signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin    
-                slotIssueF0 <= updateDispatchArgs_Is(argStateI, outSigsF0, events);
-                slotRegReadF0 <= updateDispatchArgs_RR(argStateR, outSigsF0, events, valuesFloat0, regValsF0, false);
+                slotIssueF0 <= updateIssueStage(argStateI, outSigsF0, events);
+                slotRegReadF0 <= updateRegReadStage(argStateR, outSigsF0, events, valuesFloat0, regValsF0, false);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateI <= getDispatchArgValues_Is(slotSelF0, outSigsF0, events);
-                        argStateR <= getDispatchArgValues_RR_N(slotIssueF0, events, valuesFloat0, valuesFloat1, false, false); 
+                        argStateI <= getIssueStage(slotSelF0, outSigsF0, events);
+                        argStateR <= getRegReadStage_N(slotIssueF0, events, valuesFloat0, valuesFloat1, false, false); 
                     end if;
                 end process;
 

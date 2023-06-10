@@ -169,7 +169,8 @@ package body LogicQueues is
 
     function addressLowMatching(a, b: Mword) return std_logic is
     begin
-        return bool2std(a(CMP_ADDRESS_LENGTH-1 downto 0) = b(CMP_ADDRESS_LENGTH-1 downto 0));
+        --return bool2std(a(CMP_ADDRESS_LENGTH-1 downto 0) = b(CMP_ADDRESS_LENGTH-1 downto 0));
+            return bool2std(a(CMP_ADDRESS_LENGTH-1 downto 2) = b(CMP_ADDRESS_LENGTH-1 downto 2));
     end function;
     
     function addressHighMatching(a, b: Mword) return std_logic is

@@ -236,6 +236,8 @@ function unfoldOp(op: SpecificOp) return SpecificOp;
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult;
 function updateMemDest(er: ExecResult; used: std_logic) return ExecResult;
 
+
+function TMP_slotIssueM0mq(mqReexecCtrlIs: ControlPacket; mqReexecResIS: ExecResult; mqIssueSending: std_logic) return SchedulerState;
 function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState;
 
 function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult;
@@ -886,6 +888,34 @@ begin
     end if;
     return res;
 end function;
+
+
+    function TMP_slotIssueM0mq(mqReexecCtrlIs: ControlPacket; mqReexecResIs: ExecResult; mqIssueSending: std_logic) return SchedulerState is
+        variable res: SchedulerState := DEFAULT_SCHED_STATE;
+    begin
+        res.full := mqIssueSending;
+        res.st.dbInfo := mqReexecCtrlIs.dbInfo;
+        
+        res.st.operation := mqReexecCtrlIS.op;
+        res.st.tags := mqReexecCtrlIs.tags;
+        
+        -- adr
+        res.args(0) := mqReexecCtrlIs.target;
+        res.args(1) := (others => '0');
+        
+            res.argSrc(0) := "00000000";
+            res.argSrc(1) := "00000000";
+
+            res.st.zero := "110";
+            res.st.immValue := mqReexecResIs.value(15 downto 0);
+        
+        res.argSpec.dest := mqReexecResIs.dest;
+        res.argSpec.intDestSel := not mqReexecCtrlIs.classInfo.useFP and isNonzero(mqReexecResIs.dest);
+        res.argSpec.floatDestSel := mqReexecCtrlIs.classInfo.useFP;
+    
+        return res;
+    end function;
+
 
 function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState is
     variable res: SchedulerState := DEFAULT_SCHED_STATE;

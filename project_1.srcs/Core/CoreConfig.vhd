@@ -29,7 +29,7 @@ constant DB_LOG_EVENTS: boolean := false;-- false;
 
 --constant SYNTH_CHECK: boolean := checkSynthesis;
 
-constant LOG2_PIPE_WIDTH: natural := 2;
+constant LOG2_PIPE_WIDTH: natural := 2 - 0;
 constant PIPE_WIDTH: positive := 2**LOG2_PIPE_WIDTH;
 constant ALIGN_BITS: natural := LOG2_PIPE_WIDTH + 2;
 constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');    
