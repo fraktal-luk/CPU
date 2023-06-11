@@ -21,6 +21,8 @@ use work.DecodingDev.all;
 
 package LogicFront is
 
+function shiftLine(fetchedLine: WordArray; shift: SmallNumber) return WordArray;
+
 function getEarlyEvent(fetchLine: WordArray(0 to FETCH_WIDTH-1); target, predictedAddress: Mword; fetchStall, send: std_logic) return ControlPacket;
 
 function decodeGroup(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural; ip: Mword; ctrl: ControlPacket) return BufferEntryArray;
@@ -76,6 +78,20 @@ begin
     return res; 
 end function;
 
+function shiftLine(fetchedLine: WordArray; shift: SmallNumber) return WordArray is
+    variable res: WordArray(0 to FETCH_WIDTH-1) := fetchedLine;
+    variable sh: natural := slv2u(shift(LOG2_PIPE_WIDTH-1 downto 0));
+begin
+    for i in 0 to FETCH_WIDTH-1 loop
+        if i + sh > FETCH_WIDTH-1 then
+            res(i) := fetchedLine(FETCH_WIDTH-1);
+        else
+            res(i) := fetchedLine(i + sh);
+        end if;
+    end loop;
+
+    return res;
+end function;
 
 function getFrontEvent(ip, target: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket is
 	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;

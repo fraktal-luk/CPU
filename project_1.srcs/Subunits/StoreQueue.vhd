@@ -25,8 +25,8 @@ entity StoreQueue is
 		reset: in std_logic;
 		en: in std_logic;
 
-		acceptingOut: out std_logic;
-		almostFull: out std_logic;
+		acceptingOut: out std_logic; -- UNUSED
+		almostFull: out std_logic;   -- UNUSED
 		acceptAlloc: out std_logic;
 		
    	    prevSendingRe: in std_logic;
