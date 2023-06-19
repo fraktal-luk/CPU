@@ -391,7 +391,8 @@ begin
               
                                                                                   subpipeI1_E2_Alt,
               
-              subpipeM0_Issue, subpipeM0_RegRead, subpipeM0_E0,  subpipeM0_E1,    subpipeM0_E2,
+              subpipeM0_Issue, 
+              subpipeM0_RegRead, subpipeM0_E0,  subpipeM0_E1,    subpipeM0_E2,
                                    subpipeM0_RRi, subpipeM0_E0i, subpipeM0_E1i,   subpipeM0_E2i,   subpipeM0_D0i,-- subpipeM0_D1i,
                                    subpipeM0_RRf, subpipeM0_E0f, subpipeM0_E1f,   subpipeM0_E2f,   subpipeM0_D0f, subpipeM0_D1f,
                                                             
@@ -656,7 +657,8 @@ begin
             constant CFG_MEM: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
 
             signal controlToM0_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
-            signal slotRegReadM0iq, slotRegReadM0_Merged,  slotIssueM0mq, slotIssueM0_Merged, slotRegReadM0mq: SchedulerState := DEFAULT_SCHED_STATE;
+            signal slotRegReadM0iq, slotRegReadM0_Merged,  slotIssueM0mq,-- slotIssueM0_Merged,
+                        slotRegReadM0mq: SchedulerState := DEFAULT_SCHED_STATE;
             signal resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
         begin
             wups <= work.LogicIssue.getInitWakeups(schedInfoA, bypassInt, CFG_MEM);
@@ -702,7 +704,7 @@ begin
                 signal argStateI, argStateR, argStateR_Merged: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
                 slotIssueM0 <= updateIssueStage(argStateI, outSigsM0, events);
-                    slotIssueM0_Merged <= updateIssueStage_Merge(argStateI, slotIssueM0mq, outSigsM0, events);
+                --    slotIssueM0_Merged <= updateIssueStage_Merge(argStateI, slotIssueM0mq, outSigsM0, events);
                 
                 slotRegReadM0iq <= updateRegReadStage(argStateR, outSigsM0, events, valuesInt0, regValsM0, false, true);
                     slotRegReadM0_Merged <= updateRegReadStage(argStateR_Merged, outSigsM0, events, valuesInt0, regValsM0, false, true);
