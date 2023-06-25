@@ -43,7 +43,7 @@ architecture Behavioral of MultiplierDivider is
     signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
     signal divAllowed, sendingDivIssued, divRR, divFull,
             divUnlock, 
-            divPrepareSend, divResultSending,
+            divPrepareSend, divResultSending, divPrepare,
             divResultSent, divResultSent2, divReady, remReady, sendingDivRR: std_logic := '0';
 
     signal sg0, sg1, isLowE0, isLowE1: std_logic := '0';
@@ -113,7 +113,7 @@ begin
     end process;
 
 
-    divUnlock <= not (divAllowed and allowIssueI1) and not sendingDivIssued and not divRR and not divFull;
+    divUnlock <= not (divAllowed and allowIssueI1) and not sendingDivIssued and not divRR and not divPrepare and not divFull;
 
 
     DIVISION: block
@@ -136,6 +136,8 @@ begin
                 divReady <= usingDiv and divResultSending;
                 remReady <= usingRem and divResultSending;
 
+                divPrepare <= divRR;
+
                 divAllowed <= divUnlock;
 
                 divRR <= sendingDivIssued and not killFollowerNext;
@@ -154,13 +156,19 @@ begin
                     usingDiv <= '0';
                     usingRem <= '0';
                 elsif sendingDivRR = '1' then
-                    divFull <= '1';
                     divSlot <= makeExecResult(input);
-
-                    divTime <= sn(0);
 
                     usingDiv <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opDivS);
                     usingRem <= bool2std(input.st.operation.arith = opRemU or input.st.operation.arith = opRemS);
+                elsif --sendingDivRR = '1' then
+                      divPrepare = '1' then
+                    divFull <= '1';
+                    --divSlot <= makeExecResult(input);
+
+                    divTime <= sn(0);
+
+                    --usingDiv <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opDivS);
+                    --usingRem <= bool2std(input.st.operation.arith = opRemU or input.st.operation.arith = opRemS);
 
                 else
                     divTime <= addInt(divTime, 1);
@@ -218,7 +226,7 @@ begin
                     quot11 <= result11;
                     rem11  <= sum11(31 downto 0);
                 end if;
-                    
+
                 if sendingDivRR = '1' then
                     isUnsigned <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
                     signSel0 <= input.args(0)(31) and not bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
@@ -237,6 +245,7 @@ begin
                     sum11 <= signExtend(input.args(0), 64);
 
                     divisorS <= input.args(1)(31) & input.args(1) & "000" & X"0000000";
+                elsif divPrepare = '1' then
 
                 else
                     result00 <= result00(30 downto 0) & new00;
