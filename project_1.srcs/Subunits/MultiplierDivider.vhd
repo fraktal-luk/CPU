@@ -49,8 +49,9 @@ architecture Behavioral of MultiplierDivider is
     signal sg0, sg1, isLowE0, isLowE1: std_logic := '0';
     signal arg0, arg1, mulResult, divRes: Word := (others => '0');
     signal resLongE1: Dword := (others => '0');
-    
+
     signal divQuot, divRem: Word := (others => '0');
+        signal divQuot_Alt, divRem_Alt: Word := (others => '0');
 begin
 
     sendingDivIssued <= preInput.full and usesDivider(preInput); -- Speculative because it doesn't take into account kill signals?
@@ -113,17 +114,13 @@ begin
     end process;
 
 
-    divUnlock <= not (divAllowed and allowIssueI1) and not sendingDivIssued and not divRR and not divPrepare and not divFull;
+    divUnlock <= not (divAllowed and allowIssueI1) and not sendingDivIssued and not divRR -- and not divPrepare
+                                                     and not divFull;
 
 
     DIVISION: block
         signal usingDiv, usingRem, trialled, kill: std_logic := '0';
         signal divTime: SmallNumber := sn(0);
-        
-        signal new00, new10, new01, new11, isUnsigned, signSel0, signSel1: std_logic := '0';
-        signal divisorS, sum00, sum10, sum01, sum11, diff00, diff10, diff01, diff11: Dword := (others => '0');
-        signal result00, result10, result01, result11: Word := (others => '0');
-        signal quot00, quot10, quot01, quot11, rem00, rem10, rem01, rem11: Word := (others => '0');
     begin
         kill <= (trialled and events.execEvent) or events.lateEvent; -- move to division
 
@@ -160,16 +157,9 @@ begin
 
                     usingDiv <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opDivS);
                     usingRem <= bool2std(input.st.operation.arith = opRemU or input.st.operation.arith = opRemS);
-                elsif --sendingDivRR = '1' then
-                      divPrepare = '1' then
+                --elsif divPrepare = '1' then
                     divFull <= '1';
-                    --divSlot <= makeExecResult(input);
-
                     divTime <= sn(0);
-
-                    --usingDiv <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opDivS);
-                    --usingRem <= bool2std(input.st.operation.arith = opRemU or input.st.operation.arith = opRemS);
-
                 else
                     divTime <= addInt(divTime, 1);
                 end if;
@@ -178,101 +168,210 @@ begin
         end process;
 
 
-
-       divQuot <= quot11 when (signSel0 and signSel1) = '1'
-            else  quot10 when (signSel0 and not signSel1) = '1'
-            else  quot01 when (not signSel0 and signSel1) = '1'
-            else  quot00 when (not signSel0 and not signSel1) = '1';
-
-       divRem <= rem11 when (signSel0 and signSel1) = '1'
-            else rem10 when (signSel0 and not signSel1) = '1'
-            else rem01 when (not signSel0 and signSel1) = '1'
-            else rem00 when (not signSel0 and not signSel1) = '1';
-
-        diff00 <=    add(sum00, divisorS) when --isNonzero(divTime) /= '1'
-                                               false
-                else sub(sum00, divisorS);
-        new00 <= --isNonzero(divTime) 
-                    '1'
-                 and ((cmpGeS(sum00, divisorS) and not isUnsigned) or (cmpGeU(sum00, divisorS) and isUnsigned));
-
-        diff10 <=    add(sum10, divisorS) when isNonzero(divTime) /= '1'
-                else sub(sum10, divisorS);
-        new10 <= not isNonzero(divTime) or cmpGeS(sum10, divisorS);
-
-        diff01 <=    add(sum01, divisorS) when isNonzero(divTime) /= '1'
-                else sub(sum01, divisorS);
-        new01 <= (not isNonzero(divTime) and isNonzero(sum01)) or 
-                    cmpLeS(sum01, divisorS);
-                                    
-        diff11 <=    add(sum11, divisorS) when isNonzero(divTime) /= '1'
-                else sub(sum11, divisorS);
-        new11 <= isNonzero(divTime) and cmpLeS(sum11, divisorS);
-
-        DIVISION_VARIANTS: process (clk)
+        VARIANTS: block
+            signal new00, new10, new01, new11, isUnsigned, signSel0, signSel1: std_logic := '0';
+            signal divisorS, sum00, sum10, sum01, sum11, diff00, diff10, diff01, diff11: Dword := (others => '0');
+            signal result00, result10, result01, result11: Word := (others => '0');
+            signal quot00, quot10, quot01, quot11, rem00, rem10, rem01, rem11: Word := (others => '0');
         begin
-            if rising_edge(clk) then
+           divQuot <= quot11 when (signSel0 and signSel1) = '1'
+                else  quot10 when (signSel0 and not signSel1) = '1'
+                else  quot01 when (not signSel0 and signSel1) = '1'
+                else  quot00 when (not signSel0 and not signSel1) = '1';
+    
+           divRem <= rem11 when (signSel0 and signSel1) = '1'
+                else rem10 when (signSel0 and not signSel1) = '1'
+                else rem01 when (not signSel0 and signSel1) = '1'
+                else rem00 when (not signSel0 and not signSel1) = '1';
+    
+            diff00 <=    add(sum00, divisorS) when --isNonzero(divTime) /= '1'
+                                                   false
+                    else sub(sum00, divisorS);
+            new00 <= --isNonzero(divTime) 
+                        '1'
+                     and ((cmpGeS(sum00, divisorS) and not isUnsigned) or (cmpGeU(sum00, divisorS) and isUnsigned));
+    
+            diff10 <=    add(sum10, divisorS) when isNonzero(divTime) /= '1'
+                    else sub(sum10, divisorS);
+            new10 <= not isNonzero(divTime) or cmpGeS(sum10, divisorS);
+    
+            diff01 <=    add(sum01, divisorS) when isNonzero(divTime) /= '1'
+                    else sub(sum01, divisorS);
+            new01 <= (not isNonzero(divTime) and isNonzero(sum01)) or 
+                        cmpLeS(sum01, divisorS);
+                                        
+            diff11 <=    add(sum11, divisorS) when isNonzero(divTime) /= '1'
+                    else sub(sum11, divisorS);
+            new11 <= isNonzero(divTime) and cmpLeS(sum11, divisorS);
 
-                if divResultSending = '1' then
-                    quot00 <= result00;
-                    rem00  <= sum00(31 downto 0);
+            DIVISION_SYNC: process (clk)
+            begin
+                if rising_edge(clk) then
+    
+                    if divResultSending = '1' then
+                        quot00 <= result00;
+                        rem00  <= sum00(31 downto 0);
+    
+                        quot10 <= result10;
+                        rem10  <= sum10(31 downto 0);
+    
+                        quot01 <= result01;
+                        rem01  <= sum01(31 downto 0);
+    
+                        quot11 <= result11;
+                        rem11  <= sum11(31 downto 0);
+                    end if;
 
-                    quot10 <= result10;
-                    rem10  <= sum10(31 downto 0);
-                    
-                    quot01 <= result01;
-                    rem01  <= sum01(31 downto 0);
-                    
-                    quot11 <= result11;
-                    rem11  <= sum11(31 downto 0);
+                    if sendingDivRR = '1' then
+                        isUnsigned <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
+                        signSel0 <= input.args(0)(31) and not bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
+                        signSel1 <= input.args(1)(31) and not bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
+    
+                        result00 <= (others => '0');
+                        sum00 <= zeroExtend(input.args(0), 64);
+    
+                        result10 <= (others => '0');
+                        sum10 <= signExtend(input.args(0), 64);
+    
+                        result01 <= (others => '0');
+                        sum01 <= signExtend(input.args(0), 64);
+    
+                        result11 <= (others => '0');
+                        sum11 <= signExtend(input.args(0), 64);
+    
+                        divisorS <= input.args(1)(31) & input.args(1) & "000" & X"0000000";
+                    --elsif divPrepare = '1' then
+    
+                    else
+                        result00 <= result00(30 downto 0) & new00;
+                        if new00 = '1' then
+                            sum00 <= diff00;
+                        end if;
+    
+                        result10 <= result10(30 downto 0) & new10;
+                        if new10 = '1' then
+                            sum10 <= diff10;
+                        end if;
+    
+                        result01 <= result01(30 downto 0) & new01;
+                        if new01 = '1' then
+                            sum01 <= diff01;
+                        end if;
+    
+                        result11 <= result11(30 downto 0) & new11;
+                        if new11 = '1' then
+                            sum11 <= diff11;
+                        end if;
+    
+                        divisorS <= (divisorS(63) and not isUnsigned) & divisorS(63 downto 1);    
+                    end if;
+
                 end if;
+            end process;
+        end block; -- VARIANTS
 
-                if sendingDivRR = '1' then
-                    isUnsigned <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
-                    signSel0 <= input.args(0)(31) and not bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
-                    signSel1 <= input.args(1)(31) and not bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
-                
-                    result00 <= (others => '0');
-                    sum00 <= zeroExtend(input.args(0), 64);
 
-                    result10 <= (others => '0');
-                    sum10 <= signExtend(input.args(0), 64);
+        DEV: block
+            signal new00, new10, new01, new11, isUnsigned, signSel0, signSel1: std_logic := '0';
+            signal divisorS, sum00, sum10, sum01, sum11, diff00, diff10, diff01, diff11: Dword := (others => '0');
+            signal result00, result10, result01, result11: Word := (others => '0');
+            signal quot00, quot10, quot01, quot11, rem00, rem10, rem01, rem11: Word := (others => '0');
+        begin
+           divQuot_Alt <= quot11 when (signSel0 and signSel1) = '1'
+                else  quot10 when (signSel0 and not signSel1) = '1'
+                else  quot01 when (not signSel0 and signSel1) = '1'
+                else  quot00 when (not signSel0 and not signSel1) = '1';
 
-                    result01 <= (others => '0');
-                    sum01 <= signExtend(input.args(0), 64);
+           divRem_Alt <= rem11 when (signSel0 and signSel1) = '1'
+                else rem10 when (signSel0 and not signSel1) = '1'
+                else rem01 when (not signSel0 and signSel1) = '1'
+                else rem00 when (not signSel0 and not signSel1) = '1';
+    
+            diff00 <=    add(sum00, divisorS) when --isNonzero(divTime) /= '1'
+                                                   false
+                    else sub(sum00, divisorS);
+            new00 <= --isNonzero(divTime) 
+                        '1'
+                     and ((cmpGeS(sum00, divisorS) and not isUnsigned) or (cmpGeU(sum00, divisorS) and isUnsigned));
+    
+            diff10 <=    add(sum10, divisorS) when isNonzero(divTime) /= '1'
+                    else sub(sum10, divisorS);
+            new10 <= not isNonzero(divTime) or cmpGeS(sum10, divisorS);
+    
+            diff01 <=    add(sum01, divisorS) when isNonzero(divTime) /= '1'
+                    else sub(sum01, divisorS);
+            new01 <= (not isNonzero(divTime) and isNonzero(sum01)) or 
+                        cmpLeS(sum01, divisorS);
+                                        
+            diff11 <=    add(sum11, divisorS) when isNonzero(divTime) /= '1'
+                    else sub(sum11, divisorS);
+            new11 <= isNonzero(divTime) and cmpLeS(sum11, divisorS);
 
-                    result11 <= (others => '0');
-                    sum11 <= signExtend(input.args(0), 64);
-
-                    divisorS <= input.args(1)(31) & input.args(1) & "000" & X"0000000";
-                elsif divPrepare = '1' then
-
-                else
-                    result00 <= result00(30 downto 0) & new00;
-                    if new00 = '1' then
-                        sum00 <= diff00;
+            DIVISION_SYNC: process (clk)
+            begin
+                if rising_edge(clk) then
+    
+                    if divResultSending = '1' then
+                        quot00 <= result00;
+                        rem00  <= sum00(31 downto 0);
+    
+                        quot10 <= result10;
+                        rem10  <= sum10(31 downto 0);
+    
+                        quot01 <= result01;
+                        rem01  <= sum01(31 downto 0);
+    
+                        quot11 <= result11;
+                        rem11  <= sum11(31 downto 0);
                     end if;
-                    
-                    result10 <= result10(30 downto 0) & new10;
-                    if new10 = '1' then
-                        sum10 <= diff10;
-                    end if;
-                    
-                    result01 <= result01(30 downto 0) & new01;
-                    if new01 = '1' then
-                        sum01 <= diff01;
-                    end if;
-                    
-                    result11 <= result11(30 downto 0) & new11;
-                    if new11 = '1' then
-                        sum11 <= diff11;
+
+                    if sendingDivRR = '1' then
+                        isUnsigned <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
+                        signSel0 <= input.args(0)(31) and not bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
+                        signSel1 <= input.args(1)(31) and not bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
+    
+                        result00 <= (others => '0');
+                        sum00 <= zeroExtend(input.args(0), 64);
+
+                        result10 <= (others => '0');
+                        sum10 <= signExtend(input.args(0), 64);
+    
+                        result01 <= (others => '0');
+                        sum01 <= signExtend(input.args(0), 64);
+    
+                        result11 <= (others => '0');
+                        sum11 <= signExtend(input.args(0), 64);
+    
+                        divisorS <= input.args(1)(31) & input.args(1) & "000" & X"0000000";
+                    --elsif divPrepare = '1' then
+
+                    else
+                        result00 <= result00(30 downto 0) & new00;
+                        if new00 = '1' then
+                            sum00 <= diff00;
+                        end if;
+    
+                        result10 <= result10(30 downto 0) & new10;
+                        if new10 = '1' then
+                            sum10 <= diff10;
+                        end if;
+    
+                        result01 <= result01(30 downto 0) & new01;
+                        if new01 = '1' then
+                            sum01 <= diff01;
+                        end if;
+    
+                        result11 <= result11(30 downto 0) & new11;
+                        if new11 = '1' then
+                            sum11 <= diff11;
+                        end if;
+    
+                        divisorS <= (divisorS(63) and not isUnsigned) & divisorS(63 downto 1);    
                     end if;
 
-                    divisorS <= (divisorS(63) and not isUnsigned) & divisorS(63 downto 1);    
                 end if;
-
-            end if;
-        end process;
+            end process;
+        end block; -- DEV
 
     end block;
 
@@ -284,6 +383,6 @@ begin
     outStage1 <= dataMulE1;  -- signals result tag
     output <= setMemFail(dataMulE2, '0', mulResult);
 
-        sending <= divResultSending;
+    sending <= divResultSending;
 
 end Behavioral;
