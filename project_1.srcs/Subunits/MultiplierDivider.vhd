@@ -121,7 +121,7 @@ begin
 
 
     DIVISION: block
-        signal usingDiv, usingRem, trialled, kill: std_logic := '0';
+        signal usingDiv, usingRem, trialled, kill, opUnsigned: std_logic := '0';
         signal divTime: SmallNumber := sn(0);
     begin
         kill <= (trialled and events.execEvent) or events.lateEvent; -- move to division
@@ -172,11 +172,13 @@ begin
 
         DEV: block
             signal new00, isUnsigned, signSel0, signSel1: std_logic := '0';
-            signal divisorS, sum00, diff00,
-                        a0e, a1e: Dword := (others => '0');
-            signal result00, result10, result01, result11: Word := (others => '0');
-            signal quot00, quot10, quot01, quot11, rem00, rem10, rem01, rem11,   arg0, arg1, arg0t, arg1t: Word := (others => '0');
+            signal divisorS, sum00, diff00, a0e, a1e: Dword := (others => '0');
+            signal result00, sum_T, sum_L, diff_T, diff_Sh, rem_T, ma0, ma1: Word := (others => '0');
+            signal quot00, rem00,   arg0, arg1, arg0t, arg1t: Word := (others => '0');
+                signal dTime: natural := 0;
         begin
+                dTime <= slv2u(divTime);
+
             divQuot_Alt <= quot00;
 
             divRem_Alt <=  minus(rem00) when signSel1 = '1'
@@ -187,8 +189,16 @@ begin
 
             new00 <= cmpGeU(sum00, divisorS);
 
+                diff_T <= add(sum_T, arg1t) when (isNonzero(divTime) /= '1') and isUnsigned /= '1'
+                     else sub(sum_T, arg1t);
+
             a0e <= signExtend(input.args(0), 64);
             a1e <= '1' & input.args(1) & "000" & X"0000000";
+
+            ma0 <= minus(input.args(0));
+            ma1 <= minus(input.args(1));
+
+                  opUnsigned <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
 
             DIVISION_SYNC: process (clk)
             begin
@@ -203,35 +213,58 @@ begin
                         arg0 <= input.args(0);
                         arg1 <= input.args(1);
 
-                        isUnsigned <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
-                        signSel0 <= input.args(0)(31) and not bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
-                        signSel1 <= input.args(1)(31) and not bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
+                        isUnsigned <= opUnsigned;
+                        signSel0 <= input.args(0)(31) and not opUnsigned;
+                        signSel1 <= input.args(1)(31) and not opUnsigned;
 
                         result00 <= (others => '0');
 
                         arg0t <= input.args(0);
                         arg1t <= input.args(1);
-                        if input.args(1)(31) = '1' and not (input.st.operation.arith = opDivU or input.st.operation.arith = opRemU) then
+
+                        if input.args(1)(31) = '1' and opUnsigned /= '1' then
                             sum00 <= minus(a0e);
                             divisorS <= minus(a1e);
 
                             arg0t <= minus(input.args(0));
                             arg1t <= minus(input.args(1));
-                        elsif (input.st.operation.arith = opDivU or input.st.operation.arith = opRemU) then
+
+                            sum_T <= (others => ma0(31));
+                            sum_L <= ma0(30 downto 0) & '0';
+                        elsif opUnsigned = '1' then
                             sum00 <= zeroExtend(input.args(0), 64);
                             divisorS <= '0' & input.args(1) & "000" & X"0000000";
+
+                            sum_T <= (0 => input.args(0)(31), others => '0');
+                            sum_L <= input.args(0)(30 downto 0) & '0';
                         else
                             sum00 <= signExtend(input.args(0), 64);
                             divisorS <= '0' & input.args(1) & "000" & X"0000000";
+
+                            sum_T <= (others => input.args(0)(31));
+                            sum_L <= input.args(0)(30 downto 0) & '0';
                         end if;
                     else
                         result00 <= result00(30 downto 0) & new00;
                         if new00 = '1' then
                             sum00 <= diff00;
+
+                            sum_T <= diff_T(30 downto 0) & sum_L(31);
+                            rem_T <= diff_T;
+                        else
+                            sum_T <= sum_T(30 downto 0) & sum_L(31);
+                            rem_T <= sum_T;
                         end if;
 
-                        divisorS <= (divisorS(63) and not isUnsigned) & divisorS(63 downto 1);    
+                        divisorS <= (divisorS(63) and not isUnsigned) & divisorS(63 downto 1);
+
+                        sum_L <= sum_L(30 downto 0) & '0';
                     end if;
+
+                            if dTime >= 31 then
+                            --    sum_T <= (others => 'U');
+                            --    sum_L <= (others => 'U');
+                            end if;
 
                 end if;
             end process;
