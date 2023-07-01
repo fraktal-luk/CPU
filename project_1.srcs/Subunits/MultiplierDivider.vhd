@@ -91,10 +91,12 @@ begin
             -- stage E1
             if divReady = '1' then
                divRes <= --divQuot;
-                            divQuot_Alt;
+                            --divQuot_Alt;
+                            divQuot_New;
             elsif remReady = '1' then
                divRes <= --divRem;
-                            divRem_Alt;
+                            --divRem_Alt;
+                            divRem_New;
             end if;
 
                 if not TMP_ENABLE_DIV then
@@ -231,8 +233,8 @@ begin
                 if rising_edge(clk) then
 
                     if divResultSending = '1' then
-                        quot00 <= result00;
-                        rem00  <= sum00(31 downto 0);
+                    --    quot00 <= result00;
+                    --    rem00  <= sum00(31 downto 0);
                         
                         quot_T <= result_T;
                         rem_T  <= sum_TE(32 downto 1);
@@ -301,7 +303,8 @@ begin
                     else
                         result_T <= result_T(30 downto 0) & new_T; 
                     
-                        if new00 = '1' then
+                        if --new00 = '1' then
+                           new_T = '1' then
                             sum_TE <= diff_TE(62 downto 0) & sum_L(31);
                             rem_TE <= diff_TE;
                         else
