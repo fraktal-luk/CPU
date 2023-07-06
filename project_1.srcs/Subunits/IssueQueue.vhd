@@ -115,7 +115,7 @@ begin
         wupsSelection <= getFastWakeups(queueContent, bypass, CFG_SEL);
     end generate;
 
-    queueContentUpdatedSel <= updateSchedulerArray_S_NEW(queueContent, wupsSelection, memFail, CFG_SEL);
+    queueContentUpdatedSel <= updateSchedulerArray_S(queueContent, wupsSelection, memFail, CFG_SEL);
 
     freedMask <= getFreedMask(queueContent);
     fullMask <= getFullMask(queueContent);
@@ -131,7 +131,7 @@ begin
               else trialUpdatedMask when events.execEvent = '1'
               else (others => '0');
 
-        queueContentUpdated <= updateSchedulerArray_N(queueContent, wups, memFail, CFG_WAIT);
+        queueContentUpdated <= updateSchedulerArray(queueContent, wups, memFail, CFG_WAIT);
         queueContentUpdated_2 <= updateQueueState(queueContentUpdated, sends,
                                                 killMask, trialMask, selMask,
                                                 memFail, unlockDiv);
@@ -199,9 +199,6 @@ begin
             selMask2 <= selMask1;
 
             sentKilled <= sendingKilled;
-
-
-            DB_reportEvents(queueContentNext);
         end if;
     end process;
 
@@ -220,10 +217,11 @@ begin
             if events.lateEvent = '1' or events.execEvent = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
             elsif isNonzero(recoveryCounter) = '1' then
-                recoveryCounter <= addInt(recoveryCounter, -1);
+                recoveryCounter <= --addInt(recoveryCounter, -1);
+                                    addIntTrunc(recoveryCounter, -1, 1);
             end if;
 
-            recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here    
+            --recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here    
         end if;
     end process;
 
@@ -345,11 +343,13 @@ begin
             begin
     
                 if rising_edge(clk) then
-                    lastEvents <= getLastEvents(queueContentNext);
+                    --lastEvents <= getLastEvents(queueContentNext);
 
                     prevKillMask <= killMask;
                     prevStates <= currentStates;
                     queueContentPrev <= queueContent;
+
+                    DB_reportEvents(queueContentNext, lastEvents_N);
 
 
                     if DB_LOG_EVENTS then
@@ -360,7 +360,7 @@ begin
                     end if;
                 end if;
             end process;
-    
+
             ALT_LAST_EVENTS: for i in 0 to IQ_SIZE-1 generate
                 lastEvents_N(i) <= TMP_lastEvent(queueContent(i), queueContentPrev(i), prevKillMask(i));
             end generate;

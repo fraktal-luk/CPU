@@ -266,11 +266,9 @@ type ArgumentState is record
     zero: std_logic;
     imm: std_logic;
     value: Hword;
-    
-    canFail: std_logic; -- maybe a counter is needed 
 
-    activeCounter: SmallNumber;
-        readyCtr: SmallNumber;
+    --activeCounter: SmallNumber;
+    readyCtr: SmallNumber;
     failed: std_logic;
 
     waiting: std_logic;
@@ -312,8 +310,8 @@ type EntryStatus is record
     issued: std_logic;
     freed: std_logic;
     trial: std_logic;
-    stageCtr: SmallNumber;
-        issuedCtr: SmallNumber;
+    --stageCtr: SmallNumber;
+    issuedCtr: SmallNumber;
 end record;
 
 --type IqState is (empty, active, issued, suspended, freed);
@@ -332,24 +330,18 @@ type IqEventArray is array(natural range <>) of IqEvent;
 
 type DynamicInfo is record
     full: std_logic;
-    
     status: EntryStatus;
- --   currentState: IqState; -- DB
-    lastEvent: IqEvent; -- DB
 
     renameIndex: InsTag;
-
     intDestSel: std_logic;
     floatDestSel: std_logic;
     dest: PhysName;
 
     argStates: ArgumentStateArray(0 to 2);
-    
-        db0, db1, db2, db3, db4, db5: std_logic;
+
+    --    db0, db1, db2, db3, db4, db5: std_logic;
 end record;
 
-
---type DynamicInfoArray is array(natural range <>) of DynamicInfo;
 
 -- Scheduler structure
 
@@ -600,9 +592,8 @@ constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
     zero => '0',
     imm => '0',
     value => (others => '0'),
-    canFail => '0',
-    activeCounter => (others => '0'),
-        readyCtr => (others => '0'),
+    --activeCounter => (others => '0'),
+    readyCtr => (others => '0'),
     failed => '0',
     waiting => '0',
     stored => '0',
@@ -622,24 +613,20 @@ constant DEFAULT_ENTRY_STATUS: EntryStatus := (
     issued => '0',
     freed => '0',
     trial => '0',
-    stageCtr => (others => '0'),
-        issuedCtr => (others => '0')
+    --stageCtr => (others => '0'),
+    issuedCtr => (others => '0')
 );
 
 constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     full => '0',
 
     status => DEFAULT_ENTRY_STATUS,
-   -- currentState => empty,
-    lastEvent => none,
-
     renameIndex => (others => '0'),
     intDestSel => '0',
     floatDestSel => '0',
     dest => (others => '0'),
-    argStates => (others => DEFAULT_ARG_STATE),
-    
-            db0 => '0', db1 => '0', db2 => '0', db3 => '0', db4 => '0', db5 => '0'
+    argStates => (others => DEFAULT_ARG_STATE)
+            --db0 => '0', db1 => '0', db2 => '0', db3 => '0', db4 => '0', db5 => '0'
 );
 
 constant DEFAULT_SCHEDULER_INFO: SchedulerInfo := (
