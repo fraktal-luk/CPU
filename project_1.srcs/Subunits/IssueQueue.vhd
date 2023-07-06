@@ -46,7 +46,7 @@ entity IssueQueue is
         accept: out std_logic;
 
 		nextAccepting: in std_logic;
-            unlockDiv: in std_logic;
+        unlockDiv: in std_logic;
             
 		events: in EventState;
 
@@ -61,8 +61,7 @@ end IssueQueue;
 
 
 architecture Behavioral of IssueQueue is
-    constant N_BANKS: natural := --4;
-                                PIPE_WIDTH;
+    constant N_BANKS: natural := PIPE_WIDTH;
     constant BANK_SIZE: natural := IQ_SIZE / N_BANKS;
 
     constant CFG_WAIT: SchedulerUpdateConfig := (false, false, IGNORE_MEM_FAIL, FORWARDING_D, false);
@@ -75,7 +74,7 @@ architecture Behavioral of IssueQueue is
 
     signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
 
-    signal fullMask, killMask, freedMask, readyMask, selMask, selMask1, selMask2,       dbMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+    signal fullMask, killMask, freedMask, readyMask, selMask, selMask1, selMask2: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
     signal anyReadyFull, sends, sendingKilled, sentKilled, sentTrial1, sentTrial2: std_logic := '0';
 
@@ -113,7 +112,7 @@ begin
     wups <= getSlowWakeups(queueContent, bypass, CFG_WAIT);
 
     FAST_WAKEUP: if ENABLE_FAST_WAKEUP generate
-        wupsSelection <= getFastWakeups_N2(queueContent, bypass, CFG_SEL);
+        wupsSelection <= getFastWakeups(queueContent, bypass, CFG_SEL);
     end generate;
 
     queueContentUpdatedSel <= updateSchedulerArray_S_NEW(queueContent, wupsSelection, memFail, CFG_SEL);
@@ -138,8 +137,7 @@ begin
                                                 memFail, unlockDiv);
 
         sendingTrial <= isNonzero(selMask and trialUpdatedMask);
-        sendingKilled <= --(sendingTrial and events.execEvent) or events.lateEvent;
-                            killFollower(sendingTrial, events);
+        sendingKilled <= killFollower(sendingTrial, events);
 
         sentTrial1 <= isNonzero(selMask1 and trialUpdatedMask);
         sentTrial2 <= isNonzero(selMask2 and trialUpdatedMask);
@@ -228,9 +226,6 @@ begin
             recoveryCounter(7 downto 1) <= (others => '0'); -- Only 1 bit needed here    
         end if;
     end process;
-            
-            dbMask <= TMP_getDbMask(queueContentUpdated_2);
-
 
     -- pragma synthesis off
     DEBUG_HANDLING: if DB_ENABLE generate
@@ -299,7 +294,6 @@ begin
                 function hexString(v: std_logic_vector) return string is
                     constant BIT_LEN: natural := v'length;
                     constant HEX_LEN: natural := (BIT_LEN+3)/4;        
-                    --constant SHORTFALL: natural := 4*HEX_LEN - BIT_LEN;
                     variable res: string(1 to HEX_LEN) := (others => '0');
                     variable digit: character := ' ';
                     variable rightIndex: natural := 0;
@@ -332,8 +326,7 @@ begin
                         write(currentLine, slv2hex(queueContent(i).static.dbInfo.seqNum));
                         write(currentLine, string'(": "));
 
-                        write(currentLine, --natural'image(slv2u(queueContent(i).dynamic.renameIndex)));
-                                           slv2hex(queueContent(i).dynamic.renameIndex));
+                        write(currentLine, slv2hex(queueContent(i).dynamic.renameIndex));
                         write(currentLine, string'(", "));
                         write(currentLine, std_logic'image(queueContent(i).dynamic.status.issued));
                         write(currentLine, string'(", "));
@@ -369,9 +362,7 @@ begin
             end process;
     
             ALT_LAST_EVENTS: for i in 0 to IQ_SIZE-1 generate
-            --begin
                 lastEvents_N(i) <= TMP_lastEvent(queueContent(i), queueContentPrev(i), prevKillMask(i));
-                
             end generate;
         end block;
 

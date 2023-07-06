@@ -306,7 +306,7 @@ begin
 	    nInRe <= i2slv(countOnes(renameMask), SMALL_NUMBER_SIZE) when prevSendingRe = '1' else (others => '0');    		
         nOut <= nCommitted when committing = '1' else (others => '0'); -- TODO: use nCommittedEffective? also UNUSED
     end generate;
-    
+
     STORE_QUEUE_MANAGEMENT: if not IS_LOAD_QUEUE generate
     	nFullNext <= getNumFull(pDrain, pTaggedNext, QUEUE_PTR_SIZE);
     	nAllocNext <= getNumFull(pDrain, pRenamedNext, QUEUE_PTR_SIZE);
