@@ -99,7 +99,7 @@ begin
                             divRem_New;
             end if;
 
-                if not TMP_ENABLE_DIV then
+                if not ENABLE_DIV then
                     divRes <= (others => '0');
                 end if;
 

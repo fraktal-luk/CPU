@@ -9,24 +9,19 @@ package CoreConfig is
 
 --function checkSynthesis return boolean;
 
---constant CLEAR_DEBUG_INFO: boolean := true;
-
 constant DB_ENABLE: boolean := false;
 constant DB_LOG_EVENTS: boolean := false;-- false;
 
-constant VIEW_ON: boolean := DB_ENABLE;
+constant DEBUG_LOG_COMMITTED: boolean := false;
 
+constant DB_OP_TRACKING: boolean := true;
+constant DB_TRACKED_SEQ_NUM: Word := X"00000051";
 
-    constant DEBUG_LOG_COMMITTED: boolean := false;
+constant DB_LSQ_TRACKING: boolean := false;
+constant DB_BRANCH_EXEC_TRACKING: boolean := false;
 
-    constant DB_OP_TRACKING: boolean := true;
-    constant DB_TRACKED_SEQ_NUM: Word := X"00000051";
-
-    constant DB_LSQ_TRACKING: boolean := false;
-    constant DB_BRANCH_EXEC_TRACKING: boolean := false;
-
-    constant DB_ENABLE_JUMP_WATCH: boolean := false;
-    constant DB_JUMP_WATCH_TARGET: Mword := (others => '0');
+constant DB_ENABLE_JUMP_WATCH: boolean := false;
+constant DB_JUMP_WATCH_TARGET: Mword := (others => '0');
 
 --constant SYNTH_CHECK: boolean := checkSynthesis;
 
@@ -36,30 +31,24 @@ constant ALIGN_BITS: natural := LOG2_PIPE_WIDTH + 2;
 constant PC_INC: Mword := (ALIGN_BITS => '1', others => '0');    
 
 
-    constant TMP_ENABLE_DIV: boolean := true;
-
+constant ENABLE_DIV: boolean := true;
 constant ENABLE_FP: boolean := true;
 constant ENABLE_FAST_WAKEUP: boolean := true;
+constant ENABLE_MQ: boolean := true;
+
+constant USE_LINE_PREDICTOR: boolean := true;
 
 constant QQQ: natural := 1; -- 1: remove src2, 0: don't
 
-constant ENABLE_MQ: boolean := true;
-
-
 constant ENABLE_SQ_HIGHER_ADR: boolean := true;
 
-
 constant FETCH_WIDTH: positive := PIPE_WIDTH; 
-
 constant RENAME_WIDTH: natural := PIPE_WIDTH;
 alias RENAME_W is RENAME_WIDTH;
 
 constant IBUFFER_SIZE: positive := 4;
 constant ROB_SIZE: positive := 8; 
 
-constant USE_LINE_PREDICTOR: boolean := true;
-
-constant CLEAR_DEST_SEL_ON_EMPTY: boolean := false; -- When op gets empty, sets *DestSel to 0
 
 constant PHYS_REG_BITS: natural := 6 + 2; --LOG2_PIPE_WIDTH;
 

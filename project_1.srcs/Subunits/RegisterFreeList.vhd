@@ -162,7 +162,7 @@ begin
               
 -------------
 -------------        
-        VIEW: if VIEW_ON generate            
+        VIEW: if DB_ENABLE generate            
             signal vFree, vUsed: std_logic_vector(0 to N_PHYS-1) := (others => '0');
             signal newTaken, newPut: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
             

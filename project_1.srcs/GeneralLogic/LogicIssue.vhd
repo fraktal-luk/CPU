@@ -82,7 +82,7 @@ function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant 
 function getIssueInfoArray(insVec: InstructionSlotArray; constant USE_IMM: boolean; ria: RenameInfoArray;
                            renamedDests: SmallNumberArray; renamedSources: SmallNumberArray; iqSel: IqSelector) return SchedulerInfoArray;
                            
-function getNewLocs_N(fullMask: std_logic_vector; tags: SmallNumberArray; newArr: SchedulerInfoArray) return slv2D;
+function getNewLocs(fullMask: std_logic_vector; tags: SmallNumberArray; newArr: SchedulerInfoArray) return slv2D;
 
 
 -- API, enqueue and inside IQ
@@ -123,14 +123,15 @@ function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) 
 function getSchedEntrySlot(info: SchedulerInfo; full: std_logic; iqTag: SmallNumber) return SchedulerState;
 function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
 
+function getIssueTag(sends: std_logic; selMask: std_logic_vector) return SmallNumber;
 
--- Debug functions
-function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency;
-function DB_incCyclesWaiting(dbd: DbDependency) return DbDependency;
-function DB_incCyclesReady(dbd: DbDependency) return DbDependency;
 
 function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray;
+-- Debug functions
+function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency;
 procedure DB_reportEvents(content: SchedulerInfoArray; lastEvents: IqEventArray);
+
+
 
 -- experimental, don't export
 --function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup;
@@ -319,12 +320,11 @@ begin
 end function;
 
 
-function getNewLocs_N(fullMask: std_logic_vector; tags: SmallNumberArray; newArr: SchedulerInfoArray) return slv2D is
+function getNewLocs(fullMask: std_logic_vector; tags: SmallNumberArray; newArr: SchedulerInfoArray) return slv2D is
     constant QUEUE_SIZE_EXT: natural := fullMask'length;
-    variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
-    variable cnt: natural := 0;
     constant N_BANKS: natural := PIPE_WIDTH;
     constant BANK_SIZE: natural := QUEUE_SIZE_EXT/N_BANKS;
+    variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
 begin
     for b in 0 to N_BANKS-1 loop
         res(slv2u(tags(b)) * N_BANKS + b, b) := newArr(b).dynamic.full;
@@ -746,6 +746,16 @@ end function;
 
 
 
+function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray is
+    variable res: IqStateArray(queueContent'range) := (others => empty);
+begin
+    for i in res'range loop
+        res(i) := queueContent(i).dynamic.status.state;
+    end loop;
+    return res;
+end function;
+
+
 -- DB
 procedure DB_reportEvents(content: SchedulerInfoArray; lastEvents: IqEventArray) is
     use work.CpuText.all;
@@ -764,6 +774,17 @@ begin
     -- pragma synthesis on
 end procedure;
 
+function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency is
+    variable res: DbDependency := dbd;
+begin
+    -- pragma synthesis off
+    res.producer := tag;
+    res.cyclesWaiting := 0;
+    res.cyclesReady := 0;
+    -- pragma synthesis on
+    return res;
+end function;
+
 
 -- TODO: DB?
 function handleIqDbInfo(queueContent: SchedulerInfoArray) return SchedulerInfoArray is
@@ -771,23 +792,21 @@ function handleIqDbInfo(queueContent: SchedulerInfoArray) return SchedulerInfoAr
     variable res: SchedulerInfoArray(queueContent'range) := queueContent;    
 begin
     for i in 0 to LEN-1 loop
-        for j in 0 to 2 loop
-            if res(i).dynamic.status.issued = '1' then
-                null;
-            elsif res(i).dynamic.argStates(j).waiting = '1' then
-                res(i).dynamic.argStates(j).dbDep := DB_incCyclesWaiting(res(i).dynamic.argStates(j).dbDep);
-            else
-                res(i).dynamic.argStates(j).dbDep := DB_incCyclesReady(res(i).dynamic.argStates(j).dbDep);
-            end if;
-        end loop;
-    end loop;
-
-    for i in 0 to LEN-1 loop
         if res(i).dynamic.full /= '1' then
             res(i).static.dbInfo := DEFAULT_DEBUG_INFO;
             res(i).dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
             res(i).dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
             res(i).dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
+        elsif res(i).dynamic.status.issued /= '1' then
+            -- pragma synthesis off
+            for j in 0 to 2 loop
+                if res(i).dynamic.argStates(j).waiting = '1' then
+                    res(i).dynamic.argStates(j).dbDep.cyclesWaiting := res(i).dynamic.argStates(j).dbDep.cyclesWaiting + 1;
+                else
+                    res(i).dynamic.argStates(j).dbDep.cyclesReady := res(i).dynamic.argStates(j).dbDep.cyclesReady + 1;
+                end if;
+            end loop;
+            -- pragma synthesis on
         end if;
     end loop;        
     return res;
@@ -1046,48 +1065,6 @@ begin
 end function;
 
 
--------------------------------
-
-function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray is
-    variable res: IqStateArray(queueContent'range) := (others => empty);
-begin
-    for i in res'range loop
-        res(i) := queueContent(i).dynamic.status.state;
-    end loop;
-    return res;
-end function;
-------------------
-
-    -- Debug functions
-function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency is
-    variable res: DbDependency := dbd;
-begin
-    -- pragma synthesis off
-    res.producer := tag;
-    res.cyclesWaiting := 0;
-    res.cyclesReady := 0;
-    -- pragma synthesis on
-    return res;
-end function;
-
-function DB_incCyclesWaiting(dbd: DbDependency) return DbDependency is
-    variable res: DbDependency := dbd;
-begin
-    -- pragma synthesis off
-    res.cyclesWaiting := res.cyclesWaiting + 1;
-    -- pragma synthesis on
-    return res;
-end function;
-
-function DB_incCyclesReady(dbd: DbDependency) return DbDependency is
-    variable res: DbDependency := dbd;
-begin
-    -- pragma synthesis off
-    res.cyclesReady := res.cyclesReady + 1;
-    -- pragma synthesis on
-    return res;
-end function;
-
 -- wups experimental
     function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup is
         variable res: ArgWakeup;
@@ -1215,7 +1192,26 @@ end function;
         
         return res;
     end function;
-----------------------------------------------
 
+-----------------------------------
+
+        function getTagLowPart(selMask: std_logic_vector) return SmallNumber is
+            variable res: SmallNumber := sn(-1);
+        begin
+            for i in selMask'range loop
+                if selMask(i) = '1' then
+                    res := sn(i);
+                end if;
+            end loop;
+            res(7 downto 4) := (others => '0');
+            return res;
+        end function;
+        
+        function getIssueTag(sends: std_logic; selMask: std_logic_vector) return SmallNumber is
+            variable res: SmallNumber := getTagLowPart(selMask);
+        begin
+            res(4) := sends;
+            return res;
+        end function;
 
 end LogicIssue;
