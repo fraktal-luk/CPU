@@ -25,10 +25,7 @@ function shiftLine(fetchedLine: WordArray; shift: SmallNumber) return WordArray;
 function getStallEvent(predictedAddress: Mword) return ControlPacket;
 
 function getFrontEvent(ip, target: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket;
-
 function getNormalEvent(target: Mword; cp: ControlPacket) return ControlPacket;
-
-function getEarlyEvent(fetchLine: WordArray(0 to FETCH_WIDTH-1); target, predictedAddress: Mword; fetchStall, send: std_logic) return ControlPacket;
 
 function decodeGroup(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural; ip: Mword; ctrl: ControlPacket) return BufferEntryArray;
 function getControlA(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural;ip: Mword; hasBranch: std_logic) return ControlPacketArray;
@@ -161,7 +158,6 @@ begin
             end if;
 
             res.tags.bqPointer := sn(i); -- TMP!
-
             exit;
         end if;
     end loop;
@@ -189,26 +185,6 @@ begin
         res.controlInfo.frontBranch := '1';
     end if;
     res.tags.bqPointer := cp.tags.bqPointer;
-    return res;
-end function;
-
-
-function getEarlyEvent(fetchLine: WordArray(0 to FETCH_WIDTH-1); target, predictedAddress: Mword; fetchStall, send: std_logic)
-return ControlPacket is
-	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-	--constant cp: ControlPacket := getFrontEvent(predictedAddress, target, fetchLine);
-begin
-    if fetchStall = '1' then -- Need refetching
-        res := getStallEvent(predictedAddress);
-    elsif send = '1' then
-        res := getNormalEvent(target, getFrontEvent(predictedAddress, target, fetchLine));
-        --res.tags.bqPointer := cp.tags.bqPointer;
-    else
-        res := DEFAULT_CONTROL_PACKET;
-    end if;
-
-  --  res.tags.bqPointer := cp.tags.bqPointer;
-
     return res;
 end function;
 

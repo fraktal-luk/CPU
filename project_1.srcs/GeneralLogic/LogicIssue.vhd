@@ -570,7 +570,7 @@ begin
             end if;
         else
         -- wakeup
-            res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wups(k, a));  -- AC: clears
+            res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wups(k, a));
         end if;
     end loop;
 
@@ -873,29 +873,31 @@ begin
     res.full := full;
 
     res.st := info.static;
-    res.readNew := (others => '0');
     
-    res.argSpec.args(0) := info.dynamic.argStates(0).reg;
-    res.argSpec.args(1) := info.dynamic.argStates(1).reg;
-    res.argSpec.args(2) := info.dynamic.argStates(2).reg;
 
-    res.argSpec.intArgSel := (others => '0');
-    res.argSpec.floatArgSel := (others => '0');
+--    res.argSpec.intArgSel := (others => '0');
+--    res.argSpec.floatArgSel := (others => '0');
 
     res.argSpec.intDestSel := info.dynamic.intDestSel;
     res.argSpec.floatDestSel := info.dynamic.floatDestSel;
     res.argSpec.dest := info.dynamic.dest;
 
+    res.destTag := iqTag;
+--    res.argSpec.args(0) := info.dynamic.argStates(0).reg;
+--    res.argSpec.args(1) := info.dynamic.argStates(1).reg;
+--    res.argSpec.args(2) := info.dynamic.argStates(2).reg;
+
+    for k in 0 to 2 loop
+        res.argSpec.args(k) := info.dynamic.argStates(k).reg;
+        res.argLocsPipe(k) := info.dynamic.argStates(k).srcPipe;
+        res.argSrc(k) := info.dynamic.argStates(k).srcStage;
+    end loop;
+
     if IMM_AS_REG then
         res.st.immValue(PhysName'length-2 downto 0) := res.argSpec.args(1)(6 downto 0);
     end if;
 
-    res.destTag := iqTag;
-
-    for k in 0 to 2 loop
-        res.argLocsPipe(k) := info.dynamic.argStates(k).srcPipe;
-        res.argSrc(k) := info.dynamic.argStates(k).srcStage;
-    end loop;
+    res.readNew := (others => '0');
 
     return res;
 end function;
@@ -1195,23 +1197,23 @@ end function;
 
 -----------------------------------
 
-        function getTagLowPart(selMask: std_logic_vector) return SmallNumber is
-            variable res: SmallNumber := sn(-1);
-        begin
-            for i in selMask'range loop
-                if selMask(i) = '1' then
-                    res := sn(i);
-                end if;
-            end loop;
-            res(7 downto 4) := (others => '0');
-            return res;
-        end function;
-        
-        function getIssueTag(sends: std_logic; selMask: std_logic_vector) return SmallNumber is
-            variable res: SmallNumber := getTagLowPart(selMask);
-        begin
-            res(4) := sends;
-            return res;
-        end function;
+    function getTagLowPart(selMask: std_logic_vector) return SmallNumber is
+        variable res: SmallNumber := sn(-1);
+    begin
+        for i in selMask'range loop
+            if selMask(i) = '1' then
+                res := sn(i);
+            end if;
+        end loop;
+        res(7 downto 4) := (others => '0');
+        return res;
+    end function;
+    
+    function getIssueTag(sends: std_logic; selMask: std_logic_vector) return SmallNumber is
+        variable res: SmallNumber := getTagLowPart(selMask);
+    begin
+        res(4) := sends;
+        return res;
+    end function;
 
 end LogicIssue;

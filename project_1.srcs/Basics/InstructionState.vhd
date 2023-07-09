@@ -282,21 +282,7 @@ end record;
 
 type ArgumentStateArray is array(natural range <>) of ArgumentState;
 
--- Scheduler structure
 
-type StaticInfo is record
-    dbInfo: InstructionDebugInfo;
-    operation: SpecificOp;
-    branchIns: std_logic;
-            divIns: std_logic;
-    tags: InstructionTags;    
-    immediate: std_logic;    
-    immValue: Hword;
-    zero: std_logic_vector(0 to 2);    
-end record;
-
-
---type StaticInfoArray is array(natural range <>) of StaticInfo;
 
 -- Scheduler structure
 
@@ -310,56 +296,75 @@ type EntryStatus is record
     issued: std_logic;
     freed: std_logic;
     trial: std_logic;
-    --stageCtr: SmallNumber;
     issuedCtr: SmallNumber;
 end record;
 
---type IqState is (empty, active, issued, suspended, freed);
 subtype IqState is EntryState;
-
 type IqStateArray is array(natural range <>) of IqState;
 
-type IqEvent is (none,
-                    insert, -- empty -> active/suspended
-                    kill,   --  killMask(i)
-                    issue,  -- active -> issued
-                    retract, -- issued -> active/suspended
-                    retire); -- issued -> empty and not killMask(i)
 
-type IqEventArray is array(natural range <>) of IqEvent;
+type StaticInfo is record
+    dbInfo: InstructionDebugInfo;
+    operation: SpecificOp;
+    branchIns: std_logic;
+    divIns: std_logic;
+    tags: InstructionTags;    
+    immediate: std_logic;    
+    immValue: Hword;
+    zero: std_logic_vector(0 to 2);    
+end record;
 
 type DynamicInfo is record
     full: std_logic;
     status: EntryStatus;
 
-    renameIndex: InsTag;
+    renameIndex: InsTag; -- ??
     intDestSel: std_logic;
     floatDestSel: std_logic;
     dest: PhysName;
-
     argStates: ArgumentStateArray(0 to 2);
-
-    --    db0, db1, db2, db3, db4, db5: std_logic;
 end record;
 
 
--- Scheduler structure
+--    destTag: SmallNumber;                     -- position-defined
+
+    -- argSpec
+    --    intDestSel: std_logic;
+    --    floatDestSel: std_logic;
+    --    dest: SmallNumber;
+
+    --    intArgSel: std_logic_vector(0 to 2);      -- skip
+    --    floatArgSel: std_logic_vector(0 to 2);    -- skip
+    --    args: SmallNumberArray(0 to 2);
+
+--    argSpec: InstructionArgSpec;
+
+--    argLocsPipe: SmallNumberArray(0 to 2);
+--    argSrc: SmallNumberArray(0 to 2);
+--    readNew: std_logic_vector(0 to 2);
+
+--    args: MwordArray(0 to 2);         -- after Issue
+
+    type SchedArgSpec is record
+        intDestSel: std_logic;
+        floatDestSel: std_logic;
+        dest: SmallNumber;
+        --intArgSel: std_logic_vector(0 to 2);
+        --floatArgSel: std_logic_vector(0 to 2);
+        args: SmallNumberArray(0 to 2);
+    end record;
 
 type SchedulerInfo is record
     dynamic: DynamicInfo;
     static: StaticInfo;
 end record;
 
-type SchedulerInfoArray is array(natural range <>) of SchedulerInfo;
-
 type SchedulerState is record
     full: std_logic;
-
     st: StaticInfo;
 
-    argSpec: InstructionArgSpec;
+    argSpec: SchedArgSpec;
     destTag: SmallNumber;
-    poisoned: std_logic;
 
     readNew: std_logic_vector(0 to 2);
     args: MwordArray(0 to 2);
@@ -369,12 +374,19 @@ type SchedulerState is record
 end record;
 
 
+type SchedulerInfoArray is array(natural range <>) of SchedulerInfo;
+
+
 -- Created to enable *Array				
 type InstructionSlot is record 
 	full: std_logic;
 	ins: InstructionState;
 end record;
-	
+
+
+type IqEvent is (none, insert, kill, issue, retract, retire); -- TODO: suspend/resume
+type IqEventArray is array(natural range <>) of IqEvent;
+
 
 -- NOTE: index can be negative to enable logical division into 2 different ranges 
 type InstructionSlotArray is array(integer range <>) of InstructionSlot;
@@ -556,15 +568,23 @@ constant DEFAULT_BUFFER_ENTRY: BufferEntry := (
     others => '0'
 );
 
+
+    constant DEFAULT_SCHED_ARG_SPEC: SchedArgSpec := (
+        intDestSel => '0',
+        floatDestSel => '0',
+        dest => (others => '0'),
+--        intArgSel => (others => '0'),
+--        floatArgSel => (others => '0'),
+        args => ((others => '0'), (others => '0'), (others => '0'))
+    );
+
 constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       full => '0',
 
       st => DEFAULT_STATIC_INFO,
 
-      argSpec => DEFAULT_ARG_SPEC,
+      argSpec => DEFAULT_SCHED_ARG_SPEC,
       destTag => (others => '0'),
-
-      poisoned => '0',
 
       readNew => (others => '0'),
       args => (others => (others=>'0')),
