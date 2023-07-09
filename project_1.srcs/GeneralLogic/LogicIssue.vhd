@@ -244,11 +244,11 @@ begin
 
         if i = 1 then
             res.argStates(i).imm := stInfo.immediate;
-            res.argStates(i).value := stInfo.immValue;
+          --  res.argStates(i).value := stInfo.immValue;
         end if;
 
         res.argStates(i).waiting := not stInfo.zero(i);
-        res.argStates(i).stored := '0';
+      --  res.argStates(i).stored := '0';
 
         res.argStates(i).srcPipe := (others => '0');
         res.argStates(i).srcStage := "00000010";
@@ -873,28 +873,20 @@ begin
     res.full := full;
 
     res.st := info.static;
-    
 
---    res.argSpec.intArgSel := (others => '0');
---    res.argSpec.floatArgSel := (others => '0');
-
-    res.argSpec.intDestSel := info.dynamic.intDestSel;
-    res.argSpec.floatDestSel := info.dynamic.floatDestSel;
-    res.argSpec.dest := info.dynamic.dest;
-
+    res.intDestSel := info.dynamic.intDestSel;
+    res.floatDestSel := info.dynamic.floatDestSel;
+    res.dest := info.dynamic.dest;
     res.destTag := iqTag;
---    res.argSpec.args(0) := info.dynamic.argStates(0).reg;
---    res.argSpec.args(1) := info.dynamic.argStates(1).reg;
---    res.argSpec.args(2) := info.dynamic.argStates(2).reg;
 
     for k in 0 to 2 loop
-        res.argSpec.args(k) := info.dynamic.argStates(k).reg;
+        res.args(k) := info.dynamic.argStates(k).reg;
         res.argLocsPipe(k) := info.dynamic.argStates(k).srcPipe;
         res.argSrc(k) := info.dynamic.argStates(k).srcStage;
     end loop;
 
     if IMM_AS_REG then
-        res.st.immValue(PhysName'length-2 downto 0) := res.argSpec.args(1)(6 downto 0);
+        res.st.immValue(PhysName'length-2 downto 0) := res.args(1)(6 downto 0);
     end if;
 
     res.readNew := (others => '0');
@@ -993,10 +985,10 @@ begin
         res.dynamic.argStates(i).reg := a.dynamic.argStates(i).reg or b.dynamic.argStates(i).reg;
         res.dynamic.argStates(i).zero := a.dynamic.argStates(i).used or b.dynamic.argStates(i).zero;
         res.dynamic.argStates(i).imm := a.dynamic.argStates(i).imm or b.dynamic.argStates(i).imm;
-        res.dynamic.argStates(i).value := a.dynamic.argStates(i).value or b.dynamic.argStates(i).value;
+--        res.dynamic.argStates(i).value := a.dynamic.argStates(i).value or b.dynamic.argStates(i).value;
 
         res.dynamic.argStates(i).waiting := a.dynamic.argStates(i).waiting or b.dynamic.argStates(i).waiting;
-        res.dynamic.argStates(i).stored := a.dynamic.argStates(i).stored or b.dynamic.argStates(i).stored;
+--        res.dynamic.argStates(i).stored := a.dynamic.argStates(i).stored or b.dynamic.argStates(i).stored;
 
         res.dynamic.argStates(i).srcPipe := a.dynamic.argStates(i).srcPipe or b.dynamic.argStates(i).srcPipe;
         res.dynamic.argStates(i).srcStage := a.dynamic.argStates(i).srcStage or b.dynamic.argStates(i).srcStage;

@@ -487,7 +487,7 @@ function getStoreSysMask(insVec: InstructionSlotArray) return std_logic_vector i
     variable sm1: std_logic_vector(0 to PIPE_WIDTH-1) := getStoreMask1(insVec);
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        if       sm1(i) = '1' --insVec(i).full = '1'
+        if       sm1(i) = '1'
                and insVec(i).ins.specificOperation.subpipe = Mem 
               and (insVec(i).ins.specificOperation.memory = opStoreSys)        
         then
@@ -818,8 +818,7 @@ begin
     res.full := isl.full;
     res.dbInfo := isl.st.dbInfo;
     res.tag := isl.st.tags.renameIndex;
-    res.dest := isl.argSpec.dest;
-
+    res.dest := isl.dest;
     return res;
 end function;
 
@@ -830,8 +829,7 @@ begin
     res.dbInfo := isl.st.dbInfo;
     res.tag := isl.st.tags.renameIndex;
     res.iqTag := isl.destTag;
-    res.dest := isl.argSpec.dest;
-
+    res.dest := isl.dest;
     return res;
 end function;
 
@@ -900,19 +898,19 @@ end function;
         res.st.tags := mqReexecCtrlIs.tags;
         
         -- adr
-        res.args(0) := mqReexecCtrlIs.target;
-        res.args(1) := (others => '0');
-        
-            res.argSrc(0) := "00000000";
-            res.argSrc(1) := "00000000";
+        res.argValues(0) := mqReexecCtrlIs.target;
+        res.argValues(1) := (others => '0');
 
-            res.st.zero := "110";
-            res.st.immValue := mqReexecResIs.value(15 downto 0);
-        
-        res.argSpec.dest := mqReexecResIs.dest;
-        res.argSpec.intDestSel := not mqReexecCtrlIs.classInfo.useFP and isNonzero(mqReexecResIs.dest);
-        res.argSpec.floatDestSel := mqReexecCtrlIs.classInfo.useFP;
-    
+        res.argSrc(0) := "00000000";
+        res.argSrc(1) := "00000000";
+
+        res.st.zero := "110";
+        res.st.immValue := mqReexecResIs.value(15 downto 0);
+
+        res.dest := mqReexecResIs.dest;
+        res.intDestSel := not mqReexecCtrlIs.classInfo.useFP and isNonzero(mqReexecResIs.dest);
+        res.floatDestSel := mqReexecCtrlIs.classInfo.useFP;
+
         return res;
     end function;
 
@@ -927,11 +925,11 @@ begin
     res.st.tags := mqReexecCtrlRR.tags;
     
     -- adr
-    res.args(1) := mqReexecCtrlRR.target;
-    
-    res.argSpec.dest := mqReexecResRR.dest;
-    res.argSpec.intDestSel := not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
-    res.argSpec.floatDestSel := mqReexecCtrlRR.classInfo.useFP;
+    res.argValues(1) := mqReexecCtrlRR.target;
+
+    res.dest := mqReexecResRR.dest;
+    res.intDestSel := not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
+    res.floatDestSel := mqReexecCtrlRR.classInfo.useFP;
 
     return res;
 end function;

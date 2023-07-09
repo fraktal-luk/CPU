@@ -733,8 +733,8 @@ begin
             ----------------------------
             -- Single packet of information for E0
             resultToM0_E0 <= calcEffectiveAddress(slotRegReadM0.full, slotRegReadM0, mqRegReadSending);
-            resultToM0_E0i <= updateMemDest(resultToM0_E0, slotRegReadM0.argSpec.intDestSel);
-            resultToM0_E0f <= updateMemDest(resultToM0_E0, slotRegReadM0.argSpec.floatDestSel);
+            resultToM0_E0i <= updateMemDest(resultToM0_E0, slotRegReadM0.intDestSel);
+            resultToM0_E0f <= updateMemDest(resultToM0_E0, slotRegReadM0.floatDestSel);
 
             controlToM0_E0.controlInfo.full <= slotRegReadM0.full;
             controlToM0_E0.op <= slotRegReadM0.st.operation;
@@ -974,7 +974,7 @@ begin
             sqValueResultRR.full <= sendingToStoreWrite;
             sqValueResultRR.tag <= stateExecStoreValue.st.tags.renameIndex;
             sqValueResultRR.dest <= stateExecStoreValue.st.tags.sqPointer;
-            sqValueResultRR.value <= stateExecStoreValue.args(0);
+            sqValueResultRR.value <= stateExecStoreValue.argValues(0);
         end block;
 
 

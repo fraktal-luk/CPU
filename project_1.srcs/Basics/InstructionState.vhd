@@ -221,7 +221,6 @@ type InstructionState is record
 
 	constantArgs: InstructionConstantArgs;
 	virtualArgSpec: InstructionArgSpec;
-	--physicalArgSpec: InstructionArgSpec;
 	   dest_T: PhysName; 
 end record;
 
@@ -267,15 +266,12 @@ type ArgumentState is record
     imm: std_logic;
     value: Hword;
 
-    --activeCounter: SmallNumber;
-    readyCtr: SmallNumber;
-    failed: std_logic;
-
     waiting: std_logic;
-    stored:  std_logic;
+    readyCtr: SmallNumber;
+
     srcPipe: SmallNumber;
     srcStage: SmallNumber;
-    
+
     dbDep: DbDependency;   
 end record;
 
@@ -326,34 +322,6 @@ type DynamicInfo is record
 end record;
 
 
---    destTag: SmallNumber;                     -- position-defined
-
-    -- argSpec
-    --    intDestSel: std_logic;
-    --    floatDestSel: std_logic;
-    --    dest: SmallNumber;
-
-    --    intArgSel: std_logic_vector(0 to 2);      -- skip
-    --    floatArgSel: std_logic_vector(0 to 2);    -- skip
-    --    args: SmallNumberArray(0 to 2);
-
---    argSpec: InstructionArgSpec;
-
---    argLocsPipe: SmallNumberArray(0 to 2);
---    argSrc: SmallNumberArray(0 to 2);
---    readNew: std_logic_vector(0 to 2);
-
---    args: MwordArray(0 to 2);         -- after Issue
-
-    type SchedArgSpec is record
-        intDestSel: std_logic;
-        floatDestSel: std_logic;
-        dest: SmallNumber;
-        --intArgSel: std_logic_vector(0 to 2);
-        --floatArgSel: std_logic_vector(0 to 2);
-        args: SmallNumberArray(0 to 2);
-    end record;
-
 type SchedulerInfo is record
     dynamic: DynamicInfo;
     static: StaticInfo;
@@ -363,14 +331,20 @@ type SchedulerState is record
     full: std_logic;
     st: StaticInfo;
 
-    argSpec: SchedArgSpec;
+    intDestSel: std_logic;
+    floatDestSel: std_logic;
+    dest: SmallNumber;
+
     destTag: SmallNumber;
 
-    readNew: std_logic_vector(0 to 2);
-    args: MwordArray(0 to 2);
+    args: SmallNumberArray(0 to 2);
 
     argLocsPipe: SmallNumberArray(0 to 2);
     argSrc: SmallNumberArray(0 to 2);
+
+    readNew: std_logic_vector(0 to 2);
+
+    argValues: MwordArray(0 to 2);
 end record;
 
 
@@ -517,7 +491,6 @@ constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
 	dispatchInfo => DEFAULT_CLASS_INFO_DISPATCH,
 	constantArgs => DEFAULT_CONSTANT_ARGS,
 	virtualArgSpec => DEFAULT_ARG_SPEC,
-	--physicalArgSpec => DEFAULT_ARG_SPEC,
 	   dest_T => (others => '0') 
 );
 
@@ -568,26 +541,19 @@ constant DEFAULT_BUFFER_ENTRY: BufferEntry := (
     others => '0'
 );
 
-
-    constant DEFAULT_SCHED_ARG_SPEC: SchedArgSpec := (
-        intDestSel => '0',
-        floatDestSel => '0',
-        dest => (others => '0'),
---        intArgSel => (others => '0'),
---        floatArgSel => (others => '0'),
-        args => ((others => '0'), (others => '0'), (others => '0'))
-    );
-
 constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       full => '0',
 
       st => DEFAULT_STATIC_INFO,
 
-      argSpec => DEFAULT_SCHED_ARG_SPEC,
+      intDestSel => '0',
+      floatDestSel => '0',
+      dest => (others => '0'),
+      args => ((others => '0'), (others => '0'), (others => '0')),
       destTag => (others => '0'),
 
       readNew => (others => '0'),
-      args => (others => (others=>'0')),
+      argValues => (others => (others=>'0')),
       argLocsPipe => (others => (others => '0')),
       argSrc => (others => (others => '0'))
       );
@@ -612,11 +578,10 @@ constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
     zero => '0',
     imm => '0',
     value => (others => '0'),
-    --activeCounter => (others => '0'),
     readyCtr => (others => '0'),
-    failed => '0',
+--    failed => '0',
     waiting => '0',
-    stored => '0',
+--    stored => '0',
     srcPipe => (others => '0'),
     srcStage => (others => '0'),
     
@@ -633,7 +598,6 @@ constant DEFAULT_ENTRY_STATUS: EntryStatus := (
     issued => '0',
     freed => '0',
     trial => '0',
-    --stageCtr => (others => '0'),
     issuedCtr => (others => '0')
 );
 
@@ -646,7 +610,6 @@ constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     floatDestSel => '0',
     dest => (others => '0'),
     argStates => (others => DEFAULT_ARG_STATE)
-            --db0 => '0', db1 => '0', db2 => '0', db3 => '0', db4 => '0', db5 => '0'
 );
 
 constant DEFAULT_SCHEDULER_INFO: SchedulerInfo := (

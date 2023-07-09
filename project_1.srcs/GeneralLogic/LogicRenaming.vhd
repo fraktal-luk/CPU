@@ -276,9 +276,13 @@ end function;
 function getPhysicalArgs(sch: SchedulerState) return PhysNameArray is
     variable res: PhysNameArray(0 to 2) := (others=>(others=>'0'));
 begin
-        res(0) := sch.argSpec.args(0);
-        res(1) := sch.argSpec.args(1);
-        res(2) := sch.argSpec.args(2);
+--        res(0) := sch.argSpec.args(0);
+--        res(1) := sch.argSpec.args(1);
+--        res(2) := sch.argSpec.args(2);
+        
+                res(0) := sch.args(0);
+                res(1) := sch.args(1);
+                res(2) := sch.args(2);
     return res;
 end function;
 
