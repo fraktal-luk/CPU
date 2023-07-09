@@ -55,7 +55,7 @@ architecture Behavioral of UnitFront is
 
     signal dummyBP0, dummyBP1: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0'); -- Results from BP
 
-	signal fetchedLine0, fetchedLine1, fetchedLineShifted1: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0'));
+	signal fetchedLine0, fetchedLine1, fetchedLineShifted0, fetchedLineShifted1, fetchedLineShifted1_Alt: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0'));
 
 	signal full0, full1, sendingOutFetch0, sendingOutFetch1, bufferAccepting,-- sendingToEarlyBranch, 
 	           fullBr, fullBt, earlyBranchSending, sendingToBuffer,-- sendingToBranchTransfer,
@@ -71,7 +71,7 @@ architecture Behavioral of UnitFront is
     signal toBQ, bqDataSig, bqDataSigPre: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 	signal decodedEA, dataToIbuffer, ibufDataOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 
-    signal groupShift: SmallNumber := sn(0);
+    signal groupShift, groupShift_Early: SmallNumber := sn(0);
     signal nW: natural := 0;
 
     signal decodeCounter: Word := (others => '0'); -- DB
@@ -112,6 +112,7 @@ begin
             -- Stage F1
             stageDataOutFetch1 <= stageDataOutFetch0;
             fetchedLine1 <= fetchedLine0;
+                fetchedLineShifted1_Alt <= fetchedLineShifted0;
             full1 <= sendingOutFetch0 and not killAllOrFront;          -- F1
 
             -- Stage Ibuf/BrEval
@@ -152,6 +153,12 @@ begin
 	fetchStall <= sendingOutFetch1 and (not bufferAccepting or not bqAccepting);
 	sendingToBuffer <= sendingOutFetch1 and not fetchStall;
 
+
+        groupShift_Early(LOG2_PIPE_WIDTH-1 downto 0) <= normalCt.target(LOG2_PIPE_WIDTH+1 downto 2) when sendingToBuffer = '1'
+                                                else    predictedAddress(LOG2_PIPE_WIDTH+1 downto 2);
+        fetchedLineShifted0 <= shiftLine(fetchedLine0, groupShift_Early);
+
+
         stallCt <= getStallEvent(predictedAddress);
         normalCt <= getNormalEvent(stageDataOutFetch1.target, getFrontEvent(predictedAddress, stageDataOutFetch1.target, fetchedLine1));
 
@@ -164,7 +171,11 @@ begin
     --nW <= slv2u(earlyBranchIn.tags.bqPointer) + 1 - slv2u(groupShift);
     nW <= slv2u(normalCt.tags.bqPointer) + 1 - slv2u(groupShift);
 
-    fetchedLineShifted1 <= shiftLine(fetchedLine1, groupShift);
+    fetchedLineShifted1 <= --shiftLine(fetchedLine1, groupShift);
+                            fetchedLineShifted1_Alt;
+
+            ch0 <= bool2std(fetchedLineShifted1_Alt = fetchedLineShifted1);
+            ch1 <= ch0 or not full1;
 
     decodedEA <= decodeGroup(fetchedLineShifted1, nW, predictedAddress, stageDataOutFetch1);
     dataToIbuffer <= assignSeqNum(decodedEA, decodeCounter, stageDataOutFetch1); -- TODO: DB (decodeCounter incremented per instruction)
