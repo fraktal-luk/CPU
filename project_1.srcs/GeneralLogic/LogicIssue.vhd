@@ -117,8 +117,10 @@ function getTrialUpdatedMask(content: SchedulerInfoArray) return std_logic_vecto
 
 -- issue
 function getSelMask(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector;
+    function getSelMask_H(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector;
 
 function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return SchedulerInfo;
+    function queueSelect_N(inputElems: SchedulerInfoArray; readyMask: std_logic_vector; ageMatrix: slv2D) return SchedulerInfo;
 
 function getSchedEntrySlot(info: SchedulerInfo; full: std_logic; iqTag: SmallNumber) return SchedulerState;
 function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
@@ -237,13 +239,14 @@ begin
     for i in 0 to 2 loop
         res.argStates(i).dbDep := DB_setProducer(res.argStates(i).dbDep, ri.dbDepTags(i));
 
-        res.argStates(i).used := ri.argStates(i).sel;
-        res.argStates(i).zero := ri.argStates(i).const;
+        res.argStates(i).used_T := ri.argStates(i).sel;
+        res.argStates(i).zero_T := ri.argStates(i).const;
+
         res.argStates(i).reg := ri.argStates(i).physicalNew;
         res.argStates(i).iqTag := renamedSrcs(i);
 
         if i = 1 then
-            res.argStates(i).imm := stInfo.immediate;
+            res.argStates(i).imm_T := stInfo.immediate;
           --  res.argStates(i).value := stInfo.immValue;
         end if;
 
@@ -371,7 +374,7 @@ begin
     if IS_FP then
         matchingCtr := sn(0);
     end if;
-    return bool2std(state.srcPipe(1 downto 0) = "10" and state.readyCtr = matchingCtr) and not state.zero and not state.waiting;
+    return bool2std(state.srcPipe(1 downto 0) = "10" and state.readyCtr = matchingCtr) and not state.zero_T and not state.waiting;
 end function;
 
 
@@ -834,7 +837,7 @@ begin
         -- insert current fullMask into proper row
         for j in 0 to QUEUE_SIZE_EXT-1 loop
             if insertionLocs(j, i) = '1' then
-                -- Sorry, assigment doesn;t work for ranges in >= 2D
+                -- Sorry, assigment doesn't work for ranges in >= 2D
                 for k in 0 to QUEUE_SIZE_EXT-1 loop
                     res(j, k) := fullMask(k); -- Maybe setting to all ones would work too?
                 end loop;
@@ -981,10 +984,10 @@ begin
     res.dynamic.floatDestSel := a.dynamic.floatDestSel or b.dynamic.floatDestSel;
 
     for i in 0 to 2 loop
-        res.dynamic.argStates(i).used := a.dynamic.argStates(i).used or b.dynamic.argStates(i).used;
+        res.dynamic.argStates(i).used_T := a.dynamic.argStates(i).used_T or b.dynamic.argStates(i).used_T;
         res.dynamic.argStates(i).reg := a.dynamic.argStates(i).reg or b.dynamic.argStates(i).reg;
-        res.dynamic.argStates(i).zero := a.dynamic.argStates(i).used or b.dynamic.argStates(i).zero;
-        res.dynamic.argStates(i).imm := a.dynamic.argStates(i).imm or b.dynamic.argStates(i).imm;
+        res.dynamic.argStates(i).zero_T := a.dynamic.argStates(i).zero_T or b.dynamic.argStates(i).zero_T;
+        res.dynamic.argStates(i).imm_T := a.dynamic.argStates(i).imm_T or b.dynamic.argStates(i).imm_T;
 --        res.dynamic.argStates(i).value := a.dynamic.argStates(i).value or b.dynamic.argStates(i).value;
 
         res.dynamic.argStates(i).waiting := a.dynamic.argStates(i).waiting or b.dynamic.argStates(i).waiting;
@@ -1020,6 +1023,45 @@ begin
     return res;
 end function;
 
+    function getAgeMatrixH(ageMatrix: slv2D) return slv2D is
+        constant QUEUE_SIZE_EXT: natural := ageMatrix'length;
+        variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := (others => (others => '0'));
+    begin
+        for i in 0 to QUEUE_SIZE_EXT-1 loop
+            for j in 0 to i-1 loop
+                res(i, j) := not ageMatrix(j, i);
+            end loop;
+
+            for j in i+1 to QUEUE_SIZE_EXT-1 loop
+                res(i, j) := ageMatrix(i, j);
+            end loop;
+        end loop;
+        
+        return res;
+    end function;
+
+
+    function getSelMask_H(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector is
+        constant QUEUE_SIZE_EXT: natural := readyMask'length;
+        variable res: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
+        variable row: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := (others => '0');
+        variable ageMatrixH: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := getAgeMatrixH(ageMatrix);
+    begin
+        for i in 0 to QUEUE_SIZE_EXT-1 loop
+            for j in 0 to QUEUE_SIZE_EXT-1 loop
+                row(j) := readyMask(j) and ageMatrixH(i, j);
+            end loop;
+            row(i) := '0';
+
+            if isNonzero(row(0 to QUEUE_SIZE_EXT/2 - 1)) = '1' or isNonzero(row(QUEUE_SIZE_EXT/2 to QUEUE_SIZE_EXT-1)) = '1' then
+                res(i) := '0';
+            else
+                res(i) := readyMask(i);
+            end if;
+        end loop;
+
+        return res;
+    end function;
 
 function selectDbInfo(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return InstructionDebugInfo is
     constant QUEUE_SIZE_EXT: natural := inputElems'length;
@@ -1057,6 +1099,126 @@ begin
     res.static.dbInfo := selectDbInfo(inputElems, selMask);
     return res;
 end function;
+
+    function getEffectiveStopMatrix(readyMask: std_logic_vector; ageMatrix: slv2D) return slv2D is
+        constant QUEUE_SIZE_EXT: natural := readyMask'length;
+        variable res: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := ageMatrix;
+    begin
+        for what in 0 to QUEUE_SIZE_EXT-1 loop
+            for why in 0 to QUEUE_SIZE_EXT-1 loop
+                if what = why then
+                    next;
+                end if;
+                res(what, why) := ageMatrix(what, why) and readyMask(why);
+            end loop;
+        end loop;
+        
+        return res;
+    end function;
+
+    function queueSelect_N0(inputElems: SchedulerInfoArray; readyMask: std_logic_vector; ageMatrix: slv2D) return SchedulerInfo is
+        constant QUEUE_SIZE_EXT: natural := inputElems'length;
+        variable res, sel01, sel23, sel0123: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+        variable selMask: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := getSelMask(readyMask, ageMatrix);
+        variable stopMatrix: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := getEffectiveStopMatrix(readyMask, ageMatrix);
+
+        variable ready0, ready1, stop0, stop1, stop01, stop0by23, stop1by23, goes01: std_logic := '0';
+        variable ready2, ready3, stop2, stop3, stop23, stop2by01, stop3by01, goes23: std_logic := '0';
+    begin
+        -- let's start with 0,1
+        ready0 := readyMask(0);
+        ready1 := readyMask(1);
+        stop0 := not ready0 or stopMatrix(0, 1);
+        stop1 := not ready1 or stopMatrix(1, 0);
+
+        if stop0 = '1' then
+            sel01 := inputElems(1);
+        else
+            sel01 := inputElems(0);
+        end if;
+        --------------------------------------
+        ready2 := readyMask(2);
+        ready3 := readyMask(3);
+        stop2 := not ready2 or stopMatrix(2, 3);
+        stop3 := not ready3 or stopMatrix(3, 2);
+
+        if stop2 = '1' then
+            sel23 := inputElems(3);
+        else
+            sel23 := inputElems(2);
+        end if;
+        --------------------------------------
+        --------------------------------------
+        -- Any of (0,1) not stopped by any of (2,3)?  // not ready means stopped by everything
+        stop0by23 := not readyMask(0) or stopMatrix(0, 2) or stopMatrix(0, 3);
+        stop1by23 := not readyMask(1) or stopMatrix(1, 2) or stopMatrix(1, 3);
+        goes01 := (not stop0by23) or (not stop1by23);
+        stop01 := not goes01;
+
+        stop2by01 := not readyMask(2) or stopMatrix(2, 0) or stopMatrix(2, 1);
+        stop3by01 := not readyMask(3) or stopMatrix(3, 0) or stopMatrix(3, 1);
+        goes23 := (not stop2by01) or (not stop3by01);
+        stop23 := not goes23;
+
+        if stop01 = '1' then 
+            sel0123 := sel23;
+        else
+            sel0123 := sel01;
+        end if;
+
+            res := sel0123;
+
+        return res;
+    end function;
+
+
+
+    function queueSelect_N(inputElems: SchedulerInfoArray; readyMask: std_logic_vector; ageMatrix: slv2D) return SchedulerInfo is
+        constant QUEUE_SIZE_EXT: natural := inputElems'length;
+        variable res, sel01, sel23, sel0123: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+        variable selMask: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := getSelMask(readyMask, ageMatrix);
+        variable stopMatrix: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := getEffectiveStopMatrix(readyMask, ageMatrix);
+
+        variable ready0, stop0, stop01, stop0by23, stop1by23, goes01: std_logic := '0';
+        variable ready2, stop2: std_logic := '0';
+    begin
+        -- let's start with 0,1
+        ready0 := readyMask(0);
+        stop0 := not ready0 or stopMatrix(0, 1);
+
+        if stop0 = '1' then
+            sel01 := inputElems(1);
+        else
+            sel01 := inputElems(0);
+        end if;
+        --------------------------------------
+        ready2 := readyMask(2);
+        stop2 := not ready2 or stopMatrix(2, 3);
+
+        if stop2 = '1' then
+            sel23 := inputElems(3);
+        else
+            sel23 := inputElems(2);
+        end if;
+        --------------------------------------
+        --------------------------------------
+        -- Any of (0,1) not stopped by any of (2,3)?  // not ready means stopped by everything
+        stop0by23 := not readyMask(0) or stopMatrix(0, 2) or stopMatrix(0, 3);
+        stop1by23 := not readyMask(1) or stopMatrix(1, 2) or stopMatrix(1, 3);
+        goes01 := (not stop0by23) or (not stop1by23);
+        stop01 := not goes01;
+
+        if stop01 = '1' then
+            sel0123 := sel23;
+        else
+            sel0123 := sel01;
+        end if;
+
+            res := sel0123;
+
+        return res;
+    end function;
+
 
 
 -- wups experimental

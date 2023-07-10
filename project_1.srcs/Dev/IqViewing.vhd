@@ -33,12 +33,12 @@ package body IqViewing is
                 function getArgString(argState: ArgumentState) return string is
                     variable immValue: Hword := argState.value;
                 begin
-                    if argState.imm = '1' then
+                    if argState.imm_T = '1' then
                         if IMM_AS_REG then
                             immValue(PhysName'length-2 downto 0) := argState.reg(6 downto 0);
                         end if;
                         return "{#" & integer'image(slv2u(immValue)) & "}";
-                    elsif argState.zero = '1' then
+                    elsif argState.zero_T = '1' then
                         return "{zero}";
                     else
                         if argState.waiting = '1' then

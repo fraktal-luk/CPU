@@ -74,7 +74,7 @@ architecture Behavioral of IssueQueue is
 
     signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
 
-    signal fullMask, killMask, freedMask, readyMask, selMask, selMask1, selMask2: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+    signal fullMask, killMask, freedMask, readyMask, selMask, selMask1, selMask2,   selMaskH: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
     signal anyReadyFull, sends, sendingKilled, sentKilled, sentTrial1, sentTrial2: std_logic := '0';
 
@@ -82,7 +82,7 @@ architecture Behavioral of IssueQueue is
 
     signal recoveryCounter: SmallNumber := (others => '0');
 
-    signal selectedSlot: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+    signal selectedSlot, selectedSlot_N: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
     signal selectedIqTag: SmallNumber := (others => '0');
 
     alias memFail is bypass.memFail;
@@ -157,11 +157,17 @@ begin
 
     -- Selection for issue
     selMask <= getSelMask(readyMask, ageMatrix);
+               -- selMaskH;
+        selMaskH <= getSelMask_H(readyMask, ageMatrix);
+
+        ch0 <= bool2std(selMaskH = selMask);
+            ch1 <= bool2std(selectedSlot_N.dynamic.renameIndex = selectedSlot.dynamic.renameIndex);
 
     selectedIqTag <= getIssueTag(sends, selMask);
     selectedSlot <= queueSelect(queueContentUpdatedSel, selMask);
-    schedulerOut <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
+        selectedSlot_N <= queueSelect_N(queueContentUpdatedSel, readyMask, ageMatrix);
 
+    schedulerOut <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
 
     QUEUE_SYNCHRONOUS: process(clk)
     begin

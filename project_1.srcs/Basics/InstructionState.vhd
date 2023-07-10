@@ -259,18 +259,19 @@ type DbDependencyArray is array(natural range <>) of DbDependency;
 
 -- Scheduler structure
 type ArgumentState is record
-    used: std_logic;
-    reg: PhysName;
-    iqTag: SmallNumber;
-    zero: std_logic;
-    imm: std_logic;
-    value: Hword;
+    reg: PhysName;                  -- SS
+    iqTag: SmallNumber;             --
+    zero_T: std_logic;  -- useful (for retraction)
 
     waiting: std_logic;
-    readyCtr: SmallNumber;
+    readyCtr: SmallNumber;   -- for retraction
 
-    srcPipe: SmallNumber;
-    srcStage: SmallNumber;
+    srcPipe: SmallNumber;          -- SS
+    srcStage: SmallNumber;         -- SS
+
+    used_T: std_logic;  -- DB only?
+    imm_T: std_logic;   -- DB only?
+    value: Hword;       -- DB only?
 
     dbDep: DbDependency;   
 end record;
@@ -327,6 +328,7 @@ type SchedulerInfo is record
     static: StaticInfo;
 end record;
 
+
 type SchedulerState is record
     full: std_logic;
     st: StaticInfo;
@@ -335,16 +337,16 @@ type SchedulerState is record
     floatDestSel: std_logic;
     dest: SmallNumber;
 
-    destTag: SmallNumber;
+    destTag: SmallNumber;   -- not in dynamic
 
     args: SmallNumberArray(0 to 2);
 
     argLocsPipe: SmallNumberArray(0 to 2);
     argSrc: SmallNumberArray(0 to 2);
 
-    readNew: std_logic_vector(0 to 2);
+    readNew: std_logic_vector(0 to 2);  -- not in dynamic but derivable
 
-    argValues: MwordArray(0 to 2);
+    argValues: MwordArray(0 to 2);   -- not in dynamic
 end record;
 
 
@@ -572,11 +574,11 @@ constant DEFAULT_DB_DEPENDENCY: DbDependency := (
                                     );
 
 constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
-    used => '0',
+    used_T => '0',
     reg => (others => '0'),
     iqTag => (others => '0'),
-    zero => '0',
-    imm => '0',
+    zero_T => '0',
+    imm_T => '0',
     value => (others => '0'),
     readyCtr => (others => '0'),
 --    failed => '0',
