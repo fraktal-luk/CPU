@@ -1171,7 +1171,36 @@ end function;
         return res;
     end function;
 
+    type Span is record
+        start, past: natural;
+    end record;
 
+--    function span(a, b: natural) return SpanType is
+--    begin
+    
+--    end function;
+
+    function stopByRange(ind: natural; byRange: Span; readyMask: std_logic_vector; stopMatrix: slv2D) return std_logic is
+    begin
+        for by in byRange.start to byRange.past-1 loop
+            if (not readyMask(ind) or stopMatrix(ind, by)) = '1' then
+                return '1';
+            end if;
+        end loop;
+        return '0';
+    end function;
+
+    function stopRangeByRange(whichRange: Span; byRange: Span; readyMask: std_logic_vector; stopMatrix: slv2D) return std_logic is
+        variable res, stopped: std_logic := '1';
+    begin
+        for which in whichRange.start to whichRange.past-1 loop
+            stopped := stopByRange(which, byRange, readyMask, stopMatrix);
+            if not stopped = '1' then
+                return '0';
+            end if;
+        end loop;
+        return '1';
+    end function;
 
     function queueSelect_N(inputElems: SchedulerInfoArray; readyMask: std_logic_vector; ageMatrix: slv2D) return SchedulerInfo is
         constant QUEUE_SIZE_EXT: natural := inputElems'length;
@@ -1179,12 +1208,11 @@ end function;
         variable selMask: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := getSelMask(readyMask, ageMatrix);
         variable stopMatrix: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := getEffectiveStopMatrix(readyMask, ageMatrix);
 
-        variable ready0, stop0, stop01, stop0by23, stop1by23, goes01: std_logic := '0';
-        variable ready2, stop2: std_logic := '0';
+        variable stop0, stop2: std_logic := '0';
+        variable stop01: std_logic := '0';
     begin
         -- let's start with 0,1
-        ready0 := readyMask(0);
-        stop0 := not ready0 or stopMatrix(0, 1);
+        stop0 := stopByRange(0, (1, 2), readyMask, stopMatrix);
 
         if stop0 = '1' then
             sel01 := inputElems(1);
@@ -1192,8 +1220,7 @@ end function;
             sel01 := inputElems(0);
         end if;
         --------------------------------------
-        ready2 := readyMask(2);
-        stop2 := not ready2 or stopMatrix(2, 3);
+        stop2 := stopByRange(2, (3, 4), readyMask, stopMatrix);
 
         if stop2 = '1' then
             sel23 := inputElems(3);
@@ -1203,10 +1230,7 @@ end function;
         --------------------------------------
         --------------------------------------
         -- Any of (0,1) not stopped by any of (2,3)?  // not ready means stopped by everything
-        stop0by23 := not readyMask(0) or stopMatrix(0, 2) or stopMatrix(0, 3);
-        stop1by23 := not readyMask(1) or stopMatrix(1, 2) or stopMatrix(1, 3);
-        goes01 := (not stop0by23) or (not stop1by23);
-        stop01 := not goes01;
+        stop01 := stopRangeByRange((0, 2), (2, 4), readyMask, stopMatrix);
 
         if stop01 = '1' then
             sel0123 := sel23;
