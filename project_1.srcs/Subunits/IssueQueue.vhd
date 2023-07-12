@@ -166,8 +166,8 @@ begin
 
         ch0 <= bool2std(selMaskH = selMask);
             ch1 <= bool2std(selectedSlot_N.dynamic.renameIndex = selectedSlot.dynamic.renameIndex);
-            ch2 <= bool2std(selectedSlot_N.dynamic = selectedSlot.dynamic);
-            ch3 <= bool2std(selectedSlot_N.static = selectedSlot.static);
+            ch2 <= compareDynamic(selectedSlot_N.dynamic, selectedSlot.dynamic);
+            ch3 <= compareStatic(selectedSlot_N.static, selectedSlot.static);
 
     selectedIqTag <= getIssueTag(sends, selMask);
     selectedSlot <= queueSelect(queueContentUpdatedSel, selMask);

@@ -133,7 +133,8 @@ function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray;
 function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency;
 procedure DB_reportEvents(content: SchedulerInfoArray; lastEvents: IqEventArray);
 
-
+    function compareStatic(a, b: StaticInfo) return std_logic;
+    function compareDynamic(a, b: DynamicInfo) return std_logic;
 
 -- experimental, don't export
 --function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup;
@@ -957,10 +958,14 @@ begin
     res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
     res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
     res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
+    res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
 
     res.static.branchIns := a.static.branchIns or b.static.branchIns;
-    
+    res.static.divIns := a.static.divIns or b.static.divIns;
+
     res.static.tags.renameIndex := a.static.tags.renameIndex or b.static.tags.renameIndex;
+    res.static.tags.intPointer := a.static.tags.intPointer or b.static.tags.intPointer;
+    res.static.tags.floatPointer := a.static.tags.floatPointer or b.static.tags.floatPointer;
     res.static.tags.bqPointer := a.static.tags.bqPointer or b.static.tags.bqPointer;
     res.static.tags.sqPointer := a.static.tags.sqPointer or b.static.tags.sqPointer;
     res.static.tags.lqPointer := a.static.tags.lqPointer or b.static.tags.lqPointer;   
@@ -1000,6 +1005,47 @@ begin
     return res;
 end function;
 
+
+--    dbInfo: InstructionDebugInfo;
+--    operation: SpecificOp;
+--    branchIns: std_logic;
+--    divIns: std_logic;
+--    tags: InstructionTags;    
+--    immediate: std_logic;    
+--    immValue: Hword;
+--    zero: std_logic_vector(0 to 2); 
+    function compareStatic(a, b: StaticInfo) return std_logic is
+        variable eq: boolean := false;
+    begin
+        eq :=
+        a.dbInfo = b.dbInfo and
+        a.operation = b.operation and
+        a.branchIns = b.branchIns and
+        a.divIns = b.divIns and
+        a.tags = b.tags and
+        a.immediate = b.immediate and
+        a.immValue = b.immValue and
+        a.zero = b.zero and
+        true;
+        
+        return bool2std(eq);
+    end function;
+
+    function compareDynamic(a, b: DynamicInfo) return std_logic is
+        variable eq: boolean := false;
+    begin
+        eq :=
+        a.full = b.full and
+        --a.status = b.status and
+        a.renameIndex = b.renameIndex and
+        a.intDestSel = b.intDestSel and
+        a.floatDestSel = b.floatDestSel and
+        a.dest = b.dest and
+        --a.argStates = b.argStates and
+        true;
+        
+        return bool2std(eq);
+    end function;
 
 
 function getSelMask(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector is
@@ -1281,6 +1327,12 @@ end function;
 
   
         res := level16(0);
+        
+            res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
+            res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
+            res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
+            res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
+
         res.static.dbInfo := selectDbInfo(inputElems, selMask);
 
         return res;
