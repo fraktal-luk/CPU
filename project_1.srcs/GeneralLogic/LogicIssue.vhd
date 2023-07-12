@@ -970,18 +970,22 @@ begin
     res.static.tags.sqPointer := a.static.tags.sqPointer or b.static.tags.sqPointer;
     res.static.tags.lqPointer := a.static.tags.lqPointer or b.static.tags.lqPointer;   
     res.static.tags.bqPointerSeq := a.static.tags.bqPointerSeq or b.static.tags.bqPointerSeq;
-        
+
     res.static.immediate :=  a.static.immediate or b.static.immediate;
     res.static.immValue :=  a.static.immValue or b.static.immValue;
     res.static.zero :=  a.static.zero or b.static.zero;
-    
+
 
     res.dynamic.full := a.dynamic.full or b.dynamic.full;
 
     res.dynamic.status.active := a.dynamic.status.active or b.dynamic.status.active;
+    res.dynamic.status.suspend := a.dynamic.status.suspend or b.dynamic.status.suspend;
     res.dynamic.status.issued := a.dynamic.status.issued or b.dynamic.status.issued;
+    res.dynamic.status.freed := a.dynamic.status.freed or b.dynamic.status.freed;
     res.dynamic.status.trial := a.dynamic.status.trial or b.dynamic.status.trial;
-    
+    res.dynamic.status.issuedCtr := a.dynamic.status.issuedCtr or b.dynamic.status.issuedCtr;
+        res.dynamic.status := DEFAULT_ENTRY_STATUS;
+
     res.dynamic.renameIndex := a.dynamic.renameIndex or b.dynamic.renameIndex;
 
     res.dynamic.dest := a.dynamic.dest or b.dynamic.dest;
@@ -991,29 +995,23 @@ begin
     for i in 0 to 2 loop
         res.dynamic.argStates(i).used_T := a.dynamic.argStates(i).used_T or b.dynamic.argStates(i).used_T;
         res.dynamic.argStates(i).reg := a.dynamic.argStates(i).reg or b.dynamic.argStates(i).reg;
+        res.dynamic.argStates(i).iqTag := a.dynamic.argStates(i).iqTag or b.dynamic.argStates(i).iqTag;
         res.dynamic.argStates(i).zero_T := a.dynamic.argStates(i).zero_T or b.dynamic.argStates(i).zero_T;
         res.dynamic.argStates(i).imm_T := a.dynamic.argStates(i).imm_T or b.dynamic.argStates(i).imm_T;
---        res.dynamic.argStates(i).value := a.dynamic.argStates(i).value or b.dynamic.argStates(i).value;
+        res.dynamic.argStates(i).value := a.dynamic.argStates(i).value or b.dynamic.argStates(i).value;
 
+        res.dynamic.argStates(i).readyCtr := a.dynamic.argStates(i).readyCtr or b.dynamic.argStates(i).readyCtr;
         res.dynamic.argStates(i).waiting := a.dynamic.argStates(i).waiting or b.dynamic.argStates(i).waiting;
---        res.dynamic.argStates(i).stored := a.dynamic.argStates(i).stored or b.dynamic.argStates(i).stored;
 
         res.dynamic.argStates(i).srcPipe := a.dynamic.argStates(i).srcPipe or b.dynamic.argStates(i).srcPipe;
         res.dynamic.argStates(i).srcStage := a.dynamic.argStates(i).srcStage or b.dynamic.argStates(i).srcStage;
+        
+            res.dynamic.argStates(i).dbDep := DEFAULT_DB_DEPENDENCY;
     end loop;
     
     return res;
 end function;
 
-
---    dbInfo: InstructionDebugInfo;
---    operation: SpecificOp;
---    branchIns: std_logic;
---    divIns: std_logic;
---    tags: InstructionTags;    
---    immediate: std_logic;    
---    immValue: Hword;
---    zero: std_logic_vector(0 to 2); 
     function compareStatic(a, b: StaticInfo) return std_logic is
         variable eq: boolean := false;
     begin
@@ -1036,12 +1034,17 @@ end function;
     begin
         eq :=
         a.full = b.full and
-        --a.status = b.status and
+            --a.status.state = b.status.state and
+            a.status.active = b.status.active and
+            a.status.suspend = b.status.suspend and
+            a.status.freed = b.status.freed and
+            a.status.trial = b.status.trial and
+            a.status.issuedCtr = b.status.issuedCtr and
         a.renameIndex = b.renameIndex and
         a.intDestSel = b.intDestSel and
         a.floatDestSel = b.floatDestSel and
         a.dest = b.dest and
-        --a.argStates = b.argStates and
+        a.argStates = b.argStates and
         true;
         
         return bool2std(eq);
@@ -1327,6 +1330,12 @@ end function;
 
   
         res := level16(0);
+
+            res.dynamic.status := DEFAULT_ENTRY_STATUS;
+        
+            res.dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
+            res.dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
+            res.dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
         
             res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
             res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
