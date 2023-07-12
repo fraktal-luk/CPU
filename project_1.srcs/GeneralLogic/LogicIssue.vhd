@@ -1202,7 +1202,16 @@ end function;
         return '1';
     end function;
 
-    function queueSelect_N(inputElems: SchedulerInfoArray; readyMask: std_logic_vector; ageMatrix: slv2D) return SchedulerInfo is
+    function selectFrom(first, second: SchedulerInfo; stopFirst: std_logic) return SchedulerInfo is
+    begin
+        if stopFirst = '1' then
+            return second;
+        else
+            return first;
+        end if;
+    end function;
+
+    function queueSelect_N1(inputElems: SchedulerInfoArray; readyMask: std_logic_vector; ageMatrix: slv2D) return SchedulerInfo is
         constant QUEUE_SIZE_EXT: natural := inputElems'length;
         variable res, sel01, sel23, sel0123: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
         variable selMask: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := getSelMask(readyMask, ageMatrix);
@@ -1210,39 +1219,72 @@ end function;
 
         variable stop0, stop2: std_logic := '0';
         variable stop01: std_logic := '0';
+        
+        variable level2, level4, level8, level16: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
     begin
         -- let's start with 0,1
-        stop0 := stopByRange(0, (1, 2), readyMask, stopMatrix);
-
-        if stop0 = '1' then
-            sel01 := inputElems(1);
-        else
-            sel01 := inputElems(0);
-        end if;
+        stop0 := stopRangeByRange((0, 1), (1, 2), readyMask, stopMatrix);
+        sel01 := selectFrom(inputElems(0), inputElems(1), stop0);
         --------------------------------------
-        stop2 := stopByRange(2, (3, 4), readyMask, stopMatrix);
-
-        if stop2 = '1' then
-            sel23 := inputElems(3);
-        else
-            sel23 := inputElems(2);
-        end if;
+        stop2 := stopRangeByRange((2, 3), (3, 4), readyMask, stopMatrix);  
+        sel23 := selectFrom(inputElems(2), inputElems(3), stop2);
         --------------------------------------
         --------------------------------------
         -- Any of (0,1) not stopped by any of (2,3)?  // not ready means stopped by everything
         stop01 := stopRangeByRange((0, 2), (2, 4), readyMask, stopMatrix);
-
-        if stop01 = '1' then
-            sel0123 := sel23;
-        else
-            sel0123 := sel01;
-        end if;
-
-            res := sel0123;
+        sel0123 := selectFrom(sel01, sel23, stop01);
+        
+        res := sel0123;
 
         return res;
     end function;
 
+
+    function queueSelect_N(inputElems: SchedulerInfoArray; readyMask: std_logic_vector; ageMatrix: slv2D) return SchedulerInfo is
+        constant QUEUE_SIZE_EXT: natural := inputElems'length;
+        variable res, sel01, sel23, sel0123: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+        variable selMask: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := getSelMask(readyMask, ageMatrix);
+        variable stopMatrix: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := getEffectiveStopMatrix(readyMask, ageMatrix);
+
+        variable stop0, stop2: std_logic := '0';
+        variable stop01, stopPivot: std_logic := '0';
+        
+        variable level2, level4, level8, level16: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
+        variable pivot: natural := 0;
+    begin
+        -- Build level 2
+        for i in 0 to 5 loop
+            pivot := 2*i;
+            stopPivot := stopRangeByRange((pivot, pivot+1), (pivot+1, pivot+2), readyMask, stopMatrix);
+            level2(pivot) := selectFrom(inputElems(pivot), inputElems(pivot+1), stopPivot);
+        end loop;
+        
+        for i in 0 to 2 loop
+            pivot := 4*i;
+            stopPivot := stopRangeByRange((pivot, pivot+2), (pivot+2, pivot+4), readyMask, stopMatrix);
+            level4(pivot) := selectFrom(level2(pivot), level2(pivot+2), stopPivot);
+        end loop;
+
+        --for i in 0 to 3 loop
+            pivot := 0;
+            stopPivot := stopRangeByRange((pivot, pivot+4), (pivot+4, pivot+8), readyMask, stopMatrix);
+            level8(pivot) := selectFrom(level4(pivot), level4(pivot+4), stopPivot);
+            
+            level8(pivot+8) := level4(pivot+8);
+        --end loop;     
+
+        --for i in 0 to 3 loop
+            pivot := 0;
+            stopPivot := stopRangeByRange((pivot, pivot+8), (pivot+8, pivot+12), readyMask, stopMatrix);
+            level16(pivot) := selectFrom(level8(pivot), level8(pivot+8), stopPivot);
+        --end loop;
+
+  
+        res := level16(0);
+        res.static.dbInfo := selectDbInfo(inputElems, selMask);
+
+        return res;
+    end function;
 
 
 -- wups experimental

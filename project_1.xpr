@@ -33,7 +33,7 @@
     <Option Name="EnableBDX" Val="FALSE"/>
     <Option Name="DSAVendor" Val="xilinx"/>
     <Option Name="DSANumComputeUnits" Val="60"/>
-    <Option Name="WTXSimLaunchSim" Val="16046"/>
+    <Option Name="WTXSimLaunchSim" Val="16062"/>
     <Option Name="WTModelSimLaunchSim" Val="0"/>
     <Option Name="WTQuestaLaunchSim" Val="0"/>
     <Option Name="WTIesLaunchSim" Val="0"/>
@@ -452,11 +452,12 @@
     </Run>
     <Run Id="synth_2" Type="Ft3:Synth" SrcSet="sources_1" Part="xc7k160tfbg676-1" ConstrsSet="constrs_1" Description="Performs general area optimizations including changing the threshold for control set optimizations, forcing ternary adder implementation, lowering multiplier threshold of inference into DSP blocks, moving  shift register into BRAM, applying lower thresholds for use of carry chain in comparators and also area optimized mux optimizations" WriteIncrSynthDcp="false" Dir="$PRUNDIR/synth_2" IncludeInArchive="true">
       <Strategy Version="1" Minor="2">
-        <StratHandle Name="Flow_AreaOptimized_medium" Flow="Vivado Synthesis 2018"/>
+        <StratHandle Name="Flow_AreaOptimized_medium" Flow="Vivado Synthesis 2018">
+          <Desc>Performs general area optimizations including changing the threshold for control set optimizations, forcing ternary adder implementation, lowering multiplier threshold of inference into DSP blocks, moving  shift register into BRAM, applying lower thresholds for use of carry chain in comparators and also area optimized mux optimizations</Desc>
+        </StratHandle>
         <Step Id="synth_design">
           <Option Id="ControlSetOptThreshold">1</Option>
           <Option Id="Directive">2</Option>
-          <Option Id="FlattenHierarchy">1</Option>
           <Option Id="ReTiming">1</Option>
         </Step>
       </Strategy>

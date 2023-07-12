@@ -69,6 +69,10 @@ architecture Behavioral of IssueQueue is
 
     signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdated_2, queueContentUpdatedSel: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
 
+
+        signal queueSel2, queueSel4, queueSel8, queueSel16: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
+
+
     signal ageMatrix: slv2D(0 to IQ_SIZE-1, 0 to IQ_SIZE-1) := (others => (others => '0'));
     signal insertionLocs: slv2D(0 to IQ_SIZE-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
@@ -162,9 +166,12 @@ begin
 
         ch0 <= bool2std(selMaskH = selMask);
             ch1 <= bool2std(selectedSlot_N.dynamic.renameIndex = selectedSlot.dynamic.renameIndex);
+            ch2 <= bool2std(selectedSlot_N.dynamic = selectedSlot.dynamic);
+            ch3 <= bool2std(selectedSlot_N.static = selectedSlot.static);
 
     selectedIqTag <= getIssueTag(sends, selMask);
     selectedSlot <= queueSelect(queueContentUpdatedSel, selMask);
+                    --selectedSlot_N;
         selectedSlot_N <= queueSelect_N(queueContentUpdatedSel, readyMask, ageMatrix);
 
     schedulerOut <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
