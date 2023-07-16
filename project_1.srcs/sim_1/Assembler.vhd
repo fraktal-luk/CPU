@@ -59,6 +59,7 @@ constant EMPTY_LABEL_ARRAY: LabelArray(0 to 0) := (others => (others => ' '));
 -- Structure for import or export of label: name and where the source or required replacement is
 type Xref is record
     name: line;
+        name_S: string(1 to MAX_LABEL_SIZE);
     address: integer;
 end record;
 
@@ -128,7 +129,6 @@ end procedure;
 
 function parseInstructionString(str: string) return GroupBuffer is
     variable words: GroupBuffer := (others => (others => ' '));
-    
     variable ind, grp, blockStart: integer := 0;    
 begin
     -- To keep it simple: 
@@ -344,6 +344,18 @@ begin
     return s;
 end function;
 
+function fillToMax(s: string) return string is
+    constant LEN: natural := s'length;
+    variable res: string(1 to MAX_LABEL_SIZE) := (others => cr);
+begin
+    if LEN > MAX_LABEL_SIZE then
+        res := s(1 to MAX_LABEL_SIZE);
+    else
+        res(1 to LEN) := s;
+    end if;
+    return res;
+end function;
+
 
 procedure processProgram(p: in CodeBuffer; machineCodeBuf: out WordBuffer; imports, outExports: out XrefArray) is
     variable insIndex, procIndex: integer := 0; -- Actual number of instruction
@@ -355,7 +367,7 @@ procedure processProgram(p: in CodeBuffer; machineCodeBuf: out WordBuffer; impor
     variable tmpStr: string(1 to MAX_LABEL_SIZE) :=(others => ' ');
     variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
     variable tmpHasImport: boolean := false;
-    
+        variable s: string(1 to MAX_LABEL_SIZE) := (others => cr);
     variable ne, ni: natural := 0;
 begin
     for i in 0 to --p.words'length-1 loop
@@ -371,7 +383,8 @@ begin
                 exports(insIndex)(2 to 11) := p.words(i)(1);
                 exports(insIndex)(1) := '$';
                 startOffsets(procIndex) := insIndex;
-                outExports(ne) := (new string'('$' & tmpStrip(p.words(i)(1))), 4*insIndex);
+                    s := fillToMax('$' & tmpStrip(p.words(i)(1)));
+                outExports(ne) := (new string'('$' & tmpStrip(p.words(i)(1))), s, 4*insIndex);
                 ne := ne + 1;
             elsif matches(tmpStr, "end") then
                 -- ignore
@@ -391,14 +404,15 @@ begin
     end loop;
 
     for i in 0 to --p.words'length-1 loop
-                   insIndex loop 
+                   insIndex loop
         processInstruction(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true, commands(i), tmpHasImport, tmpImport);
         if tmpHasImport then
             commands(i) := fillOffset(commands(i), i, tmpImport, labels, EMPTY_LABEL_ARRAY);
-            imports(ni) := (new string'(tmpStrip(tmpImport)), 4*i);
+                s := fillToMax(tmpImport);
+            imports(ni) := (new string'(tmpStrip(tmpImport)), s, 4*i);
             ni := ni + 1;
         end if;
-    end loop; 
+    end loop;
 
     --machineCode := commands(0 to p.words'length-1);
     --machineCodeBuf.words := (others => ins655655(ext2, 0, 0, error, 0, 0));
@@ -494,7 +508,7 @@ end procedure;
 function matchXrefs(imp, exp: XrefArray) return IntArray is
     variable res: IntArray(imp'range) := (others => -1);
     variable str0, str1: string(1 to MAX_LABEL_SIZE);
-    variable l0, l1: line; 
+    variable l0, l1: line;
 begin
     for i in imp'range loop
         if imp(i).name = null then exit; end if;
