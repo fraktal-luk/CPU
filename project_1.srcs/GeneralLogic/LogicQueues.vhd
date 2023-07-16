@@ -9,6 +9,7 @@ use work.ArchDefs.all;
 use work.Arith.all;
 
 use work.CoreConfig.all;
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 use work.PipelineGeneral.all;
 

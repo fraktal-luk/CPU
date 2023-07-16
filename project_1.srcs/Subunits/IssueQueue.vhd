@@ -9,6 +9,7 @@ use work.BasicTypes.all;
 use work.Helpers.all;
 
 use work.ArchDefs.all;
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 use work.CoreConfig.all;
 use work.PipelineGeneral.all;
@@ -171,7 +172,9 @@ begin
             ch4 <= (ch2 and ch3)  or not sends;
 
     selectedIqTag <= getIssueTag(sends, selMask);
-    selectedSlot <= queueSelect(queueContentUpdatedSel, selMask);
+    selectedSlot <= queueSelect(queueContentUpdatedSel, selMask) 
+                when sends = '1'   else queueContentUpdatedSel(11)
+                ;
                     --selectedSlot_N;
         selectedSlot_N <= queueSelect_N(queueContentUpdatedSel, readyMask, ageMatrix);
 

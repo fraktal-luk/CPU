@@ -12,6 +12,7 @@ use work.ArchDefs.all;
 use work.Arith.all;
 
 use work.CoreConfig.all;
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 
 use work.PipelineGeneral.all;
@@ -178,11 +179,13 @@ end function;
 function getNormalEvent(target: Mword; cp: ControlPacket) return ControlPacket is
 	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 begin
-    res.target := target;
+    --res.target := target;
     if cp.controlInfo.full = '1' and cp.controlInfo.frontBranch = '1' then
         res.target := cp.target; -- Correcting target within subsequent fetch line is still needed even if no redirection!
         res.controlInfo.newEvent := cp.controlInfo.newEvent; -- CAREFUL: event only if needs redirection, but break group at any taken jump
         res.controlInfo.frontBranch := '1';
+    else
+        res.target := target;
     end if;
     res.tags.bqPointer := cp.tags.bqPointer;
     return res;

@@ -348,7 +348,7 @@ function getDef(i, j, k: integer) return InstructionDefinition;
 
 function buildGeneralTable return GeneralTable;
 
-constant TheTable: GeneralTable := buildGeneralTable;
+constant TheTable: GeneralTable;-- := buildGeneralTable;
 
 
 constant EmptyTable1: OpcodeTable1 := (others => (none, none, none, undef));
@@ -616,7 +616,6 @@ end InstructionSet;
 
 
 package body InstructionSet is
-
 
 function getDef(i, j, k: integer) return InstructionDefinition is
     variable res: InstructionDefinition;
@@ -1157,6 +1156,8 @@ begin
     
     return res;
 end function;
+
+constant TheTable: GeneralTable := buildGeneralTable;
 
 
 end InstructionSet;

@@ -10,6 +10,7 @@ use work.Helpers.all;
 use work.ArchDefs.all;
 use work.InstructionSet.all;
 
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 
 
