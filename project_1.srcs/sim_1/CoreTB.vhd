@@ -269,7 +269,7 @@ ARCHITECTURE Behavior OF CoreTB IS
         machineCode := wordBuf.words(0 to PROGRAM_BUFFER_SIZE-1);
         machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
 
-        testProgram <= (others => (others => 'U'));
+        testProgram(0 to testProgram'length-1) <= (others => (others => 'U'));
         testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);        
     end procedure;
 
@@ -289,7 +289,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     -- Differs from simple ln.all in that it's written to a string of predefined length
     procedure fillStringFromLine(signal s: out string; variable ln: in line) is
     begin
-        s <= (others => ' ');
+        s(1 to s'length) <= (others => ' ');
         s(1 to ln.all'length) <= ln.all;
     end procedure;
     

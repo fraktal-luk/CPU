@@ -990,7 +990,7 @@ begin
         begin
             wups <= getInitWakeups(schedInfoA, bypassFloat, CFG_FP0);
 
-            schedInfoA <= getIssueInfoArray(renamedDataLivingRe, false, renamedArgsFloat, TMP_renamedDests, TMP_renamedSources, F0);
+            schedInfoA <= getIssueInfoArray(renamedDataLivingRe, false, renamedArgsFloat, TMP_renamedDests, TMP_renamedSources, work.LogicIssue.F0);
             schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, readyRegFlagsFloat_Early, memFail, CFG_FP0);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)

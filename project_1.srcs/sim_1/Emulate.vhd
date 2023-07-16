@@ -244,7 +244,18 @@ end record;
 
 function defaultInternalOp return InternalOperation;
 
-constant DEFAULT_INTERNAL_OPERATION: InternalOperation := defaultInternalOp;
+constant DEFAULT_INTERNAL_OPERATION: InternalOperation := --defaultInternalOp;
+(
+    ip => (others => 'U'),
+    operation => nop,
+    imm => (others => '0'),
+    intSources => (others => "00000"),
+    floatSources => (others => "00000"),
+    intDest => "00000",
+    floatDest => "00000",
+    others => '0'    
+);
+
 constant DEFAULT_INTERNAL_OP: InternalOperation := DEFAULT_INTERNAL_OPERATION;
 
 function decodeAbstract(adr: Mword; w: Word) return InternalOperation;

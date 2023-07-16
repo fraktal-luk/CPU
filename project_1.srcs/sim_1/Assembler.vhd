@@ -58,7 +58,7 @@ constant EMPTY_LABEL_ARRAY: LabelArray(0 to 0) := (others => (others => ' '));
 
 -- Structure for import or export of label: name and where the source or required replacement is
 type Xref is record
-    name: line;
+    --name: line;
         name_S: string(1 to MAX_LABEL_SIZE);
     address: integer;
 end record;
@@ -101,7 +101,7 @@ begin
         nIn := nOut;
     end if;
     
-    s <= (others => ' ');
+    s(1 to nOut) <= (others => ' ');
     s(1 to nIn) <= sIn(1 to nIn);
 end procedure;
 
@@ -109,7 +109,7 @@ end procedure;
 -- Differs from simple ln.all in that it's written to a string of predefined length
 procedure stringFromLine(s: out string; variable ln: in line) is
 begin
-    s := (others => cr);
+    s(1 to s'length) := (others => cr);
     s(1 to ln.all'length) := ln.all;        
 end procedure; 
 
@@ -119,10 +119,11 @@ procedure printXrefArray(xa: XrefArray) is
 begin
     report "Printing refs:";
     for i in xa'range loop
-        if xa(i).name = null then
-            return;
-        end if;
-        report xa(i).name.all; report natural'image(xa(i).address);
+        --if xa(i).name = null then
+        --    return;
+        --end if;
+        --report xa(i).name.all; report natural'image(xa(i).address);
+        report xa(i).name_S; report natural'image(xa(i).address);
     end loop;
 end procedure;
 
@@ -242,7 +243,7 @@ procedure processInstruction(ar: GroupBuffer; num: integer; labels, imports: Lab
     variable vals: IntArray(0 to ar'length-1) := (others => -1);
 begin
     hasImport := false;
-    import := (others => cr);
+    import(1 to import'length) := (others => cr);
     -- First elem must be opcode. Find it in opcode list
     mnem := undef;
     for m in ProcMnemonic loop
@@ -379,12 +380,13 @@ begin
                 -- add name to labels
                 -- add name to export
                 -- add insIndex to offsets
-                labels(insIndex)(1 to 10) := p.words(i)(1);
-                exports(insIndex)(2 to 11) := p.words(i)(1);
+                labels(insIndex)(1 to 10) := p.words(i)(1)(1 to 10);
+                exports(insIndex)(2 to 11) := p.words(i)(1)(1 to 10);
                 exports(insIndex)(1) := '$';
                 startOffsets(procIndex) := insIndex;
                     s := fillToMax('$' & tmpStrip(p.words(i)(1)));
-                outExports(ne) := (new string'('$' & tmpStrip(p.words(i)(1))), s, 4*insIndex);
+                outExports(ne) := --(new string'('$' & tmpStrip(p.words(i)(1))), s, 4*insIndex);
+                                    (s, 4*insIndex);
                 ne := ne + 1;
             elsif matches(tmpStr, "end") then
                 -- ignore
@@ -393,7 +395,7 @@ begin
                 procIndex := procIndex + 1;
             end if;
         elsif p.words(i)(0)(1) = '$' then -- label
-           labels(insIndex)(1 to 10) := p.words(i)(0);            
+           labels(insIndex)(1 to 10) := p.words(i)(0)(1 to 10);            
         elsif p.words(i)(0)(1) = cr then -- the line is empty
            null;
         else -- instruction
@@ -409,7 +411,8 @@ begin
         if tmpHasImport then
             commands(i) := fillOffset(commands(i), i, tmpImport, labels, EMPTY_LABEL_ARRAY);
                 s := fillToMax(tmpImport);
-            imports(ni) := (new string'(tmpStrip(tmpImport)), s, 4*i);
+            imports(ni) := --(new string'(tmpStrip(tmpImport)), s, 4*i);
+                           (s, 4*i);
             ni := ni + 1;
         end if;
     end loop;
@@ -511,15 +514,18 @@ function matchXrefs(imp, exp: XrefArray) return IntArray is
     variable l0, l1: line;
 begin
     for i in imp'range loop
-        if imp(i).name = null then exit; end if;
+        --if imp(i).name = null then exit; end if;
     
         for j in exp'range loop
-            if exp(j).name = null then exit; end if;
+            --if exp(j).name = null then exit; end if;
             
-            l0 := imp(i).name;
-            l1 := exp(j).name;
+            --l0 := imp(i).name;
+            --l1 := exp(j).name;
 
-            if matches(l0.all, l1.all) then
+            str0 := imp(i).name_S;
+            str1 := exp(j).name_S;
+
+            if matches(str0, str1) then
                 res(i) := exp(j).address;
                 exit;
             end if;
@@ -533,9 +539,9 @@ function fillXrefs(code: WordArray; imports: XrefArray; offsets: IntArray; imgSt
     variable currentPos: integer := -1;
 begin
     for i in imports'range loop
-        if imports(i).name = null then
-            return res;
-        end if;
+        --if imports(i).name = null then
+        --    return res;
+        --end if;
     
         currentPos := imports(i).address/4;
         res(currentPos) := fillOffsetConst(res(currentPos), offsets(i) - imports(i).address + libStart - imgStart);

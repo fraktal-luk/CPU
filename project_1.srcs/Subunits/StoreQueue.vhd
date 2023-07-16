@@ -420,11 +420,11 @@ begin
             begin
                 for i in 0 to ROB_SIZE-1 loop
                     if p2i(pStart, QUEUE_SIZE) = i then
-                        preRow := "start ";
+                        preRow := new string'("start ");
                     elsif p2i(pTagged, QUEUE_SIZE) = i then
-                        preRow := "end   ";
+                        preRow := new string'("end   ");
                     else
-                        preRow := "      ";
+                        preRow := new string'("      ");
                     end if;
                     
                     currentLine := null;
