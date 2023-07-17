@@ -74,7 +74,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     type Instruction is record
         address: Mword;
         bits: Word;
-        disasm: string(1 to 51);
+        disasm: string(1 to 30);
         internalOp: InternalOperation;
     end record;
         
@@ -263,7 +263,7 @@ ARCHITECTURE Behavior OF CoreTB IS
 	    constant code: CodeBuffer := readSourceFile(filename);
 	    variable wordBuf: WordBuffer;
         variable machineCode: WordArray(0 to PROGRAM_BUFFER_SIZE-1);
-        variable imp, exp: XrefArray(0 to 100);
+        variable imp, exp: XrefArray(0 to 100) := (others => DEFAULT_XREF);
     begin
         processProgram(code, wordBuf, imp, exp);
         machineCode := wordBuf.words(0 to PROGRAM_BUFFER_SIZE-1);
@@ -304,7 +304,8 @@ ARCHITECTURE Behavior OF CoreTB IS
         res := (cpuState.nextIP, insWordVar, work.InstructionSet.TMP_disasm(insWordVar), intOpVar);
         return res;
     end function;
-
+    
+    signal expSig: XrefArray(0 to 100) := (others => DEFAULT_XREF);
 BEGIN
    okFlag <= bool2std(opFlags = "001");
    errorFlag <= bool2std(opFlags = "100");
@@ -330,11 +331,13 @@ BEGIN
        variable machineCodeVar2: WordArray(0 to PROGRAM_BUFFER_SIZE-1);
        variable machineCodeBuf: WordBuffer;
 
-       variable exp, imp: XrefArray(0 to 100);
+       variable exp, imp: XrefArray(0 to 100) := (others => DEFAULT_XREF);
        
        variable match: boolean := true;
    begin
               processProgram(readSourceFile("common_asm.txt"), machineCodeBuf, imp, exp);
+              
+                expSig <= exp;
               machineCodeVar2 := machineCodeBuf.words(0 to PROGRAM_BUFFER_SIZE-1);
               commonCode2 <= machineCodeVar2;	           
 

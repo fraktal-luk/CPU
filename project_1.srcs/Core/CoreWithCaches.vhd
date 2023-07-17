@@ -161,7 +161,7 @@ begin
                 constant code: CodeBuffer := readSourceFile("primes.txt");
                 variable machineCodeBuf: WordBuffer;
                 variable machineCode: WordArray(0 to PROGRAM_BUFFER_SIZE-1);
-                variable imp, exp: XrefArray(0 to 100);
+                variable imp, exp: XrefArray(0 to 100) := (others => DEFAULT_XREF);
                 --variable res: WordArray(0 to 1023) := (others => (others => '0'));
                 constant offset: natural := 512/4;
                 --constant bound: natural := 

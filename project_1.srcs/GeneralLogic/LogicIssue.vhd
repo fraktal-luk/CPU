@@ -956,10 +956,34 @@ begin
         res.static.operation.subpipe := b.static.operation.subpipe;
     end if;
     res.static.operation.bits := a.static.operation.bits or b.static.operation.bits;
-    res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
-    res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
-    res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
-    res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
+--    res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
+--    res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
+--    res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
+--    res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
+
+            if slv2u(res.static.operation.bits) > ArithOp'pos(ArithOp'right) then
+                res.static.operation.arith := opAnd;
+            else
+                res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
+            end if;
+            
+            if slv2u(res.static.operation.bits) > MemOp'pos(MemOp'right) then
+                res.static.operation.memory := opLoad;
+            else
+                res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
+            end if;
+
+            if slv2u(res.static.operation.bits) > FpOp'pos(FpOp'right) then
+                res.static.operation.float := opMove;
+            else
+                res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
+            end if;
+            
+            if slv2u(res.static.operation.bits) > SysOp'pos(SysOp'right) then
+                res.static.operation.system := opNone;
+            else
+                res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
+            end if;
 
     res.static.branchIns := a.static.branchIns or b.static.branchIns;
     res.static.divIns := a.static.divIns or b.static.divIns;
@@ -1338,10 +1362,34 @@ end function;
             res.dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
             res.dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
         
-            res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
-            res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
-            res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
-            res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
+            --res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
+            --res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
+            --res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
+            --res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
+
+            if slv2u(res.static.operation.bits) > ArithOp'pos(ArithOp'right) then
+                res.static.operation.arith := opAnd;
+            else
+                res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
+            end if;
+            
+            if slv2u(res.static.operation.bits) > MemOp'pos(MemOp'right) then
+                res.static.operation.memory := opLoad;
+            else
+                res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
+            end if;
+
+            if slv2u(res.static.operation.bits) > FpOp'pos(FpOp'right) then
+                res.static.operation.float := opMove;
+            else
+                res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
+            end if;
+            
+            if slv2u(res.static.operation.bits) > SysOp'pos(SysOp'right) then
+                res.static.operation.system := opNone;
+            else
+                res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
+            end if;
 
         res.static.dbInfo := selectDbInfo(inputElems, selMask);
 

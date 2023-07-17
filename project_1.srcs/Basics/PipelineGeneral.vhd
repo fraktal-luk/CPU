@@ -720,7 +720,11 @@ function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
     for i in res'range loop
-        res(i).ins.specificOperation.memory := MemOp'val(slv2u(res(i).ins.specificOperation.bits));        
+        if slv2u(res(i).ins.specificOperation.bits) > MemOp'pos(MemOp'right) then
+            res(i).ins.specificOperation.memory := opLoad;
+        else
+            res(i).ins.specificOperation.memory := MemOp'val(slv2u(res(i).ins.specificOperation.bits));
+        end if;
     end loop;
 
     return res;
@@ -730,7 +734,11 @@ function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray 
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
     for i in res'range loop
-        res(i).ins.specificOperation.float := FpOp'val(slv2u(res(i).ins.specificOperation.bits));
+        if slv2u(res(i).ins.specificOperation.bits) > FpOp'pos(FpOp'right) then
+            res(i).ins.specificOperation.float := opMove;
+        else
+            res(i).ins.specificOperation.float := FpOp'val(slv2u(res(i).ins.specificOperation.bits));
+        end if;
         res(i).ins.virtualArgSpec.intDestSel := '0';          
     end loop;
     return res;
@@ -739,8 +747,12 @@ end function;
 function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
-    for i in res'range loop     
-        res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
+    for i in res'range loop
+        if slv2u(res(i).ins.specificOperation.bits) > ArithOp'pos(ArithOp'right) then
+            res(i).ins.specificOperation.arith := opAnd;
+        else
+            res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
+        end if;
         res(i).ins.virtualArgSpec.floatDestSel := '0';          
     end loop;  
     return res;
@@ -750,9 +762,13 @@ function TMP_recodeMul(insVec: InstructionSlotArray) return InstructionSlotArray
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
     for i in res'range loop     
-        res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
+        if slv2u(res(i).ins.specificOperation.bits) > ArithOp'pos(ArithOp'right) then
+            res(i).ins.specificOperation.arith := opAnd;
+        else
+            res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
+        end if;
         res(i).ins.virtualArgSpec.floatDestSel := '0';          
-    end loop;  
+    end loop;
     return res;
 end function;
 

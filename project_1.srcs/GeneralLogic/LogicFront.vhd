@@ -332,7 +332,8 @@ begin
     -- pragma synthesis off
     res.bits := bits;
     res.adr := ip;
-    res.str := work.Assembler.disasmWord(bits)(res.str'range);
+    res.str(1 to 24) := work.Assembler.disasmWord(bits)(1 to 24);
+    
     -- pragma synthesis on
     return res;
 end function;

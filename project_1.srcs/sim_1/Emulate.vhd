@@ -595,20 +595,26 @@ end function;
 
 function shiftLeft(w: Word; sh: natural) return Word is
     variable d: Dword := w & X"00000000";
+    variable res: Word := d(63-sh downto 32-sh);
 begin
-    return d(63-sh downto 32-sh);
+    --return d(63-sh downto 32-sh);
+    return res;
 end function;
 
 function shiftRightLogical(w: Word; sh: natural) return Word is
     variable d: Dword := zeroExtend(w, 64);
+    variable res: Word := d(31+sh downto sh);
 begin
-    return d(31+sh downto sh);
+    return --d(31+sh downto sh);
+           res;
 end function;
 
 function shiftRightArithmetic(w: Word; sh: natural) return Word is
     variable d: Dword := signExtend(w, 64);
+    variable res: Word := d(31+sh downto sh);
 begin
-    return d(31+sh downto sh);
+    return --d(31+sh downto sh);
+            res;
 end function;
 
 

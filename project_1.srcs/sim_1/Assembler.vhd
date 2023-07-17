@@ -58,10 +58,13 @@ constant EMPTY_LABEL_ARRAY: LabelArray(0 to 0) := (others => (others => ' '));
 
 -- Structure for import or export of label: name and where the source or required replacement is
 type Xref is record
+    valid: boolean;
     --name: line;
         name_S: string(1 to MAX_LABEL_SIZE);
     address: integer;
 end record;
+
+constant DEFAULT_XREF: Xref := (valid => false, name_S => (others => cr), address => 0);
 
 type XrefArray is array(integer range <>) of Xref;
 
@@ -122,6 +125,10 @@ begin
         --if xa(i).name = null then
         --    return;
         --end if;
+        if not xa(i).valid then
+            return;
+        end if;
+        
         --report xa(i).name.all; report natural'image(xa(i).address);
         report xa(i).name_S; report natural'image(xa(i).address);
     end loop;
@@ -386,7 +393,7 @@ begin
                 startOffsets(procIndex) := insIndex;
                     s := fillToMax('$' & tmpStrip(p.words(i)(1)));
                 outExports(ne) := --(new string'('$' & tmpStrip(p.words(i)(1))), s, 4*insIndex);
-                                    (s, 4*insIndex);
+                                    (true, s, 4*insIndex);
                 ne := ne + 1;
             elsif matches(tmpStr, "end") then
                 -- ignore
@@ -412,7 +419,7 @@ begin
             commands(i) := fillOffset(commands(i), i, tmpImport, labels, EMPTY_LABEL_ARRAY);
                 s := fillToMax(tmpImport);
             imports(ni) := --(new string'(tmpStrip(tmpImport)), s, 4*i);
-                           (s, 4*i);
+                           (true, s, 4*i);
             ni := ni + 1;
         end if;
     end loop;
@@ -515,9 +522,11 @@ function matchXrefs(imp, exp: XrefArray) return IntArray is
 begin
     for i in imp'range loop
         --if imp(i).name = null then exit; end if;
+        if not imp(i).valid then exit; end if;
     
         for j in exp'range loop
             --if exp(j).name = null then exit; end if;
+            if not exp(j).valid then exit; end if;
             
             --l0 := imp(i).name;
             --l1 := exp(j).name;
