@@ -141,7 +141,7 @@ ARCHITECTURE Behavior OF CoreTB IS
             end if;            
         end loop;
     end procedure;
-              
+
     procedure cycle(signal clk: in std_logic) is
     begin
         wait until rising_edge(clk);
@@ -152,7 +152,7 @@ ARCHITECTURE Behavior OF CoreTB IS
         wait until rising_edge(clk);
     end procedure;
 
-        
+
     procedure checkTestResult(variable testName: in line; signal testDone, testFail: out std_logic) is
     begin
         loop
@@ -258,14 +258,42 @@ ARCHITECTURE Behavior OF CoreTB IS
         programMem(startAdr to startAdr + LEN - 1) <= insSeq;    
     end procedure;
 
+    procedure loadFile(filename: in string) is
+        file f: text open read_mode is filename;
+        variable ln: line := null;
+    begin
+        readline(f, ln);
+            report ln.all;
+        readline(f, ln);
+            report ln.all;
+        readline(f, ln);
+            report ln.all;
+        
+    end procedure;
+
+
     procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
 	    --constant prog: ProgramBuffer := readSourceFile(filename).words; -- range: 0 to 999
-	    constant code: CodeBuffer := readSourceFile(filename);
+	    variable code: CodeBuffer;-- := readSourceFile(filename);
 	    variable wordBuf: WordBuffer;
         variable machineCode: WordArray(0 to PROGRAM_BUFFER_SIZE-1);
         variable imp, exp: XrefArray(0 to 100) := (others => DEFAULT_XREF);
     begin
+                report "Now again";
+                report " ";
+    
+            loadFile(filename);
+    
+            
+    
+    	    code := readSourceFile(filename);
+
+    
         processProgram(code, wordBuf, imp, exp);
+            report work.CpuText.w2hex(wordBuf.words(0));
+            report work.CpuText.w2hex(wordBuf.words(1));
+            report work.CpuText.w2hex(wordBuf.words(2));
+        
         machineCode := wordBuf.words(0 to PROGRAM_BUFFER_SIZE-1);
         machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
 
@@ -366,8 +394,24 @@ BEGIN
 
               announceTest(currentTest, currentSuite, testName.all, suiteName.all);    
 
+                    wait until rising_edge(clk);
+  --                      programMemory2(0) <= X"00001234";
+                    wait until rising_edge(clk);
+
+                    loadFile(testName.all & ".txt");
+
 
               loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory2);
+
+            --        cycle;
+                    wait until rising_edge(clk);
+--                        programMemory2(1) <= X"00002345";
+
+                    wait until rising_edge(clk);
+--                        programMemory2(2) <= X"00001111";
+
+                    wait until rising_edge(clk);
+
 
                 -- Reset handler
                 setInstruction(programMemory2, RESET_BASE, "ja -512");
@@ -383,8 +427,19 @@ BEGIN
                 -- Common lib
                 setProgram(testProgram2, i2slv(4*1024, 32), commonCode2);	           
 
+                        wait until rising_edge(clk);
 
-              setForOneCycle(resetDataMem, clk);
+              --setForOneCycle(resetDataMem, clk);
+                resetDataMem <= '1';
+                --cycle(clk);
+                --   cycle;
+                        wait until rising_edge(clk);
+
+                resetDataMem <= '0';
+                --cycle(clk);
+                --    cycle;
+                        wait until rising_edge(clk);
+
               disasmToFile(testName.all & "_disasm.txt", testProgram2);
 
               if CORE_SIMULATION then

@@ -177,19 +177,34 @@ function readSourceFile(name: string) return CodeBuffer is
     variable labelFound: boolean := false;
     variable program: ProgramBuffer := (others => (others => (others => cr)));
 begin
+     report "  ";       
+     report "file reading:";
+     report "  ";
+
     loop
         ln := null;
-        readline(src, ln);
+            if endfile(src) then
+                exit;
+            end if;
 
-        if ln = null or ln'length = 0 then
+        readline(src, ln);
+            
+--            if ln /= null then
+--                report "program line, " & natural'image(ln'length);
+--                report ln.all;
+--            end if;
+
+        if ln = null  --or ln'length = 0
+            then
             exit;
         end if;
 
+                
         str := (others => cr);
         for i in 1 to 100 loop
             read(ln, ch, good);
             if not good then
-                str(i-1) := ' ';
+                --str(i-1) := ' ';
                 exit;
             elsif ch = cr or ch = ';' then -- Stop when line ends or comment starts
                 str(i) := ' ';
@@ -202,6 +217,8 @@ begin
         program(lineNum) := parseInstructionString(str);
         lineNum := lineNum + 1;
     end loop;
+            report "file read.";
+            report "  ";
     
     return (lineNum, program);
 end function;
