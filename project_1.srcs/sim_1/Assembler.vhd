@@ -325,7 +325,7 @@ begin
     numL := (findLabel(import, labels)); -- branch offset
     if numL /= -1 then
         offset := 4*(numL - k);
-    else 
+    else
         numI := findLabel(import, imports);
         if numI /= -1 then
             offset := 4*(numI - k);
@@ -404,8 +404,8 @@ begin
                 -- add name to labels
                 -- add name to export
                 -- add insIndex to offsets
-                labels(insIndex)(1 to 10) := p.words(i)(1)(1 to 10);
-                exports(insIndex)(2 to 11) := p.words(i)(1)(1 to 10);
+                labels(insIndex) := p.words(i)(1);
+                exports(insIndex)(2 to MAX_LABEL_SIZE) := p.words(i)(1)(1 to MAX_LABEL_SIZE-1);
                 exports(insIndex)(1) := '$';
                 startOffsets(procIndex) := insIndex;
                     s := fillToMax('$' & tmpStrip(p.words(i)(1)));
@@ -419,7 +419,7 @@ begin
                 procIndex := procIndex + 1;
             end if;
         elsif p.words(i)(0)(1) = '$' then -- label
-           labels(insIndex)(1 to 10) := p.words(i)(0)(1 to 10);            
+           labels(insIndex) := p.words(i)(0);            
         elsif p.words(i)(0)(1) = cr then -- the line is empty
            null;
         else -- instruction

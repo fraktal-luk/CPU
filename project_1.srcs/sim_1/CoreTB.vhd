@@ -258,18 +258,18 @@ ARCHITECTURE Behavior OF CoreTB IS
         programMem(startAdr to startAdr + LEN - 1) <= insSeq;    
     end procedure;
 
-    procedure loadFile(filename: in string) is
-        file f: text open read_mode is filename;
-        variable ln: line := null;
-    begin
-        readline(f, ln);
-            report ln.all;
-        readline(f, ln);
-            report ln.all;
-        readline(f, ln);
-            report ln.all;
+--    procedure loadFile(filename: in string) is
+--        file f: text open read_mode is filename;
+--        variable ln: line := null;
+--    begin
+--        readline(f, ln);
+--            report ln.all;
+--        readline(f, ln);
+--            report ln.all;
+--        readline(f, ln);
+--            report ln.all;
         
-    end procedure;
+--    end procedure;
 
 
     procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
@@ -279,10 +279,10 @@ ARCHITECTURE Behavior OF CoreTB IS
         variable machineCode: WordArray(0 to PROGRAM_BUFFER_SIZE-1);
         variable imp, exp: XrefArray(0 to 100) := (others => DEFAULT_XREF);
     begin
-                report "Now again";
-                report " ";
+--                report "Now again";
+--                report " ";
     
-            loadFile(filename);
+--            loadFile(filename);
     
             
     
@@ -398,7 +398,7 @@ BEGIN
   --                      programMemory2(0) <= X"00001234";
                     wait until rising_edge(clk);
 
-                    loadFile(testName.all & ".txt");
+          --          loadFile(testName.all & ".txt");
 
 
               loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory2);
