@@ -373,10 +373,14 @@ BEGIN
 
       loop
           suiteName := null;
-          readline(suiteFile, suiteName);
-          if suiteName = null then -- testName'length = 0 then
+          if endfile(suiteFile) then
+          --if suiteName = null then -- testName'length = 0 then
               exit;
-          elsif suiteName(1) = ';' then
+          end if;
+          
+          readline(suiteFile, suiteName);
+
+          if suiteName(1) = ';' then
               next;
           end if;          
           
@@ -384,19 +388,22 @@ BEGIN
           
           file_open(testFile, suiteName.all & ".txt", read_mode);
           loop
-              testName := null;	  
+              testName := null;
+              if endfile(testFile) then
+                    exit;
+              end if;
               readline(testFile, testName);
-              if testName = null then
-                  exit;
-              elsif testName(1) = ';' then
+--              if testName = null then
+--                  exit;
+              if testName(1) = ';' then
                   next;
               end if;
 
               announceTest(currentTest, currentSuite, testName.all, suiteName.all);    
 
-                    wait until rising_edge(clk);
+          --          wait until rising_edge(clk);
   --                      programMemory2(0) <= X"00001234";
-                    wait until rising_edge(clk);
+          --          wait until rising_edge(clk);
 
           --          loadFile(testName.all & ".txt");
 
@@ -404,13 +411,13 @@ BEGIN
               loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory2);
 
             --        cycle;
-                    wait until rising_edge(clk);
+            --        wait until rising_edge(clk);
 --                        programMemory2(1) <= X"00002345";
 
-                    wait until rising_edge(clk);
+            --        wait until rising_edge(clk);
 --                        programMemory2(2) <= X"00001111";
 
-                    wait until rising_edge(clk);
+             --       wait until rising_edge(clk);
 
 
                 -- Reset handler
@@ -427,7 +434,7 @@ BEGIN
                 -- Common lib
                 setProgram(testProgram2, i2slv(4*1024, 32), commonCode2);	           
 
-                        wait until rising_edge(clk);
+                --        wait until rising_edge(clk);
 
               --setForOneCycle(resetDataMem, clk);
                 resetDataMem <= '1';

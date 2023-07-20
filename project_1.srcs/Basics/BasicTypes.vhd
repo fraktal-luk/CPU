@@ -656,7 +656,7 @@ end function;
 
 function addInt(v: std_logic_vector; n: integer) return std_logic_vector is
     variable res: std_logic_vector(v'range) := (others => '0');
-    variable vInt: integer := slv2u(v); -- Signed or not, addition bit results are the same
+    --variable vInt: integer := slv2u(v); -- Signed or not, addition bit results are the same
     variable bRes: std_logic_vector(v'range) := (others => '0'); 
 begin
     CHECK_BE(v);
