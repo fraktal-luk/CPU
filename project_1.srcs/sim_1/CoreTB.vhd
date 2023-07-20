@@ -385,8 +385,11 @@ BEGIN
           end if;          
           
           report "Starting suite: " & suiteName.all;
-          
+
           file_open(testFile, suiteName.all & ".txt", read_mode);
+          
+          wait until rising_edge(clk);
+
           loop
               testName := null;
               if endfile(testFile) then
@@ -434,18 +437,18 @@ BEGIN
                 -- Common lib
                 setProgram(testProgram2, i2slv(4*1024, 32), commonCode2);	           
 
-                --        wait until rising_edge(clk);
+                      --  
 
-              --setForOneCycle(resetDataMem, clk);
-                resetDataMem <= '1';
-                --cycle(clk);
-                --   cycle;
-                        wait until rising_edge(clk);
+                setForOneCycle(resetDataMem, clk);
+--                resetDataMem <= '1';
+--                --cycle(clk);
+--                --   cycle;
+--                        wait until rising_edge(clk);
 
-                resetDataMem <= '0';
-                --cycle(clk);
-                --    cycle;
-                        wait until rising_edge(clk);
+--                resetDataMem <= '0';
+--                --cycle(clk);
+--                --    cycle;
+--                        wait until rising_edge(clk);
 
               disasmToFile(testName.all & "_disasm.txt", testProgram2);
 
