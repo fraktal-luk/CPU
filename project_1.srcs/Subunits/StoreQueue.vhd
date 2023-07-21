@@ -84,14 +84,15 @@ architecture Behavioral of StoreQueue is
 
     signal addresses, storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 
-    signal canAlloc, drainReq, drainEqual, allowDrain, isSending, isDrainingPrev, isSelected, isSelectedNext, isSelected_Early, sqMissed, missing, committedEmptySig: std_logic := '0';
+    signal canAlloc, drainReq, drainEqual, allowDrain, isSending, isDrainingPrev, isSelected, isSelectedNext, isSelected_Early, sqMissed, missing, committedEmptySig,
+            dummy0: std_logic := '0';
 
     signal drainOutput, selectedOutput, selectedOutputSig, committedOutputSig: ControlPacket := DEFAULT_CONTROL_PACKET;
     signal adrValuePrev, drainValue, selectedValue, drainAddress, selectedAddress: Mword := (others => '0');
 
     signal selectedEntry, drainEntry: QueueEntry := DEFAULT_QUEUE_ENTRY;
 
-    signal updateResult: ExecResult := DEFAULT_EXEC_RESULT;
+    signal updateResult, selectedDataResultSig: ExecResult := DEFAULT_EXEC_RESULT;
 
 	alias compareAddressInputOp is compareAddressCtrl.op;
 	alias compareAddressInputEarlyOp is compareAddressEarlyInput_Ctrl.op;
@@ -331,16 +332,32 @@ begin
     renamedPtr <= pRenamed;
 
     -- E. output
-    selectedDataOutput <= selectedOutputSig;
+    --selectedDataOutput <= selectedOutputSig;
+    
+    TMP_SEL_DATA: block
+        function selDataRes(dest: SmallNumber) return ExecResult is
+            variable res: ExecResult := DEFAULT_EXEC_RESULT;
+        begin
+            res.dest(7 downto 0) := dest(7 downto 0);
+            return res;
+        end function;
+    begin
+--        selectedDataResultSig.full <= '0';
+--        selectedDataResultSig.failed <= '0';
+--        selectedDataResultSig.dest <= pSelectPrev;
+--        selectedDataResultSig.tag <= (others => '0');
+--        selectedDataResultSig.value <= (others => '0');
+        
+        selectedDataResultSig <= selDataRes(pSelectPrev);
+                selectedDataResult <= selectedDataResultSig;
+    end block;
 
-    selectedDataResult.full <= '0';
-    selectedDataResult.failed <= '0';
-    selectedDataResult.dest <= pSelectPrev;
-    selectedDataResult.tag <= (others => '0');
-    selectedDataResult.value <= (others => '0');
 
     WHEN_LQ: if IS_LOAD_QUEUE generate
-        selectedOutputSig.controlInfo.full <= isSelected;           
+        selectedOutputSig.controlInfo.full <= isSelected;
+        
+            selectedDataOutput <= selectedOutputSig;
+          
     end generate;
 
     WHEN_SQ: if not IS_LOAD_QUEUE generate
@@ -358,6 +375,9 @@ begin
         committedOutputSig.op <= drainOutput.op;
         committedOutputSig.target <= drainOutput.target;
         committedOutputSig.nip <= drainOutput.nip;
+        
+            selectedDataOutput <= selectedOutputSig;
+
     end generate;
 
 	committedEmptySig <= bool2std(pStart = pDrainPrev);

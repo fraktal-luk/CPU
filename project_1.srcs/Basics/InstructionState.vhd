@@ -465,9 +465,9 @@ constant DEFAULT_INSTRUCTION_SLOT: InstructionSlot := ('0', DEFAULT_INSTRUCTION_
 constant DEFAULT_INS_SLOT: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 
 constant DEFAULT_EXEC_RESULT: ExecResult := (
-    DEFAULT_DEBUG_INFO,
-    '0',
-    '0',
+    dbInfo => DEFAULT_DEBUG_INFO,
+    full => '0',
+    failed => '0',
     tag => (others => '0'),
     dest => (others => '0'),
     value => (others => '0')

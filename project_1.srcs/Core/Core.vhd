@@ -72,7 +72,7 @@ architecture Behavioral of Core is
     signal renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal aluMaskRe, mulMaskRe, memMaskRe, branchMaskRe, loadMaskRe, storeMaskRe, intStoreMaskRe, floatStoreMaskRe, fpMaskRe,
-           branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO,
+           branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO, zerosMask,
            commitMaskSQ, commitEffectiveMaskSQ, commitMaskLQ, commitEffectiveMaskLQ, branchCommitMask, branchCommitEffectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
     signal frontGroupOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
@@ -94,7 +94,8 @@ architecture Behavioral of Core is
 
     signal bqCompareEarly, bqUpdate, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
            memAddressInput, memAddressInputEarly, frontEvent, execEvent, lateEvent, execCausingDelayedSQ, execCausingDelayedLQ,
-           bqTargetData, resOutSQ, dataFromSB, missedMemResultE1, missedMemResultE2, mqReexecResIssue, mqReexecResRR, memoryRead
+           bqTargetData, resOutSQ, dataFromSB, missedMemResultE1, missedMemResultE2, mqReexecResIssue, mqReexecResRR, memoryRead,
+           defaultExecRes
            : ExecResult := DEFAULT_EXEC_RESULT;
 
     signal pcData, dataToBranch, bqSelected, branchResultE0, branchResultE1, mqReexecCtrlIssue, mqReexecCtrlRR,
@@ -1471,15 +1472,17 @@ begin
             prevSendingRe => '0',                
             prevSending => '0',
     
-            renameMask => (others => '0'),
-            inputMask => (others => '0'),
-            systemMask => (others => '0'),
-    
+            renameMask => --(others => '0'),
+                            zerosMask,
+            inputMask => --(others => '0'),
+                            zerosMask,
+            systemMask => --(others => '0'),
+                            zerosMask,
             renamedPtr => open,
     
             storeValueResult => sqValueResultE2,
     
-            compareAddressEarlyInput => DEFAULT_EXEC_RESULT,
+            compareAddressEarlyInput => defaultExecRes,--DEFAULT_EXEC_RESULT,
             compareAddressEarlyInput_Ctrl => memCtrlRR, -- only 'tag' and 'full'
     
             compareAddressInput => missedMemResultE2,
@@ -1489,9 +1492,10 @@ begin
             selectedDataResult => mqReexecResIssue,
     
             committing => '0',
-            commitMask => (others => '0'),
-            commitEffectiveMask => (others => '0'),
-    
+            commitMask => --(others => '0'),
+                            zerosMask,
+            commitEffectiveMask => --(others => '0'),
+                                        zerosMask,
             lateEventSignal => lateEventSignal,
             execEventSignal => execEventSignalE1,
             execCausing => execCausingDelayedLQ,

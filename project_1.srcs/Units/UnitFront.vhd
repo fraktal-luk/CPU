@@ -195,8 +195,8 @@ begin
         predictedAddressNext <= lateCausing.value     when lateEventSetPC = '1'
                            else execCausing.value     when execEventSignal = '1'
                            else earlyBranchOut.target when frontBranchEvent = '1'
-                           else normalTarget          when sendingToBuffer = '1'
-                           --else normalCt.target       when sendingToBuffer = '1'
+                           --else normalTarget          when sendingToBuffer = '1'
+                           else normalCt.target       when sendingToBuffer = '1'
                            else predictedAddress;
         
 --        predictedAddressNext <= getPA(lateCausing.value, execCausing.value, earlyBranchOut.target, normalCt.target, predictedAddress,
