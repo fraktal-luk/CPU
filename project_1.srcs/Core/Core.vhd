@@ -849,6 +849,20 @@ begin
                     
                     return res;
                 end function;
+                
+            function xxxyyy(sx: SchedulerState) return ExecResult is
+                variable res: ExecResult := DEFAULT_EXEC_RESULT;
+            begin
+                res.full := sx.full;
+                res.tag := sx.st.tags.renameIndex;
+                res.dest := sx.st.tags.sqPointer;
+                res.value := sx.argValues(0);
+                return res;
+            end function;
+            
+            signal threeSN: SmallNumber := X"03";
+            signal xa, xb, xc, xd, xe, xf: SmallNumber := sn(0);
+            signal xtags: InstructionTags := DEFAULT_INSTRUCTION_TAGS;
         begin
             wupsInt <= getInitWakeups(schedInfoIntA, bypassIntSV, CFG_SVI);
             wupsFloat <= getInitWakeups(schedInfoFloatA, bypassFloatSV, CFG_SVF);
@@ -973,10 +987,33 @@ begin
             stateExecStoreValue <= slotRegReadFloatSV when slotRegReadFloatSV.full = '1' else slotRegReadIntSV;
             sendingToStoreWrite <= slotRegReadIntSV.full or slotRegReadFloatSV.full;
 
-            sqValueResultRR.full <= sendingToStoreWrite;
-            sqValueResultRR.tag <= stateExecStoreValue.st.tags.renameIndex;
-            sqValueResultRR.dest <= stateExecStoreValue.st.tags.sqPointer;
-            sqValueResultRR.value <= stateExecStoreValue.argValues(0);
+--            sqValueResultRR.full <= sendingToStoreWrite;
+--            sqValueResultRR.tag <= stateExecStoreValue.st.tags.renameIndex;
+--            sqValueResultRR.dest <= stateExecStoreValue.st.tags.sqPointer;
+--            sqValueResultRR.value <= stateExecStoreValue.argValues(0);
+            
+            sqValueResultRR <= xxxyyy(stateExecStoreValue);
+            
+                --ch0 <= bool2std(sqValueResultRR.dest = stateExecStoreValue.st.tags.sqPointer);
+                --ch1 <= bool2std(sqValueResultRR.tag = stateExecStoreValue.st.tags.renameIndex);
+                --ch2 <= bool2std(sqValueResultRR.full = slotRegReadIntSV.full);
+                
+                    ch0 <= bool2std(slotIssueIntSV.st.tags.sqPointer = threeSN);
+                           -- '1';
+                    ch1 <= bool2std(slotRegReadIntSV.st.tags.sqPointer = threeSN);
+                    ch2 <= bool2std(stateExecStoreValue.st.tags.sqPointer = threeSN);
+                    ch3 <= bool2std(sqValueResultRR.dest = threeSN);
+                    --ch4 <= bool2std(stateExecStoreValue.st.tags.sqPointer = threeSN);
+                    
+                    xtags <= slotRegReadIntSV.st.tags;
+                    
+                    xa <= slotIssueIntSV.st.tags.lqPointer;
+                    xb <= --slotIssueIntSV.st.tags.bqPointer;
+                            xtags.sqPointer;
+                    xc <= slotRegReadIntSV.st.tags.sqPointer;
+                    xd <= slotIssueIntSV.st.tags.bqPointerSeq;
+                    xe <= slotIssueIntSV.st.tags.intPointer;
+                    xf <= slotIssueIntSV.st.tags.floatPointer;
         end block;
 
 
@@ -1089,8 +1126,8 @@ begin
             end if;
          end process;
 
-                ch0 <= bool2std(memRegReadFull_N = memSubpipeSent);
-                ch1 <= bool2std(lockIssueI0_N = lockIssueI0);
+--                ch0 <= bool2std(memRegReadFull_N = memSubpipeSent);
+--                ch1 <= bool2std(lockIssueI0_N = lockIssueI0);
 
         lockIssueSVI <= storeValueCollision1 or memFail;
         lockIssueSVF <= storeValueCollision1 or memFail;
@@ -1456,7 +1493,7 @@ begin
     end process;
 
     MQ_BLOCK: if ENABLE_MQ generate 
-        LOAD_MISS_QUEUE: entity work.StoreQueue(MissQueue)
+        LOAD_MISS_QUEUE: entity work.MissQueue(DefaultMQ)
         generic map(
             QUEUE_SIZE => 8
             )

@@ -1,5 +1,72 @@
 
-architecture MissQueue of StoreQueue is
+
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+use work.BasicTypes.all;
+use work.Helpers.all;
+
+use work.ArchDefs.all;
+use work.InstructionStateBase.all;
+use work.InstructionState.all;
+use work.CoreConfig.all;
+use work.PipelineGeneral.all;
+use work.LogicQueues.all;
+
+
+entity MissQueue is
+	generic(
+		QUEUE_SIZE: integer := 8;
+		IS_LOAD_QUEUE: boolean := false
+	);
+	port(
+		clk: in std_logic;
+		reset: in std_logic;
+		en: in std_logic;
+
+		acceptingOut: out std_logic; -- UNUSED
+		almostFull: out std_logic;   -- UNUSED
+		acceptAlloc: out std_logic;
+		
+   	    prevSendingRe: in std_logic;
+		prevSending: in std_logic;
+
+        renameMask: in std_logic_vector(0 to PIPE_WIDTH-1);
+        inputMask: in std_logic_vector(0 to PIPE_WIDTH-1);
+        systemMask: in std_logic_vector(0 to PIPE_WIDTH-1);
+
+        renamedPtr: out SmallNumber;
+
+		compareAddressEarlyInput: in ExecResult;
+        compareAddressEarlyInput_Ctrl: in ControlPacket;
+
+		compareAddressInput: in ExecResult;
+		compareAddressCtrl: in ControlPacket;
+
+		storeValueResult: in ExecResult;
+
+        selectedDataOutput: out ControlPacket;
+        selectedDataResult: out ExecResult;
+
+		committing: in std_logic;
+        commitMask: in std_logic_vector(0 to PIPE_WIDTH-1);
+        commitEffectiveMask: in std_logic_vector(0 to PIPE_WIDTH-1);
+
+		lateEventSignal: in std_logic;
+		execEventSignal: in std_logic;
+    	execCausing: in ExecResult;
+
+		nextAccepting: in std_logic;		
+
+		committedEmpty: out std_logic;
+		committedSending: out std_logic;
+		committedDataOut: out ControlPacket;
+		
+		dbState: in DbCoreState
+	);
+end MissQueue;
+
+architecture DefaultMQ of MissQueue is
 
     type MQ_Entry is record
         full: std_logic;
@@ -336,5 +403,5 @@ begin
     
         almostFull <= isAlmostFull;
         acceptingOut <= accepting;
-end MissQueue;
+end DefaultMQ;
 

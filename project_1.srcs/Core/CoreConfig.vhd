@@ -9,8 +9,8 @@ package CoreConfig is
 
 --function checkSynthesis return boolean;
 
-constant DB_ENABLE: boolean := true;
-constant DB_LOG_EVENTS: boolean := false;-- false;
+constant DB_ENABLE: boolean := false;
+constant DB_LOG_EVENTS: boolean := true;-- false;
 
 constant DEBUG_LOG_COMMITTED: boolean := false;
 
