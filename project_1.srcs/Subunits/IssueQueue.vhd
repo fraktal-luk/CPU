@@ -69,10 +69,7 @@ architecture Behavioral of IssueQueue is
     constant CFG_SEL: SchedulerUpdateConfig :=  (false, false, IGNORE_MEM_FAIL, FORWARDING, false);
 
     signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdated_2, queueContentUpdatedSel: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
-
-
         signal queueSel2, queueSel4, queueSel8, queueSel16: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
-
 
     signal ageMatrix: slv2D(0 to IQ_SIZE-1, 0 to IQ_SIZE-1) := (others => (others => '0'));
     signal insertionLocs: slv2D(0 to IQ_SIZE-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -161,14 +158,9 @@ begin
     sends <= anyReadyFull and nextAccepting;
 
     -- Selection for issue
-    selMask <= getSelMask(readyMask, ageMatrix);
+    selMask <= --getSelMask(readyMask, ageMatrix);
+        selMaskH;
         selMaskH <= getSelMask_H(readyMask, ageMatrix);
-
-        ch0 <= bool2std(selMaskH = selMask);
-            ch1 <= bool2std(selectedSlot_N.dynamic.renameIndex = selectedSlot.dynamic.renameIndex);
-            ch2 <= compareDynamic(selectedSlot_N.dynamic, selectedSlot.dynamic);
-            ch3 <= compareStatic(selectedSlot_N.static, selectedSlot.static);
-            ch4 <= (ch2 and ch3)  or not sends;
 
     selectedIqTag <= getIssueTag(sends, selMask);
     selectedSlot <=
@@ -198,8 +190,6 @@ begin
                         sentKilled => sentKilled,
                         trialPrev1 => sentTrial1,
                         trialPrev2 => sentTrial2
-                        --,
-                        --   cancelled_D => '0' --sentKilled or (memFail)
                         );
 
     COUNTERS_SYNCHRONOUS: process(clk)

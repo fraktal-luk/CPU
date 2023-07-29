@@ -121,6 +121,8 @@ type AbstractOperation is (
     add,
     sub,
     
+    addHigh,
+    
     mul,
     mulhs,
     mulhu,
@@ -172,8 +174,10 @@ constant OP_TABLE: OpTable(ProcMnemonic'left to ProcMnemonic'right) := (
     
     add_i => (DESC_INT, add),
     
-    shl_i => (DESC_INT, logicShift),
+    add_h => (DESC_INT, addHigh),
     
+    shl_i => (DESC_INT, logicShift),
+
     --shl_r, -- direction defined by shift value, not opcode
     --sha_i, sha_r
     
@@ -481,7 +485,7 @@ begin
             sys_call |
             sys_send
             =>
-            
+
             isSystemOp := true;
         when others =>            
     end case;
@@ -615,6 +619,13 @@ function shiftRightArithmetic(w: Word; sh: natural) return Word is
 begin
     return --d(31+sh downto sh);
             res;
+end function;
+
+
+function addHigh(a, b: Word) return Word is
+    constant bShifted: Word := shiftLeft(b, 16);
+begin
+    return add(a, bShifted);
 end function;
 
 
@@ -763,7 +774,9 @@ begin
         when arithShift => intResult := bitArithmeticShift(ia0, ia1);
         when add => intResult := add(ia0, ia1);
         when sub => intResult := sub(ia0, ia1);
-        
+
+        when addHigh => intResult := addHigh(ia0, ia1);
+
         when mul => intResult := multiplyLow(ia0, ia1); 
         when mulhu => intResult := multiplyHigh(ia0, ia1);
         when mulhs => intResult := multiplyHigh(ia0, ia1, true);
