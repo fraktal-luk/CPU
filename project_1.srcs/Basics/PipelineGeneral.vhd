@@ -62,7 +62,7 @@ type IssueQueueSignals is record
     sentKilled: std_logic;
     trialPrev1: std_logic;
     trialPrev2: std_logic;
-    cancelled_D: std_logic;
+    --cancelled_D: std_logic;
 end record;
 
 constant DEFAULT_ISSUE_QUEUE_SIGNALS: IssueQueueSignals := (

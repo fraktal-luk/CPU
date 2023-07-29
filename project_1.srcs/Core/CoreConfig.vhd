@@ -14,7 +14,7 @@ constant DB_LOG_EVENTS: boolean := true;-- false;
 
 constant DEBUG_LOG_COMMITTED: boolean := false;
 
-constant DB_OP_TRACKING: boolean := true;
+constant DB_OP_TRACKING: boolean := false;
 constant DB_TRACKED_SEQ_NUM: Word := X"00000051";
 
 constant DB_LSQ_TRACKING: boolean := false;

@@ -109,16 +109,16 @@ architecture Behavioral of Core is
     signal events: EventState := DEFAULT_EVENT_STATE;
     signal dbState: DbCoreState := DEFAULT_DB_STATE;
 
-        signal TMP_aluTags, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags,
-                TMP_aluTagsPre,  TMP_mulTagsPre, TMP_memTagsPre, TMP_sviTagsPre, TMP_svfTagsPre, TMP_fpTagsPre,
-                
-                TMP_aluTagsT, TMP_mulTagsT, TMP_memTagsT, TMP_sviTagsT, TMP_svfTagsT, TMP_fpTagsT,
-                TMP_aluTagsPreT, TMP_mulTagsPreT, TMP_memTagsPreT, TMP_sviTagsPreT, TMP_svfTagsPreT, TMP_fpTagsPreT
-                : SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
-                
-        signal TMP_renamedDests: SmallNumberArray(0 to RENAME_W-1) := (others => (others => '0'));
-        signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
-            signal memIssueFullIQ, memIssueFullMQ, memRegReadFull_N, lockIssueI0_NoMemFail, lockIssueI0_N, dividerSending: std_logic := '0';
+    signal TMP_aluTags, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags,
+            TMP_aluTagsPre,  TMP_mulTagsPre, TMP_memTagsPre, TMP_sviTagsPre, TMP_svfTagsPre, TMP_fpTagsPre,
+            
+            TMP_aluTagsT, TMP_mulTagsT, TMP_memTagsT, TMP_sviTagsT, TMP_svfTagsT, TMP_fpTagsT,
+            TMP_aluTagsPreT, TMP_mulTagsPreT, TMP_memTagsPreT, TMP_sviTagsPreT, TMP_svfTagsPreT, TMP_fpTagsPreT
+            : SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
+            
+    signal TMP_renamedDests: SmallNumberArray(0 to RENAME_W-1) := (others => (others => '0'));
+    signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
+    signal memIssueFullIQ, memIssueFullMQ, lockIssueI0_NoMemFail, dividerSending: std_logic := '0';
 begin
 
     intSignal <= int0 or int1;
@@ -659,8 +659,7 @@ begin
             constant CFG_MEM: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
 
             signal controlToM0_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
-            signal slotRegReadM0iq, slotRegReadM0_Merged,  slotIssueM0mq,-- slotIssueM0_Merged,
-                        slotRegReadM0mq: SchedulerState := DEFAULT_SCHED_STATE;
+            signal slotRegReadM0iq, slotRegReadM0_Merged,  slotIssueM0mq, slotRegReadM0mq: SchedulerState := DEFAULT_SCHED_STATE;
             signal resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
         begin
             wups <= work.LogicIssue.getInitWakeups(schedInfoA, bypassInt, CFG_MEM);
@@ -699,15 +698,14 @@ begin
                 dbState => dbState
             );
 
-                    mqIssueSending <= mqReexecCtrlIssue.controlInfo.full;
-                    slotIssueM0mq <= TMP_slotIssueM0mq(mqReexecCtrlIssue, mqReexecResIssue, mqIssueSending);
+            mqIssueSending <= mqReexecCtrlIssue.controlInfo.full;
+            slotIssueM0mq <= TMP_slotIssueM0mq(mqReexecCtrlIssue, mqReexecResIssue, mqIssueSending);
 
             TMP_ISSUE_M0: block
                 signal argStateI, argStateR, argStateR_Merged: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
                 slotIssueM0 <= updateIssueStage(argStateI, outSigsM0, events);
-                --    slotIssueM0_Merged <= updateIssueStage_Merge(argStateI, slotIssueM0mq, outSigsM0, events);
-                
+
                 slotRegReadM0iq <= updateRegReadStage(argStateR, outSigsM0, events, valuesInt0, regValsM0, false, true);
                     slotRegReadM0_Merged <= updateRegReadStage(argStateR_Merged, outSigsM0, events, valuesInt0, regValsM0, false, true);
 
@@ -730,8 +728,7 @@ begin
             slotRegReadM0mq <= TMP_slotRegReadM0mq(mqReexecCtrlRR, mqReexecResRR, mqRegReadSending);
 
             -- Merge IQ with MQ
-            slotRegReadM0 <= --mergeMemOp(slotRegReadM0iq, slotRegReadM0mq, mqRegReadSending);
-                                slotRegReadM0_Merged;
+            slotRegReadM0 <= slotRegReadM0_Merged;
             ----------------------------
             -- Single packet of information for E0
             resultToM0_E0 <= calcEffectiveAddress(slotRegReadM0.full, slotRegReadM0, mqRegReadSending);
@@ -788,15 +785,12 @@ begin
             end block;
 
             --------------------------------------------
-                  memIssueFullIQ <= slotIssueM0.full;
-                  memIssueFullMQ <= --slotIssueM0.full;
-                                      mqReexecCtrlIssue.controlInfo.full;  
+            memIssueFullIQ <= slotIssueM0.full;
+            memIssueFullMQ <= mqReexecCtrlIssue.controlInfo.full;
+
             process (clk)
             begin
                 if rising_edge(clk) then
-                        
-                
-                
                     ctrlE0 <= controlToM0_E0;
                     subpipeM0_E0 <= resultToM0_E0;  -- mem out interface
                     subpipeM0_E0i <= resultToM0_E0i; -- common: tag, value; different: full, dest
@@ -850,7 +844,7 @@ begin
                     return res;
                 end function;
                 
-            function xxxyyy(sx: SchedulerState) return ExecResult is
+            function convertExecStoreValue(sx: SchedulerState) return ExecResult is
                 variable res: ExecResult := DEFAULT_EXEC_RESULT;
             begin
                 res.full := sx.full;
@@ -987,33 +981,8 @@ begin
             stateExecStoreValue <= slotRegReadFloatSV when slotRegReadFloatSV.full = '1' else slotRegReadIntSV;
             sendingToStoreWrite <= slotRegReadIntSV.full or slotRegReadFloatSV.full;
 
---            sqValueResultRR.full <= sendingToStoreWrite;
---            sqValueResultRR.tag <= stateExecStoreValue.st.tags.renameIndex;
---            sqValueResultRR.dest <= stateExecStoreValue.st.tags.sqPointer;
---            sqValueResultRR.value <= stateExecStoreValue.argValues(0);
-            
-            sqValueResultRR <= xxxyyy(stateExecStoreValue);
-            
-                --ch0 <= bool2std(sqValueResultRR.dest = stateExecStoreValue.st.tags.sqPointer);
-                --ch1 <= bool2std(sqValueResultRR.tag = stateExecStoreValue.st.tags.renameIndex);
-                --ch2 <= bool2std(sqValueResultRR.full = slotRegReadIntSV.full);
-                
-                    ch0 <= bool2std(slotIssueIntSV.st.tags.sqPointer = threeSN);
-                           -- '1';
-                    ch1 <= bool2std(slotRegReadIntSV.st.tags.sqPointer = threeSN);
-                    ch2 <= bool2std(stateExecStoreValue.st.tags.sqPointer = threeSN);
-                    ch3 <= bool2std(sqValueResultRR.dest = threeSN);
-                    --ch4 <= bool2std(stateExecStoreValue.st.tags.sqPointer = threeSN);
-                    
-                    xtags <= slotRegReadIntSV.st.tags;
-                    
-                    xa <= slotIssueIntSV.st.tags.lqPointer;
-                    xb <= --slotIssueIntSV.st.tags.bqPointer;
-                            xtags.sqPointer;
-                    xc <= slotRegReadIntSV.st.tags.sqPointer;
-                    xd <= slotIssueIntSV.st.tags.bqPointerSeq;
-                    xe <= slotIssueIntSV.st.tags.intPointer;
-                    xf <= slotIssueIntSV.st.tags.floatPointer;
+            sqValueResultRR <= convertExecStoreValue(stateExecStoreValue);
+
         end block;
 
 
@@ -1119,15 +1088,10 @@ begin
             if rising_edge(clk) then
                 storeValueCollision1 <= outSigsSVI.sending and outSigsSVF.sending;
                 storeValueCollision2 <= storeValueCollision1;
-                
-                
-                   memRegReadFull_N <= memIssueFullIQ or memIssueFullMQ;
-                   lockIssueI0_NoMemFail <= memIssueFullIQ or memIssueFullMQ or mulSubpipeSent or dividerSending;
+                                
+                lockIssueI0_NoMemFail <= memIssueFullIQ or memIssueFullMQ or mulSubpipeSent or dividerSending;
             end if;
          end process;
-
---                ch0 <= bool2std(memRegReadFull_N = memSubpipeSent);
---                ch1 <= bool2std(lockIssueI0_N = lockIssueI0);
 
         lockIssueSVI <= storeValueCollision1 or memFail;
         lockIssueSVF <= storeValueCollision1 or memFail;
@@ -1139,8 +1103,7 @@ begin
         mulSubpipeSelected <= slotIssueI1.full;
         fp0subpipeSelected <= slotIssueF0.full;
 
-        lockIssueI0_N <= memSubpipeSent or memFail or mulSubpipeAtE0;
-                    lockIssueI0 <= lockIssueI0_NoMemFail or memFail;
+        lockIssueI0 <= lockIssueI0_NoMemFail or memFail;
 
 
         -- Issue locking:
@@ -1501,14 +1464,14 @@ begin
             clk => clk,
             reset => '0',
             en => '0',
-    
+
             acceptingOut => acceptingMQ,
             almostFull => almostFullMQ,
             acceptAlloc => open,
     
-            prevSendingRe => '0',                
+            prevSendingRe => '0',
             prevSending => '0',
-    
+
             renameMask => --(others => '0'),
                             zerosMask,
             inputMask => --(others => '0'),
@@ -1516,18 +1479,18 @@ begin
             systemMask => --(others => '0'),
                             zerosMask,
             renamedPtr => open,
-    
+
             storeValueResult => sqValueResultE2,
-    
+
             compareAddressEarlyInput => defaultExecRes,--DEFAULT_EXEC_RESULT,
             compareAddressEarlyInput_Ctrl => memCtrlRR, -- only 'tag' and 'full'
-    
+
             compareAddressInput => missedMemResultE2,
             compareAddressCtrl => missedMemCtrlE2,
-            
+
             selectedDataOutput => mqReexecCtrlIssue,
             selectedDataResult => mqReexecResIssue,
-    
+
             committing => '0',
             commitMask => --(others => '0'),
                             zerosMask,
@@ -1536,12 +1499,12 @@ begin
             lateEventSignal => lateEventSignal,
             execEventSignal => execEventSignalE1,
             execCausing => execCausingDelayedLQ,
-    
+
             nextAccepting => '0',
-    
+
             committedEmpty => open,
             committedSending => mqReady,
-    
+
             dbState => dbState        
         );
     end generate;

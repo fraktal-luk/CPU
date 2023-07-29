@@ -258,42 +258,15 @@ ARCHITECTURE Behavior OF CoreTB IS
         programMem(startAdr to startAdr + LEN - 1) <= insSeq;    
     end procedure;
 
---    procedure loadFile(filename: in string) is
---        file f: text open read_mode is filename;
---        variable ln: line := null;
---    begin
---        readline(f, ln);
---            report ln.all;
---        readline(f, ln);
---            report ln.all;
---        readline(f, ln);
---            report ln.all;
-        
---    end procedure;
-
-
     procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
-	    --constant prog: ProgramBuffer := readSourceFile(filename).words; -- range: 0 to 999
-	    variable code: CodeBuffer;-- := readSourceFile(filename);
+	    variable code: CodeBuffer := readSourceFile(filename);
 	    variable wordBuf: WordBuffer;
         variable machineCode: WordArray(0 to PROGRAM_BUFFER_SIZE-1);
         variable imp, exp: XrefArray(0 to 100) := (others => DEFAULT_XREF);
     begin
---                report "Now again";
---                report " ";
-    
---            loadFile(filename);
-    
-            
-    
-    	    code := readSourceFile(filename);
-
-    
+    	--code := readSourceFile(filename);    
         processProgram(code, wordBuf, imp, exp);
-            report work.CpuText.w2hex(wordBuf.words(0));
-            report work.CpuText.w2hex(wordBuf.words(1));
-            report work.CpuText.w2hex(wordBuf.words(2));
-        
+
         machineCode := wordBuf.words(0 to PROGRAM_BUFFER_SIZE-1);
         machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
 

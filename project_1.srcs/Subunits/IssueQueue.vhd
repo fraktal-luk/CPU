@@ -162,7 +162,6 @@ begin
 
     -- Selection for issue
     selMask <= getSelMask(readyMask, ageMatrix);
-               -- selMaskH;
         selMaskH <= getSelMask_H(readyMask, ageMatrix);
 
         ch0 <= bool2std(selMaskH = selMask);
@@ -172,10 +171,11 @@ begin
             ch4 <= (ch2 and ch3)  or not sends;
 
     selectedIqTag <= getIssueTag(sends, selMask);
-    selectedSlot <= queueSelect(queueContentUpdatedSel, selMask) 
-                when sends = '1'   else queueContentUpdatedSel(11)
-                ;
-                    --selectedSlot_N;
+    selectedSlot <=
+--                queueSelect(queueContentUpdatedSel, selMask) 
+--                when sends = '1'   else queueContentUpdatedSel(11)
+--                ;
+                    selectedSlot_N;
         selectedSlot_N <= queueSelect_N(queueContentUpdatedSel, readyMask, ageMatrix);
 
     schedulerOut <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
@@ -198,8 +198,8 @@ begin
                         sentKilled => sentKilled,
                         trialPrev1 => sentTrial1,
                         trialPrev2 => sentTrial2
-                        ,
-                           cancelled_D => sentKilled or (memFail)
+                        --,
+                        --   cancelled_D => '0' --sentKilled or (memFail)
                         );
 
     COUNTERS_SYNCHRONOUS: process(clk)

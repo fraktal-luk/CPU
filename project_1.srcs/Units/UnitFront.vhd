@@ -171,26 +171,26 @@ begin
             end if;
         end function;
 
-        signal k0,k1,k2,k3,k4,k5,e0,e1,e2,e3,e4,e5: std_logic := '0';
-        signal s0, s1, s2: std_logic := '0';
-        signal choice: SmallNumber := sn(-1);
+        --signal k0,k1,k2,k3,k4,k5,e0,e1,e2,e3,e4,e5: std_logic := '0';
+        --signal s0, s1, s2: std_logic := '0';
+        --signal choice: SmallNumber := sn(-1);
         
-        signal normalTarget, nt0, nt1, nt2: Mword := (others => '0');
+        --signal normalTarget, nt0, nt1, nt2: Mword := (others => '0');
         
-        constant a10: Mword := X"00000010";
-        constant a20: Mword := X"00000020";
+        --constant a10: Mword := X"00000010";
+        --constant a20: Mword := X"00000020";
         
-        signal frontE: ControlPacket := DEFAULT_CONTROL_PACKET;
+        --signal frontE: ControlPacket := DEFAULT_CONTROL_PACKET;
     begin
-        choice <= getChoice(lateCausing.value, execCausing.value, earlyBranchOut.target, normalCt.target, predictedAddress,
-                            lateEventSetPC, execEventSignal, frontBranchEvent, sendingToBuffer);
+--        choice <= getChoice(lateCausing.value, execCausing.value, earlyBranchOut.target, normalCt.target, predictedAddress,
+--                            lateEventSetPC, execEventSignal, frontBranchEvent, sendingToBuffer);
         
-        normalTarget <= --normalCt.target;
-                        frontE.target when (frontE.controlInfo.full = '1' and frontE.controlInfo.frontBranch = '1')
-                  else stageDataOutFetch1.target; 
-            nt0 <= normalTarget;
-            nt1 <= nt0;
-            nt2 <= nt1;
+--        normalTarget <= --normalCt.target;
+--                        frontE.target when (frontE.controlInfo.full = '1' and frontE.controlInfo.frontBranch = '1')
+--                  else stageDataOutFetch1.target; 
+--            nt0 <= normalTarget;
+--            nt1 <= nt0;
+--            nt2 <= nt1;
         
         predictedAddressNext <= lateCausing.value     when lateEventSetPC = '1'
                            else execCausing.value     when execEventSignal = '1'
@@ -202,11 +202,11 @@ begin
 --        predictedAddressNext <= getPA(lateCausing.value, execCausing.value, earlyBranchOut.target, normalCt.target, predictedAddress,
 --                                      lateEventSetPC, execEventSignal, frontBranchEvent, sendingToBuffer);
 
-            e0 <= bool2std(normalCt.target = stageDataOutFetch1.target);
-            e2 <= bool2std(normalTarget = normalCt.target);
-            e3 <= bool2std(normalTarget = stageDataOutFetch1.target);
+--            e0 <= bool2std(normalCt.target = stageDataOutFetch1.target);
+--            e2 <= bool2std(normalTarget = normalCt.target);
+--            e3 <= bool2std(normalTarget = stageDataOutFetch1.target);
             
-            frontE <= getFrontEvent(predictedAddress, stageDataOutFetch1.target, fetchedLine1);
+--            frontE <= getFrontEvent(predictedAddress, stageDataOutFetch1.target, fetchedLine1);
     end block;
 
 	fetchStall <= sendingOutFetch1 and (not bufferAccepting or not bqAccepting);
