@@ -15,6 +15,7 @@ use work.CoreConfig.all;
 use work.PipelineGeneral.all;
 
 use work.LogicIssue.all;
+use work.LogicArgRead.all;
 
 use work.ForwardingNetwork.all;
 
@@ -54,6 +55,9 @@ entity IssueQueue is
         bypass: in BypassState;
 
 		schedulerOut: out SchedulerState;
+    		schedulerOut_Fast: out SchedulerState;
+    		schedulerOut_Slow: out SchedulerState;
+
         outputSignals: out IssueQueueSignals;
 
         dbState: in DbCoreState		
@@ -78,7 +82,7 @@ architecture Behavioral of IssueQueue is
 
     signal fullMask, killMask, freedMask, readyMask, selMask, selMask1, selMask2,   selMaskH: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
-    signal anyReadyFull, sends, sendingKilled, sentKilled, sentTrial1, sentTrial2: std_logic := '0';
+    signal anyReadyFull, sends, sent, sendingKilled, sentKilled, sentTrial1, sentTrial2: std_logic := '0';
 
     signal inTags: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
 
@@ -86,6 +90,9 @@ architecture Behavioral of IssueQueue is
 
     signal selectedSlot, selectedSlot_N: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
     signal selectedIqTag: SmallNumber := (others => '0');
+
+    signal schedulerOutSig, issuedFastState, issuedSlowState: SchedulerState := DEFAULT_SCHED_STATE;
+    signal outSigs: IssueQueueSignals := (others => '0');
 
     alias memFail is bypass.memFail;
                 
@@ -170,7 +177,13 @@ begin
                     selectedSlot_N;
         selectedSlot_N <= queueSelect_N(queueContentUpdatedSel, readyMask, ageMatrix);
 
-    schedulerOut <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
+    schedulerOutSig <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
+    schedulerOut <= schedulerOutSig;
+
+        schedulerOut_Fast <= --issuedFastState;
+                            updateIssueStage(issuedFastState, outSigs, events);
+        
+        schedulerOut_Slow <= getSchedEntrySlot( queueSelect(queueContent, selMask1), sent, getIssueTag('0', selMask));
 
     QUEUE_SYNCHRONOUS: process(clk)
     begin
@@ -181,16 +194,21 @@ begin
             selMask1 <= selMask;
             selMask2 <= selMask1;
 
+            sent <= sends;
             sentKilled <= sendingKilled;
+
+            issuedFastState <= getIssueStage(schedulerOutSig, outSigs, events);
         end if;
     end process;
 
-    outputSignals <=   (
+    outSigs <=   (
                         sending => sends,
                         sentKilled => sentKilled,
                         trialPrev1 => sentTrial1,
                         trialPrev2 => sentTrial2
                         );
+    outputSignals <= outSigs;
+
 
     COUNTERS_SYNCHRONOUS: process(clk)
     begin

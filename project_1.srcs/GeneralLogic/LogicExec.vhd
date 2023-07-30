@@ -33,11 +33,11 @@ package LogicExec is
 
     function getAluControl(op: ArithOp) return AluControl;
 
-	function basicBranch(sending: std_logic; st: SchedulerState;
+	function basicBranch(sending: std_logic; ss: SchedulerState;
 	                     bqControl: ControlPacket;
                          ac: AluControl) return ControlPacket;
 
-	function executeAlu(full: std_logic; st: SchedulerState; link: Mword; ctrl: InstructionControlInfo;
+	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword; ctrl: InstructionControlInfo;
 	                                           ac: AluControl)
 	                                           return ExecResult;
 
@@ -71,13 +71,13 @@ end LogicExec;
 
 package body LogicExec is
 
-	function resolveBranchCondition(ss: SchedulerState; op: ArithOp; ac: AluControl) return std_logic is
-		constant isZero: std_logic := not isNonzero(ss.argValues(0));
+	function resolveBranchCondition(arg: Mword; op: ArithOp; ac: AluControl) return std_logic is
+		constant isZero: std_logic := not isNonzero(arg);
 	begin
 		return ac.jumpType(1) or (ac.jumpType(0) xor isZero);
 	end function;
 
-	function basicBranch(sending: std_logic; st: SchedulerState;
+	function basicBranch(sending: std_logic; ss: SchedulerState;
 	                     bqControl: ControlPacket;
 	                     ac: AluControl)
 	return ControlPacket is
@@ -89,8 +89,8 @@ package body LogicExec is
 		constant target: Mword := bqControl.target;
 		constant result: Mword := bqControl.nip;
 	begin
-	    res.dbInfo := st.st.dbInfo;
-        res.tags := st.st.tags;
+	    res.dbInfo := ss.st.dbInfo;
+        res.tags := ss.st.tags;
 
         res.controlInfo.full := sending;
 		-- Cases to handle
@@ -99,8 +99,8 @@ package body LogicExec is
 		-- j taken		: if not taken goto return, if taken equal
 		-- j not taken : if not taken ok, if taken goto dest
 
-        targetMatch := bool2std(target = st.argValues(1));
-		branchTaken := resolveBranchCondition(st, st.st.operation.arith, ac);
+        targetMatch := bool2std(target = ss.argValues(1));
+		branchTaken := resolveBranchCondition(ss.argValues(0), ss.st.operation.arith, ac);
 
         res.controlInfo.full := sending;
 
@@ -110,19 +110,19 @@ package body LogicExec is
 		elsif ctrl.frontBranch = '0' and branchTaken = '1' then
 			res.controlInfo.newEvent := '1';
 			res.controlInfo.confirmedBranch := '1';			
-			if st.st.immediate = '0' then
-				trueTarget := st.argValues(1);
+			if ss.st.immediate = '0' then
+				trueTarget := ss.argValues(1);
 			else
 				trueTarget := target;
 			end if;
 		elsif ctrl.frontBranch = '0' and branchTaken = '0' then
 			trueTarget := result;
 		else -- taken -> taken
-			if st.st.immediate = '0' then
+			if ss.st.immediate = '0' then
 				if targetMatch = '0' then
 					res.controlInfo.newEvent := '1';	-- Need to correct the target!	
 				end if;
-				trueTarget := st.argValues(1); -- reg destination
+				trueTarget := ss.argValues(1); -- reg destination
 			else
 				trueTarget := target;
 			end if;
@@ -131,14 +131,14 @@ package body LogicExec is
 
         if branchTaken = '0' then
             trueTarget := result;
-        elsif st.st.immediate = '1' then
+        elsif ss.st.immediate = '1' then
             trueTarget := target;
         else
-            trueTarget := st.argValues(1);
+            trueTarget := ss.argValues(1);
         end if;
         
         if      (ctrl.frontBranch xor branchTaken) = '1'
-                or  (ctrl.frontBranch and branchTaken and not st.st.immediate and not targetMatch) = '1'
+                or  (ctrl.frontBranch and branchTaken and not ss.st.immediate and not targetMatch) = '1'
         then
             res.controlInfo.newEvent := sending;
         else
@@ -157,7 +157,7 @@ package body LogicExec is
 		return res;
 	end function;
 
-	function executeAlu(full: std_logic; st: SchedulerState; link: Mword; ctrl: InstructionControlInfo; ac: AluControl)
+	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword; ctrl: InstructionControlInfo; ac: AluControl)
 	return ExecResult is
 		variable res: ExecResult := DEFAULT_EXEC_RESULT;
 		variable result: Mword := (others => '0');
@@ -169,11 +169,11 @@ package body LogicExec is
 		variable ov, carry, cl, cm0, cm1: std_logic := '0';
 	    variable shiftInput, rotated, shiftOutput: Dword := (others => '0');
 	begin
-	   res.dbInfo := st.st.dbInfo;
+	    res.dbInfo := ss.st.dbInfo;
 	
-		arg0 := st.argValues(0);
-		arg1 := st.argValues(1);
-		arg2 := st.argValues(2);
+		arg0 := ss.argValues(0);
+		arg1 := ss.argValues(1);
+		arg2 := ss.argValues(2);
 
 		if ac.sub = '1' then
 			argAddSub := not arg1;
@@ -228,9 +228,9 @@ package body LogicExec is
 		end if;
 		
 		res.full := full;
-		res.tag := st.st.tags.renameIndex;
+		res.tag := ss.st.tags.renameIndex;
 		res.dest := --st.argSpec.dest;
-		            st.dest;
+		            ss.dest;
 		res.value := result;
 		return res;
 	end function;
