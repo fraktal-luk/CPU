@@ -379,7 +379,7 @@ begin
 
               slotSel4, slotIssue4, slotSel5, slotIssue5, slotSel6, slotIssue6,
 
-              slotSelIntSV, slotIssueIntSV, slotRegReadIntSV, slotRegReadIntSV_P, slotRegReadIntSV_P_Delay,
+              slotSelIntSV, slotIssueIntSV, slotIssueIntSV_P, slotRegReadIntSV, slotRegReadIntSV_P, slotRegReadIntSV_P_Delay,
               slotSelFloatSV, slotIssueFloatSV, slotRegReadFloatSV
                         : SchedulerState := DEFAULT_SCHED_STATE;
 
@@ -434,8 +434,7 @@ begin
             signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
             signal dataToAlu: ExecResult := DEFAULT_EXEC_RESULT;           
 
-                signal schIssued_TF, schIssued_TS: SchedulerState := DEFAULT_SCHEDULER_STATE;
-
+            --    signal schIssued_TF, schIssued_TS: SchedulerState := DEFAULT_SCHEDULER_STATE;
 
             constant CFG_ALU: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
             constant CFG_ALU_WAIT: SchedulerUpdateConfig := (false, false, false, FORWARDING_MODES_INT_D, false); -- UNUSED
@@ -878,6 +877,9 @@ begin
                 return res;
             end function;
             
+                signal sv_issueInt, sv_rrInt, sv_rrIntDelay, sv_issueFloat, sv_rrFloat, sv_memFail, sv_lateEvent: std_logic := '0';
+                
+            
             --signal threeSN: SmallNumber := X"03";
             --signal xa, xb, xc, xd, xe, xf: SmallNumber := sn(0);
             --signal xtags: InstructionTags := DEFAULT_INSTRUCTION_TAGS;
@@ -930,6 +932,7 @@ begin
                 signal argStateI, argStateI_P, argStateR, argStateR_P, argStateR_P_Delay: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
                 slotIssueIntSV <= updateIssueStage(argStateI, outSigsSVI, events);
+                    slotIssueIntSV_P <= updateIssueStage(argStateI_P, outSigsSVI, events);
                                   --  slotIssueSVI_TF;
 
                 sendingToRegReadIntSV <= slotIssueIntSV.full and not (storeValueCollision2 and killFollower(outSigsSVI.trialPrev2, events));
@@ -937,7 +940,7 @@ begin
                 -- Reg
                 slotRegReadIntSV <= updateRegReadStage(argStateR, outSigsSVI, events, valuesInt0, regValsS0, true);
                     slotRegReadIntSV_P <= updateRegReadStage(argStateR_P, outSigsSVI, events, valuesInt0, regValsS0, true);
-                    slotRegReadIntSV_P_Delay <= updateRegReadStage(argStateR_P_Delay, outSigsSVI, events, valuesInt0, regValsS0, true);
+               --     slotRegReadIntSV_P_Delay <= updateRegReadStage(argStateR_P_Delay, outSigsSVI, events, valuesInt0, regValsS0, true);
 
                 process (clk)
                 begin
@@ -948,18 +951,26 @@ begin
                         
                             argStateI_P <= getIssueStage(slotSelIntSV, outSigsSVI, events);
                         
-                        if events.lateEvent = '1' then
+                        if (events.lateEvent or memFail) = '1' then
                             argStateI.full <= '0';
                         end if;
 
                         argStateR <= getRegReadStage_O(slotIssueIntSV, sendingToRegReadIntSV, events, valuesInt0, valuesInt1, false, true);
-                            argStateR_P <= getRegReadStage_N(slotIssueIntSV, events, valuesInt0, valuesInt1, false, true);
+                            argStateR_P <= getRegReadStage_N(slotIssueIntSV_P, events, valuesInt0, valuesInt1, false, true);
                             argStateR_P_Delay <= argStateR_P;
+                            
+                        slotRegReadIntSV_P_Delay <= slotRegReadIntSV_P;
                     end if;
                 end process;
 
-                    ch_si <= bool2std(argStateR_P_Delay = argStateR);
+                    ch_si <= bool2std(argStateR_P = argStateR);
 
+                    ch0 <= bool2std(argStateI_P = argStateI);
+                    ch1 <= bool2std(argStateR_P = argStateR);
+                    ch2 <= bool2std(argStateR_P_Delay = argStateR_P);
+
+                        ch3 <= not ch_sf and stateExecStoreValue.full;
+                        ch4 <= stateExecStoreValue_Alt.full xor stateExecStoreValue.full;
             end block;
 
             readyRegFlagsFloatSV <= reorder(readyRegFlagsFloat_Early);
@@ -1019,12 +1030,20 @@ begin
                                       else slotRegReadFloatSV when slotRegReadFloatSV.full = '1'
                                       else slotRegReadIntSV_P;
 
-            stateExecStoreValue <= --slotRegReadFloatSV when slotRegReadFloatSV.full = '1' else slotRegReadIntSV;
-                                    stateExecStoreValue_Alt;
+            stateExecStoreValue <= slotRegReadFloatSV when slotRegReadFloatSV.full = '1' else slotRegReadIntSV;
+                                   -- stateExecStoreValue_Alt;
             --sendingToStoreWrite <= slotRegReadIntSV.full or slotRegReadFloatSV.full;
 
             sqValueResultRR <= convertExecStoreValue(stateExecStoreValue);
 
+                sv_issueInt <= slotIssueIntSV.full;
+                sv_rrInt <= slotRegReadIntSV.full;
+                sv_issueFloat <= slotIssueFloatSV.full;
+                sv_rrFloat <= slotRegReadFloatSV.full;
+                
+                sv_memFail <= memFail;
+                sv_lateEvent <= events.lateEvent;
+                
         end block;
 
 
