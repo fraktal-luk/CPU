@@ -374,14 +374,13 @@ begin
               slotSelM0, slotIssueM0, slotRegReadM0,
               slotSelF0, slotIssueF0, slotRegReadF0,
 
-                slotIssueI0_TF, slotIssueI1_TF, slotIssueM0_TF, slotIssueSVI_TF, slotIssueSVF_TF, slotIssueF0_TF,
+              --  slotIssueI0_TF, slotIssueI1_TF, slotIssueM0_TF, slotIssueSVI_TF, slotIssueSVF_TF, slotIssueF0_TF,
                 slotIssueI0_TS, slotIssueI1_TS, slotIssueM0_TS, slotIssueSVI_TS, slotIssueSVF_TS, slotIssueF0_TS,
 
               slotSel4, slotIssue4, slotSel5, slotIssue5, slotSel6, slotIssue6,
 
-              slotSelIntSV,-- slotIssueIntSV,
-                     slotIssueIntSV_P,-- slotRegReadIntSV,
-               slotRegReadIntSV_P, slotRegReadIntSV_P_Delay,
+              slotSelIntSV, slotIssueIntSV_P,
+              slotRegReadIntSV_P, slotRegReadIntSV_P_Delay,
               slotSelFloatSV, slotIssueFloatSV, slotRegReadFloatSV
                         : SchedulerState := DEFAULT_SCHED_STATE;
 
@@ -436,8 +435,6 @@ begin
             signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
             signal dataToAlu: ExecResult := DEFAULT_EXEC_RESULT;           
 
-            --    signal schIssued_TF, schIssued_TS: SchedulerState := DEFAULT_SCHEDULER_STATE;
-
             constant CFG_ALU: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
             constant CFG_ALU_WAIT: SchedulerUpdateConfig := (false, false, false, FORWARDING_MODES_INT_D, false); -- UNUSED
             constant CFG_ALU_SEL: SchedulerUpdateConfig :=  (false, false, false, FORWARDING_MODES_INT, false);   -- UNUSED
@@ -473,27 +470,23 @@ begin
                 nextAccepting => allowIssueI0,
                     unlockDiv => '0',
                 schedulerOut => slotSelI0,
-                    schedulerOut_Fast => slotIssueI0_TF,
+                    schedulerOut_Fast => --slotIssueI0_TF,
+                                            slotIssueI0,
                     schedulerOut_Slow => slotIssueI0_TS,
                 outputSignals => outSigsI0, 
                 dbState => dbState
             );
 
+                ch0 <= '1';
 
             TMP_ISSUE_I0: block
-                signal --argStateI, 
-                        argStateRegI0: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal argStateRegI0: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                slotIssueI0 <= --updateIssueStage(argStateI, outSigsI0, events);
-                                slotIssueI0_TF;
                 slotRegReadI0 <= updateRegReadStage(argStateRegI0, outSigsI0, events, valuesInt0, regValsI0, false);
-
-                 --       ch_a <= bool2std(slotIssueI0_TF = slotIssueI0);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        --argStateI <= getIssueStage(slotSelI0, outSigsI0, events);
                         argStateRegI0 <= getRegReadStage_N(slotIssueI0, events, valuesInt0, valuesInt1, true, false);
                         unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.st.operation.arith);
                     end if;
@@ -534,8 +527,7 @@ begin
                 end if;
             end process;
 
-                execEventSignalE0 <= --branchResultE0.controlInfo.full and 
-                                        branchResultE0.controlInfo.newEvent;
+                execEventSignalE0 <= branchResultE0.controlInfo.newEvent;
                 execEvent <= (DEFAULT_DEBUG_INFO, execEventSignalE0, '0', branchResultE0.tags.renameIndex, branchResultE0.tags.bqPointerSeq, branchResultE0.target);
 
             bqUpdate.full <= branchResultE0.controlInfo.full;
@@ -592,24 +584,21 @@ begin
                                         unlockDiv => divUnlock,
                     events => events,
                     schedulerOut => slotSelI1,
-                        schedulerOut_Fast => slotIssueI1_TF,
+                        schedulerOut_Fast => --slotIssueI1_TF,
+                                                slotIssueI1,
                         schedulerOut_Slow => slotIssueI1_TS,
                     outputSignals => outSigsI1,
                     dbState => dbState
                 );
 
                 TMP_ISSUE_I1: block
-                    signal --argStateI, 
-                            argStateRegI1: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                    signal argStateRegI1: SchedulerState := DEFAULT_SCHEDULER_STATE;
                 begin
-                    slotIssueI1 <= --updateIssueStage(argStateI, outSigsI1, events);
-                                    slotIssueI1_TF;
                     slotRegReadI1 <= updateRegReadStage(argStateRegI1, outSigsI1, events, valuesInt0, regValsI1, false);
 
                     process (clk)
                     begin
                         if rising_edge(clk) then
-                            --argStateI <= getIssueStage(slotSelI1, outSigsI1, events);
                             argStateRegI1 <= getRegReadStage_N(slotIssueI1, events, valuesInt0, valuesInt1, true, false);
                         end if;
                     end process;
@@ -714,7 +703,8 @@ begin
                                     unlockDiv => '0',
                 events => events,
                 schedulerOut => slotSelM0,
-                    schedulerOut_Fast => slotIssueM0_TF,
+                    schedulerOut_Fast => --slotIssueM0_TF,
+                                            slotIssueM0,
                     schedulerOut_Slow => slotIssueM0_TS,
                 outputSignals => outSigsM0,            
                 dbState => dbState
@@ -724,21 +714,16 @@ begin
             slotIssueM0mq <= TMP_slotIssueM0mq(mqReexecCtrlIssue, mqReexecResIssue, mqIssueSending);
 
             TMP_ISSUE_M0: block
-                signal --argStateI,
-                        argStateRegM0, argStateR_Merged: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal argStateRegM0, argStateR_Merged: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                slotIssueM0 <= --updateIssueStage(argStateI, outSigsM0, events);
-                                slotIssueM0_TF;
-
                 slotRegReadM0iq <= updateRegReadStage(argStateRegM0, outSigsM0, events, valuesInt0, regValsM0, false, true);
-                    slotRegReadM0_Merged <= updateRegReadStage(argStateR_Merged, outSigsM0, events, valuesInt0, regValsM0, false, true);
+                slotRegReadM0_Merged <= updateRegReadStage(argStateR_Merged, outSigsM0, events, valuesInt0, regValsM0, false, true);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        --argStateI <= getIssueStage(slotSelM0, outSigsM0, events);
                         argStateRegM0 <= getRegReadStage_N(slotIssueM0, events, valuesInt0, valuesInt1, true, false, true);
-                            argStateR_Merged <= getRegReadStage_Merge(slotIssueM0, slotIssueM0.full, slotIssueM0mq, events, valuesInt0, valuesInt1, true, false, true);
+                        argStateR_Merged <= getRegReadStage_Merge(slotIssueM0, slotIssueM0.full, slotIssueM0mq, events, valuesInt0, valuesInt1, true, false, true);
                     end if;
                 end process;
 
@@ -845,9 +830,7 @@ begin
         SUBPIPES_STORE_VALUE: block
             use work.LogicIssue.all;
             use work.LogicArgRead.all;
-       
---            signal sendingToRegReadIntSV --, sendingToStoreWrite
---                    : std_logic := '0';
+
             signal schedInfoIntA, schedInfoUpdatedIntU, schedInfoFloatA, schedInfoUpdatedFloatU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
 
             constant CFG_SVI: SchedulerUpdateConfig := (true, false, true, FORWARDING_MODES_SV_INT_D, false);
@@ -855,7 +838,7 @@ begin
 
             signal wupsInt, wupsFloat: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
             
-            signal stateExecStoreValue, stateExecStoreValue_Alt: SchedulerState := DEFAULT_SCHED_STATE;
+            signal stateExecStoreValue: SchedulerState := DEFAULT_SCHED_STATE;
             
                 function reorder(flags: std_logic_vector) return std_logic_vector is
                     variable res: std_logic_vector(0 to 3*PIPE_WIDTH-1) := flags;
@@ -878,13 +861,7 @@ begin
                 res.value := sx.argValues(0);
                 return res;
             end function;
-            
-                signal sv_issueInt, sv_rrInt, sv_rrIntDelay, sv_issueFloat, sv_rrFloat, sv_memFail, sv_lateEvent: std_logic := '0';
-                
-            
-            --signal threeSN: SmallNumber := X"03";
-            --signal xa, xb, xc, xd, xe, xf: SmallNumber := sn(0);
-            --signal xtags: InstructionTags := DEFAULT_INSTRUCTION_TAGS;
+
         begin
             wupsInt <= getInitWakeups(schedInfoIntA, bypassIntSV, CFG_SVI);
             wupsFloat <= getInitWakeups(schedInfoFloatA, bypassFloatSV, CFG_SVF);
@@ -923,7 +900,8 @@ begin
                                     unlockDiv => '0',
                 events => events,
                 schedulerOut => slotSelIntSV,
-                    schedulerOut_Fast => slotIssueSVI_TF,
+                    schedulerOut_Fast => --slotIssueSVI_TF,
+                                            slotIssueIntSV_P,
                     schedulerOut_Slow => slotIssueSVI_TS,
                 outputSignals => outSigsSVI,
                 dbState => dbState
@@ -931,51 +909,18 @@ begin
 
 
             TMP_ISSUE_SVI: block
-                signal --argStateI,
-                         argStateI_P,-- argStateR, 
-                                    argStateR_P --, argStateR_P_Delay
-                                    : SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal argStateR_P: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-               -- slotIssueIntSV <= updateIssueStage(argStateI, outSigsSVI, events);
-                    slotIssueIntSV_P <= updateIssueStage(argStateI_P, outSigsSVI, events);
-                                  --  slotIssueSVI_TF;
-
-               -- sendingToRegReadIntSV <= slotIssueIntSV.full and not (storeValueCollision2 and killFollower(outSigsSVI.trialPrev2, events));
-
-                -- Reg
-                --slotRegReadIntSV <= updateRegReadStage(argStateR, outSigsSVI, events, valuesInt0, regValsS0, true);
-                    slotRegReadIntSV_P <= updateRegReadStage(argStateR_P, outSigsSVI, events, valuesInt0, regValsS0, true);
-               --     slotRegReadIntSV_P_Delay <= updateRegReadStage(argStateR_P_Delay, outSigsSVI, events, valuesInt0, regValsS0, true);
+                slotRegReadIntSV_P <= updateRegReadStage(argStateR_P, outSigsSVI, events, valuesInt0, regValsS0, true);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        if allowIssueStoreDataInt = '1' then -- nextAccepting
-                        --    argStateI <= getIssueStage(slotSelIntSV, outSigsSVI, events);
-                        end if;
-                        
-                            argStateI_P <= getIssueStage(slotSelIntSV, outSigsSVI, events);
-                        
-                        if (events.lateEvent or memFail) = '1' then
-                        --    argStateI.full <= '0';
-                        end if;
-
-                       -- argStateR <= getRegReadStage_O(slotIssueIntSV, sendingToRegReadIntSV, events, valuesInt0, valuesInt1, false, true);
-                            argStateR_P <= getRegReadStage_N(slotIssueIntSV_P, events, valuesInt0, valuesInt1, false, true);
-                        --    argStateR_P_Delay <= argStateR_P;
-                            
+                        argStateR_P <= getRegReadStage_N(slotIssueIntSV_P, events, valuesInt0, valuesInt1, false, true);                            
                         slotRegReadIntSV_P_Delay <= slotRegReadIntSV_P;
                     end if;
                 end process;
 
-                  --  ch_si <= bool2std(argStateR_P = argStateR);
-
-                    ch0 <= '0';-- bool2std(argStateI_P = argStateI);
-                    ch1 <= '1';--bool2std(argStateR_P = argStateR);
-                    ch2 <= '0';--bool2std(argStateR_P_Delay = argStateR_P);
-
-                        ch3 <= not ch_sf and stateExecStoreValue.full;
-                        ch4 <= stateExecStoreValue_Alt.full xor stateExecStoreValue.full;
             end block;
 
             readyRegFlagsFloatSV <= reorder(readyRegFlagsFloat_Early);
@@ -1006,7 +951,8 @@ begin
                                         unlockDiv => '0',
                     events => events,
                     schedulerOut => slotSelFloatSV,
-                        schedulerOut_Fast => slotIssueSVF_TF,
+                        schedulerOut_Fast => --slotIssueSVF_TF,
+                                                slotIssueFloatSV,
                         schedulerOut_Slow => slotIssueSVF_TS,           
                     outputSignals => outSigsSVF,
                     dbState => dbState
@@ -1014,41 +960,24 @@ begin
             end generate;
 
             TMP_ISSUE_SVF: block
-                signal argStateI, argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                slotIssueFloatSV <= updateIssueStage(argStateI, outSigsSVF, events);
-                                    --    slotIssueSVF_TF;
                 slotRegReadFloatSV <= updateRegReadStage(argStateR, outSigsSVF, events, valuesFloat0, regValsFS0, true);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateI <= getIssueStage(slotSelFloatSV, outSigsSVF, events);
                         argStateR <= getRegReadStage_N(slotIssueFloatSV, events, valuesFloat0, valuesFloat1, false, true);
                     end if;
                 end process;
             end block;
 
-                ch_sf <= bool2std(stateExecStoreValue_Alt = stateExecStoreValue);
-
-                stateExecStoreValue_Alt <= slotRegReadIntSV_P_Delay when storeValueCollision3 = '1'
-                                      else slotRegReadFloatSV when slotRegReadFloatSV.full = '1'
-                                      else slotRegReadIntSV_P;
-
-            stateExecStoreValue <= --slotRegReadFloatSV when slotRegReadFloatSV.full = '1' else slotRegReadIntSV;
-                                    stateExecStoreValue_Alt;
-            --sendingToStoreWrite <= slotRegReadIntSV.full or slotRegReadFloatSV.full;
+            stateExecStoreValue <= slotRegReadIntSV_P_Delay when storeValueCollision3 = '1'
+                              else slotRegReadFloatSV when slotRegReadFloatSV.full = '1'
+                              else slotRegReadIntSV_P;
 
             sqValueResultRR <= convertExecStoreValue(stateExecStoreValue);
 
-              --  sv_issueInt <= slotIssueIntSV.full;
-              --  sv_rrInt <= slotRegReadIntSV.full;
-                sv_issueFloat <= slotIssueFloatSV.full;
-                sv_rrFloat <= slotRegReadFloatSV.full;
-                
-                sv_memFail <= memFail;
-                sv_lateEvent <= events.lateEvent;
-                
         end block;
 
 
@@ -1092,7 +1021,7 @@ begin
                                     unlockDiv => '0',
                 events => events,
                 schedulerOut => slotSelF0,
-                    schedulerOut_Fast => slotIssueF0_TF,
+                    schedulerOut_Fast => slotIssueF0,
                     schedulerOut_Slow => slotIssueF0_TS,
                 outputSignals => outSigsF0,
                 dbState => dbState
@@ -1100,17 +1029,13 @@ begin
 
 
             TMP_ISSUE_F0: block
-                signal --argStateI, 
-                            argStateRegF0: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal argStateRegF0: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin    
-                slotIssueF0 <= --updateIssueStage(argStateI, outSigsF0, events);
-                                slotIssueF0_TF;
                 slotRegReadF0 <= updateRegReadStage(argStateRegF0, outSigsF0, events, valuesFloat0, regValsF0, false);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        --argStateI <= getIssueStage(slotSelF0, outSigsF0, events);
                         argStateRegF0 <= getRegReadStage_N(slotIssueF0, events, valuesFloat0, valuesFloat1, false, false); 
                     end if;
                 end process;
@@ -1543,12 +1468,9 @@ begin
             prevSendingRe => '0',
             prevSending => '0',
 
-            renameMask => --(others => '0'),
-                            zerosMask,
-            inputMask => --(others => '0'),
-                            zerosMask,
-            systemMask => --(others => '0'),
-                            zerosMask,
+            renameMask => zerosMask,
+            inputMask => zerosMask,
+            systemMask => zerosMask,
             renamedPtr => open,
 
             storeValueResult => sqValueResultE2,
@@ -1563,10 +1485,8 @@ begin
             selectedDataResult => mqReexecResIssue,
 
             committing => '0',
-            commitMask => --(others => '0'),
-                            zerosMask,
-            commitEffectiveMask => --(others => '0'),
-                                        zerosMask,
+            commitMask => zerosMask,
+            commitEffectiveMask => zerosMask,
             lateEventSignal => lateEventSignal,
             execEventSignal => execEventSignalE1,
             execCausing => execCausingDelayedLQ,
