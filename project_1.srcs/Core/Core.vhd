@@ -379,7 +379,9 @@ begin
 
               slotSel4, slotIssue4, slotSel5, slotIssue5, slotSel6, slotIssue6,
 
-              slotSelIntSV, slotIssueIntSV, slotIssueIntSV_P, slotRegReadIntSV, slotRegReadIntSV_P, slotRegReadIntSV_P_Delay,
+              slotSelIntSV,-- slotIssueIntSV,
+                     slotIssueIntSV_P,-- slotRegReadIntSV,
+               slotRegReadIntSV_P, slotRegReadIntSV_P_Delay,
               slotSelFloatSV, slotIssueFloatSV, slotRegReadFloatSV
                         : SchedulerState := DEFAULT_SCHED_STATE;
 
@@ -844,8 +846,8 @@ begin
             use work.LogicIssue.all;
             use work.LogicArgRead.all;
        
-            signal sendingToRegReadIntSV --, sendingToStoreWrite
-                    : std_logic := '0';
+--            signal sendingToRegReadIntSV --, sendingToStoreWrite
+--                    : std_logic := '0';
             signal schedInfoIntA, schedInfoUpdatedIntU, schedInfoFloatA, schedInfoUpdatedFloatU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
 
             constant CFG_SVI: SchedulerUpdateConfig := (true, false, true, FORWARDING_MODES_SV_INT_D, false);
@@ -929,16 +931,19 @@ begin
 
 
             TMP_ISSUE_SVI: block
-                signal argStateI, argStateI_P, argStateR, argStateR_P, argStateR_P_Delay: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal --argStateI,
+                         argStateI_P,-- argStateR, 
+                                    argStateR_P --, argStateR_P_Delay
+                                    : SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                slotIssueIntSV <= updateIssueStage(argStateI, outSigsSVI, events);
+               -- slotIssueIntSV <= updateIssueStage(argStateI, outSigsSVI, events);
                     slotIssueIntSV_P <= updateIssueStage(argStateI_P, outSigsSVI, events);
                                   --  slotIssueSVI_TF;
 
-                sendingToRegReadIntSV <= slotIssueIntSV.full and not (storeValueCollision2 and killFollower(outSigsSVI.trialPrev2, events));
+               -- sendingToRegReadIntSV <= slotIssueIntSV.full and not (storeValueCollision2 and killFollower(outSigsSVI.trialPrev2, events));
 
                 -- Reg
-                slotRegReadIntSV <= updateRegReadStage(argStateR, outSigsSVI, events, valuesInt0, regValsS0, true);
+                --slotRegReadIntSV <= updateRegReadStage(argStateR, outSigsSVI, events, valuesInt0, regValsS0, true);
                     slotRegReadIntSV_P <= updateRegReadStage(argStateR_P, outSigsSVI, events, valuesInt0, regValsS0, true);
                --     slotRegReadIntSV_P_Delay <= updateRegReadStage(argStateR_P_Delay, outSigsSVI, events, valuesInt0, regValsS0, true);
 
@@ -946,28 +951,28 @@ begin
                 begin
                     if rising_edge(clk) then
                         if allowIssueStoreDataInt = '1' then -- nextAccepting
-                            argStateI <= getIssueStage(slotSelIntSV, outSigsSVI, events);
+                        --    argStateI <= getIssueStage(slotSelIntSV, outSigsSVI, events);
                         end if;
                         
                             argStateI_P <= getIssueStage(slotSelIntSV, outSigsSVI, events);
                         
                         if (events.lateEvent or memFail) = '1' then
-                            argStateI.full <= '0';
+                        --    argStateI.full <= '0';
                         end if;
 
-                        argStateR <= getRegReadStage_O(slotIssueIntSV, sendingToRegReadIntSV, events, valuesInt0, valuesInt1, false, true);
+                       -- argStateR <= getRegReadStage_O(slotIssueIntSV, sendingToRegReadIntSV, events, valuesInt0, valuesInt1, false, true);
                             argStateR_P <= getRegReadStage_N(slotIssueIntSV_P, events, valuesInt0, valuesInt1, false, true);
-                            argStateR_P_Delay <= argStateR_P;
+                        --    argStateR_P_Delay <= argStateR_P;
                             
                         slotRegReadIntSV_P_Delay <= slotRegReadIntSV_P;
                     end if;
                 end process;
 
-                    ch_si <= bool2std(argStateR_P = argStateR);
+                  --  ch_si <= bool2std(argStateR_P = argStateR);
 
-                    ch0 <= bool2std(argStateI_P = argStateI);
-                    ch1 <= bool2std(argStateR_P = argStateR);
-                    ch2 <= bool2std(argStateR_P_Delay = argStateR_P);
+                    ch0 <= '0';-- bool2std(argStateI_P = argStateI);
+                    ch1 <= '1';--bool2std(argStateR_P = argStateR);
+                    ch2 <= '0';--bool2std(argStateR_P_Delay = argStateR_P);
 
                         ch3 <= not ch_sf and stateExecStoreValue.full;
                         ch4 <= stateExecStoreValue_Alt.full xor stateExecStoreValue.full;
@@ -1030,14 +1035,14 @@ begin
                                       else slotRegReadFloatSV when slotRegReadFloatSV.full = '1'
                                       else slotRegReadIntSV_P;
 
-            stateExecStoreValue <= slotRegReadFloatSV when slotRegReadFloatSV.full = '1' else slotRegReadIntSV;
-                                   -- stateExecStoreValue_Alt;
+            stateExecStoreValue <= --slotRegReadFloatSV when slotRegReadFloatSV.full = '1' else slotRegReadIntSV;
+                                    stateExecStoreValue_Alt;
             --sendingToStoreWrite <= slotRegReadIntSV.full or slotRegReadFloatSV.full;
 
             sqValueResultRR <= convertExecStoreValue(stateExecStoreValue);
 
-                sv_issueInt <= slotIssueIntSV.full;
-                sv_rrInt <= slotRegReadIntSV.full;
+              --  sv_issueInt <= slotIssueIntSV.full;
+              --  sv_rrInt <= slotRegReadIntSV.full;
                 sv_issueFloat <= slotIssueFloatSV.full;
                 sv_rrFloat <= slotRegReadFloatSV.full;
                 
@@ -1231,7 +1236,7 @@ begin
             regsSelI1 <= work.LogicRenaming.getPhysicalArgs(slotIssueI1);
             regsSelM0 <= work.LogicRenaming.getPhysicalArgs(slotIssueM0);
             -- TEMP!
-            regsSelS0 <= work.LogicRenaming.getPhysicalArgs(slotIssueIntSV);
+            regsSelS0 <= work.LogicRenaming.getPhysicalArgs(slotIssueIntSV_P);
             regsSelFS0 <= work.LogicRenaming.getPhysicalArgs(slotIssueFloatSV);
     
             regsSelF0 <= work.LogicRenaming.getPhysicalArgs(slotIssueF0);
