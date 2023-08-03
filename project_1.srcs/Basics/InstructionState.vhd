@@ -280,6 +280,7 @@ end record;
 
 type SchedulerState is record
     full: std_logic;
+        maybeFull: std_logic;
     st: StaticInfo;
 
     intDestSel: std_logic;
@@ -495,6 +496,7 @@ constant DEFAULT_BUFFER_ENTRY: BufferEntry;
 
 constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       full => '0',
+          maybeFull => '0',
 
       st => DEFAULT_STATIC_INFO,
 

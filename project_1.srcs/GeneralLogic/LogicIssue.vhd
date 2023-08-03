@@ -876,6 +876,7 @@ function getSchedEntrySlot(info: SchedulerInfo; full: std_logic; iqTag: SmallNum
     variable res: SchedulerState := DEFAULT_SCHED_STATE;
 begin
     res.full := full;
+        res.maybeFull := full;
 
     res.st := info.static;
 
@@ -946,6 +947,7 @@ begin
 end function;
 
 
+
 function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo is
     variable res: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
 begin
@@ -961,29 +963,31 @@ begin
 --    res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
 --    res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
 
-            if slv2u(res.static.operation.bits) > ArithOp'pos(ArithOp'right) then
-                res.static.operation.arith := opAnd;
-            else
-                res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
-            end if;
+--            if slv2u(res.static.operation.bits) > ArithOp'pos(ArithOp'right) then
+--                res.static.operation.arith := opAnd;
+--            else
+--                res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
+--            end if;
             
-            if slv2u(res.static.operation.bits) > MemOp'pos(MemOp'right) then
-                res.static.operation.memory := opLoad;
-            else
-                res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
-            end if;
+--            if slv2u(res.static.operation.bits) > MemOp'pos(MemOp'right) then
+--                res.static.operation.memory := opLoad;
+--            else
+--                res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
+--            end if;
 
-            if slv2u(res.static.operation.bits) > FpOp'pos(FpOp'right) then
-                res.static.operation.float := opMove;
-            else
-                res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
-            end if;
+--            if slv2u(res.static.operation.bits) > FpOp'pos(FpOp'right) then
+--                res.static.operation.float := opMove;
+--            else
+--                res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
+--            end if;
             
-            if slv2u(res.static.operation.bits) > SysOp'pos(SysOp'right) then
-                res.static.operation.system := opNone;
-            else
-                res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
-            end if;
+--            if slv2u(res.static.operation.bits) > SysOp'pos(SysOp'right) then
+--                res.static.operation.system := opNone;
+--            else
+--                res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
+--            end if;
+
+        res.static.operation := TMP_restoreOperation(res.static.operation);
 
     res.static.branchIns := a.static.branchIns or b.static.branchIns;
     res.static.divIns := a.static.divIns or b.static.divIns;
@@ -1367,29 +1371,31 @@ end function;
             --res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
             --res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
 
-            if slv2u(res.static.operation.bits) > ArithOp'pos(ArithOp'right) then
-                res.static.operation.arith := opAnd;
-            else
-                res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
-            end if;
+--            if slv2u(res.static.operation.bits) > ArithOp'pos(ArithOp'right) then
+--                res.static.operation.arith := opAnd;
+--            else
+--                res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
+--            end if;
             
-            if slv2u(res.static.operation.bits) > MemOp'pos(MemOp'right) then
-                res.static.operation.memory := opLoad;
-            else
-                res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
-            end if;
+--            if slv2u(res.static.operation.bits) > MemOp'pos(MemOp'right) then
+--                res.static.operation.memory := opLoad;
+--            else
+--                res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
+--            end if;
 
-            if slv2u(res.static.operation.bits) > FpOp'pos(FpOp'right) then
-                res.static.operation.float := opMove;
-            else
-                res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
-            end if;
+--            if slv2u(res.static.operation.bits) > FpOp'pos(FpOp'right) then
+--                res.static.operation.float := opMove;
+--            else
+--                res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
+--            end if;
             
-            if slv2u(res.static.operation.bits) > SysOp'pos(SysOp'right) then
-                res.static.operation.system := opNone;
-            else
-                res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
-            end if;
+--            if slv2u(res.static.operation.bits) > SysOp'pos(SysOp'right) then
+--                res.static.operation.system := opNone;
+--            else
+--                res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
+--            end if;
+
+        res.static.operation := TMP_restoreOperation(res.static.operation);
 
         res.static.dbInfo := selectDbInfo(inputElems, selMask);
 

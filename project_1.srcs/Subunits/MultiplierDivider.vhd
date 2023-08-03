@@ -44,7 +44,9 @@ architecture Behavioral of MultiplierDivider is
     signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
     signal divAllowed, sendingDivIssued, divRR, divFull,
             divUnlock, 
-            divPrepareSend, divResultSending, divPrepare,
+            divPrepareSend, divResultSending, divResultSendingNK,
+            divPrepareSend_N, divResultSending_N,
+            divPrepare,
             divResultSent, divResultSent2, divReady, remReady, sendingDivRR: std_logic := '0';
 
     signal sg0, sg1, isLowE0, isLowE1: std_logic := '0';
@@ -120,8 +122,14 @@ begin
     end process;
 
 
-    divUnlock <= not (divAllowed and allowIssueI1) and not sendingDivIssued and not divRR -- and not divPrepare
-                                                     and not divFull;
+    divUnlock <= not (divAllowed and allowIssueI1)  -- divAllowed - reg
+                                                    -- allowIssue1 - complex?
+    
+                 and not --sendingDivIssued -- cmoplex! 
+                            preInput.--full -- decoupling from opcode
+                                       maybeFull 
+                 and not divRR  -- reg
+                 and not divFull; -- reg
 
 
     DIVISION: block
@@ -130,12 +138,20 @@ begin
     begin
         kill <= (trialled and events.execEvent) or events.lateEvent; -- move to division
 
-        divPrepareSend <= divFull and bool2std(slv2u(divTime) = 30); -- TMP value
-        divResultSending <= divFull and bool2std(slv2u(divTime) = 32) and not kill; -- TMP value
+        divPrepareSend <= --divFull and bool2std(slv2u(divTime) = 30); -- TMP value
+                            divPrepareSend_N;
+        divResultSending <= --divFull and bool2std(slv2u(divTime) = 32) and not kill; -- TMP value
+                            divResultSending_N;
+            divResultSending_N <= divResultSendingNK and not kill;
 
         DIVIDER_STATE: process (clk)
         begin
             if rising_edge(clk) then
+                    divPrepareSend_N <= divFull and bool2std(slv2u(divTime) = 29); -- TMP value
+                    divResultSendingNK <= divFull and bool2std(slv2u(divTime) = 31); -- TMP value
+
+            
+            
                 divReady <= usingDiv and divResultSending;
                 remReady <= usingRem and divResultSending;
 

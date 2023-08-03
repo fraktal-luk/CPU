@@ -19,9 +19,9 @@ package LogicArgRead is
 
     -- Issue stage
     function getIssueStage(input: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
-    function updateIssueStage(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
+    function updateIssueStage(ss: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
     
-            function updateIssueStage_Merge(st, stMQ: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
+            function updateIssueStage_Merge(ss, stMQ: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
 
     
     -- Reg read stage
@@ -79,9 +79,11 @@ package body LogicArgRead is
     end function;
 
 
-    function updateIssueStage(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState is
-        variable res: SchedulerState := st;
+    function updateIssueStage(ss: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState is
+        variable res: SchedulerState := ss;
     begin
+            res.st.operation := TMP_restoreOperation(res.st.operation);
+    
         res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
         res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
     
@@ -93,14 +95,17 @@ package body LogicArgRead is
             res.args(1) := (others => '0');
         end if;
 
+            res.maybeFull := res.full;
         res.full := res.full and not (events.memFail or ctSigs.sentKilled or killFollower(ctSigs.trialPrev1, events));
         return res;
     end function;
 
 
-        function updateIssueStage_Merge(st, stMQ: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState is
-            variable res: SchedulerState := st;
+        function updateIssueStage_Merge(ss, stMQ: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState is
+            variable res: SchedulerState := ss;
         begin
+                res.st.operation := TMP_restoreOperation(res.st.operation);
+        
             res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
             res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
         
@@ -112,6 +117,7 @@ package body LogicArgRead is
                 res.args(1) := (others => '0');
             end if;
     
+                res.maybeFull := res.full;
             res.full := res.full and not (events.memFail or ctSigs.sentKilled or killFollower(ctSigs.trialPrev1, events));
             return res;
         end function;

@@ -253,6 +253,8 @@ function selectOrdered(ar: ExecResultArray) return ExecResult;
 function isDivOp(op: SpecificOp) return std_logic;
 function usesDivider(ss: SchedulerState) return std_logic;
 
+    function TMP_restoreOperation(so: SpecificOp) return SpecificOp;
+
 end package;
 
 
@@ -996,5 +998,37 @@ function usesDivider(ss: SchedulerState) return std_logic is
 begin
    return bool2std(ss.st.operation.arith = opDivU or ss.st.operation.arith = opDivS or ss.st.operation.arith = opRemU or ss.st.operation.arith = opRemS);
 end function;
+
+
+    function TMP_restoreOperation(so: SpecificOp) return SpecificOp is
+        variable res: SpecificOp := so;
+    begin
+        if slv2u(so.bits) > ArithOp'pos(ArithOp'right) then
+            res.arith := opAnd;
+        else
+            res.arith := ArithOp'val(slv2u(so.bits));
+        end if;
+        
+        if slv2u(so.bits) > MemOp'pos(MemOp'right) then
+            res.memory := opLoad;
+        else
+            res.memory := MemOp'val(slv2u(so.bits));
+        end if;
+
+        if slv2u(so.bits) > FpOp'pos(FpOp'right) then
+            res.float := opMove;
+        else
+            res.float := FpOp'val(slv2u(so.bits));
+        end if;
+        
+        if slv2u(so.bits) > SysOp'pos(SysOp'right) then
+            res.system := opNone;
+        else
+            res.system := SysOp'val(slv2u(so.bits));
+        end if;
+        
+        return res;
+    end function;
+
 
 end package body;
