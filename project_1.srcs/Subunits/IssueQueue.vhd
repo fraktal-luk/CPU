@@ -91,12 +91,13 @@ architecture Behavioral of IssueQueue is
     signal selectedSlot, selectedSlot_N: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
     signal selectedIqTag: SmallNumber := (others => '0');
 
-    signal schedulerOutSig, issuedFastState, issuedSlowState: SchedulerState := DEFAULT_SCHED_STATE;
+    signal schedulerOutSig, issuedFastState, issuedFastStateU, issuedSlowState: SchedulerState := DEFAULT_SCHED_STATE;
     signal outSigs: IssueQueueSignals := (others => '0');
 
     alias memFail is bypass.memFail;
                 
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
+        signal chss: SmallNumber := sn(0);
 
 begin
 
@@ -180,10 +181,14 @@ begin
     schedulerOutSig <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
     schedulerOut <= schedulerOutSig;
 
-        schedulerOut_Fast <= --issuedFastState;
-                            updateIssueStage(issuedFastState, outSigs, events);
+        schedulerOut_Fast <= issuedFastStateU;
+            issuedFastStateU <= updateIssueStage(issuedFastState, outSigs, events);
         
-        schedulerOut_Slow <= getSchedEntrySlot( queueSelect(queueContent, selMask1), sent, getIssueTag('0', selMask));
+        schedulerOut_Slow <= issuedSlowState;
+            issuedSlowState <= getSchedEntrySlot( queueSelect(queueContent, selMask1), sent, getIssueTag(sent, selMask1));
+
+        
+                chss <= compareSS(issuedFastStateU, issuedSlowState);
 
     QUEUE_SYNCHRONOUS: process(clk)
     begin

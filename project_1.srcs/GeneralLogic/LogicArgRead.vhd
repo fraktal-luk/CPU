@@ -25,12 +25,12 @@ package LogicArgRead is
 
     
     -- Reg read stage
-    function getRegReadStage_O(input: SchedulerState;
-                                     prevSending: std_logic;
-                                     events: EventState;
-                                     vals0, vals1: MwordArray;
-                                     USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
-    return SchedulerState;
+--    function getRegReadStage_O(input: SchedulerState;
+--                                     prevSending: std_logic;
+--                                     events: EventState;
+--                                     vals0, vals1: MwordArray;
+--                                     USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
+--    return SchedulerState;
 
         function getRegReadStage_Merge(input: SchedulerState;
                                          prevSending: std_logic;

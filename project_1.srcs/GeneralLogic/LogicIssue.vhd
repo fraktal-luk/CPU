@@ -134,12 +134,15 @@ function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray;
 function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency;
 procedure DB_reportEvents(content: SchedulerInfoArray; lastEvents: IqEventArray);
 
-    function compareStatic(a, b: StaticInfo) return std_logic;
-    function compareDynamic(a, b: DynamicInfo) return std_logic;
+--    function compareStatic(a, b: StaticInfo) return std_logic;
+--    function compareDynamic(a, b: DynamicInfo) return std_logic;
 
 -- experimental, don't export
 --function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup;
 --function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray;
+
+    function compareSS(a, b: SchedulerState) return SmallNumber;
+
 
 end LogicIssue;
 
@@ -1041,42 +1044,19 @@ begin
     return res;
 end function;
 
-    function compareStatic(a, b: StaticInfo) return std_logic is
-        variable eq: boolean := false;
+    function compareSS(a, b: SchedulerState) return SmallNumber is
+        variable res: SmallNumber := sn(0);
     begin
-        eq :=
-        a.dbInfo = b.dbInfo and
-        a.operation = b.operation and
-        a.branchIns = b.branchIns and
-        a.divIns = b.divIns and
-        a.tags = b.tags and
-        a.immediate = b.immediate and
-        a.immValue = b.immValue and
-        a.zero = b.zero and
-        true;
-        
-        return bool2std(eq);
-    end function;
+        res(0) := bool2std(a.full = b.full);
+        res(1) := bool2std(a.maybeFull = b.maybeFull);
+        res(2) := bool2std(a.st = b.st);
+        res(3) := bool2std(a.intDestSel = b.intDestSel and a.floatDestSel = b.floatDestSel and a.dest = b.dest and a.destTag = b.destTag);
+        res(4) := bool2std(a.args = b.args);
+        res(5) := bool2std(a.argLocsPipe = b.argLocsPipe and a.argSrc = b.argSrc);
+        res(6) := bool2std(a.readNew = b.readNew);
+        res(7) := bool2std(a.argValues = b.argValues);
 
-    function compareDynamic(a, b: DynamicInfo) return std_logic is
-        variable eq: boolean := false;
-    begin
-        eq :=
-        a.full = b.full and
-            --a.status.state = b.status.state and
-            a.status.active = b.status.active and
-            a.status.suspend = b.status.suspend and
-            a.status.freed = b.status.freed and
-            a.status.trial = b.status.trial and
-            a.status.issuedCtr = b.status.issuedCtr and
-        a.renameIndex = b.renameIndex and
-        a.intDestSel = b.intDestSel and
-        a.floatDestSel = b.floatDestSel and
-        a.dest = b.dest and
-        a.argStates = b.argStates and
-        true;
-        
-        return bool2std(eq);
+        return res;
     end function;
 
 

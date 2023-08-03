@@ -374,8 +374,9 @@ begin
               slotSelM0, slotIssueM0, slotRegReadM0,
               slotSelF0, slotIssueF0, slotRegReadF0,
 
-              --  slotIssueI0_TF, slotIssueI1_TF, slotIssueM0_TF, slotIssueSVI_TF, slotIssueSVF_TF, slotIssueF0_TF,
+                slotIssueI0_TF, slotIssueI1_TF, slotIssueM0_TF, slotIssueSVI_TF, slotIssueSVF_TF, slotIssueF0_TF,
                 slotIssueI0_TS, slotIssueI1_TS, slotIssueM0_TS, slotIssueSVI_TS, slotIssueSVF_TS, slotIssueF0_TS,
+                    slotIssueI0_U, slotIssueI1_U, slotIssueM0_U, slotIssueSVI_U, slotIssueSVF_U, slotIssueF0_U,
 
               slotSel4, slotIssue4, slotSel5, slotIssue5, slotSel6, slotIssue6,
 
@@ -470,14 +471,16 @@ begin
                 nextAccepting => allowIssueI0,
                     unlockDiv => '0',
                 schedulerOut => slotSelI0,
-                    schedulerOut_Fast => --slotIssueI0_TF,
-                                            slotIssueI0,
+                    schedulerOut_Fast => slotIssueI0_TF,
+                                         --   slotIssueI0,
                     schedulerOut_Slow => slotIssueI0_TS,
                 outputSignals => outSigsI0, 
                 dbState => dbState
             );
+                    slotIssueI0 <= slotIssueI0_TF;
+                    slotIssueI0_U <= TMP_mergeStatic(slotIssueI0, slotIssueI0_TS);
 
-                ch0 <= '1';
+           --     ch0 <= '1';
 
             TMP_ISSUE_I0: block
                 signal argStateRegI0: SchedulerState := DEFAULT_SCHEDULER_STATE;
@@ -487,8 +490,8 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateRegI0 <= getRegReadStage_N(slotIssueI0, events, valuesInt0, valuesInt1, true, false);
-                        unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0.st.operation.arith);
+                        argStateRegI0 <= getRegReadStage_N(slotIssueI0_U, events, valuesInt0, valuesInt1, true, false);
+                        unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0_U.st.operation.arith);
                     end if;
                 end process;
 
@@ -584,12 +587,14 @@ begin
                                         unlockDiv => divUnlock,
                     events => events,
                     schedulerOut => slotSelI1,
-                        schedulerOut_Fast => --slotIssueI1_TF,
-                                                slotIssueI1,
+                        schedulerOut_Fast => slotIssueI1_TF,
+                                             --   slotIssueI1,
                         schedulerOut_Slow => slotIssueI1_TS,
                     outputSignals => outSigsI1,
                     dbState => dbState
                 );
+                    slotIssueI1 <= slotIssueI1_TF;
+                    slotIssueI1_U <= TMP_mergeStatic(slotIssueI1, slotIssueI1_TS);
 
                 TMP_ISSUE_I1: block
                     signal argStateRegI1: SchedulerState := DEFAULT_SCHEDULER_STATE;
@@ -599,7 +604,7 @@ begin
                     process (clk)
                     begin
                         if rising_edge(clk) then
-                            argStateRegI1 <= getRegReadStage_N(slotIssueI1, events, valuesInt0, valuesInt1, true, false);
+                            argStateRegI1 <= getRegReadStage_N(slotIssueI1_U, events, valuesInt0, valuesInt1, true, false);
                         end if;
                     end process;
 
@@ -703,12 +708,15 @@ begin
                                     unlockDiv => '0',
                 events => events,
                 schedulerOut => slotSelM0,
-                    schedulerOut_Fast => --slotIssueM0_TF,
-                                            slotIssueM0,
+                    schedulerOut_Fast => slotIssueM0_TF,
+                                         --   slotIssueM0,
                     schedulerOut_Slow => slotIssueM0_TS,
                 outputSignals => outSigsM0,            
                 dbState => dbState
             );
+
+                slotIssueM0 <= slotIssueM0_TF;
+                slotIssueM0_U <= TMP_mergeStatic(slotIssueM0, slotIssueM0_TS);
 
             mqIssueSending <= mqReexecCtrlIssue.controlInfo.full;
             slotIssueM0mq <= TMP_slotIssueM0mq(mqReexecCtrlIssue, mqReexecResIssue, mqIssueSending);
@@ -722,8 +730,8 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateRegM0 <= getRegReadStage_N(slotIssueM0, events, valuesInt0, valuesInt1, true, false, true);
-                        argStateR_Merged <= getRegReadStage_Merge(slotIssueM0, slotIssueM0.full, slotIssueM0mq, events, valuesInt0, valuesInt1, true, false, true);
+                        argStateRegM0 <= getRegReadStage_N(slotIssueM0_U, events, valuesInt0, valuesInt1, true, false, true);
+                        argStateR_Merged <= getRegReadStage_Merge(slotIssueM0_U, slotIssueM0.full, slotIssueM0mq, events, valuesInt0, valuesInt1, true, false, true);
                     end if;
                 end process;
 
@@ -900,12 +908,14 @@ begin
                                     unlockDiv => '0',
                 events => events,
                 schedulerOut => slotSelIntSV,
-                    schedulerOut_Fast => --slotIssueSVI_TF,
-                                            slotIssueIntSV_P,
+                    schedulerOut_Fast => slotIssueSVI_TF,
+                                         --   slotIssueIntSV_P,
                     schedulerOut_Slow => slotIssueSVI_TS,
                 outputSignals => outSigsSVI,
                 dbState => dbState
             );
+                slotIssueIntSV_P <= slotIssueSVI_TF;
+                slotIssueSVI_U <= TMP_mergeStatic(slotIssueIntSV_P, slotIssueSVI_TS);
 
 
             TMP_ISSUE_SVI: block
@@ -916,7 +926,7 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateR_P <= getRegReadStage_N(slotIssueIntSV_P, events, valuesInt0, valuesInt1, false, true);                            
+                        argStateR_P <= getRegReadStage_N(slotIssueSVI_U, events, valuesInt0, valuesInt1, false, true);              
                         slotRegReadIntSV_P_Delay <= slotRegReadIntSV_P;
                     end if;
                 end process;
@@ -951,13 +961,16 @@ begin
                                         unlockDiv => '0',
                     events => events,
                     schedulerOut => slotSelFloatSV,
-                        schedulerOut_Fast => --slotIssueSVF_TF,
-                                                slotIssueFloatSV,
+                        schedulerOut_Fast => slotIssueSVF_TF,
+                                             --   slotIssueFloatSV,
                         schedulerOut_Slow => slotIssueSVF_TS,           
                     outputSignals => outSigsSVF,
                     dbState => dbState
                 );
             end generate;
+
+                slotIssueFloatSV <= slotIssueSVF_TF;
+                slotIssueSVF_U <= TMP_mergeStatic(slotIssueFloatSV, slotIssueSVF_TS);
 
             TMP_ISSUE_SVF: block
                 signal argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
@@ -967,7 +980,7 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateR <= getRegReadStage_N(slotIssueFloatSV, events, valuesFloat0, valuesFloat1, false, true);
+                        argStateR <= getRegReadStage_N(slotIssueSVF_U, events, valuesFloat0, valuesFloat1, false, true);
                     end if;
                 end process;
             end block;
@@ -1021,12 +1034,13 @@ begin
                                     unlockDiv => '0',
                 events => events,
                 schedulerOut => slotSelF0,
-                    schedulerOut_Fast => slotIssueF0,
+                    schedulerOut_Fast => slotIssueF0_TF,
                     schedulerOut_Slow => slotIssueF0_TS,
                 outputSignals => outSigsF0,
                 dbState => dbState
             );
-
+                slotIssueF0 <= slotIssueF0_TF;
+                slotIssueF0_U <= TMP_mergeStatic(slotIssueF0, slotIssueF0_TS);
 
             TMP_ISSUE_F0: block
                 signal argStateRegF0: SchedulerState := DEFAULT_SCHEDULER_STATE;
@@ -1036,7 +1050,7 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateRegF0 <= getRegReadStage_N(slotIssueF0, events, valuesFloat0, valuesFloat1, false, false); 
+                        argStateRegF0 <= getRegReadStage_N(slotIssueF0_U, events, valuesFloat0, valuesFloat1, false, false); 
                     end if;
                 end process;
 

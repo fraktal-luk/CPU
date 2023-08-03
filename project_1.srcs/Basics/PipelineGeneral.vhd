@@ -255,6 +255,8 @@ function usesDivider(ss: SchedulerState) return std_logic;
 
     function TMP_restoreOperation(so: SpecificOp) return SpecificOp;
 
+    function TMP_mergeStatic(a, b: SchedulerState) return SchedulerState;
+
 end package;
 
 
@@ -1027,6 +1029,13 @@ end function;
             res.system := SysOp'val(slv2u(so.bits));
         end if;
         
+        return res;
+    end function;
+
+    function TMP_mergeStatic(a, b: SchedulerState) return SchedulerState is
+        variable res: SchedulerState := a;
+    begin
+        --res.st := b.st;
         return res;
     end function;
 
