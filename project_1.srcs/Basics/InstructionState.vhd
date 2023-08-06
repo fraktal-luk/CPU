@@ -243,6 +243,9 @@ type EntryStatus is record
     freed: std_logic;
     trial: std_logic;
     issuedCtr: SmallNumber;
+    
+        T_justIssued: std_logic;
+        T_expiring: std_logic;
 end record;
 
 subtype IqState is EntryState;
@@ -552,7 +555,10 @@ constant DEFAULT_ENTRY_STATUS: EntryStatus := (
     issued => '0',
     freed => '0',
     trial => '0',
-    issuedCtr => (others => '0')
+    issuedCtr => (others => '0'),
+    
+        T_justIssued => '0',
+        T_expiring => '0'
 );
 
 constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (

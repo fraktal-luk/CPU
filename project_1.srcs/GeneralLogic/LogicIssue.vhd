@@ -646,6 +646,9 @@ begin
     res.dynamic.status.issued := '0';
     res.dynamic.status.active := '0';
     res.dynamic.status.suspend := '0';
+    
+        res.dynamic.status.T_justIssued := '0';
+        res.dynamic.status.T_expiring := '0';
     return res;
 end function;
 
@@ -661,6 +664,9 @@ begin
     res.dynamic.status.issued := '0';
     res.dynamic.status.active := '1' and not res.static.divIns;
     res.dynamic.status.suspend := '1' and res.static.divIns;
+    
+        res.dynamic.status.T_justIssued := '0';
+        res.dynamic.status.T_expiring := '0';
     return res;
 end function;
 
@@ -677,6 +683,8 @@ begin
     res.dynamic.status.issued := '1';
     res.dynamic.status.active := '0';
     res.dynamic.status.suspend := '0';
+    
+        res.dynamic.status.T_justIssued := '1';
     return res;
 end function;
 
@@ -707,6 +715,8 @@ return SchedulerInfoArray is
 begin
     for i in 0 to LEN-1 loop
         res(i).dynamic.status.freed := '0'; -- This is set for 1 cycle when freeing
+            res(i).dynamic.status.T_justIssued := '0';
+            res(i).dynamic.status.T_expiring := '0';
 
         if queueContent(i).dynamic.status.issued = '1' then
             res(i).dynamic.status.issuedCtr := incStageCtr(res(i).dynamic.status.issuedCtr);
@@ -715,13 +725,21 @@ begin
         end if;
 
         if queueContent(i).dynamic.status.issued = '1' then
-            if slv2u(queueContent(i).dynamic.status.issuedCtr) = IQ_HOLD_TIME - 1   then  -- Remove after successful issue
+
+
+            if --slv2u(queueContent(i).dynamic.status.issuedCtr) = IQ_HOLD_TIME - 1   then  -- Remove after successful issue
+              queueContent(i).dynamic.status.T_expiring = '1' then
                 res(i) := removeEntry(res(i));
                 res(i).dynamic.status.freed := '1';
-            elsif memFail = '1' and queueContent(i).dynamic.status.issuedCtr(1 downto 0) = "00" then
+            elsif memFail = '1' and queueContent(i).dynamic.status.--issuedCtr(1 downto 0) = "00" then
+                                                                     T_justIssued = '1'   then
                 res(i) := pullbackEntry(res(i));
             else
                 res(i) := updateIssuedEntry(res(i));
+                
+                if slv2u(queueContent(i).dynamic.status.issuedCtr) = IQ_HOLD_TIME - 2   then
+                    res(i).dynamic.status.T_expiring := '1';
+                end if;
             end if;
         end if;
 
@@ -738,7 +756,8 @@ begin
         if hasDivOp(res(i)) = '1' then
             if sends = '1' and res(i).dynamic.status.issued /= '1' then -- TODO: change to selMask(i)?
                 res(i) := suspendEntry(res(i));
-            elsif unlockDiv = '1' and res(i).dynamic.status.suspend = '1' then
+            elsif unlockDiv = '1' --and res(i).dynamic.status.suspend = '1'
+                                        then
                 res(i) := resumeEntry(res(i));
             end if;
          end if;
@@ -1055,6 +1074,8 @@ end function;
         res(5) := bool2std(a.argLocsPipe = b.argLocsPipe and a.argSrc = b.argSrc);
         res(6) := bool2std(a.readNew = b.readNew);
         res(7) := bool2std(a.argValues = b.argValues);
+
+            res := "10101010";
 
         return res;
     end function;

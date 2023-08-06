@@ -1035,7 +1035,7 @@ end function;
     function TMP_mergeStatic(a, b: SchedulerState) return SchedulerState is
         variable res: SchedulerState := a;
     begin
-        --res.st := b.st;
+        res.st := b.st;
         return res;
     end function;
 

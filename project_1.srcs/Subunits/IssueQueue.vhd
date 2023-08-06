@@ -80,9 +80,9 @@ architecture Behavioral of IssueQueue is
 
     signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
 
-    signal fullMask, killMask, freedMask, readyMask, selMask, selMask1, selMask2,   selMaskH: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+    signal fullMask, killMask, freedMask, readyMask, selMask, selMask1, selMask2, selMaskH, trialMaskAll, TMP_trialMask2: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
-    signal anyReadyFull, sends, sent, sendingKilled, sentKilled, sentTrial1, sentTrial2: std_logic := '0';
+    signal anyReadyFull, sends, sent, sendingKilled, sentKilled, sentTrial1, sentTrial2, TMP_trial2: std_logic := '0';
 
     signal inTags: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
 
@@ -138,6 +138,10 @@ begin
         signal trialMask, trialUpdatedMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
     begin
         trialMask <= getTrialMask(queueContent, events);
+            
+            trialMaskAll <= trialMask or not fullMask; -- empty slots are "on trial" because new ops are younger than Exec
+            TMP_trialMask2 <= trialMaskAll and selMask1;
+        
         trialUpdatedMask <= getTrialUpdatedMask(queueContent);
 
         killMask <= (others => '1') when events.lateEvent = '1' 
@@ -202,6 +206,8 @@ begin
             sent <= sends;
             sentKilled <= sendingKilled;
 
+            TMP_trial2 <= isNonzero(TMP_trialMask2);
+
             issuedFastState <= getIssueStage(schedulerOutSig, outSigs, events);
         end if;
     end process;
@@ -211,6 +217,7 @@ begin
                         sentKilled => sentKilled,
                         trialPrev1 => sentTrial1,
                         trialPrev2 => sentTrial2
+                                      --  TMP_trial2
                         );
     outputSignals <= outSigs;
 
