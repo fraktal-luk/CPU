@@ -42,11 +42,11 @@ end MultiplierDivider;
 
 architecture Behavioral of MultiplierDivider is
     signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
-    signal divAllowed, sendingDivIssued, divRR, divFull,
+    signal divAllowed, sendingDivIssued, divRR, divFull,    divAllowed_Pre, divRR_Pre, divPrepareSend_Pre,
             divUnlock, 
             divPrepareSend, divResultSending, divResultSendingNK,
             divPrepareSend_N, divResultSending_N,
-            divPrepare,
+            divPrepare, divFullNext_T,
             divResultSent, divResultSent2, divReady, remReady, sendingDivRR: std_logic := '0';
 
     signal sg0, sg1, isLowE0, isLowE1: std_logic := '0';
@@ -54,8 +54,10 @@ architecture Behavioral of MultiplierDivider is
     signal resLongE1: Dword := (others => '0');
 
     signal divQuot, divRem: Word := (others => '0');
-        signal divQuot_Alt, divRem_Alt: Word := (others => '0');
-        signal divQuot_New, divRem_New: Word := (others => '0');
+    signal divQuot_Alt, divRem_Alt: Word := (others => '0');
+    signal divQuot_New, divRem_New: Word := (others => '0');
+    
+    signal ch0, ch1, ch2, ch3: std_logic := '0';
 begin
 
     sendingDivIssued <= preInput.full and usesDivider(preInput); -- Speculative because it doesn't take into account kill signals?
@@ -121,37 +123,48 @@ begin
         end if;
     end process;
 
+    divUnlock <= ch1;
+--                 not (divAllowed and not divPrepareSend)  -- divAllowed - reg
+--                 and not preInput.maybeFull
+--                 and not divRR  -- reg
+--                 and not divFull; -- reg
 
-    divUnlock <= not (divAllowed and allowIssueI1)  -- divAllowed - reg
-                                                    -- allowIssue1 - complex?
-    
-                 and not --sendingDivIssued -- cmoplex! 
-                            preInput.--full -- decoupling from opcode
-                                       maybeFull 
-                 and not divRR  -- reg
-                 and not divFull; -- reg
+        ch1 <= ch2 and not preInput.maybeFull;
+        --ch2 <= not (divAllowed and not divPrepareSend) and not divRR and not divFull;
+           --       divUnlock              (sendingDivIssued and not killFollowerNext)
+           --              (divFull and bool2std(slv2u(divTime) = 29))
+    --    ch0 <= bool2std(allowIssueI1 = not divPrepareSend); 
+        ch0 <= bool2std(ch1 = divUnlock);
+
 
 
     DIVISION: block
         signal usingDiv, usingRem, trialled, kill, opUnsigned: std_logic := '0';
         signal divTime: SmallNumber := sn(0);
     begin
+            divAllowed_Pre <= divUnlock;
+            divPrepareSend_Pre <= divFull and bool2std(slv2u(divTime) = 29);
+            divRR_Pre <= sendingDivIssued and not killFollowerNext;
+            
+        divFullNext_T <= '0' when (divResultSending = '1' or kill = '1')
+                    else '1' when sendingDivRR = '1'
+                    else divFull;
+    
         kill <= (trialled and events.execEvent) or events.lateEvent; -- move to division
 
-        divPrepareSend <= --divFull and bool2std(slv2u(divTime) = 30); -- TMP value
-                            divPrepareSend_N;
-        divResultSending <= --divFull and bool2std(slv2u(divTime) = 32) and not kill; -- TMP value
-                            divResultSending_N;
-            divResultSending_N <= divResultSendingNK and not kill;
+        divPrepareSend <= divPrepareSend_N;
+        divResultSending <= divResultSending_N;
+        divResultSending_N <= divResultSendingNK and not kill;
 
         DIVIDER_STATE: process (clk)
         begin
             if rising_edge(clk) then
-                    divPrepareSend_N <= divFull and bool2std(slv2u(divTime) = 29); -- TMP value
-                    divResultSendingNK <= divFull and bool2std(slv2u(divTime) = 31); -- TMP value
+                    ch2 <= not (divAllowed_Pre and not divPrepareSend_Pre) and not divRR_Pre and not divFullNext_T;
 
             
-            
+                divPrepareSend_N <= divFull and bool2std(slv2u(divTime) = 29); -- TMP value
+                divResultSendingNK <= divFull and bool2std(slv2u(divTime) = 31); -- TMP value
+
                 divReady <= usingDiv and divResultSending;
                 remReady <= usingRem and divResultSending;
 
@@ -179,7 +192,6 @@ begin
 
                     usingDiv <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opDivS);
                     usingRem <= bool2std(input.st.operation.arith = opRemU or input.st.operation.arith = opRemS);
-                --elsif divPrepare = '1' then
                     divFull <= '1';
                     divTime <= sn(0);
                 else
@@ -195,7 +207,6 @@ begin
             signal divisorS, divisor_TE, sum00, diff00, a0e, a1e, sum_TE, diff_TE, rem_TE: Dword := (others => '0');
             signal result00, result_T, sum_T, sum_L, sum_U, diff_T, diff_Sh, ma0, ma1: Word := (others => '0');
             signal quot00, rem00, quot_T, rem_T,  arg0, arg1, arg0t, arg1t: Word := (others => '0');
-                signal dTime: natural := 0;
             
             function shiftRightU(w: Word) return Word is
                 variable res: Word := (others => '0');
@@ -212,16 +223,12 @@ begin
                 return res;
             end function;
         begin
-                dTime <= slv2u(divTime);
 
-
-                    divQuot_New <= quot_T;
-        
-                    divRem_New <=  minus(rem_T) when signSel1 = '1'
-                            else  rem_T;
+            divQuot_New <= quot_T;
+            divRem_New <=  minus(rem_T) when signSel1 = '1'
+                    else  rem_T;
 
             divQuot_Alt <= quot00;
-
             divRem_Alt <=  minus(rem00) when signSel1 = '1'
                     else  rem00;
 
@@ -235,7 +242,6 @@ begin
                 diff_T <= add(sum_T, arg1t) when (isNonzero(divTime) /= '1') and isUnsigned /= '1'
                      else sub(sum_T, arg1t);
                 new_T <= cmpGeU(sum_TE, divisor_TE);
-        
 
             a0e <= signExtend(input.argValues(0), 64);
             a1e <= '1' & input.argValues(1) & "000" & X"0000000";
@@ -243,16 +249,13 @@ begin
             ma0 <= minus(input.argValues(0));
             ma1 <= minus(input.argValues(1));
 
-                  opUnsigned <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
+            opUnsigned <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
 
             DIVISION_SYNC: process (clk)
             begin
                 if rising_edge(clk) then
 
                     if divResultSending = '1' then
-                    --    quot00 <= result00;
-                    --    rem00  <= sum00(31 downto 0);
-                        
                         quot_T <= result_T;
                         rem_T  <= sum_TE(32 downto 1);
                     end if;
@@ -274,10 +277,8 @@ begin
                             sum00 <= minus(a0e);
                             divisorS <= minus(a1e);
 
-                            arg0t <= --minus(input.argValues(0));
-                                        ma0;
-                            arg1t <= --minus(input.argValues(1));
-                                        ma1;
+                            arg0t <= ma0;
+                            arg1t <= ma1;
                         elsif opUnsigned = '1' then
                             sum00 <= zeroExtend(input.argValues(0), 64);
                             divisorS <= '0' & input.argValues(1) & "000" & X"0000000";
@@ -297,9 +298,7 @@ begin
 
 
                     if sendingDivRR = '1' then
-
                         if input.argValues(1)(31) = '1' and opUnsigned /= '1' then
-                            --sum_U <= (others => ma0(31));
                             sum_TE <= (others => ma0(31));
                             sum_T <= (others => ma0(31));
                             sum_L <= ma0(30 downto 0) & '0';
@@ -320,8 +319,7 @@ begin
                     else
                         result_T <= result_T(30 downto 0) & new_T; 
                     
-                        if --new00 = '1' then
-                           new_T = '1' then
+                        if new_T = '1' then
                             sum_TE <= diff_TE(62 downto 0) & sum_L(31);
                             rem_TE <= diff_TE;
                         else
@@ -331,10 +329,6 @@ begin
 
                         sum_L <= sum_L(30 downto 0) & '0';
                     end if;
-                            if dTime >= 31 then
-                            --    sum_T <= (others => 'U');
-                            --    sum_L <= (others => 'U');
-                            end if;
 
                 end if;
             end process;

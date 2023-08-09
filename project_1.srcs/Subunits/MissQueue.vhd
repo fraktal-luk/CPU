@@ -365,11 +365,14 @@ begin
                 recoveryCounter <= addInt(recoveryCounter, -1);
             end if;
             
-            recoveryCounter(7 downto 2) <= (others => '0');        
+            recoveryCounter(7 downto 2) <= (others => '0');
+            
+            isFull <= cmpGtU(nFull, QUEUE_SIZE-3);
+            isAlmostFull <= cmpGtU(nFull, QUEUE_SIZE-5);
         end if;
-        
-        isFull <= cmpGtU(nFull, QUEUE_SIZE-2);
-        isAlmostFull <= cmpGtU(nFull, QUEUE_SIZE-5);
+
+        --isFull <= cmpGtU(nFull, QUEUE_SIZE-2);
+        --isAlmostFull <= cmpGtU(nFull, QUEUE_SIZE-5);
     end process;
     
     accepting <= not isFull;

@@ -323,6 +323,10 @@ begin
         TMP_fpTagsPreT <= iqInds2tags(TMP_fpTagsPre);
 
 
+        ALLOC_MUL_STUB: if not ENABLE_MUL_DIV generate
+            allocAcceptMul <= '1';
+        end generate;
+
         ALLOC_FP_STUB: if not ENABLE_FP generate
             allocAcceptSVF <= '1';
             allocAcceptF0 <= '1';
@@ -542,7 +546,7 @@ begin
         end block;
 
 
-        MUL_BLOCK: if true generate
+        MUL_BLOCK: if ENABLE_MUL_DIV generate
             SUBPIPE_MUL: block
                use work.LogicIssue.all;
                use work.LogicArgRead.all;
@@ -802,7 +806,8 @@ begin
             end block;
 
             --------------------------------------------
-            memIssueFullIQ <= slotIssueM0.full;
+            memIssueFullIQ <= slotIssueM0.--full;
+                                            maybeFull;
             memIssueFullMQ <= mqReexecCtrlIssue.controlInfo.full;
 
             process (clk)
@@ -1106,12 +1111,16 @@ begin
         lockIssueSVI <= storeValueCollision1 or memFail;
         lockIssueSVF <= storeValueCollision1 or memFail;
 
-        memSubpipeSent <= slotRegReadM0.full;
-        mulSubpipeSent <= slotRegReadI1.full;
+        memSubpipeSent <= slotRegReadM0.--full;
+                                            maybeFull;
+        mulSubpipeSent <= slotRegReadI1.--full;
+                                            maybeFull;
         mulSubpipeAtE0   <= subpipeI1_E0.full;
 
-        mulSubpipeSelected <= slotIssueI1.full;
-        fp0subpipeSelected <= slotIssueF0.full;
+        mulSubpipeSelected <= slotIssueI1.--full;
+                                            maybeFull;
+        fp0subpipeSelected <= slotIssueF0.--full;
+                                            maybeFull;
 
         lockIssueI0 <= lockIssueI0_NoMemFail or memFail;
 

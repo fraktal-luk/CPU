@@ -80,16 +80,16 @@ architecture Behavioral of IssueQueue is
 
     signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
 
-    signal fullMask, killMask, freedMask, readyMask, selMask, selMask1, selMask2, selMaskH, trialMaskAll, TMP_trialMask2: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+    signal fullMask, killMask, freedMask, readyMask, selMask, selMask1, selMask2, selMaskH, trialMaskAll, TMP_trialMask1, TMP_trialMask2: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
-    signal anyReadyFull, sends, sent, sendingKilled, sentKilled, sentTrial1, sentTrial2, TMP_trial2: std_logic := '0';
+    signal anyReadyFull, sends, sent, sendingKilled, sentKilled, sentTrial1, sentTrial2, TMP_trial1, TMP_trial2: std_logic := '0';
 
     signal inTags: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
 
     signal recoveryCounter: SmallNumber := (others => '0');
 
-    signal selectedSlot, selectedSlot_N: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
-    signal selectedIqTag: SmallNumber := (others => '0');
+    signal selectedSlot, selectedSlot_N, selectedSlot_Slow: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+    signal selectedIqTag, prevIqTag: SmallNumber := (others => '0');
 
     signal schedulerOutSig, issuedFastState, issuedFastStateU, issuedSlowState: SchedulerState := DEFAULT_SCHED_STATE;
     signal outSigs: IssueQueueSignals := (others => '0');
@@ -98,6 +98,16 @@ architecture Behavioral of IssueQueue is
                 
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
         signal chss: SmallNumber := sn(0);
+
+        function TMP_slowSelect(content: SchedulerInfoArray; tag: SmallNumber) return SchedulerInfo is
+            variable ind: natural := slv2u(tag(3 downto 0));
+        begin
+            if ind > 11 then
+                return content(11);
+            else
+                return content(ind);
+            end if; 
+        end function; 
 
 begin
 
@@ -140,6 +150,7 @@ begin
         trialMask <= getTrialMask(queueContent, events);
             
             trialMaskAll <= trialMask or not fullMask; -- empty slots are "on trial" because new ops are younger than Exec
+            TMP_trialMask1 <= trialMaskAll and selMask;
             TMP_trialMask2 <= trialMaskAll and selMask1;
         
         trialUpdatedMask <= getTrialUpdatedMask(queueContent);
@@ -189,7 +200,11 @@ begin
             issuedFastStateU <= updateIssueStage(issuedFastState, outSigs, events);
         
         schedulerOut_Slow <= issuedSlowState;
-            issuedSlowState <= getSchedEntrySlot( queueSelect(queueContent, selMask1), sent, getIssueTag(sent, selMask1));
+            selectedSlot_Slow <= --queueSelect(queueContent, selMask1);
+                                 --queueContent(slv2u(prevIqTag));
+                                    TMP_slowSelect(queueContent, prevIqTag);
+
+            issuedSlowState <= getSchedEntrySlot(selectedSlot_Slow, sent, getIssueTag(sent, selMask1));
 
         
                 chss <= compareSS(issuedFastStateU, issuedSlowState);
@@ -206,9 +221,11 @@ begin
             sent <= sends;
             sentKilled <= sendingKilled;
 
+            TMP_trial1 <= isNonzero(TMP_trialMask1);
             TMP_trial2 <= isNonzero(TMP_trialMask2);
 
             issuedFastState <= getIssueStage(schedulerOutSig, outSigs, events);
+            prevIqTag <= getIssueTag('0', selMask);
         end if;
     end process;
 
@@ -216,11 +233,12 @@ begin
                         sending => sends,
                         sentKilled => sentKilled,
                         trialPrev1 => sentTrial1,
+                                      --  TMP_trial1,
                         trialPrev2 => sentTrial2
                                       --  TMP_trial2
                         );
     outputSignals <= outSigs;
-
+            ch0 <= '1';
 
     COUNTERS_SYNCHRONOUS: process(clk)
     begin
