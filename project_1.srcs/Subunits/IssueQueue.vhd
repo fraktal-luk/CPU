@@ -54,9 +54,9 @@ entity IssueQueue is
 
         bypass: in BypassState;
 
-		schedulerOut: out SchedulerState;
-    		schedulerOut_Fast: out SchedulerState;
-    		schedulerOut_Slow: out SchedulerState;
+		--schedulerOut: out SchedulerState; -- DEPREC?
+        schedulerOut_Fast: out SchedulerState;
+        schedulerOut_Slow: out SchedulerState;
 
         outputSignals: out IssueQueueSignals;
 
@@ -73,7 +73,7 @@ architecture Behavioral of IssueQueue is
     constant CFG_SEL: SchedulerUpdateConfig :=  (false, false, IGNORE_MEM_FAIL, FORWARDING, false);
 
     signal queueContent, queueContentNext, queueContentUpdated, queueContentUpdated_2, queueContentUpdatedSel: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
-        signal queueSel2, queueSel4, queueSel8, queueSel16: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
+    --    signal queueSel2, queueSel4, queueSel8, queueSel16: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
 
     signal ageMatrix: slv2D(0 to IQ_SIZE-1, 0 to IQ_SIZE-1) := (others => (others => '0'));
     signal insertionLocs: slv2D(0 to IQ_SIZE-1, 0 to PIPE_WIDTH-1) := (others => (others => '0'));
@@ -89,7 +89,7 @@ architecture Behavioral of IssueQueue is
     signal recoveryCounter: SmallNumber := (others => '0');
 
     signal selectedSlot, selectedSlot_Slow: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
-    signal selectedIqTag, prevIqTag: SmallNumber := (others => '0');
+    signal selectedIqTag, prevIqTag, prevPrevIqTag: SmallNumber := (others => '0');
 
     signal schedulerOutSig, issuedFastState, issuedFastStateU, issuedSlowState: SchedulerState := DEFAULT_SCHED_STATE;
     signal outSigs: IssueQueueSignals := (others => '0');
@@ -97,17 +97,6 @@ architecture Behavioral of IssueQueue is
     alias memFail is bypass.memFail;
                 
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
-    --    signal chss: SmallNumber := sn(0);
-
-        function TMP_slowSelect(content: SchedulerInfoArray; tag: SmallNumber) return SchedulerInfo is
-            variable ind: natural := slv2u(tag(3 downto 0));
-        begin
-            if ind > 11 then
-                return content(11);
-            else
-                return content(ind);
-            end if; 
-        end function; 
 
 begin
 
@@ -121,8 +110,8 @@ begin
         inReady => inReady,
         inMask => inMask,
 
-        TMP_outTags => inTags,
-        TMP_outTagsPre => TMP_outTagsPre,
+        outTags => inTags,
+        outTagsPre => TMP_outTagsPre,
 
         accept => accept,
 
@@ -167,8 +156,10 @@ begin
         sendingTrial <= isNonzero(selMask and trialUpdatedMask);
         sendingKilled <= killFollower(sendingTrial, events);
 
-        sentTrial1 <= isNonzero(selMask1 and trialUpdatedMask);
-        sentTrial2 <= isNonzero(selMask2 and trialUpdatedMask);
+        sentTrial1 <= --isNonzero(selMask1 and trialUpdatedMask);
+                        TMP_slowSelect(trialUpdatedMask, prevIqTag);
+        sentTrial2 <= --isNonzero(selMask2 and trialUpdatedMask);
+                        TMP_slowSelect(trialUpdatedMask, prevPrevIqTag);
     end block;
 
     insertionLocs <= getNewLocs(fullMask, inTags, newArr);
@@ -189,7 +180,6 @@ begin
                     --queueSelect(queueContentUpdatedSel, selMask);
 
     schedulerOutSig <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
-    schedulerOut <= schedulerOutSig;
 
     issuedFastStateU <= updateIssueStage(issuedFastState, outSigs, events);
     schedulerOut_Fast <= issuedFastStateU;
@@ -215,17 +205,18 @@ begin
 
             issuedFastState <= getIssueStage(schedulerOutSig, outSigs, events);
             prevIqTag <= getIssueTag('0', selMask);
+            prevPrevIqTag <= prevIqTag;
         end if;
     end process;
 
     outSigs <=   (
-                        sending => sends,
-                        sentKilled => sentKilled,
-                        trialPrev1 => sentTrial1,
-                                      --  TMP_trial1,
-                        trialPrev2 => sentTrial2
-                                      --  TMP_trial2
-                        );
+            sending => sends,
+            sentKilled => sentKilled,
+            trialPrev1 => sentTrial1,
+                          --  TMP_trial1,
+            trialPrev2 => sentTrial2
+                          --  TMP_trial2
+            );
     outputSignals <= outSigs;
             ch0 <= '0';
 

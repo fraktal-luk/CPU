@@ -19,6 +19,9 @@ function findCompletelyAvailable(mask: std_logic_vector) return integer; -- find
 function findInsertion(pA, cA: integer; fullMask, inputMask: std_logic_vector) return integer;
 function findInsertionSimplified(pA, cA: integer; fullMask, inputMask: std_logic_vector) return integer;
 
+function allOf(v: std_logic_vector) return std_logic;
+function anyOf(v: std_logic_vector) return std_logic;
+
 end Helpers;
 
 
@@ -135,6 +138,26 @@ begin
     end if;
     
     return res;
+end function;
+
+function allOf(v: std_logic_vector) return std_logic is
+begin
+    for i in v'range loop
+        if v(i) /= '1' then
+            return '0';
+        end if;
+    end loop;
+    return '1';
+end function;
+
+function anyOf(v: std_logic_vector) return std_logic is
+begin
+    for i in v'range loop
+        if v(i) = '1' then
+            return '1';
+        end if;
+    end loop;
+    return '0';
 end function;
 
 end package body;

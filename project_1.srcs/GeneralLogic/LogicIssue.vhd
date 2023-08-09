@@ -123,8 +123,11 @@ function getSelMask_H(readyMask: std_logic_vector; ageMatrix: slv2D) return std_
 function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return SchedulerInfo;
 function queueSelect_N(inputElems: SchedulerInfoArray; readyMask: std_logic_vector; ageMatrix: slv2D) return SchedulerInfo;
 
+function TMP_slowSelect(content: SchedulerInfoArray; tag: SmallNumber) return SchedulerInfo;
+function TMP_slowSelect(content: std_logic_vector; tag: SmallNumber) return std_logic;
+
 function getSchedEntrySlot(info: SchedulerInfo; full: std_logic; iqTag: SmallNumber) return SchedulerState;
-function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
+--function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
 
 function getIssueTag(sends: std_logic; selMask: std_logic_vector) return SmallNumber;
 
@@ -1355,7 +1358,7 @@ end function;
 
 -----------------------------------
 
-    function getTagLowPart(selMask: std_logic_vector) return SmallNumber is
+    function TMP_getTagLowPart(selMask: std_logic_vector) return SmallNumber is
         variable res: SmallNumber := sn(-1);
     begin
         for i in selMask'range loop
@@ -1368,10 +1371,32 @@ end function;
     end function;
     
     function getIssueTag(sends: std_logic; selMask: std_logic_vector) return SmallNumber is
-        variable res: SmallNumber := getTagLowPart(selMask);
+        variable res: SmallNumber := TMP_getTagLowPart(selMask);
     begin
         res(4) := sends;
         return res;
+    end function;
+
+    function TMP_slowSelect(content: SchedulerInfoArray; tag: SmallNumber) return SchedulerInfo is
+        constant LEN: natural := content'length;
+        variable ind: natural := slv2u(tag(3 downto 0));
+    begin
+        if ind > LEN-1 then
+            return content(LEN-1);
+        else
+            return content(ind);
+        end if; 
+    end function;
+
+    function TMP_slowSelect(content: std_logic_vector; tag: SmallNumber) return std_logic is
+        constant LEN: natural := content'length;
+        variable ind: natural := slv2u(tag(3 downto 0));
+    begin
+        if ind > LEN-1 then
+            return content(LEN-1);
+        else
+            return content(ind);
+        end if; 
     end function;
 
 end LogicIssue;
