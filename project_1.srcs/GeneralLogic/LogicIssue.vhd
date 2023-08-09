@@ -118,31 +118,24 @@ function getTrialUpdatedMask(content: SchedulerInfoArray) return std_logic_vecto
 
 -- issue
 function getSelMask(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector;
-    function getSelMask_H(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector;
+function getSelMask_H(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector;
 
 function queueSelect(inputElems: SchedulerInfoArray; selMask: std_logic_vector) return SchedulerInfo;
-    function queueSelect_N(inputElems: SchedulerInfoArray; readyMask: std_logic_vector; ageMatrix: slv2D) return SchedulerInfo;
+function queueSelect_N(inputElems: SchedulerInfoArray; readyMask: std_logic_vector; ageMatrix: slv2D) return SchedulerInfo;
 
 function getSchedEntrySlot(info: SchedulerInfo; full: std_logic; iqTag: SmallNumber) return SchedulerState;
 function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
 
 function getIssueTag(sends: std_logic; selMask: std_logic_vector) return SmallNumber;
 
-
 function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray;
 -- Debug functions
 function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency;
 procedure DB_reportEvents(content: SchedulerInfoArray; lastEvents: IqEventArray);
 
---    function compareStatic(a, b: StaticInfo) return std_logic;
---    function compareDynamic(a, b: DynamicInfo) return std_logic;
-
 -- experimental, don't export
 --function getWakeup(argState: ArgumentState; fni: ForwardingInfo; constant MODES: WakeupSpec; constant MODE_IND: natural) return ArgWakeup;
 --function getWakeupArray(content: SchedulerInfoArray; fni: ForwardingInfo; constant WAKEUP_SPEC: WakeupSpec; constant CFG: SchedulerUpdateConfig) return WakeupInfoArray;
-
-    function compareSS(a, b: SchedulerState) return SmallNumber;
-
 
 end LogicIssue;
 
@@ -630,11 +623,10 @@ begin
 end function;
 
 
-    function hasDivOp(entry: SchedulerInfo) return std_logic is
-    begin
-        return entry.dynamic.full and entry.static.divIns;
-    end function;
-
+function hasDivOp(entry: SchedulerInfo) return std_logic is
+begin
+    return entry.dynamic.full and entry.static.divIns;
+end function;
 
 
 function removeEntry(entry: SchedulerInfo) return SchedulerInfo is
@@ -647,8 +639,8 @@ begin
     res.dynamic.status.active := '0';
     res.dynamic.status.suspend := '0';
     
-        res.dynamic.status.T_justIssued := '0';
-        res.dynamic.status.T_expiring := '0';
+    res.dynamic.status.T_justIssued := '0';
+    res.dynamic.status.T_expiring := '0';
     return res;
 end function;
 
@@ -665,8 +657,8 @@ begin
     res.dynamic.status.active := '1' and not res.static.divIns;
     res.dynamic.status.suspend := '1' and res.static.divIns;
     
-        res.dynamic.status.T_justIssued := '0';
-        res.dynamic.status.T_expiring := '0';
+    res.dynamic.status.T_justIssued := '0';
+    res.dynamic.status.T_expiring := '0';
     return res;
 end function;
 
@@ -684,7 +676,7 @@ begin
     res.dynamic.status.active := '0';
     res.dynamic.status.suspend := '0';
     
-        res.dynamic.status.T_justIssued := '1';
+    res.dynamic.status.T_justIssued := '1';
     return res;
 end function;
 
@@ -715,8 +707,8 @@ return SchedulerInfoArray is
 begin
     for i in 0 to LEN-1 loop
         res(i).dynamic.status.freed := '0'; -- This is set for 1 cycle when freeing
-            res(i).dynamic.status.T_justIssued := '0';
-            res(i).dynamic.status.T_expiring := '0';
+        res(i).dynamic.status.T_justIssued := '0';
+        res(i).dynamic.status.T_expiring := '0';
 
         if queueContent(i).dynamic.status.issued = '1' then
             res(i).dynamic.status.issuedCtr := incStageCtr(res(i).dynamic.status.issuedCtr);
@@ -725,14 +717,10 @@ begin
         end if;
 
         if queueContent(i).dynamic.status.issued = '1' then
-
-
-            if --slv2u(queueContent(i).dynamic.status.issuedCtr) = IQ_HOLD_TIME - 1   then  -- Remove after successful issue
-              queueContent(i).dynamic.status.T_expiring = '1' then
+            if queueContent(i).dynamic.status.T_expiring = '1' then
                 res(i) := removeEntry(res(i));
                 res(i).dynamic.status.freed := '1';
-            elsif memFail = '1' and queueContent(i).dynamic.status.--issuedCtr(1 downto 0) = "00" then
-                                                                     T_justIssued = '1'   then
+            elsif memFail = '1' and queueContent(i).dynamic.status.T_justIssued = '1'   then
                 res(i) := pullbackEntry(res(i));
             else
                 res(i) := updateIssuedEntry(res(i));
@@ -756,8 +744,7 @@ begin
         if hasDivOp(res(i)) = '1' then
             if sends = '1' and res(i).dynamic.status.issued /= '1' then -- TODO: change to selMask(i)?
                 res(i) := suspendEntry(res(i));
-            elsif unlockDiv = '1' --and res(i).dynamic.status.suspend = '1'
-                                        then
+            elsif unlockDiv = '1' then
                 res(i) := resumeEntry(res(i));
             end if;
          end if;
@@ -898,7 +885,7 @@ function getSchedEntrySlot(info: SchedulerInfo; full: std_logic; iqTag: SmallNum
     variable res: SchedulerState := DEFAULT_SCHED_STATE;
 begin
     res.full := full;
-        res.maybeFull := full;
+    res.maybeFull := full;
 
     res.st := info.static;
 
@@ -980,36 +967,7 @@ begin
         res.static.operation.subpipe := b.static.operation.subpipe;
     end if;
     res.static.operation.bits := a.static.operation.bits or b.static.operation.bits;
---    res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
---    res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
---    res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
---    res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
-
---            if slv2u(res.static.operation.bits) > ArithOp'pos(ArithOp'right) then
---                res.static.operation.arith := opAnd;
---            else
---                res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
---            end if;
-            
---            if slv2u(res.static.operation.bits) > MemOp'pos(MemOp'right) then
---                res.static.operation.memory := opLoad;
---            else
---                res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
---            end if;
-
---            if slv2u(res.static.operation.bits) > FpOp'pos(FpOp'right) then
---                res.static.operation.float := opMove;
---            else
---                res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
---            end if;
-            
---            if slv2u(res.static.operation.bits) > SysOp'pos(SysOp'right) then
---                res.static.operation.system := opNone;
---            else
---                res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
---            end if;
-
-        res.static.operation := TMP_restoreOperation(res.static.operation);
+    res.static.operation := TMP_restoreOperation(res.static.operation);
 
     res.static.branchIns := a.static.branchIns or b.static.branchIns;
     res.static.divIns := a.static.divIns or b.static.divIns;
@@ -1035,7 +993,7 @@ begin
     res.dynamic.status.freed := a.dynamic.status.freed or b.dynamic.status.freed;
     res.dynamic.status.trial := a.dynamic.status.trial or b.dynamic.status.trial;
     res.dynamic.status.issuedCtr := a.dynamic.status.issuedCtr or b.dynamic.status.issuedCtr;
-        res.dynamic.status := DEFAULT_ENTRY_STATUS;
+    res.dynamic.status := DEFAULT_ENTRY_STATUS;
 
     res.dynamic.renameIndex := a.dynamic.renameIndex or b.dynamic.renameIndex;
 
@@ -1057,28 +1015,11 @@ begin
         res.dynamic.argStates(i).srcPipe := a.dynamic.argStates(i).srcPipe or b.dynamic.argStates(i).srcPipe;
         res.dynamic.argStates(i).srcStage := a.dynamic.argStates(i).srcStage or b.dynamic.argStates(i).srcStage;
         
-            res.dynamic.argStates(i).dbDep := DEFAULT_DB_DEPENDENCY;
+        res.dynamic.argStates(i).dbDep := DEFAULT_DB_DEPENDENCY;
     end loop;
     
     return res;
 end function;
-
-    function compareSS(a, b: SchedulerState) return SmallNumber is
-        variable res: SmallNumber := sn(0);
-    begin
-        res(0) := bool2std(a.full = b.full);
-        res(1) := bool2std(a.maybeFull = b.maybeFull);
-        res(2) := bool2std(a.st = b.st);
-        res(3) := bool2std(a.intDestSel = b.intDestSel and a.floatDestSel = b.floatDestSel and a.dest = b.dest and a.destTag = b.destTag);
-        res(4) := bool2std(a.args = b.args);
-        res(5) := bool2std(a.argLocsPipe = b.argLocsPipe and a.argSrc = b.argSrc);
-        res(6) := bool2std(a.readNew = b.readNew);
-        res(7) := bool2std(a.argValues = b.argValues);
-
-            res := "10101010";
-
-        return res;
-    end function;
 
 
 function getSelMask(readyMask: std_logic_vector; ageMatrix: slv2D) return std_logic_vector is
@@ -1195,69 +1136,9 @@ end function;
         return res;
     end function;
 
-    function queueSelect_N0(inputElems: SchedulerInfoArray; readyMask: std_logic_vector; ageMatrix: slv2D) return SchedulerInfo is
-        constant QUEUE_SIZE_EXT: natural := inputElems'length;
-        variable res, sel01, sel23, sel0123: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
-        variable selMask: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := getSelMask(readyMask, ageMatrix);
-        variable stopMatrix: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := getEffectiveStopMatrix(readyMask, ageMatrix);
-
-        variable ready0, ready1, stop0, stop1, stop01, stop0by23, stop1by23, goes01: std_logic := '0';
-        variable ready2, ready3, stop2, stop3, stop23, stop2by01, stop3by01, goes23: std_logic := '0';
-    begin
-        -- let's start with 0,1
-        ready0 := readyMask(0);
-        ready1 := readyMask(1);
-        stop0 := not ready0 or stopMatrix(0, 1);
-        stop1 := not ready1 or stopMatrix(1, 0);
-
-        if stop0 = '1' then
-            sel01 := inputElems(1);
-        else
-            sel01 := inputElems(0);
-        end if;
-        --------------------------------------
-        ready2 := readyMask(2);
-        ready3 := readyMask(3);
-        stop2 := not ready2 or stopMatrix(2, 3);
-        stop3 := not ready3 or stopMatrix(3, 2);
-
-        if stop2 = '1' then
-            sel23 := inputElems(3);
-        else
-            sel23 := inputElems(2);
-        end if;
-        --------------------------------------
-        --------------------------------------
-        -- Any of (0,1) not stopped by any of (2,3)?  // not ready means stopped by everything
-        stop0by23 := not readyMask(0) or stopMatrix(0, 2) or stopMatrix(0, 3);
-        stop1by23 := not readyMask(1) or stopMatrix(1, 2) or stopMatrix(1, 3);
-        goes01 := (not stop0by23) or (not stop1by23);
-        stop01 := not goes01;
-
-        stop2by01 := not readyMask(2) or stopMatrix(2, 0) or stopMatrix(2, 1);
-        stop3by01 := not readyMask(3) or stopMatrix(3, 0) or stopMatrix(3, 1);
-        goes23 := (not stop2by01) or (not stop3by01);
-        stop23 := not goes23;
-
-        if stop01 = '1' then 
-            sel0123 := sel23;
-        else
-            sel0123 := sel01;
-        end if;
-
-            res := sel0123;
-
-        return res;
-    end function;
-
     type Span is record
         start, past: natural;
     end record;
-
---    function span(a, b: natural) return SpanType is
---    begin
-    
---    end function;
 
     function stopByRange(ind: natural; byRange: Span; readyMask: std_logic_vector; stopMatrix: slv2D) return std_logic is
     begin
@@ -1290,33 +1171,6 @@ end function;
         end if;
     end function;
 
-    function queueSelect_N1(inputElems: SchedulerInfoArray; readyMask: std_logic_vector; ageMatrix: slv2D) return SchedulerInfo is
-        constant QUEUE_SIZE_EXT: natural := inputElems'length;
-        variable res, sel01, sel23, sel0123: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
-        variable selMask: std_logic_vector(0 to QUEUE_SIZE_EXT-1) := getSelMask(readyMask, ageMatrix);
-        variable stopMatrix: slv2D(0 to QUEUE_SIZE_EXT-1, 0 to QUEUE_SIZE_EXT-1) := getEffectiveStopMatrix(readyMask, ageMatrix);
-
-        variable stop0, stop2: std_logic := '0';
-        variable stop01: std_logic := '0';
-        
-        variable level2, level4, level8, level16: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
-    begin
-        -- let's start with 0,1
-        stop0 := stopRangeByRange((0, 1), (1, 2), readyMask, stopMatrix);
-        sel01 := selectFrom(inputElems(0), inputElems(1), stop0);
-        --------------------------------------
-        stop2 := stopRangeByRange((2, 3), (3, 4), readyMask, stopMatrix);  
-        sel23 := selectFrom(inputElems(2), inputElems(3), stop2);
-        --------------------------------------
-        --------------------------------------
-        -- Any of (0,1) not stopped by any of (2,3)?  // not ready means stopped by everything
-        stop01 := stopRangeByRange((0, 2), (2, 4), readyMask, stopMatrix);
-        sel0123 := selectFrom(sel01, sel23, stop01);
-        
-        res := sel0123;
-
-        return res;
-    end function;
 
 
     function queueSelect_N(inputElems: SchedulerInfoArray; readyMask: std_logic_vector; ageMatrix: slv2D) return SchedulerInfo is
@@ -1344,57 +1198,24 @@ end function;
             level4(pivot) := selectFrom(level2(pivot), level2(pivot+2), stopPivot);
         end loop;
 
-        --for i in 0 to 3 loop
             pivot := 0;
             stopPivot := stopRangeByRange((pivot, pivot+4), (pivot+4, pivot+8), readyMask, stopMatrix);
             level8(pivot) := selectFrom(level4(pivot), level4(pivot+4), stopPivot);
             
             level8(pivot+8) := level4(pivot+8);
-        --end loop;     
 
-        --for i in 0 to 3 loop
+
             pivot := 0;
             stopPivot := stopRangeByRange((pivot, pivot+8), (pivot+8, pivot+12), readyMask, stopMatrix);
             level16(pivot) := selectFrom(level8(pivot), level8(pivot+8), stopPivot);
-        --end loop;
-
   
         res := level16(0);
 
-            res.dynamic.status := DEFAULT_ENTRY_STATUS;
+        res.dynamic.status := DEFAULT_ENTRY_STATUS;
         
-            res.dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
-            res.dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
-            res.dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
-        
-            --res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
-            --res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
-            --res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
-            --res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
-
---            if slv2u(res.static.operation.bits) > ArithOp'pos(ArithOp'right) then
---                res.static.operation.arith := opAnd;
---            else
---                res.static.operation.arith := ArithOp'val(slv2u(res.static.operation.bits));
---            end if;
-            
---            if slv2u(res.static.operation.bits) > MemOp'pos(MemOp'right) then
---                res.static.operation.memory := opLoad;
---            else
---                res.static.operation.memory := MemOp'val(slv2u(res.static.operation.bits));
---            end if;
-
---            if slv2u(res.static.operation.bits) > FpOp'pos(FpOp'right) then
---                res.static.operation.float := opMove;
---            else
---                res.static.operation.float := FpOp'val(slv2u(res.static.operation.bits));
---            end if;
-            
---            if slv2u(res.static.operation.bits) > SysOp'pos(SysOp'right) then
---                res.static.operation.system := opNone;
---            else
---                res.static.operation.system := SysOp'val(slv2u(res.static.operation.bits));
---            end if;
+        res.dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
+        res.dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
+        res.dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
 
         res.static.operation := TMP_restoreOperation(res.static.operation);
 

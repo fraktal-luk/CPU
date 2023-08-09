@@ -394,16 +394,12 @@ begin
        -- Issue control 
        signal memSubpipeSent, mulSubpipeSent, mulSubpipeAtE0, fp0subpipeSelected, mulSubpipeSelected,
               lockIssueSVI, lockIssueSVF, allowIssueStoreDataInt, allowIssueStoreDataFP, lockIssueI0, allowIssueI0,
-                    lockIssueI1, lockIssueI1_Alt, allowIssueI1, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0,
+                    lockIssueI1, allowIssueI1, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0,
               intWriteConflict, storeValueCollision1, storeValueCollision2, storeValueCollision3, memDepFail, prevMemDepFail: std_logic := '0';
 
        signal subpipeI0_Issue, subpipeI0_RegRead, subpipeI0_E0,                                    subpipeI0_D0,
               subpipeI1_Issue, subpipeI1_RegRead, subpipeI1_E0,  subpipeI1_E1,    subpipeI1_E2,    subpipeI1_D0,  subpipeI1_D1,
-              
-                                                                                  subpipeI1_E2_Alt,
-              
-              subpipeM0_Issue, 
-              subpipeM0_RegRead, subpipeM0_E0,  subpipeM0_E1,    subpipeM0_E2,
+              subpipeM0_Issue, subpipeM0_RegRead, subpipeM0_E0,  subpipeM0_E1,    subpipeM0_E2,
                                    subpipeM0_RRi, subpipeM0_E0i, subpipeM0_E1i,   subpipeM0_E2i,   subpipeM0_D0i,-- subpipeM0_D1i,
                                    subpipeM0_RRf, subpipeM0_E0f, subpipeM0_E1f,   subpipeM0_E2f,   subpipeM0_D0f, subpipeM0_D1f,
                                                             
@@ -411,8 +407,7 @@ begin
 
               subpipeF0_Issue, subpipeF0_RegRead, subpipeF0_E0,    subpipeF0_E1,      subpipeF0_E2,      subpipeF0_D0,
                                            subpipeF0_RRu,
-              subpipe_DUMMY
-                : ExecResult := DEFAULT_EXEC_RESULT;
+              subpipe_DUMMY: ExecResult := DEFAULT_EXEC_RESULT;
 
         signal unfoldedAluOp, unfoldedAluOp_T: work.LogicExec.AluControl := work.LogicExec.DEFAULT_ALU_CONTROL;
 
@@ -455,8 +450,7 @@ begin
                 IQ_SIZE => IQ_SIZE_I0,
                 FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
                 FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
-                    WAKEUP_SPEC => WAKEUP_SPEC_I0,
-                        WTF_MEM_FAIL => '0'
+                    WAKEUP_SPEC => WAKEUP_SPEC_I0
             )
             port map(
                 clk => clk, reset => '0', en => '0', events => events,
@@ -483,8 +477,6 @@ begin
             );
                     slotIssueI0 <= slotIssueI0_TF;
                     slotIssueI0_U <= TMP_mergeStatic(slotIssueI0, slotIssueI0_TS);
-
-           --     ch0 <= '1';
 
             TMP_ISSUE_I0: block
                 signal argStateRegI0: SchedulerState := DEFAULT_SCHEDULER_STATE;
@@ -556,7 +548,7 @@ begin
                signal schedInfoA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
                signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
 
-               signal divUnlock, divUnlock_Alt, killFollowerNextI1: std_logic := '0';
+               signal divUnlock, killFollowerNextI1: std_logic := '0';
                constant CFG_MUL: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
             begin
                 wups <= getInitWakeups(schedInfoA, bypassInt, CFG_MUL);
@@ -569,8 +561,7 @@ begin
                     NAME => "I1",
                     IQ_SIZE => IQ_SIZE_I0,
                     FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-                    FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
-                                            WTF_MEM_FAIL => '0'
+                    FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
                 )
                 port map(
                     clk => clk, reset => '0', en => '0',
@@ -616,18 +607,13 @@ begin
                     subpipeI1_RegRead <= makeExecResult(slotRegReadI1);
                 end block;
                 
-                subpipeI1_E2 <= subpipeI1_E2_Alt;
-                lockIssueI1 <= lockIssueI1_Alt;
-
-                divUnlock <= divUnlock_Alt;
-
                 killFollowerNextI1 <= killFollower(outSigsI1.trialPrev1, events);
 
                 MUL_DIV: entity work.MultiplierDivider
                 port map (
                     clk => clk,
 
-                    prevSending => slotRegReadI1.full,--sendingToMultiplier,
+                    prevSending => slotRegReadI1.full,
                     preInput => slotIssueI1,
                     input => slotRegReadI1,
 
@@ -636,14 +622,13 @@ begin
 
                     events => events,
                     
-                    lockIssueI1_Alt => lockIssueI1_Alt,
-
-                    sending => dividerSending,
-                    divUnlock_Alt => divUnlock_Alt,
+                    lockIssueI1Out => lockIssueI1,
+                    divUnlockOut => divUnlock,
                     
+                    sending => dividerSending,
                     outStage0 => subpipeI1_E0,
                     outStage1 => subpipeI1_E1,
-                    output => subpipeI1_E2_Alt
+                    output => subpipeI1_E2
                 );
     
             end block;
@@ -690,8 +675,7 @@ begin
                NAME => "M0",
                IQ_SIZE => IQ_SIZE_M0,
                FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-               FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2),
-                                       WTF_MEM_FAIL => '1'
+               FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
             )
             port map(
                 clk => clk, reset => '0', en => '0',
@@ -806,8 +790,7 @@ begin
             end block;
 
             --------------------------------------------
-            memIssueFullIQ <= slotIssueM0.--full;
-                                            maybeFull;
+            memIssueFullIQ <= slotIssueM0.maybeFull;
             memIssueFullMQ <= mqReexecCtrlIssue.controlInfo.full;
 
             process (clk)
@@ -924,14 +907,14 @@ begin
 
 
             TMP_ISSUE_SVI: block
-                signal argStateR_P: SchedulerState := DEFAULT_SCHEDULER_STATE;
+                signal argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                slotRegReadIntSV_P <= updateRegReadStage(argStateR_P, outSigsSVI, events, valuesInt0, regValsS0, true);
+                slotRegReadIntSV_P <= updateRegReadStage(argStateR, outSigsSVI, events, valuesInt0, regValsS0, true);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateR_P <= getRegReadStage_N(slotIssueSVI_U, events, valuesInt0, valuesInt1, false, true);              
+                        argStateR <= getRegReadStage_N(slotIssueSVI_U, events, valuesInt0, valuesInt1, false, true);              
                         slotRegReadIntSV_P_Delay <= slotRegReadIntSV_P;
                     end if;
                 end process;
@@ -1111,16 +1094,12 @@ begin
         lockIssueSVI <= storeValueCollision1 or memFail;
         lockIssueSVF <= storeValueCollision1 or memFail;
 
-        memSubpipeSent <= slotRegReadM0.--full;
-                                            maybeFull;
-        mulSubpipeSent <= slotRegReadI1.--full;
-                                            maybeFull;
+        memSubpipeSent <= slotRegReadM0.maybeFull;
+        mulSubpipeSent <= slotRegReadI1.maybeFull;
         mulSubpipeAtE0   <= subpipeI1_E0.full;
 
-        mulSubpipeSelected <= slotIssueI1.--full;
-                                            maybeFull;
-        fp0subpipeSelected <= slotIssueF0.--full;
-                                            maybeFull;
+        mulSubpipeSelected <= slotIssueI1.maybeFull;
+        fp0subpipeSelected <= slotIssueF0.maybeFull;
 
         lockIssueI0 <= lockIssueI0_NoMemFail or memFail;
 

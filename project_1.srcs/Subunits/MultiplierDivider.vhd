@@ -26,11 +26,10 @@ entity MultiplierDivider is
         
         events: in EventState;
         
-        lockIssueI1_Alt: out std_logic;
+        lockIssueI1Out: out std_logic;        
+        divUnlockOut: out std_logic;
         
         sending: out std_logic;
-        divUnlock_Alt: out std_logic;
-        
         outStage0: out ExecResult;
         outStage1: out ExecResult;
 
@@ -43,7 +42,7 @@ end MultiplierDivider;
 architecture Behavioral of MultiplierDivider is
     signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
     signal divAllowed, sendingDivIssued, divRR, divFull,    divAllowed_Pre, divRR_Pre, divPrepareSend_Pre,
-            divUnlock, 
+            divUnlock, divUnlock_Alt, divUnlock_AltP,
             divPrepareSend, divResultSending, divResultSendingNK,
             divPrepareSend_N, divResultSending_N,
             divPrepare, divFullNext_T,
@@ -79,8 +78,6 @@ begin
         end if;
     end process;
 
-
-
     MAIN: process (clk)
     begin
         if rising_edge(clk) then
@@ -95,13 +92,9 @@ begin
 
             -- stage E1
             if divReady = '1' then
-               divRes <= --divQuot;
-                            --divQuot_Alt;
-                            divQuot_New;
+               divRes <= divQuot_New;
             elsif remReady = '1' then
-               divRes <= --divRem;
-                            --divRem_Alt;
-                            divRem_New;
+               divRes <= divRem_New;
             end if;
 
                 if not ENABLE_DIV then
@@ -110,7 +103,6 @@ begin
 
             isLowE1 <= isLowE0;
             resLongE1 <= work.Arith.multiplyLong(arg0, arg1, sg0, sg1);
-
 
             -- stage E2
             if divResultSent2 = '1' then
@@ -123,20 +115,13 @@ begin
         end if;
     end process;
 
-    divUnlock <= ch1;
+    divUnlock <= divUnlock_Alt;
 --                 not (divAllowed and not divPrepareSend)  -- divAllowed - reg
 --                 and not preInput.maybeFull
 --                 and not divRR  -- reg
 --                 and not divFull; -- reg
 
-        ch1 <= ch2 and not preInput.maybeFull;
-        --ch2 <= not (divAllowed and not divPrepareSend) and not divRR and not divFull;
-           --       divUnlock              (sendingDivIssued and not killFollowerNext)
-           --              (divFull and bool2std(slv2u(divTime) = 29))
-    --    ch0 <= bool2std(allowIssueI1 = not divPrepareSend); 
-        ch0 <= bool2std(ch1 = divUnlock);
-
-
+    divUnlock_Alt <= divUnlock_AltP and not preInput.maybeFull;
 
     DIVISION: block
         signal usingDiv, usingRem, trialled, kill, opUnsigned: std_logic := '0';
@@ -159,7 +144,7 @@ begin
         DIVIDER_STATE: process (clk)
         begin
             if rising_edge(clk) then
-                    ch2 <= not (divAllowed_Pre and not divPrepareSend_Pre) and not divRR_Pre and not divFullNext_T;
+                divUnlock_AltP <= not (divAllowed_Pre and not divPrepareSend_Pre) and not divRR_Pre and not divFullNext_T;
 
             
                 divPrepareSend_N <= divFull and bool2std(slv2u(divTime) = 29); -- TMP value
@@ -332,13 +317,13 @@ begin
 
                 end if;
             end process;
-        end block; -- DEV
+        end block;
 
     end block;
 
 
-    lockIssueI1_Alt <= divPrepareSend;
-    divUnlock_Alt <= divUnlock;
+    lockIssueI1Out <= divPrepareSend;
+    divUnlockOut <= divUnlock;
 
     outStage0 <= dataMulE0;
     outStage1 <= dataMulE1;  -- signals result tag

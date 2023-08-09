@@ -27,8 +27,8 @@ entity IssueQueue is
 		FORWARDING: ForwardingModeArray(0 to 2) := (others => (-100, false));  -- Can be used immediately
 		FORWARDING_D: ForwardingModeArray(0 to 2) := (others => (-100, false)); -- Can be used with 1 cycle delay
 		IGNORE_MEM_FAIL: boolean := false;
-		      WAKEUP_SPEC: WakeupSpec := DEFAULT_WAKEUP_SPEC;
-		      WTF_MEM_FAIL: std_logic := '1'
+		      WAKEUP_SPEC: WakeupSpec := DEFAULT_WAKEUP_SPEC
+		   --   WTF_MEM_FAIL: std_logic := '1'
 	);
 	port(
 		clk: in std_logic;
@@ -88,7 +88,7 @@ architecture Behavioral of IssueQueue is
 
     signal recoveryCounter: SmallNumber := (others => '0');
 
-    signal selectedSlot, selectedSlot_N, selectedSlot_Slow: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+    signal selectedSlot, selectedSlot_Slow: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
     signal selectedIqTag, prevIqTag: SmallNumber := (others => '0');
 
     signal schedulerOutSig, issuedFastState, issuedFastStateU, issuedSlowState: SchedulerState := DEFAULT_SCHED_STATE;
@@ -97,7 +97,7 @@ architecture Behavioral of IssueQueue is
     alias memFail is bypass.memFail;
                 
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
-        signal chss: SmallNumber := sn(0);
+    --    signal chss: SmallNumber := sn(0);
 
         function TMP_slowSelect(content: SchedulerInfoArray; tag: SmallNumber) return SchedulerInfo is
             variable ind: natural := slv2u(tag(3 downto 0));
@@ -181,33 +181,22 @@ begin
     sends <= anyReadyFull and nextAccepting;
 
     -- Selection for issue
-    selMask <= --getSelMask(readyMask, ageMatrix);
-        selMaskH;
-        selMaskH <= getSelMask_H(readyMask, ageMatrix);
+    selMaskH <= getSelMask_H(readyMask, ageMatrix);
+    selMask <= selMaskH;
 
     selectedIqTag <= getIssueTag(sends, selMask);
-    selectedSlot <=
---                queueSelect(queueContentUpdatedSel, selMask) 
---                when sends = '1'   else queueContentUpdatedSel(11)
---                ;
-                    selectedSlot_N;
-        selectedSlot_N <= queueSelect_N(queueContentUpdatedSel, readyMask, ageMatrix);
+    selectedSlot <= queueSelect_N(queueContentUpdatedSel, readyMask, ageMatrix);
+                    --queueSelect(queueContentUpdatedSel, selMask);
 
     schedulerOutSig <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
     schedulerOut <= schedulerOutSig;
 
-        schedulerOut_Fast <= issuedFastStateU;
-            issuedFastStateU <= updateIssueStage(issuedFastState, outSigs, events);
-        
-        schedulerOut_Slow <= issuedSlowState;
-            selectedSlot_Slow <= --queueSelect(queueContent, selMask1);
-                                 --queueContent(slv2u(prevIqTag));
-                                    TMP_slowSelect(queueContent, prevIqTag);
+    issuedFastStateU <= updateIssueStage(issuedFastState, outSigs, events);
+    schedulerOut_Fast <= issuedFastStateU;
 
-            issuedSlowState <= getSchedEntrySlot(selectedSlot_Slow, sent, getIssueTag(sent, selMask1));
-
-        
-                chss <= compareSS(issuedFastStateU, issuedSlowState);
+    selectedSlot_Slow <= TMP_slowSelect(queueContent, prevIqTag);
+    issuedSlowState <= getSchedEntrySlot(selectedSlot_Slow, sent, getIssueTag(sent, selMask1));
+    schedulerOut_Slow <= issuedSlowState;
 
     QUEUE_SYNCHRONOUS: process(clk)
     begin
@@ -238,7 +227,7 @@ begin
                                       --  TMP_trial2
                         );
     outputSignals <= outSigs;
-            ch0 <= '1';
+            ch0 <= '0';
 
     COUNTERS_SYNCHRONOUS: process(clk)
     begin
