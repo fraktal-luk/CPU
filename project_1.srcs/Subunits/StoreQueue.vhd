@@ -83,12 +83,11 @@ architecture Behavioral of StoreQueue is
     signal queueContent, queueContentShifting: QueueEntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_QUEUE_ENTRY);
     signal addresses, storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 
-    signal canAlloc, drainReq, drainEqual, allowDrain, isSending, isDrainingPrev, isSelected, isSelectedNext, isSelected_Early, sqMissed, missing, committedEmptySig,
+    signal canAlloc, drainReq, drainEqual, isSending, isDrainingPrev, isSelected, isSelectedNext, isSelected_Early, sqMissed, missing, committedEmptySig,
             dummy0: std_logic := '0';
 
-    signal drainOutput, selectedOutput, selectedOutputSig, committedOutputSig: ControlPacket := DEFAULT_CONTROL_PACKET;
+    signal selectedOutputSig, committedOutputSig: ControlPacket := DEFAULT_CONTROL_PACKET;
     signal adrValuePrev: Mword := (others => '0');
-
 
     signal updateResult, selectedDataResultSig: ExecResult := DEFAULT_EXEC_RESULT;
 
@@ -99,45 +98,6 @@ architecture Behavioral of StoreQueue is
 
     alias adrValueEarly is compareAddressEarlyInput.value;
     alias adrValue is compareAddressInput.value;
-
-        function makeSelectedOutputSQ(selectedOutput: ControlPacket; isSelected, sqMissed: std_logic) return ControlPacket is
-            variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-        begin
-            res.controlInfo.full := isSelected;
-            res.controlInfo.newEvent := selectedOutput.controlInfo.newEvent;
-            res.controlInfo.firstBr := selectedOutput.controlInfo.firstBr;
-            res.controlInfo.sqMiss := sqMissed;
-
-            res.op := selectedOutput.op;
-            res.target := selectedOutput.target;
-            res.nip := selectedOutput.nip;
-            return res;
-        end function;
-
-        function makeCommittedOutputSQ(drainOutput: ControlPacket; isDrainingPrev: std_logic) return ControlPacket is
-            variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-        begin
-            res.controlInfo.full := isDrainingPrev;-- and allowDrain;
-
-            res.op := drainOutput.op;
-            res.target := drainOutput.target;
-            res.nip := drainOutput.nip;
-            return res;
-        end function;
-
-        function makeSelectedOutputLQ(isSelected: std_logic) return ControlPacket is
-            variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-        begin
-            res.controlInfo.full := isSelected;
-            return res;
-        end function;
-
-        function selDataRes(dest: SmallNumber) return ExecResult is
-            variable res: ExecResult := DEFAULT_EXEC_RESULT;
-        begin
-            res.dest(7 downto 0) := dest(7 downto 0);
-            return res;
-        end function;
 
         procedure DB_logFW(adrInput: ExecResult; pSelect: SmallNumber; IS_LOAD_QUEUE: boolean) is
         begin
@@ -152,6 +112,7 @@ architecture Behavioral of StoreQueue is
 
     signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
 begin
+            ch0 <= '1';
 
     -- Ptr for random access updating
     adrPtr <= compareAddressCtrl.tags.lqPointer when IS_LOAD_QUEUE
@@ -165,16 +126,12 @@ begin
     updateResult.dest <= adrPtr;
     updateResult.value <= adrValue;
 
-
     -- Read ptr determinded by address matching - SQ only
     pSelect <= addTruncZ(findNewestMatchIndex(olderSQ, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE) when false
           else addTruncZ(pSelectEarly_BasePrev, pDrainPrevPrev, QUEUE_PTR_SIZE);
 
-            ch0 <= '0';
-
     pSelectEarly <= addTruncZ(findNewestMatchIndex(olderSQ_Early, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE);
         pSelectEarly_Base <= findNewestMatchIndex(olderSQ_Early, sn(0), nFull, QUEUE_PTR_SIZE);
-
 
     -- LQ only
     LQ_MATCH: if IS_LOAD_QUEUE generate
@@ -188,16 +145,15 @@ begin
 
     -- SQ only
     SQ_MATCH: if not IS_LOAD_QUEUE generate
-    begin    
-        olderSQ_Early <= olderNextSQ and getAddressMatching_Low(queueContentShifting, adrValueEarly) and getAddressCompleted_Low(queueContentShifting);
-
+    begin
         addressMatchMask <= getAddressMatching(queueContentShifting, adrValue) and getAddressCompleted(queueContentShifting);
 
         olderNextSQ <= cmpIndexBefore(sn(0), nFull, subTruncZ(compareAddressEarlyInput_Ctrl.tags.sqPointer, pDrainPrev, QUEUE_SIZE), QUEUE_SIZE, PTR_MASK_SN) -- TODO: nFull is not correct 
                                                                          when isLoadMemOp(compareAddressEarlyInput_Ctrl.op) = '1' else (others => '0');
         olderSQ <=   olderRegSQ and addressMatchMask;
+        
+        olderSQ_Early <= olderNextSQ and getAddressMatching_Low(queueContentShifting, adrValueEarly) and getAddressCompleted_Low(queueContentShifting);
     end generate;
-
 
     isSelectedNext <= isSelected_Early when not IS_LOAD_QUEUE
                  else compareAddressInput.full and isNonzero(newerLQ);
@@ -216,29 +172,29 @@ begin
                                                           compareAddressInput.full, adrPtr, compareAddressInputOp, adrValue,
                                                           compareAddressEarlyInput.full, adrPtrEarly, compareAddressInputEarlyOp, adrValueEarly,
                                                           QUEUE_PTR_SIZE);
-    
+
                 -- Front input
                 if prevSending = '1' then
                     updateOnInput(queueContent, pTagged, inputMask, systemMask, IS_LOAD_QUEUE);
                 end if;
-    
+
                 -- E. adr update
                 if compareAddressInput.full = '1' then
                     updateAddress(queueContent, updateResult, IS_LOAD_QUEUE);
                     addresses(p2i(adrPtr, QUEUE_SIZE))(31 downto 12) <= adrValue(31 downto 12);
                     addresses(p2i(adrPtr, QUEUE_SIZE))(11 downto 0) <= adrValue(11 downto 0);
                 end if;
-    
+
                 -- E. val update
                 if storeValueResult.full = '1' and not IS_LOAD_QUEUE then
                     updateValue(queueContent, storeValuePtr);
                     storeValues(p2i(storeValuePtr, QUEUE_SIZE)) <= storeValueResult.value;
                 end if;
-            
+
                 selectedEntry <= queueContent(p2i(pSelect, QUEUE_SIZE));
                 selectedValue <= storeValues(p2i(pSelect, QUEUE_SIZE));
                 selectedAddress <= addresses(p2i(pSelect, QUEUE_SIZE));
-    
+
                 -- D. outputs
                 drainEntry <= queueContent(p2i(pDrain, QUEUE_SIZE));
                 drainValue <= storeValues(p2i(pDrain, QUEUE_SIZE));
@@ -246,20 +202,14 @@ begin
             end if;
         end process;
 
-        selectedOutput <= getDrainOutput(selectedEntry, selectedAddress, selectedValue);    
-    
         selectedDataResultSig <= selDataRes(pSelectPrev);
-        selectedDataResult <= selectedDataResultSig;
-    
         selectedOutputSig <= makeSelectedOutputLQ(isSelected) when IS_LOAD_QUEUE
-                        else makeSelectedOutputSQ(selectedOutput, isSelected, sqMissed);           
-        selectedDataOutput <= selectedOutputSig;
-    
-    
-        drainOutput <= getDrainOutput(drainEntry, drainAddress, drainValue);   
-        committedOutputSig <= makeCommittedOutputSQ(drainOutput, isDrainingPrev);
+                        else makeSelectedOutputSQ(getDrainOutput(selectedEntry, selectedAddress, selectedValue), isSelected, sqMissed);
+
+        committedOutputSig <= makeCommittedOutputSQ(getDrainOutput(drainEntry, drainAddress, drainValue), isDrainingPrev);
 
     end block;
+
 
     CHECK_FW: block
         signal adrReady, adrMatch, adrMatchLast, tagMatchingLast, dataReady, adrMatchNormal, adrMatchRecent: std_logic := '0';
@@ -293,38 +243,6 @@ begin
             else    addIntTrunc(pRenamed, slv2u(nInRe), QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
             else    pRenamed;
 
-
-
-    process (clk)
-    begin
-        if rising_edge(clk) then
-            olderRegSQ <= olderNextSQ;
-            newerRegLQ <= newerNextLQ;
-                                
-            adrValuePrev <= adrValue;
-            adrPtrPrev <= adrPtr;
-
-            -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
-            if not IS_LOAD_QUEUE then
-                isSelected_Early <= compareAddressEarlyInput.full and isNonzero(olderSQ_Early);
-            end if;
-
-            isSelected <= isSelectedNext;
-
-            if isSelectedNext = '1' then
-                DB_logFW(compareAddressInput, pSelect, IS_LOAD_QUEUE);
-            end if;
-
-            pSelectEarlyPrev <= pSelectEarly;
-            pSelectEarly_BasePrev <= pSelectEarly_Base;
-
-            pSelectPrev <= pSelect;
-
-            sqMissed <= missing;
-
-        end if;
-    end process;
-
     process (clk)
     begin
         if rising_edge(clk) then
@@ -356,6 +274,37 @@ begin
         end if;
     end process;
 
+    process (clk)
+    begin
+        if rising_edge(clk) then
+            olderRegSQ <= olderNextSQ;
+            newerRegLQ <= newerNextLQ;
+                                
+            adrValuePrev <= adrValue;
+            adrPtrPrev <= adrPtr;
+
+            -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
+            if not IS_LOAD_QUEUE then
+                isSelected_Early <= compareAddressEarlyInput.full and isNonzero(olderSQ_Early);
+            end if;
+
+            isSelected <= isSelectedNext;
+
+            if isSelectedNext = '1' then
+                DB_logFW(compareAddressInput, pSelect, IS_LOAD_QUEUE);
+            end if;
+
+            pSelectEarlyPrev <= pSelectEarly;
+            pSelectEarly_BasePrev <= pSelectEarly_Base;
+
+            pSelectPrev <= pSelect;
+
+            sqMissed <= missing;
+
+        end if;
+    end process;
+
+
 	nIn <= i2slv( countOnes(inputMask), SMALL_NUMBER_SIZE ) when prevSending = '1' else (others => '0');
 
 	LOAD_QUEUE_MANAGEMENT: if IS_LOAD_QUEUE generate
@@ -379,18 +328,18 @@ begin
     nCommitted <= i2slv(countOnes(commitMask), SMALL_NUMBER_SIZE);
     nCommittedEffective <= i2slv(countOnes(commitEffectiveMask), SMALL_NUMBER_SIZE);
 
-    allowDrain <= not committedEmptySig;
 
+	committedEmptySig <= bool2std(pStart = pDrainPrev);
     drainEqual <= bool2std(pStart = pDrain);
-    drainReq <= not drainEqual  and allowDrain;
+    drainReq <= not drainEqual and not committedEmptySig;
 
     -- Acc sigs
     acceptAlloc <= canAlloc;
     renamedPtr <= pRenamed;
 
 
-	committedEmptySig <= bool2std(pStart = pDrainPrev);
-
+    selectedDataResult <= selectedDataResultSig;
+    selectedDataOutput <= selectedOutputSig;
 
 	-- D. output (ctrl)
     committedDataOut <= committedOutputSig;
@@ -400,75 +349,15 @@ begin
 
     -- pragma synthesis off
     DEBUG_HANDLING: if DB_ENABLE generate
+        use work.MemQueueViewing.all;
+
         process (clk)
-            use std.textio.all;
-            use work.Assembler.all;
-    
-            function getNamePrefix return string is
-            begin
-                if IS_LOAD_QUEUE then
-                    return "l";
-                else
-                    return "s";
-                end if;
-            end function;
-
-            constant NAME_PREFIX: string(1 to 1) := getNamePrefix;
-
-            function getDynamicContentString(elem: QueueEntry; adr: Mword; value: Mword) return string is
-                variable res: line;
-            begin
-                if true then --elem.full = '1' then
-                    write(res, string'(": "));
-                    write(res, std_logic'image(elem.completedA));
-                    write(res, std_logic'image(elem.completedV));
-                    write(res, string'(" @"));
-                    
-                    if elem.completedA = '1' then
-                        write(res, natural'image(slv2u(adr)));
-                    else
-                        write(res, string'("????????"));
-                    end if;
-                    write(res, string'(": "));
-                    
-                    if elem.completedV = '1' then
-                        write(res, natural'image(slv2u(value)));
-                    else
-                        write(res, string'("????????"));
-                    end if;                
-                    return res.all;
-                else
-                    return "-------------------------------------";
-                end if;
-            end function;
-
-            procedure printContent is
-               file outFile: text open write_mode is NAME_PREFIX & "q_content.txt";
-               variable preRow, currentLine: line := null;
-            begin
-                for i in 0 to ROB_SIZE-1 loop
-                    if p2i(pStart, QUEUE_SIZE) = i then
-                        preRow := new string'("start ");
-                    elsif p2i(pTagged, QUEUE_SIZE) = i then
-                        preRow := new string'("end   ");
-                    else
-                        preRow := new string'("      ");
-                    end if;
-
-                    currentLine := null;
-                    write(currentLine, preRow.all & natural'image(i) & "  ");
-                    write(currentLine, getDynamicContentString(queueContent(i), addresses(i), storeValues(i)) & ",   ");
-    
-                    writeline(outFile, currentLine);
-                end loop;
-            end procedure;
-
         begin
             if rising_edge(clk) then
                 if DB_LOG_EVENTS then
                     if dbState.dbSignal = '1' then
                         report "LSQ reporting ";
-                        printContent;
+                        printContent(queueContent, addresses, storeValues, pStart, pTagged, getNamePrefix(IS_LOAD_QUEUE));
                     end if;         
                 end if;
             end if;

@@ -75,6 +75,12 @@ package LogicQueues is
                                constant QUEUE_PTR_SIZE: natural)
     return QueueEntryArray;
 
+
+    function makeSelectedOutputSQ(selectedOutput: ControlPacket; isSelected, sqMissed: std_logic) return ControlPacket;
+    function makeCommittedOutputSQ(drainOutput: ControlPacket; isDrainingPrev: std_logic) return ControlPacket;
+    function makeSelectedOutputLQ(isSelected: std_logic) return ControlPacket;
+    function selDataRes(dest: SmallNumber) return ExecResult;
+
 end package;
 
 
@@ -419,5 +425,46 @@ package body LogicQueues is
 
         return res;
     end function;
+
+
+    function makeSelectedOutputSQ(selectedOutput: ControlPacket; isSelected, sqMissed: std_logic) return ControlPacket is
+        variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+    begin
+        res.controlInfo.full := isSelected;
+        res.controlInfo.newEvent := selectedOutput.controlInfo.newEvent;
+        res.controlInfo.firstBr := selectedOutput.controlInfo.firstBr;
+        res.controlInfo.sqMiss := sqMissed;
+
+        res.op := selectedOutput.op;
+        res.target := selectedOutput.target;
+        res.nip := selectedOutput.nip;
+        return res;
+    end function;
+
+    function makeCommittedOutputSQ(drainOutput: ControlPacket; isDrainingPrev: std_logic) return ControlPacket is
+        variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+    begin
+        res.controlInfo.full := isDrainingPrev;-- and allowDrain;
+
+        res.op := drainOutput.op;
+        res.target := drainOutput.target;
+        res.nip := drainOutput.nip;
+        return res;
+    end function;
+
+    function makeSelectedOutputLQ(isSelected: std_logic) return ControlPacket is
+        variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+    begin
+        res.controlInfo.full := isSelected;
+        return res;
+    end function;
+
+    function selDataRes(dest: SmallNumber) return ExecResult is
+        variable res: ExecResult := DEFAULT_EXEC_RESULT;
+    begin
+        res.dest(7 downto 0) := dest(7 downto 0);
+        return res;
+    end function;
+
 
 end package body;
