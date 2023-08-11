@@ -99,7 +99,10 @@ package body IqViewing is
 
                         write(currentLine, slv2hex(queueContent(i).dynamic.renameIndex));
                         write(currentLine, string'(", "));
-                        write(currentLine, std_logic'image(queueContent(i).dynamic.status.issued));
+                        write(currentLine, std_logic'image(queueContent(i).dynamic.status_N.issued0
+                                                        or queueContent(i).dynamic.status_N.issued1
+                                                        or queueContent(i).dynamic.status_N.issued2
+                                                            ));
                         write(currentLine, string'(", "));
     
                         write(currentLine, getArgString(queueContent(i).dynamic.argStates(0)));
@@ -116,16 +119,18 @@ package body IqViewing is
                 end procedure;
 
                 function TMP_lastEvent(current, prev: SchedulerInfo; killed: std_logic) return IqEvent is
+                    constant ps: EntryStatus_N := prev.dynamic.status_N;
+                    constant cs: EntryStatus_N := current.dynamic.status_N;
                 begin
-                    if killed = '1' and prev.dynamic.status.state /= empty then
+                    if killed = '1' and (ps.active or ps.suspended or ps.issued0 or ps.issued1 or ps.issued2) = '1' then
                         return kill;
-                    elsif current.dynamic.status.state = issued and prev.dynamic.status.state = active then
+                    elsif cs.issued0 = '1' then
                         return issue;
-                    elsif (current.dynamic.status.state = suspended or current.dynamic.status.state = active) and prev.dynamic.status.state = issued then
+                    elsif (cs.suspended or cs.active) = '1' and (ps.issued0 or ps.issued1 or ps.issued2) = '1' then
                         return retract;
-                    elsif (current.dynamic.status.state = suspended or current.dynamic.status.state = active) and prev.dynamic.status.state = empty then
+                    elsif (cs.suspended or cs.active) = '1' and ps.suspended = '0' and ps.active = '0' then
                         return insert;
-                    elsif current.dynamic.status.state = empty and prev.dynamic.status.state = issued then
+                    elsif cs.active = '0' and cs.suspended = '0' and ps.issued2 = '1' then
                         return retire;
                     else
                         return none;

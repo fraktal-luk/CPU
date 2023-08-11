@@ -149,7 +149,7 @@ begin
                else (others => '0');
 
         queueContentUpdated <= updateSchedulerArray(queueContent, wups, memFail, CFG_WAIT);
-        queueContentUpdated_2 <= updateQueueState(queueContentUpdated, sends,
+        queueContentUpdated_2 <= updateQueueState(queueContentUpdated, nextAccepting, sends,
                                                 killMask, trialMask, selMask,
                                                 memFail, unlockDiv);
 

@@ -235,18 +235,27 @@ type ArgumentStateArray is array(natural range <>) of ArgumentState;
 type EntryState is (empty, suspended, active, issued);
 
 type EntryStatus is record
-    state: EntryState;
+    --state: EntryState;
 
-    active: std_logic;
-    suspend: std_logic;
-    issued: std_logic;
+    --active: std_logic;
+    --suspend: std_logic;
+    --issued: std_logic;
     freed: std_logic;
     trial: std_logic;
-    issuedCtr: SmallNumber;
+    --issuedCtr: SmallNumber;
     
-        T_justIssued: std_logic;
-        T_expiring: std_logic;
+     --   T_justIssued: std_logic;
+     --   T_expiring: std_logic;
 end record;
+
+type EntryStatus_N is record
+    active: std_logic;
+    suspended: std_logic;
+    issued0: std_logic;
+    issued1: std_logic;
+    issued2: std_logic;    
+end record;
+
 
 subtype IqState is EntryState;
 type IqStateArray is array(natural range <>) of IqState;
@@ -266,6 +275,7 @@ end record;
 type DynamicInfo is record
     full: std_logic;
     status: EntryStatus;
+        status_N: EntryStatus_N;
 
     renameIndex: InsTag; -- ??
     intDestSel: std_logic;
@@ -548,23 +558,32 @@ constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
 constant DEFAULT_ARG_STATE: ArgumentState := DEFAULT_ARGUMENT_STATE;
 
 constant DEFAULT_ENTRY_STATUS: EntryStatus := (
-    state => empty,
+--    state => empty,
 
-    active => '0',
-    suspend => '0',
-    issued => '0',
+--    active => '0',
+--    suspend => '0',
+--    issued => '0',
     freed => '0',
-    trial => '0',
-    issuedCtr => (others => '0'),
+    trial => '0'
+    --issuedCtr => (others => '0')
     
-        T_justIssued => '0',
-        T_expiring => '0'
+    --    T_justIssued => '0',
+    --    T_expiring => '0'
+);
+
+constant DEFAULT_ENTRY_STATUS_N: EntryStatus_N := (
+    suspended => '0',
+    active => '0',
+    issued0 => '0',
+    issued1 => '0',
+    issued2 => '0'
 );
 
 constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     full => '0',
 
     status => DEFAULT_ENTRY_STATUS,
+        status_N => DEFAULT_ENTRY_STATUS_N,
     renameIndex => (others => '0'),
     intDestSel => '0',
     floatDestSel => '0',

@@ -102,7 +102,7 @@ return SchedulerInfoArray;
 
 function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray;
 
-function updateQueueState(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
+function updateQueueState(queueContent: SchedulerInfoArray; nextAccepting, sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
 return SchedulerInfoArray;
 
 function storeInput(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
@@ -222,13 +222,15 @@ begin
     res.full := isl.full;
 
     res.status.trial := '1'; -- Must be 1 because it's younger than any Exec instruction
-    res.status.active := res.full and not stInfo.divIns;
-    res.status.suspend := res.full and stInfo.divIns;
+--    res.status.active := res.full and not stInfo.divIns;
+ --   res.status.suspend := res.full and stInfo.divIns;
 
     if stInfo.divIns = '1' then
-        res.status.state := suspended;
+    --    res.status.state := suspended;
+            res.status_N.suspended := '1';
     else
-        res.status.state := active;
+--        res.status.state := active;
+            res.status_N.active := '1';
     end if;
 
     res.renameIndex := isl.ins.tags.renameIndex;
@@ -506,17 +508,17 @@ begin
 end function;
 
 
-function incStageCtr(ctr: SmallNumber) return SmallNumber is
-begin
-    case ctr(1 downto 0) is
-        when "00" => 
-            return X"01";
-        when "01" =>
-            return X"02";
-        when others =>
-            return X"00";
-    end case;
-end function;
+--function incStageCtr(ctr: SmallNumber) return SmallNumber is
+--begin
+--    case ctr(1 downto 0) is
+--        when "00" => 
+--            return X"01";
+--        when "01" =>
+--            return X"02";
+--        when others =>
+--            return X"00";
+--    end case;
+--end function;
 
 
 -- state handling internal
@@ -602,30 +604,6 @@ begin
 end function;
 
 
-function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray is
-    constant LEN: natural := content'length;
-    variable res: SchedulerInfoArray(content'range) := content;
-    variable newElement: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
-begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        for k in 0 to LEN-1 loop
-            if insertionLocs(k, i) = '1' then
-                newElement := newArr(i);
-                newElement.dynamic.status.trial := '1';
-                newElement.dynamic.status.issuedCtr := res(k).dynamic.status.issuedCtr;
-                newElement.dynamic.argStates(0).readyCtr := res(k).dynamic.argStates(0).readyCtr;
-                newElement.dynamic.argStates(1).readyCtr := res(k).dynamic.argStates(1).readyCtr;
-
-                res(k) := newElement;
-                exit;
-            end if;
-        end loop;
-    end loop;
-
-    return res;
-end function;
-
-
 function hasDivOp(entry: SchedulerInfo) return std_logic is
 begin
     return entry.dynamic.full and entry.static.divIns;
@@ -635,33 +613,20 @@ end function;
 function removeEntry(entry: SchedulerInfo) return SchedulerInfo is
     variable res: SchedulerInfo := entry;
 begin
-    res.dynamic.status.state := empty;
-
     res.dynamic.full := '0';
-    res.dynamic.status.issued := '0';
-    res.dynamic.status.active := '0';
-    res.dynamic.status.suspend := '0';
-    
-    res.dynamic.status.T_justIssued := '0';
-    res.dynamic.status.T_expiring := '0';
+ --   res.dynamic.status.state := empty;
     return res;
 end function;
 
 function pullbackEntry(entry: SchedulerInfo) return SchedulerInfo is
     variable res: SchedulerInfo := entry;
 begin
-    if res.static.divIns = '1' then
-        res.dynamic.status.state := suspended;
-    else
-        res.dynamic.status.state := active;
-    end if;
-        
-    res.dynamic.status.issued := '0';
-    res.dynamic.status.active := '1' and not res.static.divIns;
-    res.dynamic.status.suspend := '1' and res.static.divIns;
-    
-    res.dynamic.status.T_justIssued := '0';
-    res.dynamic.status.T_expiring := '0';
+--    if res.static.divIns = '1' then
+--        res.dynamic.status.state := suspended;
+--    else
+--        res.dynamic.status.state := active;
+--    end if;
+
     return res;
 end function;
 
@@ -674,12 +639,7 @@ end function;
 function issueEntry(entry: SchedulerInfo) return SchedulerInfo is
     variable res: SchedulerInfo := entry;
 begin
-    res.dynamic.status.state := issued;
-    res.dynamic.status.issued := '1';
-    res.dynamic.status.active := '0';
-    res.dynamic.status.suspend := '0';
-    
-    res.dynamic.status.T_justIssued := '1';
+  --  res.dynamic.status.state := issued;
     return res;
 end function;
 
@@ -687,75 +647,82 @@ end function;
 function suspendEntry(entry: SchedulerInfo) return SchedulerInfo is
     variable res: SchedulerInfo := entry;
 begin
-    res.dynamic.status.active := '0';
-    res.dynamic.status.suspend := '1';
-    res.dynamic.status.state := suspended;
+ --   res.dynamic.status.state := suspended;
     return res;
 end function;
 
 function resumeEntry(entry: SchedulerInfo) return SchedulerInfo is
     variable res: SchedulerInfo := entry;
 begin
-    res.dynamic.status.active := '1';
-    res.dynamic.status.suspend := '0';
-    res.dynamic.status.state := active;
+--    res.dynamic.status.active := '1';
+--    res.dynamic.status.suspend := '0';
+  --  res.dynamic.status.state := active;
     return res;
 end function;
 
 -- mark issued/retracted, remove issued or killed
-function updateQueueState(queueContent: SchedulerInfoArray; sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
+function updateQueueState(queueContent: SchedulerInfoArray; nextAccepting, sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
 return SchedulerInfoArray is
     constant LEN: natural := queueContent'length;
     variable res: SchedulerInfoArray(queueContent'range) := queueContent;
 begin
     for i in 0 to LEN-1 loop
         res(i).dynamic.status.freed := '0'; -- This is set for 1 cycle when freeing
-        res(i).dynamic.status.T_justIssued := '0';
-        res(i).dynamic.status.T_expiring := '0';
+--        res(i).dynamic.status.T_justIssued := '0';
+   --     res(i).dynamic.status.T_expiring := '0';
 
-        if queueContent(i).dynamic.status.issued = '1' then
-            res(i).dynamic.status.issuedCtr := incStageCtr(res(i).dynamic.status.issuedCtr);
-        else
-            res(i).dynamic.status.issuedCtr := sn(0);
+        -- Set age comparison for possible subsequent flush. This is done regardless of other parts of state      
+        res(i).dynamic.status.trial := trialMask(i);
+
+    end loop;
+
+
+    for i in 0 to LEN-1 loop
+
+        if (nextAccepting and selMask(i)) = '1' then
+            res(i).dynamic.status_N.active := '0';
+            res(i).dynamic.status_N.issued0 := '1';
         end if;
 
-        if queueContent(i).dynamic.status.issued = '1' then
-            if queueContent(i).dynamic.status.T_expiring = '1' then
-                res(i) := removeEntry(res(i));
-                res(i).dynamic.status.freed := '1';
-            elsif memFail = '1' and queueContent(i).dynamic.status.T_justIssued = '1'   then
-                res(i) := pullbackEntry(res(i));
+        if queueContent(i).dynamic.status_N.issued0 = '1' then
+            res(i).dynamic.status_N.issued0 := '0';
+
+            if memFail = '1' then
+                res(i).dynamic.status_N.active := not queueContent(i).static.divIns;
+                res(i).dynamic.status_N.suspended := queueContent(i).static.divIns;
             else
-                res(i) := updateIssuedEntry(res(i));
-                
-                if slv2u(queueContent(i).dynamic.status.issuedCtr) = IQ_HOLD_TIME - 2   then
-                    res(i).dynamic.status.T_expiring := '1';
-                end if;
+                res(i).dynamic.status_N.issued1 := '1';
             end if;
         end if;
 
-        -- set issued
-        if (selMask(i) and sends) = '1' then
-            res(i) := issueEntry(res(i));
+        if queueContent(i).dynamic.status_N.issued1 = '1' then
+            res(i).dynamic.status_N.issued1 := '0';
+            res(i).dynamic.status_N.issued2 := '1';
         end if;
 
-        -- flush on event
-        if killMask(i) = '1' then
-            res(i) := removeEntry(res(i));
+        if queueContent(i).dynamic.status_N.issued2 = '1' then
+            res(i).dynamic.status_N.issued2 := '0';
+
+            res(i).dynamic.full := '0';
+            res(i).dynamic.status.freed := '1';
         end if;
 
-        if hasDivOp(res(i)) = '1' then
-            if sends = '1' and res(i).dynamic.status.issued /= '1' then -- TODO: change to selMask(i)?
-                res(i) := suspendEntry(res(i));
+        if hasDivOp(queueContent(i)) = '1' then
+            if (sends and not selMask(i)) = '1' then 
+                res(i).dynamic.status_N.suspended := '1';
+                res(i).dynamic.status_N.active := '0';
             elsif unlockDiv = '1' then
-                res(i) := resumeEntry(res(i));
+                res(i).dynamic.status_N.suspended := '0';
+                res(i).dynamic.status_N.active := '1';
             end if;
-         end if;
+        end if;
 
-         -- Set age comparison for possible subsequent flush. This is done regardless of other parts of state      
-         res(i).dynamic.status.trial := trialMask(i);
+        if killMask(i) = '1' then
+            res(i).dynamic.status_N := DEFAULT_ENTRY_STATUS_N;
 
-         res(i).dynamic.status.issuedCtr(SMALL_NUMBER_SIZE-1 downto 2) := (others => '0'); -- clear unused bits 
+            res(i).dynamic.full := '0';
+        end if;
+
     end loop;
 
     return res;
@@ -763,11 +730,47 @@ end function;
 
 
 
+function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray is
+    constant LEN: natural := content'length;
+    variable res: SchedulerInfoArray(content'range) := content;
+    variable newElement: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        for k in 0 to LEN-1 loop
+            if insertionLocs(k, i) = '1' then
+                newElement := newArr(i);
+                newElement.dynamic.status.trial := '1';
+--                newElement.dynamic.status.issuedCtr := res(k).dynamic.status.issuedCtr;
+                newElement.dynamic.argStates(0).readyCtr := res(k).dynamic.argStates(0).readyCtr;
+                newElement.dynamic.argStates(1).readyCtr := res(k).dynamic.argStates(1).readyCtr;
+
+                res(k) := newElement;
+                
+                --    res(k).dynamic.status_N.active := '1';
+                exit;
+            end if;
+        end loop;
+    end loop;
+
+    return res;
+end function;
+
+
 function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray is
     variable res: IqStateArray(queueContent'range) := (others => empty);
 begin
     for i in res'range loop
-        res(i) := queueContent(i).dynamic.status.state;
+        if queueContent(i).dynamic.status_N.active = '1' then
+            res(i) := active;
+        elsif queueContent(i).dynamic.status_N.suspended = '1' then
+            res(i) := suspended;
+        elsif (queueContent(i).dynamic.status_N.issued0 or queueContent(i).dynamic.status_N.issued1 or queueContent(i).dynamic.status_N.issued2) = '1' then
+            res(i) := issued;
+        else
+            res(i) := empty;
+        end if;
+    
+        --res(i) := queueContent(i).dynamic.status.state;
     end loop;
     return res;
 end function;
@@ -814,7 +817,7 @@ begin
             res(i).dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
             res(i).dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
             res(i).dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
-        elsif res(i).dynamic.status.issued /= '1' then
+        elsif (res(i).dynamic.status_N.issued0 or res(i).dynamic.status_N.issued1 or res(i).dynamic.status_N.issued2) /= '1' then
             -- pragma synthesis off
             for j in 0 to 2 loop
                 if res(i).dynamic.argStates(j).waiting = '1' then
@@ -855,13 +858,13 @@ begin
                 for k in 0 to QUEUE_SIZE_EXT-1 loop
                     res(j, k) := fullMask(k); -- Maybe setting to all ones would work too?
                 end loop;
-                
+
                 -- Preceding in this group are also masked!
                 for p in 0 to PIPE_WIDTH-1 loop
                     if p = i then
                         exit;
                     end if;
-                    
+
                     for k in 0 to QUEUE_SIZE_EXT-1 loop
                         if insertionLocs(k, p) = '1' then
                             res(j, k) := '1';
@@ -869,7 +872,7 @@ begin
                         end if;
                     end loop;
                 end loop;
-                
+
                 -- Clear all dependencies on this new op
                 for k in 0 to QUEUE_SIZE_EXT-1 loop
                     res(k, j) := '0';
@@ -926,7 +929,9 @@ function getReadyMask(content: SchedulerInfoArray) return std_logic_vector is
     variable res: std_logic_vector(content'range) := (others => '0');        
 begin
     for i in res'range loop
-        res(i) := content(i).dynamic.status.active and not content(i).dynamic.argStates(0).waiting and not content(i).dynamic.argStates(1).waiting;
+        res(i) := content(i).dynamic.--status.active
+                                      status_N.active
+                    and not content(i).dynamic.argStates(0).waiting and not content(i).dynamic.argStates(1).waiting;
     end loop;
     return res;
 end function;
@@ -990,13 +995,14 @@ begin
 
     res.dynamic.full := a.dynamic.full or b.dynamic.full;
 
-    res.dynamic.status.active := a.dynamic.status.active or b.dynamic.status.active;
-    res.dynamic.status.suspend := a.dynamic.status.suspend or b.dynamic.status.suspend;
-    res.dynamic.status.issued := a.dynamic.status.issued or b.dynamic.status.issued;
+--    res.dynamic.status.active := a.dynamic.status.active or b.dynamic.status.active;
+--    res.dynamic.status.suspend := a.dynamic.status.suspend or b.dynamic.status.suspend;
+--    res.dynamic.status.issued := a.dynamic.status.issued or b.dynamic.status.issued;
     res.dynamic.status.freed := a.dynamic.status.freed or b.dynamic.status.freed;
     res.dynamic.status.trial := a.dynamic.status.trial or b.dynamic.status.trial;
-    res.dynamic.status.issuedCtr := a.dynamic.status.issuedCtr or b.dynamic.status.issuedCtr;
+--    res.dynamic.status.issuedCtr := a.dynamic.status.issuedCtr or b.dynamic.status.issuedCtr;
     res.dynamic.status := DEFAULT_ENTRY_STATUS;
+    res.dynamic.status_N := DEFAULT_ENTRY_STATUS_N;
 
     res.dynamic.renameIndex := a.dynamic.renameIndex or b.dynamic.renameIndex;
 
@@ -1017,10 +1023,10 @@ begin
 
         res.dynamic.argStates(i).srcPipe := a.dynamic.argStates(i).srcPipe or b.dynamic.argStates(i).srcPipe;
         res.dynamic.argStates(i).srcStage := a.dynamic.argStates(i).srcStage or b.dynamic.argStates(i).srcStage;
-        
+
         res.dynamic.argStates(i).dbDep := DEFAULT_DB_DEPENDENCY;
     end loop;
-    
+
     return res;
 end function;
 
@@ -1059,7 +1065,7 @@ end function;
                 res(i, j) := ageMatrix(i, j);
             end loop;
         end loop;
-        
+
         return res;
     end function;
 
@@ -1117,7 +1123,7 @@ begin
         a := orSchedEntrySlot(a, maskedQueue(i));
         b := orSchedEntrySlot(b, maskedQueue(i + QUEUE_SIZE_EXT/2));
     end loop;
-    
+
     res := orSchedEntrySlot(a, b);
     res.static.dbInfo := selectDbInfo(inputElems, selMask);
     return res;
@@ -1184,7 +1190,7 @@ end function;
 
         variable stop0, stop2: std_logic := '0';
         variable stop01, stopPivot: std_logic := '0';
-        
+
         variable level2, level4, level8, level16: SchedulerInfoArray(0 to QUEUE_SIZE_EXT-1) := (others => DEFAULT_SCHEDULER_INFO);
         variable pivot: natural := 0;
     begin
@@ -1194,7 +1200,7 @@ end function;
             stopPivot := stopRangeByRange((pivot, pivot+1), (pivot+1, pivot+2), readyMask, stopMatrix);
             level2(pivot) := selectFrom(inputElems(pivot), inputElems(pivot+1), stopPivot);
         end loop;
-        
+
         for i in 0 to 2 loop
             pivot := 4*i;
             stopPivot := stopRangeByRange((pivot, pivot+2), (pivot+2, pivot+4), readyMask, stopMatrix);
@@ -1204,18 +1210,18 @@ end function;
             pivot := 0;
             stopPivot := stopRangeByRange((pivot, pivot+4), (pivot+4, pivot+8), readyMask, stopMatrix);
             level8(pivot) := selectFrom(level4(pivot), level4(pivot+4), stopPivot);
-            
+
             level8(pivot+8) := level4(pivot+8);
 
 
             pivot := 0;
             stopPivot := stopRangeByRange((pivot, pivot+8), (pivot+8, pivot+12), readyMask, stopMatrix);
             level16(pivot) := selectFrom(level8(pivot), level8(pivot+8), stopPivot);
-  
+
         res := level16(0);
 
         res.dynamic.status := DEFAULT_ENTRY_STATUS;
-        
+
         res.dynamic.argStates(0).dbDep := DEFAULT_DB_DEPENDENCY;
         res.dynamic.argStates(1).dbDep := DEFAULT_DB_DEPENDENCY;
         res.dynamic.argStates(2).dbDep := DEFAULT_DB_DEPENDENCY;
@@ -1225,6 +1231,47 @@ end function;
         res.static.dbInfo := selectDbInfo(inputElems, selMask);
 
         return res;
+    end function;
+
+    function TMP_getTagLowPart(selMask: std_logic_vector) return SmallNumber is
+        variable res: SmallNumber := sn(-1);
+    begin
+        for i in selMask'range loop
+            if selMask(i) = '1' then
+                res := sn(i);
+            end if;
+        end loop;
+        res(7 downto 4) := (others => '0');
+        return res;
+    end function;
+
+    function getIssueTag(sends: std_logic; selMask: std_logic_vector) return SmallNumber is
+        variable res: SmallNumber := TMP_getTagLowPart(selMask);
+    begin
+        res(4) := sends;
+        return res;
+    end function;
+
+    function TMP_slowSelect(content: SchedulerInfoArray; tag: SmallNumber) return SchedulerInfo is
+        constant LEN: natural := content'length;
+        variable ind: natural := slv2u(tag(3 downto 0));
+    begin
+        if ind > LEN-1 then
+            return content(LEN-1);
+        else
+            return content(ind);
+        end if; 
+    end function;
+
+    function TMP_slowSelect(content: std_logic_vector; tag: SmallNumber) return std_logic is
+        constant LEN: natural := content'length;
+        variable ind: natural := slv2u(tag(3 downto 0));
+    begin
+        if ind > LEN-1 then
+            return content(LEN-1);
+        else
+            return content(ind);
+        end if; 
     end function;
 
 
@@ -1357,46 +1404,5 @@ end function;
     end function;
 
 -----------------------------------
-
-    function TMP_getTagLowPart(selMask: std_logic_vector) return SmallNumber is
-        variable res: SmallNumber := sn(-1);
-    begin
-        for i in selMask'range loop
-            if selMask(i) = '1' then
-                res := sn(i);
-            end if;
-        end loop;
-        res(7 downto 4) := (others => '0');
-        return res;
-    end function;
-    
-    function getIssueTag(sends: std_logic; selMask: std_logic_vector) return SmallNumber is
-        variable res: SmallNumber := TMP_getTagLowPart(selMask);
-    begin
-        res(4) := sends;
-        return res;
-    end function;
-
-    function TMP_slowSelect(content: SchedulerInfoArray; tag: SmallNumber) return SchedulerInfo is
-        constant LEN: natural := content'length;
-        variable ind: natural := slv2u(tag(3 downto 0));
-    begin
-        if ind > LEN-1 then
-            return content(LEN-1);
-        else
-            return content(ind);
-        end if; 
-    end function;
-
-    function TMP_slowSelect(content: std_logic_vector; tag: SmallNumber) return std_logic is
-        constant LEN: natural := content'length;
-        variable ind: natural := slv2u(tag(3 downto 0));
-    begin
-        if ind > LEN-1 then
-            return content(LEN-1);
-        else
-            return content(ind);
-        end if; 
-    end function;
 
 end LogicIssue;
