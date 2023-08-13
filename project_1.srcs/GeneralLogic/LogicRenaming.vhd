@@ -63,7 +63,10 @@ return PhysNameArray;
 
 function assignDests(ia: BufferEntryArray; newDests: PhysNameArray; constant IS_FP: boolean) return PhysNameArray;
 function assignDests(ria: RenameInfoArray; newDests: PhysNameArray; constant IS_FP: boolean) return PhysNameArray;
-    
+
+function DB_addTag(dbi: InstructionDebugInfo; tag: InsTag) return InstructionDebugInfo;
+procedure DB_trackSeqNum(renamed: InstructionSlotArray);
+
 end package;
 
 
@@ -560,5 +563,33 @@ begin
    res := compactFreedRegs(selected, freeListPutSel);
    return res;
 end function;
+
+
+    function DB_addTag(dbi: InstructionDebugInfo; tag: InsTag) return InstructionDebugInfo is
+        variable res: InstructionDebugInfo := dbi;
+    begin
+        -- pragma synthesis off
+        res.tag := tag;
+        -- pragma synthesis on
+        return res;
+    end function;
+
+    procedure DB_trackSeqNum(renamed: InstructionSlotArray) is
+    begin
+        -- pragma synthesis off
+        if DB_OP_TRACKING then
+            for i in renamed'range loop
+                if renamed(i).ins.dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                    report "";
+                    report "DEBUG: Tracked seqNum renamed: " & work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
+                    report "";
+
+                    return;
+                end if;
+            end loop;
+        end if;
+        -- pragma synthesis on
+    end procedure;
 
 end package body;

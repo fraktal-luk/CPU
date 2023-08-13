@@ -558,17 +558,8 @@ constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
 constant DEFAULT_ARG_STATE: ArgumentState := DEFAULT_ARGUMENT_STATE;
 
 constant DEFAULT_ENTRY_STATUS: EntryStatus := (
---    state => empty,
-
---    active => '0',
---    suspend => '0',
---    issued => '0',
     freed => '0',
     trial => '0'
-    --issuedCtr => (others => '0')
-    
-    --    T_justIssued => '0',
-    --    T_expiring => '0'
 );
 
 constant DEFAULT_ENTRY_STATUS_N: EntryStatus_N := (

@@ -127,7 +127,6 @@ function TMP_slowSelect(content: SchedulerInfoArray; tag: SmallNumber) return Sc
 function TMP_slowSelect(content: std_logic_vector; tag: SmallNumber) return std_logic;
 
 function getSchedEntrySlot(info: SchedulerInfo; full: std_logic; iqTag: SmallNumber) return SchedulerState;
---function orSchedEntrySlot(a, b: SchedulerInfo) return SchedulerInfo;
 
 function getIssueTag(sends: std_logic; selMask: std_logic_vector) return SmallNumber;
 
@@ -222,15 +221,11 @@ begin
     res.full := isl.full;
 
     res.status.trial := '1'; -- Must be 1 because it's younger than any Exec instruction
---    res.status.active := res.full and not stInfo.divIns;
- --   res.status.suspend := res.full and stInfo.divIns;
 
     if stInfo.divIns = '1' then
-    --    res.status.state := suspended;
-            res.status_N.suspended := '1';
+        res.status_N.suspended := '1';
     else
---        res.status.state := active;
-            res.status_N.active := '1';
+        res.status_N.active := '1';
     end if;
 
     res.renameIndex := isl.ins.tags.renameIndex;
@@ -250,11 +245,9 @@ begin
 
         if i = 1 then
             res.argStates(i).imm_T := stInfo.immediate;
-          --  res.argStates(i).value := stInfo.immValue;
         end if;
 
         res.argStates(i).waiting := not stInfo.zero(i);
-      --  res.argStates(i).stored := '0';
 
         res.argStates(i).srcPipe := (others => '0');
         res.argStates(i).srcStage := "00000010";
@@ -508,21 +501,6 @@ begin
 end function;
 
 
---function incStageCtr(ctr: SmallNumber) return SmallNumber is
---begin
---    case ctr(1 downto 0) is
---        when "00" => 
---            return X"01";
---        when "01" =>
---            return X"02";
---        when others =>
---            return X"00";
---    end case;
---end function;
-
-
--- state handling internal
-
 function updateWaitingArg(argState: ArgumentState; wakeups: WakeupStruct)
 return ArgumentState is
     variable res: ArgumentState := argState;
@@ -660,7 +638,7 @@ begin
     return res;
 end function;
 
--- mark issued/retracted, remove issued or killed
+
 function updateQueueState(queueContent: SchedulerInfoArray; nextAccepting, sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
 return SchedulerInfoArray is
     constant LEN: natural := queueContent'length;
@@ -668,16 +646,8 @@ return SchedulerInfoArray is
 begin
     for i in 0 to LEN-1 loop
         res(i).dynamic.status.freed := '0'; -- This is set for 1 cycle when freeing
---        res(i).dynamic.status.T_justIssued := '0';
-   --     res(i).dynamic.status.T_expiring := '0';
-
         -- Set age comparison for possible subsequent flush. This is done regardless of other parts of state      
         res(i).dynamic.status.trial := trialMask(i);
-
-    end loop;
-
-
-    for i in 0 to LEN-1 loop
 
         if (nextAccepting and selMask(i)) = '1' then
             res(i).dynamic.status_N.active := '0';
@@ -740,13 +710,10 @@ begin
             if insertionLocs(k, i) = '1' then
                 newElement := newArr(i);
                 newElement.dynamic.status.trial := '1';
---                newElement.dynamic.status.issuedCtr := res(k).dynamic.status.issuedCtr;
                 newElement.dynamic.argStates(0).readyCtr := res(k).dynamic.argStates(0).readyCtr;
                 newElement.dynamic.argStates(1).readyCtr := res(k).dynamic.argStates(1).readyCtr;
 
                 res(k) := newElement;
-                
-                --    res(k).dynamic.status_N.active := '1';
                 exit;
             end if;
         end loop;
@@ -995,12 +962,8 @@ begin
 
     res.dynamic.full := a.dynamic.full or b.dynamic.full;
 
---    res.dynamic.status.active := a.dynamic.status.active or b.dynamic.status.active;
---    res.dynamic.status.suspend := a.dynamic.status.suspend or b.dynamic.status.suspend;
---    res.dynamic.status.issued := a.dynamic.status.issued or b.dynamic.status.issued;
     res.dynamic.status.freed := a.dynamic.status.freed or b.dynamic.status.freed;
     res.dynamic.status.trial := a.dynamic.status.trial or b.dynamic.status.trial;
---    res.dynamic.status.issuedCtr := a.dynamic.status.issuedCtr or b.dynamic.status.issuedCtr;
     res.dynamic.status := DEFAULT_ENTRY_STATUS;
     res.dynamic.status_N := DEFAULT_ENTRY_STATUS_N;
 
