@@ -43,6 +43,7 @@ function cmpLessThanUnsignedSNA(arr: SmallNumberArray; num: SmallNumber) return 
 function cmpLessThanSignedSNA(arr: SmallNumberArray; num: SmallNumber) return std_logic_vector;
 function cmpEqualToSNA(arr: SmallNumberArray; num: SmallNumber) return std_logic_vector;
 
+function minus(a: std_logic_vector) return std_logic_vector;
 function add(a: std_logic_vector; b: std_logic_vector) return std_logic_vector;
 function sub(a: std_logic_vector; b: std_logic_vector) return std_logic_vector;
 
@@ -331,6 +332,19 @@ begin
     return res;
 end function; 
 
+
+function minus(a: std_logic_vector) return std_logic_vector is
+    constant LEN: natural := a'length;
+    variable bRes, res: std_logic_vector(LEN-1 downto 0) := (others => '0');
+    variable ua, ur: signed(LEN-1 downto 0) := (others => '0');
+begin
+    CHECK_BE(a);
+
+    ua := signed(a);
+    ur := -ua;
+    res := std_logic_vector(ur);
+    return res;
+end function;
 
 function add(a: std_logic_vector; b: std_logic_vector) return std_logic_vector is
     constant LEN: natural := a'length;
@@ -642,7 +656,7 @@ end function;
 
 function addInt(v: std_logic_vector; n: integer) return std_logic_vector is
     variable res: std_logic_vector(v'range) := (others => '0');
-    variable vInt: integer := slv2u(v); -- Signed or not, addition bit results are the same
+    --variable vInt: integer := slv2u(v); -- Signed or not, addition bit results are the same
     variable bRes: std_logic_vector(v'range) := (others => '0'); 
 begin
     CHECK_BE(v);

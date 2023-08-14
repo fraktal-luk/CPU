@@ -11,6 +11,7 @@ use work.BasicTypes.all;
 use work.Helpers.all;
 
 use work.ArchDefs.all;
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 use work.CoreConfig.all;
 use work.PipelineGeneral.all;
@@ -118,12 +119,12 @@ function deserializeStaticInfoA(v: std_logic_vector) return StaticOpInfoArray;
 function deserializeStaticGroupInfo(v: std_logic_vector) return StaticGroupInfo;
 
 
-function serializeOp(isl: InstructionSlot) return std_logic_vector;
-function deserializeOp(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray; 
-function serializeSpecialAction(isl: InstructionSlot) return std_logic_vector;
-function deserializeSpecialAction(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray;    
-function serializeOpGroup(insVec: InstructionSlotArray) return std_logic_vector;
-function deserializeOpGroup(insVec: InstructionSlotArray; serialData: std_logic_vector) return InstructionSlotArray;
+--function serializeOp(isl: InstructionSlot) return std_logic_vector;
+--function deserializeOp(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray; 
+--function serializeSpecialAction(isl: InstructionSlot) return std_logic_vector;
+--function deserializeSpecialAction(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray;    
+--function serializeOpGroup(insVec: InstructionSlotArray) return std_logic_vector;
+--function deserializeOpGroup(insVec: InstructionSlotArray; serialData: std_logic_vector) return InstructionSlotArray;
 
 
 procedure writeStaticInput(signal content: inout StaticOpInfoArray2D; input: StaticOpInfoArray; ptr: SmallNumber);
@@ -178,8 +179,7 @@ begin
     res.virtualIntDestSel := isl.ins.virtualArgSpec.intDestSel;
     res.virtualFloatDestSel := isl.ins.virtualArgSpec.floatDestSel;     
     res.virtualDest := isl.ins.virtualArgSpec.dest(4 downto 0);    
-    res.physicalDest := --isl.ins.physicalArgSpec.dest;
-                            isl.ins.dest_T;
+    res.physicalDest := isl.ins.dest_T;
 
     res.useSQ := isl.ins.typeInfo.secCluster;
     res.useLQ := isl.ins.typeInfo.useLQ;
@@ -213,7 +213,7 @@ begin
 
     res.hasEvent := '0';
     res.hasException := '0';
-    res.confirmedBranch := '0';--isl.ins.controlInfo.confirmedBranch;
+    res.confirmedBranch := '0';
     res.specialAction := isl.ins.controlInfo.specialAction_T; -- ???
     res.refetch := '0';
     return res;
@@ -328,36 +328,36 @@ begin
 end function;
 
 
-function serializeOp(isl: InstructionSlot) return std_logic_vector is
-begin
+--function serializeOp(isl: InstructionSlot) return std_logic_vector is
+--begin
 
-end function;
+--end function;
 
-function deserializeOp(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray is
-begin
+--function deserializeOp(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray is
+--begin
 
-end function; 
+--end function; 
 
 
-function serializeSpecialAction(isl: InstructionSlot) return std_logic_vector is
-begin
+--function serializeSpecialAction(isl: InstructionSlot) return std_logic_vector is
+--begin
 
-end function;
+--end function;
 
-function deserializeSpecialAction(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray is
-begin
+--function deserializeSpecialAction(isl: InstructionSlot; serialData: std_logic_vector) return InstructionSlotArray is
+--begin
 
-end function;    
+--end function;    
 
-function serializeOpGroup(insVec: InstructionSlotArray) return std_logic_vector is
-begin
+--function serializeOpGroup(insVec: InstructionSlotArray) return std_logic_vector is
+--begin
 
-end function;
+--end function;
 
-function deserializeOpGroup(insVec: InstructionSlotArray; serialData: std_logic_vector) return InstructionSlotArray is
-begin
+--function deserializeOpGroup(insVec: InstructionSlotArray; serialData: std_logic_vector) return InstructionSlotArray is
+--begin
 
-end function;
+--end function;
 
 
 procedure writeStaticInput(signal content: inout StaticOpInfoArray2D; input: StaticOpInfoArray; ptr: SmallNumber) is
@@ -375,7 +375,8 @@ begin
          -- pragma synthesis off
         if DB_OP_TRACKING and input(i).full = '1' and input(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
             report "";
-            report "DEBUG: Tracked seqNum written into ROB: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+            report "DEBUG: Tracked seqNum written into ROB: " & work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
             report "";
         end if;
         -- pragma synthesis on
@@ -442,7 +443,8 @@ begin
             -- pragma synthesis off
             if DB_OP_TRACKING and content(groupInd, opInd).full = '1' and content(groupInd, opInd).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
                 report "";
-                report "DEBUG: Tracked seqNum completed in ROB cluster " & integer'image(CLUSTER) & ": " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                report "DEBUG: Tracked seqNum completed in ROB cluster " & integer'image(CLUSTER) & ": " & work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
                 report "";
             end if;
             -- pragma synthesis on   
@@ -470,7 +472,8 @@ begin
             -- pragma synthesis off
             if DB_OP_TRACKING and content(groupInd, i).full = '1' and content(groupInd, i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
                 report "";
-                report "DEBUG: Tracked seqNum killed in ROB: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                report "DEBUG: Tracked seqNum killed in ROB: " & work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
                 report "";
             end if;
             -- pragma synthesis on
@@ -551,7 +554,8 @@ begin
             -- pragma synthesis off
             if DB_OP_TRACKING and content(groupInd, i).full = '1' and content(groupInd, i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
                 report "";
-                report "DEBUG: Tracked seqNum flushed from ROB: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+                report "DEBUG: Tracked seqNum flushed from ROB: " & work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
                 report "";
             end if;
             -- pragma synthesis on
@@ -568,7 +572,8 @@ begin
         -- pragma synthesis off
         if DB_OP_TRACKING and content(p2i(ptr, content'length), i).full = '1' and content(p2i(ptr, content'length), i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
             report "";
-            report "DEBUG: Tracked seqNum leaves ROB: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
+            report "DEBUG: Tracked seqNum leaves ROB: " & work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
             report "";
         end if;
         -- pragma synthesis on

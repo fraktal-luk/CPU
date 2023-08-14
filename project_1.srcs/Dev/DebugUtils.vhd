@@ -8,6 +8,7 @@ use work.ArchDefs.all;
 
 use work.CoreConfig.all;
 
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 
 

@@ -9,6 +9,7 @@ use work.BasicTypes.all;
 use work.Helpers.all;
 
 use work.ArchDefs.all;
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 use work.CoreConfig.all;
 use work.PipelineGeneral.all;
@@ -190,12 +191,8 @@ begin
                 updateDynamicContentBranch(dynamicContent, branchControl.full, branchControl, execSigsMain(0).tag);
                 updateDynamicContentMemEvent(dynamicContent, execSigsMain(2).full, memoryControl, execSigsMain(2).tag);
 
-                --DB_trackUpdateSeqNum(execSigsMain);
-                --DB_trackUpdateSeqNum(execSigsSec);
-
                 if lateEventSignal = '1' then
                     flushDynamicContent(dynamicContent);
-                    --DB_trackCompleteFlush(dynamicContent);
                 end if;
 
                 -- Write inputs
@@ -205,8 +202,6 @@ begin
 
                     writeDynamicInput(dynamicContent, dynamicInput, endPtr);
                     writeDynamicGroupInput(dynamicGroupContent, dynamicGroupInput, endPtr);
-                    
-                    --DB_trackInputSeqNum(dynamicInput);
                     
                     serialMemContent(p2i(endPtr, ROB_SIZE)) <= serialInput;
                 end if;
@@ -226,7 +221,6 @@ begin
                 
                 if isSending = '1' then
                     removeGroup(dynamicContent, startPtr);
-                    --DB_trackInputSeqNum(dynamicOutput);
                 end if;             
             end if;
         end process;
@@ -289,73 +283,19 @@ begin
 
     -- pragma synthesis off
     DEBUG_HANDLING: if DB_ENABLE generate
-        
+        use work.RobViewing.all;
+    begin
         process (clk)
-            use std.textio.all;
-            use work.Assembler.all;
-    
-            function getDynamicContentString(dyn: DynamicOpInfo) return string is
-                variable res: line;
-            begin
-                if dyn.full = '1' then
-                    write(res, natural'image(slv2u(dyn.dbInfo.tag)));
-                    write(res, string'(": "));
-                    write(res, std_logic'image(dyn.completed0));
-                    if dyn.secCluster = '1' then
-                        write(res, std_logic'image(dyn.completed1));
-                    else
-                        write(res, string'("'-'"));
-                    end if;
-                    write(res, string'(" "));
-                    if dyn.hasEvent = '1' then
-                        write(res, string'("E : "));
-                    else
-                        write(res, string'("  : "));
-                    end if;
-                    
-                    write(res, disasmWord(dyn.dbInfo.bits));
-                    
-                    return res.all;
-                else
-                    return "-------------------------------------";
-                end if;
-            end function;
-        
-            procedure printContent is
-               file outFile: text open write_mode is "rob_content.txt";
-               variable preRow, currentLine: line := null;
-            begin
-                for i in 0 to ROB_SIZE-1 loop
-                    if p2i(startPtr, ROB_SIZE) = i then
-                        preRow := "start ";
-                    elsif p2i(endPtr, ROB_SIZE) = i then
-                        preRow := "end   ";
-                    else
-                        preRow := "      ";
-                    end if;
-                    
-                    currentLine := null;
-                    write(currentLine, preRow.all & natural'image(i) & "  ");
-                    for j in 0 to PIPE_WIDTH-1 loop
-                        write(currentLine, getDynamicContentString(dynamicContent(i, j)) & ",   ");
-                    end loop;
-    
-                    writeline(outFile, currentLine);
-                end loop;
-            end procedure;
-            
         begin
-            
             if rising_edge(clk) then
                 if DB_LOG_EVENTS then
                     if dbState.dbSignal = '1' then
-                        report "ROB reporting ";
-                        printContent;
+                        printContent(dynamicContent, startPtr, endPtr);
                     end if;
                 end if;
             end if;
         end process;
-        
+
     end generate;
     -- pragma synthesis on
 

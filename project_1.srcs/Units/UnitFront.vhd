@@ -6,6 +6,7 @@ use work.BasicTypes.all;
 use work.Helpers.all;
 
 use work.ArchDefs.all;
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 use work.CoreConfig.all;
 use work.PipelineGeneral.all;
@@ -25,7 +26,7 @@ entity UnitFront is
 		  
 		frontAccepting: out std_logic;
 
-		bpAccepting: in std_logic;
+		bqAccepting: in std_logic;
 		bpSending: out std_logic;
         bpData: out ControlPacketArray(0 to FETCH_WIDTH-1);
 
@@ -55,33 +56,38 @@ architecture Behavioral of UnitFront is
 
     signal dummyBP0, dummyBP1: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0'); -- Results from BP
 
-	signal fetchedLine0, fetchedLine1: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0'));
+	signal fetchedLine0, fetchedLine1, fetchedLineShifted0, fetchedLineShifted1, fetchedLineShifted1_Alt: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0'));
 
-	signal full0, full1, sendingOutFetch0, sendingOutFetch1, bufferAccepting, sendingToEarlyBranch, fullBr, fullBt, earlyBranchSending, sendingToBuffer, sendingToBranchTransfer,
+	signal full0, full1, sendingOutFetch0, sendingOutFetch1, bufferAccepting, fullBr, fullBt, earlyBranchSending, sendingToBuffer,
            pcEn, fetchStall, frontBranchEvent, killAll, killAllOrFront, sendingOutBuffer, sendingToBQ,
 	                                                                                                    ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0';
-    signal stageDataInFetch0, stageDataOutFetch0, stageDataOutFetch1, earlyBranchIn, earlyBranchOut: ControlPacket := DEFAULT_CONTROL_PACKET;
+    signal stageDataInFetch0, stageDataOutFetch0, stageDataOutFetch1, stallCt, normalCt, earlyBranchIn, earlyBranchOut: ControlPacket := DEFAULT_CONTROL_PACKET;
 
-	signal predictedAddress, predictedAddressNext, frontTarget: Mword := (others => '0');
+	signal predictedAddress, predictedAddressNext: Mword := (others => '0');
 
-    signal bqDataSig, bqDataSigPre: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
-	signal dataToIbuffer, ibufDataOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
+    signal toBQ, bqDataSig, bqDataSigPre: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
+	signal decodedEA, dataToIbuffer, ibufDataOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 
+    signal groupShift, groupShift_Early: SmallNumber := sn(0);
+    signal nW: natural := 0;
 
-	   procedure DB_trackSeqNum(arr: BufferEntryArray) is
-       begin
-           -- pragma synthesis off
-           if DB_OP_TRACKING then
-               for i in arr'range loop
-                   if arr(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
-                       report "";
-                       report "DEBUG: Tracked seqNum assigned: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
-                       report "";
-                   end if;
-               end loop;
-           end if;
-           -- pragma synthesis on
-       end procedure;
+    signal decodeCounter: Word := (others => '0'); -- DB
+
+    procedure DB_trackSeqNum(arr: BufferEntryArray) is
+    begin
+       -- pragma synthesis off
+       if DB_OP_TRACKING then
+           for i in arr'range loop
+               if arr(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                   report "";
+                   report "DEBUG: Tracked seqNum assigned: " & work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+    
+                   report "";
+               end if;
+           end loop;
+       end if;
+       -- pragma synthesis on
+    end procedure;
 
 begin
 	killAll <= execEventSignal or lateEventSignal;
@@ -102,6 +108,7 @@ begin
             -- Stage F1
             stageDataOutFetch1 <= stageDataOutFetch0;
             fetchedLine1 <= fetchedLine0;
+                fetchedLineShifted1_Alt <= fetchedLineShifted0;
             full1 <= sendingOutFetch0 and not killAllOrFront;          -- F1
 
             -- Stage Ibuf/BrEval
@@ -109,12 +116,13 @@ begin
 
             earlyBranchOut <= earlyBranchIn;
             fullBr <= sendingOutFetch1 and not killAll;                -- F2
-            fullBt <= bool2std(sendingToBranchTransfer = '1') and not killAll; -- F2
+            fullBt <= bool2std(sendingToBuffer = '1') and not killAll; -- F2
 
             bqDataSig <= bqDataSigPre;
 
             if sendingToBuffer = '1' then
-                DB_trackSeqNum(dataToIbuffer);   
+                DB_trackSeqNum(dataToIbuffer);
+                decodeCounter <= addInt(decodeCounter, countOnes(extractFullMask(dataToIbuffer)));
             end if;
 
         end if;
@@ -131,58 +139,42 @@ begin
     earlyBranchSending <= fullBr and not killAll;
     sendingToBQ <= fullBt and not killAll;
 
-    sendingToEarlyBranch <= sendingOutFetch1;
 
-
-    predictedAddressNext <= lateCausing.value when lateEventSetPC = '1'
-                       else execCausing.value when execEventSignal = '1'
-                       else frontTarget       when frontBranchEvent = '1'
-                       else earlyBranchIn.target when sendingToEarlyBranch = '1'
+    predictedAddressNext <= lateCausing.value     when lateEventSetPC = '1'
+                       else execCausing.value     when execEventSignal = '1'
+                       else earlyBranchOut.target when frontBranchEvent = '1'
+                       else normalCt.target       when sendingToBuffer = '1'
                        else predictedAddress;
 
+
+	fetchStall <= sendingOutFetch1 and (not bufferAccepting or not bqAccepting);
 	sendingToBuffer <= sendingOutFetch1 and not fetchStall;
 
+    groupShift_Early(LOG2_PIPE_WIDTH-1 downto 0) <= normalCt.target(LOG2_PIPE_WIDTH+1 downto 2) when sendingToBuffer = '1'
+                                            else    predictedAddress(LOG2_PIPE_WIDTH+1 downto 2);
+    fetchedLineShifted0 <= shiftLine(fetchedLine0, groupShift_Early);
 
-	LEGACY: block
-    	signal fetchedLine1_Sh: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0'));
-        signal groupShift: SmallNumber := sn(0);
-        signal nW: natural := 0;
 
-        signal hasBranch: std_logic := '0';
-        signal toBQ: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
-	    signal decodedEA: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
+    stallCt <= getStallEvent(predictedAddress);
+    normalCt <= getNormalEvent(stageDataOutFetch1.target, getFrontEvent(predictedAddress, stageDataOutFetch1.target, fetchedLine1));
 
-        signal decodeCounter, decodeCounterNext: Word := (others => '0'); -- DB
-	begin
-        decodeCounterNext <= addInt(decodeCounter, countOnes(extractFullMask(dataToIbuffer))) when sendingToBuffer = '1' else decodeCounter;
+    earlyBranchIn <=              stallCt when fetchStall = '1'
+                            else  normalCt when sendingToBuffer = '1'
+                            else  DEFAULT_CONTROL_PACKET;
 
-        process(clk)
-        begin
-            if rising_edge(clk) then
-                decodeCounter <= decodeCounterNext;
-            end if;
-        end process;
+    groupShift(LOG2_PIPE_WIDTH-1 downto 0) <= predictedAddress(LOG2_PIPE_WIDTH+1 downto 2);
+    nW <= slv2u(normalCt.tags.bqPointer) + 1 - slv2u(groupShift);
 
-        earlyBranchIn <= getEarlyEvent(fetchedLine1, stageDataOutFetch1.target, predictedAddress, fetchStall, sendingOutFetch1);
+    fetchedLineShifted1 <= --shiftLine(fetchedLine1, groupShift);
+                           fetchedLineShifted1_Alt;
 
-        groupShift(1 downto 0) <= predictedAddress(3 downto 2);
-        nW <= slv2u(earlyBranchIn.tags.bqPointer) + 1 - slv2u(groupShift);
 
-        fetchedLine1_Sh <= fetchedLine1                                                               when groupShift(1 downto 0) = "00"
-                    else   fetchedLine1(1 to 3) & fetchedLine1(3)                                     when groupShift(1 downto 0) = "01"
-                    else   fetchedLine1(2 to 3) & fetchedLine1(3) & fetchedLine1(3)                   when groupShift(1 downto 0) = "10"
-                    else   fetchedLine1(3 to 3) & fetchedLine1(3) & fetchedLine1(3) & fetchedLine1(3) when groupShift(1 downto 0) = "11";
+    decodedEA <= decodeGroup(fetchedLineShifted1, nW, predictedAddress, stageDataOutFetch1);
+    dataToIbuffer <= assignSeqNum(decodedEA, decodeCounter, stageDataOutFetch1); -- TODO: DB (decodeCounter incremented per instruction)
 
-        decodedEA <= decodeGroup(fetchedLine1_Sh, nW, predictedAddress, stageDataOutFetch1);
-        dataToIbuffer <= assignSeqNum(decodedEA, decodeCounter, stageDataOutFetch1); -- TODO: DB (decodeCounter incremented per instruction)
+    toBQ <= getControlA(fetchedLineShifted1, nW, predictedAddress, groupHasBranch(dataToIbuffer));
+    bqDataSigPre <= assignSeqNum(toBQ, decodeCounter); -- TODO: DB
 
-        hasBranch <= groupHasBranch(dataToIbuffer);
-
-        toBQ <= getControlA(fetchedLine1_Sh, nW, predictedAddress, hasBranch);
-        bqDataSigPre <= assignSeqNum(toBQ, decodeCounter); -- TODO: DB
-    end block;
-
-	sendingToBranchTransfer <= sendingToBuffer;
 
 	SUBUNIT_IBUFFER: entity work.InstructionBuffer(Implem)
 	port map(
@@ -198,11 +190,7 @@ begin
 		execEventSignal => killAll
 	);
 
-
-	fetchStall <= sendingOutFetch1 and (not bufferAccepting or not bpAccepting);
-
 	frontBranchEvent <= earlyBranchOut.controlInfo.newEvent and earlyBranchSending;
-    frontTarget <= earlyBranchOut.target;
 
     -- Outputs 
 
@@ -217,7 +205,7 @@ begin
     -- Events
 	frontEventSignal <= frontBranchEvent;	
     frontCausing.full <= frontBranchEvent;
-    frontCausing.value <= frontTarget;
+    frontCausing.value <= earlyBranchOut.target;--frontTarget;
 
     -- 	Pipeline backwards
 	frontAccepting <= '1';

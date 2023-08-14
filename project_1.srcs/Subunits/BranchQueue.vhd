@@ -9,6 +9,7 @@ use work.BasicTypes.all;
 use work.Helpers.all;
 
 use work.ArchDefs.all;
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 use work.CoreConfig.all;
 use work.PipelineGeneral.all;
@@ -82,8 +83,9 @@ architecture Behavioral of BranchQueue is
 
 	signal pStart, pStartNext, pEnd, pEndNext, pTagged, pTaggedNext, pRenamed, pRenamedNext, pSelect, pSelectPrev, pCausing, pCausingPrev,
            pRenamedSeq, pRenamedSeqNext, pStartSeq, pStartSeqNext, pFlushSeq: SmallNumber := (others => '0');
+    signal nFull, nFullNext: SmallNumber := (others => '0');
 
-    signal isFull, isAlmostFull, accepting, committingBr, earlyInputSending, lateInputSending: std_logic := '0';	   
+    signal isFull, isAlmostFull, accepting, committingBr, earlyInputSending, lateInputSending, canAccept: std_logic := '0';	   
 	signal memEmpty, taggedEmpty: std_logic := '1'; -- CAREFUL: starting with '1'
 
     signal nInRe, nOut, nCommitted, nCommittedEffective: SmallNumber := (others => '0');   
@@ -188,6 +190,8 @@ begin
 
     pFlushSeq <= execCausing.dest;
 
+    nFullNext <= getNumFull(pStartNext, pEndNext, QUEUE_PTR_SIZE);
+
 
     SYNCH_POINTERS: process (clk)
     begin
@@ -209,7 +213,10 @@ begin
            -- State flag update
            memEmpty <= getQueueEmpty(pStartNext, pEndNext, QUEUE_PTR_SIZE);              
            taggedEmpty <= getQueueEmpty(pStartNext, pTaggedNext, QUEUE_PTR_SIZE);
-              
+
+           nFull <= nFullNext;
+           canAccept <= not cmpGtU(nFullNext, QUEUE_SIZE-2); -- 2 free slots needed because 1 cycle delay in frontend sending to BQ
+
            if lateEventSignal = '1' or execEventSignal = '1' then
                recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
            elsif isNonzero(recoveryCounter) = '1' then
@@ -227,9 +234,9 @@ begin
     nOut <= nCommitted when committing = '1' else (others => '0');
     
     -- Accepting sigs
-    accepting <=  bool2std(addIntTrunc(pStart, 0, QUEUE_PTR_SIZE) /= addIntTrunc(pEnd, 2, QUEUE_PTR_SIZE))
-             and bool2std(addIntTrunc(pStart, 0, QUEUE_PTR_SIZE) /= addIntTrunc(pEnd, 1, QUEUE_PTR_SIZE)); -- Need 2 reserve slots because one group could be on the way
-    
+    accepting <= -- bool2std(addIntTrunc(pStart, 0, QUEUE_PTR_SIZE) /= addIntTrunc(pEnd, 2, QUEUE_PTR_SIZE))
+            -- and bool2std(addIntTrunc(pStart, 0, QUEUE_PTR_SIZE) /= addIntTrunc(pEnd, 1, QUEUE_PTR_SIZE)); -- Need 2 reserve slots because one group could be on the way
+                    canAccept;
     -- C. out
     committingBr <= committing and commitBr and not taggedEmpty;
     committedDataOut.full <= committingBr;
@@ -239,7 +246,7 @@ begin
     acceptingOut <= '1';
     --almostFull <= '0';
     acceptingBr <= accepting;       
-    
+
     -- E. out
 --    selectedDataOutput.controlInfo <= selectedDataSlot.ins.controlInfo;
 --    selectedDataOutput.tags <= selectedDataSlot.ins.tags;

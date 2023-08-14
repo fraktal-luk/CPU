@@ -8,6 +8,7 @@ use work.ArchDefs.all;
 
 
 use work.CoreConfig.all;
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 
 use work.PipelineGeneral.all;
@@ -241,7 +242,7 @@ end record;
 
 type ForwardingMatchesArray is array(integer range <>) of ForwardingMatches; 
 
-
+-- Experimental
 constant DEFAULT_FORWARDING_INFO: ForwardingInfo := (
 	nextTagsM3 => (others => (others => '0')),
 	nextTagsM2 => (others => (others => '0')),
@@ -277,21 +278,7 @@ function makeBypassIntSV(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: 
 function makeBypassFloat(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassState;
 function makeBypassFloatSV(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassState;
 
-
-function buildForwardingNetwork(s0_R0, s0_R1: ExecResult;
-                                s1_R0, s1_R1: ExecResult;
-                                s2_R0, s2_R1: ExecResult;
-                                memFail, memDepFail: std_logic
-         -- : ExecResult
-) return ForwardingInfo;
-
-function buildForwardingNetworkFP(s0_R0, s0_R1,
-                                  s1_R0, s1_R1,
-                                  s2_R0, s2_R1
-          : ExecResult;
-                                  memFail, memDepFail: std_logic
-) return ForwardingInfo;
-
+function getExecValues(results: ExecResultArray) return MwordArray;
 
 end ForwardingNetwork;
 
@@ -366,66 +353,15 @@ begin
 end function;
 
 
-function buildForwardingNetwork(s0_R0, s0_R1: ExecResult;
-                                s1_R0, s1_R1: ExecResult;
-                                s2_R0, s2_R1: ExecResult;
-                                memFail, memDepFail: std_logic
-) return ForwardingInfo is
-    variable fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
+function getExecValues(results: ExecResultArray) return MwordArray is
+    constant LENGTH: natural := results'length;
+    constant resultCopy: ExecResultArray(0 to LENGTH-1) := results;
+    variable res: MwordArray(0 to LENGTH-1) := (others => (others => '0')); 
 begin
---    fni.nextTagsM3 := (0 => s0_M3.dest,                              1 => s1_M3.dest,                               2 => s2_M3.dest,                             others => (others => '0'));
---    fni.nextTagsM2 := (0 => s0_M2.dest,                              1 => s1_M2.dest,                               2 => s2_M2.dest,                             others => (others => '0'));
---    fni.nextTagsM1 := (0 => s0_M1.dest,                              1 => s1_M1.dest,                               2 => s2_M1.dest,                             others => (others => '0'));        
-    fni.tags0 :=      (0 => s0_R0.dest,                              1 => s1_R0.dest,                               2 => s2_R0.dest,                             others => (others => '0')); 
-    fni.tags1 :=      (0 => s0_R1.dest,                              1 => s1_R1.dest,                               2 => s2_R1.dest,                             others => (others => '0'));
-    
---    fni.iqTagsM3 :=   (0 => s0_M3.iqTag,                             1 => s1_M3.iqTag,                              2 => s2_M3.iqTag,                            others => (others => '0'));
---    fni.iqTagsM2 :=   (0 => s0_M2.iqTag,                             1 => s1_M2.iqTag,                              2 => s2_M2.iqTag,                            others => (others => '0'));
---    fni.iqTagsM1 :=   (0 => s0_M1.iqTag,                             1 => s1_M1.iqTag,                              2 => s2_M1.iqTag,                            others => (others => '0'));        
---    fni.iqTags0 :=    (0 => s0_R0.iqTag,                             1 => s1_R0.iqTag,                              2 => s2_R0.iqTag,                            others => (others => '0')); 
---    fni.iqTags1 :=    (0 => s0_R1.iqTag,                             1 => s1_R1.iqTag,                              2 => s2_R1.iqTag,                            others => (others => '0'));
-    
-    fni.values0 :=    (0 => s0_R0.value,                             1 => s1_R0.value,                              2 => s2_R0.value,                            others => (others => '0'));
-    fni.values1 :=    (0 => s0_R1.value,                             1 => s1_R1.value,                              2 => s2_R1.value,                            others => (others => '0'));                 
-    
---    fni.failedM2 :=   (0 => s0_M2.failed,                            1 => s1_M2.failed,                             2 => s2_M2.failed,                           others => '0');                 
---    fni.failedM1 :=   (0 => s0_M1.failed,                            1 => s1_M1.failed,                             2 => s2_M1.failed,                           others => '0');                 
-  --  fni.failed0  :=   (0 => s0_R0.failed,                            1 => s1_R0.failed,                             2 => s2_R0.failed,                           others => '0');                 
- --   fni.failed1  :=   (0 => s0_R1.failed,                            1 => s1_R1.failed,                             2 => s2_R1.failed,                           others => '0');                 
-
-    fni.memFail := memFail;
-    fni.memDepFail := memDepFail; 
-    
-    return fni;
+    for i in res'range loop
+        res(i) := resultCopy(i).value;
+    end loop;
+    return res;
 end function;
-
-function buildForwardingNetworkFP(s0_R0, s0_R1,
-                                  s1_R0, s1_R1,
-                                  s2_R0, s2_R1
-          : ExecResult;
-                                  memFail, memDepFail: std_logic
-
-) return ForwardingInfo is
-    variable fni: ForwardingInfo := DEFAULT_FORWARDING_INFO;
-begin
-    -- Forwarding network
---    fni.nextTagsM3 := (0 => s0_M3.dest,                                                                             2 => s2_M3.dest,                             others => (others => '0'));
---    fni.nextTagsM2 := (0 => s0_M2.dest,                                                                             2 => s2_M2.dest,                             others => (others => '0'));
---    fni.nextTagsM1 := (0 => s0_M1.dest,                                                                             2 => s2_M1.dest,                             others => (others => '0'));        
-  --  fni.tags0 :=      (0 => s0_R0.dest,                                                                             2 => s2_R0.dest,                             others => (others => '0')); 
- --   fni.tags1 :=      (0 => s0_R1.dest,                                                                             2 => s2_R1.dest,                             others => (others => '0'));
-    fni.values0 :=    (0 => s0_R0.value,                                                                            2 => s2_R0.value,                            others => (others => '0'));
-    fni.values1 :=    (0 => s0_R1.value,                                                                            2 => s2_R1.value,                            others => (others => '0'));                
-    --fni.failedM2 :=   (0 => s0_M2.failed,                                                                           2 => s2_M2.failed,                           others => '0');                 
-    --fni.failedM1 :=   (0 => s0_M1.failed,                                                                           2 => s2_M1.failed,                           others => '0');                 
- --   fni.failed0  :=   (0 => s0_R0.failed,                                                                           2 => s2_R0.failed,                           others => '0');                 
-  --  fni.failed1  :=   (0 => s0_R1.failed,                                                                           2 => s2_R1.failed,                           others => '0');                 
-
-    fni.memFail := memFail;
-    fni.memDepFail := memDepFail;
-
-    return fni;
-end function;
-
 
 end ForwardingNetwork;

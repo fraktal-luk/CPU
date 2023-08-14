@@ -6,6 +6,7 @@ use work.BasicTypes.all;
 use work.Helpers.all;
 
 use work.ArchDefs.all;
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 use work.CoreConfig.all;
 
@@ -95,13 +96,14 @@ begin
         signal physPtrTake, physPtrTakeNext, effectivePhysPtrTake: SmallNumber := i2slv(0, SMALL_NUMBER_SIZE);
         signal physPtrPut, physPtrPutNext: SmallNumber := i2slv(N_PHYS - 32 - FP_1, SMALL_NUMBER_SIZE);
 
-        signal numFront, numBack, numBackReduced, numFrontNext, numBackNext, numToTake: SmallNumber := (others => '0');
+        signal numFront, numBack, numBackReduced, numFrontNext, numBackNext, numToTake, numToTakeIfAllowed: SmallNumber := (others => '0');
         signal memRead, needTake, canWriteBack: std_logic := '0';
 
         signal outputRegs: PhysNameArray(0 to 3) := (others => (others => '0'));
     begin
         causingTag <= listPtrTakeStable when lateEventSignal = '1' else causingPointer;
 
+        numToTakeIfAllowed <= i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE);
         numToTake <= i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE) when freeListTakeAllow = '1' else (others => '0');
         needTake <= cmpLeS(numFront, addInt(numToTake, 4));
 
@@ -122,7 +124,7 @@ begin
         numBackNext <= addIntTrunc(numBackReduced, countOnes(freeListPutSel), 3) when freeListPutAllow = '1' else numBackReduced;
         numBackReduced <= numBack and "00000011";
             
-        listFrontNext <= moveFrontList(listFront, numFront, numToTake, outputRegs);
+        listFrontNext <= moveFrontList(listFront, numFront, numToTake, numToTakeIfAllowed, outputRegs, freeListTakeAllow);
         listBackNext <= moveBackList(listBack, canWriteBack, freeListPutAllow, numBackReduced, physCommitFreedDelayed);
   
         SYNCHRONOUS: process(clk)
@@ -161,7 +163,7 @@ begin
               
 -------------
 -------------        
-        VIEW: if VIEW_ON generate            
+        VIEW: if DB_ENABLE generate            
             signal vFree, vUsed: std_logic_vector(0 to N_PHYS-1) := (others => '0');
             signal newTaken, newPut: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
             

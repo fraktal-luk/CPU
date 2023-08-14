@@ -14,7 +14,7 @@ function matches(a, b: string) return boolean;
 
 function TMP_str2int(s: string) return integer;
 
-    
+
 function padLeft(s: string; n: natural) return string;
 function padRight(s: string; n: natural) return string;  
 

@@ -7,60 +7,11 @@ use work.BasicTypes.all;
 use work.ArchDefs.all;
 
 use work.CoreConfig.all;
+use work.InstructionStateBase.all;
 
 
 package InstructionState is
-	
-subtype PhysName is SmallNumber;
-type PhysNameArray is array(natural range <>) of PhysName;
 
-
-type ExecUnit is (General, ALU, MAC, Divide, Jump, Memory, System, FPU );
-type ExecFunc is (
-                unknown,
-
-                arithAdd, arithSub, arithSha,
-                logicAnd, logicOr, logicShl,
-                
-                mulS, mulU, 
-            
-                divS, divU,
-                
-                load, store,
-                
-                jump,
-                jumpZ,
-                jumpNZ,
-                
-                sysRetI, sysRetE,
-                sysHalt,
-                sysSync, sysReplay,
-                sysMTC, sysMFC, -- move to/from control
-                sysError,
-                sysCall,
-                sysSend,
-                
-                fpuMov,
-                fpuOr,
-                
-                sysUndef
-);	
-
-
---------------
-type SubpipeType is (None, ALU, Mem, FP);
-
-type ArithOp is (opAnd, opOr, opXor, opAdd, opSub, opShl, opSha, opRot, opJz, opJnz, opJ, opMul, opMulHS, opMulHU, opDivU, opDivS, opRemU, opRemS);
-
-type MemOp is (opLoad, opStore, opLoadSys, opStoreSys);
-
-type FpOp is (opMove, opOr);
-
-type SysOp is (opNone, opUndef, opHalt, opSync, opReplay,  opRetI, opRetE, opCall, opError, opSend);
-
-function getSpecificOpSize return natural;
-
-function findLog2(n: positive) return natural;
 
 constant OP_TYPE_BITS: natural := findLog2(SubpipeType'pos(SubpipeType'high) - SubpipeType'pos(SubpipeType'low) + 1);
 constant OP_VALUE_BITS: natural := getSpecificOpSize;
@@ -83,12 +34,12 @@ constant DEFAULT_SPECIFIC_OP: SpecificOp := (
     memory => opLoad,
     float => opMove,
     system => opNone);
-                                        
+
 function sop(sub: SubpipeType; func: ArithOp) return SpecificOp;
 function sop(sub: SubpipeType; func: MemOp) return SpecificOp;
 function sop(sub: SubpipeType; func: FpOp) return SpecificOp;
 function sop(sub: SubpipeType; func: SysOp) return SpecificOp;
-                                                
+ 
 ---------------
 
 constant TAG_SIZE: integer := 7 + LOG2_PIPE_WIDTH;
@@ -149,6 +100,7 @@ type ClassInfo_Dispatch is record
     storeFP: std_logic;
     useAlu: std_logic;
     useMul: std_logic;
+    useDiv: std_logic;
     useMem: std_logic;
     useFP: std_logic;
 end record;
@@ -218,7 +170,6 @@ type InstructionState is record
 
 	constantArgs: InstructionConstantArgs;
 	virtualArgSpec: InstructionArgSpec;
-	--physicalArgSpec: InstructionArgSpec;
 	   dest_T: PhysName; 
 end record;
 
@@ -257,106 +208,112 @@ type DbDependencyArray is array(natural range <>) of DbDependency;
 
 -- Scheduler structure
 type ArgumentState is record
-    used: std_logic;
-    reg: PhysName;
-    iqTag: SmallNumber;
-    zero: std_logic;
-    imm: std_logic;
-    value: Hword;
-    
-    canFail: std_logic; -- maybe a counter is needed 
-
-    activeCounter: SmallNumber;
-    failed: std_logic;
+    reg: PhysName;                  -- SS
+    iqTag: SmallNumber;             --
+    zero_T: std_logic;  -- useful (for retraction)
 
     waiting: std_logic;
-    stored:  std_logic;
-    srcPipe: SmallNumber;
-    srcStage: SmallNumber;
-    
+    readyCtr: SmallNumber;   -- for retraction
+
+    srcPipe: SmallNumber;          -- SS
+    srcStage: SmallNumber;         -- SS
+
+    used_T: std_logic;  -- DB only?
+    imm_T: std_logic;   -- DB only?
+    value: Hword;       -- DB only?
+
     dbDep: DbDependency;   
 end record;
 
 
 type ArgumentStateArray is array(natural range <>) of ArgumentState;
 
+
+
 -- Scheduler structure
+
+type EntryState is (empty, suspended, active, issued);
+
+type EntryStatus is record
+    --state: EntryState;
+
+    --active: std_logic;
+    --suspend: std_logic;
+    --issued: std_logic;
+    freed: std_logic;
+    trial: std_logic;
+    --issuedCtr: SmallNumber;
+    
+     --   T_justIssued: std_logic;
+     --   T_expiring: std_logic;
+end record;
+
+type EntryStatus_N is record
+    active: std_logic;
+    suspended: std_logic;
+    issued0: std_logic;
+    issued1: std_logic;
+    issued2: std_logic;    
+end record;
+
+
+subtype IqState is EntryState;
+type IqStateArray is array(natural range <>) of IqState;
+
 
 type StaticInfo is record
     dbInfo: InstructionDebugInfo;
     operation: SpecificOp;
     branchIns: std_logic;
+    divIns: std_logic;
     tags: InstructionTags;    
     immediate: std_logic;    
     immValue: Hword;
     zero: std_logic_vector(0 to 2);    
 end record;
 
-
---type StaticInfoArray is array(natural range <>) of StaticInfo;
-
--- Scheduler structure
-
-type EntryStatus is record
-    active: std_logic;
-    suspend: std_logic;
-    issued: std_logic;
-    freed: std_logic;
-    trial: std_logic;
-    stageCtr: SmallNumber;
-end record;
-
-type IqState is (empty, active, issued, freed);
-
-type IqStateArray is array(natural range <>) of IqState;
-
-type IqEvent is (none, insert, kill, issue, retract, retire);
-
-type IqEventArray is array(natural range <>) of IqEvent;
-
 type DynamicInfo is record
     full: std_logic;
-    
     status: EntryStatus;
-    currentState: IqState; -- DB
-    lastEvent: IqEvent; -- DB
+        status_N: EntryStatus_N;
 
-    renameIndex: InsTag;
-
+    renameIndex: InsTag; -- ??
     intDestSel: std_logic;
     floatDestSel: std_logic;
     dest: PhysName;
-
     argStates: ArgumentStateArray(0 to 2);
 end record;
 
-
---type DynamicInfoArray is array(natural range <>) of DynamicInfo;
-
--- Scheduler structure
 
 type SchedulerInfo is record
     dynamic: DynamicInfo;
     static: StaticInfo;
 end record;
 
-type SchedulerInfoArray is array(natural range <>) of SchedulerInfo;
 
 type SchedulerState is record
     full: std_logic;
-
+        maybeFull: std_logic;
     st: StaticInfo;
 
-    argSpec: InstructionArgSpec;
-    destTag: SmallNumber;
-    poisoned: std_logic;
+    intDestSel: std_logic;
+    floatDestSel: std_logic;
+    dest: SmallNumber;
 
-    readNew: std_logic_vector(0 to 2);
-    args: MwordArray(0 to 2);
+    destTag: SmallNumber;   -- not in dynamic
+
+    args: SmallNumberArray(0 to 2);
 
     argLocsPipe: SmallNumberArray(0 to 2);
     argSrc: SmallNumberArray(0 to 2);
+
+    readNew: std_logic_vector(0 to 2);  -- not in dynamic but derivable
+
+    argValues: MwordArray(0 to 2);   -- not in dynamic
 end record;
+
+
+type SchedulerInfoArray is array(natural range <>) of SchedulerInfo;
 
 
 -- Created to enable *Array				
@@ -364,7 +321,11 @@ type InstructionSlot is record
 	full: std_logic;
 	ins: InstructionState;
 end record;
-	
+
+
+type IqEvent is (none, insert, kill, issue, retract, retire); -- TODO: suspend/resume
+type IqEventArray is array(natural range <>) of IqEvent;
+
 
 -- NOTE: index can be negative to enable logical division into 2 different ranges 
 type InstructionSlotArray is array(integer range <>) of InstructionSlot;
@@ -390,19 +351,6 @@ end record;
 
 type ExecResultArray is array(integer range <>) of ExecResult;
 
-
-type EventState is record
-    lateEvent: std_logic;
-    execEvent: std_logic;
-    preExecTags: InstructionTags;
-    execCausing: ExecResult;
-    lateCausing: ExecResult;
-end record;
-
-type DbCoreState is record
-    dummy: DummyType;
-    dbSignal: std_logic;
-end record;
 
 type BufferEntryArray is array(0 to PIPE_WIDTH-1) of BufferEntry;
 type BufferEntryArray2D is array(0 to IBUFFER_SIZE-1, 0 to PIPE_WIDTH-1) of BufferEntry;
@@ -443,6 +391,7 @@ constant DEFAULT_STATIC_INFO: StaticInfo := (
     dbInfo => DEFAULT_DEBUG_INFO,
     operation => DEFAULT_SPECIFIC_OP,
     branchIns => '0',
+        divIns => '0',
     tags => DEFAULT_INSTRUCTION_TAGS,
     immediate => '0',
     immValue => (others => '0'),
@@ -507,7 +456,6 @@ constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
 	dispatchInfo => DEFAULT_CLASS_INFO_DISPATCH,
 	constantArgs => DEFAULT_CONSTANT_ARGS,
 	virtualArgSpec => DEFAULT_ARG_SPEC,
-	--physicalArgSpec => DEFAULT_ARG_SPEC,
 	   dest_T => (others => '0') 
 );
 
@@ -531,9 +479,9 @@ constant DEFAULT_INSTRUCTION_SLOT: InstructionSlot := ('0', DEFAULT_INSTRUCTION_
 constant DEFAULT_INS_SLOT: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;
 
 constant DEFAULT_EXEC_RESULT: ExecResult := (
-    DEFAULT_DEBUG_INFO,
-    '0',
-    '0',
+    dbInfo => DEFAULT_DEBUG_INFO,
+    full => '0',
+    failed => '0',
     tag => (others => '0'),
     dest => (others => '0'),
     value => (others => '0')
@@ -549,42 +497,35 @@ constant DEFAULT_EXEC_RESULT_N: ExecResult_N := (
     value => (others => '0')
 );
 
-constant DEFAULT_BUFFER_ENTRY: BufferEntry := (
-    dbInfo => DEFAULT_DEBUG_INFO,
-    specificOperation => sop(None, opNone),
-    classInfo => DEFAULT_CLASS_INFO,
-    constantArgs => DEFAULT_CONSTANT_ARGS,
-    argSpec => DEFAULT_ARG_SPEC,
-    others => '0'
-);
+constant DEFAULT_BUFFER_ENTRY: BufferEntry;
+-- := (
+--    dbInfo => DEFAULT_DEBUG_INFO,
+--    specificOperation => sop(None, opNone),
+--    classInfo => DEFAULT_CLASS_INFO,
+--    constantArgs => DEFAULT_CONSTANT_ARGS,
+--    argSpec => DEFAULT_ARG_SPEC,
+--    others => '0'
+--);
 
 constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       full => '0',
+          maybeFull => '0',
 
       st => DEFAULT_STATIC_INFO,
 
-      argSpec => DEFAULT_ARG_SPEC,
+      intDestSel => '0',
+      floatDestSel => '0',
+      dest => (others => '0'),
+      args => ((others => '0'), (others => '0'), (others => '0')),
       destTag => (others => '0'),
 
-      poisoned => '0',
-
       readNew => (others => '0'),
-      args => (others => (others=>'0')),
+      argValues => (others => (others=>'0')),
       argLocsPipe => (others => (others => '0')),
       argSrc => (others => (others => '0'))
       );
 
 constant DEFAULT_SCHED_STATE: SchedulerState := DEFAULT_SCHEDULER_STATE;
-
-constant DEFAULT_EVENT_STATE: EventState := (
-    '0',
-    '0',
-    DEFAULT_INSTRUCTION_TAGS,
-    DEFAULT_EXEC_RESULT,
-    DEFAULT_EXEC_RESULT
-    );
-
-constant DEFAULT_DB_STATE: DbCoreState := (dummy => DUMMY_VALUE, dbSignal => '0');
 
 
 constant DEFAULT_DB_DEPENDENCY: DbDependency := (
@@ -598,17 +539,16 @@ constant DEFAULT_DB_DEPENDENCY: DbDependency := (
                                     );
 
 constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
-    used => '0',
+    used_T => '0',
     reg => (others => '0'),
     iqTag => (others => '0'),
-    zero => '0',
-    imm => '0',
+    zero_T => '0',
+    imm_T => '0',
     value => (others => '0'),
-    canFail => '0',
-    activeCounter => (others => '0'),
-    failed => '0',
+    readyCtr => (others => '0'),
+--    failed => '0',
     waiting => '0',
-    stored => '0',
+--    stored => '0',
     srcPipe => (others => '0'),
     srcStage => (others => '0'),
     
@@ -618,21 +558,23 @@ constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
 constant DEFAULT_ARG_STATE: ArgumentState := DEFAULT_ARGUMENT_STATE;
 
 constant DEFAULT_ENTRY_STATUS: EntryStatus := (
-    active => '0',
-    suspend => '0',
-    issued => '0',
     freed => '0',
-    trial => '0',
-    stageCtr => (others => '0')
+    trial => '0'
+);
+
+constant DEFAULT_ENTRY_STATUS_N: EntryStatus_N := (
+    suspended => '0',
+    active => '0',
+    issued0 => '0',
+    issued1 => '0',
+    issued2 => '0'
 );
 
 constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
     full => '0',
 
     status => DEFAULT_ENTRY_STATUS,
-    currentState => empty,
-    lastEvent => none,
-
+        status_N => DEFAULT_ENTRY_STATUS_N,
     renameIndex => (others => '0'),
     intDestSel => '0',
     floatDestSel => '0',
@@ -645,12 +587,10 @@ constant DEFAULT_SCHEDULER_INFO: SchedulerInfo := (
     DEFAULT_STATIC_INFO
 );
 
-
 end InstructionState;
 
 
-
-package body InstructionState is     
+package body InstructionState is
 
 function sop(sub: SubpipeType; func: ArithOp) return SpecificOp is
     variable res: SpecificOp := DEFAULT_SPECIFIC_OP;
@@ -689,52 +629,13 @@ begin
 end function;
 
 
-
-function findLog2(n: positive) return natural is
-    variable i: natural := 0;
-    variable pow2: positive := 1;
-begin
-    loop
-        if pow2 >= n then
-            return i;
-        end if;
-        i := i + 1;
-        pow2 := 2*pow2;
-    end loop;
-    return 0;    
-end function;
-
-function getSpecificOpSize return positive is
-    variable res: positive := 1;
-    constant A: natural := ArithOp'pos(ArithOp'high) - ArithOp'pos(ArithOp'low) + 1;
-    constant M: natural := MemOp'pos(MemOp'high) - MemOp'pos(MemOp'low) + 1;
-    constant F: natural := FpOp'pos(FpOp'high) - FpOp'pos(FpOp'low) + 1;
-    constant S: natural := SysOp'pos(SysOp'high) - SysOp'pos(SysOp'low) + 1;
-    variable maxAM, maxAMF, maxAMFS, maxAll: natural := 0;
-    variable i: positive := 1;
-    variable pow2: positive := 2;
-begin
-    if A > M then
-       maxAM := A;
-    else
-       maxAM := M;
-    end if;
-    
-    if maxAM > F then
-        maxAMF := maxAM;
-    else
-        maxAMF := F;
-    end if;
-    
-    if maxAMF > S then
-        maxAMFS := maxAMF;
-    else
-        maxAMFS := S;
-    end if;
-    maxAll := maxAMFS;
-    
-    return findLog2(maxAll);
-end function;
-	
+constant DEFAULT_BUFFER_ENTRY: BufferEntry := (
+    dbInfo => DEFAULT_DEBUG_INFO,
+    specificOperation => sop(None, opNone),
+    classInfo => DEFAULT_CLASS_INFO,
+    constantArgs => DEFAULT_CONSTANT_ARGS,
+    argSpec => DEFAULT_ARG_SPEC,
+    others => '0'
+);
 
 end InstructionState;

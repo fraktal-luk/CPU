@@ -12,6 +12,7 @@ use work.ArchDefs.all;
 use work.Arith.all;
 
 use work.CoreConfig.all;
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 
 use work.PipelineGeneral.all;
@@ -21,7 +22,11 @@ use work.DecodingDev.all;
 
 package LogicFront is
 
-function getEarlyEvent(fetchLine: WordArray(0 to FETCH_WIDTH-1); target, predictedAddress: Mword; fetchStall, send: std_logic) return ControlPacket;
+function shiftLine(fetchedLine: WordArray; shift: SmallNumber) return WordArray;
+function getStallEvent(predictedAddress: Mword) return ControlPacket;
+
+function getFrontEvent(ip, target: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket;
+function getNormalEvent(target: Mword; cp: ControlPacket) return ControlPacket;
 
 function decodeGroup(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural; ip: Mword; ctrl: ControlPacket) return BufferEntryArray;
 function getControlA(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural;ip: Mword; hasBranch: std_logic) return ControlPacketArray;
@@ -76,15 +81,42 @@ begin
     return res; 
 end function;
 
+function shiftLine(fetchedLine: WordArray; shift: SmallNumber) return WordArray is
+    variable res: WordArray(0 to FETCH_WIDTH-1) := fetchedLine;
+    variable sh: natural := slv2u(shift(LOG2_PIPE_WIDTH-1 downto 0));
+begin
+    for i in 0 to FETCH_WIDTH-1 loop
+        if i + sh > FETCH_WIDTH-1 then
+            res(i) := fetchedLine(FETCH_WIDTH-1);
+        else
+            res(i) := fetchedLine(i + sh);
+        end if;
+    end loop;
+
+    return res;
+end function;
+
+function extractOffset(w: Word; long: std_logic) return Mword is
+    variable res: Mword := (others => '0'); 
+begin
+    if long = '1' then
+        res := (others => w(25));
+        res(25 downto 0) := w(25 downto 0);
+    else
+        res := (others => w(20));
+        res(20 downto 0) := w(20 downto 0);
+    end if;
+    return res;    
+end function;
+
 
 function getFrontEvent(ip, target: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket is
 	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-	variable tempOffset, tempIP, tempTarget: Mword := (others => '0');
+	variable tempOffset, tempIP: Mword := (others => '0');
 	variable branchIns, predictedTaken, uncondJump, longJump: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
 	constant partMask: std_logic_vector(0 to FETCH_WIDTH-1) := partialMask(ip);
 	variable regularJump, jumpLink, jumpCond, jumpLong, jumpReg: std_logic := '0';
 begin
-
     -- Calculate target for each instruction, even if it's to be skipped
     for i in 0 to FETCH_WIDTH-1 loop
         jumpLink := isJumpLink(fetchLine(i));
@@ -101,22 +133,15 @@ begin
         branchIns(i) := regularJump or longJump(i) or jumpReg;
 	end loop;
 
-    res.tags.bqPointer := sn(3); -- CAREFUL, TMP: here used to indicate index of taken branch within fetch group
+    res.tags.bqPointer := sn(FETCH_WIDTH-1);
 
     -- Find if any branch predicted
     for i in 0 to FETCH_WIDTH-1 loop
         if partMask(i) = '1' and branchIns(i) = '1' and predictedTaken(i) = '1' then
-            if longJump(i) = '1' then
-                tempOffset := (others => fetchLine(i)(25));
-                tempOffset(25 downto 0) := fetchLine(i)(25 downto 0);
-            else
-                tempOffset := (others => fetchLine(i)(20));
-                tempOffset(20 downto 0) := fetchLine(i)(20 downto 0);
-            end if;
-            
             tempIP := ip(MWORD_SIZE-1 downto ALIGN_BITS) & i2slv(i*4, ALIGN_BITS);    -- !! Only for BQ, indirect
-            tempTarget := add(tempIP, tempOffset);
-            res.target := tempTarget;
+            tempOffset := extractOffset(fetchLine(i), longJump(i));
+
+            res.target := add(tempIP, tempOffset);
 
             res.controlInfo.confirmedBranch := uncondJump(i);
             res.controlInfo.frontBranch := '1';
@@ -134,7 +159,6 @@ begin
             end if;
 
             res.tags.bqPointer := sn(i); -- TMP!
-
             exit;
         end if;
     end loop;
@@ -143,27 +167,27 @@ begin
 end function;
 
 
-function getEarlyEvent(fetchLine: WordArray(0 to FETCH_WIDTH-1); target, predictedAddress: Mword; fetchStall, send: std_logic)
-return ControlPacket is
+function getStallEvent(predictedAddress: Mword) return ControlPacket is
 	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-	constant cp: ControlPacket := getFrontEvent(predictedAddress, target, fetchLine);
 begin
-    if fetchStall = '1' then -- Need refetching
-        res.target := predictedAddress;
-        res.controlInfo.newEvent := '1';
-        res.controlInfo.refetch := '1';
-    elsif send = '1' then
+    res.target := predictedAddress;
+    res.controlInfo.newEvent := '1';
+    res.controlInfo.refetch := '1';
+    return res;
+end function;
+
+function getNormalEvent(target: Mword; cp: ControlPacket) return ControlPacket is
+	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+begin
+    --res.target := target;
+    if cp.controlInfo.full = '1' and cp.controlInfo.frontBranch = '1' then
+        res.target := cp.target; -- Correcting target within subsequent fetch line is still needed even if no redirection!
+        res.controlInfo.newEvent := cp.controlInfo.newEvent; -- CAREFUL: event only if needs redirection, but break group at any taken jump
+        res.controlInfo.frontBranch := '1';
+    else
         res.target := target;
-
-        if cp.controlInfo.full = '1' and cp.controlInfo.frontBranch = '1' then
-            res.target := cp.target; -- Correcting target within subsequent fetch line is still needed even if no redirection!
-            res.controlInfo.newEvent := cp.controlInfo.newEvent; -- CAREFUL: event only if needs redirection, but break group at any taken jump
-            res.controlInfo.frontBranch := '1';
-        end if;
     end if;
-
     res.tags.bqPointer := cp.tags.bqPointer;
-
     return res;
 end function;
 
@@ -228,10 +252,9 @@ end function;
 function getControlA(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural;ip: Mword; hasBranch: std_logic) return ControlPacketArray is
 	variable res: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 	variable tempIP, tempOffset: Mword := (others => '0');
-	variable full, branchIns, predictedTaken, uncondJump, longJump: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
+	variable branchIns, predictedTaken, uncondJump, longJump: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
 	variable regularJump, jumpLink, jumpCond, jumpLong, jumpReg: std_logic := '0';
 begin
-
     -- Calculate target for each instruction, even if it's to be skipped
     for i in 0 to FETCH_WIDTH-1 loop
         jumpLink := isJumpLink(fetchLine(i));
@@ -246,22 +269,14 @@ begin
         predictedTaken(i) := jumpLink or jumpLong or (jumpCond and fetchLine(i)(20));
         branchIns(i) := regularJump or longJump(i) or jumpReg;
 
-        if longJump(i) = '1' then
-            tempOffset := (others => fetchLine(i)(25));
-            tempOffset(25 downto 0) := fetchLine(i)(25 downto 0);
-        else
-            tempOffset := (others => fetchLine(i)(20));
-            tempOffset(20 downto 0) := fetchLine(i)(20 downto 0);
-        end if;
-
-
+        -------------------
         tempIP := addInt(ip, 4*i);
+        tempOffset := extractOffset(fetchLine(i), longJump(i));
+
         res(i).target := add(tempIP, tempOffset);
         res(i).nip := addInt(ip, 4*(i + 1));
 
-        full(i) := bool2std(i < nWords);
-
-        if full(i) = '1' and branchIns(i) = '1' and predictedTaken(i) = '1' then
+        if i < nWords and branchIns(i) = '1' and predictedTaken(i) = '1' then
             res(i).controlInfo.confirmedBranch := uncondJump(i);
             res(i).controlInfo.frontBranch := '1';
         end if;
@@ -317,7 +332,8 @@ begin
     -- pragma synthesis off
     res.bits := bits;
     res.adr := ip;
-    res.str := work.Assembler.disasmWord(bits)(res.str'range);
+    res.str(1 to 24) := work.Assembler.disasmWord(bits)(1 to 24);
+    
     -- pragma synthesis on
     return res;
 end function;

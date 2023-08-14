@@ -268,6 +268,7 @@ type Operation is (none,
                     
                     intAnd, intOr, intXor,
                     intAdd, intSub,
+                    intAddH,
                     intMul, intMulHU, intMulHS,
                     intDivU, intDivS,
                     intRemU, intRemS,
@@ -347,7 +348,7 @@ function getDef(i, j, k: integer) return InstructionDefinition;
 
 function buildGeneralTable return GeneralTable;
 
-constant TheTable: GeneralTable := buildGeneralTable;
+constant TheTable: GeneralTable;-- := buildGeneralTable;
 
 
 constant EmptyTable1: OpcodeTable1 := (others => (none, none, none, undef));
@@ -436,7 +437,7 @@ constant MainTable: OpcodeTable0 := (
     
     
     16 => (addI, intAdd, intImm16, add_i),
-    17 => (addH, intAdd, intImm16, add_h),
+    17 => (addH, intAddH, intImm16, add_h),
     
     20 => (intLoadW16, intLoadW, intImm16, ldi_i),
     21 => (intStoreW16, intStoreW, intStore16, sti_i),
@@ -615,7 +616,6 @@ end InstructionSet;
 
 
 package body InstructionSet is
-
 
 function getDef(i, j, k: integer) return InstructionDefinition is
     variable res: InstructionDefinition;
@@ -1156,6 +1156,8 @@ begin
     
     return res;
 end function;
+
+constant TheTable: GeneralTable := buildGeneralTable;
 
 
 end InstructionSet;

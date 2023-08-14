@@ -41,7 +41,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     signal testToDo, testDone, testFail: std_logic := '0';
     
     
-    signal simDone, emulDone: std_logic := '1';
+    --signal simDone, emulDone: std_logic := '1';
         
     signal emulReady: std_logic := '0';
     
@@ -74,7 +74,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     type Instruction is record
         address: Mword;
         bits: Word;
-        disasm: string(1 to 51);
+        disasm: string(1 to 30);
         internalOp: InternalOperation;
     end record;
         
@@ -141,7 +141,7 @@ ARCHITECTURE Behavior OF CoreTB IS
             end if;            
         end loop;
     end procedure;
-              
+
     procedure cycle(signal clk: in std_logic) is
     begin
         wait until rising_edge(clk);
@@ -152,7 +152,7 @@ ARCHITECTURE Behavior OF CoreTB IS
         wait until rising_edge(clk);
     end procedure;
 
-        
+
     procedure checkTestResult(variable testName: in line; signal testDone, testFail: out std_logic) is
     begin
         loop
@@ -259,17 +259,18 @@ ARCHITECTURE Behavior OF CoreTB IS
     end procedure;
 
     procedure loadProgramFromFileWithImports(filename: in string; libExports: XrefArray; libStart: Mword; signal testProgram: out WordArray) is        
-	    --constant prog: ProgramBuffer := readSourceFile(filename).words; -- range: 0 to 999
-	    constant code: CodeBuffer := readSourceFile(filename);
+	    variable code: CodeBuffer := readSourceFile(filename);
 	    variable wordBuf: WordBuffer;
         variable machineCode: WordArray(0 to PROGRAM_BUFFER_SIZE-1);
-        variable imp, exp: XrefArray(0 to 100);
+        variable imp, exp: XrefArray(0 to 100) := (others => DEFAULT_XREF);
     begin
+    	--code := readSourceFile(filename);    
         processProgram(code, wordBuf, imp, exp);
+
         machineCode := wordBuf.words(0 to PROGRAM_BUFFER_SIZE-1);
         machineCode := fillXrefs(machineCode, imp, matchXrefs(imp, libExports), 0, slv2u(libStart));
 
-        testProgram <= (others => (others => 'U'));
+        testProgram(0 to testProgram'length-1) <= (others => (others => 'U'));
         testProgram(0 to machineCode'length-1) <= machineCode(0 to machineCode'length-1);        
     end procedure;
 
@@ -289,7 +290,7 @@ ARCHITECTURE Behavior OF CoreTB IS
     -- Differs from simple ln.all in that it's written to a string of predefined length
     procedure fillStringFromLine(signal s: out string; variable ln: in line) is
     begin
-        s <= (others => ' ');
+        s(1 to s'length) <= (others => ' ');
         s(1 to ln.all'length) <= ln.all;
     end procedure;
     
@@ -304,7 +305,8 @@ ARCHITECTURE Behavior OF CoreTB IS
         res := (cpuState.nextIP, insWordVar, work.InstructionSet.TMP_disasm(insWordVar), intOpVar);
         return res;
     end function;
-
+    
+    signal expSig: XrefArray(0 to 100) := (others => DEFAULT_XREF);
 BEGIN
    okFlag <= bool2std(opFlags = "001");
    errorFlag <= bool2std(opFlags = "100");
@@ -330,11 +332,13 @@ BEGIN
        variable machineCodeVar2: WordArray(0 to PROGRAM_BUFFER_SIZE-1);
        variable machineCodeBuf: WordBuffer;
 
-       variable exp, imp: XrefArray(0 to 100);
+       variable exp, imp: XrefArray(0 to 100) := (others => DEFAULT_XREF);
        
        variable match: boolean := true;
    begin
               processProgram(readSourceFile("common_asm.txt"), machineCodeBuf, imp, exp);
+              
+                expSig <= exp;
               machineCodeVar2 := machineCodeBuf.words(0 to PROGRAM_BUFFER_SIZE-1);
               commonCode2 <= machineCodeVar2;	           
 
@@ -342,29 +346,55 @@ BEGIN
 
       loop
           suiteName := null;
-          readline(suiteFile, suiteName);
-          if suiteName = null then -- testName'length = 0 then
+          if endfile(suiteFile) then
+          --if suiteName = null then -- testName'length = 0 then
               exit;
-          elsif suiteName(1) = ';' then
+          end if;
+          
+          readline(suiteFile, suiteName);
+
+          if suiteName(1) = ';' then
               next;
           end if;          
           
           report "Starting suite: " & suiteName.all;
-          
+
           file_open(testFile, suiteName.all & ".txt", read_mode);
+          
+          wait until rising_edge(clk);
+
           loop
-              testName := null;	  
+              testName := null;
+              if endfile(testFile) then
+                    exit;
+              end if;
               readline(testFile, testName);
-              if testName = null then
-                  exit;
-              elsif testName(1) = ';' then
+--              if testName = null then
+--                  exit;
+              if testName(1) = ';' then
                   next;
               end if;
 
               announceTest(currentTest, currentSuite, testName.all, suiteName.all);    
 
+          --          wait until rising_edge(clk);
+  --                      programMemory2(0) <= X"00001234";
+          --          wait until rising_edge(clk);
+
+          --          loadFile(testName.all & ".txt");
+
 
               loadProgramFromFileWithImports(testName.all & ".txt", exp, i2slv(4*1024, MWORD_SIZE), programMemory2);
+
+            --        cycle;
+            --        wait until rising_edge(clk);
+--                        programMemory2(1) <= X"00002345";
+
+            --        wait until rising_edge(clk);
+--                        programMemory2(2) <= X"00001111";
+
+             --       wait until rising_edge(clk);
+
 
                 -- Reset handler
                 setInstruction(programMemory2, RESET_BASE, "ja -512");
@@ -380,8 +410,19 @@ BEGIN
                 -- Common lib
                 setProgram(testProgram2, i2slv(4*1024, 32), commonCode2);	           
 
+                      --  
 
-              setForOneCycle(resetDataMem, clk);
+                setForOneCycle(resetDataMem, clk);
+--                resetDataMem <= '1';
+--                --cycle(clk);
+--                --   cycle;
+--                        wait until rising_edge(clk);
+
+--                resetDataMem <= '0';
+--                --cycle(clk);
+--                --    cycle;
+--                        wait until rising_edge(clk);
+
               disasmToFile(testName.all & "_disasm.txt", testProgram2);
 
               if CORE_SIMULATION then
@@ -551,7 +592,96 @@ BEGIN
       signal cpuState2: CoreState := INIT_CORE_STATE;
       signal dataMemory2: ByteArray(0 to 4095);
       signal currentInstruction2: Instruction;
+      
+            signal dummyDiv, dummyRem, da, db: Word;
   begin
+  
+            process
+                variable dd, dr: Word;
+            begin
+                cycle;
+
+                   da <= X"ffffffff";
+                   db <= X"ffffffff";
+                cycle;
+                   work.Emulate.divRem(da, db, false, dd, dr);
+                   dummyDiv <= dd;
+                   dummyRem <= dr;
+                    --------------------
+                    
+                   da <= X"00000004";
+                      db <= X"00000002";
+                  cycle;
+                     work.Emulate.divRem(da, db, false, dd, dr);
+                     dummyDiv <= dd;
+                     dummyRem <= dr;
+                      --------------------
+                    
+                   da <= X"ffffffff";
+                     db <= X"80000000";
+                 cycle;
+                    work.Emulate.divRem(da, db, false, dd, dr);
+                    dummyDiv <= dd;
+                    dummyRem <= dr;
+                     --------------------
+                     
+                   da <= X"80000003";
+                     db <= X"40000000";
+                  cycle;
+                     work.Emulate.divRem(da, db, false, dd, dr);
+                     dummyDiv <= dd;
+                     dummyRem <= dr;
+                      --------------------
+
+                     
+                   da <= X"0000002b";
+                     db <= X"00000008";
+                  cycle;
+                     work.Emulate.divRem(da, db, false, dd, dr);
+                     dummyDiv <= dd;
+                     dummyRem <= dr;
+                      --------------------
+
+
+                   da <= X"80000000";
+                     db <= X"40000000";
+                  cycle;
+                     work.Emulate.divRem(da, db, true, dd, dr);
+                     dummyDiv <= dd;
+                     dummyRem <= dr;
+                      --------------------
+
+
+                   da <= X"00000008";
+                     db <= X"fffffffe";
+                  cycle;
+                     work.Emulate.divRem(da, db, true, dd, dr);
+                     dummyDiv <= dd;
+                     dummyRem <= dr;
+                      --------------------
+                      
+
+                     da <= X"ffffffff";
+                       db <= X"00000007";
+                    cycle;
+                       work.Emulate.divRem(da, db, true, dd, dr);
+                       dummyDiv <= dd;
+                       dummyRem <= dr;
+                        --------------------
+                cycle;
+                
+                cycle;
+                
+                
+                cycle;
+                
+                
+                cycle;
+                
+                    wait;
+            end process;
+  
+  
         TMP_EMUL: process (clk)
             type EmulState is (ready, prepare, running);
             variable state: EmulState := ready;
@@ -563,7 +693,7 @@ BEGIN
                 case state is
                     when ready =>
                         if resetDataMem = '1' then
-                            emulDone <= '0';
+                            --emulDone <= '0';
                             state := prepare;
                           
                             currentInstruction2 <= ((others => 'U'), (others => 'U'), (others => ' '), DEFAULT_INTERNAL_OP);

@@ -11,6 +11,7 @@ use work.BasicTypes.all;
 use work.Helpers.all;
 
 use work.ArchDefs.all;
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 use work.CoreConfig.all;
 use work.PipelineGeneral.all;
@@ -60,7 +61,6 @@ port(
     commitArgInfoF: in RenameInfoArray(0 to PIPE_WIDTH-1);
     sendingFromROB: in std_logic;
    
-    --commitGroupCtrIn: in InsTag;
     renameGroupCtrNextOut: out InsTag;
   
     execCausing: in ControlPacket;
@@ -87,74 +87,64 @@ architecture Behavioral of UnitRegManager is
     signal commitGroupCtr, commitGroupCtrNext,   commitGroupCtrIn: InsTag := INITIAL_GROUP_TAG;
     signal commitGroupCtrInc, commitGroupCtrIncNext: InsTag := INITIAL_GROUP_TAG_INC;
 
-
     signal newIntDests, newFloatDests, physStableInt, physStableFloat, zeroDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
     signal newIntDestPointer, newFloatDestPointer: SmallNumber := (others => '0');
     signal newIntSources, newIntSources_NR, newIntSourcesAlt, newFloatSources, newFloatSourcesAlt, zeroSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
     signal newSourceSelectorInt, newSourceSelectorFloat, zeroSelector: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
 
-    --signal specialActionSlot: InstructionSlot := DEFAULT_INSTRUCTION_SLOT;    
     signal specialOperation: SpecificOp := DEFAULT_SPECIFIC_OP;
 
-        -- DEBUG
-    	signal newProducersInt, newProducersFloat, zeroProducers: InsTagArray(0 to 3*PIPE_WIDTH-1) := (others => (others => 'U'));
+    -- DEBUG
+    signal newProducersInt, newProducersFloat, zeroProducers: InsTagArray(0 to 3*PIPE_WIDTH-1) := (others => (others => 'U'));
 
-    ------------
-        -- Debug functions
-        function DB_addTag(dbi: InstructionDebugInfo; tag: InsTag) return InstructionDebugInfo is
-            variable res: InstructionDebugInfo := dbi;
-        begin
-            -- pragma synthesis off
-            res.tag := tag;
-            -- pragma synthesis on
-            return res;
-        end function;
-    ---------------
-
-          function getInsSlot(elem: BufferEntry) return InstructionSlot is
-              variable res: InstructionSlot := DEFAULT_INS_SLOT;
-          begin
-              res.full := elem.full;
-              res.ins.dbInfo := elem.dbInfo;
-
-              res.ins.specificOperation := unfoldOp(elem.specificOperation);
-
-              res.ins.typeInfo := elem.classInfo;
-              res.ins.typeInfo.useSQ := elem.classInfo.secCluster;
-
-              res.ins.constantArgs := elem.constantArgs;
-              res.ins.virtualArgSpec := elem.argSpec; 
-
-
-              res.ins.controlInfo.firstBr_T := elem.firstBr;
-              res.ins.controlInfo.specialAction_T := elem.specialAction;
-
-              return res;
-          end function;
-
-          function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray is
-              variable res: InstructionSlotArray(elemVec'range);
-          begin
-              for i in res'range loop
-                  res(i) := getInsSlot(elemVec(i));
-              end loop;
-              return res;
-          end function;
+    function getInsSlot(elem: BufferEntry) return InstructionSlot is
+      variable res: InstructionSlot := DEFAULT_INS_SLOT;
+    begin
+      res.full := elem.full;
+      res.ins.dbInfo := elem.dbInfo;
+    
+      res.ins.specificOperation := unfoldOp(elem.specificOperation);
+    
+      res.ins.typeInfo := elem.classInfo;
+      res.ins.typeInfo.useSQ := elem.classInfo.secCluster;
+    
+      res.ins.constantArgs := elem.constantArgs;
+      res.ins.virtualArgSpec := elem.argSpec; 
+    
+    
+      res.ins.controlInfo.firstBr_T := elem.firstBr;
+      res.ins.controlInfo.specialAction_T := elem.specialAction;
+    
+      return res;
+    end function;
+    
+    function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray is
+      variable res: InstructionSlotArray(elemVec'range);
+    begin
+      for i in res'range loop
+          res(i) := getInsSlot(elemVec(i));
+      end loop;
+      return res;
+    end function;
 
 
     function classifyForDispatch(insVec: InstructionSlotArray) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+        variable div, mul: boolean := false;
     begin
         for i in 0 to PIPE_WIDTH-1 loop
+            div := insVec(i).ins.specificOperation.arith = opDivU
+                or insVec(i).ins.specificOperation.arith = opDivS                     
+                or insVec(i).ins.specificOperation.arith = opRemU
+                or insVec(i).ins.specificOperation.arith = opRemS;
+            mul := insVec(i).ins.specificOperation.arith = opMul
+                or insVec(i).ins.specificOperation.arith = opMulhU
+                or insVec(i).ins.specificOperation.arith = opMulhS;
+
+            res(i).ins.dispatchInfo.useDiv := bool2std(div and (insVec(i).ins.specificOperation.subpipe = ALU));
+            
             if (insVec(i).ins.specificOperation.subpipe = ALU) then
-                if      insVec(i).ins.specificOperation.arith = opMul
-                     or insVec(i).ins.specificOperation.arith = opMulhU
-                     or insVec(i).ins.specificOperation.arith = opMulhS
-                     or insVec(i).ins.specificOperation.arith = opDivU
-                     or insVec(i).ins.specificOperation.arith = opDivS                     
-                     or insVec(i).ins.specificOperation.arith = opRemU
-                     or insVec(i).ins.specificOperation.arith = opRemS
-                then
+                if mul or div then
                     res(i).ins.dispatchInfo.useMul := '1';
                 else
                     res(i).ins.dispatchInfo.useAlu := '1';
@@ -165,9 +155,9 @@ architecture Behavioral of UnitRegManager is
                 res(i).ins.dispatchInfo.useMem := '1';
 
 			    if (insVec(i).ins.specificOperation.memory = opLoad or insVec(i).ins.specificOperation.memory = opLoadSys) then 
-                        res(i).ins.typeInfo.useLQ := '1';
+                    res(i).ins.typeInfo.useLQ := '1';
                 elsif (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys) then
-                        res(i).ins.typeInfo.useSQ := '1';
+                    res(i).ins.typeInfo.useSQ := '1';
                     if res(i).ins.typeInfo.useFP = '1' then
                         res(i).ins.dispatchInfo.storeFP := '1';
                     else
@@ -186,7 +176,6 @@ architecture Behavioral of UnitRegManager is
     begin
         return ctrl.specialAction_T;
     end function;
-
 
     function getSpecialActionSlot(insVec: InstructionSlotArray) return SpecificOp is
        variable res: SpecificOp := insVec(0).ins.specificOperation;
@@ -367,28 +356,10 @@ architecture Behavioral of UnitRegManager is
 
     signal inputRenameInfoInt, inputRenameInfoFloat, resultRenameInfoInt, resultRenameInfoFloat, storedRenameInfoInt, storedRenameInfoFloat,
                       commitArgInfoIntDelayed, commitArgInfoFloatDelayed: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
-                      
-                      
-                      
-        procedure DB_trackSeqNum(renamed: InstructionSlotArray) is
-        begin
-            -- pragma synthesis off
-            if DB_OP_TRACKING then
-                for i in renamed'range loop
-                    if renamed(i).ins.dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
-                        report "";
-                        report "DEBUG: Tracked seqNum renamed: " & integer'image(slv2u(DB_TRACKED_SEQ_NUM));
-                        report "";
-                        
-                        return;
-                    end if;
-                end loop;
-            end if;
-            -- pragma synthesis on
-        end procedure;
+
 begin
 
-            commitGroupCtrIn <= commitGroupCtr;
+    commitGroupCtrIn <= commitGroupCtr;
 
     inputRenameInfoInt <= getRenameInfo(frontData, zeroDests, zeroSources, zeroSources, zeroProducers, zeroSelector);
     inputRenameInfoFloat <= getRenameInfo(frontData, zeroDests, zeroSources, zeroSources, zeroProducers, zeroSelector, true);
@@ -424,13 +395,10 @@ begin
     renameCtrNext <= addInt(renameCtr, countOnes(extractFullMask(renamedBase))) when frontLastSending = '1'
                        else renameCtr;
 
-
-
-        commitGroupCtrNext <= commitGroupCtrInc when sendingFromROB = '1' else commitGroupCtr;
-        commitGroupCtrIncNext <= addInt(commitGroupCtrInc, PIPE_WIDTH) when sendingFromROB = '1' else commitGroupCtrInc;
+    commitGroupCtrNext <= commitGroupCtrInc when sendingFromROB = '1' else commitGroupCtr;
+    commitGroupCtrIncNext <= addInt(commitGroupCtrInc, PIPE_WIDTH) when sendingFromROB = '1' else commitGroupCtrInc;
 
             ch0 <= bool2std(commitGroupCtr = commitGroupCtrIn);
-
 
     -- Re-allow renaming when everything from rename/exec is committed - reg map will be well defined now
     renameLockRelease <= '1' when commitGroupCtrIn = renameGroupCtr else '0';
@@ -458,22 +426,21 @@ begin
             if frontLastSending = '1' then
                 renameFull <= '1';
                 renamedDataLivingPre <= renamedBase;
-                
+
                 DB_trackSeqNum(renamedBase);
-                
             elsif renamedSendingSig = '1' then
                 renameFull <= '0';
             end if;
-    
+
             if eventSig = '1' then
                 renameFull <= '0';
             end if;
-    
+
             renameGroupCtr <= renameGroupCtrNext;
             renameCtr <= renameCtrNext;
 
-                commitGroupCtr <= commitGroupCtrNext;
-                commitGroupCtrInc <= commitGroupCtrIncNext;
+            commitGroupCtr <= commitGroupCtrNext;
+            commitGroupCtrInc <= commitGroupCtrIncNext;
 
             -- Lock when exec part causes event
             if execEventSignal = '1' or lateEventSignal = '1' then -- CAREFUL
@@ -506,9 +473,9 @@ begin
         
         rewind => renameLockEndDelayed,
         
-            reserveTag => renameGroupCtrNext,
-            commitTag => commitGroupCtrIn,
-            rewindTag => execCausing.tags.renameIndex,
+        reserveTag => renameGroupCtrNext,
+        commitTag => commitGroupCtrIn,
+        rewindTag => execCausing.tags.renameIndex,
         
         sendingToReserve => frontSendingIn,
         reserveInfoA => inputRenameInfoInt,
@@ -535,9 +502,9 @@ begin
             
             rewind => renameLockEndDelayed,
 
-                reserveTag => renameGroupCtrNext,
-                commitTag => commitGroupCtrIn,
-                rewindTag => execCausing.tags.renameIndex,
+            reserveTag => renameGroupCtrNext,
+            commitTag => commitGroupCtrIn,
+            rewindTag => execCausing.tags.renameIndex,
 
             sendingToReserve => frontSendingIn,
     
@@ -614,7 +581,7 @@ begin
     newPhysDestsOut <= newIntDests;
     newFloatDestsOut <= newFloatDests; 
     renameAccepting <= not renameLockState;
- 
+
     renamedSending <= renamedSendingSig;   
 
     renamingBr <= frontLastSending and frontData(0).firstBr;
@@ -631,55 +598,18 @@ begin
     
     renameGroupCtrNextOut <= renameGroupCtrNext;
     
+    -- pragma synthesis off
     RENAME_DB: block
-        signal gapSig: std_logic := '0';
-        signal gapFirst, gapLast: Word := (others => 'U');
-        signal lastSeqNum: Word := (others => '0');
+
     begin
-    
+
         COMMON_SYNCHRONOUS: process(clk)
-            procedure DB_handleGroup(ia: BufferEntryArray; signal lastSeqNum: inout Word; signal gapSig: out std_logic) is--; signal gapSig: out std_logic) is
-                variable any: boolean := false;
-                variable firstNewSeqNum, lastNewSeqNum, gap: Word := (others => '0');
-                
-            begin
-                -- pragma synthesis off
-            
-                for i in 0 to PIPE_WIDTH-1 loop
-                    if ia(i).full = '1' then
-                        if not any then
-                            firstNewSeqNum := ia(i).dbInfo.seqNum;
-                        end if;
-                        lastNewSeqNum := ia(i).dbInfo.seqNum;
-                        any := true;
-                    end if;
-                end loop;
-                
-                gap := sub(firstNewSeqNum, lastSeqNum);
-                if slv2u(gap) /= 1 then
-                    gapSig <= '1';
-                    gapFirst <= addInt(lastSeqNum, 1);
-                    gapLast <= addInt(firstNewSeqNum, -1);
-                else
-                    gapSig <= '0';
-                    gapFirst <= (others => 'U');
-                    gapLast <= (others => 'U');
-                end if;
-                
-                lastSeqNum <= lastNewSeqNum;
-                
-                -- pragma synthesis on
-            end procedure;
         begin
             if rising_edge(clk) then
-               if frontSendingIn = '1' then
-                   
-                   -- DEBUG
-                   --robDataCommitted <= robDataCommittedNext;
-                   DB_handleGroup(frontData, lastSeqNum, gapSig);
-               end if;
+
             end if;
-        end process;       
-    
-    end block;          
+        end process;
+    end block;
+    -- pragma synthesis on
+           
 end Behavioral;

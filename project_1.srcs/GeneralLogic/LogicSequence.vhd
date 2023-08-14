@@ -8,6 +8,7 @@ use work.Arith.all;
 
 use work.ArchDefs.all;
 use work.CoreConfig.all;
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 
 use work.PipelineGeneral.all;
@@ -15,7 +16,7 @@ use work.PipelineGeneral.all;
 
 package LogicSequence is
 
-function getNextPC(pc: Mword; jumpPC: Mword; jump: std_logic) return Mword;
+function getNextPC(pc: Mword) return Mword;
 
 function getLatePCData(commitCt: InstructionControlInfo; commitTarget: Mword; int: std_logic; intType: std_logic_vector;
 					   currentState, linkExc, linkInt, stateExc, stateInt: Mword; specialOp: SpecificOp)
@@ -45,21 +46,21 @@ function DB_addIndex(dbi: InstructionDebugInfo; index: Word) return InstructionD
 function DB_incIndex(dbi: InstructionDebugInfo) return InstructionDebugInfo;
 function DB_addCycle(dbi: InstructionDebugInfo; cycle: Word) return InstructionDebugInfo;
 
+    procedure DB_reportLateEvent(cp: ControlPacket);
+    procedure DB_handleGroup(ia: ControlPacketArray; signal lastSeqNum: inout Word; signal gapSig: out std_logic; signal gapFirst, gapLast: out Word);
+    procedure DB_trackSeqNum(ia: ControlPacketArray);
+
 end LogicSequence;
 
 
 
 package body LogicSequence is
 
-function getNextPC(pc: Mword; jumpPC: Mword; jump: std_logic) return Mword is
+function getNextPC(pc: Mword) return Mword is
 	variable res, pcBase: Mword := (others => '0'); 
 begin
 	pcBase := pc and i2slv(-PIPE_WIDTH*4, MWORD_SIZE); -- Clearing low bits
-	if jump = '1' then
-		res := jumpPC;
-	else
-		res := add(pcBase, PC_INC);
-	end if;
+	res := add(pcBase, PC_INC);
 	return res;
 end function;
 
@@ -259,5 +260,67 @@ begin
     return res;
 end function;
 
+
+-- TODO: now there's no ControlPacket to pass here, create it
+procedure DB_reportLateEvent(cp: ControlPacket) is
+begin
+    -- pragma synthesis off
+    if DB_BRANCH_EXEC_TRACKING and cp.controlInfo.full = '1' and cp.controlInfo.newEvent = '1' then
+        report "";
+        report "DEBUG: late event: " & natural'image(slv2u(cp.dbInfo.seqNum));
+        report "";
+        report "";
+    end if;
+    -- pragma synthesis on
+end procedure;
+
+procedure DB_handleGroup(ia: ControlPacketArray; signal lastSeqNum: inout Word; signal gapSig: out std_logic; signal gapFirst, gapLast: out Word) is
+    variable any: boolean := false;
+    variable firstNewSeqNum, lastNewSeqNum, gap: Word := (others => '0');
+begin
+    -- pragma synthesis off
+
+    for i in 0 to PIPE_WIDTH-1 loop
+        if ia(i).controlInfo.full = '1' then
+            if not any then
+                firstNewSeqNum := ia(i).dbInfo.seqNum;
+            end if;
+            lastNewSeqNum := ia(i).dbInfo.seqNum;
+            any := true;
+        end if;
+    end loop;
+
+    gap := sub(firstNewSeqNum, lastSeqNum);
+    if slv2u(gap) /= 1 then
+        gapSig <= '1';
+        gapFirst <= addInt(lastSeqNum, 1);
+        gapLast <= addInt(firstNewSeqNum, -1);
+    else
+        gapSig <= '0';
+        gapFirst <= (others => 'U');
+        gapLast <= (others => 'U');
+    end if;
+
+    lastSeqNum <= lastNewSeqNum;
+
+    -- pragma synthesis on
+end procedure;
+
+procedure DB_trackSeqNum(ia: ControlPacketArray) is
+begin
+    -- pragma synthesis off
+    if DB_OP_TRACKING then
+        for i in ia'range loop
+            if ia(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                report "";
+                report "DEBUG: Tracked seqNum committed: " & work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+                report "";
+
+                return;
+            end if;
+        end loop;
+    end if;
+    -- pragma synthesis on
+end procedure;
 
 end LogicSequence;

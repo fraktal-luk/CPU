@@ -10,6 +10,7 @@ use work.BasicTypes.all;
 use work.Helpers.all;
 
 use work.ArchDefs.all;
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 use work.CoreConfig.all;
 use work.PipelineGeneral.all;
@@ -32,18 +33,18 @@ package LogicExec is
 
     function getAluControl(op: ArithOp) return AluControl;
 
-	function basicBranch(sending: std_logic; st: SchedulerState; tags: InstructionTags;
-                         ctrl: InstructionControlInfo;
-                         target, result: Mword;
+	function basicBranch(sending: std_logic; ss: SchedulerState;
+	                     bqControl: ControlPacket;
                          ac: AluControl) return ControlPacket;
 
-	function executeAlu(full: std_logic; st: SchedulerState; link: Mword; ctrl: InstructionControlInfo;
+	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword; ctrl: InstructionControlInfo;
 	                                           ac: AluControl)
 	                                           return ExecResult;
 
-	function executeMulE0(full: std_logic; st: SchedulerState; link: Mword) return ExecResult;
+	function prepareMultiply(full: std_logic; st: SchedulerState) return ExecResult;
 	
 	function executeFpu(st: SchedulerState) return Mword;     
+    function TMP_fp(full: std_logic; ss: SchedulerState) return ExecResult;
 
     function mergeMemOp(stIQ, stMQ: SchedulerState; mqReady: std_logic) return SchedulerState;
 
@@ -70,24 +71,26 @@ end LogicExec;
 
 package body LogicExec is
 
-	function resolveBranchCondition(ss: SchedulerState; op: ArithOp; ac: AluControl) return std_logic is
-		constant isZero: std_logic := not isNonzero(ss.args(0));
+	function resolveBranchCondition(arg: Mword; op: ArithOp; ac: AluControl) return std_logic is
+		constant isZero: std_logic := not isNonzero(arg);
 	begin
 		return ac.jumpType(1) or (ac.jumpType(0) xor isZero);
 	end function;
 
-	function basicBranch(sending: std_logic; st: SchedulerState; tags: InstructionTags;
-	                     ctrl: InstructionControlInfo;
-	                     target, result: Mword;
+	function basicBranch(sending: std_logic; ss: SchedulerState;
+	                     bqControl: ControlPacket;
 	                     ac: AluControl)
 	return ControlPacket is
 		variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 		variable branchTaken, targetMatch: std_logic := '0';
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
 		variable targetEqual: std_logic := '0';
+		constant ctrl: InstructionControlInfo := bqControl.controlInfo;
+		constant target: Mword := bqControl.target;
+		constant result: Mword := bqControl.nip;
 	begin
-	    res.dbInfo := st.st.dbInfo;
-        res.tags := st.st.tags;
+	    res.dbInfo := ss.st.dbInfo;
+        res.tags := ss.st.tags;
 
         res.controlInfo.full := sending;
 		-- Cases to handle
@@ -96,8 +99,8 @@ package body LogicExec is
 		-- j taken		: if not taken goto return, if taken equal
 		-- j not taken : if not taken ok, if taken goto dest
 
-        targetMatch := bool2std(target = st.args(1));
-		branchTaken := resolveBranchCondition(st, st.st.operation.arith, ac);
+        targetMatch := bool2std(target = ss.argValues(1));
+		branchTaken := resolveBranchCondition(ss.argValues(0), ss.st.operation.arith, ac);
 
         res.controlInfo.full := sending;
 
@@ -107,19 +110,19 @@ package body LogicExec is
 		elsif ctrl.frontBranch = '0' and branchTaken = '1' then
 			res.controlInfo.newEvent := '1';
 			res.controlInfo.confirmedBranch := '1';			
-			if st.st.immediate = '0' then
-				trueTarget := st.args(1);
+			if ss.st.immediate = '0' then
+				trueTarget := ss.argValues(1);
 			else
 				trueTarget := target;
 			end if;
 		elsif ctrl.frontBranch = '0' and branchTaken = '0' then
 			trueTarget := result;
 		else -- taken -> taken
-			if st.st.immediate = '0' then
+			if ss.st.immediate = '0' then
 				if targetMatch = '0' then
 					res.controlInfo.newEvent := '1';	-- Need to correct the target!	
 				end if;
-				trueTarget := st.args(1); -- reg destination
+				trueTarget := ss.argValues(1); -- reg destination
 			else
 				trueTarget := target;
 			end if;
@@ -128,14 +131,14 @@ package body LogicExec is
 
         if branchTaken = '0' then
             trueTarget := result;
-        elsif st.st.immediate = '1' then
+        elsif ss.st.immediate = '1' then
             trueTarget := target;
         else
-            trueTarget := st.args(1);
+            trueTarget := ss.argValues(1);
         end if;
         
         if      (ctrl.frontBranch xor branchTaken) = '1'
-                or  (ctrl.frontBranch and branchTaken and not st.st.immediate and not targetMatch) = '1'
+                or  (ctrl.frontBranch and branchTaken and not ss.st.immediate and not targetMatch) = '1'
         then
             res.controlInfo.newEvent := sending;
         else
@@ -147,14 +150,14 @@ package body LogicExec is
 		res.target := trueTarget;
 		-- Return address
 		res.nip := result;
-		res.tags.intPointer := tags.intPointer;
-		res.tags.floatPointer := tags.floatPointer;
-    	res.tags.sqPointer := tags.sqPointer;
-	    res.tags.lqPointer := tags.lqPointer;		
+		res.tags.intPointer := bqControl. tags.intPointer;
+		res.tags.floatPointer := bqControl. tags.floatPointer;
+    	res.tags.sqPointer := bqControl. tags.sqPointer;
+	    res.tags.lqPointer := bqControl. tags.lqPointer;		
 		return res;
 	end function;
 
-	function executeAlu(full: std_logic; st: SchedulerState; link: Mword; ctrl: InstructionControlInfo; ac: AluControl)
+	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword; ctrl: InstructionControlInfo; ac: AluControl)
 	return ExecResult is
 		variable res: ExecResult := DEFAULT_EXEC_RESULT;
 		variable result: Mword := (others => '0');
@@ -166,11 +169,11 @@ package body LogicExec is
 		variable ov, carry, cl, cm0, cm1: std_logic := '0';
 	    variable shiftInput, rotated, shiftOutput: Dword := (others => '0');
 	begin
-	   res.dbInfo := st.st.dbInfo;
+	    res.dbInfo := ss.st.dbInfo;
 	
-		arg0 := st.args(0);
-		arg1 := st.args(1);
-		arg2 := st.args(2);
+		arg0 := ss.argValues(0);
+		arg1 := ss.argValues(1);
+		arg2 := ss.argValues(2);
 
 		if ac.sub = '1' then
 			argAddSub := not arg1;
@@ -225,8 +228,9 @@ package body LogicExec is
 		end if;
 		
 		res.full := full;
-		res.tag := st.st.tags.renameIndex;
-		res.dest := st.argSpec.dest;
+		res.tag := ss.st.tags.renameIndex;
+		res.dest := --st.argSpec.dest;
+		            ss.dest;
 		res.value := result;
 		return res;
 	end function;
@@ -236,7 +240,7 @@ package body LogicExec is
         variable ac: AluControl := DEFAULT_ALU_CONTROL; 
     begin
         case op is
-            when opAdd =>
+            when opAdd | opAddH =>
                 ac.adder := '1';
             when opSub =>
                 ac.adder := '1';
@@ -273,50 +277,47 @@ package body LogicExec is
     end function;
 
 
-	function executeMulE0(full: std_logic; st: SchedulerState; link: Mword) return ExecResult is
+	function prepareMultiply(full: std_logic; st: SchedulerState) return ExecResult is
 		variable res: ExecResult := DEFAULT_EXEC_RESULT;
-		variable result: Mword := (others => '0');
-		variable arg0, arg1, arg2: Mword := (others => '0');
-		variable argAddSub: Mword := (others => '0');
-		variable carryIn: std_logic := '0';
-		variable resultExt: std_logic_vector(MWORD_SIZE downto 0) := (others => '0');
-		variable resultExt0, resultExt1: Word := (others => '0');
-		variable ov, carry, cl, cm0, cm1: std_logic := '0';
-	    variable shiftInput, rotated, shiftOutput: Dword := (others => '0');
-	begin
-		arg0 := st.args(0);
-		arg1 := st.args(1);
-		arg2 := st.args(2);
+	begin 
+        if (full and not isDivOp(st.st.operation)) = '1' then
+            res.dbInfo := st.st.dbInfo; 
 
-        result := arg0 xor arg1;
-
-        res.dbInfo := st.st.dbInfo; 
-
-		res.full := full and not isDivOp(st.st.operation);
-		res.tag := st.st.tags.renameIndex;
-		res.dest := st.argSpec.dest;
-		      if isDivOp(st.st.operation) = '1' then
-		          res.dbInfo := DEFAULT_DEBUG_INFO;
-		          res.dest := (others => '0');
-		      end if;
-		res.value := result;
+            res.full := full;-- and not isDivOp(st.st.operation);
+            res.tag := st.st.tags.renameIndex;
+            res.dest := --st.argSpec.dest;
+                        st.dest;
+        end if;
+        
 		return res;
 	end function;
 
-	
+
 	function executeFpu(st: SchedulerState) return Mword is
        variable res: Mword := (others => '0');
 	begin
         if st.st.operation.float = opOr then 
-           res := st.args(0) or st.args(1);
+           res := st.argValues(0) or st.argValues(1);
         elsif st.st.operation.float = opMove then
-           res := st.args(0);
+           res := st.argValues(0);
         else
            
 		end if;
 
 		return res;
 	end function;
+
+
+    function TMP_fp(full: std_logic; ss: SchedulerState) return ExecResult is
+        variable res: ExecResult := DEFAULT_EXEC_RESULT;
+    begin
+        res.full := full;
+        res.tag := ss.st.tags.renameIndex;
+        res.dest := --ss.argSpec.dest;
+                    ss.dest;
+        res.value := executeFpu(ss);
+        return res;
+    end function;
 
 
     function mergeMemOp(stIQ, stMQ: SchedulerState; mqReady: std_logic) return SchedulerState is
@@ -335,12 +336,13 @@ package body LogicExec is
         variable res: ExecResult := DEFAULT_EXEC_RESULT;
         variable adr: Mword := (others => '0'); 
     begin
-        adr := add(st.args(0), st.args(1));
+        adr := add(st.argValues(0), st.argValues(1));
 
         res.full := full;
         res.dbInfo := st.st.dbInfo;
         res.tag := st.st.tags.renameIndex;
-        res.dest := st.argSpec.dest;        
+        res.dest := --st.argSpec.dest;        
+                    st.dest;        
         res.value := adr;
         
         return res;

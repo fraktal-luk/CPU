@@ -9,12 +9,38 @@ use work.ArchDefs.all;
 use work.Arith.all;
 
 use work.CoreConfig.all;
+use work.InstructionStateBase.all;
 use work.InstructionState.all;
 
 
 package PipelineGeneral is
 
 type slv2D is array(natural range <>, natural range <>) of std_logic;
+
+type EventState is record
+    lateEvent: std_logic;
+    execEvent: std_logic;
+    preExecTags: InstructionTags;
+    execCausing: ExecResult;
+    lateCausing: ExecResult;
+    memFail: std_logic;
+end record;
+
+type DbCoreState is record
+    dummy: DummyType;
+    dbSignal: std_logic;
+end record;
+
+constant DEFAULT_EVENT_STATE: EventState := (
+    '0',
+    '0',
+    DEFAULT_INSTRUCTION_TAGS,
+    DEFAULT_EXEC_RESULT,
+    DEFAULT_EXEC_RESULT,
+    '0'
+    );
+
+constant DEFAULT_DB_STATE: DbCoreState := (dummy => DUMMY_VALUE, dbSignal => '0');
 
 
 function sn(n: integer) return SmallNumber;
@@ -32,13 +58,18 @@ function makeExecResult_N(er: ExecResult; iqTag: SmallNumber) return ExecResult_
 
 
 type IssueQueueSignals is record
-    empty: std_logic;
-    ready: std_logic;
     sending: std_logic;
-    cancelled: std_logic;
-    killFollower: std_logic;
-    killFollowerNext: std_logic;
+    sentKilled: std_logic;
+    trialPrev1: std_logic;
+    trialPrev2: std_logic;
+    --cancelled_D: std_logic;
 end record;
+
+constant DEFAULT_ISSUE_QUEUE_SIGNALS: IssueQueueSignals := (
+    others => '0'
+);
+
+function killFollower(trial: std_logic; events: EventState) return std_logic;
 
 
 type RegisterState is record
@@ -57,31 +88,31 @@ type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
 constant DEFAULT_DEP_VEC: DependencyVec := (others => (others => (others => '0')));
 
 
-    type ArgRenameState is record
-        sel: std_logic;
-        const: std_logic;
-        virtual: RegName;
-        physical: PhysName;
-        physicalStable: PhysName;
-        physicalNew: PhysName;
-        deps: std_logic_vector(0 to PIPE_WIDTH-1);
-        sourceStable: std_logic; 
-        sourceNew: std_logic; 
-        sourceReady: std_logic; 
-    end record;
+type ArgRenameState is record
+    sel: std_logic;
+    const: std_logic;
+    virtual: RegName;
+    physical: PhysName;
+    physicalStable: PhysName;
+    physicalNew: PhysName;
+    deps: std_logic_vector(0 to PIPE_WIDTH-1);
+    sourceStable: std_logic; 
+    sourceNew: std_logic; 
+    sourceReady: std_logic; 
+end record;
 
-    constant DEFAULT_ARG_RENAME_STATE: ArgRenameState := (
-        virtual => (others => '0'),
-        physical => (others => '0'),
-        physicalStable => (others => '0'),
-        physicalNew => (others => '0'),
-        deps => (others => '0'),
-        const => '1',
-        sourceStable => '1',
-        others => '0'
-    );
+constant DEFAULT_ARG_RENAME_STATE: ArgRenameState := (
+    virtual => (others => '0'),
+    physical => (others => '0'),
+    physicalStable => (others => '0'),
+    physicalNew => (others => '0'),
+    deps => (others => '0'),
+    const => '1',
+    sourceStable => '1',
+    others => '0'
+);
 
-    type ArgRenameStateArray is array(natural range <>) of ArgRenameState;
+type ArgRenameStateArray is array(natural range <>) of ArgRenameState;
 
 type RenameInfo is record
     dbInfo: InstructionDebugInfo;
@@ -206,6 +237,8 @@ function unfoldOp(op: SpecificOp) return SpecificOp;
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult;
 function updateMemDest(er: ExecResult; used: std_logic) return ExecResult;
 
+
+function TMP_slotIssueM0mq(mqReexecCtrlIs: ControlPacket; mqReexecResIS: ExecResult; mqIssueSending: std_logic) return SchedulerState;
 function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState;
 
 function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult;
@@ -218,11 +251,22 @@ return ControlPacket;
 function selectOrdered(ar: ExecResultArray) return ExecResult;
 
 function isDivOp(op: SpecificOp) return std_logic;
+function usesDivider(ss: SchedulerState) return std_logic;
+
+    function TMP_restoreOperation(so: SpecificOp) return SpecificOp;
+
+    function TMP_mergeStatic(a, b: SchedulerState) return SchedulerState;
 
 end package;
 
 
 package body PipelineGeneral is
+
+function killFollower(trial: std_logic; events: EventState) return std_logic is
+begin
+    return (trial and events.execEvent) or events.lateEvent;
+end function;
+
 
 function iqInds2tags(inds: SmallNumberArray) return SmallNumberArray is
     variable res: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
@@ -230,7 +274,7 @@ function iqInds2tags(inds: SmallNumberArray) return SmallNumberArray is
 begin
     for i in 0 to RENAME_W-1 loop 
         lane := sn(i);
-        res(i)(SMALL_NUMBER_SIZE-1 downto 2) := inds(i)(SMALL_NUMBER_SIZE-3 downto 0);
+        res(i)(SMALL_NUMBER_SIZE-3+LOG2_PIPE_WIDTH downto LOG2_PIPE_WIDTH) := inds(i)(SMALL_NUMBER_SIZE-3 downto 0);
         res(i) := res(i) or lane;
     end loop;
     return res;
@@ -448,7 +492,7 @@ function getStoreSysMask(insVec: InstructionSlotArray) return std_logic_vector i
     variable sm1: std_logic_vector(0 to PIPE_WIDTH-1) := getStoreMask1(insVec);
 begin
     for i in 0 to PIPE_WIDTH-1 loop
-        if       sm1(i) = '1' --insVec(i).full = '1'
+        if       sm1(i) = '1'
                and insVec(i).ins.specificOperation.subpipe = Mem 
               and (insVec(i).ins.specificOperation.memory = opStoreSys)        
         then
@@ -581,7 +625,6 @@ function updateArgStates(riaInt, riaFloat: RenameInfoArray; readyRegFlags: std_l
 begin
     for i in 0 to PIPE_WIDTH-1 loop
         for j in 0 to 2 loop
-            --res(3*i to 3*i + 2) := ((riaInt(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaInt(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
             res(3*i + j) := ((riaInt(i).argStates(j).sourceStable or readyRegFlags(3*i +j)) and not riaInt(i).argStates(j).sourceNew);-- and not riaFloat(i).sourcesNew);
         end loop;
     end loop;
@@ -593,7 +636,6 @@ function updateArgStatesFloat(riaInt, riaFloat: RenameInfoArray; readyRegFlags: 
 begin
     for i in 0 to PIPE_WIDTH-1 loop
         for j in 0 to 2 loop
-            --res(3*i to 3*i + 2) := ((riaFloat(i).sourcesStable or readyRegFlags(3*i to 3*i + 2)) and not riaFloat(i).sourcesNew);-- and not riaFloat(i).sourcesNew);
             res(3*i + j) := ((riaFloat(i).argStates(j).sourceStable or readyRegFlags(3*i +j)) and not riaFloat(i).argStates(j).sourceNew);-- and not riaFloat(i).sourcesNew);
         end loop;
     end loop;
@@ -605,16 +647,10 @@ function replaceDests(insVec: InstructionSlotArray; ria: RenameInfoArray) return
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
     for i in res'range loop
-      --   res(i).ins.physicalArgSpec.intDestSel := ria(i).destSel and not ria(i).destSelFP;
-      --   res(i).ins.physicalArgSpec.floatDestSel := ria(i).destSelFP;
-         
-       --  res(i).ins.physicalArgSpec.dest := ria(i).physicalDest;
-            res(i).ins.dest_T := ria(i).physicalDest;
+        res(i).ins.dest_T := ria(i).physicalDest;
     end loop;
     return res;
 end function;
-
-
 
 
 function findDeps(ia: BufferEntryArray) return DependencyVec is
@@ -688,7 +724,11 @@ function TMP_recodeMem(insVec: InstructionSlotArray) return InstructionSlotArray
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
     for i in res'range loop
-        res(i).ins.specificOperation.memory := MemOp'val(slv2u(res(i).ins.specificOperation.bits));        
+        if slv2u(res(i).ins.specificOperation.bits) > MemOp'pos(MemOp'right) then
+            res(i).ins.specificOperation.memory := opLoad;
+        else
+            res(i).ins.specificOperation.memory := MemOp'val(slv2u(res(i).ins.specificOperation.bits));
+        end if;
     end loop;
 
     return res;
@@ -698,9 +738,12 @@ function TMP_recodeFP(insVec: InstructionSlotArray) return InstructionSlotArray 
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
     for i in res'range loop
-        res(i).ins.specificOperation.float := FpOp'val(slv2u(res(i).ins.specificOperation.bits));
+        if slv2u(res(i).ins.specificOperation.bits) > FpOp'pos(FpOp'right) then
+            res(i).ins.specificOperation.float := opMove;
+        else
+            res(i).ins.specificOperation.float := FpOp'val(slv2u(res(i).ins.specificOperation.bits));
+        end if;
         res(i).ins.virtualArgSpec.intDestSel := '0';          
-        --res(i).ins.physicalArgSpec.intDestSel := '0';        
     end loop;
     return res;
 end function;
@@ -708,10 +751,13 @@ end function;
 function TMP_recodeALU(insVec: InstructionSlotArray) return InstructionSlotArray is
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
-    for i in res'range loop     
-        res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
+    for i in res'range loop
+        if slv2u(res(i).ins.specificOperation.bits) > ArithOp'pos(ArithOp'right) then
+            res(i).ins.specificOperation.arith := opAnd;
+        else
+            res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
+        end if;
         res(i).ins.virtualArgSpec.floatDestSel := '0';          
-        --res(i).ins.physicalArgSpec.floatDestSel := '0';          
     end loop;  
     return res;
 end function;
@@ -720,10 +766,13 @@ function TMP_recodeMul(insVec: InstructionSlotArray) return InstructionSlotArray
     variable res: InstructionSlotArray(insVec'range) := insVec;
 begin
     for i in res'range loop     
-        res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
+        if slv2u(res(i).ins.specificOperation.bits) > ArithOp'pos(ArithOp'right) then
+            res(i).ins.specificOperation.arith := opAnd;
+        else
+            res(i).ins.specificOperation.arith := ArithOp'val(slv2u(res(i).ins.specificOperation.bits));
+        end if;
         res(i).ins.virtualArgSpec.floatDestSel := '0';          
-        --res(i).ins.physicalArgSpec.floatDestSel := '0';          
-    end loop;  
+    end loop;
     return res;
 end function;
 
@@ -790,8 +839,7 @@ begin
     res.full := isl.full;
     res.dbInfo := isl.st.dbInfo;
     res.tag := isl.st.tags.renameIndex;
-    res.dest := isl.argSpec.dest;
-
+    res.dest := isl.dest;
     return res;
 end function;
 
@@ -802,8 +850,7 @@ begin
     res.dbInfo := isl.st.dbInfo;
     res.tag := isl.st.tags.renameIndex;
     res.iqTag := isl.destTag;
-    res.dest := isl.argSpec.dest;
-
+    res.dest := isl.dest;
     return res;
 end function;
 
@@ -861,6 +908,34 @@ begin
     return res;
 end function;
 
+
+    function TMP_slotIssueM0mq(mqReexecCtrlIs: ControlPacket; mqReexecResIs: ExecResult; mqIssueSending: std_logic) return SchedulerState is
+        variable res: SchedulerState := DEFAULT_SCHED_STATE;
+    begin
+        res.full := mqIssueSending;
+        res.st.dbInfo := mqReexecCtrlIs.dbInfo;
+        
+        res.st.operation := mqReexecCtrlIS.op;
+        res.st.tags := mqReexecCtrlIs.tags;
+        
+        -- adr
+        res.argValues(0) := mqReexecCtrlIs.target;
+        res.argValues(1) := (others => '0');
+
+        res.argSrc(0) := "00000000";
+        res.argSrc(1) := "00000000";
+
+        res.st.zero := "110";
+        res.st.immValue := mqReexecResIs.value(15 downto 0);
+
+        res.dest := mqReexecResIs.dest;
+        res.intDestSel := not mqReexecCtrlIs.classInfo.useFP and isNonzero(mqReexecResIs.dest);
+        res.floatDestSel := mqReexecCtrlIs.classInfo.useFP;
+
+        return res;
+    end function;
+
+
 function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState is
     variable res: SchedulerState := DEFAULT_SCHED_STATE;
 begin
@@ -871,11 +946,11 @@ begin
     res.st.tags := mqReexecCtrlRR.tags;
     
     -- adr
-    res.args(1) := mqReexecCtrlRR.target;
-    
-    res.argSpec.dest := mqReexecResRR.dest;
-    res.argSpec.intDestSel := not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
-    res.argSpec.floatDestSel := mqReexecCtrlRR.classInfo.useFP;
+    res.argValues(1) := mqReexecCtrlRR.target;
+
+    res.dest := mqReexecResRR.dest;
+    res.intDestSel := not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
+    res.floatDestSel := mqReexecCtrlRR.classInfo.useFP;
 
     return res;
 end function;
@@ -920,6 +995,49 @@ begin
     return bool2std(op.subpipe = ALU
                     and (op.arith = opDivU or op.arith = opDivS or op.arith = opRemU or op.arith = opRemS));
 end function;
+
+function usesDivider(ss: SchedulerState) return std_logic is
+begin
+   return bool2std(ss.st.operation.arith = opDivU or ss.st.operation.arith = opDivS or ss.st.operation.arith = opRemU or ss.st.operation.arith = opRemS);
+end function;
+
+
+    function TMP_restoreOperation(so: SpecificOp) return SpecificOp is
+        variable res: SpecificOp := so;
+    begin
+        if slv2u(so.bits) > ArithOp'pos(ArithOp'right) then
+            res.arith := opAnd;
+        else
+            res.arith := ArithOp'val(slv2u(so.bits));
+        end if;
+        
+        if slv2u(so.bits) > MemOp'pos(MemOp'right) then
+            res.memory := opLoad;
+        else
+            res.memory := MemOp'val(slv2u(so.bits));
+        end if;
+
+        if slv2u(so.bits) > FpOp'pos(FpOp'right) then
+            res.float := opMove;
+        else
+            res.float := FpOp'val(slv2u(so.bits));
+        end if;
+        
+        if slv2u(so.bits) > SysOp'pos(SysOp'right) then
+            res.system := opNone;
+        else
+            res.system := SysOp'val(slv2u(so.bits));
+        end if;
+        
+        return res;
+    end function;
+
+    function TMP_mergeStatic(a, b: SchedulerState) return SchedulerState is
+        variable res: SchedulerState := a;
+    begin
+        res.st := b.st;
+        return res;
+    end function;
 
 
 end package body;

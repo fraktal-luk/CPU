@@ -58,9 +58,13 @@ constant EMPTY_LABEL_ARRAY: LabelArray(0 to 0) := (others => (others => ' '));
 
 -- Structure for import or export of label: name and where the source or required replacement is
 type Xref is record
-    name: line;
+    valid: boolean;
+    --name: line;
+        name_S: string(1 to MAX_LABEL_SIZE);
     address: integer;
 end record;
+
+constant DEFAULT_XREF: Xref := (valid => false, name_S => (others => cr), address => 0);
 
 type XrefArray is array(integer range <>) of Xref;
 
@@ -100,7 +104,7 @@ begin
         nIn := nOut;
     end if;
     
-    s <= (others => ' ');
+    s(1 to nOut) <= (others => ' ');
     s(1 to nIn) <= sIn(1 to nIn);
 end procedure;
 
@@ -108,7 +112,7 @@ end procedure;
 -- Differs from simple ln.all in that it's written to a string of predefined length
 procedure stringFromLine(s: out string; variable ln: in line) is
 begin
-    s := (others => cr);
+    s(1 to s'length) := (others => cr);
     s(1 to ln.all'length) := ln.all;        
 end procedure; 
 
@@ -118,17 +122,21 @@ procedure printXrefArray(xa: XrefArray) is
 begin
     report "Printing refs:";
     for i in xa'range loop
-        if xa(i).name = null then
+        --if xa(i).name = null then
+        --    return;
+        --end if;
+        if not xa(i).valid then
             return;
         end if;
-        report xa(i).name.all; report natural'image(xa(i).address);
+        
+        --report xa(i).name.all; report natural'image(xa(i).address);
+        report xa(i).name_S; report natural'image(xa(i).address);
     end loop;
 end procedure;
 
 
 function parseInstructionString(str: string) return GroupBuffer is
     variable words: GroupBuffer := (others => (others => ' '));
-    
     variable ind, grp, blockStart: integer := 0;    
 begin
     -- To keep it simple: 
@@ -169,19 +177,34 @@ function readSourceFile(name: string) return CodeBuffer is
     variable labelFound: boolean := false;
     variable program: ProgramBuffer := (others => (others => (others => cr)));
 begin
+     report "  ";       
+     report "file reading:";
+     report "  ";
+
     loop
         ln := null;
-        readline(src, ln);
+            if endfile(src) then
+                exit;
+            end if;
 
-        if ln = null or ln'length = 0 then
+        readline(src, ln);
+            
+--            if ln /= null then
+--                report "program line, " & natural'image(ln'length);
+--                report ln.all;
+--            end if;
+
+        if ln = null  --or ln'length = 0
+            then
             exit;
         end if;
 
+                
         str := (others => cr);
         for i in 1 to 100 loop
             read(ln, ch, good);
             if not good then
-                str(i-1) := ' ';
+                --str(i-1) := ' ';
                 exit;
             elsif ch = cr or ch = ';' then -- Stop when line ends or comment starts
                 str(i) := ' ';
@@ -194,6 +217,8 @@ begin
         program(lineNum) := parseInstructionString(str);
         lineNum := lineNum + 1;
     end loop;
+            report "file read.";
+            report "  ";
     
     return (lineNum, program);
 end function;
@@ -242,7 +267,7 @@ procedure processInstruction(ar: GroupBuffer; num: integer; labels, imports: Lab
     variable vals: IntArray(0 to ar'length-1) := (others => -1);
 begin
     hasImport := false;
-    import := (others => cr);
+    import(1 to import'length) := (others => cr);
     -- First elem must be opcode. Find it in opcode list
     mnem := undef;
     for m in ProcMnemonic loop
@@ -300,7 +325,7 @@ begin
     numL := (findLabel(import, labels)); -- branch offset
     if numL /= -1 then
         offset := 4*(numL - k);
-    else 
+    else
         numI := findLabel(import, imports);
         if numI /= -1 then
             offset := 4*(numI - k);
@@ -344,6 +369,18 @@ begin
     return s;
 end function;
 
+function fillToMax(s: string) return string is
+    constant LEN: natural := s'length;
+    variable res: string(1 to MAX_LABEL_SIZE) := (others => cr);
+begin
+    if LEN > MAX_LABEL_SIZE then
+        res := s(1 to MAX_LABEL_SIZE);
+    else
+        res(1 to LEN) := s;
+    end if;
+    return res;
+end function;
+
 
 procedure processProgram(p: in CodeBuffer; machineCodeBuf: out WordBuffer; imports, outExports: out XrefArray) is
     variable insIndex, procIndex: integer := 0; -- Actual number of instruction
@@ -355,7 +392,7 @@ procedure processProgram(p: in CodeBuffer; machineCodeBuf: out WordBuffer; impor
     variable tmpStr: string(1 to MAX_LABEL_SIZE) :=(others => ' ');
     variable tmpImport: string(1 to MAX_LABEL_SIZE) := (others => cr);
     variable tmpHasImport: boolean := false;
-    
+        variable s: string(1 to MAX_LABEL_SIZE) := (others => cr);
     variable ne, ni: natural := 0;
 begin
     for i in 0 to --p.words'length-1 loop
@@ -367,11 +404,13 @@ begin
                 -- add name to labels
                 -- add name to export
                 -- add insIndex to offsets
-                labels(insIndex)(1 to 10) := p.words(i)(1);
-                exports(insIndex)(2 to 11) := p.words(i)(1);
+                labels(insIndex) := p.words(i)(1);
+                exports(insIndex)(2 to MAX_LABEL_SIZE) := p.words(i)(1)(1 to MAX_LABEL_SIZE-1);
                 exports(insIndex)(1) := '$';
                 startOffsets(procIndex) := insIndex;
-                outExports(ne) := (new string'('$' & tmpStrip(p.words(i)(1))), 4*insIndex);
+                    s := fillToMax('$' & tmpStrip(p.words(i)(1)));
+                outExports(ne) := --(new string'('$' & tmpStrip(p.words(i)(1))), s, 4*insIndex);
+                                    (true, s, 4*insIndex);
                 ne := ne + 1;
             elsif matches(tmpStr, "end") then
                 -- ignore
@@ -380,7 +419,7 @@ begin
                 procIndex := procIndex + 1;
             end if;
         elsif p.words(i)(0)(1) = '$' then -- label
-           labels(insIndex)(1 to 10) := p.words(i)(0);            
+           labels(insIndex) := p.words(i)(0);            
         elsif p.words(i)(0)(1) = cr then -- the line is empty
            null;
         else -- instruction
@@ -391,14 +430,16 @@ begin
     end loop;
 
     for i in 0 to --p.words'length-1 loop
-                   insIndex loop 
+                   insIndex loop
         processInstruction(pSqueezed(i), i, labels, EMPTY_LABEL_ARRAY, true, commands(i), tmpHasImport, tmpImport);
         if tmpHasImport then
             commands(i) := fillOffset(commands(i), i, tmpImport, labels, EMPTY_LABEL_ARRAY);
-            imports(ni) := (new string'(tmpStrip(tmpImport)), 4*i);
+                s := fillToMax(tmpImport);
+            imports(ni) := --(new string'(tmpStrip(tmpImport)), s, 4*i);
+                           (true, s, 4*i);
             ni := ni + 1;
         end if;
-    end loop; 
+    end loop;
 
     --machineCode := commands(0 to p.words'length-1);
     --machineCodeBuf.words := (others => ins655655(ext2, 0, 0, error, 0, 0));
@@ -494,18 +535,23 @@ end procedure;
 function matchXrefs(imp, exp: XrefArray) return IntArray is
     variable res: IntArray(imp'range) := (others => -1);
     variable str0, str1: string(1 to MAX_LABEL_SIZE);
-    variable l0, l1: line; 
+    variable l0, l1: line;
 begin
     for i in imp'range loop
-        if imp(i).name = null then exit; end if;
+        --if imp(i).name = null then exit; end if;
+        if not imp(i).valid then exit; end if;
     
         for j in exp'range loop
-            if exp(j).name = null then exit; end if;
+            --if exp(j).name = null then exit; end if;
+            if not exp(j).valid then exit; end if;
             
-            l0 := imp(i).name;
-            l1 := exp(j).name;
+            --l0 := imp(i).name;
+            --l1 := exp(j).name;
 
-            if matches(l0.all, l1.all) then
+            str0 := imp(i).name_S;
+            str1 := exp(j).name_S;
+
+            if matches(str0, str1) then
                 res(i) := exp(j).address;
                 exit;
             end if;
@@ -519,9 +565,9 @@ function fillXrefs(code: WordArray; imports: XrefArray; offsets: IntArray; imgSt
     variable currentPos: integer := -1;
 begin
     for i in imports'range loop
-        if imports(i).name = null then
-            return res;
-        end if;
+        --if imports(i).name = null then
+        --    return res;
+        --end if;
     
         currentPos := imports(i).address/4;
         res(currentPos) := fillOffsetConst(res(currentPos), offsets(i) - imports(i).address + libStart - imgStart);
