@@ -161,7 +161,7 @@ begin
     end block;
 
     insertionLocs <= getNewLocs(fullMask, inTags, newArr);
-    queueContentNext <= storeInput(queueContentUpdated_2, newArr, prevSendingOK, insertionLocs);
+    queueContentNext <= storeInput(queueContentUpdated_2, newArr, prevSendingOK, events.execEvent or events.lateEvent, insertionLocs);
 
     readyMask <= getReadyMask(queueContentUpdatedSel);
 
