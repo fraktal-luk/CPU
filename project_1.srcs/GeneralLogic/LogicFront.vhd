@@ -26,11 +26,10 @@ function shiftLine(fetchedLine: WordArray; shift: SmallNumber) return WordArray;
 function getStallEvent(predictedAddress: Mword) return ControlPacket;
 
 function getFrontEvent(ip, target: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket;
-function getNormalEvent(target: Mword;-- cpO: ControlPacket;
-                        ip: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket;
+function getNormalEvent(target: Mword; ip: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket;
 
 function decodeGroup(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural; ip: Mword; ctrl: ControlPacket) return BufferEntryArray;
-function getControlA(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural;ip: Mword; hasBranch: std_logic) return ControlPacketArray;
+function getControlGroup(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural;ip: Mword; hasBranch: std_logic) return ControlPacketArray;
 
 function groupHasBranch(ea: BufferEntryArray) return std_logic;
 
@@ -179,8 +178,7 @@ begin
     return res;
 end function;
 
-function getNormalEvent(target: Mword;-- cpO: ControlPacket;
-                        ip: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket is
+function getNormalEvent(target: Mword; ip: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket is
 	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 	constant cp: ControlPacket := getFrontEvent(ip, target, fetchLine);
 begin
@@ -190,7 +188,6 @@ begin
         res.controlInfo.frontBranch := '1';
     else
         res.target := target;
-                      --cp.target;
     end if;
     res.tags.bqPointer := cp.tags.bqPointer;
     return res;
@@ -254,7 +251,7 @@ begin
 end function;
 
 
-function getControlA(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural;ip: Mword; hasBranch: std_logic) return ControlPacketArray is
+function getControlGroup(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural; ip: Mword; hasBranch: std_logic) return ControlPacketArray is
 	variable res: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 	variable tempIP, tempOffset: Mword := (others => '0');
 	variable branchIns, predictedTaken, uncondJump, longJump: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');

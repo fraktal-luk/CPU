@@ -64,16 +64,21 @@ end Core;
 architecture Behavioral of Core is
 
     signal frontAccepting, bpSending, renameAllow, frontGroupSend, frontSendAllow, canSendRename, robSending,
-           renameSendingBr, renamedSending, commitAccepting, frontEventSignal, bqAccepting, execEventSignalE0, execEventSignalE1, lateEventSignal, lateEventSetPC,
+           renameSendingBr, renamedSending, commitAccepting,-- frontEventSignal,
+                         bqAccepting, execEventSignalE0, execEventSignalE1,-- lateEventSignal,-- lateEventSetPC,
            allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
-           mqReady, mqIssueSending, mqRegReadSending, sbSending, sbEmpty, sysRegRead, sysRegSending, intSignal, memFail
+           mqReady, mqIssueSending, mqRegReadSending, sbSending, sbEmpty,-- sysRegRead,-- sysRegSending,
+           intSignal, memFail
            : std_logic := '0';
 
     signal renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal aluMaskRe, mulMaskRe, memMaskRe, branchMaskRe, loadMaskRe, storeMaskRe, intStoreMaskRe, floatStoreMaskRe, fpMaskRe,
            branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO, zerosMask,
-           commitMaskSQ, commitEffectiveMaskSQ, commitMaskLQ, commitEffectiveMaskLQ, branchCommitMask, branchCommitEffectiveMask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
+           --commitMaskSQ,
+           commitEffectiveMaskSQ,-- commitMaskLQ,
+           commitEffectiveMaskLQ, branchCommitMask --, branchCommitEffectiveMask
+           : std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
     signal frontGroupOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
 
@@ -85,8 +90,8 @@ architecture Behavioral of Core is
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal intType: std_logic_vector(0 to 1) := (others => '0');
-    signal sysRegReadValue: Mword := (others => '0');
-    signal sysRegReadSel: slv5 := (others => '0');
+    --signal sysRegReadValue: Mword := (others => '0');
+    --signal sysRegReadSel: slv5 := (others => '0');
 
     signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
     signal specialOp, specialOutROB: SpecificOp := DEFAULT_SPECIFIC_OP;
@@ -94,7 +99,7 @@ architecture Behavioral of Core is
 
     signal bqCompareEarly, bqUpdate, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
            memAddressInput, memAddressInputEarly, frontEvent, execEvent, lateEvent, execCausingDelayedSQ, execCausingDelayedLQ,
-           bqTargetData, resOutSQ, dataFromSB, missedMemResultE1, missedMemResultE2, mqReexecResIssue, mqReexecResRR, memoryRead,
+           bqTargetData, resOutSQ, dataFromSB, missedMemResultE1, missedMemResultE2, mqReexecResIssue, mqReexecResRR, memoryRead, sysRegReadIn, sysRegReadOut,
            defaultExecRes
            : ExecResult := DEFAULT_EXEC_RESULT;
 
@@ -126,11 +131,13 @@ begin
 
     dread <= memoryRead.full;
     dadr <= memoryRead.value;
-    sysRegReadSel <= memoryRead.value(4 downto 0);
-    sysRegRead <= memoryRead.full;
+    --sysRegReadSel <= memoryRead.value(4 downto 0);
+    --sysRegRead <= memoryRead.full;
+        sysRegReadIn.full <= memoryRead.full;
+        sysRegReadIn.value <= --sysRegReadSel;
+                                zeroExtend(memoryRead.value(4 downto 0), MWORD_SIZE);
 
-
-    events <= (lateEventSignal, execEventSignalE0, dataToBranch.tags, execEvent, lateEvent, memFail);
+    events <= (lateEvent.full, execEvent.full, dataToBranch.tags, execEvent, lateEvent, memFail);
 
     dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'), zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
 
@@ -140,8 +147,11 @@ begin
         clk => clk, reset => reset, en => '0',
         
         -- sys reg interface
-        sysRegReadSel => sysRegReadSel,
-        sysRegReadValue => sysRegReadValue,
+      --  sysRegReadSel => sysRegReadSel,
+      --  sysRegReadValue => sysRegReadValue,
+
+            sysRegReadIn => sysRegReadIn,
+            sysRegReadOut => sysRegReadOut,
 
         -- to front pipe
         pcDataOut => pcData,
@@ -152,14 +162,14 @@ begin
         -- Events in
         intSignal => intSignal,
         intType => intType,
-        execEventSignal => execEventSignalE0,        
-        frontEventSignal => frontEventSignal,        
+        --execEventSignal => execEvent.full,        
+        --frontEventSignal => frontEvent.full,
         frontEvent => frontEvent,
         execEvent => execEvent,
 
         -- Events out
-        lateEventOut => lateEventSignal,
-        lateEventSetPC => lateEventSetPC,
+--        lateEventOut => lateEventSignal,
+        --lateEventSetPC => lateEventSetPC,
         lateEvent => lateEvent,
 
         -- Interface from ROB
@@ -202,15 +212,15 @@ begin
         dataOut => frontGroupOut,
         lastSending => frontGroupSend,
 
-        frontEventSignal => frontEventSignal,
+--        frontEventSignal => frontEventSignal,
         frontCausing => frontEvent,
 
         execCausing => execEvent,
         lateCausing => lateEvent,
 
-        execEventSignal => execEventSignalE0,
-        lateEventSignal => lateEventSignal,
-        lateEventSetPC => lateEventSetPC,
+        --execEventSignal => execEvent.full,
+        --lateEventSignal => lateEvent.full,
+        --lateEventSetPC => lateEventSetPC,
 
         dbState => dbState
     );    
@@ -261,8 +271,8 @@ begin
 
         execCausing => branchResultE0,
 
-        execEventSignal => execEventSignalE0,
-        lateEventSignal => lateEventSignal,
+        execEventSignal => execEvent.full,
+        lateEventSignal => lateEvent.full,
 
         dbState => dbState
     );
@@ -280,7 +290,7 @@ begin
 	port map(
 		clk => clk, reset => '0', en => '0',
 
-		lateEventSignal => lateEventSignal,
+		lateEventSignal => lateEvent.full,
 
 		execSigsMain => execOutMain,
 		execSigsSec => execOutSec,
@@ -522,7 +532,7 @@ begin
 
                     branchResultE0 <= dataToBranch;
                     branchResultE1 <= branchResultE0;
-                    execEventSignalE1 <= execEventSignalE0 and not lateEventSignal; -- Don't allow subsequent event from cancelled branch
+                    execEventSignalE1 <= execEvent.full and not lateEvent.full; -- Don't allow subsequent event from cancelled branch
                 end if;
             end process;
 
@@ -766,12 +776,12 @@ begin
             
                 memResult <= getLSResultData_result(  ctrlE1.op,
                                                       memLoadReady, memLoadValue,
-                                                      sysRegSending, sysRegReadValue,
+                                                      sysRegReadOut.full, sysRegReadOut.value,
                                                       ctOutSQ, ctOutLQ).value;
     
                 memoryCtrlPre <= getLSResultData(   ctrlE1.op,
                                                     subpipeM0_E1.value,
-                                                    '1', memLoadReady, sysRegSending,
+                                                    '1', memLoadReady, sysRegReadOut.full,
                                                     ctOutSQ, ctOutLQ);
                 ctrlE1u.tags <= ctrlE1.tags;
                 ctrlE1u.op <= ctrlE1.op;
@@ -1266,7 +1276,7 @@ begin
             readyRegFlagsFloat_Early(3*i to 3*i + 2 - QQQ) <= readyRegFlagsFloatNext_Early(3*i to 3*i + 2 - QQQ);
         end generate;
 
-        sysRegSending <= sysRegRead;
+--        sysRegSending <= sysRegRead;
 
     end block; -- TEMP_EXEC
 
@@ -1282,13 +1292,13 @@ begin
         systemStoreMaskOO <= getStoreSysMask(renamedDataLivingRe);
         systemLoadMaskOO <= getLoadSysMask(renamedDataLivingRe);
      
-        commitMaskSQ <= work.LogicQueues.getCommittedMask(robOut, false);
-        commitMaskLQ <= work.LogicQueues.getCommittedMask(robOut, true);
+        --commitMaskSQ <= work.LogicQueues.getCommittedMask(robOut, false);
+        --commitMaskLQ <= work.LogicQueues.getCommittedMask(robOut, true);
         commitEffectiveMaskSQ <= work.LogicQueues.getCommittedEffectiveMask(robOut, false);
         commitEffectiveMaskLQ <= work.LogicQueues.getCommittedEffectiveMask(robOut, true);
-    
+
         branchCommitMask <= work.LogicQueues.getCommittedMaskBr(robOut);
-        branchCommitEffectiveMask <= work.LogicQueues.getCommittedEffectiveMaskBr(robOut);
+        --branchCommitEffectiveMask <= work.LogicQueues.getCommittedEffectiveMaskBr(robOut);
     end block;
 
     BRANCH_QUEUE: entity work.BranchQueue
@@ -1325,13 +1335,12 @@ begin
 		committing => robSending, -- When ROB is sending so is BQ if it has corresponding branches
         commitBr => robOut(0).controlInfo.firstBr,
         commitMask => branchCommitMask,
-        commitEffectiveMask => branchCommitEffectiveMask,
+        --commitEffectiveMask => branchCommitEffectiveMask,
 
-		lateEventSignal => lateEventSignal,
+		lateEventSignal => lateEvent.full,
 		execEventSignal => execEventSignalE1,
 		execCausing => DEFAULT_EXEC_RESULT,
 		nextAccepting => commitAccepting,		
-		sendingSQOut => open,
 		
 		committedDataOut => bqTargetData,
 		
@@ -1371,10 +1380,10 @@ begin
         selectedDataResult => resOutSQ,
 
 		committing => robSending,
-        commitMask => commitMaskSQ,
+        --commitMask => commitMaskSQ,
         commitEffectiveMask => commitEffectiveMaskSQ,
 
-		lateEventSignal => lateEventSignal,
+		lateEventSignal => lateEvent.full,
 		execEventSignal => execEventSignalE1,
 		execCausing => execCausingDelayedSQ,
 		
@@ -1419,10 +1428,10 @@ begin
         selectedDataOutput => ctOutLQ,
 
 		committing => robSending,
-        commitMask => commitMaskLQ,
+        --commitMask => commitMaskLQ,
         commitEffectiveMask => commitEffectiveMaskLQ,
 
-		lateEventSignal => lateEventSignal,
+		lateEventSignal => lateEvent.full,
 		execEventSignal => execEventSignalE1,
 		execCausing => execCausingDelayedLQ,
 		
@@ -1489,7 +1498,7 @@ begin
             committing => '0',
             commitMask => zerosMask,
             commitEffectiveMask => zerosMask,
-            lateEventSignal => lateEventSignal,
+            lateEventSignal => lateEvent.full,
             execEventSignal => execEventSignalE1,
             execCausing => execCausingDelayedLQ,
 
@@ -1535,7 +1544,7 @@ begin
                 stallDetected <= bool2std(watchdogCount = 57);
 
                 if DB_LOG_EVENTS then
-                    logEvent(eventLog, lateEventSignal, execEventSignalE0, frontEventSignal, stallDetected, cycleCount);
+                    logEvent(eventLog, lateEvent.full, execEvent.full, frontEvent.full, stallDetected, cycleCount);
                  end if;
             end if;
         end process;

@@ -80,6 +80,7 @@ package LogicQueues is
     function makeCommittedOutputSQ(drainOutput: ControlPacket; isDrainingPrev: std_logic) return ControlPacket;
     function makeSelectedOutputLQ(isSelected: std_logic) return ControlPacket;
     function selDataRes(dest: SmallNumber) return ExecResult;
+    procedure DB_logFW(adrInput: ExecResult; pSelect: SmallNumber; IS_LOAD_QUEUE: boolean);
 
 end package;
 
@@ -466,5 +467,15 @@ package body LogicQueues is
         return res;
     end function;
 
+    procedure DB_logFW(adrInput: ExecResult; pSelect: SmallNumber; IS_LOAD_QUEUE: boolean) is
+    begin
+         -- pragma synthesis off
+        if DB_LSQ_TRACKING then
+            report "";
+            report "DEBUG: Store FW(" & boolean'image(IS_LOAD_QUEUE) & "): seqNum " & work.CpuText.w2hex(adrInput.dbInfo.seqNum) & " from entry " & work.CpuText.slv2hex(pSelect);
+            report "";
+        end if;
+        -- pragma synthesis on
+    end procedure;
 
 end package body;

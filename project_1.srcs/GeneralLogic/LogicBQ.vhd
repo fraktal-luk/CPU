@@ -1,5 +1,4 @@
 
-
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 
@@ -18,15 +17,11 @@ use work.PipelineGeneral.all;
 
 package LogicBQ is
 
-constant PTR_MASK_SN: SmallNumber := i2slv(BQ_SIZE-1, SMALL_NUMBER_SIZE);
-constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
-constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;
-
 type EarlyInfo is record
    full: std_logic_vector(0 to PIPE_WIDTH-1);
    frontBranch: std_logic_vector(0 to PIPE_WIDTH-1);
    confirmedBranch: std_logic_vector(0 to PIPE_WIDTH-1);
-   
+
    ip: Mword;
    targets: MwordArray(0 to PIPE_WIDTH-1);
    links: MwordArray(0 to PIPE_WIDTH-1);
@@ -37,7 +32,6 @@ constant DEFAULT_EARLY_INFO: EarlyInfo := ( targets => (others => (others => '0'
                                             others => (others => '0'));
 
 type EarlyInfoArray is array (natural range <>) of EarlyInfo;
-
 
 type LateInfo is record
    intPtr: SmallNumber;
@@ -52,18 +46,16 @@ end record;
 
 constant DEFAULT_LATE_INFO: LateInfo := (others => (others => '0'));
 
+constant EARLY_ELEM_SIZE: natural := 67;
+constant EARLY_INFO_SIZE: natural := EARLY_ELEM_SIZE*PIPE_WIDTH + 32;
+constant LATE_INFO_SIZE: natural := 4*8 + 4*(PIPE_WIDTH-1);
+
 type LateInfoArray is array (natural range <>) of LateInfo;
+type EarlyInfoSerialArray is array(0 to BQ_SIZE-1) of std_logic_vector(EARLY_INFO_SIZE-1 downto 0);
+type LateInfoSerialArray is array(0 to BQ_SIZE-1) of std_logic_vector(LATE_INFO_SIZE-1 downto 0);
 
 function getEarlyInfo(cpa: ControlPacketArray) return EarlyInfo;
 function getLateInfo(insVec: InstructionSlotArray) return LateInfo;
-
-constant EARLY_ELEM_SIZE: natural := 67;
-constant EARLY_INFO_SIZE: natural := EARLY_ELEM_SIZE*PIPE_WIDTH + 32;
-
-constant LATE_INFO_SIZE: natural := 4*8 + 4*(PIPE_WIDTH-1);
-
-type EarlyInfoSerialArray is array(0 to BQ_SIZE-1) of std_logic_vector(EARLY_INFO_SIZE-1 downto 0);
-type LateInfoSerialArray is array(0 to BQ_SIZE-1) of std_logic_vector(LATE_INFO_SIZE-1 downto 0);
 
 function serializeEarlyInfo(info: EarlyInfo) return std_logic_vector;
 function serializeLateInfo(info: LateInfo) return std_logic_vector;
@@ -71,8 +63,7 @@ function serializeLateInfo(info: LateInfo) return std_logic_vector;
 function deserializeEarlyInfo(v: std_logic_vector) return EarlyInfo;
 function deserializeLateInfo(v: std_logic_vector) return LateInfo;
 
-function getMatchedSlot_N(full: std_logic; renameIndex: InsTag; earlySelected: EarlyInfo; lateSelected: LateInfo)
-return ControlPacket;
+function getMatchedSlot(full: std_logic; renameIndex: InsTag; earlySelected: EarlyInfo; lateSelected: LateInfo) return ControlPacket;
 
 end package;
 
@@ -102,7 +93,7 @@ begin
     res.floatPtr := insVec(0).ins.tags.floatPointer;
     res.sqPtr := insVec(0).ins.tags.sqPointer;
     res.lqPtr := insVec(0).ins.tags.lqPointer;
-    
+
     for i in 1 to insVec'length - 1 loop
         res.usingInt(i-1) := insVec(i).ins.tags.intPointer(0) xor insVec(i-1).ins.tags.intPointer(0);
         res.usingFloat(i-1) := insVec(i).ins.tags.floatPointer(0) xor insVec(i-1).ins.tags.floatPointer(0);
@@ -126,9 +117,9 @@ begin
         
         res(67*i + 66 downto 67*i) := tmp(66 downto 0);
     end loop;
-    
+
     res(EARLY_ELEM_SIZE*PIPE_WIDTH + 31 downto EARLY_ELEM_SIZE*PIPE_WIDTH) := info.ip;
-    
+
     return res;
 end function;
 
@@ -147,14 +138,14 @@ function deserializeEarlyInfo(v: std_logic_vector) return EarlyInfo is
 begin
     for i in 0 to PIPE_WIDTH-1 loop
         tmp := v(67*i + 66 downto 67*i);
-    
+
         res.targets(i) := tmp(31 downto 0);
         res.links(i) := tmp(63 downto 32);
         res.full(i) := tmp(64);
         res.frontBranch(i) := tmp(65);
         res.confirmedBranch(i) := tmp(66);    
     end loop;
-    
+
     res.ip := v(EARLY_ELEM_SIZE*PIPE_WIDTH + 31 downto EARLY_ELEM_SIZE*PIPE_WIDTH);
     return res;
 end function;
@@ -166,7 +157,7 @@ begin
     res.sqPtr := v(23 downto 16);
     res.floatPtr := v(15 downto 8);
     res.intPtr := v(7 downto 0);
-    
+
     res.usingLQ :=    v(4*(PIPE_WIDTH-1)-1 + 32 downto 3*(PIPE_WIDTH-1) + 32);
     res.usingSQ :=    v(3*(PIPE_WIDTH-1)-1 + 32 downto 2*(PIPE_WIDTH-1) + 32);
     res.usingFloat := v(2*(PIPE_WIDTH-1)-1 + 32 downto 1*(PIPE_WIDTH-1) + 32);
@@ -176,8 +167,7 @@ begin
 end function;
 
 
-function getMatchedSlot_N(full: std_logic; renameIndex: InsTag; earlySelected: EarlyInfo; lateSelected: LateInfo)
-return ControlPacket is
+function getMatchedSlot(full: std_logic; renameIndex: InsTag; earlySelected: EarlyInfo; lateSelected: LateInfo) return ControlPacket is
     variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
     constant ipBase: Mword := earlySelected.ip;
     constant trgs: MwordArray := earlySelected.targets;
@@ -191,26 +181,22 @@ begin
     floatBase := lateSelected.floatPtr;
     sqBase := lateSelected.sqPtr;
     lqBase := lateSelected.lqPtr;
-    
+
     useVecInt(1 to PIPE_WIDTH-1) := lateSelected.usingInt;
     useVecFloat(1 to PIPE_WIDTH-1) := lateSelected.usingFloat;
     useVecSQ(1 to PIPE_WIDTH-1) := lateSelected.usingSQ;
     useVecLQ(1 to PIPE_WIDTH-1) := lateSelected.usingLQ;
-    
+
     lowPtr := slv2u(getTagLow(renameIndex));
-    
+
     res.controlInfo.frontBranch := earlySelected.frontBranch(lowPtr);
     res.controlInfo.confirmedBranch := earlySelected.confirmedBranch(lowPtr);
-    
+ 
     res.controlInfo.full := full;
-    
-    --res.ip := trgs(lowPtr);
-    -- !!! this doesn't work for register branches
 
     res.nip := ress(lowPtr);
-
     res.target := trgs(lowPtr);
-   
+
     if lowPtr = 0 then
         res.tags.intPointer := intBase;
         res.tags.floatPointer := floatBase;
@@ -227,5 +213,3 @@ begin
 end function;
 
 end package body; 
-
-
