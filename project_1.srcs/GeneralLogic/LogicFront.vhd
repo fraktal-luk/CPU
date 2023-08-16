@@ -26,7 +26,8 @@ function shiftLine(fetchedLine: WordArray; shift: SmallNumber) return WordArray;
 function getStallEvent(predictedAddress: Mword) return ControlPacket;
 
 function getFrontEvent(ip, target: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket;
-function getNormalEvent(target: Mword; cp: ControlPacket) return ControlPacket;
+function getNormalEvent(target: Mword;-- cpO: ControlPacket;
+                        ip: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket;
 
 function decodeGroup(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural; ip: Mword; ctrl: ControlPacket) return BufferEntryArray;
 function getControlA(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural;ip: Mword; hasBranch: std_logic) return ControlPacketArray;
@@ -35,10 +36,12 @@ function groupHasBranch(ea: BufferEntryArray) return std_logic;
 
 -- DEBUG
 function assignSeqNum(cpa: ControlPacketArray; seqNum: Word) return ControlPacketArray;
-function assignSeqNum(ba: BufferEntryArray; seqNum: Word; ctrl: ControlPacket) return BufferEntryArray;
+function assignSeqNum(ba: BufferEntryArray; seqNum: Word) return BufferEntryArray;
 
 function DB_addBitsAndIp(dbi: InstructionDebugInfo; bits: Word; ip: Mword) return InstructionDebugInfo;
 function DB_addSeqNum(dbi: InstructionDebugInfo; sn: Word) return InstructionDebugInfo;
+
+procedure DB_trackSeqNum(arr: BufferEntryArray);
 
 end LogicFront;
 
@@ -176,22 +179,24 @@ begin
     return res;
 end function;
 
-function getNormalEvent(target: Mword; cp: ControlPacket) return ControlPacket is
+function getNormalEvent(target: Mword;-- cpO: ControlPacket;
+                        ip: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket is
 	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+	constant cp: ControlPacket := getFrontEvent(ip, target, fetchLine);
 begin
-    --res.target := target;
     if cp.controlInfo.full = '1' and cp.controlInfo.frontBranch = '1' then
         res.target := cp.target; -- Correcting target within subsequent fetch line is still needed even if no redirection!
         res.controlInfo.newEvent := cp.controlInfo.newEvent; -- CAREFUL: event only if needs redirection, but break group at any taken jump
         res.controlInfo.frontBranch := '1';
     else
         res.target := target;
+                      --cp.target;
     end if;
     res.tags.bqPointer := cp.tags.bqPointer;
     return res;
 end function;
 
-
+--                                                                                         -- below only for DB!
 function decodeGroup(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural; ip: Mword; ctrl: ControlPacket)
 return BufferEntryArray is
     variable res: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
@@ -308,7 +313,7 @@ begin
     return res;
 end function;
 
-function assignSeqNum(ba: BufferEntryArray; seqNum: Word; ctrl: ControlPacket) return BufferEntryArray is
+function assignSeqNum(ba: BufferEntryArray; seqNum: Word) return BufferEntryArray is
     variable res: BufferEntryArray := ba;
     variable sn: Word := seqNum;
 begin
@@ -346,5 +351,21 @@ begin
     -- pragma synthesis on
     return res;
 end function;
+
+    procedure DB_trackSeqNum(arr: BufferEntryArray) is
+    begin
+       -- pragma synthesis off
+       if DB_OP_TRACKING then
+           for i in arr'range loop
+               if arr(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                   report "";
+                   report "DEBUG: Tracked seqNum assigned: " & work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+    
+                   report "";
+               end if;
+           end loop;
+       end if;
+       -- pragma synthesis on
+    end procedure;
 
 end LogicFront;
