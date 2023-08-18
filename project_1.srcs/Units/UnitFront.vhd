@@ -36,16 +36,11 @@ entity UnitFront is
 		lastSending: out std_logic;
 		-------
 		
-		--frontEventSignal: out std_logic;
 		frontCausing: out ExecResult;
 
 		execCausing: in ExecResult;
 		lateCausing: in ExecResult;
-		
-		--execEventSignal: in std_logic;
-		--lateEventSignal: in std_logic;
-		--lateEventSetPC: in std_logic;
-		
+
 		dbState: in DbCoreState		
 	);
 end UnitFront;
@@ -174,9 +169,8 @@ begin
     bpSending <= sendingToBQ;
 
     -- Events
---	frontEventSignal <= frontBranchEvent;	
-    frontCausing.full <= frontBranchEvent; -- redundant with frontBranchEvent
-    frontCausing.value <= earlyBranchOut.target;--frontTarget;
+    frontCausing.full <= frontBranchEvent;
+    frontCausing.value <= earlyBranchOut.target;
 
     --
 	frontAccepting <= '1';

@@ -64,20 +64,16 @@ end Core;
 architecture Behavioral of Core is
 
     signal frontAccepting, bpSending, renameAllow, frontGroupSend, frontSendAllow, canSendRename, robSending,
-           renameSendingBr, renamedSending, commitAccepting,-- frontEventSignal,
-                         bqAccepting, execEventSignalE0, execEventSignalE1,-- lateEventSignal,-- lateEventSetPC,
+           renameSendingBr, renamedSending, commitAccepting, bqAccepting, execEventSignalE0, execEventSignalE1,
            allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
-           mqReady, mqIssueSending, mqRegReadSending, sbSending, sbEmpty,-- sysRegRead,-- sysRegSending,
-           intSignal, memFail
+           mqReady, mqIssueSending, mqRegReadSending, sbSending, sbEmpty, intSignal, memFail
            : std_logic := '0';
 
     signal renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal aluMaskRe, mulMaskRe, memMaskRe, branchMaskRe, loadMaskRe, storeMaskRe, intStoreMaskRe, floatStoreMaskRe, fpMaskRe,
            branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO, zerosMask,
-           --commitMaskSQ,
-           commitEffectiveMaskSQ,-- commitMaskLQ,
-           commitEffectiveMaskLQ, branchCommitMask --, branchCommitEffectiveMask
+           commitEffectiveMaskSQ, commitEffectiveMaskLQ, branchCommitMask
            : std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
     signal frontGroupOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
@@ -90,8 +86,6 @@ architecture Behavioral of Core is
     signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
 
     signal intType: std_logic_vector(0 to 1) := (others => '0');
-    --signal sysRegReadValue: Mword := (others => '0');
-    --signal sysRegReadSel: slv5 := (others => '0');
 
     signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
     signal specialOp, specialOutROB: SpecificOp := DEFAULT_SPECIFIC_OP;
@@ -125,21 +119,18 @@ architecture Behavioral of Core is
     signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
     signal memIssueFullIQ, memIssueFullMQ, lockIssueI0_NoMemFail, dividerSending: std_logic := '0';
 begin
-
     intSignal <= int0 or int1;
     intType <= (int0, int1);
 
     dread <= memoryRead.full;
     dadr <= memoryRead.value;
-    --sysRegReadSel <= memoryRead.value(4 downto 0);
-    --sysRegRead <= memoryRead.full;
-        sysRegReadIn.full <= memoryRead.full;
-        sysRegReadIn.value <= --sysRegReadSel;
-                                zeroExtend(memoryRead.value(4 downto 0), MWORD_SIZE);
 
     events <= (lateEvent.full, execEvent.full, dataToBranch.tags, execEvent, lateEvent, memFail);
 
     dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'), zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
+
+    sysRegReadIn.full <= memoryRead.full;
+    sysRegReadIn.value <= zeroExtend(memoryRead.value(4 downto 0), MWORD_SIZE);
 
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
 	generic map(DEBUG_FILE_PREFIX => DEBUG_FILE_PREFIX)
@@ -147,11 +138,8 @@ begin
         clk => clk, reset => reset, en => '0',
         
         -- sys reg interface
-      --  sysRegReadSel => sysRegReadSel,
-      --  sysRegReadValue => sysRegReadValue,
-
-            sysRegReadIn => sysRegReadIn,
-            sysRegReadOut => sysRegReadOut,
+        sysRegReadIn => sysRegReadIn,
+        sysRegReadOut => sysRegReadOut,
 
         -- to front pipe
         pcDataOut => pcData,
@@ -162,14 +150,10 @@ begin
         -- Events in
         intSignal => intSignal,
         intType => intType,
-        --execEventSignal => execEvent.full,        
-        --frontEventSignal => frontEvent.full,
         frontEvent => frontEvent,
         execEvent => execEvent,
 
         -- Events out
---        lateEventOut => lateEventSignal,
-        --lateEventSetPC => lateEventSetPC,
         lateEvent => lateEvent,
 
         -- Interface from ROB
@@ -209,18 +193,14 @@ begin
         bpData => bpData,
 
         renameAccepting => frontSendAllow,
+
         dataOut => frontGroupOut,
         lastSending => frontGroupSend,
 
---        frontEventSignal => frontEventSignal,
         frontCausing => frontEvent,
 
         execCausing => execEvent,
         lateCausing => lateEvent,
-
-        --execEventSignal => execEvent.full,
-        --lateEventSignal => lateEvent.full,
-        --lateEventSetPC => lateEventSetPC,
 
         dbState => dbState
     );    
@@ -346,30 +326,30 @@ begin
         RENAMER: entity work.Renamer
         port map(
             clk => clk, evt => events,
-            
+
             prevSending => frontGroupSend,
-            
+
             frontData => frontGroupOut,
-            
+
             maskAlu => aluMaskRe,
             maskMul => mulMaskRe,
             maskMem => memMaskRe,
-            
+
             TMP_tagsAlu => TMP_aluTagsPreT,
             TMP_tagsMul => TMP_mulTagsPreT,
             TMP_tagsMem => TMP_memTagsPreT,
-                
-            commitArgInfoI => renamedArgsIntROB,
-                
-                TMP_destsOut => TMP_renamedDests,
-                TMP_sourcesOut => TMP_renamedSources,
 
-                commitGroupCtr => commitGroupCtr,
-                commitGroupCtrNext => commitGroupCtrNext,
-                renameGroupCtrNext => renameGroupCtrNext,
-                
-                renameSending => renamedSending, -- CAREFUL, it's an input
-                robSending => robSending, -- CAREFUL, it's an input
+            commitArgInfoI => renamedArgsIntROB,
+
+            TMP_destsOut => TMP_renamedDests,
+            TMP_sourcesOut => TMP_renamedSources,
+
+            commitGroupCtr => commitGroupCtr,
+            commitGroupCtrNext => commitGroupCtrNext,
+            renameGroupCtrNext => renameGroupCtrNext,
+
+            renameSending => renamedSending, -- CAREFUL, it's an input
+            robSending => robSending, -- CAREFUL, it's an input
 
             dummy => open
         );
@@ -394,8 +374,8 @@ begin
 
               slotSel4, slotIssue4, slotSel5, slotIssue5, slotSel6, slotIssue6,
 
-              slotSelIntSV, slotIssueIntSV_P,
-              slotRegReadIntSV_P, slotRegReadIntSV_P_Delay,
+              slotSelIntSV, slotIssueIntSV,
+              slotRegReadIntSV, slotRegReadIntSV_Delay,
               slotSelFloatSV, slotIssueFloatSV, slotRegReadFloatSV
                         : SchedulerState := DEFAULT_SCHED_STATE;
 
@@ -404,7 +384,7 @@ begin
        -- Issue control 
        signal memSubpipeSent, mulSubpipeSent, mulSubpipeAtE0, fp0subpipeSelected, mulSubpipeSelected,
               lockIssueSVI, lockIssueSVF, allowIssueStoreDataInt, allowIssueStoreDataFP, lockIssueI0, allowIssueI0,
-                    lockIssueI1, allowIssueI1, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0,
+              lockIssueI1, allowIssueI1, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0,
               intWriteConflict, storeValueCollision1, storeValueCollision2, storeValueCollision3, memDepFail, prevMemDepFail: std_logic := '0';
 
        signal subpipeI0_Issue, subpipeI0_RegRead, subpipeI0_E0,                                    subpipeI0_D0,
@@ -478,9 +458,7 @@ begin
                 bypass => bypassInt,
                 nextAccepting => allowIssueI0,
                     unlockDiv => '0',
-                --schedulerOut => slotSelI0,
                     schedulerOut_Fast => slotIssueI0_TF,
-                                         --   slotIssueI0,
                     schedulerOut_Slow => slotIssueI0_TS,
                 outputSignals => outSigsI0, 
                 dbState => dbState
@@ -591,9 +569,7 @@ begin
                     nextAccepting => allowIssueI1,
                                         unlockDiv => divUnlock,
                     events => events,
-                    --schedulerOut => slotSelI1,
                         schedulerOut_Fast => slotIssueI1_TF,
-                                             --   slotIssueI1,
                         schedulerOut_Slow => slotIssueI1_TS,
                     outputSignals => outSigsI1,
                     dbState => dbState
@@ -705,9 +681,7 @@ begin
                 nextAccepting => allowIssueM0,
                                     unlockDiv => '0',
                 events => events,
-                --schedulerOut => slotSelM0,
                     schedulerOut_Fast => slotIssueM0_TF,
-                                         --   slotIssueM0,
                     schedulerOut_Slow => slotIssueM0_TS,
                 outputSignals => outSigsM0,            
                 dbState => dbState
@@ -905,27 +879,25 @@ begin
                 nextAccepting => allowIssueStoreDataInt,
                                     unlockDiv => '0',
                 events => events,
-                --schedulerOut => slotSelIntSV,
                     schedulerOut_Fast => slotIssueSVI_TF,
-                                         --   slotIssueIntSV_P,
                     schedulerOut_Slow => slotIssueSVI_TS,
                 outputSignals => outSigsSVI,
                 dbState => dbState
             );
-                slotIssueIntSV_P <= slotIssueSVI_TF;
-                slotIssueSVI_U <= TMP_mergeStatic(slotIssueIntSV_P, slotIssueSVI_TS);
+                slotIssueIntSV <= slotIssueSVI_TF;
+                slotIssueSVI_U <= TMP_mergeStatic(slotIssueIntSV, slotIssueSVI_TS);
 
 
             TMP_ISSUE_SVI: block
                 signal argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
-                slotRegReadIntSV_P <= updateRegReadStage(argStateR, outSigsSVI, events, valuesInt0, regValsS0, true);
+                slotRegReadIntSV <= updateRegReadStage(argStateR, outSigsSVI, events, valuesInt0, regValsS0, true);
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
                         argStateR <= getRegReadStage_N(slotIssueSVI_U, events, valuesInt0, valuesInt1, false, true);              
-                        slotRegReadIntSV_P_Delay <= slotRegReadIntSV_P;
+                        slotRegReadIntSV_Delay <= slotRegReadIntSV;
                     end if;
                 end process;
 
@@ -958,9 +930,7 @@ begin
                     nextAccepting => allowIssueStoreDataFP,
                                         unlockDiv => '0',
                     events => events,
-                    --schedulerOut => slotSelFloatSV,
                         schedulerOut_Fast => slotIssueSVF_TF,
-                                             --   slotIssueFloatSV,
                         schedulerOut_Slow => slotIssueSVF_TS,           
                     outputSignals => outSigsSVF,
                     dbState => dbState
@@ -983,9 +953,9 @@ begin
                 end process;
             end block;
 
-            stateExecStoreValue <= slotRegReadIntSV_P_Delay when storeValueCollision3 = '1'
+            stateExecStoreValue <= slotRegReadIntSV_Delay when storeValueCollision3 = '1'
                               else slotRegReadFloatSV when slotRegReadFloatSV.full = '1'
-                              else slotRegReadIntSV_P;
+                              else slotRegReadIntSV;
 
             sqValueResultRR <= convertExecStoreValue(stateExecStoreValue);
 
@@ -1031,7 +1001,6 @@ begin
                 nextAccepting => allowIssueF0,
                                     unlockDiv => '0',
                 events => events,
-                --schedulerOut => slotSelF0,
                     schedulerOut_Fast => slotIssueF0_TF,
                     schedulerOut_Slow => slotIssueF0_TS,
                 outputSignals => outSigsF0,
@@ -1173,7 +1142,7 @@ begin
             regsSelI1 <= work.LogicRenaming.getPhysicalArgs(slotIssueI1);
             regsSelM0 <= work.LogicRenaming.getPhysicalArgs(slotIssueM0);
             -- TEMP!
-            regsSelS0 <= work.LogicRenaming.getPhysicalArgs(slotIssueIntSV_P);
+            regsSelS0 <= work.LogicRenaming.getPhysicalArgs(slotIssueIntSV);
             regsSelFS0 <= work.LogicRenaming.getPhysicalArgs(slotIssueFloatSV);
     
             regsSelF0 <= work.LogicRenaming.getPhysicalArgs(slotIssueF0);
@@ -1276,8 +1245,6 @@ begin
             readyRegFlagsFloat_Early(3*i to 3*i + 2 - QQQ) <= readyRegFlagsFloatNext_Early(3*i to 3*i + 2 - QQQ);
         end generate;
 
---        sysRegSending <= sysRegRead;
-
     end block; -- TEMP_EXEC
 
 
@@ -1292,13 +1259,9 @@ begin
         systemStoreMaskOO <= getStoreSysMask(renamedDataLivingRe);
         systemLoadMaskOO <= getLoadSysMask(renamedDataLivingRe);
      
-        --commitMaskSQ <= work.LogicQueues.getCommittedMask(robOut, false);
-        --commitMaskLQ <= work.LogicQueues.getCommittedMask(robOut, true);
         commitEffectiveMaskSQ <= work.LogicQueues.getCommittedEffectiveMask(robOut, false);
         commitEffectiveMaskLQ <= work.LogicQueues.getCommittedEffectiveMask(robOut, true);
-
         branchCommitMask <= work.LogicQueues.getCommittedMaskBr(robOut);
-        --branchCommitEffectiveMask <= work.LogicQueues.getCommittedEffectiveMaskBr(robOut);
     end block;
 
     BRANCH_QUEUE: entity work.BranchQueue
@@ -1335,7 +1298,6 @@ begin
 		committing => robSending, -- When ROB is sending so is BQ if it has corresponding branches
         commitBr => robOut(0).controlInfo.firstBr,
         commitMask => branchCommitMask,
-        --commitEffectiveMask => branchCommitEffectiveMask,
 
 		lateEventSignal => lateEvent.full,
 		execEventSignal => execEventSignalE1,
@@ -1380,7 +1342,6 @@ begin
         selectedDataResult => resOutSQ,
 
 		committing => robSending,
-        --commitMask => commitMaskSQ,
         commitEffectiveMask => commitEffectiveMaskSQ,
 
 		lateEventSignal => lateEvent.full,
@@ -1428,7 +1389,6 @@ begin
         selectedDataOutput => ctOutLQ,
 
 		committing => robSending,
-        --commitMask => commitMaskLQ,
         commitEffectiveMask => commitEffectiveMaskLQ,
 
 		lateEventSignal => lateEvent.full,
