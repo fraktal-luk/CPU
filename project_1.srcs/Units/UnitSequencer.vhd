@@ -142,7 +142,6 @@ begin
     end process;
 
     sendingOutPC <= fullPC and not eventOccurred;
-    lateEventSending <= fullLateCausing;      
 
     SYS_REGS: block
         signal jumpDbMatch, jumpHwMatch, excInfoReady: std_logic := '0';
@@ -278,6 +277,8 @@ begin
                 end if;
             end if;
         end process;
+
+        lateEventSending <= fullLateCausing;
 
         sendingToLateCausing <= (eventCommitted or intCommitted) and sbEmpty;
                                 -- (ec and sbe) or (ic and sbe)
