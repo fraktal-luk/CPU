@@ -37,7 +37,7 @@ package LogicExec is
 	                     bqControl: ControlPacket;
                          ac: AluControl) return ControlPacket;
 
-	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword; ctrl: InstructionControlInfo;
+	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword;-- ctrl: InstructionControlInfo;
 	                                           ac: AluControl)
 	                                           return ExecResult;
 
@@ -92,7 +92,7 @@ package body LogicExec is
 	    res.dbInfo := ss.st.dbInfo;
         res.tags := ss.st.tags;
 
-        res.controlInfo.full := sending;
+        res.controlInfo.c_full := sending;
 		-- Cases to handle
 		-- jr taken		: if not taken goto return, if taken and not equal goto reg, if taken and equal ok 
 		-- jr not taken: if not taken ok, if taken goto reg
@@ -102,7 +102,7 @@ package body LogicExec is
         targetMatch := bool2std(target = ss.argValues(1));
 		branchTaken := resolveBranchCondition(ss.argValues(0), ss.st.operation.arith, ac);
 
-        res.controlInfo.full := sending;
+        res.controlInfo.c_full := sending;
 
 		if ctrl.frontBranch = '1' and branchTaken = '0' then
 			res.controlInfo.newEvent := '1';
@@ -157,7 +157,8 @@ package body LogicExec is
 		return res;
 	end function;
 
-	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword; ctrl: InstructionControlInfo; ac: AluControl)
+	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword;-- ctrl: InstructionControlInfo;
+	                    ac: AluControl)
 	return ExecResult is
 		variable res: ExecResult := DEFAULT_EXEC_RESULT;
 		variable result: Mword := (others => '0');
@@ -357,7 +358,7 @@ package body LogicExec is
                              ) return InstructionControlInfo is
         variable res: InstructionControlInfo := DEFAULT_CONTROL_INFO;
         constant sysOp: boolean := (isLoadSysOp(op) or isStoreSysOp(op)) = '1';
-        constant memForwarded: boolean := std2bool(ctSQ.controlInfo.full);
+        constant memForwarded: boolean := std2bool(ctSQ.controlInfo.c_full);
         constant memFail: boolean := std2bool(not memLoadReady and isLoadMemOp(op));
     begin
         -- mfc/mtc?
@@ -386,7 +387,7 @@ package body LogicExec is
          end if;
 
          -- CAREFUL: store when newer load has been done - violation resolution when reissue is used
-         if isStoreMemOp(op) = '1' and ctLQ.controlInfo.full = '1' then
+         if isStoreMemOp(op) = '1' and ctLQ.controlInfo.c_full = '1' then
             res.orderViolation := '1';
             res.specialAction := '1';
             res.newEvent := '1';
@@ -402,7 +403,7 @@ package body LogicExec is
                                  ) return ExecResult is
         variable res: ExecResult := DEFAULT_EXEC_RESULT;
         constant sysOp: boolean := (isLoadSysOp(op) or isStoreSysOp(op)) = '1';
-        constant memForwarded: boolean := std2bool(ctSQ.controlInfo.full);
+        constant memForwarded: boolean := std2bool(ctSQ.controlInfo.c_full);
         constant memFail: boolean := std2bool(not memLoadReady);
     begin
          if sysOp then

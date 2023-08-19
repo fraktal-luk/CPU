@@ -49,8 +49,7 @@ end UnitFront;
 architecture Behavioral of UnitFront is
 	signal fetchedLine0, fetchedLine1, fetchedLineShifted0, fetchedLineShifted1, fetchedLineShifted1_Alt: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0'));
 
-	signal full0, full1, sendingOutFetch0, sendingOutFetch1, bufferAccepting, queuesAccepting, fullBr, fullBt, earlyBranchSending, sendingToBuffer,
-           pcEn, frontBranchEvent, killAll, killAllOrFront, sendingOutBuffer, sendingToBQ,
+	signal bufferAccepting, queuesAccepting, fullBt, sendingToBuffer, killAll, killAllOrFront, sendingOutBuffer, sendingToBQ,
                                                                              ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0';
     signal stageDataOutFetch0, stageDataOutFetch1, stallCt, normalCt, earlyBranchIn, earlyBranchOut: ControlPacket := DEFAULT_CONTROL_PACKET;
 
@@ -66,34 +65,46 @@ architecture Behavioral of UnitFront is
 
 begin
 	killAll <= execCausing.full or lateCausing.full;
-    killAllOrFront <= killAll or frontBranchEvent;
+    killAllOrFront <= killAll or earlyBranchOut.controlInfo.newEvent;
 
 	fetchedLine0 <= iin;
-    pcEn <= pcDataIn.controlInfo.full;
 
     process(clk)
     begin
         if rising_edge(clk) then
 
             -- Stage F0
-            stageDataOutFetch0 <= pcDataIn;
             -- fetchedLine0: assigned async
-            full0 <= bool2std(pcEn = '1') and not killAllOrFront;
+
+            stageDataOutFetch0 <= pcDataIn;
+            if killAllOrFront = '1' then
+                stageDataOutFetch0.full <= '0';
+                stageDataOutFetch0.controlInfo.c_full <= '0';
+            end if;
+
 
             -- Stage F1
-            stageDataOutFetch1 <= stageDataOutFetch0;
             fetchedLine1 <= fetchedLine0;
-                fetchedLineShifted1_Alt <= fetchedLineShifted0;
-            full1 <= sendingOutFetch0 and not killAllOrFront;          -- F1
+            fetchedLineShifted1_Alt <= fetchedLineShifted0;
+            
+            stageDataOutFetch1 <= stageDataOutFetch0;
+            if killAllOrFront = '1' then
+                stageDataOutFetch1.full <= '0';
+                stageDataOutFetch1.controlInfo.c_full <= '0';
+            end if;
 
             -- Stage Ibuf/BrEval
 			predictedAddress <= predictedAddressNext;
 
             earlyBranchOut <= earlyBranchIn;
-            fullBr <= sendingOutFetch1 and not killAll;                -- F2
+            if killAllOrFront = '1' then
+                earlyBranchOut.full <= '0';
+                earlyBranchOut.controlInfo.c_full <= '0';
+                earlyBranchOut.controlInfo.newEvent <= '0';
+            end if;
+
             fullBt <= bool2std(sendingToBuffer = '1') and not killAll; -- F2
             bqDataSig <= bqDataSigPre; -- F2
-
 
             if sendingToBuffer = '1' then
                 DB_trackSeqNum(dataToIbuffer);
@@ -102,22 +113,19 @@ begin
 
         end if;
     end process;
-
-    sendingOutFetch0 <= full0 and not killAllOrFront;
-    sendingOutFetch1 <= full1 and not killAllOrFront;
-
+    
     queuesAccepting <= bufferAccepting and bqAccepting;
-	sendingToBuffer <= sendingOutFetch1 and queuesAccepting;
+	sendingToBuffer <= stageDataOutFetch1.full and not killAllOrFront and queuesAccepting;
 
-    stallCt <= getStallEvent(predictedAddress);
-    normalCt <= getNormalEvent(stageDataOutFetch1.target, predictedAddress, fetchedLine1);
+    stallCt <= getStallEvent(stageDataOutFetch1.full, predictedAddress);
+    normalCt <= getNormalEvent(stageDataOutFetch1.full, stageDataOutFetch1.target, predictedAddress, fetchedLine1);
 
     earlyBranchIn <=      normalCt when queuesAccepting = '1'
                     else  stallCt;
 
     predictedAddressNext <= lateCausing.value     when lateCausing.full = '1'
                        else execCausing.value     when execCausing.full = '1'
-                       else earlyBranchOut.target when frontBranchEvent = '1'
+                       else earlyBranchOut.target when earlyBranchOut.controlInfo.newEvent = '1'
                        else normalCt.target       when sendingToBuffer = '1'
                        else predictedAddress; -- predictedAddress == stallCt.target
 
@@ -139,10 +147,6 @@ begin
     toBQ <= getControlGroup(fetchedLineShifted1, nW, predictedAddress, groupHasBranch(dataToIbuffer));
     bqDataSigPre <= assignSeqNum(toBQ, decodeCounter); -- TODO: DB
 
-    earlyBranchSending <= fullBr and not killAll;
-	frontBranchEvent <= earlyBranchOut.controlInfo.newEvent and earlyBranchSending;
-    sendingToBQ <= fullBt and not killAll;
-
 	SUBUNIT_IBUFFER: entity work.InstructionBuffer(Implem)
 	port map(
 		clk => clk, reset => '0', en => '0',
@@ -158,6 +162,9 @@ begin
 	);
 
 
+    sendingToBQ <= fullBt and not killAll;
+
+
     -- Outputs 
 
     -- Pipeline (F2) (may be delayed any number of cycles)
@@ -169,7 +176,7 @@ begin
     bpSending <= sendingToBQ;
 
     -- Events
-    frontCausing.full <= frontBranchEvent;
+    frontCausing.full <= earlyBranchOut.controlInfo.newEvent;
     frontCausing.value <= earlyBranchOut.target;
 
     --

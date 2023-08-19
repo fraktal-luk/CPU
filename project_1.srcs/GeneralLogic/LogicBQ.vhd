@@ -74,7 +74,7 @@ function getEarlyInfo(cpa: ControlPacketArray) return EarlyInfo is
     variable res: EarlyInfo;
 begin
     for i in cpa'range loop
-        res.full(i) := cpa(i).controlInfo.full;
+        res.full(i) := cpa(i).controlInfo.c_full;
         res.frontBranch(i) := cpa(i).controlInfo.frontBranch;
         res.confirmedBranch(i) := cpa(i).controlInfo.confirmedBranch;
 
@@ -192,7 +192,7 @@ begin
     res.controlInfo.frontBranch := earlySelected.frontBranch(lowPtr);
     res.controlInfo.confirmedBranch := earlySelected.confirmedBranch(lowPtr);
  
-    res.controlInfo.full := full;
+    res.controlInfo.c_full := full;
 
     res.nip := ress(lowPtr);
     res.target := trgs(lowPtr);

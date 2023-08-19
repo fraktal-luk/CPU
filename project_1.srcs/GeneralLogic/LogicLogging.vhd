@@ -31,7 +31,7 @@ package body LogicLogging is
                 procedure DB_reportBranchEvent(cp: ControlPacket) is
                 begin
                     -- pragma synthesis off
-                    if DB_BRANCH_EXEC_TRACKING and cp.controlInfo.full = '1' and cp.controlInfo.newEvent = '1' then
+                    if DB_BRANCH_EXEC_TRACKING and cp.controlInfo.c_full = '1' and cp.controlInfo.newEvent = '1' then
                         report "";
                         report "DEBUG: branch redirect: " & natural'image(slv2u(cp.dbInfo.seqNum));
                         report "";

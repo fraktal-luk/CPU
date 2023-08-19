@@ -70,7 +70,7 @@ end record;
 
 
 type InstructionControlInfo is record
-    full: std_logic;
+    c_full: std_logic;
 	newEvent: std_logic; -- True if any new event appears
 	hasInterrupt: std_logic;   -- CP
 	hasException: std_logic;
@@ -177,6 +177,7 @@ type InstructionStateArray is array(integer range <>) of InstructionState;
 
 type ControlPacket is record
     dbInfo: InstructionDebugInfo;
+    full: std_logic;
     controlInfo: InstructionControlInfo;
     classInfo: InstructionClassInfo;
     op: SpecificOp;
@@ -400,7 +401,7 @@ constant DEFAULT_STATIC_INFO: StaticInfo := (
 
 
 constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
-    full => '0',
+    c_full => '0',
     newEvent => '0',
     hasInterrupt => '0',
     hasException => '0',
@@ -463,7 +464,7 @@ constant DEFAULT_INS_STATE: InstructionState := DEFAULT_INSTRUCTION_STATE;
 
 constant DEFAULT_CONTROL_PACKET: ControlPacket := (
     dbInfo => DEFAULT_DEBUG_INFO,
-
+    full => '0',
     controlInfo => DEFAULT_CONTROL_INFO,
     classInfo => DEFAULT_CLASS_INFO,
     op => DEFAULT_SPECIFIC_OP,

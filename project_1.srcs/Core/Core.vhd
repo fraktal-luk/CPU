@@ -89,7 +89,8 @@ architecture Behavioral of Core is
 
     signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
     signal specialOp, specialOutROB: SpecificOp := DEFAULT_SPECIFIC_OP;
-    signal branchCtrl, memoryCtrlE2: InstructionControlInfo := DEFAULT_CONTROL_INFO;
+    signal branchCtrl, memoryCtrlE2: --InstructionControlInfo := DEFAULT_CONTROL_INFO;
+                                     ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal bqCompareEarly, bqUpdate, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
            memAddressInput, memAddressInputEarly, frontEvent, execEvent, lateEvent, execCausingDelayedSQ, execCausingDelayedLQ,
@@ -127,7 +128,7 @@ begin
 
     events <= (lateEvent.full, execEvent.full, dataToBranch.tags, execEvent, lateEvent, memFail);
 
-    dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'), zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
+    dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.c_full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'), zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
 
     sysRegReadIn.full <= memoryRead.full;
     sysRegReadIn.value <= zeroExtend(memoryRead.value(4 downto 0), MWORD_SIZE);
@@ -176,7 +177,7 @@ begin
     );
 
     iadr <= pcData.ip;
-    iadrvalid <= pcData.controlInfo.full;
+    iadrvalid <= pcData.controlInfo.c_full;
 
 
 	UNIT_FRONT: entity work.UnitFront(Behavioral)
@@ -491,7 +492,8 @@ begin
 
                 unfoldedAluOp_T <= work.LogicExec.getAluControl(slotRegReadI0.st.operation.arith);
 
-            dataToAlu <= executeAlu(slotRegReadI0.full, slotRegReadI0, bqSelected.nip, dataToBranch.controlInfo, unfoldedAluOp);
+            dataToAlu <= executeAlu(slotRegReadI0.full, slotRegReadI0, bqSelected.nip,-- dataToBranch.controlInfo
+                                    unfoldedAluOp);
             process (clk)
             begin
                 if rising_edge(clk) then
@@ -504,7 +506,7 @@ begin
                 use work.LogicLogging.all;
             begin
                 if rising_edge(clk) then
-                    if dataToBranch.controlInfo.full = '1' then
+                    if dataToBranch.controlInfo.c_full = '1' then
                         DB_reportBranchEvent(dataToBranch);
                     end if;
 
@@ -517,7 +519,7 @@ begin
                 execEventSignalE0 <= branchResultE0.controlInfo.newEvent;
                 execEvent <= (DEFAULT_DEBUG_INFO, execEventSignalE0, '0', branchResultE0.tags.renameIndex, branchResultE0.tags.bqPointerSeq, branchResultE0.target);
 
-            bqUpdate.full <= branchResultE0.controlInfo.full;
+            bqUpdate.full <= branchResultE0.controlInfo.c_full;
             bqUpdate.tag <= branchResultE0.tags.renameIndex;
             bqUpdate.value <= branchResultE0.target;
 
@@ -690,7 +692,7 @@ begin
                 slotIssueM0 <= slotIssueM0_TF;
                 slotIssueM0_U <= TMP_mergeStatic(slotIssueM0, slotIssueM0_TS);
 
-            mqIssueSending <= mqReexecCtrlIssue.controlInfo.full;
+            mqIssueSending <= mqReexecCtrlIssue.controlInfo.c_full;
             slotIssueM0mq <= TMP_slotIssueM0mq(mqReexecCtrlIssue, mqReexecResIssue, mqIssueSending);
 
             TMP_ISSUE_M0: block
@@ -713,7 +715,7 @@ begin
 
             ---------------------------------------------
             -- RR --
-            mqRegReadSending <= mqReexecCtrlRR.controlInfo.full;
+            mqRegReadSending <= mqReexecCtrlRR.controlInfo.c_full;
             slotRegReadM0mq <= TMP_slotRegReadM0mq(mqReexecCtrlRR, mqReexecResRR, mqRegReadSending);
 
             -- Merge IQ with MQ
@@ -724,7 +726,7 @@ begin
             resultToM0_E0i <= updateMemDest(resultToM0_E0, slotRegReadM0.intDestSel);
             resultToM0_E0f <= updateMemDest(resultToM0_E0, slotRegReadM0.floatDestSel);
 
-            controlToM0_E0.controlInfo.full <= slotRegReadM0.full;
+            controlToM0_E0.controlInfo.c_full <= slotRegReadM0.full;
             controlToM0_E0.op <= slotRegReadM0.st.operation;
             controlToM0_E0.tags <= slotRegReadM0.st.tags;
             controlToM0_E0.dbInfo <= slotRegReadM0.st.dbInfo;
@@ -743,7 +745,7 @@ begin
             MEM_RESULTS: block
                 signal memLoadReady, memoryMissed: std_logic := '0';
                 signal memLoadValue, memResult: Mword := (others => '0');
-                signal memoryCtrlPre: InstructionControlInfo := DEFAULT_CONTROL_INFO;                
+                --signal memoryCtrlPre: InstructionControlInfo := DEFAULT_CONTROL_INFO;                
             begin
                 memLoadReady <= dvalid; -- In
                 memLoadValue <= din;    -- In
@@ -752,14 +754,13 @@ begin
                                                       memLoadReady, memLoadValue,
                                                       sysRegReadOut.full, sysRegReadOut.value,
                                                       ctOutSQ, ctOutLQ).value;
-    
-                memoryCtrlPre <= getLSResultData(   ctrlE1.op,
-                                                    subpipeM0_E1.value,
-                                                    '1', memLoadReady, sysRegReadOut.full,
-                                                    ctOutSQ, ctOutLQ);
+                --memoryCtrlPre <= 
                 ctrlE1u.tags <= ctrlE1.tags;
                 ctrlE1u.op <= ctrlE1.op;
-                ctrlE1u.controlInfo <= memoryCtrlPre;
+                ctrlE1u.controlInfo <= getLSResultData(ctrlE1.op,
+                                                       subpipeM0_E1.value,
+                                                       '1', memLoadReady, sysRegReadOut.full,
+                                                       ctOutSQ, ctOutLQ);
 
                 memoryMissed <= ctrlE1u.controlInfo.dataMiss or ctrlE1u.controlInfo.sqMiss;
     
@@ -775,7 +776,7 @@ begin
 
             --------------------------------------------
             memIssueFullIQ <= slotIssueM0.maybeFull;
-            memIssueFullMQ <= mqReexecCtrlIssue.controlInfo.full;
+            memIssueFullMQ <= mqReexecCtrlIssue.controlInfo.c_full;
 
             process (clk)
             begin
@@ -798,7 +799,7 @@ begin
                 end if;
             end process;
 
-            memoryCtrlE2 <= ctrlE2.controlInfo;  -- for ROB
+            memoryCtrlE2 <= ctrlE2;--.controlInfo;  -- for ROB
 
             memCtrlE0 <= ctrlE0; -- Interface
 
@@ -1097,7 +1098,7 @@ begin
         allowIssueF0 <= not lockIssueF0;
 
 
-        branchCtrl <= branchResultE0.controlInfo;
+        branchCtrl <= branchResultE0;--.controlInfo;
 
         execOutMain(0) <= subpipeI0_E0;
         execOutMain(1) <= subpipeI1_E2;
@@ -1480,7 +1481,7 @@ begin
 		signal sysStoreAddressW: Mword := (others => '0');
 	begin
 		doutadr <= ctOutSB.target;
-		dwrite <= sbSending and ctOutSB.controlInfo.full and isStoreMemOp(ctOutSB.op);
+		dwrite <= sbSending and ctOutSB.controlInfo.c_full and isStoreMemOp(ctOutSB.op);
 		dout <= ctOutSB.nip;
 	end block;
 

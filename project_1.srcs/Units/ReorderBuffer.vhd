@@ -28,8 +28,10 @@ entity ReorderBuffer is
 		execSigsMain: in ExecResultArray(0 to 3);
 		execSigsSec: in ExecResultArray(0 to 3);
 		
-		branchControl: in InstructionControlInfo;
-		memoryControl: in InstructionControlInfo;
+		branchControl: in --InstructionControlInfo;
+		                  ControlPacket;
+		memoryControl: in --InstructionControlInfo;
+		                  ControlPacket;
 		
 		specialOp: in SpecificOp;
 		
@@ -120,7 +122,7 @@ architecture Behavioral of ReorderBuffer is
         for i in res'range loop
             res(i).dbInfo := da(i).dbInfo;
             
-            res(i).controlInfo.full := da(i).full;
+            res(i).controlInfo.c_full := da(i).full;
             res(i).controlInfo.killed := da(i).killed;
             res(i).controlInfo.causing := da(i).causing;
 
@@ -144,7 +146,7 @@ architecture Behavioral of ReorderBuffer is
 begin
     inputSpecial.ins.specificOperation <= specialOp;
 
-	execEvent <= branchControl.full and branchControl.newEvent;
+	execEvent <= branchControl.controlInfo.c_full and branchControl.controlInfo.newEvent;
 	
 	causingPtr <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN_LONG;
 	
@@ -188,8 +190,8 @@ begin
                 updateDynamicContent(dynamicContent, execSigsMain, 0);
                 updateDynamicContent(dynamicContent, execSigsSec, 1);
 
-                updateDynamicContentBranch(dynamicContent, branchControl.full, branchControl, execSigsMain(0).tag);
-                updateDynamicContentMemEvent(dynamicContent, execSigsMain(2).full, memoryControl, execSigsMain(2).tag);
+                updateDynamicContentBranch(dynamicContent, branchControl.controlInfo.c_full, branchControl.controlInfo, execSigsMain(0).tag);
+                updateDynamicContentMemEvent(dynamicContent, execSigsMain(2).full, memoryControl.controlInfo, execSigsMain(2).tag);
 
                 if lateEventSignal = '1' then
                     flushDynamicContent(dynamicContent);

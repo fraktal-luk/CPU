@@ -348,7 +348,7 @@ function extractFullMask(cpa: ControlPacketArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to cpa'length-1) := (others => '0');
 begin
 	for i in res'range loop
-		res(i) := cpa(i).controlInfo.full;
+		res(i) := cpa(i).controlInfo.c_full;
 	end loop;
 	return res;
 end function;

@@ -221,8 +221,9 @@ begin
                                              bqTargetData.full,
                                              bqTargetData.value,
                                              lastEffectiveOut.target,
-                                             lateCausingOut.controlInfo,
-                                             lateCausingOut.target,
+                                             --lateCausingOut.controlInfo,
+                                             --lateCausingOut.target,
+                                             lateCausingOut,
                                              lateEventSending);
 
         sendingToLastEffective <= sendingFromROB or lateEventSending;
@@ -257,7 +258,8 @@ begin
                 if sendingToLastEffective = '1' then
                     lastEffectiveOut <= lastEffectiveIn;
                 else
-                    lastEffectiveOut.controlInfo.full <= '0';
+                    lastEffectiveOut.full <= '0';
+                    lastEffectiveOut.controlInfo.c_full <= '0';
                     lastEffectiveOut.controlInfo.newEvent <= '0';
                 end if;
 
@@ -271,8 +273,9 @@ begin
                     lateCausingOut <= lateCausingIn;
                 else
                     fullLateCausing <= '0';
-
-                    lateCausingOut.controlInfo.full <= '0';
+                    
+                    lateCausingOut.full <= '0';
+                    lateCausingOut.controlInfo.c_full <= '0';
                     lateCausingOut.controlInfo.newEvent <= '0';
                 end if;
             end if;
@@ -282,7 +285,8 @@ begin
 
         sendingToLateCausing <= (eventCommitted or intCommitted) and sbEmpty;
                                 -- (ec and sbe) or (ic and sbe)
-        lateCausingIn <= getLatePCData( lastEffectiveOut.controlInfo, lastEffectiveOut.target,
+        lateCausingIn <= getLatePCData( --lastEffectiveOut.controlInfo, lastEffectiveOut.target,
+                                        lastEffectiveOut,
                                         intCommitted, intTypeCommitted, currentState,
                                         linkRegExc, linkRegInt, savedStateExc, savedStateInt,
                                         specialOp);
@@ -299,7 +303,8 @@ begin
     failSig <= eventCommitted and bool2std(specialOp.system = opError); 
 
     -- OUTPUT
-    pcDataSig.controlInfo.full <= sendingOutPC;
+    pcDataSig.full <= sendingOutPC;
+    pcDataSig.controlInfo.c_full <= sendingOutPC;
     pcDataSig.ip <= pcCurrent;
     pcDataSig.target <= pcInc;
     pcDataSig.dbInfo <= pcDbInfo;
