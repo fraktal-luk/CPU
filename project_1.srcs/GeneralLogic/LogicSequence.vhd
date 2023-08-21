@@ -18,24 +18,21 @@ package LogicSequence is
 
 function getNextPC(pc: Mword) return Mword;
 
-function getLatePCData(--commitCt: InstructionControlInfo; commitTarget: Mword;
-                       commitCp: ControlPacket;
-                       int: std_logic; intType: std_logic_vector;
-					   currentState, linkExc, linkInt, stateExc, stateInt: Mword; specialOp: SpecificOp)
-return ControlPacket;
-
 function newPCData(commitEvent: std_logic; lateTarget: Mword;
                    execEvent: std_logic; execTarget: Mword;	
                    frontEvent: std_logic; frontTarget: Mword;
                    pcNext: Mword)
 return Mword;
 
+function getLatePCData(commitCp: ControlPacket; int: std_logic; intType: std_logic_vector;
+					   currentState, linkExc, linkInt, stateExc, stateInt: Mword; specialOp: SpecificOp)
+return ControlPacket;
+
+function forwardLateCausing(lateCausing: ControlPacket) return ControlPacket;
+
 function getNewEffective(sendingToCommit: std_logic;
                          robData: ControlPacketArray; bqTargetFull: std_logic;
-                         bqTarget, lastEffectiveTarget: Mword;
-						 --lateCt: InstructionControlInfo; lateTarget: Mword;
-						 lateCausing: ControlPacket;
-						 evtPhase2: std_logic)
+                         bqTarget, lastEffectiveTarget: Mword)
 return ControlPacket;
 
 function anyEvent(cpa: ControlPacketArray) return std_logic;
@@ -49,9 +46,9 @@ function DB_addIndex(dbi: InstructionDebugInfo; index: Word) return InstructionD
 function DB_incIndex(dbi: InstructionDebugInfo) return InstructionDebugInfo;
 function DB_addCycle(dbi: InstructionDebugInfo; cycle: Word) return InstructionDebugInfo;
 
-    procedure DB_reportLateEvent(cp: ControlPacket);
-    procedure DB_handleGroup(ia: ControlPacketArray; signal lastSeqNum: inout Word; signal gapSig: out std_logic; signal gapFirst, gapLast: out Word);
-    procedure DB_trackSeqNum(ia: ControlPacketArray);
+procedure DB_reportLateEvent(cp: ControlPacket);
+procedure DB_handleGroup(ia: ControlPacketArray; signal lastSeqNum: inout Word; signal gapSig: out std_logic; signal gapFirst, gapLast: out Word);
+procedure DB_trackSeqNum(ia: ControlPacketArray);
 
 end LogicSequence;
 
@@ -67,10 +64,25 @@ begin
 	return res;
 end function;
 
+function newPCData(commitEvent: std_logic; lateTarget: Mword;
+                   execEvent: std_logic; execTarget: Mword;	
+                   frontEvent: std_logic; frontTarget: Mword;
+                   pcNext: Mword)
+return Mword is
+begin
+	if commitEvent = '1' then
+		return lateTarget;
+	elsif execEvent = '1' then		
+		return execTarget;
+	elsif frontEvent = '1' then
+		return frontTarget;
+	else	-- Go to the next line
+		return pcNext;
+	end if;
+end function;
 
-function getLatePCData(--commitCt: InstructionControlInfo; commitTarget: Mword;
-                       commitCp: ControlPacket;
-                       int: std_logic; intType: std_logic_vector;
+
+function getLatePCData(commitCp: ControlPacket; int: std_logic; intType: std_logic_vector;
 					   currentState, linkExc, linkInt, stateExc, stateInt: Mword; specialOp: SpecificOp)
 return ControlPacket is
     constant commitCt: InstructionControlInfo := commitCp.controlInfo;
@@ -132,39 +144,25 @@ begin
 end function;
 
 
-function newPCData(commitEvent: std_logic; lateTarget: Mword;
-                   execEvent: std_logic; execTarget: Mword;	
-                   frontEvent: std_logic; frontTarget: Mword;
-                   pcNext: Mword)
-return Mword is
+function forwardLateCausing(lateCausing: ControlPacket) return ControlPacket is
+    variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 begin
-	if commitEvent = '1' then
-		return lateTarget;
-	elsif execEvent = '1' then		
-		return execTarget;
-	elsif frontEvent = '1' then
-		return frontTarget;
-	else	-- Go to the next line
-		return pcNext;
-	end if;
+   res.controlInfo := lateCausing.controlInfo;
+   res.target := lateCausing.target;
+   return res;
 end function;
 
 
 function getNewEffective(sendingToCommit: std_logic;
                          robData: ControlPacketArray;
                          bqTargetFull: std_logic;
-                         bqTarget, lastEffectiveTarget: Mword;
-						 --lateCt: InstructionControlInfo; lateTarget: Mword;
-						 lateCausing: ControlPacket;					 
-						 evtPhase2: std_logic)
+                         bqTarget, lastEffectiveTarget: Mword)
 return ControlPacket is
-     constant lateCt: InstructionControlInfo := lateCausing.controlInfo;
-     constant lateTarget: Mword := lateCausing.target;
-	variable ct_O: InstructionControlInfo := DEFAULT_CONTROL_INFO;
-	variable target_O: Mword := (others => '0');
-	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-	variable targetInc: Mword := (others => '0');
-	variable anyConfirmed: boolean := false;
+	 variable ct_O: InstructionControlInfo := DEFAULT_CONTROL_INFO;
+	 variable target_O: Mword := (others => '0');
+	 variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+	 variable targetInc: Mword := (others => '0');
+	 variable anyConfirmed: boolean := false;
 begin
     for i in PIPE_WIDTH-1 downto 0 loop
         if robData(i).controlInfo.c_full = '1' then
@@ -179,20 +177,12 @@ begin
         end if;
     end loop;
 
-	if evtPhase2 = '1' then
-	   res.controlInfo := lateCt;
-	   res.target := lateTarget;
-	   return res;
-	end if;
-
     ct_O := robData(0).controlInfo;
-    --target_O := robData(0).target;
 
     for i in PIPE_WIDTH-1 downto 0 loop
         if robData(i).controlInfo.c_full = '1' then
            ct_O := robData(i).controlInfo;
            ct_O.newEvent := hasSyncEvent(robData(i).controlInfo);
-           --target_O := robData(i).target;
            exit;
         end if;
     end loop;

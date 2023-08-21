@@ -19,10 +19,7 @@ use work.DebugUtils.all;
 
 
 entity Core is
-    generic(
-        DEBUG_FILE_PREFIX: string := "CoreDB_"
-    );
-    Port ( clk : in  STD_LOGIC;
+    port ( clk : in  STD_LOGIC;
            reset : in  STD_LOGIC;
            en : in  STD_LOGIC;
 			  
@@ -89,8 +86,7 @@ architecture Behavioral of Core is
 
     signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
     signal specialOp, specialOutROB: SpecificOp := DEFAULT_SPECIFIC_OP;
-    signal branchCtrl, memoryCtrlE2: --InstructionControlInfo := DEFAULT_CONTROL_INFO;
-                                     ControlPacket := DEFAULT_CONTROL_PACKET;
+    signal branchCtrl, memoryCtrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal bqCompareEarly, bqUpdate, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
            memAddressInput, memAddressInputEarly, frontEvent, execEvent, lateEvent, execCausingDelayedSQ, execCausingDelayedLQ,
@@ -134,7 +130,6 @@ begin
     sysRegReadIn.value <= zeroExtend(memoryRead.value(4 downto 0), MWORD_SIZE);
 
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
-	generic map(DEBUG_FILE_PREFIX => DEBUG_FILE_PREFIX)
     port map (
         clk => clk, reset => reset, en => '0',
         
