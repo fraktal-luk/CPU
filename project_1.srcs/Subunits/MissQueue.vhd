@@ -129,7 +129,7 @@ architecture DefaultMQ of MissQueue is
         function makeOutputData(entry: MQ_Entry; adr, tagWord, renameTagWord: Mword; sending2, lateEventSignal: std_logic) return ControlPacket is
             variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
         begin
-            res.controlInfo.full := sending2 and entry.full and not lateEventSignal;
+            res.controlInfo.c_full := sending2 and entry.full and not lateEventSignal;
             res.tag := renameTagWord(TAG_SIZE-1 downto 0);
 
             res.target := adr;
@@ -229,7 +229,7 @@ begin
         ch0 <= '0';
 
 
-    prevSendingEarly <= compareAddressEarlyInput_Ctrl.controlInfo.full;
+    prevSendingEarly <= compareAddressEarlyInput_Ctrl.controlInfo.c_full;
 
     canSend <= '1';
 

@@ -105,7 +105,7 @@ function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray;
 function updateQueueState(queueContent: SchedulerInfoArray; nextAccepting, sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
 return SchedulerInfoArray;
 
-function storeInput(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
+function storeInput(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending, evt: std_logic; insertionLocs: slv2D)
 return SchedulerInfoArray;
 
 function updateAgeMatrix(ageMatrix, insertionLocs: slv2D; fullMask: std_logic_vector) return slv2D;
@@ -800,11 +800,11 @@ begin
 end function;
 
 -- Insert new elements, update db info
-function storeInput(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending: std_logic; insertionLocs: slv2D)
+function storeInput(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending, evt: std_logic; insertionLocs: slv2D)
 return SchedulerInfoArray is
     variable res: SchedulerInfoArray(queueContent'range) := queueContent;
 begin
-    if prevSending = '1' then
+    if (prevSending and not evt) = '1' then
         res := insertElements(res, inputData, insertionLocs);
     end if;
 

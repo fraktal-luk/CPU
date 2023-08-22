@@ -257,6 +257,8 @@ function usesDivider(ss: SchedulerState) return std_logic;
 
     function TMP_mergeStatic(a, b: SchedulerState) return SchedulerState;
 
+    function countSN(v: std_logic_vector) return SmallNumber;
+
 end package;
 
 
@@ -346,7 +348,7 @@ function extractFullMask(cpa: ControlPacketArray) return std_logic_vector is
 	variable res: std_logic_vector(0 to cpa'length-1) := (others => '0');
 begin
 	for i in res'range loop
-		res(i) := cpa(i).controlInfo.full;
+		res(i) := cpa(i).controlInfo.c_full;
 	end loop;
 	return res;
 end function;
@@ -829,7 +831,7 @@ function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural)
     variable result: SmallNumber := diff;
 begin
     result(QUEUE_PTR_SIZE) := xored(QUEUE_PTR_SIZE) and not isNonzero(xored(QUEUE_PTR_SIZE-1 downto 0));
-    return result;      
+    return result;
 end function;
 
 
@@ -1039,5 +1041,11 @@ end function;
         return res;
     end function;
 
+    function countSN(v: std_logic_vector) return SmallNumber is
+        variable res: SmallNumber := sn(0);
+    begin
+        res := sn(countOnes(v));
+        return res;
+    end function;
 
 end package body;

@@ -23,22 +23,24 @@ use work.DecodingDev.all;
 package LogicFront is
 
 function shiftLine(fetchedLine: WordArray; shift: SmallNumber) return WordArray;
-function getStallEvent(predictedAddress: Mword) return ControlPacket;
+function getStallEvent(full: std_logic; predictedAddress: Mword) return ControlPacket;
 
 function getFrontEvent(ip, target: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket;
-function getNormalEvent(target: Mword; cp: ControlPacket) return ControlPacket;
+function getNormalEvent(full: std_logic; target: Mword; ip: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket;
 
 function decodeGroup(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural; ip: Mword; ctrl: ControlPacket) return BufferEntryArray;
-function getControlA(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural;ip: Mword; hasBranch: std_logic) return ControlPacketArray;
+function getControlGroup(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural;ip: Mword; hasBranch: std_logic) return ControlPacketArray;
 
 function groupHasBranch(ea: BufferEntryArray) return std_logic;
 
 -- DEBUG
 function assignSeqNum(cpa: ControlPacketArray; seqNum: Word) return ControlPacketArray;
-function assignSeqNum(ba: BufferEntryArray; seqNum: Word; ctrl: ControlPacket) return BufferEntryArray;
+function assignSeqNum(ba: BufferEntryArray; seqNum: Word) return BufferEntryArray;
 
 function DB_addBitsAndIp(dbi: InstructionDebugInfo; bits: Word; ip: Mword) return InstructionDebugInfo;
 function DB_addSeqNum(dbi: InstructionDebugInfo; sn: Word) return InstructionDebugInfo;
+
+procedure DB_trackSeqNum(arr: BufferEntryArray);
 
 end LogicFront;
 
@@ -145,7 +147,7 @@ begin
 
             res.controlInfo.confirmedBranch := uncondJump(i);
             res.controlInfo.frontBranch := '1';
-            res.controlInfo.full := '1';
+            res.controlInfo.c_full := '1';
 
             -- Here check if the next line from line predictor agrees with the target predicted now.
             --	If so, don't cause the event but set invalidation mask that next line will use.
@@ -167,20 +169,24 @@ begin
 end function;
 
 
-function getStallEvent(predictedAddress: Mword) return ControlPacket is
+function getStallEvent(full: std_logic; predictedAddress: Mword) return ControlPacket is
 	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 begin
     res.target := predictedAddress;
-    res.controlInfo.newEvent := '1';
-    res.controlInfo.refetch := '1';
+    res.full := full;
+    res.controlInfo.c_full := full;
+    res.controlInfo.newEvent := full;
+    res.controlInfo.refetch := full;
     return res;
 end function;
 
-function getNormalEvent(target: Mword; cp: ControlPacket) return ControlPacket is
+function getNormalEvent(full: std_logic; target: Mword; ip: Mword; fetchLine: WordArray(0 to FETCH_WIDTH-1)) return ControlPacket is
 	variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+	constant cp: ControlPacket := getFrontEvent(ip, target, fetchLine);
 begin
-    --res.target := target;
-    if cp.controlInfo.full = '1' and cp.controlInfo.frontBranch = '1' then
+    res.full := full;
+    res.controlInfo.c_full := full;
+    if full = '1' and cp.controlInfo.c_full = '1' and cp.controlInfo.frontBranch = '1' then
         res.target := cp.target; -- Correcting target within subsequent fetch line is still needed even if no redirection!
         res.controlInfo.newEvent := cp.controlInfo.newEvent; -- CAREFUL: event only if needs redirection, but break group at any taken jump
         res.controlInfo.frontBranch := '1';
@@ -191,7 +197,7 @@ begin
     return res;
 end function;
 
-
+--                                                                                         -- below only for DB!
 function decodeGroup(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural; ip: Mword; ctrl: ControlPacket)
 return BufferEntryArray is
     variable res: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
@@ -249,7 +255,7 @@ begin
 end function;
 
 
-function getControlA(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural;ip: Mword; hasBranch: std_logic) return ControlPacketArray is
+function getControlGroup(fetchLine: WordArray(0 to FETCH_WIDTH-1); nWords: natural; ip: Mword; hasBranch: std_logic) return ControlPacketArray is
 	variable res: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 	variable tempIP, tempOffset: Mword := (others => '0');
 	variable branchIns, predictedTaken, uncondJump, longJump: std_logic_vector(0 to FETCH_WIDTH-1) := (others => '0');
@@ -297,7 +303,7 @@ function assignSeqNum(cpa: ControlPacketArray; seqNum: Word) return ControlPacke
     variable sn: Word := seqNum;
 begin
     for i in res'range loop
-        if res(i).controlInfo.full /= '1' then
+        if res(i).controlInfo.c_full /= '1' then
             res(i).dbInfo := DEFAULT_DEBUG_INFO;
             next;
         end if;
@@ -308,7 +314,7 @@ begin
     return res;
 end function;
 
-function assignSeqNum(ba: BufferEntryArray; seqNum: Word; ctrl: ControlPacket) return BufferEntryArray is
+function assignSeqNum(ba: BufferEntryArray; seqNum: Word) return BufferEntryArray is
     variable res: BufferEntryArray := ba;
     variable sn: Word := seqNum;
 begin
@@ -346,5 +352,21 @@ begin
     -- pragma synthesis on
     return res;
 end function;
+
+    procedure DB_trackSeqNum(arr: BufferEntryArray) is
+    begin
+       -- pragma synthesis off
+       if DB_OP_TRACKING then
+           for i in arr'range loop
+               if arr(i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                   report "";
+                   report "DEBUG: Tracked seqNum assigned: " & work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+    
+                   report "";
+               end if;
+           end loop;
+       end if;
+       -- pragma synthesis on
+    end procedure;
 
 end LogicFront;

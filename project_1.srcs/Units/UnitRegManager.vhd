@@ -358,6 +358,7 @@ architecture Behavioral of UnitRegManager is
                       commitArgInfoIntDelayed, commitArgInfoFloatDelayed: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 
 begin
+    eventSig <= execEventSignal or lateEventSignal;
 
     commitGroupCtrIn <= commitGroupCtr;
 
@@ -369,7 +370,6 @@ begin
 
     frontLastSending <= frontSendingIn and not eventSig;
 
-    eventSig <= execEventSignal or lateEventSignal;
 
     renamedBase <= renameGroupBase( frontData,
                                     newIntDests, 
@@ -414,7 +414,9 @@ begin
 
     renameLockEndDelayedNext <= renameLockStateNext and renameLockRelease;
 
-    renamedSendingSig <= renameFull and nextAccepting and not eventSig;
+    renamedSendingSig <= renameFull and nextAccepting
+                                                        --and not eventSig
+                                                        ;
 
     COMMON_SYNCHRONOUS: process(clk)
     begin
@@ -443,11 +445,13 @@ begin
             commitGroupCtrInc <= commitGroupCtrIncNext;
 
             -- Lock when exec part causes event
-            if execEventSignal = '1' or lateEventSignal = '1' then -- CAREFUL
-                renameLockState <= '1';    
-            elsif renameLockReleaseDelayed = '1' then
-                renameLockState <= '0';
-            end if;
+--            if execEventSignal = '1' or lateEventSignal = '1' then -- CAREFUL
+--                renameLockState <= '1';    
+--            elsif renameLockReleaseDelayed = '1' then
+--                renameLockState <= '0';
+--            end if;
+         
+                renameLockState <= renameLockStateNext;
          
             commitArgInfoIntDelayed <= commitArgInfoI;
             commitArgInfoFloatDelayed <= commitArgInfoF;

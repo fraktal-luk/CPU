@@ -80,6 +80,7 @@ package LogicQueues is
     function makeCommittedOutputSQ(drainOutput: ControlPacket; isDrainingPrev: std_logic) return ControlPacket;
     function makeSelectedOutputLQ(isSelected: std_logic) return ControlPacket;
     function selDataRes(dest: SmallNumber) return ExecResult;
+    procedure DB_logFW(adrInput: ExecResult; pSelect: SmallNumber; IS_LOAD_QUEUE: boolean);
 
 end package;
 
@@ -317,14 +318,14 @@ package body LogicQueues is
     variable res: std_logic_vector(robData'range) := (others => '0');
  begin
     for i in 0 to PIPE_WIDTH-1 loop
-        if robData(i).controlInfo.full = '1' and hasSyncEvent(robData(i).controlInfo) = '1' then
+        if robData(i).controlInfo.c_full = '1' and hasSyncEvent(robData(i).controlInfo) = '1' then
             exit;
         end if;
         
         if isLQ then
-            res(i) := robData(i).controlInfo.full and robData(i).classInfo.useLQ;--'1';
+            res(i) := robData(i).controlInfo.c_full and robData(i).classInfo.useLQ;--'1';
         else
-            res(i) := robData(i).controlInfo.full and robData(i).classInfo.secCluster;--'1';
+            res(i) := robData(i).controlInfo.c_full and robData(i).classInfo.secCluster;--'1';
         end if;
      
     end loop;
@@ -356,11 +357,11 @@ package body LogicQueues is
         variable res: std_logic_vector(robData'range) := (others => '0');
      begin
         for i in 0 to PIPE_WIDTH-1 loop
-            if robData(i).controlInfo.full = '1' and hasSyncEvent(robData(i).controlInfo) = '1' then
+            if robData(i).controlInfo.c_full = '1' and hasSyncEvent(robData(i).controlInfo) = '1' then
                 exit;
             end if;
 
-            res(i) := robData(i).controlInfo.full and robData(i).classInfo.branchIns;
+            res(i) := robData(i).controlInfo.c_full and robData(i).classInfo.branchIns;
         end loop;
         return res;
      end function;
@@ -430,7 +431,7 @@ package body LogicQueues is
     function makeSelectedOutputSQ(selectedOutput: ControlPacket; isSelected, sqMissed: std_logic) return ControlPacket is
         variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
     begin
-        res.controlInfo.full := isSelected;
+        res.controlInfo.c_full := isSelected;
         res.controlInfo.newEvent := selectedOutput.controlInfo.newEvent;
         res.controlInfo.firstBr := selectedOutput.controlInfo.firstBr;
         res.controlInfo.sqMiss := sqMissed;
@@ -444,7 +445,7 @@ package body LogicQueues is
     function makeCommittedOutputSQ(drainOutput: ControlPacket; isDrainingPrev: std_logic) return ControlPacket is
         variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
     begin
-        res.controlInfo.full := isDrainingPrev;-- and allowDrain;
+        res.controlInfo.c_full := isDrainingPrev;-- and allowDrain;
 
         res.op := drainOutput.op;
         res.target := drainOutput.target;
@@ -455,7 +456,7 @@ package body LogicQueues is
     function makeSelectedOutputLQ(isSelected: std_logic) return ControlPacket is
         variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
     begin
-        res.controlInfo.full := isSelected;
+        res.controlInfo.c_full := isSelected;
         return res;
     end function;
 
@@ -466,5 +467,15 @@ package body LogicQueues is
         return res;
     end function;
 
+    procedure DB_logFW(adrInput: ExecResult; pSelect: SmallNumber; IS_LOAD_QUEUE: boolean) is
+    begin
+         -- pragma synthesis off
+        if DB_LSQ_TRACKING then
+            report "";
+            report "DEBUG: Store FW(" & boolean'image(IS_LOAD_QUEUE) & "): seqNum " & work.CpuText.w2hex(adrInput.dbInfo.seqNum) & " from entry " & work.CpuText.slv2hex(pSelect);
+            report "";
+        end if;
+        -- pragma synthesis on
+    end procedure;
 
 end package body;
