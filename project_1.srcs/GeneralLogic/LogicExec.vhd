@@ -345,10 +345,10 @@ package body LogicExec is
         res.dest := --st.argSpec.dest;        
                     st.dest;        
         res.value := adr;
-        
+
         return res;
     end function;
-    
+
     function getLSResultData( op: SpecificOp;
                               result: Mword;
                               tlbReady: std_logic;  

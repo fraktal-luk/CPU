@@ -15,13 +15,13 @@ use work.PipelineGeneral.all;
 
 
 package LogicQueues is
-    
+
     type QueueEntry is record
         isSysOp: std_logic;
         first: std_logic;
-        
+
         hasEvent: std_logic;
-    
+
         completedA: std_logic;
         completedLowA: std_logic;
         completedV: std_logic;
@@ -39,26 +39,30 @@ package LogicQueues is
 
     type QueueEntryArray is array (natural range <>) of QueueEntry;
 
-    procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural; isl: InstructionSlot; sysOp: std_logic; constant IS_LOAD_QUEUE: boolean);    
-    procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber; fullMask, sysMask: std_logic_vector; constant IS_LOAD_QUEUE: boolean);
-    procedure updateAddress(signal content: inout QueueEntryArray; er: ExecResult; constant IS_LOAD_QUEUE: boolean);
-    
+    procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural;-- isl: InstructionSlot;
+                                sysOp: std_logic --; constant IS_LOAD_QUEUE: boolean
+                                );    
+    procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber; fullMask, sysMask: std_logic_vector --; constant IS_LOAD_QUEUE: boolean
+    );
+    procedure updateAddress(signal content: inout QueueEntryArray; er: ExecResult --; constant IS_LOAD_QUEUE: boolean
+    );
+
     procedure updateValue(signal content: inout QueueEntryArray; ind: SmallNumber);
 
     constant CMP_ADDRESS_LENGTH: natural := 12;    
-        
+
     function getAddressCompleted(content: QueueEntryArray) return std_logic_vector;
     function getAddressCompleted_Low(content: QueueEntryArray) return std_logic_vector;
     function getAddressMatching(content: QueueEntryArray; adr: Mword) return std_logic_vector;
     function getAddressMatching_Low(content: QueueEntryArray; adr: Mword) return std_logic_vector;
-    
+
     function addressLowMatching(a, b: Mword) return std_logic;
     function addressHighMatching(a, b: Mword) return std_logic;
-    
+
     function getWhichMemOp(content: QueueEntryArray) return std_logic_vector;
 
     function getDrainOutput(elem: QueueEntry; adr, value: Mword) return ControlPacket;
-    
+
     function cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
     function cmpIndexAfter(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
     function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, nFull: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
@@ -87,24 +91,21 @@ end package;
 
 package body LogicQueues is
 
-    procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural; isl: InstructionSlot; sysOp: std_logic; constant IS_LOAD_QUEUE: boolean) is
+    procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural;-- isl: InstructionSlot; 
+                                sysOp: std_logic --; constant IS_LOAD_QUEUE: boolean
+                                ) is
     begin
-        if not IS_LOAD_QUEUE then
-            content(ind).isSysOp <= isStoreSysOp(isl.ins.specificOperation);
-        else
-            content(ind).isSysOp <= isLoadSysOp(isl.ins.specificOperation);
-        end if;
-        
         content(ind).isSysOp <= sysOp;
-        
+
         content(ind).first <= '0'; -- TMP
         content(ind).hasEvent <= '0';
-    
+
         content(ind).completedA <= '0';
         content(ind).completedV <= '0';
     end procedure;
 
-    procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber; fullMask, sysMask: std_logic_vector; constant IS_LOAD_QUEUE: boolean) is
+    procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber; fullMask, sysMask: std_logic_vector --; constant IS_LOAD_QUEUE: boolean
+    ) is
         constant LEN: natural := content'length;
         constant PTR_MASK_SN: SmallNumber := i2slv(LEN-1, SMALL_NUMBER_SIZE);
         constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);        
@@ -118,17 +119,18 @@ package body LogicQueues is
             inputRevInds(i) := countOnes(fullMask(0 to i-1)); -- which slot input[i] takes after compression
             inputInds(inputRevInds(i)) := i;                  -- 
         end loop;
-        
+
         for i in fullMask'range loop
             if i < countOnes(fullMask) then
-                updateElemOnInput(content, queueInds(i), DEFAULT_INS_SLOT, sysMask(inputInds(i)), IS_LOAD_QUEUE);
+                updateElemOnInput(content, queueInds(i), sysMask(inputInds(i)));
             end if;
         end loop;
-    
+
         content(queueInds(0)).first <= '1';
     end procedure;
 
-    procedure updateAddress(signal content: inout QueueEntryArray; er: ExecResult; constant IS_LOAD_QUEUE: boolean) is
+    procedure updateAddress(signal content: inout QueueEntryArray; er: ExecResult --; constant IS_LOAD_QUEUE: boolean
+    ) is
         constant LEN: natural := content'length;
         constant PTR_MASK_SN: SmallNumber := i2slv(LEN-1, SMALL_NUMBER_SIZE);
         constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);        
@@ -139,7 +141,7 @@ package body LogicQueues is
         allow := er.full;
         indV := er.dest and PTR_MASK_SN;
         ind := slv2u(indV);
- 
+
         if allow = '1' then
             content(ind).completedA <= '1';
             content(ind).address <= er.value;
@@ -164,7 +166,7 @@ package body LogicQueues is
         end loop;
         return res;
     end function;
-    
+
 
     function getAddressCompleted_Low(content: QueueEntryArray) return std_logic_vector is
         variable res: std_logic_vector(content'range);
@@ -177,16 +179,15 @@ package body LogicQueues is
 
     function addressLowMatching(a, b: Mword) return std_logic is
     begin
-        --return bool2std(a(CMP_ADDRESS_LENGTH-1 downto 0) = b(CMP_ADDRESS_LENGTH-1 downto 0));
-            return bool2std(a(CMP_ADDRESS_LENGTH-1 downto 2) = b(CMP_ADDRESS_LENGTH-1 downto 2));
+        return bool2std(a(CMP_ADDRESS_LENGTH-1 downto 2) = b(CMP_ADDRESS_LENGTH-1 downto 2));
     end function;
-    
+
     function addressHighMatching(a, b: Mword) return std_logic is
     begin
         return bool2std(a(31 downto CMP_ADDRESS_LENGTH) = b(31 downto CMP_ADDRESS_LENGTH));
     end function;
-    
-    
+
+
     function getAddressMatching(content: QueueEntryArray; adr: Mword) return std_logic_vector is
         variable res: std_logic_vector(content'range);
     begin
@@ -204,7 +205,7 @@ package body LogicQueues is
         end loop;
         return res;
     end function;
-    
+
     function getWhichMemOp(content: QueueEntryArray) return std_logic_vector is
         variable res: std_logic_vector(content'range);
     begin
@@ -245,7 +246,7 @@ package body LogicQueues is
         -- B) if index < start then i >= start || i < index
         -- C) if index = start then none -> can be coalesced into A):
         -- A') if index >= start then i >= start && i < index    =>    i >= start && i < start   =>   i empty
-    
+
         for i in 0 to res'length-1 loop
             iv := i2slv(i, SMALL_NUMBER_SIZE);
             if sign = '0' then --cmpGeU(index, pStart) = '1' then
@@ -256,7 +257,7 @@ package body LogicQueues is
         end loop;
         return res;
     end function;
-    
+
     function cmpIndexAfter(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber)
     return std_logic_vector is
         constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
@@ -272,7 +273,7 @@ package body LogicQueues is
         -- C) if index = end then all (because in this case start = end and queue is full; otherwise index = end wouldn't be possible)
         --           -> can be coalesced into A):
         -- A') if index >= end then i < end || i => index    =>    i < end || i => end   =>   i all
-    
+
         for i in 0 to res'length-1 loop
             iv := i2slv(i, SMALL_NUMBER_SIZE);
             if sign = '1' then
@@ -321,13 +322,13 @@ package body LogicQueues is
         if robData(i).controlInfo.c_full = '1' and hasSyncEvent(robData(i).controlInfo) = '1' then
             exit;
         end if;
-        
+
         if isLQ then
             res(i) := robData(i).controlInfo.c_full and robData(i).classInfo.useLQ;--'1';
         else
             res(i) := robData(i).controlInfo.c_full and robData(i).classInfo.secCluster;--'1';
         end if;
-     
+
     end loop;
     return res;
  end function;
@@ -341,7 +342,7 @@ package body LogicQueues is
         if robData(i).controlInfo.newEvent = '1' and hasSyncEvent(robData(i).controlInfo) = '0' then
             exit;
         end if;
-    
+
         -- Not only full, because exceptions clear following 'full' bits
         if isLQ then
             res(i) := robData(i).classInfo.useLQ;
@@ -383,7 +384,6 @@ package body LogicQueues is
      end function;
 
 
-
     function shiftQueueContent(content: QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, draining: std_logic;
                                compareInputFull: std_logic; sqPtr: SmallNumber; op: SpecificOp; adr: Mword;
                                compareInputEarlyFull: std_logic; sqPtrEarly: SmallNumber; opEarly: SpecificOp; adrEarly: Mword;
@@ -407,13 +407,13 @@ package body LogicQueues is
             res(slv2u(currentPtr)).address := adr;
         end if;
 
-            if compareInputEarlyFull = '1' and isStoreOp(opEarly) = '1' then
-                res(slv2u(currentEarlyPtr)).completedLowA := '1';
-            end if;
-    
-            if compareInputEarlyFull = '1' and isStoreMemOp(opEarly) = '1' then
-                res(slv2u(currentEarlyPtr)).addressLow := adrEarly;
-            end if;
+        if compareInputEarlyFull = '1' and isStoreOp(opEarly) = '1' then
+            res(slv2u(currentEarlyPtr)).completedLowA := '1';
+        end if;
+
+        if compareInputEarlyFull = '1' and isStoreMemOp(opEarly) = '1' then
+            res(slv2u(currentEarlyPtr)).addressLow := adrEarly;
+        end if;
 
         if ev = '1' then
             for i in 0 to LEN-1 loop -- clear 'completed' for empty slots
