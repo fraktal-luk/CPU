@@ -63,7 +63,8 @@ architecture Behavioral of Core is
     signal frontAccepting, bpSending, renameAllow, frontGroupSend, frontSendAllow, canSendRename, robSending,
            renameSendingBr, renamedSending, commitAccepting, bqAccepting, execEventSignalE0, execEventSignalE1,
            allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
-           mqReady, mqIssueSending, mqRegReadSending, sbSending, sbEmpty, intSignal, memFail
+           mqReady, mqIssueSending, mqRegReadSending,-- sbSending,
+           sbEmpty, intSignal, memFail
            : std_logic := '0';
 
     signal renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -160,7 +161,7 @@ begin
         ---
         bqTargetData => bqTargetData,
 
-        sbSending => sbSending,
+        sbSending => ctOutSB.full,
         dataFromSB => dataFromSB,
         sbEmpty => sbEmpty,
 
@@ -794,11 +795,11 @@ begin
                 end if;
             end process;
 
+            memCtrlE0 <= ctrlE0; -- Interface
+            memoryRead <= subpipeM0_E0; -- Out
+
             memoryCtrlE2 <= ctrlE2;--.controlInfo;  -- for ROB
 
-            memCtrlE0 <= ctrlE0; -- Interface
-
-            memoryRead <= subpipeM0_E0; -- Out
         end block;
 
         ------------------------
@@ -1347,11 +1348,14 @@ begin
 		nextAccepting => commitAccepting,
 
         committedEmpty => sbEmpty,
-        committedSending => sbSending,
+        --committedSending => sbSending,
         committedDataOut => ctOutSB,
         
         dbState => dbState
 	);
+
+    --     sbSending <= ctOutSB.full;
+
 
     LOAD_QUEUE: entity work.StoreQueue(Behavioral)
 	generic map(
@@ -1394,7 +1398,8 @@ begin
 		nextAccepting => commitAccepting,
 		
         committedEmpty => open,
-        committedSending => open,
+        --committedSending => open,
+        committedDataOut => open,
         
         dbState => dbState
 	);
@@ -1473,10 +1478,11 @@ begin
     end generate;
 
 	MEMORY_INTERFACE: block
-		signal sysStoreAddressW: Mword := (others => '0');
+		--signal sysStoreAddressW: Mword := (others => '0');
 	begin
 		doutadr <= ctOutSB.target;
-		dwrite <= sbSending and ctOutSB.controlInfo.c_full and isStoreMemOp(ctOutSB.op);
+		dwrite <= ctOutSB.full -- and ctOutSB.controlInfo.c_full 
+		              and isStoreMemOp(ctOutSB.op);
 		dout <= ctOutSB.nip;
 	end block;
 

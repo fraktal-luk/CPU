@@ -289,7 +289,8 @@ begin
 end function;
 
 function p2i(p: SmallNumber; n: natural) return natural is
-    constant mask: SmallNumber := i2slv(n-1, SMALL_NUMBER_SIZE);
+    constant mask: SmallNumber := --i2slv(n-1, SMALL_NUMBER_SIZE);
+                                  sn(n-1);
     constant pT: SmallNumber := p and mask;
 begin
     return slv2u(pT);

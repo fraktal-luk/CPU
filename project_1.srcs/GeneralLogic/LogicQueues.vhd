@@ -20,7 +20,7 @@ package LogicQueues is
         isSysOp: std_logic;
         first: std_logic;
 
-        hasEvent: std_logic;
+        hasEvent: std_logic; -- Never set?
 
         completedA: std_logic;
         completedLowA: std_logic;
@@ -39,15 +39,8 @@ package LogicQueues is
 
     type QueueEntryArray is array (natural range <>) of QueueEntry;
 
-    procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural;-- isl: InstructionSlot;
-                                sysOp: std_logic --; constant IS_LOAD_QUEUE: boolean
-                                );    
-    procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber; fullMask, sysMask: std_logic_vector --; constant IS_LOAD_QUEUE: boolean
-    );
-    procedure updateAddress(signal content: inout QueueEntryArray; er: ExecResult --; constant IS_LOAD_QUEUE: boolean
-    );
-
-    procedure updateValue(signal content: inout QueueEntryArray; ind: SmallNumber);
+    procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural; sysOp: std_logic);    
+    procedure updateOnInput(signal content: inout QueueEntryArray; ptr: SmallNumber; fullMask, sysMask: std_logic_vector);
 
     constant CMP_ADDRESS_LENGTH: natural := 12;    
 
@@ -91,9 +84,7 @@ end package;
 
 package body LogicQueues is
 
-    procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural;-- isl: InstructionSlot; 
-                                sysOp: std_logic --; constant IS_LOAD_QUEUE: boolean
-                                ) is
+    procedure updateElemOnInput(signal content: inout QueueEntryArray; ind: natural; sysOp: std_logic) is
     begin
         content(ind).isSysOp <= sysOp;
 
@@ -101,6 +92,7 @@ package body LogicQueues is
         content(ind).hasEvent <= '0';
 
         content(ind).completedA <= '0';
+        content(ind).completedLowA <= '0';
         content(ind).completedV <= '0';
     end procedure;
 
@@ -129,34 +121,6 @@ package body LogicQueues is
         content(queueInds(0)).first <= '1';
     end procedure;
 
-    procedure updateAddress(signal content: inout QueueEntryArray; er: ExecResult --; constant IS_LOAD_QUEUE: boolean
-    ) is
-        constant LEN: natural := content'length;
-        constant PTR_MASK_SN: SmallNumber := i2slv(LEN-1, SMALL_NUMBER_SIZE);
-        constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);        
-        variable indV: SmallNumber;
-        variable ind: natural;
-        variable allow: std_logic;
-    begin
-        allow := er.full;
-        indV := er.dest and PTR_MASK_SN;
-        ind := slv2u(indV);
-
-        if allow = '1' then
-            content(ind).completedA <= '1';
-            content(ind).address <= er.value;
-        end if;        
-    end procedure;
-
-    procedure updateValue(signal content: inout QueueEntryArray; ind: SmallNumber) is
-        constant LEN: natural := content'length;
-        constant PTR_MASK_SN: SmallNumber := i2slv(LEN-1, SMALL_NUMBER_SIZE);
-        constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
-        constant indV: SmallNumber := ind and PTR_MASK_SN;
-        constant index: natural := slv2u(indV);
-    begin
-        content(index).completedV <= '1';
-    end procedure;
 
     function getAddressCompleted(content: QueueEntryArray) return std_logic_vector is
         variable res: std_logic_vector(content'range);
@@ -314,24 +278,25 @@ package body LogicQueues is
     end function;
 
 
--- scan: full and syncEvent; full and [usingQ]
- function getCommittedEffectiveMask(robData: ControlPacketArray; isLQ: boolean) return std_logic_vector is
-    variable res: std_logic_vector(robData'range) := (others => '0');
- begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        if robData(i).controlInfo.c_full = '1' and hasSyncEvent(robData(i).controlInfo) = '1' then
-            exit;
-        end if;
-
-        if isLQ then
-            res(i) := robData(i).controlInfo.c_full and robData(i).classInfo.useLQ;--'1';
-        else
-            res(i) := robData(i).controlInfo.c_full and robData(i).classInfo.secCluster;--'1';
-        end if;
-
-    end loop;
-    return res;
- end function;
+    -- scan: full and syncEvent; full and [usingQ]
+     function getCommittedEffectiveMask(robData: ControlPacketArray; isLQ: boolean) return std_logic_vector is
+        variable res: std_logic_vector(robData'range) := (others => '0');
+     begin
+        for i in 0 to PIPE_WIDTH-1 loop
+            if robData(i).controlInfo.c_full = '1' then
+                if hasSyncEvent(robData(i).controlInfo) = '1' then
+                    exit;
+                end if;
+    
+                if isLQ then
+                    res(i) := robData(i).classInfo.useLQ;
+                else
+                    res(i) := robData(i).classInfo.secCluster;
+                end if;
+            end if;
+        end loop;
+        return res;
+     end function;
     
     -- scan: newEvent and syncEvent; [usingQ] 
     function getCommittedMask(robData: ControlPacketArray; isLQ: boolean) return std_logic_vector is
@@ -362,7 +327,9 @@ package body LogicQueues is
                 exit;
             end if;
 
-            res(i) := robData(i).controlInfo.c_full and robData(i).classInfo.branchIns;
+            if robData(i).controlInfo.c_full = '1' then
+                res(i) := robData(i).classInfo.branchIns;
+            end if;
         end loop;
         return res;
      end function;
@@ -397,9 +364,10 @@ package body LogicQueues is
         if draining = '1' then -- Move forward     
             res(0 to LEN-2) := res(1 to LEN-1);
             res(LEN-1).completedA := '0';
+            res(LEN-1).completedLowA := '0';
         end if;
 
-        if compareInputFull = '1' and isStoreOp(op) = '1' then
+        if compareInputFull = '1' and isStoreMemOp(op) = '1' then
             res(slv2u(currentPtr)).completedA := '1';
         end if;
 
@@ -407,7 +375,7 @@ package body LogicQueues is
             res(slv2u(currentPtr)).address := adr;
         end if;
 
-        if compareInputEarlyFull = '1' and isStoreOp(opEarly) = '1' then
+        if compareInputEarlyFull = '1' and isStoreMemOp(opEarly) = '1' then
             res(slv2u(currentEarlyPtr)).completedLowA := '1';
         end if;
 
@@ -445,7 +413,8 @@ package body LogicQueues is
     function makeCommittedOutputSQ(drainOutput: ControlPacket; isDrainingPrev: std_logic) return ControlPacket is
         variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
     begin
-        res.controlInfo.c_full := isDrainingPrev;-- and allowDrain;
+        res.full := isDrainingPrev;
+        res.controlInfo.c_full := isDrainingPrev;
 
         res.op := drainOutput.op;
         res.target := drainOutput.target;
