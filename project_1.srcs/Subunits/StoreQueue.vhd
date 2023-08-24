@@ -89,38 +89,53 @@ architecture Behavioral of StoreQueue is
 
     signal selectedDataResultSig: ExecResult := DEFAULT_EXEC_RESULT;
 
-	alias storeValuePtr is storeValueResult.dest;
+	--alias storeValuePtr is storeValueResult.dest;
     alias pFlush is execCausing.dest;
 
     alias adrValueEarly is compareAddressEarlyInput.value;
     alias adrValue is compareAddressInput.value;
 
+    signal updateAdr, updateCompletedA, updateEarlyCompletedA, lookupEarly: std_logic := '0';
+
+
     signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
 begin
             ch0 <= bool2std(queueContentShifting_Alt = queueContentShifting);
             ch1 <= '0';
+            ch2 <= '1';
 
+    lookupEarly <= isStoreMemOp(compareAddressEarlyInput_Ctrl.op) when IS_LOAD_QUEUE
+              else isLoadMemOp(compareAddressEarlyInput_Ctrl.op);
+    updateEarlyCompletedA <= isLoadMemOp(compareAddressEarlyInput_Ctrl.op) when IS_LOAD_QUEUE
+                   else isStoreMemOp(compareAddressEarlyInput_Ctrl.op);
+    updateCompletedA <= isLoadMemOp(compareAddressCtrl.op) when IS_LOAD_QUEUE
+                   else isStoreMemOp(compareAddressCtrl.op);
+    updateAdr <= isLoadOp(compareAddressCtrl.op) when IS_LOAD_QUEUE
+            else isStoreOp(compareAddressCtrl.op);
+
+
+    adrPtrEarly <= compareAddressEarlyInput_Ctrl.tags.lqPointer when IS_LOAD_QUEUE
+              else compareAddressEarlyInput_Ctrl.tags.sqPointer;
     -- Ptr for random access updating
     adrPtr <= compareAddressCtrl.tags.lqPointer when IS_LOAD_QUEUE
          else compareAddressCtrl.tags.sqPointer;
 
-    adrPtrEarly <= compareAddressEarlyInput_Ctrl.tags.lqPointer when IS_LOAD_QUEUE
-              else compareAddressEarlyInput_Ctrl.tags.sqPointer;
+
+    pSelectEarly <= addTruncZ(findNewestMatchIndex(olderSQ_Early, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE);
+        pSelectEarly_Base <= findNewestMatchIndex(olderSQ_Early, sn(0), nFull, QUEUE_PTR_SIZE);
 
     -- Read ptr determinded by address matching - SQ only
     pSelect <= addTruncZ(findNewestMatchIndex(olderSQ, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE) when false
           else addTruncZ(pSelectEarly_BasePrev, pDrainPrevPrev, QUEUE_PTR_SIZE);
 
-    pSelectEarly <= addTruncZ(findNewestMatchIndex(olderSQ_Early, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE);
-        pSelectEarly_Base <= findNewestMatchIndex(olderSQ_Early, sn(0), nFull, QUEUE_PTR_SIZE);
 
     -- LQ only
     LQ_MATCH: if IS_LOAD_QUEUE generate
     begin
-        addressMatchMask <= getAddressMatching(queueContent_NS, adrValue) and getAddressCompleted(queueContent_NS);       
+        addressMatchMask <= getAddressMatching(queueContent_NS, adrValue) and getAddressCompleted(queueContent_NS);
+      
                -- TODO: could/should be pStartNext?
-        newerNextLQ <= cmpIndexAfter(pStart, pTagged, adrPtrEarly, QUEUE_SIZE)-- and getWhichMemOp(queueContent_NS)
-                                                                         when isStoreMemOp(compareAddressEarlyInput_Ctrl.op) = '1' else (others => '0');
+        newerNextLQ <= cmpIndexAfter(pStart, pTagged, adrPtrEarly, QUEUE_SIZE) when lookupEarly = '1' else (others => '0');
         newerLQ <=     newerRegLQ and addressMatchMask;
     end generate;
 
@@ -129,10 +144,8 @@ begin
     begin
         addressMatchMask <= getAddressMatching(queueContentShifting, adrValue) and getAddressCompleted(queueContentShifting);
 
-        olderNextSQ <= cmpIndexBefore(sn(0), nFull,
-                                        subTruncZ(adrPtrEarly, pDrainPrev, QUEUE_PTR_SIZE),  
-                                        QUEUE_SIZE) -- TODO: nFull is not correct 
-                                                                         when isLoadMemOp(compareAddressEarlyInput_Ctrl.op) = '1' else (others => '0');
+                -- TODO: nFull is not correct
+        olderNextSQ <= cmpIndexBefore(sn(0), nFull, subTruncZ(adrPtrEarly, pDrainPrev, QUEUE_PTR_SIZE), QUEUE_SIZE) when lookupEarly = '1' else (others => '0');
         olderSQ <=   olderRegSQ and addressMatchMask;
         olderSQ_Early <= olderNextSQ and getAddressMatching_Low(queueContentShifting, adrValueEarly) and getAddressCompleted_Low(queueContentShifting);
     end generate;
@@ -187,21 +200,12 @@ begin
     QUEUE_DATA: block
         signal drainValue, selectedValue, drainAddress, selectedAddress: Mword := (others => '0');
         signal selectedEntry, drainEntry: QueueEntry := DEFAULT_QUEUE_ENTRY;
-        signal updateAdr, updateCompletedA, updateEarlyCompletedA: std_logic := '0';
 
         signal qaPtr, qaEarlyPtr: SmallNumber := sn(0);
     begin
 
         qaPtr <= subTruncZ(compareAddressCtrl.tags.sqPointer, pDrain, QUEUE_PTR_SIZE);
         qaEarlyPtr <= subTruncZ(compareAddressEarlyInput_Ctrl.tags.sqPointer, pDrain, QUEUE_PTR_SIZE);
-
-
-        updateEarlyCompletedA <= isLoadMemOp(compareAddressEarlyInput_Ctrl.op) when IS_LOAD_QUEUE
-                       else isStoreMemOp(compareAddressEarlyInput_Ctrl.op);
-        updateCompletedA <= isLoadMemOp(compareAddressCtrl.op) when IS_LOAD_QUEUE
-                       else isStoreMemOp(compareAddressCtrl.op);
-        updateAdr <= isLoadOp(compareAddressCtrl.op) when IS_LOAD_QUEUE
-                else isStoreOp(compareAddressCtrl.op);
 
         QUEUE_DATA_SYNC: process (clk)
         begin
@@ -263,9 +267,9 @@ begin
 
                 -- E. val update
                 if storeValueResult.full = '1' and not IS_LOAD_QUEUE then
-                    queueContent_NS(p2i(storeValuePtr, QUEUE_SIZE)).completedV <= '1';
+                    queueContent_NS(p2i(storeValueResult.dest, QUEUE_SIZE)).completedV <= '1';
                     
-                    storeValues(p2i(storeValuePtr, QUEUE_SIZE)) <= storeValueResult.value;
+                    storeValues(p2i(storeValueResult.dest, QUEUE_SIZE)) <= storeValueResult.value;
                 end if;
 
                 selectedEntry <= queueContent_NS(p2i(pSelect, QUEUE_SIZE));
