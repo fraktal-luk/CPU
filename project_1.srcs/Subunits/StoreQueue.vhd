@@ -73,12 +73,12 @@ architecture Behavioral of StoreQueue is
 
 	signal addressMatchMask, newerLQ, newerRegLQ, newerNextLQ, olderNextSQ, olderRegSQ, olderSQ, olderSQ_Early: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
-	signal adrPtr,-- adrPtrEarly, 
+	signal adrPtr, adrPtrEarly, 
 	       adrPtrPrev, pSelect, pSelectPrev, pSelectEarly_Base, pSelectEarly_BasePrev, pSelectEarly,-- pSelectEarlyPrev,
 	       pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pDrainPrevPrev, pTagged, pTaggedNext, pRenamed, pRenamedNext, 
            nFull, nFullNext, nAlloc, nAllocNext: SmallNumber := sn(0);
 
-    signal queueContent_NS, queueContentShifting: QueueEntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_QUEUE_ENTRY);
+    signal queueContent_NS, queueContentShifting,  queueContentShifting_Alt: QueueEntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_QUEUE_ENTRY);
     signal addresses, storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 
     signal canAlloc, drainReq, drainEqual, isSending, isDrainingPrev, isSelected, isSelectedNext, isSelected_Early, sqMissed, missing, committedEmptySig,
@@ -97,12 +97,15 @@ architecture Behavioral of StoreQueue is
 
     signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
 begin
-            ch0 <= '0';
-            ch1 <= '1';
+            ch0 <= bool2std(queueContentShifting_Alt = queueContentShifting);
+            ch1 <= '0';
 
     -- Ptr for random access updating
     adrPtr <= compareAddressCtrl.tags.lqPointer when IS_LOAD_QUEUE
          else compareAddressCtrl.tags.sqPointer;
+
+    adrPtrEarly <= compareAddressEarlyInput_Ctrl.tags.lqPointer when IS_LOAD_QUEUE
+              else compareAddressEarlyInput_Ctrl.tags.sqPointer;
 
     -- Read ptr determinded by address matching - SQ only
     pSelect <= addTruncZ(findNewestMatchIndex(olderSQ, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE) when false
@@ -116,7 +119,7 @@ begin
     begin
         addressMatchMask <= getAddressMatching(queueContent_NS, adrValue) and getAddressCompleted(queueContent_NS);       
                -- TODO: could/should be pStartNext?
-        newerNextLQ <= cmpIndexAfter(pStart, pTagged, compareAddressEarlyInput_Ctrl.tags.lqPointer, QUEUE_SIZE, PTR_MASK_SN)-- and getWhichMemOp(queueContent_NS)
+        newerNextLQ <= cmpIndexAfter(pStart, pTagged, adrPtrEarly, QUEUE_SIZE)-- and getWhichMemOp(queueContent_NS)
                                                                          when isStoreMemOp(compareAddressEarlyInput_Ctrl.op) = '1' else (others => '0');
         newerLQ <=     newerRegLQ and addressMatchMask;
     end generate;
@@ -127,9 +130,8 @@ begin
         addressMatchMask <= getAddressMatching(queueContentShifting, adrValue) and getAddressCompleted(queueContentShifting);
 
         olderNextSQ <= cmpIndexBefore(sn(0), nFull,
-                                        subTruncZ(compareAddressEarlyInput_Ctrl.tags.sqPointer, pDrainPrev, --QUEUE_SIZE),
-                                                                                                              QUEUE_PTR_SIZE),  
-                                        QUEUE_SIZE, PTR_MASK_SN) -- TODO: nFull is not correct 
+                                        subTruncZ(adrPtrEarly, pDrainPrev, QUEUE_PTR_SIZE),  
+                                        QUEUE_SIZE) -- TODO: nFull is not correct 
                                                                          when isLoadMemOp(compareAddressEarlyInput_Ctrl.op) = '1' else (others => '0');
         olderSQ <=   olderRegSQ and addressMatchMask;
         olderSQ_Early <= olderNextSQ and getAddressMatching_Low(queueContentShifting, adrValueEarly) and getAddressCompleted_Low(queueContentShifting);
@@ -185,13 +187,21 @@ begin
     QUEUE_DATA: block
         signal drainValue, selectedValue, drainAddress, selectedAddress: Mword := (others => '0');
         signal selectedEntry, drainEntry: QueueEntry := DEFAULT_QUEUE_ENTRY;
-        signal updateAdr, updateCompletedA: std_logic := '0';
+        signal updateAdr, updateCompletedA, updateEarlyCompletedA: std_logic := '0';
+
+        signal qaPtr, qaEarlyPtr: SmallNumber := sn(0);
     begin
 
+        qaPtr <= subTruncZ(compareAddressCtrl.tags.sqPointer, pDrain, QUEUE_PTR_SIZE);
+        qaEarlyPtr <= subTruncZ(compareAddressEarlyInput_Ctrl.tags.sqPointer, pDrain, QUEUE_PTR_SIZE);
+
+
+        updateEarlyCompletedA <= isLoadMemOp(compareAddressEarlyInput_Ctrl.op) when IS_LOAD_QUEUE
+                       else isStoreMemOp(compareAddressEarlyInput_Ctrl.op);
+        updateCompletedA <= isLoadMemOp(compareAddressCtrl.op) when IS_LOAD_QUEUE
+                       else isStoreMemOp(compareAddressCtrl.op);
         updateAdr <= isLoadOp(compareAddressCtrl.op) when IS_LOAD_QUEUE
                 else isStoreOp(compareAddressCtrl.op);
-        updateCompletedA <= isLoadMemOp(compareAddressCtrl.op) when IS_LOAD_QUEUE
-                else isStoreMemOp(compareAddressCtrl.op);
 
         QUEUE_DATA_SYNC: process (clk)
         begin
@@ -201,6 +211,36 @@ begin
                                                           compareAddressInput.full, compareAddressCtrl.tags.sqPointer, compareAddressCtrl.op, adrValue,
                                                           compareAddressEarlyInput.full, compareAddressEarlyInput_Ctrl.tags.sqPointer, compareAddressEarlyInput_Ctrl.op, adrValueEarly,
                                                           QUEUE_PTR_SIZE);
+            end if;
+
+            if rising_edge(clk) then
+                -- SQ only
+                if isDrainingPrev = '1' then -- Move forward     
+                    queueContentShifting_Alt(0 to QUEUE_SIZE-2) <= queueContentShifting_Alt(1 to QUEUE_SIZE-1);
+                    queueContentShifting_Alt(QUEUE_SIZE-1).completedA <= '0';
+                    queueContentShifting_Alt(QUEUE_SIZE-1).completedLowA <= '0';
+                end if;
+
+                -- Update
+                if compareAddressEarlyInput.full = '1' and --isStoreMemOp(compareAddressEarlyInput_Ctrl.op) = '1' then
+                                                            updateEarlyCompletedA = '1' then
+                    queueContentShifting_Alt(slv2u(qaEarlyPtr)).completedLowA <= '1';
+                    queueContentShifting_Alt(slv2u(qaEarlyPtr)).addressLow <= adrValueEarly;
+                end if;
+
+                -- Update 
+                if compareAddressInput.full = '1' and --isStoreMemOp(compareAddressCtrl.op) = '1' then
+                                                        updateCompletedA = '1' then
+                    queueContentShifting_Alt(slv2u(qaPtr)).completedA <= '1';
+                    queueContentShifting_Alt(slv2u(qaPtr)).address <= adrValue;
+                end if;
+
+                shiftQueueContent_Evt(queueContentShifting_Alt, sn(0), nFullNext, execEventSignal or lateEventSignal, '0');
+
+            end if;
+
+
+            if rising_edge(clk) then
 
                 -- Front input
                 if prevSending = '1' then
@@ -215,10 +255,10 @@ begin
 
                     if updateAdr = '1' then
                         queueContent_NS(p2i(adrPtr, QUEUE_SIZE)).address <= adrValue;
+                        
+                        addresses(p2i(adrPtr, QUEUE_SIZE))(31 downto 12) <= adrValue(31 downto 12);
+                        addresses(p2i(adrPtr, QUEUE_SIZE))(11 downto 0) <= adrValue(11 downto 0);
                     end if;
-
-                    addresses(p2i(adrPtr, QUEUE_SIZE))(31 downto 12) <= adrValue(31 downto 12);
-                    addresses(p2i(adrPtr, QUEUE_SIZE))(11 downto 0) <= adrValue(11 downto 0);
                 end if;
 
                 -- E. val update
@@ -247,7 +287,6 @@ begin
     end block;
 
 
-
     pDrainNext <= addIntTrunc(pDrain, 1, QUEUE_PTR_SIZE+1) when drainReq = '1' else pDrain;
     pStartNext <= addTruncZ(pStart, countSN(commitEffectiveMask), QUEUE_PTR_SIZE+1) when committing = '1'
              else pStart;
@@ -261,7 +300,6 @@ begin
             else    pFlush when execEventSignal = '1'
             else    addTruncZ(pRenamed, countSN(renameMask), QUEUE_PTR_SIZE+1) when prevSendingRe = '1'
             else    pRenamed;
-
 
     process (clk)
     begin

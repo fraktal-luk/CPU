@@ -56,8 +56,10 @@ package LogicQueues is
 
     function getDrainOutput(elem: QueueEntry; adr, value: Mword) return ControlPacket;
 
-    function cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
-    function cmpIndexAfter(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber) return std_logic_vector;
+    function cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural)--; constant PTR_MASK_SN: SmallNumber)
+    return std_logic_vector;
+    function cmpIndexAfter(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural)--; constant PTR_MASK_SN: SmallNumber)
+    return std_logic_vector;
     function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, nFull: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
 
     function getCommittedEffectiveMask(robData: ControlPacketArray; isLQ: boolean) return std_logic_vector;
@@ -71,6 +73,8 @@ package LogicQueues is
                                compareInputEarlyFull: std_logic; sqPtrEarly: SmallNumber; opEarly: SpecificOp; adrEarly: Mword;
                                constant QUEUE_PTR_SIZE: natural)
     return QueueEntryArray;
+
+    procedure shiftQueueContent_Evt(signal content: inout QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, draining: std_logic);
 
 
     function makeSelectedOutputSQ(selectedOutput: ControlPacket; isSelected, sqMissed: std_logic) return ControlPacket;
@@ -196,8 +200,9 @@ package body LogicQueues is
         return res;
     end function;
 
-    function cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber)
+    function cmpIndexBefore(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural) --; constant PTR_MASK_SN: SmallNumber)
     return std_logic_vector is
+    	constant PTR_MASK_SN: SmallNumber := sn(QUEUE_SIZE-1);
         constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
         variable res: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
         variable iv: SmallNumber := (others => '0');
@@ -222,8 +227,9 @@ package body LogicQueues is
         return res;
     end function;
 
-    function cmpIndexAfter(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural; constant PTR_MASK_SN: SmallNumber)
+    function cmpIndexAfter(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural) --; constant PTR_MASK_SN: SmallNumber)
     return std_logic_vector is
+    	constant PTR_MASK_SN: SmallNumber := sn(QUEUE_SIZE-1);
         constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
         variable res: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
         variable iv: SmallNumber := (others => '0');
@@ -361,28 +367,26 @@ package body LogicQueues is
         constant currentPtr: SmallNumber := subTruncZ(sqPtr, startPtrNext, QUEUE_PTR_SIZE);
         constant currentEarlyPtr: SmallNumber := subTruncZ(sqPtrEarly, startPtrNext, QUEUE_PTR_SIZE);
     begin
+        -- Shift
         if draining = '1' then -- Move forward     
             res(0 to LEN-2) := res(1 to LEN-1);
             res(LEN-1).completedA := '0';
             res(LEN-1).completedLowA := '0';
         end if;
 
+        -- Update 
         if compareInputFull = '1' and isStoreMemOp(op) = '1' then
             res(slv2u(currentPtr)).completedA := '1';
-        end if;
-
-        if compareInputFull = '1' and isStoreMemOp(op) = '1' then
             res(slv2u(currentPtr)).address := adr;
         end if;
 
+        -- Update
         if compareInputEarlyFull = '1' and isStoreMemOp(opEarly) = '1' then
             res(slv2u(currentEarlyPtr)).completedLowA := '1';
-        end if;
-
-        if compareInputEarlyFull = '1' and isStoreMemOp(opEarly) = '1' then
             res(slv2u(currentEarlyPtr)).addressLow := adrEarly;
         end if;
 
+        -- Clear empty slots
         if ev = '1' then
             for i in 0 to LEN-1 loop -- clear 'completed' for empty slots
                 if i >= slv2u(nFullNext) then
@@ -394,6 +398,21 @@ package body LogicQueues is
 
         return res;
     end function;
+
+
+    procedure shiftQueueContent_Evt(signal content: inout QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, draining: std_logic) is
+        constant LEN: natural := content'length;
+    begin
+        -- Clear empty slots
+        if ev = '1' then
+            for i in 0 to LEN-1 loop -- clear 'completed' for empty slots
+                if i >= slv2u(nFullNext) then
+                    content(i).completedA <= '0';
+                    content(i).completedLowA <= '0';
+                end if;
+            end loop;
+        end if;
+    end procedure;
 
 
     function makeSelectedOutputSQ(selectedOutput: ControlPacket; isSelected, sqMissed: std_logic) return ControlPacket is
