@@ -60,21 +60,15 @@ package LogicQueues is
     return std_logic_vector;
     function cmpIndexAfter(pStartLong, pEndLong, cmpIndexLong: SmallNumber; constant QUEUE_SIZE: natural)--; constant PTR_MASK_SN: SmallNumber)
     return std_logic_vector;
+
     function findNewestMatchIndex(olderSQ: std_logic_vector; pStart, nFull: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
+    function findNewestMatchIndex_2(olderSQ: std_logic_vector; pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural) return SmallNumber;
 
     function getCommittedEffectiveMask(robData: ControlPacketArray; isLQ: boolean) return std_logic_vector;
-    function getCommittedMask(robData: ControlPacketArray; isLQ: boolean) return std_logic_vector;
-
-    function getCommittedEffectiveMaskBr(robData: ControlPacketArray) return std_logic_vector;
     function getCommittedMaskBr(robData: ControlPacketArray) return std_logic_vector;
 
-    function shiftQueueContent(content: QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, draining: std_logic;
-                               compareInputFull: std_logic; sqPtr: SmallNumber; op: SpecificOp; adr: Mword;
-                               compareInputEarlyFull: std_logic; sqPtrEarly: SmallNumber; opEarly: SpecificOp; adrEarly: Mword;
-                               constant QUEUE_PTR_SIZE: natural)
-    return QueueEntryArray;
-
-    procedure shiftQueueContent_Evt(signal content: inout QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, draining: std_logic);
+    procedure shiftQueueContent_Drain(signal content: inout QueueEntryArray);
+    procedure shiftQueueContent_Evt(signal content: inout QueueEntryArray; nFullNext: SmallNumber);
 
 
     function makeSelectedOutputSQ(selectedOutput: ControlPacket; isSelected, sqMissed: std_logic) return ControlPacket;
@@ -217,7 +211,8 @@ package body LogicQueues is
         -- A') if index >= start then i >= start && i < index    =>    i >= start && i < start   =>   i empty
 
         for i in 0 to res'length-1 loop
-            iv := i2slv(i, SMALL_NUMBER_SIZE);
+            iv := --i2slv(i, SMALL_NUMBER_SIZE);
+                    sn(i);
             if sign = '0' then --cmpGeU(index, pStart) = '1' then
                 res(i) := cmpGeU(iv, pStart) and cmpLtU(iv, index);
             else
@@ -245,7 +240,8 @@ package body LogicQueues is
         -- A') if index >= end then i < end || i => index    =>    i < end || i => end   =>   i all
 
         for i in 0 to res'length-1 loop
-            iv := i2slv(i, SMALL_NUMBER_SIZE);
+            iv := --i2slv(i, SMALL_NUMBER_SIZE);
+                    sn(i);
             if sign = '1' then
                 res(i) := cmpLtU(iv, pEnd) or cmpGeU(iv, index);
             else
@@ -284,6 +280,40 @@ package body LogicQueues is
     end function;
 
 
+    function findNewestMatchIndex_2(olderSQ: std_logic_vector; pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural)
+    return SmallNumber is
+        constant LEN: integer := olderSQ'length;
+        constant PTR_MASK_SN: SmallNumber := sn(LEN-1);  
+        variable beforeStart: std_logic_vector(0 to LEN-1) := (others => '0');
+ --       constant wrap: std_logic := pStart(QUEUE_PTR_SIZE) xor pEnd(QUEUE_PTR_SIZE);
+
+ --       variable res: SmallNumber := (others => '0');
+
+        constant pStartTr: SmallNumber := pStart and PTR_MASK_SN;
+        constant pEndTr: SmallNumber := pEnd and PTR_MASK_SN;
+    begin        
+        for i in 0 to LEN-1 loop
+            beforeStart(i) := cmpLtU(sn(i), pStartTr) and olderSQ(i);
+        end loop;
+
+        -- beforeStart is older than after start, so we scan it first
+        for i in LEN-1 downto 0 loop
+            if beforeStart(i) = '1' then
+                return sn(i);
+            end if;
+        end loop;
+        
+        -- if not found there, scan the rest
+        for i in LEN-1 downto 0 loop
+            if olderSQ(i) = '1' then
+                return sn(i);
+            end if;
+        end loop;
+
+        return sn(0);
+    end function;
+
+
     -- scan: full and syncEvent; full and [usingQ]
      function getCommittedEffectiveMask(robData: ControlPacketArray; isLQ: boolean) return std_logic_vector is
         variable res: std_logic_vector(robData'range) := (others => '0');
@@ -303,42 +333,7 @@ package body LogicQueues is
         end loop;
         return res;
      end function;
-    
-    -- scan: newEvent and syncEvent; [usingQ] 
-    function getCommittedMask(robData: ControlPacketArray; isLQ: boolean) return std_logic_vector is
-        variable res: std_logic_vector(robData'range) := (others => '0');
-    begin
-    for i in 0 to PIPE_WIDTH-1 loop
-        -- A redirected branch cuts a group in SQ, so it must stop there
-        if robData(i).controlInfo.newEvent = '1' and hasSyncEvent(robData(i).controlInfo) = '0' then
-            exit;
-        end if;
 
-        -- Not only full, because exceptions clear following 'full' bits
-        if isLQ then
-            res(i) := robData(i).classInfo.useLQ;
-        else
-            res(i) := robData(i).classInfo.secCluster;
-        end if;
-    end loop;
-    return res;
-    end function;
-
-    -- scan: full and syncEvent; full and branch
-     function getCommittedEffectiveMaskBr(robData: ControlPacketArray) return std_logic_vector is
-        variable res: std_logic_vector(robData'range) := (others => '0');
-     begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            if robData(i).controlInfo.c_full = '1' and hasSyncEvent(robData(i).controlInfo) = '1' then
-                exit;
-            end if;
-
-            if robData(i).controlInfo.c_full = '1' then
-                res(i) := robData(i).classInfo.branchIns;
-            end if;
-        end loop;
-        return res;
-     end function;
 
      -- scan: newEvent and syncEvent; branch
      function getCommittedMaskBr(robData: ControlPacketArray) return std_logic_vector is
@@ -357,61 +352,34 @@ package body LogicQueues is
      end function;
 
 
-    function shiftQueueContent(content: QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, draining: std_logic;
-                               compareInputFull: std_logic; sqPtr: SmallNumber; op: SpecificOp; adr: Mword;
-                               compareInputEarlyFull: std_logic; sqPtrEarly: SmallNumber; opEarly: SpecificOp; adrEarly: Mword;
-                               constant QUEUE_PTR_SIZE: natural)
-    return QueueEntryArray is
-        variable res: QueueEntryArray(0 to content'length-1) := content;
+
+    procedure shiftQueueContent_Drain(signal content: inout QueueEntryArray) is
         constant LEN: natural := content'length;
-        constant currentPtr: SmallNumber := subTruncZ(sqPtr, startPtrNext, QUEUE_PTR_SIZE);
-        constant currentEarlyPtr: SmallNumber := subTruncZ(sqPtrEarly, startPtrNext, QUEUE_PTR_SIZE);
     begin
-        -- Shift
-        if draining = '1' then -- Move forward     
-            res(0 to LEN-2) := res(1 to LEN-1);
-            res(LEN-1).completedA := '0';
-            res(LEN-1).completedLowA := '0';
-        end if;
+        content(0 to LEN-2) <= content(1 to LEN-1);
 
-        -- Update 
-        if compareInputFull = '1' and isStoreMemOp(op) = '1' then
-            res(slv2u(currentPtr)).completedA := '1';
-            res(slv2u(currentPtr)).address := adr;
-        end if;
+        content(LEN-1).isSysOp <= '0';
 
-        -- Update
-        if compareInputEarlyFull = '1' and isStoreMemOp(opEarly) = '1' then
-            res(slv2u(currentEarlyPtr)).completedLowA := '1';
-            res(slv2u(currentEarlyPtr)).addressLow := adrEarly;
-        end if;
+        content(LEN-1).first <= '0'; -- TMP
+        content(LEN-1).hasEvent <= '0';
 
-        -- Clear empty slots
-        if ev = '1' then
-            for i in 0 to LEN-1 loop -- clear 'completed' for empty slots
-                if i >= slv2u(nFullNext) then
-                    res(i).completedA := '0';
-                    res(i).completedLowA := '0';
-                end if;
-            end loop;
-        end if;
+        content(LEN-1).completedA <= '0';
+        content(LEN-1).completedLowA <= '0';
+        content(LEN-1).completedV <= '0';
+   end procedure;
 
-        return res;
-    end function;
-
-
-    procedure shiftQueueContent_Evt(signal content: inout QueueEntryArray; startPtrNext, nFullNext: SmallNumber; ev, draining: std_logic) is
+    procedure shiftQueueContent_Evt(signal content: inout QueueEntryArray; nFullNext: SmallNumber) is
         constant LEN: natural := content'length;
     begin
         -- Clear empty slots
-        if ev = '1' then
+        --if ev = '1' then
             for i in 0 to LEN-1 loop -- clear 'completed' for empty slots
                 if i >= slv2u(nFullNext) then
                     content(i).completedA <= '0';
                     content(i).completedLowA <= '0';
                 end if;
             end loop;
-        end if;
+        --end if;
     end procedure;
 
 
