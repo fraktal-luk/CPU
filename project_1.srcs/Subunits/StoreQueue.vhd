@@ -75,7 +75,7 @@ architecture Behavioral of StoreQueue is
 	           newerLQ, newerRegLQ, newerNextLQ, olderNextSQ, olderNextSQ_Early, olderRegSQ, olderSQ, olderSQ_Early: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
 	signal adrPtr, adrPtrEarly, 
-	       adrPtrPrev, pSelect, pSelectNext, pSelectPrev, pSelectEarly_Base, pSelectEarly_BasePrev, pSelectEarly, pSelectEarlyNS, pSelectLate_Base, pSelectLate,
+	       adrPtrPrev, pSelect, pSelectNext, pSelectPrev, pSelectEarly_Base, pSelectEarly_BasePrev, pSelectEarly, pSelectEarlyNS, pSelectEarlyPrevNS, pSelectLate_Base, pSelectLate,
 	       pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pDrainPrevPrev, pTagged, pTaggedNext, pRenamed, pRenamedNext, 
            nFull, nFullNext, nAlloc, nAllocNext: SmallNumber := sn(0);
 
@@ -134,7 +134,10 @@ begin
     pSelectLate <= addTruncZ(pSelectLate_Base, pDrainPrev, QUEUE_PTR_SIZE);
 
     -- Read ptr determinded by address matching - SQ only
-    pSelect <= addTruncZ(pSelectEarly_BasePrev, pDrainPrevPrev, QUEUE_PTR_SIZE);
+    pSelect <= --addTruncZ(pSelectEarly_BasePrev, pDrainPrevPrev, QUEUE_PTR_SIZE);
+                pSelectEarlyPrevNS;
+    
+    
     pSelectNext <= addTruncZ(pSelectEarly_Base, pDrainPrev, QUEUE_PTR_SIZE);
 
             ch0 <= bool2std(pSelectEarly = pSelectEarlyNS) or not isNonzero(amvOlderNS);
@@ -200,11 +203,14 @@ begin
 
             -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
             if not IS_LOAD_QUEUE then
-                isSelected_Early <= compareAddressEarlyInput.full and isNonzero(olderSQ_Early);
+                isSelected_Early <= compareAddressEarlyInput.full and isNonzero(--olderSQ_Early);
+                                                                                amvOlderNS);
             end if;
 
             pSelectEarly_BasePrev <= pSelectEarly_Base;
             pSelectPrev <= pSelect; -- Only SQ?
+
+                pSelectEarlyPrevNS <= pSelectEarlyNS;
 
                -- pSelect <= pSelectNext;
 
