@@ -376,6 +376,8 @@ package body LogicExec is
             -- TLB problems...
          elsif memFail then
              res.dataMiss := '1';
+             res.specialAction := '1';
+             res.newEvent := '1';
          elsif memForwarded then
              if ctSQ.controlInfo.sqMiss = '1' then
                  res.sqMiss := '1';
@@ -385,6 +387,9 @@ package body LogicExec is
          else    -- successful mem load
             null;
          end if;
+
+            res.dataMiss := bool2std(memFail);
+            res.sqMiss := ctSQ.controlInfo.sqMiss;
 
          -- CAREFUL: store when newer load has been done - violation resolution when reissue is used
          if isStoreMemOp(op) = '1' and ctLQ.controlInfo.c_full = '1' then
