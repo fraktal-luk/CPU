@@ -125,9 +125,11 @@ begin
                targetOutput <= targetArray(p2i(pStartNext, QUEUE_SIZE));
 
                -- Read Exec: all arrays
-               selectedDataSlot <= getMatchedSlot(compareAddressQuickInput.full, compareAddressQuickInput.tag, earlySelected, lateSelected);
+               --selectedDataSlot <= getMatchedSlot(compareAddressQuickInput.full, compareAddressQuickInput.tag, earlySelected, lateSelected);
            end if;
        end process;
+               selectedDataSlot <= getMatchedSlot(compareAddressQuickInput.full, compareAddressQuickInput.tag, earlySelected, lateSelected);
+
 
        earlySerialSelected <= earlySerialMem(p2i(pSelect, QUEUE_SIZE));
        earlySelected <= deserializeEarlyInfo(earlySerialSelected);
@@ -167,7 +169,8 @@ begin
     begin
        if rising_edge(clk) then
            pSelectPrev <= pSelect;
-           pCausing <= pSelectPrev;
+           pCausing <= --pSelectPrev;
+                        pSelect;
            pCausingPrev <= pCausing;
 
            pStart <= pStartNext;

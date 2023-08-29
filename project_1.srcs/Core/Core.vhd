@@ -117,6 +117,8 @@ architecture Behavioral of Core is
     signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
     signal memIssueFullIQ, memIssueFullMQ, lockIssueI0_NoMemFail, dividerSending: std_logic := '0';
 begin
+            ch0 <= '1';
+
     intSignal <= int0 or int1;
     intType <= (int0, int1);
 
@@ -481,9 +483,13 @@ begin
 
                 issueTagI0 <= slotIssueI0.destTag;
 
-                bqCompareEarly.full <= slotIssueI0.full and slotIssueI0.st.branchIns;
-                bqCompareEarly.tag <= slotIssueI0.st.tags.renameIndex;
-                bqCompareEarly.dest <= slotIssueI0.st.tags.bqPointer;
+--                bqCompareEarly.full <= slotIssueI0.full and slotIssueI0.st.branchIns;
+--                bqCompareEarly.tag <= slotIssueI0.st.tags.renameIndex;
+--                bqCompareEarly.dest <= slotIssueI0.st.tags.bqPointer;
+                
+                    bqCompareEarly.full <= slotRegReadI0.full and slotRegReadI0.st.branchIns;
+                    bqCompareEarly.tag <= slotRegReadI0.st.tags.renameIndex;
+                    bqCompareEarly.dest <= slotRegReadI0.st.tags.bqPointer;
             end block;
 
                 unfoldedAluOp_T <= work.LogicExec.getAluControl(slotRegReadI0.st.operation.arith);
