@@ -126,10 +126,10 @@ package body LogicExec is
 		res.target := trueTarget;
 		-- Return address
 		res.nip := result;
-		res.tags.intPointer := bqControl. tags.intPointer;
-		res.tags.floatPointer := bqControl. tags.floatPointer;
-    	res.tags.sqPointer := bqControl. tags.sqPointer;
-	    res.tags.lqPointer := bqControl. tags.lqPointer;		
+		res.tags.intPointer := bqControl.tags.intPointer;
+		res.tags.floatPointer := bqControl.tags.floatPointer;
+    	res.tags.sqPointer := bqControl.tags.sqPointer;
+	    res.tags.lqPointer := bqControl.tags.lqPointer;		
 		return res;
 	end function;
 

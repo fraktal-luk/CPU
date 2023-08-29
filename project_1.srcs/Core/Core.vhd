@@ -237,9 +237,10 @@ begin
         lqPointer => lqPointer,
         bqPointerSeq => bqPointerSeq,
 
+        sendingFromROB => robSending,
+        robData => robOut,
         commitArgInfoI => renamedArgsIntROB,
         commitArgInfoF => renamedArgsFloatROB,
-        sendingFromROB => robSending,
 
         newPhysDestsOut => newIntDests,
         newFloatDestsOut => newFloatDests,

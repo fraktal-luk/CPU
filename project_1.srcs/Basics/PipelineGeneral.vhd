@@ -258,6 +258,7 @@ function usesDivider(ss: SchedulerState) return std_logic;
     function TMP_mergeStatic(a, b: SchedulerState) return SchedulerState;
 
     function countSN(v: std_logic_vector) return SmallNumber;
+    function std2int(s: std_logic) return integer;
 
 end package;
 
@@ -1048,5 +1049,15 @@ end function;
         res := sn(countOnes(v));
         return res;
     end function;
+
+    function std2int(s: std_logic) return integer is
+    begin
+        if s = '1' then
+            return 1;
+        else
+            return 0;
+        end if;
+    end function;
+
 
 end package body;

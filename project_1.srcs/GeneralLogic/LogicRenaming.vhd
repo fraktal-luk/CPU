@@ -65,6 +65,7 @@ function assignDests(ia: BufferEntryArray; newDests: PhysNameArray; constant IS_
 function assignDests(ria: RenameInfoArray; newDests: PhysNameArray; constant IS_FP: boolean) return PhysNameArray;
 
 function DB_addTag(dbi: InstructionDebugInfo; tag: InsTag) return InstructionDebugInfo;
+function DB_addRenameCounter(dbi: InstructionDebugInfo; ctr: Word) return InstructionDebugInfo;
 procedure DB_trackSeqNum(renamed: InstructionSlotArray);
 
 end package;
@@ -570,6 +571,15 @@ end function;
     begin
         -- pragma synthesis off
         res.tag := tag;
+        -- pragma synthesis on
+        return res;
+    end function;
+
+    function DB_addRenameCounter(dbi: InstructionDebugInfo; ctr: Word) return InstructionDebugInfo is
+        variable res: InstructionDebugInfo := dbi;
+    begin
+        -- pragma synthesis off
+        res.rename := ctr;
         -- pragma synthesis on
         return res;
     end function;
