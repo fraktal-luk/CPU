@@ -503,7 +503,7 @@ begin
                 end if;
             end process;
 
-            dataToBranch <= basicBranch(slotRegReadI0.full and slotRegReadI0.st.branchIns, slotRegReadI0, bqSelected, unfoldedAluOp);
+            dataToBranch <= basicBranch(slotRegReadI0.full and slotRegReadI0.st.branchIns, slotRegReadI0, bqSelected, unfoldedAluOp, lateEvent);
             process (clk)
                 use work.LogicLogging.all;
             begin

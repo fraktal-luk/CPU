@@ -96,6 +96,13 @@ architecture Behavioral of UnitSequencer is
 
     alias lateCausingState is lateCausingOut.nip;
 
+    function suppress(cp: ControlPacket; sup: std_logic) return ControlPacket is
+        variable res: ControlPacket := cp;
+    begin
+        
+        return res;
+    end function; 
+
     signal  ch0, ch1, ch2, ch3, ch4, ch5: std_logic := '0';
 begin
     eventOccurred <= lateEventSending or execEvent.full or frontEvent.full;
@@ -292,6 +299,7 @@ begin
                     lateCausingOut.full <= '0';
                     lateCausingOut.controlInfo.c_full <= '0';
                     lateCausingOut.controlInfo.newEvent <= '0';
+                    --lateCausingOut <= suppress(lateCausingOut, not sendingToLateCausing);
                 end if;
             end if;
         end process;

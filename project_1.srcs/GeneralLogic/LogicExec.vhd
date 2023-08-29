@@ -33,13 +33,11 @@ package LogicExec is
 
     function getAluControl(op: ArithOp) return AluControl;
 
-	function basicBranch(sending: std_logic; ss: SchedulerState;
-	                     bqControl: ControlPacket;
-                         ac: AluControl) return ControlPacket;
+	function basicBranch(sending: std_logic; ss: SchedulerState; bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
+	return ControlPacket;
 
-	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword;-- ctrl: InstructionControlInfo;
-	                                           ac: AluControl)
-	                                           return ExecResult;
+	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword; ac: AluControl)
+	return ExecResult;
 
 	function prepareMultiply(full: std_logic; st: SchedulerState) return ExecResult;
 	
@@ -77,14 +75,12 @@ package body LogicExec is
 		return ac.jumpType(1) or (ac.jumpType(0) xor isZero);
 	end function;
 
-	function basicBranch(sending: std_logic; ss: SchedulerState;
-	                     bqControl: ControlPacket;
-	                     ac: AluControl)
+	function basicBranch(sending: std_logic; ss: SchedulerState; bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
 	return ControlPacket is
 		variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-		variable branchTaken, targetMatch: std_logic := '0';
+		variable branchTaken, targetMatch, targetEqual: std_logic := '0';
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
-		variable targetEqual: std_logic := '0';
+		--variable : std_logic := '0';
 		constant ctrl: InstructionControlInfo := bqControl.controlInfo;
 		constant target: Mword := bqControl.target;
 		constant result: Mword := bqControl.nip;
@@ -104,43 +100,23 @@ package body LogicExec is
 
         res.controlInfo.c_full := sending;
 
-		if ctrl.frontBranch = '1' and branchTaken = '0' then
-			res.controlInfo.newEvent := '1';
-			trueTarget := result;
-		elsif ctrl.frontBranch = '0' and branchTaken = '1' then
-			res.controlInfo.newEvent := '1';
-			res.controlInfo.confirmedBranch := '1';			
-			if ss.st.immediate = '0' then
-				trueTarget := ss.argValues(1);
-			else
-				trueTarget := target;
-			end if;
-		elsif ctrl.frontBranch = '0' and branchTaken = '0' then
-			trueTarget := result;
-		else -- taken -> taken
-			if ss.st.immediate = '0' then
-				if targetMatch = '0' then
-					res.controlInfo.newEvent := '1';	-- Need to correct the target!	
-				end if;
-				trueTarget := ss.argValues(1); -- reg destination
-			else
-				trueTarget := target;
-			end if;
-			res.controlInfo.confirmedBranch := '1';			
-		end if;
-
-        if branchTaken = '0' then
+        if false and lateEvent.full = '1' then
+                trueTarget := lateEvent.value;
+        elsif branchTaken = '0' then
             trueTarget := result;
         elsif ss.st.immediate = '1' then
-            trueTarget := target;
+            trueTarget := target;         
         else
             trueTarget := ss.argValues(1);
         end if;
         
-        if      (ctrl.frontBranch xor branchTaken) = '1'
-                or  (ctrl.frontBranch and branchTaken and not ss.st.immediate and not targetMatch) = '1'
+        if false and lateEvent.full = '1' then
+                res.controlInfo.newEvent := '1';
+        elsif      (ctrl.frontBranch xor branchTaken) = '1'
+                or  (--ctrl.frontBranch and 
+                                          branchTaken and not ss.st.immediate and not targetMatch) = '1'
         then
-            res.controlInfo.newEvent := sending;
+            res.controlInfo.newEvent := sending;         
         else
             res.controlInfo.newEvent := '0';
         end if;
@@ -157,8 +133,7 @@ package body LogicExec is
 		return res;
 	end function;
 
-	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword;-- ctrl: InstructionControlInfo;
-	                    ac: AluControl)
+	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword; ac: AluControl)
 	return ExecResult is
 		variable res: ExecResult := DEFAULT_EXEC_RESULT;
 		variable result: Mword := (others => '0');
