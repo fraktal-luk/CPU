@@ -67,15 +67,22 @@ port(
   
     execCausing: in ControlPacket;
     
-    execEventSignal: in std_logic;
-    lateEventSignal: in std_logic;
-    
+--    execEventSignal: in std_logic;
+--    lateEventSignal: in std_logic;
+    execEventSignalE1: in std_logic;
+
+	events: in EventState;
+
     dbState: in DbCoreState
 );
 end UnitRegManager;
 
 
 architecture Behavioral of UnitRegManager is
+    --alias execCausing is events.execCausing;
+    alias execEventSignal is events.execEvent;
+    alias lateEventSignal is events.lateEvent;
+
     signal renamedBase, renamedDataLivingPre: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, robSendingDelayed, frontLastSending, renameFull, renamedSendingSig, robSendingPrev,
                renameLockState, renameLockStateNext, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed, renameLockEndDelayedNext,
@@ -94,6 +101,8 @@ architecture Behavioral of UnitRegManager is
     signal newSourceSelectorInt, newSourceSelectorFloat, zeroSelector: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
 
     signal specialOperation: SpecificOp := DEFAULT_SPECIFIC_OP;
+
+        signal    execCausingDelay: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     -- DEBUG
     signal newProducersInt, newProducersFloat, zeroProducers: InsTagArray(0 to 3*PIPE_WIDTH-1) := (others => (others => 'U'));
@@ -245,7 +254,7 @@ architecture Behavioral of UnitRegManager is
         variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
     begin
         for i in 0 to PIPE_WIDTH-1 loop
-            res(i) := ia(i).ins.virtualArgSpec.intDestSel;
+            res(i) := ia(i).ins.virtualArgSpec.floatDestSel;
         end loop;
         return res;
     end function;
@@ -260,7 +269,6 @@ architecture Behavioral of UnitRegManager is
                             sqPointer: SmallNumber;
                             lqPointer: SmallNumber;
                             bqPointerSeq: SmallNumber;
-                            --renameCtr: Word;                               
                             dbtrap: std_logic)
      return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := ia;
@@ -425,8 +433,6 @@ architecture Behavioral of UnitRegManager is
 begin
     eventSig <= execEventSignal or lateEventSignal;
 
-    --commitGroupCtrIn <= commitGroupCtr;
-
     inputRenameInfoInt <= getRenameInfo(frontData, zeroDests, zeroSources, zeroSources, zeroProducers, zeroSelector);
     inputRenameInfoFloat <= getRenameInfo(frontData, zeroDests, zeroSources, zeroSources, zeroProducers, zeroSelector, true);
 
@@ -460,8 +466,6 @@ begin
 
     commitGroupCtrNext <= commitGroupCtrInc when sendingFromROB = '1' else commitGroupCtr;
     commitGroupCtrIncNext <= addInt(commitGroupCtrInc, PIPE_WIDTH) when sendingFromROB = '1' else commitGroupCtrInc;
-
-            ch0 <= bool2std(commitGroupCtr = commitGroupCtr);
 
     -- Re-allow renaming when everything from rename/exec is committed - reg map will be well defined now
     renameLockRelease <= '1' when commitGroupCtr = renameGroupCtr else '0';
@@ -500,6 +504,7 @@ begin
             end if;
 
             robSendingPrev <= sendingFromROB;
+               execCausingDelay <= execCausing;
 
             renameGroupCtr <= renameGroupCtrNext;
             renameCtr <= renameCtrNext;
@@ -521,52 +526,59 @@ begin
 
         POINTERS: block
             use work.LogicQueues.all;
-            signal R_ri: InsTag := (others => '0');
-            signal C_ri: InsTag := (others => '0');
-            signal R_sq, R_lq, R_bq, R_bqs, R_int, R_float: SmallNumber := sn(0);
-            signal C_sq, C_lq, C_bq, C_bqs, C_int, C_float: SmallNumber := sn(0);
+            signal E_tags: InstructionTags := DEFAULT_INSTRUCTION_TAGS;
+            signal R_tags, C_tags: InstructionTags := (renameIndex => INITIAL_GROUP_TAG, intPointer => (others => '0'), floatPointer => (others => '0'), others => sn(0));
         begin
+
+            ch0 <= bool2std(R_tags = E_tags);
+
+
+            E_tags.renameIndex <= renameGroupCtr;
+            E_tags.sqPointer <= sqPointer;
+            E_tags.lqPointer <= lqPointer;
+            E_tags.bqPointer <= bqPointer;
+            --E_tags.bqPointerSeq <= bqPointerSeq;
+            E_tags.intPointer <= newIntDestPointer;
+            E_tags.floatPointer <= newFloatDestPointer;
 
             process (clk)
             begin
                 if rising_edge(clk) then
+                        ch1 <= ch0;
+                
                     if lateEventSignal = '1' then
-                        R_ri <= C_ri;
-                        R_sq <= C_sq;
-                        R_lq <= C_lq;
-                        R_bq <= C_bq;
-                        R_bqs <= C_bqs;
-                        R_int <= C_float;
-                        R_float <= C_float;
+                        R_tags <= C_tags;
                     elsif execEventSignal = '1' then
-                        R_ri <= execCausing.tags.renameIndex;
-                        R_sq <= execCausing.tags.sqPointer;
-                        R_lq <= execCausing.tags.lqPointer;
-                        R_bq <= execCausing.tags.bqPointer;
-                        R_bqs <= execCausing.tags.bqPointerSeq;
-                        R_int <= execCausing.tags.intPointer;
-                        R_float <= execCausing.tags.floatPointer;
+                        R_tags.renameIndex <= clearTagLow(execCausing.tags.renameIndex);
+                        R_tags.intPointer <= (execCausing.tags.intPointer);
+                        R_tags.floatPointer <= (execCausing.tags.floatPointer);
+                    elsif execEventSignalE1 = '1' then
+                        R_tags.sqPointer <= (execCausingDelay.tags.sqPointer);
+                        R_tags.lqPointer <= (execCausingDelay.tags.lqPointer);
+                        R_tags.bqPointer <= addIntTrunc(execCausingDelay.tags.bqPointer, 1, BQ_PTR_SIZE+1);
                     elsif frontLastSending = '1' then
-                        R_ri <= addIntTrunc(R_ri, PIPE_WIDTH, TAG_SIZE);
-                        R_sq <= addIntTrunc(R_sq, countOnes(getStoreMask1(TMP_recodeMem(getInsSlotArray(frontData)))), SQ_PTR_SIZE+1);
-                        R_lq <= addIntTrunc(R_sq, countOnes(getLoadMask1(TMP_recodeMem(getInsSlotArray(frontData)))), LQ_PTR_SIZE+1);
-                        R_bq <= addIntTrunc(R_bq, countOnes(getBranchMask1(TMP_recodeMem(getInsSlotArray(frontData)))), LQ_PTR_SIZE+1);
-                        R_bqs <= addIntTrunc(R_bqs, std2int(frontData(0).firstBr), LQ_PTR_SIZE+1);
-                        R_int <= addIntTrunc(R_int, countOnes(getRenamedInt(TMP_recodeMem(getInsSlotArray(frontData)))), SMALL_NUMBER_SIZE);
-                        R_float <= addIntTrunc(R_float, countOnes(getRenamedFloat(TMP_recodeMem(getInsSlotArray(frontData)))), SMALL_NUMBER_SIZE);
+                        R_tags.renameIndex <= addIntTrunc(R_tags.renameIndex, PIPE_WIDTH, TAG_SIZE);
+                        R_tags.sqPointer <= addIntTrunc(R_tags.sqPointer, countOnes(getStoreMask1(renamedBase)), SQ_PTR_SIZE+1);
+                        R_tags.lqPointer <= addIntTrunc(R_tags.lqPointer, countOnes(getLoadMask1(renamedBase)), LQ_PTR_SIZE+1);
+                        R_tags.bqPointer <= addIntTrunc(R_tags.bqPointer, std2int(frontData(0).firstBr), BQ_PTR_SIZE+1);
+                        if frontData(0).firstBr = '1' then
+                        --    R_tags.bqPointerSeq <= addIntTrunc(R_tags.bqPointerSeq, countOnes(getBranchMask1(renamedBase)), BQ_SEQ_PTR_SIZE+1);
+                        end if;
+                        R_tags.intPointer <= addIntTrunc(R_tags.intPointer, countOnes(getRenamedInt(TMP_recodeMem(getInsSlotArray(frontData)))), SMALL_NUMBER_SIZE);
+                        R_tags.floatPointer <= addIntTrunc(R_tags.floatPointer, countOnes(getRenamedFloat(TMP_recodeMem(getInsSlotArray(frontData)))), SMALL_NUMBER_SIZE);
                     end if;
 
                     if sendingFromROB = '1' then
-                        C_ri <= addIntTrunc(C_ri, PIPE_WIDTH, TAG_SIZE);
-                        C_sq <= addIntTrunc(C_sq, countOnes(getCommittedEffectiveMask(robData, false)), SQ_PTR_SIZE+1);
-                        C_lq <= addIntTrunc(C_lq, countOnes(getCommittedEffectiveMask(robData, true)), LQ_PTR_SIZE+1);
-                        C_bq <= addIntTrunc(C_bq, std2int(robData(0).controlInfo.firstBr), BQ_PTR_SIZE+1);
-                        C_bqs <= addIntTrunc(C_bqs, countOnes(getCommittedMaskBr(robData)), BQ_SEQ_PTR_SIZE+1);
+                        C_tags.renameIndex <= addIntTrunc(C_tags.renameIndex, PIPE_WIDTH, TAG_SIZE);
+                        C_tags.sqPointer <= addIntTrunc(C_tags.sqPointer, countOnes(getCommittedEffectiveMask(robData, false)), SQ_PTR_SIZE+1);
+                        C_tags.lqPointer <= addIntTrunc(C_tags.lqPointer, countOnes(getCommittedEffectiveMask(robData, true)), LQ_PTR_SIZE+1);
+                        C_tags.bqPointer <= addIntTrunc(C_tags.bqPointer, std2int(robData(0).controlInfo.firstBr), BQ_PTR_SIZE+1);
+                        --C_tags.bqPointerSeq <= addIntTrunc(C_tags.bqPointerSeq, countOnes(getCommittedMaskBr(robData)), BQ_SEQ_PTR_SIZE+1);
                     end if;
 
                     if robSendingPrev = '1' then
-                        C_int <= addIntTrunc(C_int, countOnes(getVirtualFloatDestSels(commitArgInfoIntDelayed)), SMALL_NUMBER_SIZE);
-                        C_float <= addIntTrunc(C_float, countOnes(getVirtualFloatDestSels(commitArgInfoFloatDelayed)), SMALL_NUMBER_SIZE);
+                        C_tags.intPointer <= addIntTrunc(C_tags.intPointer, countOnes(getVirtualIntDestSels(commitArgInfoIntDelayed)), SMALL_NUMBER_SIZE);
+                        C_tags.floatPointer <= addIntTrunc(C_tags.floatPointer, countOnes(getVirtualFloatDestSels(commitArgInfoFloatDelayed)), SMALL_NUMBER_SIZE);
                     end if;
                 end if;
             end process;

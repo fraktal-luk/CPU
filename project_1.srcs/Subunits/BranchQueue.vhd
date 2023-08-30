@@ -52,9 +52,11 @@ entity BranchQueue is
         commitBr: in std_logic;
         commitMask: in std_logic_vector(0 to PIPE_WIDTH-1);
 
-		lateEventSignal: in std_logic;
+		--lateEventSignal: in std_logic;
 		execEventSignal: in std_logic;
         execCausing: in ExecResult;
+
+		events: in EventState;
 
 		nextAccepting: in std_logic;  -- UNUSED	
 
@@ -65,7 +67,10 @@ entity BranchQueue is
 end BranchQueue;
 
 
-architecture Behavioral of BranchQueue is    
+architecture Behavioral of BranchQueue is
+    alias lateEventSignal is events.lateEvent;
+    --alias execEventSignal is events.execEvent;
+ 
 	constant PTR_MASK_SN: SmallNumber := sn(QUEUE_SIZE-1);
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
     constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;

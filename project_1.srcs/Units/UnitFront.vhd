@@ -38,8 +38,10 @@ entity UnitFront is
 		
 		frontCausing: out ExecResult;
 
-		execCausing: in ExecResult;
-		lateCausing: in ExecResult;
+--		execCausing: in ExecResult;
+--		lateCausing: in ExecResult;
+
+		events: in EventState;
 
 		dbState: in DbCoreState		
 	);
@@ -47,6 +49,9 @@ end UnitFront;
 
 
 architecture Behavioral of UnitFront is
+	alias execCausing is events.execCausing;
+	alias lateCausing is events.lateCausing;
+
 	signal fetchedLine0, fetchedLine1, fetchedLineShifted0, fetchedLineShifted1, fetchedLineShifted1_Alt: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0'));
 
 	signal bufferAccepting, queuesAccepting, fullBt, sendingToBuffer, killAll, killAllOrFront, sendingOutBuffer, sendingToBQ,

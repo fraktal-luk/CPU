@@ -61,7 +61,7 @@ end Core;
 architecture Behavioral of Core is
 
     signal frontAccepting, bpSending, renameAllow, frontGroupSend, frontSendAllow, canSendRename, robSending,
-           renameSendingBr, renamedSending, commitAccepting, bqAccepting, execEventSignalE0, execEventSignalE1,
+           renameSendingBr, renamedSending, commitAccepting, bqAccepting, execEventSignalE0, execEventSignalE1, execEventSignalDelay,
            allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
            mqReady, mqIssueSending, mqRegReadSending,-- sbSending,
            sbEmpty, intSignal, memFail
@@ -95,7 +95,7 @@ architecture Behavioral of Core is
            defaultExecRes
            : ExecResult := DEFAULT_EXEC_RESULT;
 
-    signal pcData, dataToBranch, bqSelected, branchResultE0, branchResultE1, mqReexecCtrlIssue, mqReexecCtrlRR,
+    signal pcData, dataToBranch, bqSelected, branchResultE0, branchResultE1, branchResultDelay, mqReexecCtrlIssue, mqReexecCtrlRR,
            memCtrlRR, memCtrlE0, missedMemCtrlE1, missedMemCtrlE2, ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal bpData: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
@@ -117,7 +117,7 @@ architecture Behavioral of Core is
     signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
     signal memIssueFullIQ, memIssueFullMQ, lockIssueI0_NoMemFail, dividerSending: std_logic := '0';
 begin
-            ch0 <= '1';
+            ch0 <= '0';
 
     intSignal <= int0 or int1;
     intType <= (int0, int1);
@@ -181,6 +181,7 @@ begin
 	UNIT_FRONT: entity work.UnitFront(Behavioral)
     port map(
         clk => clk, reset => '0', en => '0',
+        events => events,
         
         iin => iin,
                     
@@ -198,8 +199,8 @@ begin
 
         frontCausing => frontEvent,
 
-        execCausing => execEvent,
-        lateCausing => lateEvent,
+        --execCausing => execEvent,
+        --lateCausing => lateEvent,
 
         dbState => dbState
     );    
@@ -207,6 +208,8 @@ begin
     REGISTER_MANAGER: entity work.UnitRegManager(Behavioral)
     port map(
         clk => clk,
+        events => events,
+        
         renameAccepting => renameAllow,
         frontSendingIn => frontGroupSend,
         frontData => frontGroupOut,
@@ -251,8 +254,9 @@ begin
 
         execCausing => branchResultE0,
 
-        execEventSignal => execEvent.full,
-        lateEventSignal => lateEvent.full,
+        --execEventSignal => execEvent.full,
+        --lateEventSignal => lateEvent.full,
+        execEventSignalE1 => execEventSignalE1,
 
         dbState => dbState
     );
@@ -522,12 +526,15 @@ begin
                 execEventSignalE0 <= branchResultE0.controlInfo.newEvent;
                 execEvent <= (DEFAULT_DEBUG_INFO, execEventSignalE0, '0', branchResultE0.tags.renameIndex, branchResultE0.tags.bqPointerSeq, branchResultE0.target);
 
+                execEventSignalDelay <= execEventSignalE1;
+                branchResultDelay <= branchResultE1;
+                
             bqUpdate.full <= branchResultE0.controlInfo.c_full;
             bqUpdate.tag <= branchResultE0.tags.renameIndex;
             bqUpdate.value <= branchResultE0.target;
 
-            execCausingDelayedSQ.dest <= branchResultE1.tags.sqPointer;
-            execCausingDelayedLQ.dest <= branchResultE1.tags.lqPointer;
+            execCausingDelayedSQ.dest <= branchResultDelay.tags.sqPointer;
+            execCausingDelayedLQ.dest <= branchResultDelay.tags.lqPointer;
         end block;
 
 
@@ -1274,6 +1281,8 @@ begin
 	)
 	port map(
 		clk => clk,
+		events => events,
+		
 		reset => '0',
 		en => '0',
 
@@ -1303,8 +1312,8 @@ begin
         commitBr => robOut(0).controlInfo.firstBr,
         commitMask => branchCommitMask,
 
-		lateEventSignal => lateEvent.full,
-		execEventSignal => execEventSignalE1,
+		--lateEventSignal => lateEvent.full,
+		execEventSignal => execEventSignalDelay,
 		execCausing => DEFAULT_EXEC_RESULT,
 		nextAccepting => commitAccepting,		
 		
@@ -1319,6 +1328,8 @@ begin
 	)
 	port map(
 		clk => clk,
+		events => events,
+		
 		reset => '0',
 		en => '0',
 
@@ -1349,7 +1360,7 @@ begin
         commitEffectiveMask => commitEffectiveMaskSQ,
 
 		lateEventSignal => lateEvent.full,
-		execEventSignal => execEventSignalE1,
+		execEventSignal => execEventSignalDelay,
 		execCausing => execCausingDelayedSQ,
 		
 		nextAccepting => commitAccepting,
@@ -1371,6 +1382,8 @@ begin
 	)
 	port map(
 		clk => clk,
+		events => events,
+
 		reset => '0',
 		en => '0',
 
@@ -1399,7 +1412,7 @@ begin
         commitEffectiveMask => commitEffectiveMaskLQ,
 
 		lateEventSignal => lateEvent.full,
-		execEventSignal => execEventSignalE1,
+		execEventSignal => execEventSignalDelay,
 		execCausing => execCausingDelayedLQ,
 		
 		nextAccepting => commitAccepting,
@@ -1437,6 +1450,8 @@ begin
             )
         port map(
             clk => clk,
+            events => events,
+
             reset => '0',
             en => '0',
 

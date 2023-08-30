@@ -56,6 +56,8 @@ entity MissQueue is
 		execEventSignal: in std_logic;
     	execCausing: in ExecResult;
 
+		events: in EventState;
+
 		nextAccepting: in std_logic;		
 
 		committedEmpty: out std_logic;
