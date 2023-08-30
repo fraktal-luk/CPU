@@ -176,7 +176,8 @@ begin
            pSelectPrev <= pSelect;
            pCausing <= --pSelectPrev;
                         pSelect;
-           pCausingPrev <= pCausing;
+           pCausingPrev <= --pCausing;
+                            pSelect;
 
            pStart <= pStartNext;
            pTagged <= pTaggedNext;

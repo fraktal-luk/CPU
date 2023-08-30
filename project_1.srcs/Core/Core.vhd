@@ -256,7 +256,7 @@ begin
 
         --execEventSignal => execEvent.full,
         --lateEventSignal => lateEvent.full,
-        execEventSignalE1 => execEventSignalE1,
+        execEventSignalE1 => execEventSignalDelay,
 
         dbState => dbState
     );
@@ -526,8 +526,10 @@ begin
                 execEventSignalE0 <= branchResultE0.controlInfo.newEvent;
                 execEvent <= (DEFAULT_DEBUG_INFO, execEventSignalE0, '0', branchResultE0.tags.renameIndex, branchResultE0.tags.bqPointerSeq, branchResultE0.target);
 
-                execEventSignalDelay <= execEventSignalE1;
-                branchResultDelay <= branchResultE1;
+                execEventSignalDelay <= --execEventSignalE1;
+                                            execEventSignalE0;
+                branchResultDelay <= --branchResultE1;
+                                        branchResultE0;
                 
             bqUpdate.full <= branchResultE0.controlInfo.c_full;
             bqUpdate.tag <= branchResultE0.tags.renameIndex;
@@ -978,7 +980,7 @@ begin
             use work.LogicArgRead.all;
 
             signal outSigsF0: IssueQueueSignals := (others => '0');
-            signal schedInfoA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1);
+            signal schedInfoA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
             signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
             constant CFG_FP0: SchedulerUpdateConfig := (true, true, false, FORWARDING_MODES_FLOAT_D, false);
         begin
@@ -1482,7 +1484,7 @@ begin
             commitMask => zerosMask,
             commitEffectiveMask => zerosMask,
             lateEventSignal => lateEvent.full,
-            execEventSignal => execEventSignalE1,
+            execEventSignal => execEventSignalDelay,
             execCausing => execCausingDelayedLQ,
 
             nextAccepting => '0',
