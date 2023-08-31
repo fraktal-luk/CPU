@@ -44,6 +44,7 @@ entity UnitSequencer is
         
         robData: in ControlPacketArray(0 to PIPE_WIDTH-1);
         robSpecial: in SpecificOp;
+        robCtrl: in ControlPacket;
         
         sendingFromROB: in std_logic;
         

@@ -99,8 +99,8 @@ type DynamicOpInfoArray2D is array(0 to ROB_SIZE-1, 0 to PIPE_WIDTH-1) of Dynami
 type DynamicGroupInfoArray is array(0 to ROB_SIZE-1) of DynamicGroupInfo;
 
 
-function getStaticGroupInfo(isa: InstructionSlotArray; ssl: InstructionSlot) return StaticGroupInfo;
-function getDynamicGroupInfo(isa: InstructionSlotArray; ssl: InstructionSlot) return DynamicGroupInfo;
+function getStaticGroupInfo(inputCtrl: ControlPacket; isa: InstructionSlotArray; ssl: InstructionSlot) return StaticGroupInfo;
+function getDynamicGroupInfo(inputCtrl: ControlPacket; isa: InstructionSlotArray; ssl: InstructionSlot) return DynamicGroupInfo;
 function getStaticOpInfo(isl: InstructionSlot) return StaticOpInfo;
 function getStaticOpInfoA(isa: InstructionSlotArray) return StaticOpInfoArray;
 function getDynamicOpInfo(isl: InstructionSlot) return DynamicOpInfo;
@@ -155,16 +155,19 @@ end package;
 package body LogicROB is
 
 
-function getStaticGroupInfo(isa: InstructionSlotArray; ssl: InstructionSlot) return StaticGroupInfo is
+function getStaticGroupInfo(inputCtrl: ControlPacket; isa: InstructionSlotArray; ssl: InstructionSlot) return StaticGroupInfo is
     variable res: StaticGroupInfo;
 begin
-    res.specialOp := sop(None, ssl.ins.specificOperation.system).bits;       
-    res.useBQ := isa(0).ins.controlInfo.firstBr_T;
+    res.specialOp := --sop(None, ssl.ins.specificOperation.system).bits;
+                       sop(None, inputCtrl.op.system).bits;
+                    --inputCtrl.op.bits;
+    res.useBQ := --isa(0).ins.controlInfo.firstBr_T;
+                 inputCtrl.controlInfo.firstBr;
     return res;
 end function;
-    
 
-function getDynamicGroupInfo(isa: InstructionSlotArray; ssl: InstructionSlot) return DynamicGroupInfo is
+
+function getDynamicGroupInfo(inputCtrl: ControlPacket; isa: InstructionSlotArray; ssl: InstructionSlot) return DynamicGroupInfo is
     variable res: DynamicGroupInfo;
 begin
     res.full := '0';                

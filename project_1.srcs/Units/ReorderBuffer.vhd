@@ -23,7 +23,9 @@ entity ReorderBuffer is
 		reset: in std_logic;
 		en: in std_logic;
 		
-		lateEventSignal: in std_logic;
+		events: in EventState;
+		
+--		lateEventSignal: in std_logic;
 
 		execSigsMain: in ExecResultArray(0 to 3);
 		execSigsSec: in ExecResultArray(0 to 3);
@@ -33,7 +35,8 @@ entity ReorderBuffer is
 		memoryControl: in --InstructionControlInfo;
 		                  ControlPacket;
 		
-		specialOp: in SpecificOp;
+		--specialOp: in SpecificOp;
+		inputCtrl: in ControlPacket;
 		
 		inputData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		prevSending: in std_logic;
@@ -47,6 +50,7 @@ entity ReorderBuffer is
 		sendingOut: out std_logic; 
 
         robOut: out ControlPacketArray(0 to PIPE_WIDTH-1);
+		outputCtrl: out ControlPacket;
 
 		outputArgInfoI: out RenameInfoArray(0 to PIPE_WIDTH-1);
 		outputArgInfoF: out RenameInfoArray(0 to PIPE_WIDTH-1);
@@ -58,7 +62,9 @@ end ReorderBuffer;
 
 
 architecture Behavioral of ReorderBuffer is
-    signal inputSpecial: InstructionSlot := DEFAULT_INS_SLOT;
+	alias lateEventSignal is events.lateCausing.full;
+
+    --signal inputSpecial: InstructionSlot := DEFAULT_INS_SLOT;
         
 	signal isSending, outputCompleted, outputCompleted_Pre, outputEmpty, execEvent, allowAlloc: std_logic := '0';	
 	signal startPtr, startPtrNext, endPtr, endPtrNext, renamedPtr, renamedPtrNext, causingPtr: SmallNumber := (others => '0');	
@@ -143,8 +149,21 @@ architecture Behavioral of ReorderBuffer is
     end function;
 
 
+    function getOutputCtrl(si: StaticGroupInfo; di: DynamicGroupInfo; sending: std_logic) return ControlPacket is
+        variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+    begin
+        res.full := sending;
+
+        res.op.subpipe := None;
+        res.op.system := SysOp'val(slv2u(si.specialOp));
+        res.op.bits := si.specialOp;
+        
+        return res;
+    end function;
+
+
 begin
-    inputSpecial.ins.specificOperation <= specialOp;
+    --inputSpecial.ins.specificOperation <= specialOp;
 
 	execEvent <= branchControl.controlInfo.c_full and branchControl.controlInfo.newEvent;
 	
@@ -166,11 +185,13 @@ begin
         staticInput <= getStaticOpInfoA(inputData);
         dynamicInput <= getDynamicOpInfoA(inputData);
         
-        staticGroupInput <= getStaticGroupInfo(inputData, inputSpecial);
-        dynamicGroupInput <= getDynamicGroupInfo(inputData, inputSpecial);
+        staticGroupInput <= getStaticGroupInfo(inputCtrl, inputData, DEFAULT_INS_SLOT);
+        dynamicGroupInput <= getDynamicGroupInfo(inputCtrl, inputData, DEFAULT_INS_SLOT);
 
         -- Outputs
         outputSpecial <= getSpecialOperation(staticGroupOutput, dynamicGroupOutput);
+
+            outputCtrl <= getOutputCtrl(staticGroupOutput, dynamicGroupOutput, isSending);
 
     	outputCompleted_Pre <= groupCompleted(dynamicOutput_Pre);
 

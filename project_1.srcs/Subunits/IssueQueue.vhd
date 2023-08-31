@@ -142,8 +142,8 @@ begin
         
         trialUpdatedMask <= getTrialUpdatedMask(queueContent);
 
-        killMask <= (others => '1') when events.lateEvent = '1' 
-               else trialUpdatedMask when events.execEvent = '1'
+        killMask <= (others => '1') when events.lateCausing.full = '1' 
+               else trialUpdatedMask when events.execCausing.full = '1'
                else (others => '0');
 
         queueContentUpdated <= updateSchedulerArray(queueContent, wups, memFail, CFG_WAIT);
@@ -161,7 +161,7 @@ begin
     end block;
 
     insertionLocs <= getNewLocs(fullMask, inTags, newArr);
-    queueContentNext <= storeInput(queueContentUpdated_2, newArr, prevSendingOK, events.execEvent or events.lateEvent, insertionLocs);
+    queueContentNext <= storeInput(queueContentUpdated_2, newArr, prevSendingOK, events.execCausing.full or events.lateCausing.full, insertionLocs);
 
     readyMask <= getReadyMask(queueContentUpdatedSel);
 
@@ -221,7 +221,7 @@ begin
     COUNTERS_SYNCHRONOUS: process(clk)
     begin
         if rising_edge(clk) then                
-            if events.lateEvent = '1' or events.execEvent = '1' then
+            if events.lateCausing.full = '1' or events.execCausing.full = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
             elsif isNonzero(recoveryCounter) = '1' then
                 recoveryCounter <= addIntTrunc(recoveryCounter, -1, 1);

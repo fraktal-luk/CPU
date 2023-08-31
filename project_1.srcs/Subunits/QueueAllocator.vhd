@@ -173,7 +173,7 @@ begin
                 outTags <= newInds;
             end if;
 
-            if (evt.execEvent or evt.lateEvent) = '1' then
+            if (evt.execCausing.full or evt.lateCausing.full) = '1' then
                 recoveryCounter <= sn(3);
             elsif recoveryCounter /= sn(0) then
                 recoveryCounter <= addIntTrunc(recoveryCounter, -1, 2);

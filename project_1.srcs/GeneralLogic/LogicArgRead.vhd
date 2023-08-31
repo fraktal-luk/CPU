@@ -72,7 +72,7 @@ package body LogicArgRead is
         res.full := ctSigs.sending;
         res := TMP_clearDestIfEmpty(res);
 
-        if events.lateEvent = '1' then
+        if events.lateCausing.full = '1' then
             res.full := '0';
         end if;
         return res;
@@ -168,7 +168,7 @@ package body LogicArgRead is
             res.argValues(1) := (others => '0');
         end if;
 
-        if events.lateEvent = '1' then
+        if events.lateCausing.full = '1' then
             res.full := '0';
         end if;
 
@@ -225,7 +225,7 @@ package body LogicArgRead is
                 res := mqInput;
             end if;
 
-            if events.lateEvent = '1' then
+            if events.lateCausing.full = '1' then
                 res.full := '0';
             end if;
     

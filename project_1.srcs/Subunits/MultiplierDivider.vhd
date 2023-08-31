@@ -135,7 +135,7 @@ begin
                     else '1' when sendingDivRR = '1'
                     else divFull;
     
-        kill <= (trialled and events.execEvent) or events.lateEvent; -- move to division
+        kill <= (trialled and events.execCausing.full) or events.lateCausing.full; -- move to division
 
         divPrepareSend <= divPrepareSend_N;
         divResultSending <= divResultSending_N;

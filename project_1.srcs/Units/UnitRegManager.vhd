@@ -2,7 +2,6 @@
 
 ----------------------------------------------------------------------------------
 
-
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 
@@ -25,6 +24,7 @@ port(
     renameAccepting: out std_logic;
     frontSendingIn: in std_logic;
     frontData: in BufferEntryArray;
+    frontCtrl: in ControlPacket;
 
     aluMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
     mulMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
@@ -42,10 +42,8 @@ port(
     renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
 
     renamedSending: out std_logic;
-    
+
     nextAccepting: in std_logic;
-    
-    renamingBr: out std_logic;
 
     bqPointer: in SmallNumber;
     sqPointer: in SmallNumber;
@@ -54,22 +52,17 @@ port(
 
     newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
-    
+
     specialOut: out SpecificOp;
-    
+    renamedCtrl: out ControlPacket;
+
     sendingFromROB: in std_logic;
     robData: in ControlPacketArray(0 to PIPE_WIDTH-1);
 
     commitArgInfoI: in RenameInfoArray(0 to PIPE_WIDTH-1);
     commitArgInfoF: in RenameInfoArray(0 to PIPE_WIDTH-1);
-   
+
     renameGroupCtrNextOut: out InsTag;
-  
-    execCausing: in ControlPacket;
-    
---    execEventSignal: in std_logic;
---    lateEventSignal: in std_logic;
-    execEventSignalE1: in std_logic;
 
 	events: in EventState;
 
@@ -79,9 +72,8 @@ end UnitRegManager;
 
 
 architecture Behavioral of UnitRegManager is
-    --alias execCausing is events.execCausing;
-    alias execEventSignal is events.execEvent;
-    alias lateEventSignal is events.lateEvent;
+    alias execEventSignal is events.execCausing.full;
+    alias lateEventSignal is events.lateCausing.full;
 
     signal renamedBase, renamedDataLivingPre: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
     signal eventSig, robSendingDelayed, frontLastSending, renameFull, renamedSendingSig, robSendingPrev,
@@ -101,8 +93,7 @@ architecture Behavioral of UnitRegManager is
     signal newSourceSelectorInt, newSourceSelectorFloat, zeroSelector: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
 
     signal specialOperation: SpecificOp := DEFAULT_SPECIFIC_OP;
-
-        signal    execCausingDelay: ControlPacket := DEFAULT_CONTROL_PACKET;
+    signal ctrl: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     -- DEBUG
     signal newProducersInt, newProducersFloat, zeroProducers: InsTagArray(0 to 3*PIPE_WIDTH-1) := (others => (others => 'U'));
@@ -427,6 +418,14 @@ architecture Behavioral of UnitRegManager is
         return res;
     end function;
 
+    function makeOutputCtrl(ctrl: ControlPacket; renamedData: InstructionSlotArray; sending: std_logic) return ControlPacket is
+        variable res: ControlPacket := ctrl;
+    begin
+        res.full := sending;
+        res.controlInfo.firstBr := renamedData(0).ins.controlInfo.firstBr_T;
+        return res;
+    end function;
+
     signal inputRenameInfoInt, inputRenameInfoFloat, resultRenameInfoInt, resultRenameInfoFloat, storedRenameInfoInt, storedRenameInfoFloat,
                       commitArgInfoIntDelayed, commitArgInfoFloatDelayed: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 
@@ -457,7 +456,7 @@ begin
     renamedDataLiving <= restoreRenameIndex(renamedDataLivingPre);
 
     renameGroupCtrNext <=   commitGroupCtr when lateEventSignal = '1'
-                       else clearTagLow(execCausing.tags.renameIndex) when execEventSignal = '1'
+                       else clearTagLow(events.execTags.renameIndex) when execEventSignal = '1'
                        else addInt(renameGroupCtr, PIPE_WIDTH) when frontLastSending = '1'
                        else renameGroupCtr;
     
@@ -491,20 +490,26 @@ begin
                 renameFull <= '1';
                 renamedDataLivingPre <= renamedBase;
                 specialOperation <= getSpecialActionSlot(renamedBase);        
+                
+                ctrl.full <= '1';
+                ctrl.op <= getSpecialActionSlot(renamedBase);
+                  
                 storedRenameInfoInt <= resultRenameInfoInt;
                 storedRenameInfoFloat <= resultRenameInfoFloat;            
 
                 DB_trackSeqNum(renamedBase);
             elsif renamedSendingSig = '1' then
                 renameFull <= '0';
+                ctrl.full <= '0';
             end if;
 
             if eventSig = '1' then
                 renameFull <= '0';
+                ctrl.full <= '0';
             end if;
 
             robSendingPrev <= sendingFromROB;
-               execCausingDelay <= execCausing;
+            --   execCausingDelay <= execCausing;
 
             renameGroupCtr <= renameGroupCtrNext;
             renameCtr <= renameCtrNext;
@@ -549,13 +554,13 @@ begin
                     if lateEventSignal = '1' then
                         R_tags <= C_tags;
                     elsif execEventSignal = '1' then
-                        R_tags.renameIndex <= clearTagLow(execCausing.tags.renameIndex);
-                        R_tags.intPointer <= (execCausing.tags.intPointer);
-                        R_tags.floatPointer <= (execCausing.tags.floatPointer);
-                    elsif execEventSignalE1 = '1' then
-                        R_tags.sqPointer <= (execCausingDelay.tags.sqPointer);
-                        R_tags.lqPointer <= (execCausingDelay.tags.lqPointer);
-                        R_tags.bqPointer <= addIntTrunc(execCausingDelay.tags.bqPointer, 1, BQ_PTR_SIZE+1);
+                        R_tags.renameIndex <= clearTagLow(events.execTags.renameIndex);
+                        R_tags.intPointer <= (events.execTags.intPointer);
+                        R_tags.floatPointer <= (events.execTags.floatPointer);
+                    --elsif execEventSignalE1 = '1' then
+                        R_tags.sqPointer <= (events.execTags.sqPointer);
+                        R_tags.lqPointer <= (events.execTags.lqPointer);
+                        R_tags.bqPointer <= addIntTrunc(events.execTags.bqPointer, 1, BQ_PTR_SIZE+1);
                     elsif frontLastSending = '1' then
                         R_tags.renameIndex <= addIntTrunc(R_tags.renameIndex, PIPE_WIDTH, TAG_SIZE);
                         R_tags.sqPointer <= addIntTrunc(R_tags.sqPointer, countOnes(getStoreMask1(renamedBase)), SQ_PTR_SIZE+1);
@@ -597,7 +602,7 @@ begin
         
         reserveTag => renameGroupCtrNext,
         commitTag => commitGroupCtr,
-        rewindTag => execCausing.tags.renameIndex,
+        rewindTag => events.execTags.renameIndex,
         
         sendingToReserve => frontSendingIn,
         reserveInfoA => inputRenameInfoInt,
@@ -626,7 +631,7 @@ begin
 
             reserveTag => renameGroupCtrNext,
             commitTag => commitGroupCtr,
-            rewindTag => execCausing.tags.renameIndex,
+            rewindTag => events.execTags.renameIndex,
 
             sendingToReserve => frontSendingIn,
     
@@ -657,7 +662,7 @@ begin
         rewind => eventSig,
         execEventSignal => execEventSignal,
         lateEventSignal => lateEventSignal,
-        causingPointer => execCausing.tags.intPointer,
+        causingPointer => events.execTags.intPointer,
         
         sendingToReserve => frontSendingIn, 
         takeAllow => frontSendingIn,
@@ -682,7 +687,7 @@ begin
             rewind => eventSig,
             execEventSignal => execEventSignal,
             lateEventSignal => lateEventSignal,        
-            causingPointer => execCausing.tags.floatPointer,
+            causingPointer => events.execTags.floatPointer,
             
             sendingToReserve => frontSendingIn, 
             takeAllow => frontSendingIn,	-- FROM SEQ
@@ -697,16 +702,17 @@ begin
             physStableDelayed => physStableFloat -- FOR MAPPING (from MAP)
         );
 	end generate;
-	
-    specialOut <= specialOperation;
-	
+
+    specialOut <= --specialOperation;
+                    ctrl.op;
+    renamedCtrl <= makeOutputCtrl(ctrl, renamedDataLivingPre, renamedSendingSig);
+
     newPhysDestsOut <= newIntDests;
     newFloatDestsOut <= newFloatDests; 
     renameAccepting <= not renameLockState;
 
     renamedSending <= renamedSendingSig;   
 
-    renamingBr <= frontLastSending and frontData(0).firstBr;
 
     aluMaskRe <= getAluMask1(renamedBase);
     mulMaskRe <= getMulMask1(renamedBase);

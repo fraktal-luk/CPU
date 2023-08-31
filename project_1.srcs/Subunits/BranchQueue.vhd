@@ -37,6 +37,8 @@ entity BranchQueue is
 
 		branchMaskRe: in std_logic_vector(0 to PIPE_WIDTH-1);		
 		dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+        renamedCtrl: in ControlPacket;
+
         dataInBr: in ControlPacketArray(0 to PIPE_WIDTH-1);
 
         renamedPtr: out SmallNumber;
@@ -53,8 +55,8 @@ entity BranchQueue is
         commitMask: in std_logic_vector(0 to PIPE_WIDTH-1);
 
 		--lateEventSignal: in std_logic;
-		execEventSignal: in std_logic;
-        execCausing: in ExecResult;
+		--execEventSignal: in std_logic;
+        --execCausing: in ExecResult;
 
 		events: in EventState;
 
@@ -68,9 +70,9 @@ end BranchQueue;
 
 
 architecture Behavioral of BranchQueue is
-    alias lateEventSignal is events.lateEvent;
-    --alias execEventSignal is events.execEvent;
- 
+    alias lateEventSignal is events.lateCausing.full;
+    alias execEventSignal is events.execCausing.full;
+
 	constant PTR_MASK_SN: SmallNumber := sn(QUEUE_SIZE-1);
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
     constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;
@@ -87,12 +89,13 @@ architecture Behavioral of BranchQueue is
     signal targetOutput: Mword := (others => '0');
 
     alias pSelect is compareAddressQuickInput.dest;
-    alias pFlushSeq is execCausing.dest;
+    alias pFlushSeq is events.execCausing.dest; -- TODO: incorrect?
 
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0'; 
 begin
     earlyInputSending <= prevSendingBr and dataInBr(0).controlInfo.firstBr;
-    lateInputSending <= prevSending and dataIn(0).ins.controlInfo.firstBr_T;
+    lateInputSending <= prevSending and --dataIn(0).ins.controlInfo.firstBr_T;
+                                        renamedCtrl.controlInfo.firstBr;
 
     RW: block
        signal earlySerialInput, earlySerialSelected:  std_logic_vector(EARLY_INFO_SIZE-1 downto 0) := (others => '0');

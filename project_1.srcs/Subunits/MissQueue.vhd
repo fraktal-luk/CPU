@@ -52,9 +52,9 @@ entity MissQueue is
         commitMask: in std_logic_vector(0 to PIPE_WIDTH-1);
         commitEffectiveMask: in std_logic_vector(0 to PIPE_WIDTH-1);
 
-		lateEventSignal: in std_logic;
-		execEventSignal: in std_logic;
-    	execCausing: in ExecResult;
+		--lateEventSignal: in std_logic;
+		--execEventSignal: in std_logic;
+    	--execCausing: in ExecResult;
 
 		events: in EventState;
 
@@ -69,6 +69,9 @@ entity MissQueue is
 end MissQueue;
 
 architecture DefaultMQ of MissQueue is
+
+    alias lateEventSignal is events.lateCausing.full;
+    alias execEventSignal is events.execCausing.full;
 
     type MQ_Entry is record
         full: std_logic;
@@ -238,7 +241,7 @@ begin
     TMP_prevSending <= compareAddressInput.full;
 
     writePtr <= i2slv(TMP_getNewIndex(fullMask), SMALL_NUMBER_SIZE);
-    killMask <= getKillMask(queueContent, execEventSignal, lateEventSignal, execCausing.tag);
+    killMask <= getKillMask(queueContent, execEventSignal, lateEventSignal, events.execCausing.tag);
     inputFullMask <= maskFromIndex(writePtr, QUEUE_SIZE) when TMP_prevSending = '1' else (others => '0');
 
     -- completion and subsequent removal from queue is triggered by:

@@ -22,49 +22,46 @@ entity Core is
     port ( clk : in  STD_LOGIC;
            reset : in  STD_LOGIC;
            en : in  STD_LOGIC;
-			  
+
 		   -- address fot program mem
            iadrvalid: out std_logic;
 		   iadr : out  Mword;
 		   -- instruction input
 		   ivalid: in std_logic;
            iin : in  WordArray(0 to PIPE_WIDTH-1);
-			  
+
 		   -- Mem load interface
 		   dread: out std_logic;
            dadr : out  Mword;
 		   dvalid: in std_logic;			  
            din : in  Mword;
-			  
+
 		   -- Mem store interface
 		   dwrite: out std_logic;
 		   doutadr: out Mword;
            dout : out  Mword;
-			  
+
 		   intallow: out std_logic;
 		   intack: out std_logic;
 		   -- Interrupt input (int0) and additional input (int1)
            int0 : in  STD_LOGIC;
            int1 : in  STD_LOGIC;
-			  
+
 		   filladr: in Mword;
 		   fillready: in std_logic;
-			  
+
 		   -- Other buses for development 
            iaux : in  Mword;
-           oaux : out  Mword			  
-
+           oaux : out  Mword
 		);
 end Core;
 
 
 architecture Behavioral of Core is
 
-    signal frontAccepting, bpSending, renameAllow, frontGroupSend, frontSendAllow, canSendRename, robSending,
-           renameSendingBr, renamedSending, commitAccepting, bqAccepting, execEventSignalE0, execEventSignalE1, execEventSignalDelay,
+    signal frontAccepting, bpSending, renameAllow, frontGroupSend, frontSendAllow, canSendRename, robSending, renameSendingBr, renamedSending, commitAccepting, bqAccepting,
            allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
-           mqReady, mqIssueSending, mqRegReadSending,-- sbSending,
-           sbEmpty, intSignal, memFail
+           mqReady, mqIssueSending, mqRegReadSending, sbEmpty, intSignal, memFail
            : std_logic := '0';
 
     signal renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
@@ -87,15 +84,15 @@ architecture Behavioral of Core is
 
     signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
     signal specialOp, specialOutROB: SpecificOp := DEFAULT_SPECIFIC_OP;
-    signal branchCtrl, memoryCtrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
+    signal renamedCtrl, branchCtrl, memoryCtrlE2, ctrlOutROB: ControlPacket := DEFAULT_CONTROL_PACKET;
 
-    signal bqCompareEarly, bqUpdate, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
-           memAddressInput, memAddressInputEarly, frontEvent, execEvent, lateEvent, execCausingDelayedSQ, execCausingDelayedLQ,
+    signal bqCompareEarly, bqUpdate, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2, memAddressInput, memAddressInputEarly,
+           frontEvent, execEvent, lateEvent,-- execCausingDelayedSQ, execCausingDelayedLQ,
            bqTargetData, resOutSQ, dataFromSB, missedMemResultE1, missedMemResultE2, mqReexecResIssue, mqReexecResRR, memoryRead, sysRegReadIn, sysRegReadOut,
            defaultExecRes
            : ExecResult := DEFAULT_EXEC_RESULT;
 
-    signal pcData, dataToBranch, bqSelected, branchResultE0, branchResultE1, branchResultDelay, mqReexecCtrlIssue, mqReexecCtrlRR,
+    signal pcData, dataToBranch, bqSelected, mqReexecCtrlIssue, mqReexecCtrlRR,
            memCtrlRR, memCtrlE0, missedMemCtrlE1, missedMemCtrlE2, ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal bpData: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
@@ -125,7 +122,6 @@ begin
     dread <= memoryRead.full;
     dadr <= memoryRead.value;
 
-    events <= (lateEvent.full, execEvent.full, dataToBranch.tags, execEvent, lateEvent, memFail);
 
     dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.c_full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'), zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
 
@@ -160,6 +156,7 @@ begin
         sendingFromROB => robSending,    
         robData => robOut,
         robSpecial => specialOutROB,
+        robCtrl => ctrlOutROB,
         ---
         bqTargetData => bqTargetData,
 
@@ -199,9 +196,6 @@ begin
 
         frontCausing => frontEvent,
 
-        --execCausing => execEvent,
-        --lateCausing => lateEvent,
-
         dbState => dbState
     );    
 
@@ -213,6 +207,7 @@ begin
         renameAccepting => renameAllow,
         frontSendingIn => frontGroupSend,
         frontData => frontGroupOut,
+        frontCtrl => DEFAULT_CONTROL_PACKET,
 
         aluMaskRe => aluMaskRe,
         mulMaskRe => mulMaskRe,
@@ -232,8 +227,8 @@ begin
         renamedArgsFloat => renamedArgsFloat,
 
         renamedSending => renamedSending,
-
-        renamingBr => renameSendingBr,
+        specialOut => specialOp,
+        renamedCtrl => renamedCtrl,
 
         bqPointer => bqPointer,
         sqPointer => sqPointer,
@@ -248,18 +243,14 @@ begin
         newPhysDestsOut => newIntDests,
         newFloatDestsOut => newFloatDests,
 
-        specialOut => specialOp,
-
         renameGroupCtrNextOut => renameGroupCtrNext,
-
-        execCausing => branchResultE0,
-
-        --execEventSignal => execEvent.full,
-        --lateEventSignal => lateEvent.full,
-        execEventSignalE1 => execEventSignalDelay,
 
         dbState => dbState
     );
+
+        renameSendingBr <= frontGroupSend 
+                             --   and not events.execCausing.full and not events.lateCausing.full 
+                            and frontGroupOut(0).firstBr;
 
     frontSendAllow <=   renameAllow 
                     and allocAcceptAlu and allocAcceptMul and allocAcceptMem
@@ -274,7 +265,8 @@ begin
 	port map(
 		clk => clk, reset => '0', en => '0',
 
-		lateEventSignal => lateEvent.full,
+        events => events,
+		--lateEventSignal => lateEvent.full,
 
 		execSigsMain => execOutMain,
 		execSigsSec => execOutSec,
@@ -282,7 +274,9 @@ begin
 		branchControl => branchCtrl,
 		memoryControl => memoryCtrlE2,
 
-		specialOp => specialOp,
+		--specialOp => --specialOp,
+		--              renamedCtrl.op,
+        inputCtrl => renamedCtrl,
 
 		inputData => renamedDataLivingMerged,
 		prevSending => renamedSending,
@@ -294,10 +288,12 @@ begin
 
 		sendingOut => robSending, 
         robOut => robOut,
+		outputSpecial => specialOutROB,
+        outputCtrl => ctrlOutROB,
+        
         outputArgInfoI => renamedArgsIntROB,
         outputArgInfoF => renamedArgsFloatROB,
 
-		outputSpecial => specialOutROB,
 
 		dbState => dbState	
 	);     
@@ -488,13 +484,9 @@ begin
 
                 issueTagI0 <= slotIssueI0.destTag;
 
---                bqCompareEarly.full <= slotIssueI0.full and slotIssueI0.st.branchIns;
---                bqCompareEarly.tag <= slotIssueI0.st.tags.renameIndex;
---                bqCompareEarly.dest <= slotIssueI0.st.tags.bqPointer;
-                
-                    bqCompareEarly.full <= slotRegReadI0.full and slotRegReadI0.st.branchIns;
-                    bqCompareEarly.tag <= slotRegReadI0.st.tags.renameIndex;
-                    bqCompareEarly.dest <= slotRegReadI0.st.tags.bqPointer;
+                bqCompareEarly.full <= slotRegReadI0.full and slotRegReadI0.st.branchIns;
+                bqCompareEarly.tag <= slotRegReadI0.st.tags.renameIndex;
+                bqCompareEarly.dest <= slotRegReadI0.st.tags.bqPointer;
             end block;
 
                 unfoldedAluOp_T <= work.LogicExec.getAluControl(slotRegReadI0.st.operation.arith);
@@ -509,34 +501,32 @@ begin
             end process;
 
             dataToBranch <= basicBranch(slotRegReadI0.full and slotRegReadI0.st.branchIns, slotRegReadI0, bqSelected, unfoldedAluOp, lateEvent);
-            process (clk)
-                use work.LogicLogging.all;
+
+            JUMPS: block
+                signal branchResultE0: ControlPacket := DEFAULT_CONTROL_PACKET;
             begin
-                if rising_edge(clk) then
-                    if dataToBranch.controlInfo.c_full = '1' then
-                        DB_reportBranchEvent(dataToBranch);
+                process (clk)
+                    use work.LogicLogging.all;
+                begin
+                    if rising_edge(clk) then
+                        if dataToBranch.controlInfo.c_full = '1' then
+                            DB_reportBranchEvent(dataToBranch);
+                        end if;
+
+                        branchResultE0 <= dataToBranch;
                     end if;
+                end process;
+    
+                execEvent <= (DEFAULT_DEBUG_INFO, branchResultE0.controlInfo.newEvent, '0', branchResultE0.tags.renameIndex, branchResultE0.tags.bqPointerSeq, branchResultE0.target);
 
-                    branchResultE0 <= dataToBranch;
-                    branchResultE1 <= branchResultE0;
-                    execEventSignalE1 <= execEvent.full and not lateEvent.full; -- Don't allow subsequent event from cancelled branch
-                end if;
-            end process;
+                branchCtrl <= branchResultE0;
 
-                execEventSignalE0 <= branchResultE0.controlInfo.newEvent;
-                execEvent <= (DEFAULT_DEBUG_INFO, execEventSignalE0, '0', branchResultE0.tags.renameIndex, branchResultE0.tags.bqPointerSeq, branchResultE0.target);
+                bqUpdate.full <= branchResultE0.controlInfo.c_full;
+                bqUpdate.tag <= branchResultE0.tags.renameIndex;
+                bqUpdate.value <= branchResultE0.target;
 
-                execEventSignalDelay <= --execEventSignalE1;
-                                            execEventSignalE0;
-                branchResultDelay <= --branchResultE1;
-                                        branchResultE0;
-                
-            bqUpdate.full <= branchResultE0.controlInfo.c_full;
-            bqUpdate.tag <= branchResultE0.tags.renameIndex;
-            bqUpdate.value <= branchResultE0.target;
-
-            execCausingDelayedSQ.dest <= branchResultDelay.tags.sqPointer;
-            execCausingDelayedLQ.dest <= branchResultDelay.tags.lqPointer;
+                events <= (dataToBranch.tags, branchResultE0.tags, execEvent, lateEvent, memFail);
+            end block;
         end block;
 
 
@@ -757,7 +747,6 @@ begin
             MEM_RESULTS: block
                 signal memLoadReady, memoryMissed: std_logic := '0';
                 signal memLoadValue, memResult: Mword := (others => '0');
-                --signal memoryCtrlPre: InstructionControlInfo := DEFAULT_CONTROL_INFO;                
             begin
                 memLoadReady <= dvalid; -- In
                 memLoadValue <= din;    -- In
@@ -1095,7 +1084,6 @@ begin
 
         lockIssueI0 <= lockIssueI0_NoMemFail or memFail;
 
-
         -- Issue locking:
         --     if F0 issued, to avoid WB collisions with FP load
         --     if MQ intends to reexecute
@@ -1110,8 +1098,6 @@ begin
         allowIssueF0 <= not lockIssueF0;
 
 
-        branchCtrl <= branchResultE0;--.controlInfo;
-
         execOutMain(0) <= subpipeI0_E0;
         execOutMain(1) <= subpipeI1_E2;
         execOutMain(2) <= subpipeM0_E2;
@@ -1124,17 +1110,14 @@ begin
                                    (subpipeI0_RegRead, subpipeI1_E2, subpipeM0_E0i) ,
                                    (DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, subpipeM0_E1i),
                                     issueTagI0, memFail);
-
         bypassIntSV <= makeBypassIntSV((subpipeI0_E0, subpipeI1_D0, subpipeM0_E2i),
                                        (subpipeI0_D0, subpipeI1_D1, subpipeM0_D0i) ,
                                        (others => DEFAULT_EXEC_RESULT),
                                         sn(0), memFail);
-
          bypassFloat <= makeBypassFloat((subpipeF0_RegRead, DEFAULT_EXEC_RESULT, subpipeM0_E2f),
                                         (subpipeF0_E0, DEFAULT_EXEC_RESULT, subpipeM0_D0f) ,
                                         (subpipeF0_E1, DEFAULT_EXEC_RESULT, subpipeM0_D1f),
                                         sn(0), memFail);
-
         bypassFloatSV <= makeBypassFloatSV((subpipeF0_E2, DEFAULT_EXEC_RESULT, subpipeM0_D0f),
                                            (subpipeF0_D0, DEFAULT_EXEC_RESULT, subpipeM0_D1f) ,
                                            (others => DEFAULT_EXEC_RESULT),
@@ -1268,10 +1251,10 @@ begin
         branchMaskOO <= getBranchMask1(renamedDataLivingRe);
         loadMaskOO <= getLoadMask1(renamedDataLivingRe);
         storeMaskOO <= getStoreMask1(renamedDataLivingRe);
-        
+
         systemStoreMaskOO <= getStoreSysMask(renamedDataLivingRe);
         systemLoadMaskOO <= getLoadSysMask(renamedDataLivingRe);
-     
+
         commitEffectiveMaskSQ <= work.LogicQueues.getCommittedEffectiveMask(robOut, false);
         commitEffectiveMaskLQ <= work.LogicQueues.getCommittedEffectiveMask(robOut, true);
         branchCommitMask <= work.LogicQueues.getCommittedMaskBr(robOut);
@@ -1284,23 +1267,24 @@ begin
 	port map(
 		clk => clk,
 		events => events,
-		
+
 		reset => '0',
 		en => '0',
 
 		acceptingOut => open,
-		
+
 		acceptingBr => bqAccepting,
-		
+
 		prevSending => renamedSending,
 	    prevSendingBr => bpSending,
-	    
+
 	    prevSendingRe => renameSendingBr,
-	    
+        renamedCtrl => renamedCtrl,
+
 	    renamedPtr => bqPointerSeq,
-	       
+
 	    bqPtrOut => bqPointer,
-	    
+
 	    branchMaskRe => branchMaskRe,
 		dataIn => renamedDataToBQ,  -- Uses only .tags + .firstBr?
         dataInBr => bpData,
@@ -1314,13 +1298,10 @@ begin
         commitBr => robOut(0).controlInfo.firstBr,
         commitMask => branchCommitMask,
 
-		--lateEventSignal => lateEvent.full,
-		execEventSignal => execEventSignalDelay,
-		execCausing => DEFAULT_EXEC_RESULT,
 		nextAccepting => commitAccepting,		
-		
+
 		committedDataOut => bqTargetData,
-		
+
 		dbState => dbState
 	);
 
@@ -1331,15 +1312,15 @@ begin
 	port map(
 		clk => clk,
 		events => events,
-		
+
 		reset => '0',
 		en => '0',
 
 		acceptAlloc => allocAcceptSQ,
-		
+
 	    prevSendingRe => frontGroupSend,
 		prevSending => renamedSending,
-		
+
         renameMask => storeMaskRe,
         inputMask => storeMaskOO,
         systemMask => systemStoreMaskOO,
@@ -1354,27 +1335,19 @@ begin
         compareAddressInput => memAddressInput,
         compareAddressCtrl => memCtrlE0,
 
-
         selectedDataOutput => ctOutSQ,
         selectedDataResult => resOutSQ,
 
 		committing => robSending,
         commitEffectiveMask => commitEffectiveMaskSQ,
 
-		lateEventSignal => lateEvent.full,
-		execEventSignal => execEventSignalDelay,
-		execCausing => execCausingDelayedSQ,
-		
 		nextAccepting => commitAccepting,
 
         committedEmpty => sbEmpty,
-        --committedSending => sbSending,
         committedDataOut => ctOutSB,
-        
+
         dbState => dbState
 	);
-
-    --     sbSending <= ctOutSB.full;
 
 
     LOAD_QUEUE: entity work.StoreQueue(Behavioral)
@@ -1393,11 +1366,11 @@ begin
 
 	    prevSendingRe => frontGroupSend,				
 		prevSending => renamedSending,
-		
+
 		renameMask => loadMaskRe,
         inputMask => loadMaskOO,
         systemMask => systemLoadMaskOO,
-            
+
         renamedPtr => lqPointer,
 
         storeValueResult => DEFAULT_EXEC_RESULT,
@@ -1413,16 +1386,11 @@ begin
 		committing => robSending,
         commitEffectiveMask => commitEffectiveMaskLQ,
 
-		lateEventSignal => lateEvent.full,
-		execEventSignal => execEventSignalDelay,
-		execCausing => execCausingDelayedLQ,
-		
 		nextAccepting => commitAccepting,
-		
+
         committedEmpty => open,
-        --committedSending => open,
         committedDataOut => open,
-        
+
         dbState => dbState
 	);
 
@@ -1434,11 +1402,11 @@ begin
             sqValueResultE0 <= sqValueResultRR;
             sqValueResultE1 <= sqValueResultE0;
             sqValueResultE2 <= sqValueResultE1;
-        
+
             -- MQ inputs
             missedMemResultE2 <= missedMemResultE1;
             missedMemCtrlE2 <= missedMemCtrlE1;
-        
+
             -- MQ outputs
             mqReexecCtrlRR <= mqReexecCtrlIssue;
             mqReexecResRR <= mqReexecResIssue;
@@ -1483,9 +1451,6 @@ begin
             committing => '0',
             commitMask => zerosMask,
             commitEffectiveMask => zerosMask,
-            lateEventSignal => lateEvent.full,
-            execEventSignal => execEventSignalDelay,
-            execCausing => execCausingDelayedLQ,
 
             nextAccepting => '0',
 
@@ -1502,11 +1467,9 @@ begin
     end generate;
 
 	MEMORY_INTERFACE: block
-		--signal sysStoreAddressW: Mword := (others => '0');
 	begin
 		doutadr <= ctOutSB.target;
-		dwrite <= ctOutSB.full -- and ctOutSB.controlInfo.c_full 
-		              and isStoreMemOp(ctOutSB.op);
+		dwrite <= ctOutSB.full and isStoreMemOp(ctOutSB.op);
 		dout <= ctOutSB.nip;
 	end block;
 
@@ -1521,7 +1484,7 @@ begin
         file eventLog: text open write_mode is "event_log.txt";
     begin
         watchdogCountNext <= watchdogCount + 1 when not std2bool(robSending or renamedSending) else 0;
-    
+
         MONITOR: process (clk)
         begin
             if rising_edge(clk) then
@@ -1534,9 +1497,9 @@ begin
                  end if;
             end if;
         end process;
-        
+
         dbState.dbSignal <= stallDetected;
-        
+
 	end generate;
 	-- pragma synthesis on
 

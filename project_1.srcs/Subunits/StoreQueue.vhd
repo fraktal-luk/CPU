@@ -53,9 +53,9 @@ entity StoreQueue is
 		committing: in std_logic;
         commitEffectiveMask: in std_logic_vector(0 to PIPE_WIDTH-1);
 
-		lateEventSignal: in std_logic;
-		execEventSignal: in std_logic;
-    	execCausing: in ExecResult;
+		--lateEventSignal: in std_logic;
+		--execEventSignal: in std_logic;
+    	--execCausing: in ExecResult;
 
 		events: in EventState;
 
@@ -70,13 +70,16 @@ end StoreQueue;
 
 
 architecture Behavioral of StoreQueue is
+    alias lateEventSignal is events.lateCausing.full;
+    alias execEventSignal is events.execCausing.full;
+
 	constant PTR_MASK_SN: SmallNumber := sn(QUEUE_SIZE-1);
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
 
 	signal addressMatchMask, adrMatchesLowNS, adrMatchesLowSh, validMaskNS, validMaskSh, amvNS, amvSh, amvOlderNS, amvOlderSh,
 	           newerLQ, newerRegLQ, newerNextLQ, olderNextSQ_Early, olderSQ_Early: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
-	signal adrPtr, adrPtrEarly, adrPtrPrev, pSelect,
+	signal adrPtr, adrPtrEarly, adrPtrPrev, pSelect, pFlush,
 	       pSelectPrev, pSelectEarly_Base, pSelectEarly_BasePrev, pSelectEarly, pSelectEarlyNS, pSelectEarlyPrevNS,
 	       pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pDrainPrevPrev, pTagged, pTaggedNext, pRenamed, pRenamedNext, 
            nFull, nFullNext, nAlloc, nAllocNext: SmallNumber := sn(0);
@@ -93,8 +96,9 @@ architecture Behavioral of StoreQueue is
     signal selectedDataResultSig: ExecResult := DEFAULT_EXEC_RESULT;
 
 	--alias storeValuePtr is storeValueResult.dest;
-    alias pFlush is execCausing.dest;
-
+                    -- events.execTags.lqPointer ; if IS_LQ    
+                    -- events.execTags.sqPointer ; if not IS_LQ    
+    
     alias adrValueEarly is compareAddressEarlyInput.value;
     alias adrValue is compareAddressInput.value;
 
@@ -107,6 +111,11 @@ begin
             --ch0 <= bool2std(queueContentShifting = queueContentShifting);
             ch1 <= '1';
             ch2 <= '1';
+
+        pFlush <= events.execTags.lqPointer when IS_LOAD_QUEUE
+             else events.execTags.sqPointer;
+
+
 
     lookupEarly <= isStoreMemOp(compareAddressEarlyInput_Ctrl.op) when IS_LOAD_QUEUE
               else isLoadMemOp(compareAddressEarlyInput_Ctrl.op);

@@ -18,9 +18,10 @@ package PipelineGeneral is
 type slv2D is array(natural range <>, natural range <>) of std_logic;
 
 type EventState is record
-    lateEvent: std_logic;
-    execEvent: std_logic;
+    --lateEvent: std_logic;
+    --execEvent: std_logic;
     preExecTags: InstructionTags;
+    execTags: InstructionTags;
     execCausing: ExecResult;
     lateCausing: ExecResult;
     memFail: std_logic;
@@ -32,8 +33,9 @@ type DbCoreState is record
 end record;
 
 constant DEFAULT_EVENT_STATE: EventState := (
-    '0',
-    '0',
+    --'0',
+    --'0',
+    DEFAULT_INSTRUCTION_TAGS,
     DEFAULT_INSTRUCTION_TAGS,
     DEFAULT_EXEC_RESULT,
     DEFAULT_EXEC_RESULT,
@@ -267,7 +269,8 @@ package body PipelineGeneral is
 
 function killFollower(trial: std_logic; events: EventState) return std_logic is
 begin
-    return (trial and events.execEvent) or events.lateEvent;
+    --return (trial and events.execEvent) or events.lateEvent;
+    return (trial and events.execCausing.full) or events.lateCausing.full;
 end function;
 
 
