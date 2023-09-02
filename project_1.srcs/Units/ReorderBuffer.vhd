@@ -42,8 +42,8 @@ entity ReorderBuffer is
 		prevSending: in std_logic;
 		prevSendingRe: in std_logic;
 
-		acceptingOut: out std_logic;
-		acceptingMore: out std_logic;
+		--acceptingOut: out std_logic;
+		--acceptingMore: out std_logic;
         acceptAlloc: out std_logic;
 
 		nextAccepting: in std_logic;
@@ -54,7 +54,7 @@ entity ReorderBuffer is
 
 		outputArgInfoI: out RenameInfoArray(0 to PIPE_WIDTH-1);
 		outputArgInfoF: out RenameInfoArray(0 to PIPE_WIDTH-1);
-		outputSpecial: out SpecificOp;
+		--outputSpecial: out SpecificOp;
 		
 	    dbState: in DbCoreState
 	);	
@@ -189,7 +189,7 @@ begin
         dynamicGroupInput <= getDynamicGroupInfo(inputCtrl, inputData, DEFAULT_INS_SLOT);
 
         -- Outputs
-        outputSpecial <= getSpecialOperation(staticGroupOutput, dynamicGroupOutput);
+        --outputSpecial <= getSpecialOperation(staticGroupOutput, dynamicGroupOutput);
 
             outputCtrl <= getOutputCtrl(staticGroupOutput, dynamicGroupOutput, isSending);
 

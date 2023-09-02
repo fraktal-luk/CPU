@@ -43,10 +43,10 @@ entity UnitSequencer is
         commitAccepting: out std_logic;
         
         robData: in ControlPacketArray(0 to PIPE_WIDTH-1);
-        robSpecial: in SpecificOp;
         robCtrl: in ControlPacket;
         
-        sendingFromROB: in std_logic;
+--        robSpecial: in SpecificOp;
+--        sendingFromROB: in std_logic;
         
         bqTargetData: in ExecResult;
         
@@ -71,6 +71,9 @@ end UnitSequencer;
 
 
 architecture Behavioral of UnitSequencer is
+    alias robSpecial is robCtrl.op;
+    alias sendingFromROB is robCtrl.full;
+        
     signal pcDataSig: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal pcNew, pcCurrent, pcInc: Mword := (others => '0');        

@@ -53,7 +53,7 @@ port(
     newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
     newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
 
-    specialOut: out SpecificOp;
+    --specialOut: out SpecificOp;
     renamedCtrl: out ControlPacket;
 
     sendingFromROB: in std_logic;
@@ -76,7 +76,7 @@ architecture Behavioral of UnitRegManager is
     alias lateEventSignal is events.lateCausing.full;
 
     signal renamedBase, renamedDataLivingPre: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
-    signal eventSig, robSendingDelayed, frontLastSending, renameFull, renamedSendingSig, robSendingPrev,
+    signal eventSig, robSendingDelayed, frontLastSending, renameFull, renamedSendingSig, robSendingPrev, hasBranch,
                renameLockState, renameLockStateNext, renameLockEnd, renameLockEndDelayed, renameLockRelease, renameLockReleaseDelayed, renameLockEndDelayedNext,
                  ch0, ch1, ch2
                : std_logic := '0';
@@ -92,7 +92,7 @@ architecture Behavioral of UnitRegManager is
     signal newIntSources, newIntSources_NR, newIntSourcesAlt, newFloatSources, newFloatSourcesAlt, zeroSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
     signal newSourceSelectorInt, newSourceSelectorFloat, zeroSelector: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0'); 
 
-    signal specialOperation: SpecificOp := DEFAULT_SPECIFIC_OP;
+    --signal specialOperation: SpecificOp := DEFAULT_SPECIFIC_OP;
     signal ctrl: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     -- DEBUG
@@ -103,18 +103,18 @@ architecture Behavioral of UnitRegManager is
     begin
       res.full := elem.full;
       res.ins.dbInfo := elem.dbInfo;
-    
+
       res.ins.specificOperation := unfoldOp(elem.specificOperation);
     
       res.ins.typeInfo := elem.classInfo;
       res.ins.typeInfo.useSQ := elem.classInfo.secCluster;
-    
+
       res.ins.constantArgs := elem.constantArgs;
       res.ins.virtualArgSpec := elem.argSpec; 
     
     
-      res.ins.controlInfo.firstBr_T := elem.firstBr;
-      res.ins.controlInfo.specialAction_T := elem.specialAction;
+      --res.ins.controlInfo.firstBr_T := elem.firstBr;
+      --res.ins.controlInfo.specialAction_T := elem.specialAction;
     
       return res;
     end function;
@@ -173,17 +173,20 @@ architecture Behavioral of UnitRegManager is
     end function;
 
 
-    function hasSyncEvent(ctrl: InstructionControlInfo_T) return std_logic is
-    begin
-        return ctrl.specialAction_T;
-    end function;
+--    function hasSyncEvent(ctrl: InstructionControlInfo_T) return std_logic is
+--    begin
+--        return ctrl.specialAction_T;
+--    end function;
 
-    function getSpecialActionSlot(insVec: InstructionSlotArray) return SpecificOp is
-       variable res: SpecificOp := insVec(0).ins.specificOperation;
+    function getSpecialActionSlot(insVec: InstructionSlotArray; frontData: BufferEntryArray) return SpecificOp is
+       variable res: SpecificOp := --insVec(0).ins.specificOperation;
+                                   frontData(0).specificOperation;
     begin
        for i in PIPE_WIDTH-1 downto 0 loop
-           if (insVec(i).full and hasSyncEvent(insVec(i).ins.controlInfo)) = '1' then
-               res := insVec(i).ins.specificOperation;
+           if (insVec(i).full and --hasSyncEvent(insVec(i).ins.controlInfo)) = '1' then
+                                    frontData(i).specialAction) = '1' then
+               res := --insVec(i).ins.specificOperation;
+                      frontData(i).specificOperation;
                res.system := SysOp'val(slv2u(res.bits));
                exit;
            end if;
@@ -209,7 +212,7 @@ architecture Behavioral of UnitRegManager is
         return res;
     end function;
 
-    function suppressAfterEvent(isa: InstructionSlotArray) return InstructionSlotArray is
+    function suppressAfterEvent(isa: InstructionSlotArray; frontData: BufferEntryArray) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := isa;
         variable found: boolean := false;
     begin
@@ -223,7 +226,8 @@ architecture Behavioral of UnitRegManager is
                 res(i).ins.dispatchInfo := DEFAULT_CLASS_INFO_DISPATCH;                            
             end if;
 
-            if hasSyncEvent(res(i).ins.controlInfo) = '1' then
+            if --hasSyncEvent(res(i).ins.controlInfo) = '1' then
+               frontData(i).specialAction = '1' then
                 found := true;
             end if;
         end loop;
@@ -273,9 +277,12 @@ architecture Behavioral of UnitRegManager is
 
         -- Assign dest registers
         for i in 0 to PIPE_WIDTH-1 loop
-            takeVecInt(i) := res(i).ins.virtualArgSpec.intDestSel;
-            takeVecFloat(i) := res(i).ins.virtualArgSpec.floatDestSel; 
+        --    takeVecInt(i) := res(i).ins.virtualArgSpec.intDestSel;
+        --    takeVecFloat(i) := res(i).ins.virtualArgSpec.floatDestSel;
         end loop;
+ 
+        takeVecInt :=  getRenamedInt(res);
+        takeVecFloat :=  getRenamedFloat(res);
 
         -- Setting tags
         for i in 0 to PIPE_WIDTH-1 loop
@@ -322,7 +329,7 @@ architecture Behavioral of UnitRegManager is
 
         -- TODO: Why do we cancel ops after event? Rethink, maybe this step is needed just because of some bad design elsewhere
         --       The OOO already has to deal with dynamically arising events
-        res := suppressAfterEvent(res);
+        res := suppressAfterEvent(res, ia);
 
         return res;
     end function;
@@ -418,11 +425,12 @@ architecture Behavioral of UnitRegManager is
         return res;
     end function;
 
-    function makeOutputCtrl(ctrl: ControlPacket; renamedData: InstructionSlotArray; sending: std_logic) return ControlPacket is
+    function makeOutputCtrl(ctrl: ControlPacket; renamedData: InstructionSlotArray; sending, hasBranch: std_logic) return ControlPacket is
         variable res: ControlPacket := ctrl;
     begin
         res.full := sending;
-        res.controlInfo.firstBr := renamedData(0).ins.controlInfo.firstBr_T;
+        res.controlInfo.firstBr := --renamedData(0).ins.controlInfo.firstBr_T;
+                                    hasBranch;
         return res;
     end function;
 
@@ -489,11 +497,12 @@ begin
             if frontLastSending = '1' then
                 renameFull <= '1';
                 renamedDataLivingPre <= renamedBase;
-                specialOperation <= getSpecialActionSlot(renamedBase);        
-                
+                --specialOperation <= getSpecialActionSlot(renamedBase, frontData);        
+                hasBranch <= frontData(0).firstBr;
+
                 ctrl.full <= '1';
-                ctrl.op <= getSpecialActionSlot(renamedBase);
-                  
+                ctrl.op <= getSpecialActionSlot(renamedBase, frontData);
+
                 storedRenameInfoInt <= resultRenameInfoInt;
                 storedRenameInfoFloat <= resultRenameInfoFloat;            
 
@@ -516,13 +525,13 @@ begin
 
             commitGroupCtr <= commitGroupCtrNext;
             commitGroupCtrInc <= commitGroupCtrIncNext;
-         
+
             renameLockState <= renameLockStateNext;
-         
+
             commitArgInfoIntDelayed <= commitArgInfoI;
             commitArgInfoFloatDelayed <= commitArgInfoF;
             robSendingDelayed <= sendingFromROB;
-            
+
             renameLockReleaseDelayed <= renameLockRelease;
             renameLockEndDelayed <= renameLockEndDelayedNext;
 
@@ -703,9 +712,9 @@ begin
         );
 	end generate;
 
-    specialOut <= --specialOperation;
-                    ctrl.op;
-    renamedCtrl <= makeOutputCtrl(ctrl, renamedDataLivingPre, renamedSendingSig);
+    --specialOut <= --specialOperation;
+    --                ctrl.op;
+    renamedCtrl <= makeOutputCtrl(ctrl, renamedDataLivingPre, renamedSendingSig, hasBranch);
 
     newPhysDestsOut <= newIntDests;
     newFloatDestsOut <= newFloatDests; 

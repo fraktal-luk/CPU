@@ -90,10 +90,10 @@ type InstructionControlInfo is record
     ignored: std_logic;
 end record;
 
-type InstructionControlInfo_T is record
-	specialAction_T: std_logic;
-    firstBr_T: std_logic;
-end record;
+--type InstructionControlInfo_T is record
+--	specialAction_T: std_logic;
+--    firstBr_T: std_logic;
+--end record;
 
 
 type ClassInfo_Dispatch is record
@@ -114,6 +114,7 @@ type InstructionClassInfo is record
 	useLQ: std_logic; --
 	useSQ: std_logic; -- 
 	useFP: std_logic; -- true if instruction is routed to FP renamer (NOTE, CHECK: Int renamer is used for all ops, even those that don't go to any IQ)
+	useSpecial: std_logic;
 end record;
 
 
@@ -163,7 +164,7 @@ end record;
 
 type InstructionState is record
     dbInfo: InstructionDebugInfo;
-	controlInfo: InstructionControlInfo_T;
+	--controlInfo: InstructionControlInfo_T;
 	tags: InstructionTags;
 	specificOperation: SpecificOp;
 	typeInfo: InstructionClassInfo;
@@ -423,10 +424,10 @@ constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
     ignored => '0'  -- ??
 );
 
-    constant DEFAULT_CONTROL_INFO_T: InstructionControlInfo_T := (											    											
-        specialAction_T => '0',
-        firstBr_T => '0'
-    );
+--    constant DEFAULT_CONTROL_INFO_T: InstructionControlInfo_T := (											    											
+--        specialAction_T => '0',
+--        firstBr_T => '0'
+--    );
 
 constant DEFAULT_CLASS_INFO: InstructionClassInfo := ( 
     mainCluster => '0',
@@ -434,7 +435,8 @@ constant DEFAULT_CLASS_INFO: InstructionClassInfo := (
     branchIns => '0',
     useLQ => '0',
 	useSQ => '0',
-    useFP => '0'
+    useFP => '0',
+    useSpecial => '0'
 );
 
 
@@ -452,7 +454,7 @@ constant DEFAULT_ARG_SPEC: InstructionArgSpec := (
 
 constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
     dbInfo => DEFAULT_DEBUG_INFO,
-	controlInfo => DEFAULT_CONTROL_INFO_T,	
+	--controlInfo => DEFAULT_CONTROL_INFO_T,	
 	specificOperation => DEFAULT_SPECIFIC_OP,
 	tags => DEFAULT_INSTRUCTION_TAGS,
 	typeInfo => DEFAULT_CLASS_INFO,

@@ -217,7 +217,8 @@ begin
     res.hasEvent := '0';
     res.hasException := '0';
     res.confirmedBranch := '0';
-    res.specialAction := isl.ins.controlInfo.specialAction_T; -- ???
+    res.specialAction := --isl.ins.controlInfo.specialAction_T; -- ???
+                        isl.ins.typeInfo.useSpecial;
     res.refetch := '0';
     return res;
 end function;

@@ -67,8 +67,7 @@ architecture Behavioral of Core is
     signal renamedDataLivingRe, renamedDataLivingMerged, renamedDataToBQ: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal aluMaskRe, mulMaskRe, memMaskRe, branchMaskRe, loadMaskRe, storeMaskRe, intStoreMaskRe, floatStoreMaskRe, fpMaskRe,
-           branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO, zerosMask,
-           commitEffectiveMaskSQ, commitEffectiveMaskLQ, branchCommitMask
+           branchMaskOO, loadMaskOO, storeMaskOO, systemStoreMaskOO, systemLoadMaskOO, zerosMask, commitEffectiveMaskSQ, commitEffectiveMaskLQ, branchCommitMask
            : std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
     signal frontGroupOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
@@ -83,13 +82,10 @@ architecture Behavioral of Core is
     signal intType: std_logic_vector(0 to 1) := (others => '0');
 
     signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
-    signal specialOp, specialOutROB: SpecificOp := DEFAULT_SPECIFIC_OP;
     signal renamedCtrl, branchCtrl, memoryCtrlE2, ctrlOutROB: ControlPacket := DEFAULT_CONTROL_PACKET;
 
-    signal bqCompareEarly, bqUpdate, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2, memAddressInput, memAddressInputEarly,
-           frontEvent, execEvent, lateEvent,-- execCausingDelayedSQ, execCausingDelayedLQ,
-           bqTargetData, resOutSQ, dataFromSB, missedMemResultE1, missedMemResultE2, mqReexecResIssue, mqReexecResRR, memoryRead, sysRegReadIn, sysRegReadOut,
-           defaultExecRes
+    signal bqCompareEarly, bqUpdate, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2, memAddressInput, memAddressInputEarly, frontEvent, execEvent, lateEvent,
+           bqTargetData, resOutSQ, dataFromSB, missedMemResultE1, missedMemResultE2, mqReexecResIssue, mqReexecResRR, memoryRead, sysRegReadIn, sysRegReadOut, defaultExecRes
            : ExecResult := DEFAULT_EXEC_RESULT;
 
     signal pcData, dataToBranch, bqSelected, mqReexecCtrlIssue, mqReexecCtrlRR,
@@ -105,11 +101,11 @@ architecture Behavioral of Core is
 
     signal TMP_aluTags, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags,
             TMP_aluTagsPre,  TMP_mulTagsPre, TMP_memTagsPre, TMP_sviTagsPre, TMP_svfTagsPre, TMP_fpTagsPre,
-            
+
             TMP_aluTagsT, TMP_mulTagsT, TMP_memTagsT, TMP_sviTagsT, TMP_svfTagsT, TMP_fpTagsT,
             TMP_aluTagsPreT, TMP_mulTagsPreT, TMP_memTagsPreT, TMP_sviTagsPreT, TMP_svfTagsPreT, TMP_fpTagsPreT
             : SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
-            
+
     signal TMP_renamedDests: SmallNumberArray(0 to RENAME_W-1) := (others => (others => '0'));
     signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
     signal memIssueFullIQ, memIssueFullMQ, lockIssueI0_NoMemFail, dividerSending: std_logic := '0';
@@ -122,7 +118,6 @@ begin
     dread <= memoryRead.full;
     dadr <= memoryRead.value;
 
-
     dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.c_full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'), zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
 
     sysRegReadIn.full <= memoryRead.full;
@@ -131,7 +126,7 @@ begin
 	UNIT_SEQUENCER: entity work.UnitSequencer(Behavioral)
     port map (
         clk => clk, reset => reset, en => '0',
-        
+
         -- sys reg interface
         sysRegReadIn => sysRegReadIn,
         sysRegReadOut => sysRegReadOut,
@@ -153,9 +148,7 @@ begin
 
         -- Interface from ROB
         commitAccepting => commitAccepting,
-        sendingFromROB => robSending,    
         robData => robOut,
-        robSpecial => specialOutROB,
         robCtrl => ctrlOutROB,
         ---
         bqTargetData => bqTargetData,
@@ -179,12 +172,12 @@ begin
     port map(
         clk => clk, reset => '0', en => '0',
         events => events,
-        
+
         iin => iin,
-                    
+       
         pcDataIn => pcData,
         frontAccepting => frontAccepting,
-    
+
         bqAccepting => bqAccepting,
         bpSending => bpSending,
         bpData => bpData,
@@ -203,7 +196,7 @@ begin
     port map(
         clk => clk,
         events => events,
-        
+
         renameAccepting => renameAllow,
         frontSendingIn => frontGroupSend,
         frontData => frontGroupOut,
@@ -227,7 +220,6 @@ begin
         renamedArgsFloat => renamedArgsFloat,
 
         renamedSending => renamedSending,
-        specialOut => specialOp,
         renamedCtrl => renamedCtrl,
 
         bqPointer => bqPointer,
@@ -248,9 +240,7 @@ begin
         dbState => dbState
     );
 
-        renameSendingBr <= frontGroupSend 
-                             --   and not events.execCausing.full and not events.lateCausing.full 
-                            and frontGroupOut(0).firstBr;
+    renameSendingBr <= frontGroupSend and frontGroupOut(0).firstBr;
 
     frontSendAllow <=   renameAllow 
                     and allocAcceptAlu and allocAcceptMul and allocAcceptMem
@@ -266,7 +256,6 @@ begin
 		clk => clk, reset => '0', en => '0',
 
         events => events,
-		--lateEventSignal => lateEvent.full,
 
 		execSigsMain => execOutMain,
 		execSigsSec => execOutSec,
@@ -274,10 +263,7 @@ begin
 		branchControl => branchCtrl,
 		memoryControl => memoryCtrlE2,
 
-		--specialOp => --specialOp,
-		--              renamedCtrl.op,
         inputCtrl => renamedCtrl,
-
 		inputData => renamedDataLivingMerged,
 		prevSending => renamedSending,
 		prevSendingRe => frontGroupSend,
@@ -288,12 +274,10 @@ begin
 
 		sendingOut => robSending, 
         robOut => robOut,
-		outputSpecial => specialOutROB,
         outputCtrl => ctrlOutROB,
         
         outputArgInfoI => renamedArgsIntROB,
         outputArgInfoF => renamedArgsFloatROB,
-
 
 		dbState => dbState	
 	);     
@@ -755,7 +739,6 @@ begin
                                                       memLoadReady, memLoadValue,
                                                       sysRegReadOut.full, sysRegReadOut.value,
                                                       ctOutSQ, ctOutLQ).value;
-                --memoryCtrlPre <= 
                 ctrlE1u.tags <= ctrlE1.tags;
                 ctrlE1u.op <= ctrlE1.op;
                 ctrlE1u.controlInfo <= getLSResultData(ctrlE1.op,
@@ -803,7 +786,7 @@ begin
             memCtrlE0 <= ctrlE0; -- Interface
             memoryRead <= subpipeM0_E0; -- Out
 
-            memoryCtrlE2 <= ctrlE2;--.controlInfo;  -- for ROB
+            memoryCtrlE2 <= ctrlE2; -- for ROB
 
         end block;
 
