@@ -129,8 +129,8 @@ architecture Behavioral of ReorderBuffer is
             res(i).dbInfo := da(i).dbInfo;
             
             res(i).controlInfo.c_full := da(i).full;
-            res(i).controlInfo.killed := da(i).killed;
-            res(i).controlInfo.causing := da(i).causing;
+            --res(i).controlInfo.killed := da(i).killed;
+            --res(i).controlInfo.causing := da(i).causing;
 
             res(i).controlInfo.newEvent := da(i).hasEvent;
             res(i).controlInfo.hasException := da(i).hasException;

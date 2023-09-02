@@ -85,9 +85,9 @@ type InstructionControlInfo is record
     dataMiss: std_logic;        -- MQ
     sqMiss:    std_logic;       -- MQ
     firstBr: std_logic;
-    killed: std_logic;
-    causing: std_logic;
-    ignored: std_logic;
+    --killed: std_logic;
+    --causing: std_logic;
+    --ignored: std_logic;
 end record;
 
 --type InstructionControlInfo_T is record
@@ -221,8 +221,8 @@ type ArgumentState is record
     srcPipe: SmallNumber;          -- SS
     srcStage: SmallNumber;         -- SS
 
-    used_T: std_logic;  -- DB only?
-    imm_T: std_logic;   -- DB only?
+    --used_T: std_logic;  -- DB only?
+    --imm_T: std_logic;   -- DB only?
     value: Hword;       -- DB only?
 
     dbDep: DbDependency;   
@@ -238,17 +238,8 @@ type ArgumentStateArray is array(natural range <>) of ArgumentState;
 type EntryState is (empty, suspended, active, issued);
 
 type EntryStatus is record
-    --state: EntryState;
-
-    --active: std_logic;
-    --suspend: std_logic;
-    --issued: std_logic;
     freed: std_logic;
     trial: std_logic;
-    --issuedCtr: SmallNumber;
-    
-     --   T_justIssued: std_logic;
-     --   T_expiring: std_logic;
 end record;
 
 type EntryStatus_N is record
@@ -278,7 +269,7 @@ end record;
 type DynamicInfo is record
     full: std_logic;
     status: EntryStatus;
-        status_N: EntryStatus_N;
+    status_N: EntryStatus_N;
 
     renameIndex: InsTag; -- ??
     intDestSel: std_logic;
@@ -418,10 +409,10 @@ constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
     tlbMiss => '0',
     dataMiss => '0',
     sqMiss => '0',
-    firstBr => '0',
-    killed => '0',  -- ??
-    causing => '0', -- ??
-    ignored => '0'  -- ??
+    firstBr => '0' --,
+   --killed => '0',  -- ??
+    --causing => '0', -- ??
+    --ignored => '0'  -- ??
 );
 
 --    constant DEFAULT_CONTROL_INFO_T: InstructionControlInfo_T := (											    											
@@ -544,11 +535,11 @@ constant DEFAULT_DB_DEPENDENCY: DbDependency := (
                                     );
 
 constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
-    used_T => '0',
+    --used_T => '0',
     reg => (others => '0'),
     iqTag => (others => '0'),
     zero_T => '0',
-    imm_T => '0',
+    --imm_T => '0',
     value => (others => '0'),
     readyCtr => (others => '0'),
 --    failed => '0',

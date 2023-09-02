@@ -237,14 +237,14 @@ begin
     for i in 0 to 2 loop
         res.argStates(i).dbDep := DB_setProducer(res.argStates(i).dbDep, ri.dbDepTags(i));
 
-        res.argStates(i).used_T := ri.argStates(i).sel;
+        --res.argStates(i).used_T := ri.argStates(i).sel;
         res.argStates(i).zero_T := ri.argStates(i).const;
 
         res.argStates(i).reg := ri.argStates(i).physicalNew;
         res.argStates(i).iqTag := renamedSrcs(i);
 
         if i = 1 then
-            res.argStates(i).imm_T := stInfo.immediate;
+        --    res.argStates(i).imm_T := stInfo.immediate;
         end if;
 
         res.argStates(i).waiting := not stInfo.zero(i);
@@ -974,11 +974,11 @@ begin
     res.dynamic.floatDestSel := a.dynamic.floatDestSel or b.dynamic.floatDestSel;
 
     for i in 0 to 2 loop
-        res.dynamic.argStates(i).used_T := a.dynamic.argStates(i).used_T or b.dynamic.argStates(i).used_T;
+        --res.dynamic.argStates(i).used_T := a.dynamic.argStates(i).used_T or b.dynamic.argStates(i).used_T;
         res.dynamic.argStates(i).reg := a.dynamic.argStates(i).reg or b.dynamic.argStates(i).reg;
         res.dynamic.argStates(i).iqTag := a.dynamic.argStates(i).iqTag or b.dynamic.argStates(i).iqTag;
         res.dynamic.argStates(i).zero_T := a.dynamic.argStates(i).zero_T or b.dynamic.argStates(i).zero_T;
-        res.dynamic.argStates(i).imm_T := a.dynamic.argStates(i).imm_T or b.dynamic.argStates(i).imm_T;
+        --res.dynamic.argStates(i).imm_T := a.dynamic.argStates(i).imm_T or b.dynamic.argStates(i).imm_T;
         res.dynamic.argStates(i).value := a.dynamic.argStates(i).value or b.dynamic.argStates(i).value;
 
         res.dynamic.argStates(i).readyCtr := a.dynamic.argStates(i).readyCtr or b.dynamic.argStates(i).readyCtr;

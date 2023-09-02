@@ -34,7 +34,7 @@ package body IqViewing is
                 function getArgString(argState: ArgumentState) return string is
                     variable immValue: Hword := argState.value;
                 begin
-                    if argState.imm_T = '1' then
+                    if false then --argState.imm_T = '1' then
                         if IMM_AS_REG then
                             immValue(PhysName'length-2 downto 0) := argState.reg(6 downto 0);
                         end if;

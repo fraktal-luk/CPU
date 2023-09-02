@@ -61,6 +61,14 @@ function initFreeList32(constant IS_FP: boolean) return WordArray;
 function selAndCompactPhysDests(physStableDelayed, physCommitDestsDelayed: PhysNameArray; stableUpdateSelDelayed, freeListPutSel: std_logic_vector)
 return PhysNameArray;
 
+function getRenamedInt(ia: InstructionSlotArray) return std_logic_vector;
+function getRenamedFloat(ia: InstructionSlotArray) return std_logic_vector;
+function getRenameInfo( ia: BufferEntryArray;
+                        newPhysDests, newPhysSources, newPhysSourcesStable: PhysNameArray;
+                        newProducers: InsTagArray; -- TODO: split to some DB function
+                        newSourceSelector: std_logic_vector; constant IS_FP: boolean := false)
+return RenameInfoArray;
+
 function assignDests(ia: BufferEntryArray; newDests: PhysNameArray; constant IS_FP: boolean) return PhysNameArray;
 function assignDests(ria: RenameInfoArray; newDests: PhysNameArray; constant IS_FP: boolean) return PhysNameArray;
 
@@ -212,12 +220,10 @@ return PhysNameArray is
 begin
     for i in 0 to 31 loop
         for k in 0 to PIPE_WIDTH-1 loop
-        --sa := (sm(0)(i), sm(1)(i), sm(2)(i), sm(3)(i));
             sa(k) := sm(k)(i);
         end loop;
 
-        enMask(i) :=  (sending and isNonzero(sa))--  (sa(0)(i) or sa(1)(i) or sa(2)(i) or sa(3)(i))) 
-                    or rew;
+        enMask(i) :=  (sending and isNonzero(sa)) or rew;
         
         if enMask(i) = '1' then
             res(i) := getSelection(inputArr, stable(i), reserve, sa, rew);
@@ -231,13 +237,9 @@ function getVirtualArgs(ria: RenameInfoArray) return RegNameArray is
     variable res: RegNameArray(0 to 3*ria'length-1) := (others => (others => '0'));
 begin
     for i in ria'range loop
---        res(3*i+0) := ria(i).virtualSources(0)(4 downto 0);
---        res(3*i+1) := ria(i).virtualSources(1)(4 downto 0);
---        res(3*i+2) := ria(i).virtualSources(2)(4 downto 0);
-        
-            res(3*i+0) := ria(i).argStates(0).virtual(4 downto 0);
-            res(3*i+1) := ria(i).argStates(1).virtual(4 downto 0);
-            res(3*i+2) := ria(i).argStates(2).virtual(4 downto 0);
+        res(3*i+0) := ria(i).argStates(0).virtual(4 downto 0);
+        res(3*i+1) := ria(i).argStates(1).virtual(4 downto 0);
+        res(3*i+2) := ria(i).argStates(2).virtual(4 downto 0);
     end loop;
     return res;
 end function;
@@ -266,13 +268,9 @@ function getPhysicalArgs(ria: RenameInfoArray) return PhysNameArray is
     variable res: PhysNameArray(0 to 3*ria'length-1) := (others=>(others=>'0'));
 begin
     for i in ria'range loop
---        res(3*i+0) := ria(i).physicalSources(0);
---        res(3*i+1) := ria(i).physicalSources(1);
---        res(3*i+2) := ria(i).physicalSources(2);
-
-            res(3*i+0) := ria(i).argStates(0).physical;
-            res(3*i+1) := ria(i).argStates(1).physical;
-            res(3*i+2) := ria(i).argStates(2).physical;
+        res(3*i+0) := ria(i).argStates(0).physical_O;
+        res(3*i+1) := ria(i).argStates(1).physical_O;
+        res(3*i+2) := ria(i).argStates(2).physical_O;
     end loop;
     return res;
 end function;
@@ -281,13 +279,9 @@ end function;
 function getPhysicalArgs(sch: SchedulerState) return PhysNameArray is
     variable res: PhysNameArray(0 to 2) := (others=>(others=>'0'));
 begin
---        res(0) := sch.argSpec.args(0);
---        res(1) := sch.argSpec.args(1);
---        res(2) := sch.argSpec.args(2);
-        
-                res(0) := sch.args(0);
-                res(1) := sch.args(1);
-                res(2) := sch.args(2);
+    res(0) := sch.args(0);
+    res(1) := sch.args(1);
+    res(2) := sch.args(2);
     return res;
 end function;
 
@@ -381,7 +375,6 @@ return SmallNumber is
     variable res: SmallNumber := numFront;
     variable nTaken, tmpTag2: SmallNumber := (others => '0');
 begin
-
     nTaken := i2slv(countOnes(freeListTakeSel), SMALL_NUMBER_SIZE);
     res := numFront;
     
@@ -417,11 +410,8 @@ end function;
 
 function moveListImpl(list: PhysNameArray; diff: SmallNumber; input: PhysNameArray) return PhysNameArray is
     variable res: PhysNameArray(0 to 7) := list;          
-    --variable listShifted: PhysNameArray(0 to 7) := (others => (others => '0'));
-    --constant diff: SmallNumber := sub(numToTake, numFront);
     variable ind: SmallNumber := (others => '0');
 begin
-    --listShifted := nextShift(list, numToTake);
     for i in 0 to 7 loop
         ind := addInt(diff, i);            
         if slv2s(ind) >= 0 then
@@ -439,17 +429,9 @@ function moveFrontList(list: PhysNameArray; numFront, numToTake, numToTake_N: Sm
     variable listShifted: PhysNameArray(0 to 7) := (others => (others => '0'));
     constant diff: SmallNumber := sub(numToTake_N, numFront);
     constant diffZ: SmallNumber := sub(sn(0), numFront);
-    variable ind: SmallNumber := (others => '0');
 begin
     listShifted := nextShift(list, numToTake);
---    for i in 0 to 7 loop
---        ind := addInt(diff, i);            
---        if slv2s(ind) >= 0 then
---            res(i) := input(slv2u(ind(1 downto 0)));
---        else
---            res(i) := listShifted(i);                    
---        end if;
---    end loop;
+
     if allowTake = '1' then
         res := moveListImpl(listShifted, diff, input);
     else
@@ -489,7 +471,6 @@ begin
 end function;
 
 
-
 function getFp1(constant IS_FP: boolean) return natural is
 begin
    if IS_FP then
@@ -510,10 +491,6 @@ begin
         res(i) := i2slv(i + 32 + fp1, PhysName'length);
     end loop;
 
---    -- For FP, there's no register 0, mapper starts with 1:32 rather than 0:31, so one less is in this list
---    if IS_FP then
---        res((N_PHYS - 32)/4 - 1)(31 downto 24) := (others => '0');
---    end if;
     return res;
 end function;
 
@@ -566,40 +543,146 @@ begin
 end function;
 
 
-    function DB_addTag(dbi: InstructionDebugInfo; tag: InsTag) return InstructionDebugInfo is
-        variable res: InstructionDebugInfo := dbi;
-    begin
-        -- pragma synthesis off
-        res.tag := tag;
-        -- pragma synthesis on
-        return res;
-    end function;
+function getRenamedInt(ia: InstructionSlotArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := ia(i).ins.virtualArgSpec.intDestSel;
+    end loop;
+    return res;
+end function;
 
-    function DB_addRenameCounter(dbi: InstructionDebugInfo; ctr: Word) return InstructionDebugInfo is
-        variable res: InstructionDebugInfo := dbi;
-    begin
-        -- pragma synthesis off
-        res.rename := ctr;
-        -- pragma synthesis on
-        return res;
-    end function;
+function getRenamedFloat(ia: InstructionSlotArray) return std_logic_vector is
+    variable res: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0' );
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := ia(i).ins.virtualArgSpec.floatDestSel;
+    end loop;
+    return res;
+end function;
 
-    procedure DB_trackSeqNum(renamed: InstructionSlotArray) is
-    begin
-        -- pragma synthesis off
-        if DB_OP_TRACKING then
-            for i in renamed'range loop
-                if renamed(i).ins.dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
-                    report "";
-                    report "DEBUG: Tracked seqNum renamed: " & work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
 
-                    report "";
+function getArgStates(va: InstructionArgSpec; ca: InstructionConstantArgs; depSpec: DependencySpec; constant IS_FP: boolean) return ArgRenameStateArray is
+    variable res: ArgRenameStateArray(0 to 2) := (others => DEFAULT_ARG_RENAME_STATE); 
+begin
+    for j in 0 to 2 loop
+        if IS_FP then
+            res(j).sel := va.floatArgSel(j);
+        else
+            res(j).sel := va.intArgSel(j);
+        end if;
 
-                    return;
+        res(j).const := (va.intArgSel(j) and -- TODO: this makes a difference for test time
+                                not isNonzero(va.args(j)(4 downto 0))) -- int r0
+                            or (not va.intArgSel(j) and not va.floatArgSel(j)) -- arg not used
+                            or (bool2std(j = 1) and ca.immSel);
+        res(j).virtual := va.args(j)(4 downto 0);
+        
+        res(j).deps := depSpec(j);
+    end loop;
+    return res;
+end function;
+
+
+function getRenameInfo( ia: BufferEntryArray;
+                        newPhysDests, newPhysSources, newPhysSourcesStable: PhysNameArray;
+                        newProducers: InsTagArray; -- TODO: split to some DB function
+                        newSourceSelector: std_logic_vector; constant IS_FP: boolean := false)
+return RenameInfoArray is
+    variable res: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+    variable dests: PhysNameArray(0 to PIPE_WIDTH-1) := assignDests(ia, newPhysDests, IS_FP);
+    variable va: InstructionArgSpec := DEFAULT_ARG_SPEC;
+    variable ca: InstructionConstantArgs := DEFAULT_CONSTANT_ARGS;
+    variable depVec: DependencyVec;
+    variable phySourceSlice: PhysNameArray(0 to 2) := (others => (others => '0'));
+begin
+    depVec := findDeps(ia);
+    if IS_FP then
+        depVec := getRealDepVecFloat(ia, depVec);
+    else
+        depVec := getRealDepVecInt(ia, depVec);
+    end if;
+
+    for i in 0 to PIPE_WIDTH-1 loop
+        va := ia(i).argSpec;
+        ca := ia(i).constantArgs;
+
+        -- Dest
+        if IS_FP then        
+            res(i).destSel := va.floatDestSel;
+            res(i).destSelFP := va.floatDestSel;
+        else
+            res(i).destSel := va.intDestSel;
+        end if;
+
+        res(i).virtualDest := va.dest(4 downto 0);
+        res(i).physicalDest := dests(i);
+
+        res(i).argStates := getArgStates(va, ca, depVec(i), IS_FP);
+
+        if ia(i).specificOperation.subpipe = Mem then
+            res(i) := swapArgs12(res(i));
+        end if;
+
+        phySourceSlice := newPhysSources(3*i to 3*i + 2);
+        for j in 0 to 2 loop
+            res(i).argStates(j).physical_O := phySourceSlice(j);
+            res(i).argStates(j).physicalNew := phySourceSlice(j);
+            for k in PIPE_WIDTH-1 downto 0 loop
+                if res(i).argStates(j).deps(k) = '1' then
+                    res(i).argStates(j).physicalNew := dests(k);
+                    exit;
                 end if;
             end loop;
+        end loop;
+
+        res(i).dbInfo := ia(i).dbInfo;
+        for j in 0 to 2 loop
+            res(i).dbDepTags(j) := newProducers(3*i + j);
+        end loop;
+
+        if QQQ = 1 then
+            res(i).argStates(2) := DEFAULT_ARG_RENAME_STATE;
         end if;
-        -- pragma synthesis on
-    end procedure;
+    end loop;
+
+    return res;
+end function;
+
+function DB_addTag(dbi: InstructionDebugInfo; tag: InsTag) return InstructionDebugInfo is
+    variable res: InstructionDebugInfo := dbi;
+begin
+    -- pragma synthesis off
+    res.tag := tag;
+    -- pragma synthesis on
+    return res;
+end function;
+
+function DB_addRenameCounter(dbi: InstructionDebugInfo; ctr: Word) return InstructionDebugInfo is
+    variable res: InstructionDebugInfo := dbi;
+begin
+    -- pragma synthesis off
+    res.rename := ctr;
+    -- pragma synthesis on
+    return res;
+end function;
+
+procedure DB_trackSeqNum(renamed: InstructionSlotArray) is
+begin
+    -- pragma synthesis off
+    if DB_OP_TRACKING then
+        for i in renamed'range loop
+            if renamed(i).ins.dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
+                report "";
+                report "DEBUG: Tracked seqNum renamed: " & work.CpuText.slv2hex(DB_TRACKED_SEQ_NUM);
+
+                report "";
+
+                return;
+            end if;
+        end loop;
+    end if;
+    -- pragma synthesis on
+end procedure;
 
 end package body;
