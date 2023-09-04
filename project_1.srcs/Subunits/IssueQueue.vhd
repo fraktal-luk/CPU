@@ -37,7 +37,6 @@ entity IssueQueue is
 
 		prevSendingOK: in std_logic;
 		newArr: in SchedulerInfoArray(0 to PIPE_WIDTH-1);
-        TMP_newTags: in SmallNumberArray(0 to RENAME_W-1);
 
         inReady: in std_logic;
         inMask: std_logic_vector;

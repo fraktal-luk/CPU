@@ -13,10 +13,10 @@ use work.InstructionStateBase.all;
 package InstructionState is
 
 
-constant OP_TYPE_BITS: natural := findLog2(SubpipeType'pos(SubpipeType'high) - SubpipeType'pos(SubpipeType'low) + 1);
+--constant OP_TYPE_BITS: natural := findLog2(SubpipeType'pos(SubpipeType'high) - SubpipeType'pos(SubpipeType'low) + 1);
 constant OP_VALUE_BITS: natural := getSpecificOpSize;
 
-constant SYS_OP_SIZE: natural := findLog2(SysOp'pos(SysOp'high) - SysOp'pos(SysOp'low) + 1);
+--constant SYS_OP_SIZE: natural := findLog2(SysOp'pos(SysOp'high) - SysOp'pos(SysOp'low) + 1);
 
 type SpecificOp is record
     subpipe: SubpipeType;
@@ -45,6 +45,7 @@ function sop(sub: SubpipeType; func: SysOp) return SpecificOp;
 constant TAG_SIZE: integer := 7 + LOG2_PIPE_WIDTH;
 subtype InsTag is std_logic_vector(TAG_SIZE-1 downto 0);
 
+-- TODO: move somewhere else?
 constant INITIAL_RENAME_CTR: InsTag := i2slv(-1, TAG_SIZE);
 constant INITIAL_GROUP_TAG: InsTag := i2slv(-PIPE_WIDTH, TAG_SIZE);
 constant INITIAL_GROUP_TAG_INC: InsTag := i2slv(0, TAG_SIZE);
@@ -107,6 +108,16 @@ type ClassInfo_Dispatch is record
 end record;
 
 
+type InstructionTypeInfo is record
+	mainCluster: std_logic;
+	secCluster: std_logic; --
+	branchIns: std_logic; --
+	useLQ: std_logic; --
+	useSQ: std_logic; -- 
+	useFP: std_logic; --   -- true if instruction is routed to FP renamer (NOTE, CHECK: Int renamer is used for all ops, even those that don't go to any IQ)
+	useSpecial: std_logic;
+end record;
+
 type InstructionClassInfo is record
 	mainCluster: std_logic; --
 	secCluster: std_logic; --
@@ -150,8 +161,8 @@ type BufferEntry is record
 
     -- NOTE: for compresion maybe can be just 2 bits:
     --       (br NT, br T, br T confirmed, special) is 4 possibilities     
-    frontBranch: std_logic;     -- seems unused
-    confirmedBranch: std_logic; -- seems unused
+    frontBranch: std_logic;     -- seems unused?
+    confirmedBranch: std_logic; -- seems unused?
     specialAction: std_logic;
 
     classInfo: InstructionClassInfo;
@@ -167,7 +178,7 @@ type InstructionState is record
 	--controlInfo: InstructionControlInfo_T;
 	tags: InstructionTags;
 	specificOperation: SpecificOp;
-	typeInfo: InstructionClassInfo;
+	typeInfo: InstructionTypeInfo;
 	dispatchInfo: ClassInfo_Dispatch;
 
 	constantArgs: InstructionConstantArgs;
@@ -430,6 +441,16 @@ constant DEFAULT_CLASS_INFO: InstructionClassInfo := (
     useSpecial => '0'
 );
 
+constant DEFAULT_TYPE_INFO: InstructionTypeInfo := ( 
+    mainCluster => '0',
+    secCluster => '0',
+    branchIns => '0',
+    useLQ => '0',
+	useSQ => '0',
+    useFP => '0',
+    useSpecial => '0'
+);
+
 
 constant DEFAULT_CONSTANT_ARGS: InstructionConstantArgs := ('0', (others=>'0'));
 
@@ -448,7 +469,7 @@ constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
 	--controlInfo => DEFAULT_CONTROL_INFO_T,	
 	specificOperation => DEFAULT_SPECIFIC_OP,
 	tags => DEFAULT_INSTRUCTION_TAGS,
-	typeInfo => DEFAULT_CLASS_INFO,
+	typeInfo => DEFAULT_TYPE_INFO,
 	dispatchInfo => DEFAULT_CLASS_INFO_DISPATCH,
 	constantArgs => DEFAULT_CONSTANT_ARGS,
 	virtualArgSpec => DEFAULT_ARG_SPEC,

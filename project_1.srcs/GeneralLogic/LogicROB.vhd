@@ -59,8 +59,8 @@ type DynamicOpInfo is record
     dbInfo: InstructionDebugInfo;
 
     full:       std_logic;
-    killed:     std_logic;
-    causing:    std_logic;
+    --killed:     std_logic;
+    --causing:    std_logic;
     completed0: std_logic;
     completed1: std_logic;
     
@@ -70,7 +70,7 @@ type DynamicOpInfo is record
     specialAction: std_logic;
     refetch: std_logic;
     mainCluster: std_logic;
-    secCluster:std_logic;
+    secCluster: std_logic;
 end record;
 
 constant DEFAULT_DYNAMIC_GROUP_INFO: DynamicGroupInfo := (
@@ -207,8 +207,8 @@ begin
         res.dbInfo := isl.ins.dbInfo;
 
     res.full := isl.full;
-    res.killed := '0';
-    res.causing := '0';
+    --res.killed := '0';
+    --res.causing := '0';
     res.completed0 := '0';
     res.completed1 := '0';
     res.mainCluster := isl.ins.typeInfo.mainCluster;
@@ -469,7 +469,7 @@ begin
     for i in 0 to PIPE_WIDTH-1 loop
         if eventFound then
             content(groupInd, i).full <= '0';
-            content(groupInd, i).killed <= content(groupInd, i).full;              
+            --content(groupInd, i).killed <= content(groupInd, i).full;              
         
             --DB_trackKilledSeqNum(content(groupInd, i));
             
@@ -488,7 +488,7 @@ begin
             end if;                
         
             if execInfo.newEvent = '1' then
-                content(groupInd, i).causing <= '1';                        
+                --content(groupInd, i).causing <= '1';                        
                 eventFound := true;
             end if;
         end if;
@@ -521,12 +521,12 @@ begin
     for i in 0 to PIPE_WIDTH-1 loop
         if eventFound then
             content(groupInd, i).full <= '0';
-            content(groupInd, i).killed <= content(groupInd, i).full;                   
+            --content(groupInd, i).killed <= content(groupInd, i).full;                   
         elsif opInd = i then
             if execInfo.specialAction = '1' then
                 content(groupInd, i).specialAction <= '1';   
                 content(groupInd, i).refetch <= '1';                    
-                content(groupInd, i).causing <= '1';                    
+                --content(groupInd, i).causing <= '1';                    
                 eventFound := true;
             end if;
         end if;
@@ -553,7 +553,7 @@ begin
     for groupInd in 0 to ROB_SIZE-1 loop
         for i in 0 to PIPE_WIDTH-1 loop
             content(groupInd, i).full <= '0';
-            content(groupInd, i).killed <= content(groupInd, i).full;
+            --content(groupInd, i).killed <= content(groupInd, i).full;
 
             -- pragma synthesis off
             if DB_OP_TRACKING and content(groupInd, i).full = '1' and content(groupInd, i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then
@@ -571,7 +571,7 @@ procedure removeGroup(signal content: inout DynamicOpInfoArray2D; ptr: SmallNumb
 begin
     for i in 0 to PIPE_WIDTH-1 loop
         content(p2i(ptr, content'length), i).full <= '0';
-        content(p2i(ptr, content'length), i).killed <= '0';
+        --content(p2i(ptr, content'length), i).killed <= '0';
         
         -- pragma synthesis off
         if DB_OP_TRACKING and content(p2i(ptr, content'length), i).full = '1' and content(p2i(ptr, content'length), i).dbInfo.seqNum = DB_TRACKED_SEQ_NUM then

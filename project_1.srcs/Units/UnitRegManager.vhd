@@ -98,6 +98,48 @@ architecture Behavioral of UnitRegManager is
     -- DEBUG
     signal newProducersInt, newProducersFloat, zeroProducers: InsTagArray(0 to 3*PIPE_WIDTH-1) := (others => (others => 'U'));
 
+
+    function classifyForDispatch(inSlot: InstructionSlot) return InstructionSlot is
+        variable outSlot: InstructionSlot := inSlot;
+        variable div, mul: boolean := false;
+    begin
+        div := inSlot.ins.specificOperation.arith = opDivU
+            or inSlot.ins.specificOperation.arith = opDivS                     
+            or inSlot.ins.specificOperation.arith = opRemU
+            or inSlot.ins.specificOperation.arith = opRemS;
+        mul := inSlot.ins.specificOperation.arith = opMul
+            or inSlot.ins.specificOperation.arith = opMulhU
+            or inSlot.ins.specificOperation.arith = opMulhS;
+
+        outSlot.ins.dispatchInfo.useDiv := bool2std(div and (inSlot.ins.specificOperation.subpipe = ALU));
+        
+        if (inSlot.ins.specificOperation.subpipe = ALU) then
+            if mul or div then
+                outSlot.ins.dispatchInfo.useMul := '1';
+            else
+                outSlot.ins.dispatchInfo.useAlu := '1';
+            end if;
+        elsif inSlot.ins.specificOperation.subpipe = FP then
+            outSlot.ins.dispatchInfo.useFP := '1';
+        elsif inSlot.ins.specificOperation.subpipe = Mem then
+            outSlot.ins.dispatchInfo.useMem := '1';
+
+            if (inSlot.ins.specificOperation.memory = opLoad or inSlot.ins.specificOperation.memory = opLoadSys) then 
+                outSlot.ins.typeInfo.useLQ := '1';
+            elsif (inSlot.ins.specificOperation.memory = opStore or inSlot.ins.specificOperation.memory = opStoreSys) then
+                outSlot.ins.typeInfo.useSQ := '1';
+                if outSlot.ins.typeInfo.useFP = '1' then
+                    outSlot.ins.dispatchInfo.storeFP := '1';
+                else
+                    outSlot.ins.dispatchInfo.storeInt := '1';
+                end if;
+            end if;
+
+        end if;
+        return outSlot;
+    end function;
+
+
     function getInsSlot(elem: BufferEntry) return InstructionSlot is
       variable res: InstructionSlot := DEFAULT_INS_SLOT;
     begin
@@ -105,67 +147,90 @@ architecture Behavioral of UnitRegManager is
       res.ins.dbInfo := elem.dbInfo;
 
       res.ins.specificOperation := unfoldOp(elem.specificOperation);
-    
-      res.ins.typeInfo := elem.classInfo;
+
+      res.ins.typeInfo.mainCluster := elem.classInfo.mainCluster;
+      res.ins.typeInfo.secCluster := elem.classInfo.secCluster;
+      res.ins.typeInfo.branchIns := elem.classInfo.branchIns;
+      res.ins.typeInfo.useLQ := elem.classInfo.useLQ;
+      --res.ins.typeInfo.useSQ := elem.classInfo.useSQ;
+      res.ins.typeInfo.useFP := elem.classInfo.useFP;
+      res.ins.typeInfo.useSpecial := elem.classInfo.useSpecial;
+
       res.ins.typeInfo.useSQ := elem.classInfo.secCluster;
+
+      res := classifyForDispatch(res);
 
       res.ins.constantArgs := elem.constantArgs;
       res.ins.virtualArgSpec := elem.argSpec; 
 
       return res;
     end function;
-    
+
+
+
+
+--    function classifyForDispatch(insVec: InstructionSlotArray) return InstructionSlotArray is
+--        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
+--        variable inSlot, outSlot: InstructionSlot := DEFAULT_INS_SLOT;
+--        variable div, mul: boolean := false;
+--    begin
+--        for i in 0 to PIPE_WIDTH-1 loop
+--            inSlot := insVec(i);
+--            outSlot := inSlot;
+        
+--            div := inSlot.ins.specificOperation.arith = opDivU
+--                or inSlot.ins.specificOperation.arith = opDivS                     
+--                or inSlot.ins.specificOperation.arith = opRemU
+--                or inSlot.ins.specificOperation.arith = opRemS;
+--            mul := inSlot.ins.specificOperation.arith = opMul
+--                or inSlot.ins.specificOperation.arith = opMulhU
+--                or inSlot.ins.specificOperation.arith = opMulhS;
+
+--            outSlot.ins.dispatchInfo.useDiv := bool2std(div and (inSlot.ins.specificOperation.subpipe = ALU));
+            
+--            if (inSlot.ins.specificOperation.subpipe = ALU) then
+--                if mul or div then
+--                    outSlot.ins.dispatchInfo.useMul := '1';
+--                else
+--                    outSlot.ins.dispatchInfo.useAlu := '1';
+--                end if;
+--            elsif inSlot.ins.specificOperation.subpipe = FP then
+--                outSlot.ins.dispatchInfo.useFP := '1';
+--            elsif inSlot.ins.specificOperation.subpipe = Mem then
+--                outSlot.ins.dispatchInfo.useMem := '1';
+
+--			    if (inSlot.ins.specificOperation.memory = opLoad or inSlot.ins.specificOperation.memory = opLoadSys) then 
+--                    outSlot.ins.typeInfo.useLQ := '1';
+--                elsif (inSlot.ins.specificOperation.memory = opStore or inSlot.ins.specificOperation.memory = opStoreSys) then
+--                    outSlot.ins.typeInfo.useSQ := '1';
+--                    if outSlot.ins.typeInfo.useFP = '1' then
+--                        outSlot.ins.dispatchInfo.storeFP := '1';
+--                    else
+--                        outSlot.ins.dispatchInfo.storeInt := '1';
+--                    end if;
+--                end if;
+
+--            end if;
+            
+--            --outSlot := outSlot;
+--            res(i) := outSlot;
+--        end loop;
+        
+--        return res;
+--    end function;
+
     function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray is
       variable res: InstructionSlotArray(elemVec'range);
     begin
       for i in res'range loop
           res(i) := getInsSlot(elemVec(i));
       end loop;
+      
+      --res := classifyForDispatch(res);
+      
       return res;
     end function;
 
-    function classifyForDispatch(insVec: InstructionSlotArray) return InstructionSlotArray is
-        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
-        variable div, mul: boolean := false;
-    begin
-        for i in 0 to PIPE_WIDTH-1 loop
-            div := insVec(i).ins.specificOperation.arith = opDivU
-                or insVec(i).ins.specificOperation.arith = opDivS                     
-                or insVec(i).ins.specificOperation.arith = opRemU
-                or insVec(i).ins.specificOperation.arith = opRemS;
-            mul := insVec(i).ins.specificOperation.arith = opMul
-                or insVec(i).ins.specificOperation.arith = opMulhU
-                or insVec(i).ins.specificOperation.arith = opMulhS;
-
-            res(i).ins.dispatchInfo.useDiv := bool2std(div and (insVec(i).ins.specificOperation.subpipe = ALU));
-            
-            if (insVec(i).ins.specificOperation.subpipe = ALU) then
-                if mul or div then
-                    res(i).ins.dispatchInfo.useMul := '1';
-                else
-                    res(i).ins.dispatchInfo.useAlu := '1';
-                end if;
-            elsif insVec(i).ins.specificOperation.subpipe = FP then
-                res(i).ins.dispatchInfo.useFP := '1';
-            elsif insVec(i).ins.specificOperation.subpipe = Mem then
-                res(i).ins.dispatchInfo.useMem := '1';
-
-			    if (insVec(i).ins.specificOperation.memory = opLoad or insVec(i).ins.specificOperation.memory = opLoadSys) then 
-                    res(i).ins.typeInfo.useLQ := '1';
-                elsif (insVec(i).ins.specificOperation.memory = opStore or insVec(i).ins.specificOperation.memory = opStoreSys) then
-                    res(i).ins.typeInfo.useSQ := '1';
-                    if res(i).ins.typeInfo.useFP = '1' then
-                        res(i).ins.dispatchInfo.storeFP := '1';
-                    else
-                        res(i).ins.dispatchInfo.storeInt := '1';
-                    end if;
-                end if;
-
-            end if;
-        end loop;
-        
-        return res;
-    end function;
 
     function getSpecialActionSlot(insVec: InstructionSlotArray; frontData: BufferEntryArray) return SpecificOp is
        variable res: SpecificOp := frontData(0).specificOperation;
@@ -207,7 +272,7 @@ architecture Behavioral of UnitRegManager is
             end if;
 
             if res(i).full /= '1' then
-                res(i).ins.typeInfo := DEFAULT_CLASS_INFO;
+                res(i).ins.typeInfo := DEFAULT_TYPE_INFO;
                 res(i).ins.dispatchInfo := DEFAULT_CLASS_INFO_DISPATCH;                            
             end if;
 
@@ -248,10 +313,12 @@ architecture Behavioral of UnitRegManager is
                             renameCtr: Word; -- DB!                           
                             dbtrap: std_logic)
     return InstructionSlotArray is
-        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := TMP_recodeMem(getInsSlotArray(ia));
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := --TMP_recodeMem
+                                                                    (getInsSlotArray(ia));
     begin
+        --    res := classifyForDispatch(res);
+
         res := updateTags(res, baseTags);
-        res := classifyForDispatch(res);
 
         res := DB_updateTags(res, baseTags.renameIndex, renameCtr);
 
@@ -293,6 +360,7 @@ begin
 
     frontLastSending <= frontSendingIn and not eventSig;
 
+          --  ch0 <= '1';
 
     baseTags <= (
         renameIndex => renameGroupCtrNext,

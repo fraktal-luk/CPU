@@ -438,7 +438,6 @@ begin
 
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedU,
-                TMP_newTags => TMP_aluTags,
                 bypass => bypassInt,
                 nextAccepting => allowIssueI0,
                     unlockDiv => '0',
@@ -552,7 +551,6 @@ begin
             
                     prevSendingOK => renamedSending,
                     newArr => schedInfoUpdatedU,
-                    TMP_newTags => TMP_mulTags,
                     bypass => bypassInt,
                     nextAccepting => allowIssueI1,
                                         unlockDiv => divUnlock,
@@ -664,7 +662,6 @@ begin
 
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedU,
-                TMP_newTags => TMP_memTags,
                 bypass => bypassInt,
                 nextAccepting => allowIssueM0,
                                     unlockDiv => '0',
@@ -859,7 +856,6 @@ begin
 
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedIntU,
-                TMP_newTags => TMP_sviTags,
                 bypass => bypassIntSV,
                 nextAccepting => allowIssueStoreDataInt,
                                     unlockDiv => '0',
@@ -910,7 +906,6 @@ begin
 
                     prevSendingOK => renamedSending,
                     newArr => schedInfoUpdatedFloatU,
-                    TMP_newTags => TMP_svfTags,
                     bypass => bypassFloatSV,
                     nextAccepting => allowIssueStoreDataFP,
                                         unlockDiv => '0',
@@ -981,7 +976,6 @@ begin
 
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedU,
-                TMP_newTags => TMP_fpTags,
                 bypass => bypassFloat,
                 nextAccepting => allowIssueF0,
                                     unlockDiv => '0',
@@ -1211,13 +1205,7 @@ begin
                     readyRegFlagsNext => readyRegFlagsFloatNext_Early
                 );
             end generate;
-
         end block;
-
-        SRC_LATE_OVERRIDE: if true generate
-        --     readyRegFlagsInt_T <= updateArgStates(renamedArgsInt, renamedArgsFloat, readyRegFlagsIntNext_Early);
-        --     readyRegFlagsFloat_T <= updateArgStatesFloat(renamedArgsInt, renamedArgsFloat, readyRegFlagsFloatNext_Early);
-        end generate;
 
         RR_FLAGS_TEMP: for i in 0 to PIPE_WIDTH-1 generate
             readyRegFlagsInt_Early(3*i to 3*i + 2 - QQQ) <= readyRegFlagsIntNext_Early(3*i to 3*i + 2 - QQQ);
@@ -1248,11 +1236,9 @@ begin
 		QUEUE_SIZE => BQ_SIZE
 	)
 	port map(
-		clk => clk,
-		events => events,
+		clk => clk, reset => '0', en => '0',
 
-		reset => '0',
-		en => '0',
+		events => events,
 
 		acceptingOut => open,
 
@@ -1293,11 +1279,9 @@ begin
 		QUEUE_SIZE => SQ_SIZE
 	)
 	port map(
-		clk => clk,
+		clk => clk, reset => '0', en => '0',
+		
 		events => events,
-
-		reset => '0',
-		en => '0',
 
 		acceptAlloc => allocAcceptSQ,
 
@@ -1339,11 +1323,9 @@ begin
 		IS_LOAD_QUEUE => true
 	)
 	port map(
-		clk => clk,
+		clk => clk, reset => '0', en => '0',
+		
 		events => events,
-
-		reset => '0',
-		en => '0',
 
 		acceptAlloc => allocAcceptLQ,
 
@@ -1402,11 +1384,9 @@ begin
             QUEUE_SIZE => 8
             )
         port map(
-            clk => clk,
+            clk => clk, reset => '0', en => '0',
+            
             events => events,
-
-            reset => '0',
-            en => '0',
 
             acceptingOut => acceptingMQ,
             almostFull => almostFullMQ,

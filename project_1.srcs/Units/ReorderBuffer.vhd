@@ -22,28 +22,21 @@ entity ReorderBuffer is
 		clk: in std_logic;
 		reset: in std_logic;
 		en: in std_logic;
-		
+
 		events: in EventState;
-		
---		lateEventSignal: in std_logic;
 
 		execSigsMain: in ExecResultArray(0 to 3);
 		execSigsSec: in ExecResultArray(0 to 3);
-		
-		branchControl: in --InstructionControlInfo;
-		                  ControlPacket;
-		memoryControl: in --InstructionControlInfo;
-		                  ControlPacket;
-		
-		--specialOp: in SpecificOp;
+
+		branchControl: in ControlPacket;
+		memoryControl: in ControlPacket;
+
 		inputCtrl: in ControlPacket;
-		
+
 		inputData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 		prevSending: in std_logic;
 		prevSendingRe: in std_logic;
 
-		--acceptingOut: out std_logic;
-		--acceptingMore: out std_logic;
         acceptAlloc: out std_logic;
 
 		nextAccepting: in std_logic;
@@ -54,8 +47,7 @@ entity ReorderBuffer is
 
 		outputArgInfoI: out RenameInfoArray(0 to PIPE_WIDTH-1);
 		outputArgInfoF: out RenameInfoArray(0 to PIPE_WIDTH-1);
-		--outputSpecial: out SpecificOp;
-		
+
 	    dbState: in DbCoreState
 	);	
 end ReorderBuffer;
@@ -64,8 +56,6 @@ end ReorderBuffer;
 architecture Behavioral of ReorderBuffer is
 	alias lateEventSignal is events.lateCausing.full;
 
-    --signal inputSpecial: InstructionSlot := DEFAULT_INS_SLOT;
-        
 	signal isSending, outputCompleted, outputCompleted_Pre, outputEmpty, execEvent, allowAlloc: std_logic := '0';	
 	signal startPtr, startPtrNext, endPtr, endPtrNext, renamedPtr, renamedPtrNext, causingPtr: SmallNumber := (others => '0');	
 
@@ -79,7 +69,6 @@ architecture Behavioral of ReorderBuffer is
     signal dynamicGroupContent: DynamicGroupInfoArray := (others => DEFAULT_DYNAMIC_GROUP_INFO);
     -- 
     signal robOut_N: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
-
 
     signal ch0, ch1, ch2, ch3: std_logic := '0';
 
@@ -128,10 +117,9 @@ architecture Behavioral of ReorderBuffer is
         for i in res'range loop
             res(i).dbInfo := da(i).dbInfo;
             
+            res(i).full := da(i).full;
+            
             res(i).controlInfo.c_full := da(i).full;
-            --res(i).controlInfo.killed := da(i).killed;
-            --res(i).controlInfo.causing := da(i).causing;
-
             res(i).controlInfo.newEvent := da(i).hasEvent;
             res(i).controlInfo.hasException := da(i).hasException;
             res(i).controlInfo.confirmedBranch := da(i).confirmedBranch;
@@ -163,8 +151,6 @@ architecture Behavioral of ReorderBuffer is
 
 
 begin
-    --inputSpecial.ins.specificOperation <= specialOp;
-
 	execEvent <= branchControl.controlInfo.c_full and branchControl.controlInfo.newEvent;
 	
 	causingPtr <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN_LONG;
@@ -178,7 +164,6 @@ begin
         
         signal serialInput, serialOutput: std_logic_vector(TMP_SERIAL_MEM_WIDTH-1 downto 0) := (others=> '0');
     begin
-
         -- Inputs
         serialInput <= serializeStatic(staticInput, staticGroupInput);
            
@@ -189,9 +174,7 @@ begin
         dynamicGroupInput <= getDynamicGroupInfo(inputCtrl, inputData, DEFAULT_INS_SLOT);
 
         -- Outputs
-        --outputSpecial <= getSpecialOperation(staticGroupOutput, dynamicGroupOutput);
-
-            outputCtrl <= getOutputCtrl(staticGroupOutput, dynamicGroupOutput, isSending);
+        outputCtrl <= getOutputCtrl(staticGroupOutput, dynamicGroupOutput, isSending);
 
     	outputCompleted_Pre <= groupCompleted(dynamicOutput_Pre);
 

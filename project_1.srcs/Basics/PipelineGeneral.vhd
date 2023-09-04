@@ -871,24 +871,6 @@ begin
 end function;
 
 
-
-function unfoldOp(op: SpecificOp) return SpecificOp is
-    variable res: SpecificOp := op;
-begin          
-    case op.subpipe is
-        when ALU =>
-            res.arith := ArithOp'val(slv2u(op.bits));     
-        when None =>
-            res.system := SysOp'val(slv2u(op.bits));
-        when FP =>
-            res.float := FpOp'val(slv2u(op.bits));
-        when others =>
-            res.memory := MemOp'val(slv2u(op.bits));
-    end case;
-    return res;
-end function;
-
-
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult is
     variable res: ExecResult := er;
 begin
@@ -1002,6 +984,26 @@ begin
 end function;
 
 
+function unfoldOp(op: SpecificOp) return SpecificOp is
+    variable res: SpecificOp := op;
+begin
+        return TMP_restoreOperation(op);
+
+    --------
+    case op.subpipe is
+        when ALU =>
+            res.arith := ArithOp'val(slv2u(op.bits));     
+        when None =>
+            res.system := SysOp'val(slv2u(op.bits));
+        when FP =>
+            res.float := FpOp'val(slv2u(op.bits));
+        when others =>
+            res.memory := MemOp'val(slv2u(op.bits));
+    end case;
+    return res;
+end function;
+
+-- TODO: rename
 function TMP_restoreOperation(so: SpecificOp) return SpecificOp is
     variable res: SpecificOp := so;
 begin
@@ -1010,7 +1012,7 @@ begin
     else
         res.arith := ArithOp'val(slv2u(so.bits));
     end if;
-    
+
     if slv2u(so.bits) > MemOp'pos(MemOp'right) then
         res.memory := opLoad;
     else
@@ -1022,13 +1024,13 @@ begin
     else
         res.float := FpOp'val(slv2u(so.bits));
     end if;
-    
+
     if slv2u(so.bits) > SysOp'pos(SysOp'right) then
         res.system := opNone;
     else
         res.system := SysOp'val(slv2u(so.bits));
     end if;
-    
+
     return res;
 end function;
 
