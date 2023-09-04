@@ -161,8 +161,8 @@ type BufferEntry is record
 
     -- NOTE: for compresion maybe can be just 2 bits:
     --       (br NT, br T, br T confirmed, special) is 4 possibilities     
-    frontBranch: std_logic;     -- seems unused?
-    confirmedBranch: std_logic; -- seems unused?
+    --frontBranch: std_logic;     -- seems unused?
+    --confirmedBranch: std_logic; -- seems unused?
     specialAction: std_logic;
 
     classInfo: InstructionClassInfo;
@@ -463,6 +463,7 @@ constant DEFAULT_ARG_SPEC: InstructionArgSpec := (
     args => ((others => '0'), (others => '0'), (others => '0'))
 );
 
+constant DEFAULT_BUFFER_ENTRY: BufferEntry;
 
 constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
     dbInfo => DEFAULT_DEBUG_INFO,
@@ -514,15 +515,6 @@ constant DEFAULT_EXEC_RESULT_N: ExecResult_N := (
     value => (others => '0')
 );
 
-constant DEFAULT_BUFFER_ENTRY: BufferEntry;
--- := (
---    dbInfo => DEFAULT_DEBUG_INFO,
---    specificOperation => sop(None, opNone),
---    classInfo => DEFAULT_CLASS_INFO,
---    constantArgs => DEFAULT_CONSTANT_ARGS,
---    argSpec => DEFAULT_ARG_SPEC,
---    others => '0'
---);
 
 constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       full => '0',
@@ -648,11 +640,13 @@ end function;
 
 constant DEFAULT_BUFFER_ENTRY: BufferEntry := (
     dbInfo => DEFAULT_DEBUG_INFO,
-    specificOperation => sop(None, opNone),
+    full => '0',
+    firstBr => '0',
+    specialAction => '0',
     classInfo => DEFAULT_CLASS_INFO,
+    specificOperation => DEFAULT_SPECIFIC_OP,
     constantArgs => DEFAULT_CONSTANT_ARGS,
-    argSpec => DEFAULT_ARG_SPEC,
-    others => '0'
+    argSpec => DEFAULT_ARG_SPEC
 );
 
 end InstructionState;
