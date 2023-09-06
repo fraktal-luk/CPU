@@ -577,8 +577,9 @@ begin
                             or (not va.intArgSel(j) and not va.floatArgSel(j)) -- arg not used
                             or (bool2std(j = 1) and ca.immSel);
         res(j).virtual := va.args(j)(4 downto 0);
-        
+
         res(j).deps := depSpec(j);
+        res(j).hasDep := isNonzero(depSpec(j));
     end loop;
     return res;
 end function;

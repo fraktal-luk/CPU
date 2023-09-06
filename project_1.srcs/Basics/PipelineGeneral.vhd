@@ -31,8 +31,6 @@ type DbCoreState is record
 end record;
 
 constant DEFAULT_EVENT_STATE: EventState := (
-    --'0',
-    --'0',
     DEFAULT_INSTRUCTION_TAGS,
     DEFAULT_INSTRUCTION_TAGS,
     DEFAULT_EXEC_RESULT,
@@ -49,8 +47,6 @@ function p2i(p: SmallNumber; n: natural) return natural;
 
 function iqInds2tags(inds: SmallNumberArray) return SmallNumberArray;
 
---type PhysicalSubpipe is (ALU, Mem, FP, StoreDataInt, StoreDataFloat);
-
 
 function makeExecResult(isl: SchedulerState) return ExecResult;
 function makeExecResult_N(isl: SchedulerState) return ExecResult_N;
@@ -62,7 +58,6 @@ type IssueQueueSignals is record
     sentKilled: std_logic;
     trialPrev1: std_logic;
     trialPrev2: std_logic;
-    --cancelled_D: std_logic;
 end record;
 
 constant DEFAULT_ISSUE_QUEUE_SIGNALS: IssueQueueSignals := (
@@ -81,7 +76,6 @@ type RegisterStateArray is array(integer range <>) of RegisterState;
 type RegisterStateArray2D is array(integer range <>) of RegisterStateArray(0 to 2);
 
 
-
 type DependencySpec is array(0 to 2) of std_logic_vector(0 to PIPE_WIDTH-1); 
 type DependencyVec is array(0 to PIPE_WIDTH-1) of DependencySpec;
 
@@ -93,23 +87,19 @@ type ArgRenameState is record
     const: std_logic;
     virtual: RegName;
     physical_O: PhysName;
-    --physicalStable: PhysName;
     physicalNew: PhysName;
     deps: std_logic_vector(0 to PIPE_WIDTH-1);
-    --sourceStable: std_logic; 
-    --sourceNew: std_logic; 
-    --sourceReady: std_logic; 
+    hasDep: std_logic;
 end record;
 
 constant DEFAULT_ARG_RENAME_STATE: ArgRenameState := (
+    sel => '0',
+    const => '1',
     virtual => (others => '0'),
     physical_O => (others => '0'),
-    --physicalStable => (others => '0'),
     physicalNew => (others => '0'),
     deps => (others => '0'),
-    const => '1',
-    --sourceStable => '1',
-    others => '0'
+    hasDep => '0'
 );
 
 type ArgRenameStateArray is array(natural range <>) of ArgRenameState;
@@ -131,9 +121,9 @@ type RenameInfoArray is array(natural range <>) of RenameInfo;
 
 constant DEFAULT_RENAME_INFO: RenameInfo := (
     dbInfo => DEFAULT_DEBUG_INFO, 
-    
+
     dbDepTags => (others => (others => 'U')),
-                   
+
     destSel => '0',
     destSelFP => '0',
     psel => '0',
@@ -156,6 +146,7 @@ end record;
 function mergeRenameInfoFP(intArgs, floatArgs: RenameInfoArray) return RenameInfoArray;
 
 function TMP_getPhysicalArgsNew(ri: RenameInfoArray) return PhysNameArray;
+function TMP_getPhysicalDestsNew(ri: RenameInfoArray) return PhysNameArray;
 
 function extractFullMask(queueContent: InstructionSlotArray) return std_logic_vector;
 function extractFullMask(cpa: ControlPacketArray) return std_logic_vector;
@@ -322,6 +313,17 @@ begin
 
     return res;
 end function;
+
+function TMP_getPhysicalDestsNew(ri: RenameInfoArray) return PhysNameArray is
+    variable res: PhysNameArray(0 to PIPE_WIDTH-1);
+begin
+    for i in 0 to PIPE_WIDTH-1 loop
+        res(i) := ri(i).physicalDest;
+    end loop;
+
+    return res;
+end function;
+
 
 function compareTagBefore(tagA, tagB: InsTag) return std_logic is
 	variable tC: InsTag := (others => '0');

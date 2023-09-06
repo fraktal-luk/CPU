@@ -75,12 +75,11 @@ type WakeupStructArray2D is array(natural range <>, natural range <>) of WakeupS
 type IqSelector is (I0, I1, M0, SVI, SVF, F0);
 
 -- Enqueue
-function prepareNewArr(input: SchedulerInfoArray; rrf: std_logic_vector) return SchedulerInfoArray;
 function getIssueStaticInfo(isl: InstructionSlot; constant HAS_IMM: boolean; ri: RenameInfo) return StaticInfo; 
 function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo;
-                                renamedDest: SmallNumber; renamedSrcs: SmallNumberArray(0 to 2)) return DynamicInfo;
+                                renamedDest: SmallNumber; renamedSrcs: SmallNumberArray(0 to 2); rrfSlice: std_logic_vector(0 to 2)) return DynamicInfo;
 
-function getIssueInfoArray(insVec: InstructionSlotArray; constant USE_IMM: boolean; ria: RenameInfoArray;
+function getIssueInfoArray(insVec: InstructionSlotArray; constant USE_IMM: boolean; ria: RenameInfoArray; rrf: std_logic_vector;
                            renamedDests: SmallNumberArray; renamedSources: SmallNumberArray; iqSel: IqSelector) return SchedulerInfoArray;
                            
 function getNewLocs(fullMask: std_logic_vector; tags: SmallNumberArray; newArr: SchedulerInfoArray) return slv2D;
@@ -94,7 +93,7 @@ function getInitWakeups(content: SchedulerInfoArray; bypass: BypassState; config
 function updateSchedulerArray(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfoArray;
 
-function updateOnDispatch(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; readyRegFlags: std_logic_vector; memFail: std_logic; config: SchedulerUpdateConfig)
+function updateOnDispatch(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfoArray;
 
 function updateSchedulerArray_S(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
@@ -145,20 +144,6 @@ end LogicIssue;
 
 package body LogicIssue is
 
-function updateRR(newContent: SchedulerInfoArray; rr: std_logic_vector) return SchedulerInfoArray is
-   variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := newContent;
-   variable rrf: std_logic_vector(0 to 2) := (others => '0');      	   
-begin
-   for i in 0 to PIPE_WIDTH-1 loop
-       rrf := rr(3*i to 3*i + 2);
-       for j in 0 to 2 loop
-            res(i).dynamic.argStates(j).waiting := res(i).dynamic.argStates(j).waiting and not rrf(j);
-       end loop;                
-   end loop;
-
-   return res;
-end function;
-
 function restoreRenameIndex(sia: SchedulerInfoArray) return SchedulerInfoArray is
    variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1) := sia;
 begin
@@ -166,19 +151,6 @@ begin
        res(i).dynamic.renameIndex := clearTagLow(res(0).dynamic.renameIndex) or i2slv(i, TAG_SIZE);
    end loop;
    return res;
-end function;
-
-function prepareNewArr(input: SchedulerInfoArray; rrf: std_logic_vector) return SchedulerInfoArray is
-    variable res: SchedulerInfoArray(input'range) := input;
-    variable rm, rrfFull: std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
-begin
-    for j in 0 to PIPE_WIDTH-1 loop
-        rm(3*j to 3*j + 2) := (others => input(j).dynamic.full); 
-    end loop;
-
-    rrfFull := rm and rrf;
-    res := restoreRenameIndex(updateRR(input, rrfFull));
-    return res;
 end function;
 
 
@@ -215,7 +187,7 @@ end function;
 
 
 function getIssueDynamicInfo(isl: InstructionSlot; stInfo: StaticInfo; constant HAS_IMM: boolean; ri: RenameInfo;
-                                renamedDest: SmallNumber; renamedSrcs: SmallNumberArray(0 to 2)) return DynamicInfo is
+                                renamedDest: SmallNumber; renamedSrcs: SmallNumberArray(0 to 2); rrfSlice: std_logic_vector(0 to 2)) return DynamicInfo is
     variable res: DynamicInfo := DEFAULT_DYNAMIC_INFO;
 begin
     res.full := isl.full;
@@ -234,23 +206,18 @@ begin
     res.floatDestSel := ri.destSelFP;
     res.dest := ri.physicalDest;
 
-    for i in 0 to 2 loop
-        res.argStates(i).dbDep := DB_setProducer(res.argStates(i).dbDep, ri.dbDepTags(i));
+    for a in 0 to 2 loop
+        res.argStates(a).dbDep := DB_setProducer(res.argStates(a).dbDep, ri.dbDepTags(a));
 
-        --res.argStates(i).used_T := ri.argStates(i).sel;
-        res.argStates(i).zero_T := ri.argStates(i).const;
+        res.argStates(a).zero_T := ri.argStates(a).const;
 
-        res.argStates(i).reg := ri.argStates(i).physicalNew;
-        res.argStates(i).iqTag := renamedSrcs(i);
+        res.argStates(a).reg := ri.argStates(a).physicalNew;
+        res.argStates(a).iqTag := renamedSrcs(a);
 
-        if i = 1 then
-        --    res.argStates(i).imm_T := stInfo.immediate;
-        end if;
+        res.argStates(a).waiting := (not stInfo.zero(a) and not rrfSlice(a)) or ri.argStates(a).hasDep;
 
-        res.argStates(i).waiting := not stInfo.zero(i);
-
-        res.argStates(i).srcPipe := (others => '0');
-        res.argStates(i).srcStage := "00000010";
+        res.argStates(a).srcPipe := (others => '0');
+        res.argStates(a).srcStage := "00000010";
     end loop;
 
     if IMM_AS_REG and HAS_IMM and isl.ins.constantArgs.immSel = '1' then
@@ -262,7 +229,16 @@ begin
 end function;
 
 
-function getIssueInfoArray(insVec: InstructionSlotArray; constant USE_IMM: boolean; ria: RenameInfoArray;
+function updateReadyRegs(sch: SchedulerInfo; rrfSlice: std_logic_vector(0 to 2)) return SchedulerInfo is
+    variable res: SchedulerInfo := sch;
+begin
+    for a in 0 to 2 loop
+        res.dynamic.argStates(a).waiting := res.dynamic.argStates(a).waiting and not rrfSlice(a);
+    end loop;
+    return res;
+end function;
+
+function getIssueInfoArray(insVec: InstructionSlotArray; constant USE_IMM: boolean; ria: RenameInfoArray; rrf: std_logic_vector;
                                 renamedDests: SmallNumberArray; renamedSources: SmallNumberArray; iqSel: IqSelector) return SchedulerInfoArray is
     variable res: SchedulerInfoArray(0 to PIPE_WIDTH-1);
     variable slot: InstructionSlot := DEFAULT_INS_SLOT;
@@ -271,6 +247,8 @@ function getIssueInfoArray(insVec: InstructionSlotArray; constant USE_IMM: boole
     variable recoded: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
     variable mask: std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
     variable ria_N: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
+    variable rrfSlice: std_logic_vector(0 to 2) := (others => '0');
+
 begin
     case iqSel is
         when I0 =>
@@ -301,20 +279,25 @@ begin
 
     for i in res'range loop
         argInfo := ria_N(i);
+        rrfSlice := rrf(3*i to 3*i + 2);
         slot := recoded(i);
         slot.full := mask(i);
         res(i).static := getIssueStaticInfo(slot, USE_IMM, argInfo);
-        res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, argInfo, renamedDests(i), renamedSources(3*i to 3*i + 2));
+        res(i).dynamic := getIssueDynamicInfo(slot, res(i).static, USE_IMM, argInfo, renamedDests(i), renamedSources(3*i to 3*i + 2), rrfSlice);
+        
+        --res(i) := updateReadyRegs(res(i), rrfSlice);
     end loop;
+
     return res;    
 end function;
 
-function updateOnDispatch(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; readyRegFlags: std_logic_vector; memFail: std_logic; config: SchedulerUpdateConfig)
+
+function updateOnDispatch(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfoArray is
     variable res: SchedulerInfoArray(0 to schedArray'length-1);
 begin
     res := updateSchedulerArray(schedArray, wakeups, memFail, config);
-    res := prepareNewArr(res, readyRegFlags);
+    res := restoreRenameIndex(res);
     return res;
 end function;
 
@@ -735,9 +718,7 @@ begin
             res(i) := issued;
         else
             res(i) := empty;
-        end if;
-    
-        --res(i) := queueContent(i).dynamic.status.state;
+        end if;    
     end loop;
     return res;
 end function;

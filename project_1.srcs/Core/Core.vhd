@@ -79,7 +79,7 @@ architecture Behavioral of Core is
     signal bqPointer, bqPointerSeq, lqPointer, sqPointer: SmallNumber := (others => '0');
 
     signal renameGroupCtrNext, commitGroupCtr, commitGroupCtrNext: InsTag := (others => '0');
-    signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0')); -- TODO: merge into rename info?
+    signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0')); -- TODO: merge into rename info? But 1 cycle difference!
 
     signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
 
@@ -200,7 +200,7 @@ begin
         frontCausing => frontEvent,
 
         dbState => dbState
-    );    
+    );
 
     frontSendAllow <=   renameAllow 
                     and allocAcceptAlu and allocAcceptMul and allocAcceptMem
@@ -426,10 +426,10 @@ begin
             constant CFG_ALU_WAIT: SchedulerUpdateConfig := (false, false, false, FORWARDING_MODES_INT_D, false); -- UNUSED
             constant CFG_ALU_SEL: SchedulerUpdateConfig :=  (false, false, false, FORWARDING_MODES_INT, false);   -- UNUSED
         begin
-            schedInfoA <= getIssueInfoArray(renamedDataLivingRe, true, renamedArgsInt, TMP_renamedDests, TMP_renamedSources, I0);
+            schedInfoA <= getIssueInfoArray(renamedDataLivingRe, true, renamedArgsInt, readyRegFlagsInt_Early, TMP_renamedDests, TMP_renamedSources, I0);
 
             wups <= work.LogicIssue.getInitWakeups(schedInfoA, bypassInt, CFG_ALU);
-            schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, readyRegFlagsInt_Early, memFail, CFG_ALU);
+            schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, memFail, CFG_ALU);
 
             IQUEUE_I0: entity work.IssueQueue(Behavioral)
             generic map(
@@ -545,10 +545,10 @@ begin
                signal divUnlock, killFollowerNextI1: std_logic := '0';
                constant CFG_MUL: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
             begin
-                schedInfoA <= getIssueInfoArray(renamedDataLivingRe, true, renamedArgsInt, TMP_renamedDests, TMP_renamedSources, I1);
+                schedInfoA <= getIssueInfoArray(renamedDataLivingRe, true, renamedArgsInt, readyRegFlagsInt_Early, TMP_renamedDests, TMP_renamedSources, I1);
 
                 wups <= getInitWakeups(schedInfoA, bypassInt, CFG_MUL);
-                schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, readyRegFlagsInt_Early, memFail, CFG_MUL);
+                schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, memFail, CFG_MUL);
 
                 IQUEUE_I1: entity work.IssueQueue(Behavioral)
                 generic map(
@@ -662,10 +662,10 @@ begin
             : SchedulerState := DEFAULT_SCHED_STATE;
             signal resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
         begin
-            schedInfoA <= getIssueInfoArray(renamedDataLivingRe, true, renamedArgsMerged, TMP_renamedDests, TMP_renamedSources, M0);         
+            schedInfoA <= getIssueInfoArray(renamedDataLivingRe, true, renamedArgsMerged, readyRegFlagsInt_Early_Mem, TMP_renamedDests, TMP_renamedSources, M0);         
             
             wups <= work.LogicIssue.getInitWakeups(schedInfoA, bypassInt, CFG_MEM);
-            schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, readyRegFlagsInt_Early_Mem, memFail, CFG_MEM);
+            schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, memFail, CFG_MEM);
 
             IQUEUE_MEM: entity work.IssueQueue(Behavioral)
             generic map(
@@ -860,11 +860,11 @@ begin
             wupsInt <= getInitWakeups(schedInfoIntA, bypassIntSV, CFG_SVI);
             wupsFloat <= getInitWakeups(schedInfoFloatA, bypassFloatSV, CFG_SVF);
 
-            schedInfoIntA <= getIssueInfoArray(renamedDataLivingRe, false, renamedArgsInt, TMP_renamedDests, TMP_renamedSources, SVI);
-            schedInfoUpdatedIntU <= updateOnDispatch(schedInfoIntA, wupsInt, readyRegFlagsSV, memFail, CFG_SVI);
+            schedInfoIntA <= getIssueInfoArray(renamedDataLivingRe, false, renamedArgsInt, readyRegFlagsSV, TMP_renamedDests, TMP_renamedSources, SVI);
+            schedInfoUpdatedIntU <= updateOnDispatch(schedInfoIntA, wupsInt, memFail, CFG_SVI);
 
-            schedInfoFloatA <= getIssueInfoArray(renamedDataLivingRe, false, renamedArgsFloat, TMP_renamedDests, TMP_renamedSources, SVF);
-            schedInfoUpdatedFloatU <= updateOnDispatch(schedInfoFloatA, wupsFloat, readyRegFlagsFloatSV, memFail, CFG_SVF);
+            schedInfoFloatA <= getIssueInfoArray(renamedDataLivingRe, false, renamedArgsFloat, readyRegFlagsFloatSV, TMP_renamedDests, TMP_renamedSources, SVF);
+            schedInfoUpdatedFloatU <= updateOnDispatch(schedInfoFloatA, wupsFloat, memFail, CFG_SVF);
 
             readyRegFlagsSV <= reorder(readyRegFlagsInt_Early);
             
@@ -993,8 +993,8 @@ begin
         begin
             wups <= getInitWakeups(schedInfoA, bypassFloat, CFG_FP0);
 
-            schedInfoA <= getIssueInfoArray(renamedDataLivingRe, false, renamedArgsFloat, TMP_renamedDests, TMP_renamedSources, work.LogicIssue.F0);
-            schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, readyRegFlagsFloat_Early, memFail, CFG_FP0);
+            schedInfoA <= getIssueInfoArray(renamedDataLivingRe, false, renamedArgsFloat, readyRegFlagsFloat_Early, TMP_renamedDests, TMP_renamedSources, work.LogicIssue.F0);
+            schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, memFail, CFG_FP0);
 
             IQUEUE_F0: entity work.IssueQueue(Behavioral)
             generic map(
@@ -1156,11 +1156,18 @@ begin
             signal regsSelI0, regsSelI1, regsSelM0, regsSelS0, regsSelFloatA, regsSelFloatC, regsSelFS0, regsSelF0: PhysNameArray(0 to 2) := (others => (others => '0'));
             signal resultToIntRF, resultToIntRF_Early, resultToIntRF_EarlyEffective, resultToFloatRF, resultToFloatRF_Early: ExecResult := DEFAULT_EXEC_RESULT;
             signal newIntSources, newFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
+            
+            signal newIntDests_T, newFloatDests_T, newIntDests_N, newFloatDests_N: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+            signal frontGroupSend_T: std_logic := '0';
         begin
         
             newIntSources <= TMP_getPhysicalArgsNew(renamedArgsInt);
             newFloatSources <= TMP_getPhysicalArgsNew(renamedArgsFloat);
-        
+
+            newIntDests_N <= TMP_getPhysicalDestsNew(renamedArgsInt);
+            newFloatDests_N <= TMP_getPhysicalDestsNew(renamedArgsFloat);
+
+
             regsSelI0 <= work.LogicRenaming.getPhysicalArgs(slotIssueI0);
             regsSelI1 <= work.LogicRenaming.getPhysicalArgs(slotIssueI1);
             regsSelM0 <= work.LogicRenaming.getPhysicalArgs(slotIssueM0);
@@ -1181,6 +1188,10 @@ begin
                    resultToIntRF_Early <= selectOrdered((subpipeM0_E0i, subpipeI1_E1, setMemFail(subpipeI0_Issue, memFail, (others => '0'))));
                    resultToFloatRF <= selectOrdered((subpipeM0_E2f, subpipeF0_E2));
                    resultToFloatRF_Early <= selectOrdered((subpipeM0_E0f, subpipeF0_E0));
+
+                        frontGroupSend_T <= frontGroupSend;
+                        newIntDests_T <= newIntDests;
+                        newFloatDests_T <= newFloatDests;
                end if;
             end process;
     
@@ -1214,13 +1225,28 @@ begin
             port map(
                 clk => clk, reset => '0', en => '0',
     
-                sendingToReserve => frontGroupSend,
-                newPhysDests => newIntDests,
+                sendingToReserve => frontGroupSend_T,
+                newPhysDests => --newIntDests_T,
+                                    newIntDests_N,
                 newPhysSources => newIntSources,
                 writingData_T(0) => resultToIntRF_EarlyEffective,
                 readyRegFlagsNext => readyRegFlagsIntNext_Early
             );
-            
+
+--                INT_READY_TABLE_EARLY_T: entity work.RegisterReadyTable(Behavioral)
+--                generic map(
+--                    WRITE_WIDTH => 1
+--                )
+--                port map(
+--                    clk => clk, reset => '0', en => '0',
+        
+--                    sendingToReserve => frontGroupSend_T,
+--                    newPhysDests => newIntDests_T,
+--                    newPhysSources => newIntSources,
+--                    writingData_T(0) => resultToIntRF_EarlyEffective,
+--                    readyRegFlagsNext => open
+--                );
+
             FP_REGISTERS: if ENABLE_FP generate
                 FLOAT_REG_FILE: entity work.RegFile(Behavioral)
                 generic map(IS_FP => true, WIDTH => 4, WRITE_WIDTH => 1)
@@ -1248,8 +1274,9 @@ begin
                 port map(
                     clk => clk, reset => '0', en => '0', 
                      
-                    sendingToReserve => frontGroupSend,                 
-                    newPhysDests => newFloatDests,
+                    sendingToReserve => frontGroupSend_T,                 
+                    newPhysDests => --newFloatDests_T,
+                                        newFloatDests_N,
                     newPhysSources => newFloatSources,
                     writingData_T(0) => resultToFloatRF_Early,
                     readyRegFlagsNext => readyRegFlagsFloatNext_Early
