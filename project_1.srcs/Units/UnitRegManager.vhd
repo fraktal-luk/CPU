@@ -26,15 +26,15 @@ port(
     frontData: in BufferEntryArray;
     frontCtrl: in ControlPacket;
 
-    aluMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
-    mulMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
-    memMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
-    branchMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
-    storeMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
-    loadMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
-    intStoreMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
-    floatStoreMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
-    fpMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+--    aluMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+--    mulMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+--    memMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+--    branchMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+--    storeMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+--    loadMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+--    intStoreMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+--    floatStoreMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
+--    fpMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
 
     renamedArgsInt: out RenameInfoArray(0 to PIPE_WIDTH-1);
     renamedArgsFloat: out RenameInfoArray(0 to PIPE_WIDTH-1);
@@ -50,8 +50,8 @@ port(
     lqPointer: in SmallNumber;
     bqPointerSeq: in SmallNumber;
 
-    newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
-    newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
+    --newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
+    --newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
 
     renamedCtrl: out ControlPacket;
 
@@ -97,76 +97,6 @@ architecture Behavioral of UnitRegManager is
 
     -- DEBUG
     signal newProducersInt, newProducersFloat, zeroProducers: InsTagArray(0 to 3*PIPE_WIDTH-1) := (others => (others => 'U'));
-
-
-    function classifyForDispatch(inSlot: InstructionSlot) return InstructionSlot is
-        variable outSlot: InstructionSlot := inSlot;
-        variable div, mul: boolean := false;
-    begin
-        div := inSlot.ins.specificOperation.arith = opDivU
-            or inSlot.ins.specificOperation.arith = opDivS                     
-            or inSlot.ins.specificOperation.arith = opRemU
-            or inSlot.ins.specificOperation.arith = opRemS;
-        mul := inSlot.ins.specificOperation.arith = opMul
-            or inSlot.ins.specificOperation.arith = opMulhU
-            or inSlot.ins.specificOperation.arith = opMulhS;
-
-        outSlot.ins.dispatchInfo.useDiv := bool2std(div and (inSlot.ins.specificOperation.subpipe = ALU));
-        
-        if (inSlot.ins.specificOperation.subpipe = ALU) then
-            if mul or div then
-                outSlot.ins.dispatchInfo.useMul := '1';
-            else
-                outSlot.ins.dispatchInfo.useAlu := '1';
-            end if;
-        elsif inSlot.ins.specificOperation.subpipe = FP then
-            outSlot.ins.dispatchInfo.useFP := '1';
-        elsif inSlot.ins.specificOperation.subpipe = Mem then
-            outSlot.ins.dispatchInfo.useMem := '1';
-
-            if (inSlot.ins.specificOperation.memory = opLoad or inSlot.ins.specificOperation.memory = opLoadSys) then 
-                outSlot.ins.typeInfo.useLQ := '1';
-            elsif (inSlot.ins.specificOperation.memory = opStore or inSlot.ins.specificOperation.memory = opStoreSys) then
-                outSlot.ins.typeInfo.useSQ := '1';
-                if outSlot.ins.typeInfo.useFP = '1' then
-                    outSlot.ins.dispatchInfo.storeFP := '1';
-                else
-                    outSlot.ins.dispatchInfo.storeInt := '1';
-                end if;
-            end if;
-
-        end if;
-        return outSlot;
-    end function;
-
-
-    function getInsSlot(elem: BufferEntry) return InstructionSlot is
-      variable res: InstructionSlot := DEFAULT_INS_SLOT;
-    begin
-      res.full := elem.full;
-      res.ins.dbInfo := elem.dbInfo;
-
-      res.ins.specificOperation := unfoldOp(elem.specificOperation);
-
-      res.ins.typeInfo.mainCluster := elem.classInfo.mainCluster;
-      res.ins.typeInfo.secCluster := elem.classInfo.secCluster;
-      res.ins.typeInfo.branchIns := elem.classInfo.branchIns;
-      res.ins.typeInfo.useLQ := elem.classInfo.useLQ;
-      --res.ins.typeInfo.useSQ := elem.classInfo.useSQ;
-      res.ins.typeInfo.useFP := elem.classInfo.useFP;
-      res.ins.typeInfo.useSpecial := elem.classInfo.useSpecial;
-
-      res.ins.typeInfo.useSQ := elem.classInfo.secCluster;
-
-      res := classifyForDispatch(res);
-
-      res.ins.constantArgs := elem.constantArgs;
-      res.ins.virtualArgSpec := elem.argSpec; 
-
-      return res;
-    end function;
-
-
 
 
 --    function classifyForDispatch(insVec: InstructionSlotArray) return InstructionSlotArray is
@@ -219,18 +149,6 @@ architecture Behavioral of UnitRegManager is
 --        return res;
 --    end function;
 
-    function getInsSlotArray(elemVec: BufferEntryArray) return InstructionSlotArray is
-      variable res: InstructionSlotArray(elemVec'range);
-    begin
-      for i in res'range loop
-          res(i) := getInsSlot(elemVec(i));
-      end loop;
-      
-      --res := classifyForDispatch(res);
-      
-      return res;
-    end function;
-
 
     function getSpecialActionSlot(insVec: InstructionSlotArray; frontData: BufferEntryArray) return SpecificOp is
        variable res: SpecificOp := frontData(0).specificOperation;
@@ -257,28 +175,6 @@ architecture Behavioral of UnitRegManager is
             ctr := addInt(renameCtr, i);
             res(i).ins.dbInfo := DB_addTag(res(i).ins.dbInfo, tag);
             res(i).ins.dbInfo := DB_addRenameCounter(res(i).ins.dbInfo, ctr);
-        end loop;
-
-        return res;
-    end function;
-
-    function suppressAfterEvent(isa: InstructionSlotArray; frontData: BufferEntryArray) return InstructionSlotArray is
-        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := isa;
-        variable found: boolean := false;
-    begin
-         for i in 0 to PIPE_WIDTH-1 loop
-            if found then
-                res(i).full := '0';
-            end if;
-
-            if res(i).full /= '1' then
-                res(i).ins.typeInfo := DEFAULT_TYPE_INFO;
-                res(i).ins.dispatchInfo := DEFAULT_CLASS_INFO_DISPATCH;                            
-            end if;
-
-            if frontData(i).specialAction = '1' then
-                found := true;
-            end if;
         end loop;
 
         return res;
@@ -636,23 +532,31 @@ begin
 
     renamedCtrl <= makeOutputCtrl(ctrl, renamedDataLivingPre, renamedSendingSig, hasBranch);
 
-    newPhysDestsOut <= newIntDests;
-    newFloatDestsOut <= newFloatDests; 
+    --newPhysDestsOut <= newIntDests;
+    --newFloatDestsOut <= newFloatDests; 
     renameAccepting <= not renameLockState;
 
     renamedSending <= renamedSendingSig;   
 
+--    DISPATCH_STR: block
+--        signal isa, isa2: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
+--    begin
+--        isa <= --getInsSlotArray(frontData);
+--                --renamedBase;
+--                isa2;
+--        isa2 <= suppressAfterEvent(getInsSlotArray(frontData), frontData);
 
-    aluMaskRe <= getAluMask1(renamedBase);
-    mulMaskRe <= getMulMask1(renamedBase);
-    memMaskRe <= getMemMask1(renamedBase);
-    branchMaskRe <= getBranchMask1(renamedBase);
-    loadMaskRe <= getLoadMask1(renamedBase);
-    storeMaskRe <= getStoreMask1(renamedBase);
-    fpMaskRe <= getFpMask1(renamedBase);
-    intStoreMaskRe <= getIntStoreMask1(renamedBase);
-    floatStoreMaskRe <= getFloatStoreMask1(renamedBase);
-    
+--        aluMaskRe <= getAluMask1(isa);
+--        mulMaskRe <= getMulMask1(isa);
+--        memMaskRe <= getMemMask1(isa);
+--        branchMaskRe <= getBranchMask1(isa);
+--        loadMaskRe <= getLoadMask1(isa);
+--        storeMaskRe <= getStoreMask1(isa);
+--        fpMaskRe <= getFpMask1(isa);
+--        intStoreMaskRe <= getIntStoreMask1(isa);
+--        floatStoreMaskRe <= getFloatStoreMask1(isa);
+--    end block;
+
     renameGroupCtrNextOut <= renameGroupCtrNext;
     
     -- pragma synthesis off

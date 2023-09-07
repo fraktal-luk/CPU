@@ -79,7 +79,7 @@ architecture Behavioral of Core is
     signal bqPointer, bqPointerSeq, lqPointer, sqPointer: SmallNumber := (others => '0');
 
     signal renameGroupCtrNext, commitGroupCtr, commitGroupCtrNext: InsTag := (others => '0');
-    signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0')); -- TODO: merge into rename info? But 1 cycle difference!
+    --signal newIntDests, newFloatDests: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0')); -- TODO: merge into rename info? But 1 cycle difference!
 
     signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
 
@@ -109,8 +109,11 @@ architecture Behavioral of Core is
     signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
     signal --memIssueFullIQ, memIssueFullMQ,
             lockIssueI0_NoMemFail, dividerSending: std_logic := '0';
+            
+            signal dispMasks_Actual, dispMasks_N: DispatchMasks := DEFAULT_DISPATCH_MASKS;
 begin
-            ch0 <= '0';
+            ch0 <= bool2std(dispMasks_N = dispMasks_Actual);
+            ch1 <= '0';
 
     -- TODO: move closer to mem code
     dread <= memoryRead.full;
@@ -223,15 +226,15 @@ begin
         lqPointer => lqPointer,
         bqPointerSeq => bqPointerSeq,
 
-        aluMaskRe => aluMaskRe,
-        mulMaskRe => mulMaskRe,
-        memMaskRe => memMaskRe,
-        branchMaskRe => branchMaskRe,
-        loadMaskRe => loadMaskRe,
-        storeMaskRe => storeMaskRe,
-        intStoreMaskRe => intStoreMaskRe,
-        floatStoreMaskRe => floatStoreMaskRe,
-        fpMaskRe => fpMaskRe,
+--        aluMaskRe => aluMaskRe,
+--        mulMaskRe => mulMaskRe,
+--        memMaskRe => memMaskRe,
+--        branchMaskRe => branchMaskRe,
+--        loadMaskRe => loadMaskRe,
+--        storeMaskRe => storeMaskRe,
+--        intStoreMaskRe => intStoreMaskRe,
+--        floatStoreMaskRe => floatStoreMaskRe,
+--        fpMaskRe => fpMaskRe,
 
 
         nextAccepting => canSendRename,
@@ -243,8 +246,8 @@ begin
         renamedArgsInt => renamedArgsInt,
         renamedArgsFloat => renamedArgsFloat,
 
-        newPhysDestsOut => newIntDests,
-        newFloatDestsOut => newFloatDests,
+        --newPhysDestsOut => newIntDests,
+        --newFloatDestsOut => newFloatDests,
 
 
         sendingFromROB => robSending,
@@ -257,6 +260,30 @@ begin
 
         dbState => dbState
     );
+            
+            dispMasks_Actual <= (
+                alu => aluMaskRe,
+                mul => mulMaskRe,
+                mem => memMaskRe,
+                branch => branchMaskRe,
+                load => loadMaskRe,
+                store => storeMaskRe,
+                intStore => intStoreMaskRe,
+                floatStore => floatStoreMaskRe,
+                fp => fpMaskRe
+            );
+
+            dispMasks_N <= getDispatchMasks(frontGroupOut);
+
+                aluMaskRe <= dispMasks_N.alu;
+                mulMaskRe <= dispMasks_N.mul;
+                memMaskRe <= dispMasks_N.mem;
+                branchMaskRe <= dispMasks_N.branch;
+                loadMaskRe <= dispMasks_N.load;
+                storeMaskRe <= dispMasks_N.store;
+                intStoreMaskRe <= dispMasks_N.intStore;
+                floatStoreMaskRe <= dispMasks_N.floatStore;
+                fpMaskRe <= dispMasks_N.fp;
 
     canSendRename <= '1';
 
@@ -1157,10 +1184,11 @@ begin
             signal resultToIntRF, resultToIntRF_Early, resultToIntRF_EarlyEffective, resultToFloatRF, resultToFloatRF_Early: ExecResult := DEFAULT_EXEC_RESULT;
             signal newIntSources, newFloatSources: PhysNameArray(0 to 3*PIPE_WIDTH-1) := (others => (others => '0'));
             
-            signal newIntDests_T, newFloatDests_T, newIntDests_N, newFloatDests_N: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
+            signal --newIntDests_T, newFloatDests_T, 
+                    newIntDests_N, newFloatDests_N: PhysNameArray(0 to PIPE_WIDTH-1) := (others => (others => '0'));
             signal frontGroupSend_T: std_logic := '0';
         begin
-        
+
             newIntSources <= TMP_getPhysicalArgsNew(renamedArgsInt);
             newFloatSources <= TMP_getPhysicalArgsNew(renamedArgsFloat);
 
@@ -1190,8 +1218,10 @@ begin
                    resultToFloatRF_Early <= selectOrdered((subpipeM0_E0f, subpipeF0_E0));
 
                         frontGroupSend_T <= frontGroupSend;
-                        newIntDests_T <= newIntDests;
-                        newFloatDests_T <= newFloatDests;
+                   --     newIntDests_T <= newIntDests;
+                   --     newFloatDests_T <= newFloatDests;
+                   
+                        ch2 <= ch0;
                end if;
             end process;
     
@@ -1225,7 +1255,8 @@ begin
             port map(
                 clk => clk, reset => '0', en => '0',
     
-                sendingToReserve => frontGroupSend_T,
+                sendingToReserve => --frontGroupSend_T,
+                                        renamedSending,
                 newPhysDests => --newIntDests_T,
                                     newIntDests_N,
                 newPhysSources => newIntSources,
@@ -1274,7 +1305,8 @@ begin
                 port map(
                     clk => clk, reset => '0', en => '0', 
                      
-                    sendingToReserve => frontGroupSend_T,                 
+                    sendingToReserve => --frontGroupSend_T,
+                                        renamedSending,                 
                     newPhysDests => --newFloatDests_T,
                                         newFloatDests_N,
                     newPhysSources => newFloatSources,
