@@ -273,6 +273,7 @@ function std2int(s: std_logic) return integer;
 
     function suppressAfterEvent(isa: InstructionSlotArray; frontData: BufferEntryArray) return InstructionSlotArray;
     function getDispatchMasks(fd: BufferEntryArray) return DispatchMasks;
+    function getDispatchMasks(cpa: ControlPacketArray) return DispatchMasks;
 
 end package;
 
@@ -1164,6 +1165,67 @@ end function;
 
 
 
+    function getInsSlot(cp: ControlPacket) return InstructionSlot is
+      variable res: InstructionSlot := DEFAULT_INS_SLOT;
+    begin
+      res.full := cp.full;
+      res.ins.dbInfo := cp.dbInfo;
+
+      res.ins.specificOperation := unfoldOp(cp.op);
+
+      res.ins.typeInfo.mainCluster := cp.classInfo.mainCluster;
+      res.ins.typeInfo.secCluster := cp.classInfo.secCluster;
+      res.ins.typeInfo.branchIns := cp.classInfo.branchIns;
+      res.ins.typeInfo.useLQ := cp.classInfo.useLQ;
+      --res.ins.typeInfo.useSQ := elem.classInfo.useSQ;
+      res.ins.typeInfo.useFP := cp.classInfo.useFP;
+      res.ins.typeInfo.useSpecial := cp.classInfo.useSpecial;
+
+      res.ins.typeInfo.useSQ := cp.classInfo.secCluster;
+
+      res := classifyForDispatch(res);
+
+      --res.ins.constantArgs := elem.constantArgs;
+      --res.ins.virtualArgSpec := elem.argSpec; 
+
+      return res;
+    end function;
+
+    function getInsSlotArray(cpVec: ControlPacketArray) return InstructionSlotArray is
+      variable res: InstructionSlotArray(cpVec'range);
+    begin
+      for i in res'range loop
+          res(i) := getInsSlot(cpVec(i));
+      end loop;
+      
+      --res := classifyForDispatch(res);
+      
+      return res;
+    end function;
+
+
+    function suppressAfterEvent(isa: InstructionSlotArray) return InstructionSlotArray is
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := isa;
+        variable found: boolean := false;
+    begin
+         for i in 0 to PIPE_WIDTH-1 loop
+            if found then
+                res(i).full := '0';
+            end if;
+
+            if res(i).full /= '1' then
+                res(i).ins.typeInfo := DEFAULT_TYPE_INFO;
+                res(i).ins.dispatchInfo := DEFAULT_CLASS_INFO_DISPATCH;                            
+            end if;
+
+            if res(i).ins.typeInfo.useSpecial = '1' then
+                found := true;
+            end if;
+        end loop;
+
+        return res;
+    end function;
+
     function suppressAfterEvent(isa: InstructionSlotArray; frontData: BufferEntryArray) return InstructionSlotArray is
         variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := isa;
         variable found: boolean := false;
@@ -1190,6 +1252,25 @@ end function;
         function getDispatchMasks(fd: BufferEntryArray) return DispatchMasks is
             variable res: DispatchMasks := DEFAULT_DISPATCH_MASKS;
             constant isa: InstructionSlotArray(0 to PIPE_WIDTH-1) := suppressAfterEvent(getInsSlotArray(fd), fd);
+        begin
+            res.alu := getAluMask1(isa);
+            res.mul := getMulMask1(isa);
+            res.mem := getMemMask1(isa);
+            res.branch := getBranchMask1(isa);
+            res.load := getLoadMask1(isa);
+            res.store := getStoreMask1(isa);
+            res.fp := getFpMask1(isa);
+            res.intStore := getIntStoreMask1(isa);
+            res.floatStore := getFloatStoreMask1(isa);
+            return res;
+        end function;
+
+        function getDispatchMasks(cpa: ControlPacketArray) return DispatchMasks is
+            variable res: DispatchMasks := DEFAULT_DISPATCH_MASKS;
+            constant isa: InstructionSlotArray(0 to PIPE_WIDTH-1) := suppressAfterEvent(
+                                                                            getInsSlotArray(cpa)
+                                                                     --           , fd
+                                                                     );
         begin
             res.alu := getAluMask1(isa);
             res.mul := getMulMask1(isa);

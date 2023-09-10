@@ -57,6 +57,7 @@ port(
 
     sendingFromROB: in std_logic;
     robData: in ControlPacketArray(0 to PIPE_WIDTH-1);
+    robCtrl: in ControlPacket;
 
     commitArgInfoI: in RenameInfoArray(0 to PIPE_WIDTH-1);
     commitArgInfoF: in RenameInfoArray(0 to PIPE_WIDTH-1);
@@ -97,57 +98,6 @@ architecture Behavioral of UnitRegManager is
 
     -- DEBUG
     signal newProducersInt, newProducersFloat, zeroProducers: InsTagArray(0 to 3*PIPE_WIDTH-1) := (others => (others => 'U'));
-
-
---    function classifyForDispatch(insVec: InstructionSlotArray) return InstructionSlotArray is
---        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := insVec;
---        variable inSlot, outSlot: InstructionSlot := DEFAULT_INS_SLOT;
---        variable div, mul: boolean := false;
---    begin
---        for i in 0 to PIPE_WIDTH-1 loop
---            inSlot := insVec(i);
---            outSlot := inSlot;
-        
---            div := inSlot.ins.specificOperation.arith = opDivU
---                or inSlot.ins.specificOperation.arith = opDivS                     
---                or inSlot.ins.specificOperation.arith = opRemU
---                or inSlot.ins.specificOperation.arith = opRemS;
---            mul := inSlot.ins.specificOperation.arith = opMul
---                or inSlot.ins.specificOperation.arith = opMulhU
---                or inSlot.ins.specificOperation.arith = opMulhS;
-
---            outSlot.ins.dispatchInfo.useDiv := bool2std(div and (inSlot.ins.specificOperation.subpipe = ALU));
-            
---            if (inSlot.ins.specificOperation.subpipe = ALU) then
---                if mul or div then
---                    outSlot.ins.dispatchInfo.useMul := '1';
---                else
---                    outSlot.ins.dispatchInfo.useAlu := '1';
---                end if;
---            elsif inSlot.ins.specificOperation.subpipe = FP then
---                outSlot.ins.dispatchInfo.useFP := '1';
---            elsif inSlot.ins.specificOperation.subpipe = Mem then
---                outSlot.ins.dispatchInfo.useMem := '1';
-
---			    if (inSlot.ins.specificOperation.memory = opLoad or inSlot.ins.specificOperation.memory = opLoadSys) then 
---                    outSlot.ins.typeInfo.useLQ := '1';
---                elsif (inSlot.ins.specificOperation.memory = opStore or inSlot.ins.specificOperation.memory = opStoreSys) then
---                    outSlot.ins.typeInfo.useSQ := '1';
---                    if outSlot.ins.typeInfo.useFP = '1' then
---                        outSlot.ins.dispatchInfo.storeFP := '1';
---                    else
---                        outSlot.ins.dispatchInfo.storeInt := '1';
---                    end if;
---                end if;
-
---            end if;
-            
---            --outSlot := outSlot;
---            res(i) := outSlot;
---        end loop;
-        
---        return res;
---    end function;
 
 
     function getSpecialActionSlot(insVec: InstructionSlotArray; frontData: BufferEntryArray) return SpecificOp is
@@ -209,11 +159,8 @@ architecture Behavioral of UnitRegManager is
                             renameCtr: Word; -- DB!                           
                             dbtrap: std_logic)
     return InstructionSlotArray is
-        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := --TMP_recodeMem
-                                                                    (getInsSlotArray(ia));
+        variable res: InstructionSlotArray(0 to PIPE_WIDTH-1) := getInsSlotArray(ia);
     begin
-        --    res := classifyForDispatch(res);
-
         res := updateTags(res, baseTags);
 
         res := DB_updateTags(res, baseTags.renameIndex, renameCtr);
@@ -244,7 +191,6 @@ architecture Behavioral of UnitRegManager is
 
     signal inputRenameInfoInt, inputRenameInfoFloat, resultRenameInfoInt, resultRenameInfoFloat, storedRenameInfoInt, storedRenameInfoFloat,
                       commitArgInfoIntDelayed, commitArgInfoFloatDelayed: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
-
 begin
     eventSig <= execEventSignal or lateEventSignal;
 
@@ -406,7 +352,7 @@ begin
                         C_tags.renameIndex <= addIntTrunc(C_tags.renameIndex, PIPE_WIDTH, TAG_SIZE);
                         C_tags.sqPointer <= addIntTrunc(C_tags.sqPointer, countOnes(getCommittedEffectiveMask(robData, false)), SQ_PTR_SIZE+1);
                         C_tags.lqPointer <= addIntTrunc(C_tags.lqPointer, countOnes(getCommittedEffectiveMask(robData, true)), LQ_PTR_SIZE+1);
-                        C_tags.bqPointer <= addIntTrunc(C_tags.bqPointer, std2int(robData(0).controlInfo.firstBr), BQ_PTR_SIZE+1);
+                        C_tags.bqPointer <= addIntTrunc(C_tags.bqPointer, std2int(robCtrl.controlInfo.firstBr), BQ_PTR_SIZE+1);
                         --C_tags.bqPointerSeq <= addIntTrunc(C_tags.bqPointerSeq, countOnes(getCommittedMaskBr(robData)), BQ_SEQ_PTR_SIZE+1);
 
                         commitTags <= updateTagsCommit(commitTags, robData);
@@ -530,32 +476,10 @@ begin
         );
 	end generate;
 
-    renamedCtrl <= makeOutputCtrl(ctrl, renamedDataLivingPre, renamedSendingSig, hasBranch);
-
-    --newPhysDestsOut <= newIntDests;
-    --newFloatDestsOut <= newFloatDests; 
     renameAccepting <= not renameLockState;
 
+    renamedCtrl <= makeOutputCtrl(ctrl, renamedDataLivingPre, renamedSendingSig, hasBranch);
     renamedSending <= renamedSendingSig;   
-
---    DISPATCH_STR: block
---        signal isa, isa2: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INS_SLOT);
---    begin
---        isa <= --getInsSlotArray(frontData);
---                --renamedBase;
---                isa2;
---        isa2 <= suppressAfterEvent(getInsSlotArray(frontData), frontData);
-
---        aluMaskRe <= getAluMask1(isa);
---        mulMaskRe <= getMulMask1(isa);
---        memMaskRe <= getMemMask1(isa);
---        branchMaskRe <= getBranchMask1(isa);
---        loadMaskRe <= getLoadMask1(isa);
---        storeMaskRe <= getStoreMask1(isa);
---        fpMaskRe <= getFpMask1(isa);
---        intStoreMaskRe <= getIntStoreMask1(isa);
---        floatStoreMaskRe <= getFloatStoreMask1(isa);
---    end block;
 
     renameGroupCtrNextOut <= renameGroupCtrNext;
     

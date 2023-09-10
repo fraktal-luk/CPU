@@ -532,7 +532,7 @@ begin
 
         if memFail = '1' and not config.ignoreMemFail then
         -- Resetting to waiting state
-            if dependsOnMemHit(state.dynamic.argStates(a), config.fp) = '1' then -- Remember, this depends on "old" state, before counter increments!
+            if dependsOnMemHit(state.dynamic.argStates(a), config.fp) = '1' then
                 res.dynamic.argStates(a) := retractArg(res.dynamic.argStates(a));
             end if;
         else

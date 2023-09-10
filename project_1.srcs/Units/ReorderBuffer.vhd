@@ -137,7 +137,7 @@ architecture Behavioral of ReorderBuffer is
     end function;
 
 
-    function getOutputCtrl(si: StaticGroupInfo; di: DynamicGroupInfo; sending: std_logic) return ControlPacket is
+    function getOutputCtrl(si: StaticGroupInfo; di: DynamicGroupInfo; sgi: StaticGroupInfo; dgi: DynamicGroupInfo; sending: std_logic) return ControlPacket is
         variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
     begin
         res.full := sending;
@@ -145,7 +145,8 @@ architecture Behavioral of ReorderBuffer is
         res.op.subpipe := None;
         res.op.system := SysOp'val(slv2u(si.specialOp));
         res.op.bits := si.specialOp;
-        
+
+        res.controlInfo.firstBr := sgi.useBQ;
         return res;
     end function;
 
@@ -174,7 +175,7 @@ begin
         dynamicGroupInput <= getDynamicGroupInfo(inputCtrl, inputData, DEFAULT_INS_SLOT);
 
         -- Outputs
-        outputCtrl <= getOutputCtrl(staticGroupOutput, dynamicGroupOutput, isSending);
+        outputCtrl <= getOutputCtrl(staticGroupOutput, dynamicGroupOutput, staticGroupOutput, dynamicGroupOutput, isSending);
 
     	outputCompleted_Pre <= groupCompleted(dynamicOutput_Pre);
 
