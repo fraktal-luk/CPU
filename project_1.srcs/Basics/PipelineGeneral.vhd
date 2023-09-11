@@ -41,6 +41,7 @@ constant DEFAULT_EVENT_STATE: EventState := (
 constant DEFAULT_DB_STATE: DbCoreState := (dummy => DUMMY_VALUE, dbSignal => '0');
 
 
+-- TODO: move to basictypes
 function sn(n: integer) return SmallNumber;
 
 function p2i(p: SmallNumber; n: natural) return natural;

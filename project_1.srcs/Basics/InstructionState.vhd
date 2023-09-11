@@ -12,11 +12,7 @@ use work.InstructionStateBase.all;
 
 package InstructionState is
 
-
---constant OP_TYPE_BITS: natural := findLog2(SubpipeType'pos(SubpipeType'high) - SubpipeType'pos(SubpipeType'low) + 1);
 constant OP_VALUE_BITS: natural := getSpecificOpSize;
-
---constant SYS_OP_SIZE: natural := findLog2(SysOp'pos(SysOp'high) - SysOp'pos(SysOp'low) + 1);
 
 type SpecificOp is record
     subpipe: SubpipeType;
@@ -86,16 +82,7 @@ type InstructionControlInfo is record
     dataMiss: std_logic;        -- MQ
     sqMiss:    std_logic;       -- MQ
     firstBr: std_logic;
-    --killed: std_logic;
-    --causing: std_logic;
-    --ignored: std_logic;
 end record;
-
---type InstructionControlInfo_T is record
---	specialAction_T: std_logic;
---    firstBr_T: std_logic;
---end record;
-
 
 type ClassInfo_Dispatch is record
 	storeInt: std_logic;
@@ -158,11 +145,7 @@ type BufferEntry is record
     dbInfo: InstructionDebugInfo;
     full: std_logic;
     firstBr: std_logic; -- TEMP
-
-    -- NOTE: for compresion maybe can be just 2 bits:
-    --       (br NT, br T, br T confirmed, special) is 4 possibilities     
-    --frontBranch: std_logic;     -- seems unused?
-    --confirmedBranch: std_logic; -- seems unused?
+   
     specialAction: std_logic;
 
     classInfo: InstructionClassInfo;
@@ -175,7 +158,6 @@ end record;
 
 type InstructionState is record
     dbInfo: InstructionDebugInfo;
-	--controlInfo: InstructionControlInfo_T;
 	tags: InstructionTags;
 	specificOperation: SpecificOp;
 	typeInfo: InstructionTypeInfo;
@@ -183,7 +165,7 @@ type InstructionState is record
 
 	constantArgs: InstructionConstantArgs;
 	virtualArgSpec: InstructionArgSpec;
-	   dest_T: PhysName; 
+	dest_T: PhysName; 
 end record;
 
 type InstructionStateArray is array(integer range <>) of InstructionState;
@@ -228,12 +210,17 @@ type ArgumentState is record
 
     waiting: std_logic;
     readyCtr: SmallNumber;   -- for retraction
+        T_depMem1: std_logic;
+        T_depMem2: std_logic;
+        T_depMem3: std_logic;
+        T_failed: std_logic;
+
+        M_dep: std_logic;
+        M_ctr: SmallNumber;
 
     srcPipe: SmallNumber;          -- SS
     srcStage: SmallNumber;         -- SS
 
-    --used_T: std_logic;  -- DB only?
-    --imm_T: std_logic;   -- DB only?
     value: Hword;       -- DB only?
 
     dbDep: DbDependency;   
@@ -241,7 +228,6 @@ end record;
 
 
 type ArgumentStateArray is array(natural range <>) of ArgumentState;
-
 
 
 -- Scheduler structure
@@ -298,7 +284,7 @@ end record;
 
 type SchedulerState is record
     full: std_logic;
-        maybeFull: std_logic;
+    maybeFull: std_logic;
     st: StaticInfo;
 
     intDestSel: std_logic;
@@ -397,7 +383,7 @@ constant DEFAULT_STATIC_INFO: StaticInfo := (
     dbInfo => DEFAULT_DEBUG_INFO,
     operation => DEFAULT_SPECIFIC_OP,
     branchIns => '0',
-        divIns => '0',
+    divIns => '0',
     tags => DEFAULT_INSTRUCTION_TAGS,
     immediate => '0',
     immValue => (others => '0'),
@@ -420,16 +406,8 @@ constant DEFAULT_CONTROL_INFO: InstructionControlInfo := (
     tlbMiss => '0',
     dataMiss => '0',
     sqMiss => '0',
-    firstBr => '0' --,
-   --killed => '0',  -- ??
-    --causing => '0', -- ??
-    --ignored => '0'  -- ??
+    firstBr => '0'
 );
-
---    constant DEFAULT_CONTROL_INFO_T: InstructionControlInfo_T := (											    											
---        specialAction_T => '0',
---        firstBr_T => '0'
---    );
 
 constant DEFAULT_CLASS_INFO: InstructionClassInfo := ( 
     mainCluster => '0',
@@ -467,14 +445,13 @@ constant DEFAULT_BUFFER_ENTRY: BufferEntry;
 
 constant DEFAULT_INSTRUCTION_STATE: InstructionState := (
     dbInfo => DEFAULT_DEBUG_INFO,
-	--controlInfo => DEFAULT_CONTROL_INFO_T,	
 	specificOperation => DEFAULT_SPECIFIC_OP,
 	tags => DEFAULT_INSTRUCTION_TAGS,
 	typeInfo => DEFAULT_TYPE_INFO,
 	dispatchInfo => DEFAULT_CLASS_INFO_DISPATCH,
 	constantArgs => DEFAULT_CONSTANT_ARGS,
 	virtualArgSpec => DEFAULT_ARG_SPEC,
-	   dest_T => (others => '0') 
+	dest_T => (others => '0') 
 );
 
 constant DEFAULT_INS_STATE: InstructionState := DEFAULT_INSTRUCTION_STATE;
@@ -548,16 +525,20 @@ constant DEFAULT_DB_DEPENDENCY: DbDependency := (
                                     );
 
 constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
-    --used_T => '0',
     reg => (others => '0'),
     iqTag => (others => '0'),
     zero_T => '0',
-    --imm_T => '0',
     value => (others => '0'),
     readyCtr => (others => '0'),
---    failed => '0',
+        T_depMem1 => '0',
+        T_depMem2 => '0',
+        T_depMem3 => '0',
+        T_failed => '0',
+        
+        M_dep => '0',
+        M_ctr => (others => '0'),
+        
     waiting => '0',
---    stored => '0',
     srcPipe => (others => '0'),
     srcStage => (others => '0'),
     

@@ -92,7 +92,7 @@ architecture Behavioral of Core is
 
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
 
-    signal events: EventState := DEFAULT_EVENT_STATE;
+    signal events, eventsPrev, events_T: EventState := DEFAULT_EVENT_STATE;
     signal dbState: DbCoreState := DEFAULT_DB_STATE;
 
     signal TMP_aluTags, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags,
@@ -467,7 +467,8 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                events => events,
+                events => --events,
+                            events_T,
 
                 accept => allocAcceptAlu,
 
@@ -550,7 +551,9 @@ begin
                         lateEventPre <= events.lateCausing.full;
 
                         --    events <= (dataToBranch.tags, branchResultE0.tags, execEvent, lateEvent, memFail);
-
+                        
+                        eventsPrev <= events;
+                        
                     end if;
                 end process;
 
@@ -568,10 +571,11 @@ begin
                 bqUpdate.value <= branchResultE0.target;
 
                 events <= (dataToBranch.tags, branchResultE0.tags, execEvent, lateEvent, memFailSig);
-                          --(branchResultE0.tags, branchResultE1.tags, execEvent, lateEvent, memFailSig);
+
+                    events_T <= (eventsPrev.preExecTags, eventsPrev.execTags, eventsPrev.execCausing, events.lateCausing, memFailSig);
+                    --events_T <= (eventsPrev.preExecTags, eventsPrev.execTags, eventsPrev.execCausing, eventsPrev.lateCausing, memFailSig);
             end block;
         end block;
-
 
         MUL_BLOCK: if ENABLE_MUL_DIV generate
             SUBPIPE_MUL: block
@@ -600,7 +604,8 @@ begin
                 )
                 port map(
                     clk => clk, reset => '0', en => '0',
-                    events => events,
+                    events => --events,
+                                events_T,
 
                     accept => allocAcceptMul,
 
@@ -716,7 +721,8 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                events => events,
+                events => --events,
+                            events_T,
 
                 accept => allocAcceptMem,
 
@@ -876,7 +882,8 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                events => events,
+                events => --events,
+                            events_T,
 
                 accept => allocAcceptSVI,
 
@@ -934,7 +941,7 @@ begin
                 wupsFloat <= getInitWakeups(schedInfoFloatA, bypassFloatSV, CFG_SVF);
                 schedInfoFloatA <= getIssueInfoArray(renamedDataLivingRe, false, renamedArgsFloat, readyRegFlagsFloatSV, TMP_renamedDests, TMP_renamedSources, SVF);
                 schedInfoUpdatedFloatU <= updateOnDispatch(schedInfoFloatA, wupsFloat, memFail, CFG_SVF);
-    
+
                 FP_STORE_IQ: if ENABLE_FP generate
                     IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)
                     generic map(
@@ -945,35 +952,36 @@ begin
                     )
                     port map(
                         clk => clk, reset => '0', en => '0',
-                        events => events,
-    
+                        events => --events,
+                                    events_T,
+
                         accept => allocAcceptSVF,
-    
+
                         inReady => frontGroupSend,
                         inMask => floatStoreMaskRe,
-    
+
                         TMP_outTags => TMP_svfTags,
-    
+
                         prevSendingOK => renamedSending,
                         newArr => schedInfoUpdatedFloatU,
-    
+
                         bypass => bypassFloatSV,
                         unlockDiv => '0',
-    
+
                         nextAccepting => allowIssueStoreDataFP,
-    
+
                         schedulerOut_Fast => slotIssueSVF_TF,
                         schedulerOut_Slow => slotIssueSVF_TS,           
                         outputSignals => outSigsSVF,
-    
+
                         dbState => dbState
                     );
                 end generate;
-    
+
                 slotIssueFloatSV <= slotIssueSVF_TF;
                 slotIssueSVF_U <= TMP_mergeStatic(slotIssueSVF_TF, slotIssueSVF_TS);
                 issueFloatSV <= outSigsSVF.sending;
-    
+
                 TMP_ISSUE_SVF: block
                     signal argStateR: SchedulerState := DEFAULT_SCHEDULER_STATE;
                 begin
@@ -1020,7 +1028,8 @@ begin
             )
             port map(
                clk => clk, reset => '0', en => '0',
-               events => events,
+               events => --events,
+                            events_T,
                accept => allocAcceptF0,
 
                inReady => frontGroupSend,
@@ -1364,7 +1373,8 @@ begin
 	)
 	port map(
 		clk => clk, reset => '0', en => '0',
-		events => events,
+		events => --events,
+		              events_T,
 
 		acceptAlloc => allocAcceptSQ,
 
@@ -1410,7 +1420,8 @@ begin
 	)
 	port map(
 		clk => clk, reset => '0', en => '0',
-		events => events,
+		events => --events,
+		              events_T,
 
 		acceptAlloc => allocAcceptLQ,
 
@@ -1473,7 +1484,8 @@ begin
             )
         port map(
             clk => clk, reset => '0', en => '0',
-            events => events,
+            events => --events,
+                        events_T,
 
             acceptAlloc => open,
 

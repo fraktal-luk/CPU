@@ -28,9 +28,12 @@ type WakeupStruct is record
     reg: PhysName;
     iqTag: SmallNumber;
     active: std_logic;
+    
+    M_dep: std_logic;
+    M_ctr: SmallNumber;
 end record;
 
-constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0', (others => '0'), sn(0), '0');
+constant DEFAULT_WAKEUP_STRUCT: WakeupStruct := ((others => '0'), "00000010", '0', (others => '0'), sn(0), '0', '0', sn(0));
 
 -- struct for experimental code
 type ArgWakeup is record
@@ -361,8 +364,8 @@ function getSlowWakeup(si: SchedulerInfo; a: natural; bypass: BypassState; fwMod
     variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
     constant arg: PhysName := si.dynamic.argStates(a).reg;
 begin
-    for p in 0 to bypass.used'length-1 loop
-        if bypass.used(p) /= '1' then
+    for p in 0 to bypass.usedSlow'length-1 loop
+        if bypass.usedSlow(p) /= '1' then
             next;
         end if;
 
@@ -370,6 +373,9 @@ begin
             res.match := '1';
             res.argLocsPipe(2 downto 0) := i2slv(p, 3);
             res.argSrc(1 downto 0) := i2slv(bypass.phase(p), 2);
+            
+            --res.M_dep := bypass
+            
             exit;
         end if;
     end loop;
@@ -384,7 +390,7 @@ function getFastWakeup(si: SchedulerInfo; a: natural; bypass: BypassState; fwMod
     variable matchVec: std_logic_vector(0 to 2) := (others => '0');
     variable srcStage: natural := 2;
 begin
-    for p in 0 to bypass.used'length-1 loop
+    for p in 0 to bypass.usedFast'length-1 loop
         if bypass.usedFast(p) /= '1' then
             next;
         end if;
@@ -411,8 +417,8 @@ function getInitWakeup(si: SchedulerInfo; a: natural; bypass: BypassState; fwMod
     variable res: WakeupStruct := DEFAULT_WAKEUP_STRUCT;
     constant arg: PhysName := si.dynamic.argStates(a).reg;
 begin
-    for p in 0 to bypass.used'length-1 loop
-        if bypass.used(p) /= '1' then
+    for p in 0 to bypass.usedSlow'length-1 loop
+        if bypass.usedSlow(p) /= '1' then
             next;
         end if;
 
@@ -489,12 +495,23 @@ return ArgumentState is
     variable res: ArgumentState := argState;
 begin
     if (argState.waiting and wakeups.match) /= '1' then
+        if res.M_dep = '1' then
+            res.M_ctr := addInt(res.M_ctr, 1);
+        end if;
+
         return res;
     end if;
 
     res.srcPipe := wakeups.argLocsPipe;
     res.srcStage := wakeups.argSrc;
     res.waiting := '0';
+    
+        if wakeups.argLocsPipe(1 downto 0) = "10" then -- Mem
+            res.T_depMem1 := '1';
+            res.M_dep := '1';
+            res.M_ctr := sn(1);
+        end if;
+
     return res;
 end function;
 
@@ -502,6 +519,9 @@ function retractArg(argState: ArgumentState) return ArgumentState is
     variable res: ArgumentState := argState;
 begin
     res.waiting := '1';
+    
+        res.M_dep := '0';
+        res.M_ctr := sn(0);
     return res;
 end function;
 
@@ -576,6 +596,11 @@ function removeEntry(entry: SchedulerInfo) return SchedulerInfo is
 begin
     res.dynamic.full := '0';
  --   res.dynamic.status.state := empty;
+    for a in 0 to 2 loop
+        res.dynamic.argStates(a).M_dep := '0';
+        res.dynamic.argStates(a).M_ctr := sn(0);
+    end loop;
+
     return res;
 end function;
 

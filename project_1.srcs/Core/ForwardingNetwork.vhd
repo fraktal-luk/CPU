@@ -111,7 +111,7 @@ type ForwardingModeArray is array (natural range <>) of ForwardingMode;
 
 ---- 1 per arg. const if unused
 type BypassState is record
-    used:  std_logic_vector(0 to 2);
+    usedSlow:  std_logic_vector(0 to 2);
     usedFast:  std_logic_vector(0 to 2);
     obj:   ExecResultArray(0 to 2);
     objNext:   ExecResultArray(0 to 2);
@@ -120,10 +120,12 @@ type BypassState is record
     stage: IntArray(0 to 2);
     phase: IntArray(0 to 2);
     memFail: std_logic;
+    
+    
 end record;
 
 constant DEFAULT_BYPASS_STATE: BypassState := (
-    used => (others => '0'),
+    usedSlow => (others => '0'),
     usedFast => (others => '0'),
     obj => (others => DEFAULT_EXEC_RESULT),
     objNext => (others => DEFAULT_EXEC_RESULT),
@@ -288,7 +290,7 @@ package body  ForwardingNetwork is
 function makeBypassInt(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassState is
     variable bypassInt: BypassState := DEFAULT_BYPASS_STATE;
 begin
-    bypassInt.used := "111";
+    bypassInt.usedSlow := "111";
     bypassInt.usedFast := "100";
     bypassInt.obj := obj;--(subpipeI0_Issue, subpipeI1_E1, subpipeM0_RegRead);
     bypassInt.objNext := objN;--(subpipeI0_RegRead, subpipeI1_E2, subpipeM0_E0i);                
@@ -305,7 +307,7 @@ end function;
 function makeBypassIntSV(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassState is
     variable bypassIntSV: BypassState := DEFAULT_BYPASS_STATE;
 begin
-    bypassIntSV.used := "111";
+    bypassIntSV.usedSlow := "111";
     bypassIntSV.usedFast := "000";
                         --"000";
     bypassIntSV.obj := obj;--(subpipeI0_E0, subpipeI1_D0, subpipeM0_E2i);
@@ -322,7 +324,7 @@ end function;
 function makeBypassFloat(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassState is
     variable bypassFloat: BypassState := DEFAULT_BYPASS_STATE;
 begin
-    bypassFloat.used := "101";
+    bypassFloat.usedSlow := "101";
     bypassFloat.usedFast := "000";
     bypassFloat.obj := obj;--(subpipeI0_Issue, subpipeI1_E1, subpipeM0_RegRead);
     bypassFloat.objNext := objN;--(subpipeI0_RegRead, subpipeI1_E2, subpipeM0_E0i);                
@@ -338,7 +340,7 @@ end function;
 function makeBypassFloatSV(obj, objN, objN2: ExecResultArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassState is
     variable bypassFloatSV: BypassState := DEFAULT_BYPASS_STATE;
 begin
-    bypassFloatSV.used := "101";
+    bypassFloatSV.usedSlow := "101";
     bypassFloatSV.usedFast := "000";
                           --"000";  
     bypassFloatSV.obj := obj;--(subpipeF0_E2, DEFAULT_EXEC_RESULT, subpipeM0_D0f);
