@@ -209,9 +209,9 @@ begin
     outSigs <=   (
             sending => sends,
             sentKilled => sentKilled,
-            trialPrev1 => sentTrial1,
+            trialPrev1 => '0',--sentTrial1,
                           --  TMP_trial1,
-            trialPrev2 => sentTrial2
+            trialPrev2 => '0'--sentTrial2
                           --  TMP_trial2
             );
     outputSignals <= outSigs;

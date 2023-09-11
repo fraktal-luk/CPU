@@ -275,6 +275,8 @@ function std2int(s: std_logic) return integer;
     function getDispatchMasks(fd: BufferEntryArray) return DispatchMasks;
     function getDispatchMasks(cpa: ControlPacketArray) return DispatchMasks;
 
+    function convertExecStoreValue(sx: SchedulerState) return ExecResult;
+
 end package;
 
 
@@ -1283,5 +1285,15 @@ end function;
             res.floatStore := getFloatStoreMask1(isa);
             return res;
         end function;
+
+    function convertExecStoreValue(sx: SchedulerState) return ExecResult is
+        variable res: ExecResult := DEFAULT_EXEC_RESULT;
+    begin
+        res.full := sx.full;
+        res.tag := sx.st.tags.renameIndex;
+        res.dest := sx.st.tags.sqPointer;
+        res.value := sx.argValues(0);
+        return res;
+    end function;
 
 end package body;
