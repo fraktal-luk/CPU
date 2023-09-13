@@ -26,16 +26,6 @@ port(
     frontData: in BufferEntryArray;
     frontCtrl: in ControlPacket;
 
---    aluMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
---    mulMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
---    memMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
---    branchMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
---    storeMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
---    loadMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
---    intStoreMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
---    floatStoreMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
---    fpMaskRe: out std_logic_vector(0 to PIPE_WIDTH-1);
-
     renamedArgsInt: out RenameInfoArray(0 to PIPE_WIDTH-1);
     renamedArgsFloat: out RenameInfoArray(0 to PIPE_WIDTH-1);
     
@@ -50,8 +40,6 @@ port(
     lqPointer: in SmallNumber;
     bqPointerSeq: in SmallNumber;
 
-    --newPhysDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
-    --newFloatDestsOut: out PhysNameArray(0 to PIPE_WIDTH-1);
 
     renamedCtrl: out ControlPacket;
 

@@ -30,16 +30,17 @@ entity BranchQueue is
 		acceptingOut: out std_logic;		
 		acceptingBr: out std_logic;
 
-		prevSending: in std_logic;
 		prevSendingBr: in std_logic;
+        dataInBr: in ControlPacketArray(0 to PIPE_WIDTH-1);
+        ctrlInBr: in ControlPacket;
+        
+		frontSending: in std_logic;
+		branchMaskFront: in std_logic_vector(0 to PIPE_WIDTH-1);		
 
-		prevSendingRe: in std_logic;
-
-		branchMaskRe: in std_logic_vector(0 to PIPE_WIDTH-1);		
-		dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+		renamedSending: in std_logic;
+		renamedDataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
         renamedCtrl: in ControlPacket;
 
-        dataInBr: in ControlPacketArray(0 to PIPE_WIDTH-1);
 
         renamedPtr: out SmallNumber;
         bqPtrOut: out SmallNumber;
@@ -54,9 +55,6 @@ entity BranchQueue is
         commitBr: in std_logic;
         commitMask: in std_logic_vector(0 to PIPE_WIDTH-1);
 
-		--lateEventSignal: in std_logic;
-		--execEventSignal: in std_logic;
-        --execCausing: in ExecResult;
 
 		events: in EventState;
 
@@ -94,7 +92,7 @@ architecture Behavioral of BranchQueue is
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0'; 
 begin
     earlyInputSending <= prevSendingBr and dataInBr(0).controlInfo.firstBr;
-    lateInputSending <= prevSending and --dataIn(0).ins.controlInfo.firstBr_T;
+    lateInputSending <= renamedSending and --dataIn(0).ins.controlInfo.firstBr_T;
                                         renamedCtrl.controlInfo.firstBr;
 
     RW: block
@@ -109,7 +107,7 @@ begin
        signal lateSelected: LateInfo := DEFAULT_LATE_INFO;      
     begin
        earlySerialInput <= serializeEarlyInfo(getEarlyInfo(dataInBr));
-       lateSerialInput <= serializeLateInfo(getLateInfo(dataIn));
+       lateSerialInput <= serializeLateInfo(getLateInfo(renamedDataIn));
 
        SYNCH: process (clk)
        begin
@@ -155,7 +153,7 @@ begin
 
     pRenamedNext <= pStart when lateEventSignal = '1'
         else       addIntTrunc(pCausingPrev, 1, QUEUE_CAP_SIZE) when execEventSignal = '1'
-        else       addIntTrunc(pRenamed, 1, QUEUE_CAP_SIZE) when prevSendingRe = '1'
+        else       addIntTrunc(pRenamed, 1, QUEUE_CAP_SIZE) when frontSending = '1'
         else       pRenamed;
 
     pEndNext <= pStart when lateEventSignal = '1'
@@ -167,7 +165,7 @@ begin
 
     pRenamedSeqNext <= pStartSeq when lateEventSignal = '1'
             else       pFlushSeq when execEventSignal = '1'
-            else       addTruncZ(pRenamedSeq, countSN(branchMaskRe), BQ_SEQ_PTR_SIZE + 1) when prevSendingRe = '1'
+            else       addTruncZ(pRenamedSeq, countSN(branchMaskFront), BQ_SEQ_PTR_SIZE + 1) when frontSending = '1'
             else       pRenamedSeq;
 
     nFullNext <= getNumFull(pStartNext, pEndNext, QUEUE_PTR_SIZE);

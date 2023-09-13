@@ -29,10 +29,12 @@ entity UnitFront is
 		bqAccepting: in std_logic;
 		bpSending: out std_logic;
         bpData: out ControlPacketArray(0 to FETCH_WIDTH-1);
+        bpCtrl: out ControlPacket;
 
 		-- Interface front to renaming
 		renameAccepting: in std_logic;		
-		dataOut: out BufferEntryArray; 
+		dataOut: out BufferEntryArray;
+		ctrlOut: out ControlPacket;
 		lastSending: out std_logic;
 		-------
 		
@@ -155,14 +157,14 @@ begin
 	SUBUNIT_IBUFFER: entity work.InstructionBuffer(Implem)
 	port map(
 		clk => clk, reset => '0', en => '0',
-		
+
 		prevSending => sendingToBuffer,
 		nextAccepting => renameAccepting,
 		stageDataIn => dataToIbuffer,
 		acceptingOut => bufferAccepting,
 		sendingOut => sendingOutBuffer,
 		stageDataOut => ibufDataOut,
-		
+
 		execEventSignal => killAll
 	);
 
@@ -172,14 +174,17 @@ begin
 
     -- Outputs 
 
-    -- Pipeline (F2) (may be delayed any number of cycles)
-	lastSending <= sendingOutBuffer;
-    dataOut <= ibufDataOut;
-    
     -- Pipeline F2    
     bpData <= bqDataSig;
     bpSending <= sendingToBQ;
+        bpCtrl.full <= sendingToBQ;
 
+
+    -- Pipeline (F2) (may be delayed any number of cycles)
+	lastSending <= sendingOutBuffer;
+    dataOut <= ibufDataOut;
+        ctrlOut.full <= sendingOutBuffer;
+        
     -- Events
     frontCausing.full <= earlyBranchOut.controlInfo.newEvent;
     frontCausing.value <= earlyBranchOut.target;

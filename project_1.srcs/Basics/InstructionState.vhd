@@ -306,6 +306,8 @@ end record;
 
 type SchedulerInfoArray is array(natural range <>) of SchedulerInfo;
 
+type SchedulerStateArray is array (natural range <>) of SchedulerState;
+
 
 -- Created to enable *Array				
 type InstructionSlot is record 

@@ -92,7 +92,7 @@ architecture Behavioral of IssueQueue is
     signal outSigs: IssueQueueSignals := (others => '0');
 
     alias memFail is bypass.memFail;
-                
+
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
 
 begin

@@ -116,13 +116,29 @@ type BypassState is record
     obj:   ExecResultArray(0 to 2);
     objNext:   ExecResultArray(0 to 2);
     objNext2:   ExecResultArray(0 to 2);
+    
+    --    F_dep: std_logic_vector(0 to 2);
+    --    F_ctr: SmallNumberArray(0 to 2);
+    
     objTags: SmallNumberArray(0 to 2);
-    stage: IntArray(0 to 2);
+    --stage: IntArray(0 to 2);
     phase: IntArray(0 to 2);
     memFail: std_logic;
-    
-    
 end record;
+
+type BypassStateSch is record
+    usedSlow:  std_logic_vector(0 to 2);
+    usedFast:  std_logic_vector(0 to 2);
+    obj:   SchedulerStateArray(0 to 2);
+    objNext:   SchedulerStateArray(0 to 2);
+    objNext2:   SchedulerStateArray(0 to 2);
+    
+    objTags: SmallNumberArray(0 to 2);
+    --stage: IntArray(0 to 2);
+    phase: IntArray(0 to 2);
+    memFail: std_logic;
+end record;
+
 
 constant DEFAULT_BYPASS_STATE: BypassState := (
     usedSlow => (others => '0'),
@@ -130,8 +146,22 @@ constant DEFAULT_BYPASS_STATE: BypassState := (
     obj => (others => DEFAULT_EXEC_RESULT),
     objNext => (others => DEFAULT_EXEC_RESULT),
     objNext2 => (others => DEFAULT_EXEC_RESULT),
+    
     objTags => (others => sn(0)),
-    stage => (others => -4),
+    --stage => (others => -4),
+    phase => (others => -4),
+    memFail => '0'
+);
+
+constant DEFAULT_BYPASS_STATE_SCH: BypassStateSch := (
+    usedSlow => (others => '0'),
+    usedFast => (others => '0'),
+    obj => (others => DEFAULT_SCHEDULER_STATE),
+    objNext => (others => DEFAULT_SCHEDULER_STATE),
+    objNext2 => (others => DEFAULT_SCHEDULER_STATE),
+    
+    objTags => (others => sn(0)),
+    --stage => (others => -4),
     phase => (others => -4),
     memFail => '0'
 );
@@ -296,10 +326,10 @@ begin
     bypassInt.objNext := objN;--(subpipeI0_RegRead, subpipeI1_E2, subpipeM0_E0i);                
     bypassInt.objNext2 := objN2;--(DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, subpipeM0_E1i);
     bypassInt.objTags := (issueTagI0, sn(0), sn(0));
-    bypassInt.stage := (-2, -2, -3);
+    --bypassInt.stage := (-2, -2, -3);
     bypassInt.phase := ( 0,  0, -1);
     bypassInt.memFail := memFail;
-    
+
     return bypassInt;
 end function;
 
@@ -314,10 +344,10 @@ begin
     bypassIntSV.objNext := objN;--(subpipeI0_D0, subpipeI1_D1, subpipeM0_D0i);
     bypassIntSV.objNext2 := objN2;--(others => DEFAULT_EXEC_RESULT);
     bypassIntSV.objTags := (others => sn(0));
-    bypassIntSV.stage := (0, 0, 0);
+    --bypassIntSV.stage := (0, 0, 0);
     bypassIntSV.phase := (2, 2, 2);                
     bypassIntSV.memFail := memFail;
-    
+
     return bypassIntSV;
 end function;
 
@@ -330,7 +360,7 @@ begin
     bypassFloat.objNext := objN;--(subpipeI0_RegRead, subpipeI1_E2, subpipeM0_E0i);                
     bypassFloat.objNext2 := objN2;--(DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, subpipeM0_E1i);
     bypassFloat.objTags := (others => sn(0));
-    bypassFloat.stage := (-3, -4, -1);
+    --bypassFloat.stage := (-3, -4, -1);
     bypassFloat.phase := (-1,  0,  1);
     bypassFloat.memFail := memFail;
 
@@ -347,18 +377,35 @@ begin
     bypassFloatSV.objNext := objN;--(subpipeF0_D0, DEFAULT_EXEC_RESULT, subpipeM0_D1f);
     bypassFloatSV.objNext2 := objN2;--(others => DEFAULT_EXEC_RESULT);
     bypassFloatSV.objTags := (others => sn(0));
-    bypassFloatSV.stage := (0, -4, 0);
+    --bypassFloatSV.stage := (0, -4, 0);
     bypassFloatSV.phase := (2,  0, 2);                
     bypassFloatSV.memFail := memFail;
-    
+
     return bypassFloatSV;
 end function;
+
+    function makeBypassInt(obj, objN, objN2: SchedulerStateArray(0 to 2); issueTagI0: SmallNumber; memFail: std_logic) return BypassStateSch is
+        variable bypassInt: BypassStateSch := DEFAULT_BYPASS_STATE_SCH;
+    begin
+        bypassInt.usedSlow := "111";
+        bypassInt.usedFast := "100";
+        bypassInt.obj := obj;--(subpipeI0_Issue, subpipeI1_E1, subpipeM0_RegRead);
+        bypassInt.objNext := objN;--(subpipeI0_RegRead, subpipeI1_E2, subpipeM0_E0i);
+        bypassInt.objNext2 := objN2;--(DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, subpipeM0_E1i);
+        bypassInt.objTags := (issueTagI0, sn(0), sn(0));
+        --bypassInt.stage := (-2, -2, -3);
+        bypassInt.phase := ( 0,  0, -1);
+        bypassInt.memFail := memFail;
+
+        return bypassInt;
+    end function;
+
 
 
 function getExecValues(results: ExecResultArray) return MwordArray is
     constant LENGTH: natural := results'length;
     constant resultCopy: ExecResultArray(0 to LENGTH-1) := results;
-    variable res: MwordArray(0 to LENGTH-1) := (others => (others => '0')); 
+    variable res: MwordArray(0 to LENGTH-1) := (others => (others => '0'));
 begin
     for i in res'range loop
         res(i) := resultCopy(i).value;
