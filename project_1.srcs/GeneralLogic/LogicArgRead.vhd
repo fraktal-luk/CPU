@@ -72,6 +72,9 @@ package body LogicArgRead is
         res.full := ctSigs.sending;
         res := TMP_clearDestIfEmpty(res);
 
+            -- Don't because whole scheduler gets updated for selection. TODO: regularize this
+            --res.poison := advancePoison(res.poison);
+
         if events.lateCausing.full = '1' then
             res.full := '0';
         end if;
@@ -133,6 +136,7 @@ package body LogicArgRead is
     begin
         res.full := prevSending;
         res := TMP_clearDestIfEmpty(res);
+            res.poison := advancePoison(res.poison);
 
         if REGS_ONLY then
             return res;    
@@ -186,7 +190,8 @@ package body LogicArgRead is
         begin
             res.full := prevSending;
             res := TMP_clearDestIfEmpty(res);
-    
+                res.poison := advancePoison(res.poison);
+
             if REGS_ONLY then
                 return res;    
             end if;

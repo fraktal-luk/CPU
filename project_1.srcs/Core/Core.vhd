@@ -153,7 +153,7 @@ begin
         intSignal <= int0 or int1;
         intType <= (int0, int1);
     
-        dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.c_full and isStoreSysOp(ctOutSB.op), '0', InsTag'(others => '0'), zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
+        dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.c_full and isStoreSysOp(ctOutSB.op), '0', DEFAULT_POISON, InsTag'(others => '0'), zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
 
         SEQUENCER: entity work.UnitSequencer(Behavioral)
         port map (
@@ -580,7 +580,7 @@ begin
                 suppressNext2 <= (compareTagBefore(branchResultE0.tags.renameIndex, slotRegReadI0.st.tags.renameIndex) and branchResultE1.controlInfo.newEvent) or lateEventPre;
 
 
-                execEvent <= (DEFAULT_DEBUG_INFO, branchResultE0.controlInfo.newEvent, '0', branchResultE0.tags.renameIndex, branchResultE0.tags.bqPointerSeq, branchResultE0.target);
+                execEvent <= (DEFAULT_DEBUG_INFO, branchResultE0.controlInfo.newEvent, '0', DEFAULT_POISON, branchResultE0.tags.renameIndex, branchResultE0.tags.bqPointerSeq, branchResultE0.target);
                                                   --branchResultE1.controlInfo.newEvent, '0', branchResultE1.tags.renameIndex, branchResultE1.tags.bqPointerSeq, branchResultE1.target);
 
                 branchCtrl <= branchResultE0;

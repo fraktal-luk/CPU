@@ -124,7 +124,7 @@ begin
         wupsSelection <= getFastWakeups(queueContent, bypass, CFG_SEL);
     end generate;
 
-    queueContentUpdatedSel <= updateSchedulerArray_S(queueContent, wupsSelection, memFail, CFG_SEL);
+    queueContentUpdatedSel <= updateQueueArgs_S(queueContent, wupsSelection, CFG_SEL);
 
     freedMask <= getFreedMask(queueContent);
     fullMask <= getFullMask(queueContent);
@@ -145,7 +145,7 @@ begin
                else trialUpdatedMask when events.execCausing.full = '1'
                else (others => '0');
 
-        queueContentUpdated <= updateSchedulerArray(queueContent, wups, memFail, CFG_WAIT);
+        queueContentUpdated <= updateQueueArgs(queueContent, wups, memFail, CFG_WAIT);
         queueContentUpdated_2 <= updateQueueState(queueContentUpdated, nextAccepting, sends,
                                                 killMask, trialMask, selMask,
                                                 memFail, unlockDiv);

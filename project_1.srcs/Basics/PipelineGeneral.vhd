@@ -50,9 +50,6 @@ function iqInds2tags(inds: SmallNumberArray) return SmallNumberArray;
 
 
 function makeExecResult(isl: SchedulerState) return ExecResult;
-function makeExecResult_N(isl: SchedulerState) return ExecResult_N;
-function makeExecResult_N(er: ExecResult; iqTag: SmallNumber) return ExecResult_N;
-
 
 type IssueQueueSignals is record
     sending: std_logic;
@@ -277,6 +274,8 @@ function std2int(s: std_logic) return integer;
     function getDispatchMasks(cpa: ControlPacketArray) return DispatchMasks;
 
     function convertExecStoreValue(sx: SchedulerState) return ExecResult;
+
+    function advancePoison(p: PoisonInfo) return PoisonInfo;
 
 end package;
 
@@ -868,36 +867,14 @@ function makeExecResult(isl: SchedulerState) return ExecResult is
 begin
     res.full := isl.full;
     res.dbInfo := isl.st.dbInfo;
+    
+        res.poison := isl.poison;
+    
     res.tag := isl.st.tags.renameIndex;
     res.dest := isl.dest;
     return res;
 end function;
 
-function makeExecResult_N(isl: SchedulerState) return ExecResult_N is
-    variable res: ExecResult_N := DEFAULT_EXEC_RESULT_N;
-begin
-    res.full := isl.full;
-    res.dbInfo := isl.st.dbInfo;
-    res.tag := isl.st.tags.renameIndex;
-    res.iqTag := isl.destTag;
-    res.dest := isl.dest;
-    return res;
-end function;
-
-function makeExecResult_N(er: ExecResult; iqTag: SmallNumber) return ExecResult_N is
-    variable res: ExecResult_N := DEFAULT_EXEC_RESULT_N;
-begin
-    res.dbInfo := er.dbInfo;
-
-    res.full := er.full;
-    res.failed := er.failed;
-    res.tag := er.tag;
-    res.iqTag := iqTag;
-    res.dest := er.dest;
-    res.value := er.value;
-
-    return res;
-end function;
 
 
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult is
@@ -1294,6 +1271,17 @@ end function;
         res.tag := sx.st.tags.renameIndex;
         res.dest := sx.st.tags.sqPointer;
         res.value := sx.argValues(0);
+        return res;
+    end function;
+
+    function advancePoison(p: PoisonInfo) return PoisonInfo is
+        variable res: PoisonInfo := p;
+    begin
+        
+        res.degrees := '0' & p.degrees(0 to 3);
+        if isNonzero(res.degrees) /= '1' then
+            res.isOn := '0';
+        end if;
         return res;
     end function;
 

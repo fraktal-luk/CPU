@@ -187,6 +187,13 @@ end record;
 type ControlPacketArray is array(integer range <>) of ControlPacket;
 
 
+type PoisonInfo is record
+    isOn: std_logic;
+    degrees: std_logic_vector(0 to 4);
+end record;
+
+constant DEFAULT_POISON: PoisonInfo := ('0', (others => '0'));
+
 
 -- DB stuff
 type DbDependency is record
@@ -222,6 +229,8 @@ type ArgumentState is record
     srcStage: SmallNumber;         -- SS
 
     value: Hword;       -- DB only?
+
+        poison: PoisonInfo;
 
     dbDep: DbDependency;   
 end record;
@@ -292,6 +301,8 @@ type SchedulerState is record
     dest: SmallNumber;
 
     destTag: SmallNumber;   -- not in dynamic
+    poison: PoisonInfo;
+
 
     args: SmallNumberArray(0 to 2);
 
@@ -327,20 +338,12 @@ type ExecResult is record
     dbInfo: InstructionDebugInfo;
     full: std_logic;
     failed: std_logic;
+    poison: PoisonInfo;
     tag: InsTag;
     dest: PhysName;
     value: Mword;
 end record;
 
-type ExecResult_N is record
-    dbInfo: InstructionDebugInfo;
-    full: std_logic;
-    failed: std_logic;
-    tag: InsTag;
-    iqTag: SmallNumber;
-    dest: PhysName;
-    value: Mword;
-end record;
 
 type ExecResultArray is array(integer range <>) of ExecResult;
 
@@ -479,17 +482,8 @@ constant DEFAULT_EXEC_RESULT: ExecResult := (
     dbInfo => DEFAULT_DEBUG_INFO,
     full => '0',
     failed => '0',
+    poison => DEFAULT_POISON,
     tag => (others => '0'),
-    dest => (others => '0'),
-    value => (others => '0')
-);
-
-constant DEFAULT_EXEC_RESULT_N: ExecResult_N := (
-    DEFAULT_DEBUG_INFO,
-    '0',
-    '0',
-    tag => (others => '0'),
-    iqTag => (others => '0'),
     dest => (others => '0'),
     value => (others => '0')
 );
@@ -506,6 +500,8 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       dest => (others => '0'),
       args => ((others => '0'), (others => '0'), (others => '0')),
       destTag => (others => '0'),
+
+      poison => DEFAULT_POISON,
 
       readNew => (others => '0'),
       argValues => (others => (others=>'0')),
@@ -543,7 +539,9 @@ constant DEFAULT_ARGUMENT_STATE: ArgumentState := (
     waiting => '0',
     srcPipe => (others => '0'),
     srcStage => (others => '0'),
-    
+
+        poison => DEFAULT_POISON,
+
     dbDep => DEFAULT_DB_DEPENDENCY
 ); 
 
