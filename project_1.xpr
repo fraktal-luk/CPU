@@ -62,7 +62,7 @@
     <Option Name="IPStaticSourceDir" Val="$PIPUSERFILESDIR/ipstatic"/>
     <Option Name="EnableBDX" Val="FALSE"/>
     <Option Name="WTXSimLaunchSim" Val="16415"/>
-    <Option Name="WTModelSimLaunchSim" Val="312"/>
+    <Option Name="WTModelSimLaunchSim" Val="316"/>
     <Option Name="WTQuestaLaunchSim" Val="0"/>
     <Option Name="WTIesLaunchSim" Val="0"/>
     <Option Name="WTVcsLaunchSim" Val="0"/>
@@ -457,6 +457,7 @@
       <File Path="$PSRCDIR/sim_1/TestCode/mul_div.txt"/>
       <File Path="$PSRCDIR/sim_1/TestCode/div.txt"/>
       <File Path="$PSRCDIR/sim_1/TestCode/div_s.txt"/>
+      <File Path="$PSRCDIR/sim_1/TestCode/a_tmp_sf5.txt"/>
       <Config>
         <Option Name="DesignMode" Val="RTL"/>
         <Option Name="TopModule" Val="CoreTB"/>

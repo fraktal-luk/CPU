@@ -8,6 +8,7 @@ a_tmp_sf1
 a_tmp_sf2
 a_tmp_sf3
 a_tmp_sf4
+a_tmp_sf5
 shifts
 mul
 div_s

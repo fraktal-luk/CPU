@@ -131,14 +131,90 @@ begin
 
     QUEUE_CTRL: block
         signal sendingTrial: std_logic := '0';
-        signal trialMask, trialUpdatedMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+        signal trialMask, trialUpdatedMask, retractMask0, retractMask1, pullbackMask,  retractMask0_N, retractMask1_N, pullbackMask_N: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+
+        function getPullbackMask0(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+            variable depends: std_logic := '0';       
+        begin
+            for i in res'range loop
+                depends := dependsOnMemHit(content(i).dynamic.argStates(0), config.fp);
+                res(i) := depends and memFail and not bool2std(config.ignoreMemFail);
+            end loop;
+            return res;
+        end function;
+
+        function getPullbackMask1(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+            variable depends: std_logic := '0';       
+        begin
+            for i in res'range loop
+                depends := dependsOnMemHit(content(i).dynamic.argStates(1), config.fp);
+                res(i) := depends and memFail and not bool2std(config.ignoreMemFail);
+            end loop;
+            return res;
+        end function;
+
+        function getPullbackMask(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+            variable depends: std_logic := '0';       
+        begin
+            for i in res'range loop
+                res(i) := content(i).dynamic.status_N.issued0 and memFail; -- and not bool2std(config.ignoreMemFail);
+            end loop;
+            return res;
+        end function;
+
+
+
+        function getPullbackMask0_N(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+            variable depends: std_logic := '0';       
+        begin
+            for i in res'range loop
+                depends := content(i).dynamic.argStates(0).poison.isOn and content(i).dynamic.argStates(0).poison.degrees(2);
+                res(i) := depends and memFail and not bool2std(config.ignoreMemFail);
+            end loop;
+            return res;
+        end function;
+
+        function getPullbackMask1_N(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+            variable depends: std_logic := '0';       
+        begin
+            for i in res'range loop
+                depends := content(i).dynamic.argStates(1).poison.isOn and content(i).dynamic.argStates(1).poison.degrees(2);
+                res(i) := depends and memFail and not bool2std(config.ignoreMemFail);
+            end loop;
+            return res;
+        end function;
+
+        function getIssuedMask(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+            variable depends: std_logic := '0';       
+        begin
+            for i in res'range loop
+                res(i) := content(i).dynamic.status_N.issued0 or content(i).dynamic.status_N.issued1 or content(i).dynamic.status_N.issued2;
+            end loop;
+            return res;
+        end function;
+
     begin
         trialMask <= getTrialMask(queueContent, events);
-            
+
+        retractMask0 <= getPullbackMask0(queueContent, memFail, CFG_WAIT);
+        retractMask1 <= getPullbackMask1(queueContent, memFail, CFG_WAIT);
+        pullbackMask <= getPullbackMask(queueContent, memFail, CFG_WAIT);
+
+            retractMask0_N <= getPullbackMask0_N(queueContent, memFail, CFG_WAIT);
+            retractMask1_N <= getPullbackMask1_N(queueContent, memFail, CFG_WAIT);
+            pullbackMask_N <= --getPullbackMask_N(queueContent, memFail, CFG_WAIT);
+                                (retractMask0_N or retractMask1_N) and getIssuedMask(queueContent, memFail, CFG_WAIT);
+
             trialMaskAll <= trialMask or not fullMask; -- empty slots are "on trial" because new ops are younger than Exec
             TMP_trialMask1 <= trialMaskAll and selMask;
             TMP_trialMask2 <= trialMaskAll and selMask1;
-        
+
         trialUpdatedMask <= getTrialUpdatedMask(queueContent);
 
         killMask <= (others => '1') when events.lateCausing.full = '1' 

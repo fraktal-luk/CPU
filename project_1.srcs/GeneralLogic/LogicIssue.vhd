@@ -133,6 +133,9 @@ function getSchedEntrySlot(info: SchedulerInfo; full: std_logic; iqTag: SmallNum
 
 function getIssueTag(sends: std_logic; selMask: std_logic_vector) return SmallNumber;
 
+function dependsOnMemHit(state: ArgumentState; constant IS_FP: boolean) return std_logic;
+
+
 function getCurrentStates(queueContent: SchedulerInfoArray) return IqStateArray;
 -- Debug functions
 function DB_setProducer(dbd: DbDependency; tag: InsTag) return DbDependency;
