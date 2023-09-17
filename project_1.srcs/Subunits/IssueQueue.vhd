@@ -132,6 +132,27 @@ begin
     QUEUE_CTRL: block
         signal sendingTrial: std_logic := '0';
         signal trialMask, trialUpdatedMask, retractMask0, retractMask1, pullbackMask,  retractMask0_N, retractMask1_N, pullbackMask_N: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+        signal updates: SchedulerUpdateArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_UPDATE);  
+
+        function getUpdates(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig;
+                            killMask, trialMask, trialUpdatedMask, readyMask, selMask: std_logic_vector        
+        ) return SchedulerUpdateArray is
+            variable res: SchedulerUpdateArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_UPDATE);
+        begin
+            for i in 0 to IQ_SIZE-1 loop
+                res(i).kill := killMask(i);
+                res(i).trial := trialMask(i);
+                --freed
+                --retract0
+                --retract1
+                --pullback
+                --suspend
+                --resume
+                res(i).ready := readyMask(i);
+                res(i).selected := selMask(i);
+            end loop;
+            return res;
+        end function;
 
         function getPullbackMask0(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig) return std_logic_vector is
             variable res: std_logic_vector(content'range) := (others => '0');
@@ -221,9 +242,15 @@ begin
                else trialUpdatedMask when events.execCausing.full = '1'
                else (others => '0');
 
+
+            updates <= getUpdates(queueContent, memFail, CFG_WAIT,
+                                    killMask, trialMask, trialUpdatedMask, readyMask, selMask
+                                    );
+
         queueContentUpdated <= updateQueueArgs(queueContent, wups, memFail, CFG_WAIT);
         queueContentUpdated_2 <= updateQueueState(queueContentUpdated, nextAccepting, sends,
-                                                killMask, trialMask, selMask,
+                                                --killMask, trialMask, selMask,
+                                                updates,
                                                 memFail, unlockDiv);
 
         sendingTrial <= isNonzero(selMask and trialUpdatedMask);

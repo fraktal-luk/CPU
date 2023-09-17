@@ -291,6 +291,22 @@ type SchedulerInfo is record
 end record;
 
 
+type SchedulerUpdate is record
+    kill: std_logic;
+    trial: std_logic;
+    freed: std_logic;
+    retract0: std_logic;
+    retract1: std_logic;
+    pullback: std_logic;
+    suspend: std_logic;
+    resume: std_logic;
+    ready: std_logic;
+    selected: std_logic;
+end record;
+
+type SchedulerUpdateArray is array(natural range <>) of SchedulerUpdate;
+
+
 type SchedulerState is record
     full: std_logic;
     maybeFull: std_logic;
@@ -576,6 +592,8 @@ constant DEFAULT_SCHEDULER_INFO: SchedulerInfo := (
     DEFAULT_DYNAMIC_INFO,
     DEFAULT_STATIC_INFO
 );
+
+constant DEFAULT_SCHEDULER_UPDATE: SchedulerUpdate := (others => '0');
 
 end InstructionState;
 

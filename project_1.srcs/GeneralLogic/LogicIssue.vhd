@@ -105,7 +105,9 @@ return SchedulerInfoArray;
 
 function insertElements(content: SchedulerInfoArray; newArr: SchedulerInfoArray; insertionLocs: slv2D) return SchedulerInfoArray;
 
-function updateQueueState(queueContent: SchedulerInfoArray; nextAccepting, sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
+function updateQueueState(queueContent: SchedulerInfoArray; nextAccepting, sends: std_logic;-- killMask, trialMask, selMask: std_logic_vector;
+                          updates: SchedulerUpdateArray;
+                          memFail, unlockDiv: std_logic)
 return SchedulerInfoArray;
 
 function storeInput(queueContent: SchedulerInfoArray; inputData: SchedulerInfoArray; prevSending, evt: std_logic; insertionLocs: slv2D)
@@ -666,60 +668,120 @@ begin
 end function;
 
 
-function updateQueueState(queueContent: SchedulerInfoArray; nextAccepting, sends: std_logic; killMask, trialMask, selMask: std_logic_vector; memFail, unlockDiv: std_logic)
+function updateEntryState(entry: SchedulerInfo; nextAccepting, sends: std_logic;-- kill, trial, sel: std_logic;
+                          update: SchedulerUpdate;
+                          memFail, unlockDiv: std_logic
+) return SchedulerInfo is
+    variable res: SchedulerInfo := entry;
+begin
+        res.dynamic.status.freed := '0'; -- This is set for 1 cycle when freeing
+        -- Set age comparison for possible subsequent flush. This is done regardless of other parts of state      
+        res.dynamic.status.trial := update.trial;
+
+        if (nextAccepting and update.selected) = '1' then
+            res.dynamic.status_N.active := '0';
+            res.dynamic.status_N.issued0 := '1';
+        end if;
+
+        if entry.dynamic.status_N.issued0 = '1' then
+            res.dynamic.status_N.issued0 := '0';
+
+            if memFail = '1' then
+                res.dynamic.status_N.active := not entry.static.divIns;
+                res.dynamic.status_N.suspended := entry.static.divIns;
+            else
+                res.dynamic.status_N.issued1 := '1';
+            end if;
+        end if;
+
+        if entry.dynamic.status_N.issued1 = '1' then
+            res.dynamic.status_N.issued1 := '0';
+            res.dynamic.status_N.issued2 := '1';
+        end if;
+
+        if entry.dynamic.status_N.issued2 = '1' then
+            res.dynamic.status_N.issued2 := '0';
+
+            res.dynamic.full := '0';
+            res.dynamic.status.freed := '1';
+        end if;
+
+        if hasDivOp(entry) = '1' then
+            if (sends and not update.selected) = '1' then 
+                res.dynamic.status_N.suspended := '1';
+                res.dynamic.status_N.active := '0';
+            elsif unlockDiv = '1' then
+                res.dynamic.status_N.suspended := '0';
+                res.dynamic.status_N.active := '1';
+            end if;
+        end if;
+
+        if update.kill = '1' then
+            res.dynamic.status_N := DEFAULT_ENTRY_STATUS_N;
+
+            res.dynamic.full := '0';
+        end if; 
+    return res;
+end function;
+
+
+function updateQueueState(queueContent: SchedulerInfoArray; nextAccepting, sends: std_logic;-- killMask, trialMask, selMask: std_logic_vector;
+                          updates: SchedulerUpdateArray;
+                          memFail, unlockDiv: std_logic)
 return SchedulerInfoArray is
     constant LEN: natural := queueContent'length;
     variable res: SchedulerInfoArray(queueContent'range) := queueContent;
 begin
     for i in 0 to LEN-1 loop
-        res(i).dynamic.status.freed := '0'; -- This is set for 1 cycle when freeing
-        -- Set age comparison for possible subsequent flush. This is done regardless of other parts of state      
-        res(i).dynamic.status.trial := trialMask(i);
+--        res(i).dynamic.status.freed := '0'; -- This is set for 1 cycle when freeing
+--        -- Set age comparison for possible subsequent flush. This is done regardless of other parts of state      
+--        res(i).dynamic.status.trial := trialMask(i);
 
-        if (nextAccepting and selMask(i)) = '1' then
-            res(i).dynamic.status_N.active := '0';
-            res(i).dynamic.status_N.issued0 := '1';
-        end if;
+--        if (nextAccepting and selMask(i)) = '1' then
+--            res(i).dynamic.status_N.active := '0';
+--            res(i).dynamic.status_N.issued0 := '1';
+--        end if;
 
-        if queueContent(i).dynamic.status_N.issued0 = '1' then
-            res(i).dynamic.status_N.issued0 := '0';
+--        if queueContent(i).dynamic.status_N.issued0 = '1' then
+--            res(i).dynamic.status_N.issued0 := '0';
 
-            if memFail = '1' then
-                res(i).dynamic.status_N.active := not queueContent(i).static.divIns;
-                res(i).dynamic.status_N.suspended := queueContent(i).static.divIns;
-            else
-                res(i).dynamic.status_N.issued1 := '1';
-            end if;
-        end if;
+--            if memFail = '1' then
+--                res(i).dynamic.status_N.active := not queueContent(i).static.divIns;
+--                res(i).dynamic.status_N.suspended := queueContent(i).static.divIns;
+--            else
+--                res(i).dynamic.status_N.issued1 := '1';
+--            end if;
+--        end if;
 
-        if queueContent(i).dynamic.status_N.issued1 = '1' then
-            res(i).dynamic.status_N.issued1 := '0';
-            res(i).dynamic.status_N.issued2 := '1';
-        end if;
+--        if queueContent(i).dynamic.status_N.issued1 = '1' then
+--            res(i).dynamic.status_N.issued1 := '0';
+--            res(i).dynamic.status_N.issued2 := '1';
+--        end if;
 
-        if queueContent(i).dynamic.status_N.issued2 = '1' then
-            res(i).dynamic.status_N.issued2 := '0';
+--        if queueContent(i).dynamic.status_N.issued2 = '1' then
+--            res(i).dynamic.status_N.issued2 := '0';
 
-            res(i).dynamic.full := '0';
-            res(i).dynamic.status.freed := '1';
-        end if;
+--            res(i).dynamic.full := '0';
+--            res(i).dynamic.status.freed := '1';
+--        end if;
 
-        if hasDivOp(queueContent(i)) = '1' then
-            if (sends and not selMask(i)) = '1' then 
-                res(i).dynamic.status_N.suspended := '1';
-                res(i).dynamic.status_N.active := '0';
-            elsif unlockDiv = '1' then
-                res(i).dynamic.status_N.suspended := '0';
-                res(i).dynamic.status_N.active := '1';
-            end if;
-        end if;
+--        if hasDivOp(queueContent(i)) = '1' then
+--            if (sends and not selMask(i)) = '1' then 
+--                res(i).dynamic.status_N.suspended := '1';
+--                res(i).dynamic.status_N.active := '0';
+--            elsif unlockDiv = '1' then
+--                res(i).dynamic.status_N.suspended := '0';
+--                res(i).dynamic.status_N.active := '1';
+--            end if;
+--        end if;
 
-        if killMask(i) = '1' then
-            res(i).dynamic.status_N := DEFAULT_ENTRY_STATUS_N;
+--        if killMask(i) = '1' then
+--            res(i).dynamic.status_N := DEFAULT_ENTRY_STATUS_N;
 
-            res(i).dynamic.full := '0';
-        end if;
-
+--            res(i).dynamic.full := '0';
+--        end if;
+        res(i) := updateEntryState(queueContent(i), nextAccepting, sends,-- killMask(i), trialMask(i), selMask(i), 
+                                    updates(i), memFail, unlockDiv);
     end loop;
 
     return res;
