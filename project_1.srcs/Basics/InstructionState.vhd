@@ -253,7 +253,8 @@ type EntryStatus_N is record
     suspended: std_logic;
     issued0: std_logic;
     issued1: std_logic;
-    issued2: std_logic;    
+    issued2: std_logic;
+    freed: std_logic;
 end record;
 
 
@@ -274,8 +275,8 @@ end record;
 
 type DynamicInfo is record
     full: std_logic;
-    status: EntryStatus;
     status_N: EntryStatus_N;
+    status: EntryStatus;
 
     renameIndex: InsTag; -- ??
     intDestSel: std_logic;
@@ -295,8 +296,7 @@ type SchedulerUpdate is record
     kill: std_logic;
     trial: std_logic;
     freed: std_logic;
-    retract0: std_logic;
-    retract1: std_logic;
+    retract: std_logic_vector(0 to 2);
     pullback: std_logic;
     suspend: std_logic;
     resume: std_logic;
@@ -573,7 +573,8 @@ constant DEFAULT_ENTRY_STATUS_N: EntryStatus_N := (
     active => '0',
     issued0 => '0',
     issued1 => '0',
-    issued2 => '0'
+    issued2 => '0',
+    freed => '0'
 );
 
 constant DEFAULT_DYNAMIC_INFO: DynamicInfo := (
@@ -593,7 +594,7 @@ constant DEFAULT_SCHEDULER_INFO: SchedulerInfo := (
     DEFAULT_STATIC_INFO
 );
 
-constant DEFAULT_SCHEDULER_UPDATE: SchedulerUpdate := (others => '0');
+constant DEFAULT_SCHEDULER_UPDATE: SchedulerUpdate := (retract => (others => '0'), others => '0');
 
 end InstructionState;
 

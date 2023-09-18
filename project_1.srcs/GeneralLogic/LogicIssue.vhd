@@ -94,8 +94,12 @@ function getSlowWakeups(content: SchedulerInfoArray; bypass: BypassState; config
 function getFastWakeups(content: SchedulerInfoArray; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
 function getInitWakeups(content: SchedulerInfoArray; bypass: BypassState; config: SchedulerUpdateConfig) return WakeupStructArray2D;
 
-function updateQueueArgs(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
+function updateQueueArgs(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; updates: SchedulerUpdateArray; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfoArray;
+
+function updateQueueArgs_Init(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
+return SchedulerInfoArray;
+
 
 function updateOnDispatch(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfoArray;
@@ -119,6 +123,7 @@ function getTrialMask(content: SchedulerInfoArray; events: EventState) return st
 function getReadyMask(content: SchedulerInfoArray) return std_logic_vector;
 function getFullMask(content: SchedulerInfoArray) return std_logic_vector;
 function getFreedMask(content: SchedulerInfoArray) return std_logic_vector;
+function getFreedMask_N(content: SchedulerInfoArray) return std_logic_vector;
 function getTrialUpdatedMask(content: SchedulerInfoArray) return std_logic_vector;
 
 -- issue
@@ -301,7 +306,7 @@ function updateOnDispatch(schedArray: SchedulerInfoArray; wakeups: WakeupStructA
 return SchedulerInfoArray is
     variable res: SchedulerInfoArray(0 to schedArray'length-1);
 begin
-    res := updateQueueArgs(schedArray, wakeups, memFail, config);
+    res := updateQueueArgs_Init(schedArray, wakeups, memFail, config);
     res := restoreRenameIndex(res);
     return res;
 end function;
@@ -352,15 +357,6 @@ begin
 end function;
 
 
-function dependsOnMemHit(state: ArgumentState; constant IS_FP: boolean) return std_logic is
-    variable matchingCtr: SmallNumber := sn(1);
-begin
-    if IS_FP then
-        matchingCtr := sn(0);
-    end if;
-    -- TODO: check why .zero_T needed - for constant arg srcPipe should never be updated?
-    return bool2std(state.srcPipe(1 downto 0) = "10" and state.readyCtr = matchingCtr) and not state.zero_T and not state.waiting;
-end function;
 
 
 function getSlowWakeup(si: SchedulerInfo; a: natural; bypass: BypassState; fwModes: ForwardingModeArray) return WakeupStruct is
@@ -558,11 +554,38 @@ begin
 end function;
 
 
-function updateEntryArgs(state: SchedulerInfo; wups: WakeupStructArray2D; k: natural; memFail: std_logic; config: SchedulerUpdateConfig)
+function dependsOnMemHit(state: ArgumentState; constant IS_FP: boolean) return std_logic is
+    variable matchingCtr: SmallNumber := sn(1);
+begin
+    if IS_FP then
+        matchingCtr := sn(0);
+    end if;
+    -- TODO: check why .zero_T needed - for constant arg srcPipe should never be updated?
+    return bool2std(state.srcPipe(1 downto 0) = "10" and state.readyCtr = matchingCtr) and not state.zero_T and not state.waiting;
+end function;
+
+
+function updateEntryArgs_Init(state: SchedulerInfo; wups: WakeupStructArray2D; k: natural; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfo is
     variable res: SchedulerInfo := state;
 begin
     for a in 0 to 1 loop
+        if memFail = '1' and not config.ignoreMemFail then
+        else
+            res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wups(k, a));
+        end if;
+    end loop;
+
+    return res;
+end function;
+
+function updateEntryArgs(state: SchedulerInfo; k: natural; wups: WakeupStructArray2D; update: SchedulerUpdate; memFail: std_logic; config: SchedulerUpdateConfig)
+return SchedulerInfo is
+    variable res: SchedulerInfo := state;
+begin
+    for a in 0 to 1 loop
+        -----------------------------------------------------------------------------------
+        --- This doen't apply to input entries? (because they can't be ready if they're not constant)
         res.dynamic.argStates(a).srcStage := incSrcStage(res.dynamic.argStates(a).srcStage);
 
         if res.dynamic.argStates(a).waiting = '1' then
@@ -570,10 +593,13 @@ begin
         else
             res.dynamic.argStates(a).readyCtr := incReadyCounter(res.dynamic.argStates(a).readyCtr);
         end if;
+        -----------------------------------------------------------------------------------
+        -----------------------------------------------------------------------------------
 
         if memFail = '1' and not config.ignoreMemFail then
         -- Resetting to waiting state
-            if dependsOnMemHit(state.dynamic.argStates(a), config.fp) = '1' then
+            if --dependsOnMemHit(state.dynamic.argStates(a), config.fp) = '1' then
+                update.retract(a) = '1' then
                 res.dynamic.argStates(a) := retractArg(res.dynamic.argStates(a));
             end if;
         else
@@ -595,12 +621,22 @@ begin
     return res;
 end function;
 
-function updateQueueArgs(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
+function updateQueueArgs(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; updates: SchedulerUpdateArray; memFail: std_logic; config: SchedulerUpdateConfig)
 return SchedulerInfoArray is
     variable res: SchedulerInfoArray(0 to schedArray'length-1);
 begin
     for i in schedArray'range loop
-        res(i) := updateEntryArgs(schedArray(i), wakeups, i, memFail, config);
+        res(i) := updateEntryArgs(schedArray(i), i, wakeups, updates(i), memFail, config);
+    end loop;    
+    return res;
+end function;
+
+function updateQueueArgs_Init(schedArray: SchedulerInfoArray; wakeups: WakeupStructArray2D; memFail: std_logic; config: SchedulerUpdateConfig)
+return SchedulerInfoArray is
+    variable res: SchedulerInfoArray(0 to schedArray'length-1);
+begin
+    for i in schedArray'range loop
+        res(i) := updateEntryArgs_Init(schedArray(i), wakeups, i, memFail, config);
     end loop;    
     return res;
 end function;
@@ -675,6 +711,10 @@ function updateEntryState(entry: SchedulerInfo; nextAccepting, sends: std_logic;
     variable res: SchedulerInfo := entry;
 begin
         res.dynamic.status.freed := '0'; -- This is set for 1 cycle when freeing
+
+        if entry.dynamic.status_N.freed = '1' then
+            res.dynamic.status_N.freed := '0';
+        end if;
         -- Set age comparison for possible subsequent flush. This is done regardless of other parts of state      
         res.dynamic.status.trial := update.trial;
 
@@ -686,12 +726,19 @@ begin
         if entry.dynamic.status_N.issued0 = '1' then
             res.dynamic.status_N.issued0 := '0';
 
-            if memFail = '1' then
-                res.dynamic.status_N.active := not entry.static.divIns;
-                res.dynamic.status_N.suspended := entry.static.divIns;
-            else
-                res.dynamic.status_N.issued1 := '1';
-            end if;
+            res.dynamic.status_N.issued1 := '1';
+--            if --memFail = '1' then
+--                update.pullback = '1' then
+--                res.dynamic.status_N.active := not entry.static.divIns;
+--                res.dynamic.status_N.suspended := entry.static.divIns;
+                
+--                res.dynamic.status_N.issued0 := '0';
+--                res.dynamic.status_N.issued1 := '0';
+--                res.dynamic.status_N.issued2 := '0';
+--                res.dynamic.status_N.freed := '0';
+--            else
+--                res.dynamic.status_N.issued1 := '1';
+--            end if;
         end if;
 
         if entry.dynamic.status_N.issued1 = '1' then
@@ -704,6 +751,7 @@ begin
 
             res.dynamic.full := '0';
             res.dynamic.status.freed := '1';
+            res.dynamic.status_N.freed := '1';
         end if;
 
         if hasDivOp(entry) = '1' then
@@ -715,6 +763,16 @@ begin
                 res.dynamic.status_N.active := '1';
             end if;
         end if;
+
+            if update.pullback = '1' then
+                res.dynamic.status_N.active := not entry.static.divIns;
+                res.dynamic.status_N.suspended := entry.static.divIns;
+                
+                res.dynamic.status_N.issued0 := '0';
+                res.dynamic.status_N.issued1 := '0';
+                res.dynamic.status_N.issued2 := '0';
+                res.dynamic.status_N.freed := '0';
+            end if;
 
         if update.kill = '1' then
             res.dynamic.status_N := DEFAULT_ENTRY_STATUS_N;
@@ -1012,6 +1070,15 @@ begin
     end loop;
     return res;
 end function;
+
+    function getFreedMask_N(content: SchedulerInfoArray) return std_logic_vector is
+        variable res: std_logic_vector(content'range) := (others => '0');        
+    begin
+        for i in res'range loop
+            res(i) := content(i).dynamic.status_N.freed;
+        end loop;
+        return res;
+    end function;
 
 function getTrialUpdatedMask(content: SchedulerInfoArray) return std_logic_vector is
     variable res: std_logic_vector(content'range) := (others => '0');        

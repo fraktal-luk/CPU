@@ -77,7 +77,7 @@ architecture Behavioral of IssueQueue is
 
     signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
 
-    signal fullMask, killMask, freedMask, readyMask, selMask, selMask1, selMask2, selMaskH, trialMaskAll, TMP_trialMask1, TMP_trialMask2: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+    signal fullMask, killMask, freedMask, freedMask_N, readyMask, selMask, selMask1, selMask2, selMaskH, trialMaskAll, TMP_trialMask1, TMP_trialMask2: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
     signal anyReadyFull, sends, sent, sendingKilled, sentKilled, sentTrial1, sentTrial2, TMP_trial1, TMP_trial2: std_logic := '0';
 
@@ -127,6 +127,7 @@ begin
     queueContentUpdatedSel <= updateQueueArgs_S(queueContent, wupsSelection, CFG_SEL);
 
     freedMask <= getFreedMask(queueContent);
+    freedMask_N <= getFreedMask_N(queueContent);
     fullMask <= getFullMask(queueContent);
 
     QUEUE_CTRL: block
@@ -135,7 +136,7 @@ begin
         signal updates: SchedulerUpdateArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_UPDATE);  
 
         function getUpdates(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig;
-                            killMask, trialMask, trialUpdatedMask, readyMask, selMask: std_logic_vector        
+                            killMask, trialMask, trialUpdatedMask, readyMask, selMask, retractMask0, retractMask1, pullbackMask: std_logic_vector        
         ) return SchedulerUpdateArray is
             variable res: SchedulerUpdateArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_UPDATE);
         begin
@@ -143,9 +144,9 @@ begin
                 res(i).kill := killMask(i);
                 res(i).trial := trialMask(i);
                 --freed
-                --retract0
-                --retract1
-                --pullback
+                res(i).retract(0) := retractMask0(i);
+                res(i).retract(1) := retractMask1(i);
+                res(i).pullback := pullbackMask(i);
                 --suspend
                 --resume
                 res(i).ready := readyMask(i);
@@ -244,12 +245,12 @@ begin
 
 
             updates <= getUpdates(queueContent, memFail, CFG_WAIT,
-                                    killMask, trialMask, trialUpdatedMask, readyMask, selMask
+                                    killMask, trialMask, trialUpdatedMask, readyMask, selMask,
+                                        retractMask0, retractMask1, pullbackMask
                                     );
 
-        queueContentUpdated <= updateQueueArgs(queueContent, wups, memFail, CFG_WAIT);
+        queueContentUpdated <= updateQueueArgs(queueContent, wups, updates, memFail, CFG_WAIT);
         queueContentUpdated_2 <= updateQueueState(queueContentUpdated, nextAccepting, sends,
-                                                --killMask, trialMask, selMask,
                                                 updates,
                                                 memFail, unlockDiv);
 
