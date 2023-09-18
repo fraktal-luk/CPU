@@ -502,12 +502,14 @@ function updateWaitingArg(argState: ArgumentState; wakeups: WakeupStruct)
 return ArgumentState is
     variable res: ArgumentState := argState;
 begin
+    res.poison := advancePoison(res.poison);
+
     if (argState.waiting and wakeups.match) /= '1' then
         if res.M_dep = '1' then
-            res.M_ctr := addInt(res.M_ctr, 1);
+            --res.M_ctr := addInt(res.M_ctr, 1);
         end if;
 
-        res.poison := advancePoison(res.poison);
+        --res.poison := advancePoison(res.poison);
 
         return res;
     end if;
@@ -516,12 +518,12 @@ begin
     res.srcStage := wakeups.argSrc;
     res.waiting := '0';
 
-    res.poison := advancePoison(wakeups.poison);
+    --res.poison := advancePoison(wakeups.poison);
 
         if wakeups.argLocsPipe(1 downto 0) = "10" then -- Mem
             res.T_depMem1 := '1';
             res.M_dep := '1';
-            res.M_ctr := sn(1);
+            --res.M_ctr := sn(1);
             
             res.poison.isOn := '1';
             res.poison.degrees(1) := '1';
@@ -601,6 +603,8 @@ begin
             if --dependsOnMemHit(state.dynamic.argStates(a), config.fp) = '1' then
                 update.retract(a) = '1' then
                 res.dynamic.argStates(a) := retractArg(res.dynamic.argStates(a));
+            else
+                    res.dynamic.argStates(a).poison := advancePoison(res.dynamic.argStates(a).poison);
             end if;
         else
         -- wakeup
@@ -714,6 +718,7 @@ begin
 
         if entry.dynamic.status_N.freed = '1' then
             res.dynamic.status_N.freed := '0';
+            res.dynamic.status.freed := '0';
         end if;
         -- Set age comparison for possible subsequent flush. This is done regardless of other parts of state      
         res.dynamic.status.trial := update.trial;
@@ -772,11 +777,14 @@ begin
                 res.dynamic.status_N.issued1 := '0';
                 res.dynamic.status_N.issued2 := '0';
                 res.dynamic.status_N.freed := '0';
+                
+                res.dynamic.status.freed := '0';
             end if;
 
         if update.kill = '1' then
             res.dynamic.status_N := DEFAULT_ENTRY_STATUS_N;
 
+                res.dynamic.status.freed := '0'; -- This makes a huge difference!
             res.dynamic.full := '0';
         end if; 
     return res;

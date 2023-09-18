@@ -237,6 +237,10 @@ begin
             TMP_trialMask1 <= trialMaskAll and selMask;
             TMP_trialMask2 <= trialMaskAll and selMask1;
 
+                ch0 <= bool2std(retractMask0_N = retractMask0);
+                ch1 <= bool2std(retractMask1_N = retractMask1);
+                ch2 <= bool2std(pullbackMask_N = pullbackMask);
+
         trialUpdatedMask <= getTrialUpdatedMask(queueContent);
 
         killMask <= (others => '1') when events.lateCausing.full = '1' 
@@ -319,7 +323,7 @@ begin
                           --  TMP_trial2
             );
     outputSignals <= outSigs;
-            ch0 <= '0';
+         --   ch0 <= '0';
 
     COUNTERS_SYNCHRONOUS: process(clk)
     begin

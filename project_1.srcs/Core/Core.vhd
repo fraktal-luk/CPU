@@ -591,8 +591,8 @@ begin
 
                 events <= (dataToBranch.tags, branchResultE0.tags, execEvent, lateEvent, memFailSig);
 
-                    events_T <= (eventsPrev.preExecTags, eventsPrev.execTags, eventsPrev.execCausing, events.lateCausing, memFailSig);
-                    --events_T <= (eventsPrev.preExecTags, eventsPrev.execTags, eventsPrev.execCausing, eventsPrev.lateCausing, memFailSig);
+                    --events_T <= (eventsPrev.preExecTags, eventsPrev.execTags, eventsPrev.execCausing, events.lateCausing, memFailSig);
+                       events_T <= (eventsPrev.preExecTags, eventsPrev.execTags, eventsPrev.execCausing, eventsPrev.lateCausing, memFailSig);
             end block;
         end block;
 
