@@ -251,6 +251,7 @@ begin
             updates <= getUpdates(queueContent, memFail, CFG_WAIT,
                                     killMask, trialMask, trialUpdatedMask, readyMask, selMask,
                                         retractMask0, retractMask1, pullbackMask
+                                        --retractMask0_N, retractMask1_N, pullbackMask_N
                                     );
 
         queueContentUpdated <= updateQueueArgs(queueContent, wups, updates, memFail, CFG_WAIT);

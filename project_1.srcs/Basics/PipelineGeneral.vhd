@@ -882,6 +882,11 @@ function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return Ex
 begin
     res.full := er.full and not fail;
     res.failed := er.full and fail;
+
+    if fail = '1' then
+        res.dest := (others => '0');
+    end if;
+
     res.value := memResult;
     return res;
 end function;
