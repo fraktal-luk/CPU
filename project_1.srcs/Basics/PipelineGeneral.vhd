@@ -51,6 +51,8 @@ function iqInds2tags(inds: SmallNumberArray) return SmallNumberArray;
 
 function makeExecResult(isl: SchedulerState) return ExecResult;
 
+function squashOnMemFail(val: std_logic) return std_logic;
+
 type IssueQueueSignals is record
     sending: std_logic;
     sentKilled: std_logic;
@@ -875,6 +877,10 @@ begin
     return res;
 end function;
 
+function squashOnMemFail(val: std_logic) return std_logic is
+begin
+    return val and bool2std(SQUASH_ON_MEM_FAIL);
+end function;
 
 
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult is

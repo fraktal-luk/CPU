@@ -598,18 +598,18 @@ begin
         -----------------------------------------------------------------------------------
         -----------------------------------------------------------------------------------
 
-        if memFail = '1' and not config.ignoreMemFail then
-        -- Resetting to waiting state
-            if --dependsOnMemHit(state.dynamic.argStates(a), config.fp) = '1' then
-                update.retract(a) = '1' then
-                res.dynamic.argStates(a) := retractArg(res.dynamic.argStates(a));
-            else
-                    res.dynamic.argStates(a).poison := advancePoison(res.dynamic.argStates(a).poison);
-            end if;
+        if squashOnMemFail(memFail and not bool2std(config.ignoreMemFail)) = '1' then
+            res.dynamic.argStates(a).poison := advancePoison(res.dynamic.argStates(a).poison);
         else
         -- wakeup
             res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wups(k, a));
         end if;
+        
+             -- Resetting to waiting state
+             if --dependsOnMemHit(state.dynamic.argStates(a), config.fp) = '1' then
+                update.retract(a) = '1' then
+                res.dynamic.argStates(a) := retractArg(res.dynamic.argStates(a));
+             end if;
     end loop;
 
     return res;

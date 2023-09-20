@@ -99,7 +99,7 @@ package body LogicArgRead is
         end if;
 
             res.maybeFull := res.full;
-        res.full := res.full and not (events.memFail or ctSigs.sentKilled or killFollower(ctSigs.trialPrev1, events));
+        res.full := res.full and not (squashOnMemFail(events.memFail) or ctSigs.sentKilled or killFollower(ctSigs.trialPrev1, events));
         return res;
     end function;
 
