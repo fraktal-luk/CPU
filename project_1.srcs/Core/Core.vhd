@@ -83,7 +83,7 @@ architecture Behavioral of Core is
 
     signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
 
-    signal pcData, bpCtrl, frontCtrl, dataToBranch, bqSelected, mqReexecCtrlIssue, mqReexecCtrlRR, renamedCtrl, branchCtrl, memoryCtrlE2, ctrlOutROB,
+    signal pcData, bpCtrl, frontCtrl, bqSelected, mqReexecCtrlIssue, mqReexecCtrlRR, renamedCtrl, branchCtrl, memoryCtrlE2, ctrlOutROB,
            memCtrlRR, memCtrlE0, missedMemCtrlE1, missedMemCtrlE2, ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal bqCompareEarly, bqUpdate, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2, memAddressInput, memAddressInputEarly,
@@ -548,14 +548,16 @@ begin
             end process;
 
 
-
             JUMPS: block
-                signal branchResultE0, branchResultE1: ControlPacket := DEFAULT_CONTROL_PACKET;
+                signal dataToBranch, branchResultE0, branchResultE1: ControlPacket := DEFAULT_CONTROL_PACKET;
+
                 signal suppressNext1, suppressNext2, lateEventPre: std_logic := '0';
+                signal branchPoisoned: std_logic := '0';
+                signal brPoison: PoisonInfo := DEFAULT_POISON;
             begin
 
-                        dataToBranch <= basicBranch(slotRegReadI0.full and slotRegReadI0.st.branchIns and not suppressNext1 and not suppressNext2,
-                                            slotRegReadI0, bqSelected, unfoldedAluOp, events.lateCausing);
+                dataToBranch <= basicBranch(slotRegReadI0.full and slotRegReadI0.st.branchIns and not suppressNext1 and not suppressNext2,
+                                    slotRegReadI0, bqSelected, unfoldedAluOp, events.lateCausing);
 
                 process (clk)
                     use work.LogicLogging.all;
@@ -566,6 +568,14 @@ begin
                         end if;
 
                         branchResultE0 <= dataToBranch;
+                            brPoison <= slotRegReadI0.poison;
+                        
+                        if dataToBranch.full = '1' and memFail = '1' and slotRegReadI0.poison.isOn = '1' then
+                            branchPoisoned <= '1';
+                        else
+                            branchPoisoned <= '0';
+                        end if;
+                        
                         branchResultE1 <= branchResultE0;
                         lateEventPre <= events.lateCausing.full;
 

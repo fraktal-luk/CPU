@@ -86,8 +86,10 @@ package body LogicExec is
 		constant result: Mword := bqControl.nip;
 	begin
 	    res.dbInfo := ss.st.dbInfo;
+	    
         res.tags := ss.st.tags;
 
+        res.full := sending;
         res.controlInfo.c_full := sending;
 		-- Cases to handle
 		-- jr taken		: if not taken goto return, if taken and not equal goto reg, if taken and equal ok 
@@ -146,6 +148,8 @@ package body LogicExec is
 	    variable shiftInput, rotated, shiftOutput: Dword := (others => '0');
 	begin
 	    res.dbInfo := ss.st.dbInfo;
+	
+	    res.poison := advancePoison(ss.poison);
 	
 		arg0 := ss.argValues(0);
 		arg1 := ss.argValues(1);
@@ -259,6 +263,8 @@ package body LogicExec is
         if (full and not isDivOp(st.st.operation)) = '1' then
             res.dbInfo := st.st.dbInfo; 
 
+            res.poison := st.poison;
+
             res.full := full;-- and not isDivOp(st.st.operation);
             res.tag := st.st.tags.renameIndex;
             res.dest := --st.argSpec.dest;
@@ -315,6 +321,9 @@ package body LogicExec is
         adr := add(st.argValues(0), st.argValues(1));
 
         res.full := full;
+        
+        res.poison := advancePoison(st.poison);
+
         res.dbInfo := st.st.dbInfo;
         res.tag := st.st.tags.renameIndex;
         res.dest := --st.argSpec.dest;        
