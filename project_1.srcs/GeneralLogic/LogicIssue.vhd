@@ -519,6 +519,8 @@ begin
     res.waiting := '0';
 
     --res.poison := advancePoison(wakeups.poison);
+        res.poison.isOn := res.poison.isOn or wakeups.poison.isOn;
+        res.poison.degrees := res.poison.degrees or wakeups.poison.degrees;
 
         if wakeups.argLocsPipe(1 downto 0) = "10" then -- Mem
             res.T_depMem1 := '1';
@@ -572,7 +574,7 @@ return SchedulerInfo is
     variable res: SchedulerInfo := state;
 begin
     for a in 0 to 1 loop
-        if memFail = '1' and not config.ignoreMemFail then
+        if squashOnMemFail(memFail and not bool2std(config.ignoreMemFail)) = '1'  then
         else
             res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wups(k, a));
         end if;
