@@ -502,7 +502,7 @@ function updateWaitingArg(argState: ArgumentState; wakeups: WakeupStruct)
 return ArgumentState is
     variable res: ArgumentState := argState;
 begin
-    res.poison := advancePoison(res.poison);
+    --res.poison := advancePoison(res.poison);
 
     if (argState.waiting and wakeups.match) /= '1' then
         if res.M_dep = '1' then
@@ -528,7 +528,7 @@ begin
             --res.M_ctr := sn(1);
             
             res.poison.isOn := '1';
-            res.poison.degrees(1) := '1';
+            res.poison.degrees(0) := '1';
         end if;
 
     return res;
@@ -551,6 +551,7 @@ return SchedulerInfo is
     variable res: SchedulerInfo := state;
 begin
     for a in 0 to 1 loop
+        --res.dynamic.argStates(a).poison := advancePoison(res.dynamic.argStates(a).poison);
         res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wups(k, a));
     end loop;
 
@@ -576,8 +577,11 @@ begin
     for a in 0 to 1 loop
         if squashOnMemFail(memFail and not bool2std(config.ignoreMemFail)) = '1'  then
         else
+            --res.dynamic.argStates(a).poison := advancePoison(res.dynamic.argStates(a).poison);
             res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wups(k, a));
         end if;
+        res.dynamic.argStates(a).poison := advancePoison(res.dynamic.argStates(a).poison);
+
     end loop;
 
     return res;
@@ -601,17 +605,17 @@ begin
         -----------------------------------------------------------------------------------
 
         if squashOnMemFail(memFail and not bool2std(config.ignoreMemFail)) = '1' then
-            res.dynamic.argStates(a).poison := advancePoison(res.dynamic.argStates(a).poison);
         else
         -- wakeup
             res.dynamic.argStates(a) := updateWaitingArg(res.dynamic.argStates(a), wups(k, a));
         end if;
-        
-             -- Resetting to waiting state
-             if --dependsOnMemHit(state.dynamic.argStates(a), config.fp) = '1' then
-                update.retract(a) = '1' then
-                res.dynamic.argStates(a) := retractArg(res.dynamic.argStates(a));
-             end if;
+        res.dynamic.argStates(a).poison := advancePoison(res.dynamic.argStates(a).poison);
+
+         -- Resetting to waiting state
+         if --dependsOnMemHit(state.dynamic.argStates(a), config.fp) = '1' then
+            update.retract(a) = '1' then
+            res.dynamic.argStates(a) := retractArg(res.dynamic.argStates(a));
+         end if;
     end loop;
 
     return res;
