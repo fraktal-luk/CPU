@@ -20,7 +20,8 @@ entity MultiplierDivider is
         prevSending: in std_logic;
         preInput: in SchedulerState;
         input: in SchedulerState;
-        
+            inputEP: in ExecPacket;
+
         allowIssueI1: in std_logic;
         killFollowerNext: in std_logic;
         
@@ -30,6 +31,10 @@ entity MultiplierDivider is
         divUnlockOut: out std_logic;
         
         sending: out std_logic;
+            outE0: out ExecPacket;
+            outE1: out ExecPacket;
+            outE2: out ExecPacket;
+
         outStage0: out ExecResult;
         outStage1: out ExecResult;
 
@@ -55,9 +60,14 @@ architecture Behavioral of MultiplierDivider is
     signal divQuot, divRem: Word := (others => '0');
     signal divQuot_Alt, divRem_Alt: Word := (others => '0');
     signal divQuot_New, divRem_New: Word := (others => '0');
-    
+
+        signal divEP, EP_I1_E0, EP_I1_E1, EP_I1_E2: ExecPacket := DEFAULT_EXEC_PACKET;
+
     signal ch0, ch1, ch2, ch3: std_logic := '0';
 begin
+            outE0 <= EP_I1_E0;
+            outE1 <= EP_I1_E1;
+            outE2 <= EP_I1_E2;
 
     sendingDivIssued <= preInput.full and usesDivider(preInput); -- Speculative because it doesn't take into account kill signals?
     sendingDivRR <= prevSending and usesDivider(input);
@@ -75,6 +85,17 @@ begin
             
             divResultSent <= divResultSending;
             divResultSent2 <= divResultSent;
+                
+                if (prevSending and not isDivOp(input.st.operation)) = '1' then
+                    EP_I1_E0 <= updateEP(inputEP, events);
+                elsif divResultSending = '1' then
+                    EP_I1_E0 <= updateEP(divEP, events);
+                else
+                    EP_I1_E0 <= DEFAULT_EXEC_PACKET; 
+                end if;
+                
+                EP_I1_E1 <= updateEP(EP_I1_E0, events);
+                EP_I1_E2 <= updateEP(EP_I1_E1, events);
         end if;
     end process;
 
@@ -135,7 +156,7 @@ begin
                     else '1' when sendingDivRR = '1'
                     else divFull;
     
-        kill <= (trialled and events.execEvent) or events.lateEvent; -- move to division
+        kill <= (trialled and events.execCausing.full) or events.lateCausing.full; -- move to division
 
         divPrepareSend <= divPrepareSend_N;
         divResultSending <= divResultSending_N;
@@ -169,17 +190,20 @@ begin
                 if divResultSending = '1' or kill = '1' then
                     divFull <= '0';
                     divSlot.dbInfo <= DEFAULT_DEBUG_INFO;
-
+                        divEP <= DEFAULT_EXEC_PACKET;
+                        
                     usingDiv <= '0';
                     usingRem <= '0';
                 elsif sendingDivRR = '1' then
                     divSlot <= makeExecResult(input);
+                        divEP <= updateEP(inputEP, events);
 
                     usingDiv <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opDivS);
                     usingRem <= bool2std(input.st.operation.arith = opRemU or input.st.operation.arith = opRemS);
                     divFull <= '1';
                     divTime <= sn(0);
                 else
+                        divEP <= updateEP(divEP, events);
                     divTime <= addInt(divTime, 1);
                 end if;
 

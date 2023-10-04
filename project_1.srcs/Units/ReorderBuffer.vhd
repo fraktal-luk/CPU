@@ -22,44 +22,43 @@ entity ReorderBuffer is
 		clk: in std_logic;
 		reset: in std_logic;
 		en: in std_logic;
-		
-		lateEventSignal: in std_logic;
+
+		events: in EventState;
+
+        acceptAlloc: out std_logic;
+		prevSendingRe: in std_logic;
+
+
+		prevSending: in std_logic;
+		inputCtrl: in ControlPacket;
+		inputData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
 
 		execSigsMain: in ExecResultArray(0 to 3);
 		execSigsSec: in ExecResultArray(0 to 3);
-		
-		branchControl: in --InstructionControlInfo;
-		                  ControlPacket;
-		memoryControl: in --InstructionControlInfo;
-		                  ControlPacket;
-		
-		specialOp: in SpecificOp;
-		
-		inputData: in InstructionSlotArray(0 to PIPE_WIDTH-1);
-		prevSending: in std_logic;
-		prevSendingRe: in std_logic;
 
-		acceptingOut: out std_logic;
-		acceptingMore: out std_logic;
-        acceptAlloc: out std_logic;
+            execMain: ExecPacketArray(0 to 3);
+            execSec: ExecPacketArray(0 to 3);
+
+		branchControl: in ControlPacket;
+		memoryControl: in ControlPacket;
 
 		nextAccepting: in std_logic;
 		sendingOut: out std_logic; 
 
         robOut: out ControlPacketArray(0 to PIPE_WIDTH-1);
+		outputCtrl: out ControlPacket;
 
 		outputArgInfoI: out RenameInfoArray(0 to PIPE_WIDTH-1);
 		outputArgInfoF: out RenameInfoArray(0 to PIPE_WIDTH-1);
-		outputSpecial: out SpecificOp;
-		
+
 	    dbState: in DbCoreState
 	);	
 end ReorderBuffer;
 
 
 architecture Behavioral of ReorderBuffer is
-    signal inputSpecial: InstructionSlot := DEFAULT_INS_SLOT;
-        
+	alias lateEventSignal is events.lateCausing.full;
+
 	signal isSending, outputCompleted, outputCompleted_Pre, outputEmpty, execEvent, allowAlloc: std_logic := '0';	
 	signal startPtr, startPtrNext, endPtr, endPtrNext, renamedPtr, renamedPtrNext, causingPtr: SmallNumber := (others => '0');	
 
@@ -73,7 +72,6 @@ architecture Behavioral of ReorderBuffer is
     signal dynamicGroupContent: DynamicGroupInfoArray := (others => DEFAULT_DYNAMIC_GROUP_INFO);
     -- 
     signal robOut_N: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
-
 
     signal ch0, ch1, ch2, ch3: std_logic := '0';
 
@@ -122,10 +120,9 @@ architecture Behavioral of ReorderBuffer is
         for i in res'range loop
             res(i).dbInfo := da(i).dbInfo;
             
+            res(i).full := da(i).full;
+            
             res(i).controlInfo.c_full := da(i).full;
-            res(i).controlInfo.killed := da(i).killed;
-            res(i).controlInfo.causing := da(i).causing;
-
             res(i).controlInfo.newEvent := da(i).hasEvent;
             res(i).controlInfo.hasException := da(i).hasException;
             res(i).controlInfo.confirmedBranch := da(i).confirmedBranch;
@@ -143,9 +140,21 @@ architecture Behavioral of ReorderBuffer is
     end function;
 
 
-begin
-    inputSpecial.ins.specificOperation <= specialOp;
+    function getOutputCtrl(si: StaticGroupInfo; di: DynamicGroupInfo; sgi: StaticGroupInfo; dgi: DynamicGroupInfo; sending: std_logic) return ControlPacket is
+        variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
+    begin
+        res.full := sending;
 
+        res.op.subpipe := None;
+        res.op.system := SysOp'val(slv2u(si.specialOp));
+        res.op.bits := si.specialOp;
+
+        res.controlInfo.firstBr := sgi.useBQ;
+        return res;
+    end function;
+
+
+begin
 	execEvent <= branchControl.controlInfo.c_full and branchControl.controlInfo.newEvent;
 	
 	causingPtr <= getTagHighSN(execSigsMain(0).tag) and PTR_MASK_SN_LONG;
@@ -159,18 +168,17 @@ begin
         
         signal serialInput, serialOutput: std_logic_vector(TMP_SERIAL_MEM_WIDTH-1 downto 0) := (others=> '0');
     begin
-
         -- Inputs
         serialInput <= serializeStatic(staticInput, staticGroupInput);
            
         staticInput <= getStaticOpInfoA(inputData);
         dynamicInput <= getDynamicOpInfoA(inputData);
         
-        staticGroupInput <= getStaticGroupInfo(inputData, inputSpecial);
-        dynamicGroupInput <= getDynamicGroupInfo(inputData, inputSpecial);
+        staticGroupInput <= getStaticGroupInfo(inputCtrl, inputData, DEFAULT_INS_SLOT);
+        dynamicGroupInput <= getDynamicGroupInfo(inputCtrl, inputData, DEFAULT_INS_SLOT);
 
         -- Outputs
-        outputSpecial <= getSpecialOperation(staticGroupOutput, dynamicGroupOutput);
+        outputCtrl <= getOutputCtrl(staticGroupOutput, dynamicGroupOutput, staticGroupOutput, dynamicGroupOutput, isSending);
 
     	outputCompleted_Pre <= groupCompleted(dynamicOutput_Pre);
 
@@ -286,10 +294,25 @@ begin
     -- pragma synthesis off
     DEBUG_HANDLING: if DB_ENABLE generate
         use work.RobViewing.all;
+
+        signal states: StateTable := (others => (others => empty));
     begin
         process (clk)
         begin
             if rising_edge(clk) then
+                if prevSending = '1' then
+                    DB_writeStates(states, inputData, endPtr);
+                end if;
+                
+                DB_updateStatesMain(states, execMain);
+                
+                if isSending = '1' then
+                    DB_commitStates(states, startPtr);
+                end if;
+                
+                DB_eventStates(states, events, startPtr, endPtr);
+                DB_memEventStates(states, execMain(2), memoryControl, startPtr, endPtr);
+                
                 if DB_LOG_EVENTS then
                     if dbState.dbSignal = '1' then
                         printContent(dynamicContent, startPtr, endPtr);

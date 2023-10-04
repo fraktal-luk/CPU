@@ -53,9 +53,11 @@ entity StoreQueue is
 		committing: in std_logic;
         commitEffectiveMask: in std_logic_vector(0 to PIPE_WIDTH-1);
 
-		lateEventSignal: in std_logic;
-		execEventSignal: in std_logic;
-    	execCausing: in ExecResult;
+		--lateEventSignal: in std_logic;
+		--execEventSignal: in std_logic;
+    	--execCausing: in ExecResult;
+
+		events: in EventState;
 
 		nextAccepting: in std_logic;		
 
@@ -68,20 +70,25 @@ end StoreQueue;
 
 
 architecture Behavioral of StoreQueue is
+    alias lateEventSignal is events.lateCausing.full;
+    alias execEventSignal is events.execCausing.full;
+
 	constant PTR_MASK_SN: SmallNumber := sn(QUEUE_SIZE-1);
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
 
-	signal addressMatchMask, newerLQ, newerRegLQ, newerNextLQ, olderNextSQ, olderRegSQ, olderSQ, olderSQ_Early: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
+	signal addressMatchMask, adrMatchesLowNS, adrMatchesLowSh, validMaskNS, validMaskSh, amvNS, amvSh, amvOlderNS, amvOlderSh,
+	           newerLQ, newerRegLQ, newerNextLQ, olderNextSQ_Early, olderSQ_Early: std_logic_vector(0 to QUEUE_SIZE-1) := (others => '0');
 
-	signal adrPtr, adrPtrEarly, 
-	       adrPtrPrev, pSelect, pSelectPrev, pSelectEarly_Base, pSelectEarly_BasePrev, pSelectEarly,-- pSelectEarlyPrev,
+	signal adrPtr, adrPtrEarly, adrPtrPrev, pSelect, pFlush,
+	       pSelectPrev, pSelectEarly_Base, pSelectEarly_BasePrev, pSelectEarly, pSelectEarlyNS, pSelectEarlyPrevNS,
 	       pStart, pStartNext, pDrain, pDrainNext, pDrainPrev, pDrainPrevPrev, pTagged, pTaggedNext, pRenamed, pRenamedNext, 
            nFull, nFullNext, nAlloc, nAllocNext: SmallNumber := sn(0);
 
-    signal queueContent_NS, queueContentShifting,  queueContentShifting_Alt: QueueEntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_QUEUE_ENTRY);
-    signal addresses, storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
+    signal queueContent_NS, queueContentShifting: QueueEntryArray(0 to QUEUE_SIZE-1) := (others => DEFAULT_QUEUE_ENTRY);
+    signal addresses, addressesLow, storeValues: MwordArray(0 to QUEUE_SIZE-1) := (others => (others => '0'));
 
     signal canAlloc, drainReq, drainEqual, isSending, isDrainingPrev, isSelected, isSelectedNext, isSelected_Early, sqMissed, missing, committedEmptySig,
+            notU, -- Careful: needed to prevent false drainReq on init
             dummy0: std_logic := '0';
 
     signal selectedOutputSig, committedOutputSig: ControlPacket := DEFAULT_CONTROL_PACKET;
@@ -90,19 +97,26 @@ architecture Behavioral of StoreQueue is
     signal selectedDataResultSig: ExecResult := DEFAULT_EXEC_RESULT;
 
 	--alias storeValuePtr is storeValueResult.dest;
-    alias pFlush is execCausing.dest;
-
+                    -- events.execTags.lqPointer ; if IS_LQ    
+                    -- events.execTags.sqPointer ; if not IS_LQ    
+    
     alias adrValueEarly is compareAddressEarlyInput.value;
     alias adrValue is compareAddressInput.value;
 
-    signal updateAdr, updateCompletedA, updateEarlyCompletedA, lookupEarly: std_logic := '0';
+    signal updateAdr, updateEarlyAdr, updateCompletedA, updateCompletedSysA, updateEarlyCompletedA, lookupEarly: std_logic := '0';
 
+    constant USE_SHIFTING: boolean := false;
 
     signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
 begin
-            ch0 <= bool2std(queueContentShifting_Alt = queueContentShifting);
-            ch1 <= '0';
+            --ch0 <= bool2std(queueContentShifting = queueContentShifting);
+            ch1 <= '1';
             ch2 <= '1';
+
+        pFlush <= events.execTags.lqPointer when IS_LOAD_QUEUE
+             else events.execTags.sqPointer;
+
+
 
     lookupEarly <= isStoreMemOp(compareAddressEarlyInput_Ctrl.op) when IS_LOAD_QUEUE
               else isLoadMemOp(compareAddressEarlyInput_Ctrl.op);
@@ -110,6 +124,10 @@ begin
                    else isStoreMemOp(compareAddressEarlyInput_Ctrl.op);
     updateCompletedA <= isLoadMemOp(compareAddressCtrl.op) when IS_LOAD_QUEUE
                    else isStoreMemOp(compareAddressCtrl.op);
+    updateCompletedSysA <= isLoadSysOp(compareAddressCtrl.op) when IS_LOAD_QUEUE
+                      else isStoreSysOp(compareAddressCtrl.op);
+    updateEarlyAdr <= isLoadOp(compareAddressEarlyInput_Ctrl.op) when IS_LOAD_QUEUE
+                 else isStoreOp(compareAddressEarlyInput_Ctrl.op);
     updateAdr <= isLoadOp(compareAddressCtrl.op) when IS_LOAD_QUEUE
             else isStoreOp(compareAddressCtrl.op);
 
@@ -121,20 +139,32 @@ begin
          else compareAddressCtrl.tags.sqPointer;
 
 
-    pSelectEarly <= addTruncZ(findNewestMatchIndex(olderSQ_Early, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE);
-        pSelectEarly_Base <= findNewestMatchIndex(olderSQ_Early, sn(0), nFull, QUEUE_PTR_SIZE);
+    pSelectEarly_Base <= findNewestMatchIndex(olderSQ_Early, sn(0), nFull, QUEUE_PTR_SIZE);
+    pSelectEarly <= addTruncZ(pSelectEarly_Base, pDrainPrev, QUEUE_PTR_SIZE);
+
+    pSelectEarlyNS <= findNewestMatchIndex_2(amvOlderNS, pDrainPrev, pTagged, QUEUE_PTR_SIZE);
 
     -- Read ptr determinded by address matching - SQ only
-    pSelect <= addTruncZ(findNewestMatchIndex(olderSQ, sn(0), nFull, QUEUE_PTR_SIZE), pDrainPrev, QUEUE_PTR_SIZE) when false
-          else addTruncZ(pSelectEarly_BasePrev, pDrainPrevPrev, QUEUE_PTR_SIZE);
+    pSelect <= addTruncZ(pSelectEarly_BasePrev, pDrainPrevPrev, QUEUE_PTR_SIZE) when USE_SHIFTING
+          else pSelectEarlyPrevNS;
+    
+    addressMatchMask <= getAddressMatching(queueContent_NS, adrValue) and getAddressCompleted(queueContent_NS);
 
+    adrMatchesLowSh <= getAddressMatching_Low(queueContentShifting, adrValueEarly) and getAddressCompleted_Low(queueContentShifting);
+    adrMatchesLowNS <= getAddressMatching_Low(queueContent_NS, adrValueEarly) and getAddressCompleted_Low(queueContent_NS);
 
+    validMaskSh <= cmpIndexBefore(sn(0), nFull, nFull, QUEUE_SIZE);
+    validMaskNS <= cmpIndexBefore(pDrainPrev, pTagged, pTagged, QUEUE_SIZE);
+
+    amvSh <= adrMatchesLowSh and validMaskSh;
+    amvNS <= adrMatchesLowNS and validMaskNS;
+
+    amvOlderSh <= amvSh and olderNextSQ_Early; 
+    amvOlderNS <= amvNS and cmpIndexBefore(pDrainPrev, pTagged, adrPtrEarly, QUEUE_SIZE)-- when lookupEarly = '1' else (others => '0');
+                                                                                         ;
     -- LQ only
     LQ_MATCH: if IS_LOAD_QUEUE generate
     begin
-        addressMatchMask <= getAddressMatching(queueContent_NS, adrValue) and getAddressCompleted(queueContent_NS);
-      
-               -- TODO: could/should be pStartNext?
         newerNextLQ <= cmpIndexAfter(pStart, pTagged, adrPtrEarly, QUEUE_SIZE) when lookupEarly = '1' else (others => '0');
         newerLQ <=     newerRegLQ and addressMatchMask;
     end generate;
@@ -142,35 +172,25 @@ begin
     -- SQ only
     SQ_MATCH: if not IS_LOAD_QUEUE generate
     begin
-        addressMatchMask <= getAddressMatching(queueContentShifting, adrValue) and getAddressCompleted(queueContentShifting);
-
-                -- TODO: nFull is not correct
-        olderNextSQ <= cmpIndexBefore(sn(0), nFull, subTruncZ(adrPtrEarly, pDrainPrev, QUEUE_PTR_SIZE), QUEUE_SIZE) when lookupEarly = '1' else (others => '0');
-        olderSQ <=   olderRegSQ and addressMatchMask;
-        olderSQ_Early <= olderNextSQ and getAddressMatching_Low(queueContentShifting, adrValueEarly) and getAddressCompleted_Low(queueContentShifting);
+        olderNextSQ_Early <= cmpIndexBefore(sn(0), nFull, subTruncZ(adrPtrEarly, pDrainPrev, QUEUE_PTR_SIZE), QUEUE_SIZE) when lookupEarly = '1' else (others => '0');
+        olderSQ_Early <= olderNextSQ_Early and adrMatchesLowSh;
     end generate;
 
     CHECK_FW: block
-        signal adrReady, adrMatch, adrMatchLast, tagMatchingLast, dataReady, adrMatchNormal, adrMatchRecent: std_logic := '0';
+        signal adrReady, adrMatch, dataReady, adrMatchNormal: std_logic := '0';
     begin
+        adrMatch <= addressHighMatching(addresses(p2i(pSelect, QUEUE_SIZE)), adrValue);
         adrReady <= queueContent_NS(p2i(pSelect, QUEUE_SIZE)).completedA;
         dataReady <= queueContent_NS(p2i(pSelect, QUEUE_SIZE)).completedV;
 
-        adrMatch <= addressHighMatching(addresses(p2i(pSelect, QUEUE_SIZE)), adrValue);
-        adrMatchNormal <= adrReady and adrMatch;
+        adrMatchNormal <= adrReady and adrMatch and dataReady;
 
-        adrMatchLast <= addressHighMatching(adrValuePrev, adrValue);
-        tagMatchingLast <= --bool2std((pSelectEarlyPrev and PTR_MASK_SN) = (adrPtrPrev and PTR_MASK_SN));
-                           bool2std((pSelect and PTR_MASK_SN) = (adrPtrPrev and PTR_MASK_SN));
-        adrMatchRecent <= adrMatchLast and tagMatchingLast;
-
-        missing <= isSelected_Early and (not (adrMatchNormal or adrMatchRecent) or not dataReady);
+        missing <= isSelected_Early and not adrMatchNormal;
     end block;
 
     process (clk)
     begin
         if rising_edge(clk) then
-            olderRegSQ <= olderNextSQ;
             newerRegLQ <= newerNextLQ;
 
             adrValuePrev <= adrValue;
@@ -178,11 +198,20 @@ begin
 
             -- ERROR! isNonzero(mask) has to take into acount whether the match is with a full entry, that is [pDrain:pTagged) for SQ, [pStart:pTagged) for LQ
             if not IS_LOAD_QUEUE then
-                isSelected_Early <= compareAddressEarlyInput.full and isNonzero(olderSQ_Early);
+                if USE_SHIFTING then
+                    isSelected_Early <= compareAddressEarlyInput.full and isNonzero(olderSQ_Early);
+                else
+                    isSelected_Early <= compareAddressEarlyInput.full and isNonzero(amvOlderNS) --;
+                                                                                                and lookupEarly;
+                end if;
             end if;
 
             pSelectEarly_BasePrev <= pSelectEarly_Base;
             pSelectPrev <= pSelect; -- Only SQ?
+
+            pSelectEarlyPrevNS <= pSelectEarlyNS;
+
+               -- pSelect <= pSelectNext;
 
             isSelected <= isSelectedNext;
             sqMissed <= missing;
@@ -201,65 +230,55 @@ begin
         signal drainValue, selectedValue, drainAddress, selectedAddress: Mword := (others => '0');
         signal selectedEntry, drainEntry: QueueEntry := DEFAULT_QUEUE_ENTRY;
 
-        signal qaPtr, qaEarlyPtr: SmallNumber := sn(0);
+        signal qaPtr, qaEarlyPtr, oneIfDraining: SmallNumber := sn(0);
     begin
+        oneIfDraining <= sn(1) when isDrainingPrev = '1' else sn(0);
 
         qaPtr <= subTruncZ(compareAddressCtrl.tags.sqPointer, pDrain, QUEUE_PTR_SIZE);
         qaEarlyPtr <= subTruncZ(compareAddressEarlyInput_Ctrl.tags.sqPointer, pDrain, QUEUE_PTR_SIZE);
 
         QUEUE_DATA_SYNC: process (clk)
         begin
-            if rising_edge(clk) then
-                -- SQ only
-                queueContentShifting <= shiftQueueContent(queueContentShifting, pDrain, nFullNext, execEventSignal or lateEventSignal, isDrainingPrev,
-                                                          compareAddressInput.full, compareAddressCtrl.tags.sqPointer, compareAddressCtrl.op, adrValue,
-                                                          compareAddressEarlyInput.full, compareAddressEarlyInput_Ctrl.tags.sqPointer, compareAddressEarlyInput_Ctrl.op, adrValueEarly,
-                                                          QUEUE_PTR_SIZE);
-            end if;
 
             if rising_edge(clk) then
                 -- SQ only
                 if isDrainingPrev = '1' then -- Move forward     
-                    queueContentShifting_Alt(0 to QUEUE_SIZE-2) <= queueContentShifting_Alt(1 to QUEUE_SIZE-1);
-                    queueContentShifting_Alt(QUEUE_SIZE-1).completedA <= '0';
-                    queueContentShifting_Alt(QUEUE_SIZE-1).completedLowA <= '0';
+                    shiftQueueContent_Drain(queueContentShifting);
                 end if;
-
-                -- Update
-                if compareAddressEarlyInput.full = '1' and --isStoreMemOp(compareAddressEarlyInput_Ctrl.op) = '1' then
-                                                            updateEarlyCompletedA = '1' then
-                    queueContentShifting_Alt(slv2u(qaEarlyPtr)).completedLowA <= '1';
-                    queueContentShifting_Alt(slv2u(qaEarlyPtr)).addressLow <= adrValueEarly;
-                end if;
-
-                -- Update 
-                if compareAddressInput.full = '1' and --isStoreMemOp(compareAddressCtrl.op) = '1' then
-                                                        updateCompletedA = '1' then
-                    queueContentShifting_Alt(slv2u(qaPtr)).completedA <= '1';
-                    queueContentShifting_Alt(slv2u(qaPtr)).address <= adrValue;
-                end if;
-
-                shiftQueueContent_Evt(queueContentShifting_Alt, sn(0), nFullNext, execEventSignal or lateEventSignal, '0');
-
-            end if;
-
-
-            if rising_edge(clk) then
 
                 -- Front input
                 if prevSending = '1' then
                     updateOnInput(queueContent_NS, pTagged, inputMask, systemMask);
+                    
+                        updateOnInput(queueContentShifting, subTruncZ(nFull, oneIfDraining, QUEUE_PTR_SIZE), inputMask, systemMask); -- !!! 
                 end if;
 
-                -- E. adr update
-                if compareAddressInput.full = '1' then
+                -- Update early
+                if compareAddressEarlyInput.full = '1' then
+                    if updateEarlyCompletedA = '1' then
+                        queueContentShifting(slv2u(qaEarlyPtr)).completedLowA <= '1';
+                        queueContent_NS(p2i(adrPtrEarly, QUEUE_SIZE)).completedLowA <= '1';
+                    end if;
+                    
+                    if updateEarlyAdr = '1' then
+                        queueContentShifting(slv2u(qaEarlyPtr)).addressLow <= adrValueEarly;
+                        queueContent_NS(p2i(adrPtrEarly, QUEUE_SIZE)).addressLow(11 downto 0) <= adrValueEarly(11 downto 0);
+
+                        addressesLow(p2i(adrPtrEarly, QUEUE_SIZE))(11 downto 0) <= adrValueEarly(11 downto 0);
+                    end if;
+                end if;
+
+                -- Update
+                if compareAddressInput.full = '1' then 
                     if updateCompletedA = '1' then
+                        queueContentShifting(slv2u(qaPtr)).completedA <= '1';
                         queueContent_NS(p2i(adrPtr, QUEUE_SIZE)).completedA <= '1';
                     end if;
 
                     if updateAdr = '1' then
+                        queueContentShifting(slv2u(qaPtr)).address <= adrValue;
                         queueContent_NS(p2i(adrPtr, QUEUE_SIZE)).address <= adrValue;
-                        
+
                         addresses(p2i(adrPtr, QUEUE_SIZE))(31 downto 12) <= adrValue(31 downto 12);
                         addresses(p2i(adrPtr, QUEUE_SIZE))(11 downto 0) <= adrValue(11 downto 0);
                     end if;
@@ -271,6 +290,11 @@ begin
                     
                     storeValues(p2i(storeValueResult.dest, QUEUE_SIZE)) <= storeValueResult.value;
                 end if;
+
+                if (execEventSignal or lateEventSignal) = '1' then
+                    shiftQueueContent_Evt(queueContentShifting, nFullNext);
+                end if;
+
 
                 selectedEntry <= queueContent_NS(p2i(pSelect, QUEUE_SIZE));
                 selectedValue <= storeValues(p2i(pSelect, QUEUE_SIZE));
@@ -340,9 +364,11 @@ begin
 
     ------------
     -- SQ
+        notU <= '1'; -- Careful: needed to prevent false drainReq on init
+    
 	committedEmptySig <= bool2std(pStart = pDrainPrev);
     drainEqual <= bool2std(pStart = pDrain);
-    drainReq <= not drainEqual and not committedEmptySig;
+    drainReq <= not drainEqual and not committedEmptySig  and notU;
     -------------
 
 
@@ -361,9 +387,261 @@ begin
     DEBUG_HANDLING: if DB_ENABLE generate
         use work.MemQueueViewing.all;
 
+        type EntryState is (empty, waiting, adr, val, completed, committed);
+        type EntryStateArray is array(0 to QUEUE_SIZE-1) of EntryState;
+        
+        signal states: EntryStateArray := (others => empty);
+
+        procedure stateError(msg: string; oldVal: EntryState; ind: natural) is
+        begin
+            report msg & "; at (" & natural'image(ind) & ") = " &  EntryState'image(oldVal) severity failure;
+        end procedure;
+
+        procedure writeState(signal table: inout EntryStateArray; ind: natural; IS_LQ: boolean) is
+            variable oldVal, newVal: EntryState := table(ind);
+        begin
+            case oldVal is
+                when empty =>
+                    if IS_LQ then 
+                        newVal := val;
+                    else
+                        newVal := waiting;
+                    end if;
+                when others => stateError("WRITE: ", oldVal, ind);
+            end case;
+            table(ind) <= newVal;
+        end procedure;
+
+        procedure commitState(signal table: inout EntryStateArray; ind: natural; IS_LQ: boolean) is
+            variable oldVal, newVal: EntryState := table(ind);
+        begin
+            case oldVal is
+                when completed =>
+                    if IS_LQ then 
+                        newVal := empty;
+                    else
+                        newVal := committed;
+                    end if;
+                when others => stateError("COMMIT: ", oldVal, ind);
+            end case;
+            table(ind) <= newVal;
+        end procedure;
+
+        procedure drainState(signal table: inout EntryStateArray; ind: natural) is
+            variable oldVal, newVal: EntryState := table(ind);
+        begin
+            case oldVal is
+                when committed => newVal := empty;
+                when others => stateError("DRAIN: ", oldVal, ind);
+            end case;
+            table(ind) <= newVal;
+        end procedure;
+
+        procedure updateState(signal table: inout EntryStateArray; ind: natural; a, v: std_logic; IS_LQ: boolean) is
+            variable oldVal, newVal: EntryState := table(ind);
+        begin
+            case oldVal is
+                when waiting =>
+                    if v = '1' then newVal := val; end if;
+
+                    if a = '1' then
+                        if newVal = val then
+                            newVal := completed;
+                        else
+                            newVal := adr;
+                        end if;
+                    end if;
+
+                when val =>
+                    if v = '1' then stateError("UPDATE: ", oldVal, ind); end if;
+                    if a = '1' then newVal := completed; end if;
+                when adr =>
+                    if v = '1' then newVal := completed; end if;
+                    if a = '1' then stateError("UPDATE: ", oldVal, ind); end if; -- We allow multiple replays for loads
+                when completed =>
+                    if not IS_LQ then stateError("UPDATE: ", oldVal, ind); end if;
+                when others => stateError("UPDATE: ", oldVal, ind);
+            end case;
+            table(ind) <= newVal;
+        end procedure;
+
+
+
+        procedure DB_writeStates(signal table: inout EntryStateArray; mask: std_logic_vector; endP: SmallNumber; IS_LQ: boolean) is
+            constant n: natural := countOnes(mask);
+            variable indSN: SmallNumber := endP;
+            variable ind: natural := 0;
+        begin
+            for i in 0 to n-1 loop
+                --table(p2i(addInt(endP, i), QUEUE_SIZE)) <= waiting;
+                writeState(table, p2i(addInt(endP, i), QUEUE_SIZE), IS_LQ);
+            end loop;
+        end procedure;
+
+        procedure DB_commitStates(signal table: inout EntryStateArray; mask: std_logic_vector; startP: SmallNumber;  IS_LQ: boolean) is
+            constant n: natural := countOnes(mask);
+        begin
+            for i in 0 to n-1 loop
+--                if IS_LQ then
+--                    table(p2i(addInt(startP, i), QUEUE_SIZE)) <= empty;
+--                else
+--                    table(p2i(addInt(startP, i), QUEUE_SIZE)) <= committed;
+--                end if;
+                
+                commitState(table, p2i(addInt(startP, i), QUEUE_SIZE), IS_LQ);
+            end loop;
+        end procedure;
+
+        procedure DB_drainStates(signal table: inout EntryStateArray; drainP: SmallNumber) is
+            constant n: natural := 1;
+        begin
+            for i in 0 to n-1 loop
+                --table(p2i(addInt(drainP, i), QUEUE_SIZE)) <= empty;
+                drainState(table, p2i(drainP, QUEUE_SIZE));
+            end loop;
+        end procedure;
+
+        procedure DB_updateAddress(signal table: inout EntryStateArray; en: std_logic; er: ExecResult; ec: ControlPacket; IS_LQ: boolean) is
+            constant n: natural := 1;
+            variable dest: SmallNumber := sn(0);
+        begin
+            if en /= '1' then
+                return;
+            end if;
+            
+            if IS_LQ then
+                dest := ec.tags.lqPointer;
+            else
+                dest := ec.tags.sqPointer;
+            end if;
+
+            case table(p2i(dest, QUEUE_SIZE)) is
+                when empty => report "Wrong: emp" severity error;
+                when waiting => table(p2i(dest, QUEUE_SIZE)) <= adr;
+                when adr => 
+                    if not IS_LQ then -- Repeated loads are possible. For stores, there should be just 1. 
+                                      --It will change when proper misses are implemented and every adr operation may fail.
+                            report "Wrong: adr" severity error;
+                    end if;
+                when val => table(p2i(dest, QUEUE_SIZE)) <= completed;
+                when completed => report "Wrong: comp" severity error;
+                when committed => report "Wrong: comm" severity error;
+            end case;
+        end procedure;
+
+        procedure DB_updateValue(signal table: inout EntryStateArray; en: std_logic; er: ExecResult--; ec: ControlPacket; IS_LQ: boolean
+        ) is
+            constant n: natural := 1;
+            variable dest: SmallNumber := sn(0);
+        begin
+            if en /= '1' then
+                return;
+            end if;
+            
+            dest := er.dest;
+            
+            case table(p2i(dest, QUEUE_SIZE)) is
+                when empty => report "v Wrong: emp" severity error;
+                when waiting => table(p2i(dest, QUEUE_SIZE)) <= val;
+                when adr => table(p2i(dest, QUEUE_SIZE)) <= completed;
+                when val => report "v Wrong: val" severity error;
+                when completed => report "v Wrong: comp" severity error;
+                when committed => report "v Wrong: comm" severity error;
+            end case;
+        end procedure;
+
+
+        procedure DB_updateStates(signal table: inout EntryStateArray; enA, enV: std_logic; adrCt: ControlPacket; valRes: ExecResult; IS_LQ: boolean) is
+            constant n: natural := 1;
+            variable destA, destV: SmallNumber := sn(0);
+        begin
+            if IS_LQ then
+                destA := adrCt.tags.lqPointer;
+            else
+                destA := adrCt.tags.sqPointer;
+            end if;
+            destV := valRes.dest;
+            
+            
+            if (enA) = '1' then
+                if enV = '1' and p2i(destA, QUEUE_SIZE) = p2i(destV, QUEUE_SIZE) then
+                    updateState(table, p2i(destA, QUEUE_SIZE), '1', '1', IS_LQ);
+                    return;
+                else
+                    updateState(table, p2i(destA, QUEUE_SIZE), '1', '0', IS_LQ);
+                end if;
+            end if;
+
+            if (enV) = '1' then
+                updateState(table, p2i(destV, QUEUE_SIZE), '0', '1', IS_LQ);
+            end if;
+        end procedure;
+
+
+        procedure DB_eventStates(signal table: inout EntryStateArray; evt: EventState; startP, drainP: SmallNumber; IS_LQ: boolean) is
+            variable killInd: natural := 0;
+        begin
+            if evt.lateCausing.full = '1' then
+                table <= (others => empty);
+                return;
+            end if;
+            
+            if evt.execCausing.full /= '1' then
+                return;
+            end if;
+            
+            if IS_LQ then
+                killInd := slv2u(evt.execTags.lqPointer) mod QUEUE_SIZE;
+            else
+                killInd := slv2u(evt.execTags.sqPointer) mod QUEUE_SIZE;
+            end if;
+            
+            -- TODO: handle the case of full queue - the below will probably kill nothing if exec event is outside the bounds of queue content
+            loop
+                if     (killInd = p2i(startP, QUEUE_SIZE) and IS_LOAD_QUEUE)
+                    or (killInd = p2i(drainP, QUEUE_SIZE) and not IS_LOAD_QUEUE) then
+                    exit;
+                end if;
+                table(killInd) <= empty;
+                killInd := (killInd + 1) mod QUEUE_SIZE;
+            end loop;
+
+        end procedure;
+
+        signal drainReqPre: std_logic := '0';
+    begin
+
         process (clk)
         begin
             if rising_edge(clk) then
+                drainReqPre <= drainReq;
+            
+                if prevSending = '1' then
+                    DB_writeStates(states, inputMask, pTagged, IS_LOAD_QUEUE);
+                end if;
+            
+                if committing = '1' then
+                    DB_commitStates(states, commitEffectiveMask, pStart, IS_LOAD_QUEUE);
+                end if;
+            
+                if drainReqPre = '1' and not IS_LOAD_QUEUE then
+                    DB_drainStates(states, pDrainPrev);
+                end if;
+            
+            
+--                if compareAddressInput.full = '1' then
+--                    DB_updateAddress(states, updateCompletedA, compareAddressInput, compareAddressCtrl, IS_LOAD_QUEUE);
+--                end if;
+                
+--                if storeValueResult.full = '1' then
+--                    DB_updateValue(states, '1', storeValueResult);
+--                end if;
+                if (compareAddressInput.full or storeValueResult.full) = '1' then
+                   DB_updateStates(states, (updateCompletedA or updateCompletedSysA) and compareAddressInput.full, storeValueResult.full, compareAddressCtrl, storeValueResult, IS_LOAD_QUEUE);
+                end if;
+
+                DB_eventStates(states, events, pStart, pDrainPrev, IS_LOAD_QUEUE);
+            
                 if DB_LOG_EVENTS then
                     if dbState.dbSignal = '1' then
                         report "LSQ reporting ";

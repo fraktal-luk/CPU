@@ -30,14 +30,17 @@ entity BranchQueue is
 		acceptingOut: out std_logic;		
 		acceptingBr: out std_logic;
 
-		prevSending: in std_logic;
 		prevSendingBr: in std_logic;
-
-		prevSendingRe: in std_logic;
-
-		branchMaskRe: in std_logic_vector(0 to PIPE_WIDTH-1);		
-		dataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
         dataInBr: in ControlPacketArray(0 to PIPE_WIDTH-1);
+        ctrlInBr: in ControlPacket;
+        
+		frontSending: in std_logic;
+		branchMaskFront: in std_logic_vector(0 to PIPE_WIDTH-1);		
+
+		renamedSending: in std_logic;
+		renamedDataIn: in InstructionSlotArray(0 to PIPE_WIDTH-1);
+        renamedCtrl: in ControlPacket;
+
 
         renamedPtr: out SmallNumber;
         bqPtrOut: out SmallNumber;
@@ -52,9 +55,8 @@ entity BranchQueue is
         commitBr: in std_logic;
         commitMask: in std_logic_vector(0 to PIPE_WIDTH-1);
 
-		lateEventSignal: in std_logic;
-		execEventSignal: in std_logic;
-        execCausing: in ExecResult;
+
+		events: in EventState;
 
 		nextAccepting: in std_logic;  -- UNUSED	
 
@@ -65,7 +67,10 @@ entity BranchQueue is
 end BranchQueue;
 
 
-architecture Behavioral of BranchQueue is    
+architecture Behavioral of BranchQueue is
+    alias lateEventSignal is events.lateCausing.full;
+    alias execEventSignal is events.execCausing.full;
+
 	constant PTR_MASK_SN: SmallNumber := sn(QUEUE_SIZE-1);
     constant QUEUE_PTR_SIZE: natural := countOnes(PTR_MASK_SN);
     constant QUEUE_CAP_SIZE: natural := QUEUE_PTR_SIZE + 1;
@@ -82,12 +87,13 @@ architecture Behavioral of BranchQueue is
     signal targetOutput: Mword := (others => '0');
 
     alias pSelect is compareAddressQuickInput.dest;
-    alias pFlushSeq is execCausing.dest;
+    alias pFlushSeq is events.execCausing.dest; -- TODO: incorrect?
 
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0'; 
 begin
     earlyInputSending <= prevSendingBr and dataInBr(0).controlInfo.firstBr;
-    lateInputSending <= prevSending and dataIn(0).ins.controlInfo.firstBr_T;
+    lateInputSending <= renamedSending and --dataIn(0).ins.controlInfo.firstBr_T;
+                                        renamedCtrl.controlInfo.firstBr;
 
     RW: block
        signal earlySerialInput, earlySerialSelected:  std_logic_vector(EARLY_INFO_SIZE-1 downto 0) := (others => '0');
@@ -101,7 +107,7 @@ begin
        signal lateSelected: LateInfo := DEFAULT_LATE_INFO;      
     begin
        earlySerialInput <= serializeEarlyInfo(getEarlyInfo(dataInBr));
-       lateSerialInput <= serializeLateInfo(getLateInfo(dataIn));
+       lateSerialInput <= serializeLateInfo(getLateInfo(renamedDataIn));
 
        SYNCH: process (clk)
        begin
@@ -125,9 +131,11 @@ begin
                targetOutput <= targetArray(p2i(pStartNext, QUEUE_SIZE));
 
                -- Read Exec: all arrays
-               selectedDataSlot <= getMatchedSlot(compareAddressQuickInput.full, compareAddressQuickInput.tag, earlySelected, lateSelected);
+               --selectedDataSlot <= getMatchedSlot(compareAddressQuickInput.full, compareAddressQuickInput.tag, earlySelected, lateSelected);
            end if;
        end process;
+               selectedDataSlot <= getMatchedSlot(compareAddressQuickInput.full, compareAddressQuickInput.tag, earlySelected, lateSelected);
+
 
        earlySerialSelected <= earlySerialMem(p2i(pSelect, QUEUE_SIZE));
        earlySelected <= deserializeEarlyInfo(earlySerialSelected);
@@ -145,7 +153,7 @@ begin
 
     pRenamedNext <= pStart when lateEventSignal = '1'
         else       addIntTrunc(pCausingPrev, 1, QUEUE_CAP_SIZE) when execEventSignal = '1'
-        else       addIntTrunc(pRenamed, 1, QUEUE_CAP_SIZE) when prevSendingRe = '1'
+        else       addIntTrunc(pRenamed, 1, QUEUE_CAP_SIZE) when frontSending = '1'
         else       pRenamed;
 
     pEndNext <= pStart when lateEventSignal = '1'
@@ -157,7 +165,7 @@ begin
 
     pRenamedSeqNext <= pStartSeq when lateEventSignal = '1'
             else       pFlushSeq when execEventSignal = '1'
-            else       addTruncZ(pRenamedSeq, countSN(branchMaskRe), BQ_SEQ_PTR_SIZE + 1) when prevSendingRe = '1'
+            else       addTruncZ(pRenamedSeq, countSN(branchMaskFront), BQ_SEQ_PTR_SIZE + 1) when frontSending = '1'
             else       pRenamedSeq;
 
     nFullNext <= getNumFull(pStartNext, pEndNext, QUEUE_PTR_SIZE);
@@ -167,8 +175,10 @@ begin
     begin
        if rising_edge(clk) then
            pSelectPrev <= pSelect;
-           pCausing <= pSelectPrev;
-           pCausingPrev <= pCausing;
+           pCausing <= --pSelectPrev;
+                        pSelect;
+           pCausingPrev <= --pCausing;
+                            pSelect;
 
            pStart <= pStartNext;
            pTagged <= pTaggedNext;
@@ -201,5 +211,112 @@ begin
     -- C. out    
     bqPtrOut <= pRenamed;
     renamedPtr <= pRenamedSeq;
+
+
+    -- pragma synthesis off
+    DEBUG_HANDLING: if DB_ENABLE generate
+
+        type EntryState is (empty, allocated, waiting, done);
+        type EntryRow is array(0 to PIPE_WIDTH-1) of EntryState;
+        type EntryRowArray is array(0 to QUEUE_SIZE-1) of EntryRow;
+
+        signal states: EntryRowArray := (others => (others => empty));
+
+--        signal wp1, wp2, wp3: SmallNumber := sn(0);
+
+            procedure DB_writeEarlyStates(signal table: inout EntryRowArray; allocP: SmallNumber; input: ControlPacketArray) is
+            begin
+                for i in 0 to PIPE_WIDTH-1 loop
+                    if input(i).full = '1' then
+                        table(p2i(allocP, QUEUE_SIZE))(i) <= allocated;
+                    end if;
+                end loop;
+            end procedure;
+
+            procedure DB_writeLateStates(signal table: inout EntryRowArray; endP: SmallNumber; input: InstructionSlotArray) is
+            begin
+                for i in 0 to PIPE_WIDTH-1 loop
+                    if input(i).full = '1' then
+                        table(p2i(endP, QUEUE_SIZE))(i) <= waiting;
+                    end if;
+                end loop;
+            end procedure;
+
+            procedure DB_commitStates(signal table: inout EntryRowArray; startP: SmallNumber) is
+            begin
+                table(p2i(startP, QUEUE_SIZE)) <= (others => empty);
+            end procedure;
+            
+            
+            procedure DB_killStates(signal table: inout EntryRowArray; startP: SmallNumber; tag: InsTag; lateEvent, execEvent: std_logic) is
+                variable row, col: natural := 0;
+                variable tagHigh, tagHighTrunc: SmallNumber;
+            begin
+                if lateEvent /= '1' then
+                    table <= (others => (others => empty));
+                    return;
+                end if;
+
+                if execEvent /= '1' then
+                    return;
+                end if;
+
+                tagHigh := getTagHighSN(tag);
+                tagHighTrunc := tagHigh and PTR_MASK_SN;
+                row := slv2u(tagHighTrunc);
+                col := slv2u(getTagLow(tag));
+
+                loop
+                    col := col + 1;
+                    if col = PIPE_WIDTH then
+                        exit;
+                    end if;
+                    table(row)(col) <= empty;
+                end loop;
+                
+                loop
+                    row := row + 1;
+                    if row = p2i(startP, QUEUE_SIZE) then
+                        exit;
+                    end if;
+                    table(row) <= (others => empty);
+                end loop;
+            end procedure;
+
+    begin
+
+        process (clk)
+        begin
+            if rising_edge(clk) then
+
+                if earlyInputSending = '1' then
+                    DB_writeEarlyStates(states, pEnd, dataInBr);
+                end if;
+
+                if lateInputSending = '1' then
+                    DB_writeLateStates(states, pTagged, renamedDataIn);
+                end if;
+
+
+                if committing = '1' then
+                    DB_commitStates(states, pStart);
+                end if;
+
+
+                if (events.execCausing.full or events.lateCausing.full) = '1' then
+                    DB_killStates(states, pStart, events.execCausing.tag, events.lateCausing.full, events.execCausing.full);
+                end if;
+
+
+                if DB_LOG_EVENTS then
+                    if dbState.dbSignal = '1' then
+                        report "BQ reporting ";
+                        --printContent(queueContent_NS, addresses, storeValues, pStart, pTagged, getNamePrefix(IS_LOAD_QUEUE));
+                    end if;
+                end if;
+            end if;
+        end process;
+    end generate;
+    -- pragma synthesis on
 
 end Behavioral;

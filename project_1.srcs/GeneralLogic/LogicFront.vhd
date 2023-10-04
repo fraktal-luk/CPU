@@ -227,6 +227,7 @@ begin
         res(i).specialAction := not (classInfo.mainCluster or classInfo.secCluster);
 
         res(i).classInfo := classInfo;
+            res(i).classInfo.useSpecial := res(i).specialAction; -- TODO: incorporate into decodeFromWord
         res(i).specificOperation := op;
         res(i).constantArgs := constantArgs;
         res(i).argSpec := argSpec;

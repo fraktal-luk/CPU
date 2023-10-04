@@ -33,13 +33,11 @@ package LogicExec is
 
     function getAluControl(op: ArithOp) return AluControl;
 
-	function basicBranch(sending: std_logic; ss: SchedulerState;
-	                     bqControl: ControlPacket;
-                         ac: AluControl) return ControlPacket;
+	function basicBranch(sending: std_logic; ss: SchedulerState; bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
+	return ControlPacket;
 
-	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword;-- ctrl: InstructionControlInfo;
-	                                           ac: AluControl)
-	                                           return ExecResult;
+	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword; ac: AluControl)
+	return ExecResult;
 
 	function prepareMultiply(full: std_logic; st: SchedulerState) return ExecResult;
 	
@@ -77,21 +75,21 @@ package body LogicExec is
 		return ac.jumpType(1) or (ac.jumpType(0) xor isZero);
 	end function;
 
-	function basicBranch(sending: std_logic; ss: SchedulerState;
-	                     bqControl: ControlPacket;
-	                     ac: AluControl)
+	function basicBranch(sending: std_logic; ss: SchedulerState; bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
 	return ControlPacket is
 		variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-		variable branchTaken, targetMatch: std_logic := '0';
+		variable branchTaken, targetMatch, targetEqual: std_logic := '0';
 		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
-		variable targetEqual: std_logic := '0';
+		--variable : std_logic := '0';
 		constant ctrl: InstructionControlInfo := bqControl.controlInfo;
 		constant target: Mword := bqControl.target;
 		constant result: Mword := bqControl.nip;
 	begin
 	    res.dbInfo := ss.st.dbInfo;
+	    
         res.tags := ss.st.tags;
 
+        res.full := sending;
         res.controlInfo.c_full := sending;
 		-- Cases to handle
 		-- jr taken		: if not taken goto return, if taken and not equal goto reg, if taken and equal ok 
@@ -104,43 +102,23 @@ package body LogicExec is
 
         res.controlInfo.c_full := sending;
 
-		if ctrl.frontBranch = '1' and branchTaken = '0' then
-			res.controlInfo.newEvent := '1';
-			trueTarget := result;
-		elsif ctrl.frontBranch = '0' and branchTaken = '1' then
-			res.controlInfo.newEvent := '1';
-			res.controlInfo.confirmedBranch := '1';			
-			if ss.st.immediate = '0' then
-				trueTarget := ss.argValues(1);
-			else
-				trueTarget := target;
-			end if;
-		elsif ctrl.frontBranch = '0' and branchTaken = '0' then
-			trueTarget := result;
-		else -- taken -> taken
-			if ss.st.immediate = '0' then
-				if targetMatch = '0' then
-					res.controlInfo.newEvent := '1';	-- Need to correct the target!	
-				end if;
-				trueTarget := ss.argValues(1); -- reg destination
-			else
-				trueTarget := target;
-			end if;
-			res.controlInfo.confirmedBranch := '1';			
-		end if;
-
-        if branchTaken = '0' then
+        if false and lateEvent.full = '1' then
+                trueTarget := lateEvent.value;
+        elsif branchTaken = '0' then
             trueTarget := result;
         elsif ss.st.immediate = '1' then
-            trueTarget := target;
+            trueTarget := target;         
         else
             trueTarget := ss.argValues(1);
         end if;
         
-        if      (ctrl.frontBranch xor branchTaken) = '1'
-                or  (ctrl.frontBranch and branchTaken and not ss.st.immediate and not targetMatch) = '1'
+        if false and lateEvent.full = '1' then
+                res.controlInfo.newEvent := '1';
+        elsif      (ctrl.frontBranch xor branchTaken) = '1'
+                or  (--ctrl.frontBranch and 
+                                          branchTaken and not ss.st.immediate and not targetMatch) = '1'
         then
-            res.controlInfo.newEvent := sending;
+            res.controlInfo.newEvent := sending;         
         else
             res.controlInfo.newEvent := '0';
         end if;
@@ -150,15 +128,14 @@ package body LogicExec is
 		res.target := trueTarget;
 		-- Return address
 		res.nip := result;
-		res.tags.intPointer := bqControl. tags.intPointer;
-		res.tags.floatPointer := bqControl. tags.floatPointer;
-    	res.tags.sqPointer := bqControl. tags.sqPointer;
-	    res.tags.lqPointer := bqControl. tags.lqPointer;		
+		res.tags.intPointer := bqControl.tags.intPointer;
+		res.tags.floatPointer := bqControl.tags.floatPointer;
+    	res.tags.sqPointer := bqControl.tags.sqPointer;
+	    res.tags.lqPointer := bqControl.tags.lqPointer;		
 		return res;
 	end function;
 
-	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword;-- ctrl: InstructionControlInfo;
-	                    ac: AluControl)
+	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword; ac: AluControl)
 	return ExecResult is
 		variable res: ExecResult := DEFAULT_EXEC_RESULT;
 		variable result: Mword := (others => '0');
@@ -171,6 +148,8 @@ package body LogicExec is
 	    variable shiftInput, rotated, shiftOutput: Dword := (others => '0');
 	begin
 	    res.dbInfo := ss.st.dbInfo;
+	
+	    res.poison := advancePoison(ss.poison);
 	
 		arg0 := ss.argValues(0);
 		arg1 := ss.argValues(1);
@@ -284,6 +263,8 @@ package body LogicExec is
         if (full and not isDivOp(st.st.operation)) = '1' then
             res.dbInfo := st.st.dbInfo; 
 
+            res.poison := st.poison;
+
             res.full := full;-- and not isDivOp(st.st.operation);
             res.tag := st.st.tags.renameIndex;
             res.dest := --st.argSpec.dest;
@@ -340,6 +321,9 @@ package body LogicExec is
         adr := add(st.argValues(0), st.argValues(1));
 
         res.full := full;
+        
+        res.poison := advancePoison(st.poison);
+
         res.dbInfo := st.st.dbInfo;
         res.tag := st.st.tags.renameIndex;
         res.dest := --st.argSpec.dest;        
@@ -376,6 +360,8 @@ package body LogicExec is
             -- TLB problems...
          elsif memFail then
              res.dataMiss := '1';
+             res.specialAction := '1';
+             res.newEvent := '1';
          elsif memForwarded then
              if ctSQ.controlInfo.sqMiss = '1' then
                  res.sqMiss := '1';
@@ -385,6 +371,9 @@ package body LogicExec is
          else    -- successful mem load
             null;
          end if;
+
+            res.dataMiss := bool2std(memFail);
+            res.sqMiss := ctSQ.controlInfo.sqMiss;
 
          -- CAREFUL: store when newer load has been done - violation resolution when reissue is used
          if isStoreMemOp(op) = '1' and ctLQ.controlInfo.c_full = '1' then

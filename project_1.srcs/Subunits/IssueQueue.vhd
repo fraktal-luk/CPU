@@ -35,9 +35,10 @@ entity IssueQueue is
 		reset: in std_logic;
 		en: in std_logic;
 
+		events: in EventState;
+
 		prevSendingOK: in std_logic;
 		newArr: in SchedulerInfoArray(0 to PIPE_WIDTH-1);
-        TMP_newTags: in SmallNumberArray(0 to RENAME_W-1);
 
         inReady: in std_logic;
         inMask: std_logic_vector;
@@ -49,14 +50,12 @@ entity IssueQueue is
 
 		nextAccepting: in std_logic;
         unlockDiv: in std_logic;
-            
-		events: in EventState;
 
         bypass: in BypassState;
 
         schedulerOut_Fast: out SchedulerState;
         schedulerOut_Slow: out SchedulerState;
-
+            outEP: out ExecPacket;
         outputSignals: out IssueQueueSignals;
 
         dbState: in DbCoreState		
@@ -78,7 +77,10 @@ architecture Behavioral of IssueQueue is
 
     signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
 
-    signal fullMask, killMask, freedMask, readyMask, selMask, selMask1, selMask2, selMaskH, trialMaskAll, TMP_trialMask1, TMP_trialMask2: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+    signal fullMask, trialMask, killMask, freedMask, freedMask_N, freeingMask, readyMask, selMask, selMask1, selMask2, selMaskH,
+              retractMask0, retractMask1, pullbackMask,
+              retractMask0_N, retractMask1_N, pullbackMask_N,
+                trialMaskAll, TMP_trialMask1, TMP_trialMask2: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
     signal anyReadyFull, sends, sent, sendingKilled, sentKilled, sentTrial1, sentTrial2, TMP_trial1, TMP_trial2: std_logic := '0';
 
@@ -93,7 +95,7 @@ architecture Behavioral of IssueQueue is
     signal outSigs: IssueQueueSignals := (others => '0');
 
     alias memFail is bypass.memFail;
-                
+
     signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8: std_logic := '0';
 
 begin
@@ -125,30 +127,142 @@ begin
         wupsSelection <= getFastWakeups(queueContent, bypass, CFG_SEL);
     end generate;
 
-    queueContentUpdatedSel <= updateSchedulerArray_S(queueContent, wupsSelection, memFail, CFG_SEL);
+    queueContentUpdatedSel <= updateQueueArgs_S(queueContent, wupsSelection, CFG_SEL);
 
     freedMask <= getFreedMask(queueContent);
+    freedMask_N <= getFreedMask_N(queueContent);
     fullMask <= getFullMask(queueContent);
 
     QUEUE_CTRL: block
         signal sendingTrial: std_logic := '0';
-        signal trialMask, trialUpdatedMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+        signal trialUpdatedMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+        signal updates: SchedulerUpdateArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_UPDATE);  
+
+        function getUpdates(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig;
+                            killMask, trialMask, trialUpdatedMask, readyMask, selMask, retractMask0, retractMask1, pullbackMask: std_logic_vector        
+        ) return SchedulerUpdateArray is
+            variable res: SchedulerUpdateArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_UPDATE);
+        begin
+            for i in 0 to IQ_SIZE-1 loop
+                res(i).kill := killMask(i);
+                res(i).trial := trialMask(i);
+                --freed
+                res(i).retract(0) := retractMask0(i);
+                res(i).retract(1) := retractMask1(i);
+                res(i).pullback := pullbackMask(i);
+                --suspend
+                --resume
+                res(i).ready := readyMask(i);
+                res(i).selected := selMask(i);
+            end loop;
+            return res;
+        end function;
+
+        function getPullbackMask0(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+            variable depends: std_logic := '0';       
+        begin
+            for i in res'range loop
+                depends := dependsOnMemHit(content(i).dynamic.argStates(0), config.fp);
+                res(i) := depends and memFail and not bool2std(config.ignoreMemFail);
+            end loop;
+            return res;
+        end function;
+
+        function getPullbackMask1(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+            variable depends: std_logic := '0';       
+        begin
+            for i in res'range loop
+                depends := dependsOnMemHit(content(i).dynamic.argStates(1), config.fp);
+                res(i) := depends and memFail and not bool2std(config.ignoreMemFail);
+            end loop;
+            return res;
+        end function;
+
+        function getPullbackMask(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+            variable depends: std_logic := '0';       
+        begin
+            for i in res'range loop
+                res(i) := content(i).dynamic.status_N.issued0 and memFail; -- and not bool2std(config.ignoreMemFail);
+            end loop;
+            return res;
+        end function;
+
+
+
+        function getPullbackMask0_N(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+            variable depends: std_logic := '0';       
+        begin
+            for i in res'range loop
+                depends := content(i).dynamic.argStates(0).poison.isOn and content(i).dynamic.argStates(0).poison.degrees(2);
+                res(i) := depends and memFail and not bool2std(config.ignoreMemFail);
+            end loop;
+            return res;
+        end function;
+
+        function getPullbackMask1_N(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+            variable depends: std_logic := '0';       
+        begin
+            for i in res'range loop
+                depends := content(i).dynamic.argStates(1).poison.isOn and content(i).dynamic.argStates(1).poison.degrees(2);
+                res(i) := depends and memFail and not bool2std(config.ignoreMemFail);
+            end loop;
+            return res;
+        end function;
+
+        function getIssuedMask(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig) return std_logic_vector is
+            variable res: std_logic_vector(content'range) := (others => '0');
+            variable depends: std_logic := '0';       
+        begin
+            for i in res'range loop
+                res(i) := content(i).dynamic.status_N.issued0 or content(i).dynamic.status_N.issued1 or content(i).dynamic.status_N.issued2;
+            end loop;
+            return res;
+        end function;
+
     begin
+            freeingMask <= getFreedMask_N(queueContentUpdated_2);
+
+
         trialMask <= getTrialMask(queueContent, events);
-            
+
+        retractMask0 <= getPullbackMask0(queueContent, memFail, CFG_WAIT);
+        retractMask1 <= getPullbackMask1(queueContent, memFail, CFG_WAIT);
+        pullbackMask <= getPullbackMask(queueContent, memFail, CFG_WAIT);
+
+            retractMask0_N <= getPullbackMask0_N(queueContent, memFail, CFG_WAIT);
+            retractMask1_N <= getPullbackMask1_N(queueContent, memFail, CFG_WAIT);
+            pullbackMask_N <= --getPullbackMask_N(queueContent, memFail, CFG_WAIT);
+                                (retractMask0_N or retractMask1_N) and getIssuedMask(queueContent, memFail, CFG_WAIT);
+
             trialMaskAll <= trialMask or not fullMask; -- empty slots are "on trial" because new ops are younger than Exec
             TMP_trialMask1 <= trialMaskAll and selMask;
             TMP_trialMask2 <= trialMaskAll and selMask1;
-        
+
+                ch0 <= bool2std(retractMask0_N = retractMask0);
+                ch1 <= bool2std(retractMask1_N = retractMask1);
+                ch2 <= bool2std(pullbackMask_N = pullbackMask);
+
         trialUpdatedMask <= getTrialUpdatedMask(queueContent);
 
-        killMask <= (others => '1') when events.lateEvent = '1' 
-               else trialUpdatedMask when events.execEvent = '1'
+        killMask <= (others => '1') when events.lateCausing.full = '1' 
+               else trialUpdatedMask when events.execCausing.full = '1'
                else (others => '0');
 
-        queueContentUpdated <= updateSchedulerArray(queueContent, wups, memFail, CFG_WAIT);
+
+            updates <= getUpdates(queueContent, memFail, CFG_WAIT,
+                                    killMask, trialMask, trialUpdatedMask, readyMask, selMask,
+                                        retractMask0, retractMask1, pullbackMask
+                                        --retractMask0_N, retractMask1_N, pullbackMask_N
+                                    );
+
+        queueContentUpdated <= updateQueueArgs(queueContent, wups, updates, memFail, CFG_WAIT);
         queueContentUpdated_2 <= updateQueueState(queueContentUpdated, nextAccepting, sends,
-                                                killMask, trialMask, selMask,
+                                                updates,
                                                 memFail, unlockDiv);
 
         sendingTrial <= isNonzero(selMask and trialUpdatedMask);
@@ -161,7 +275,7 @@ begin
     end block;
 
     insertionLocs <= getNewLocs(fullMask, inTags, newArr);
-    queueContentNext <= storeInput(queueContentUpdated_2, newArr, prevSendingOK, events.execEvent or events.lateEvent, insertionLocs);
+    queueContentNext <= storeInput(queueContentUpdated_2, newArr, prevSendingOK, events.execCausing.full or events.lateCausing.full, insertionLocs);
 
     readyMask <= getReadyMask(queueContentUpdatedSel);
 
@@ -202,6 +316,8 @@ begin
             TMP_trial2 <= isNonzero(TMP_trialMask2);
 
             issuedFastState <= getIssueStage(schedulerOutSig, outSigs, events);
+              --  outEP <= updateEP(, events);
+            
             prevIqTag <= getIssueTag('0', selMask);
             prevPrevIqTag <= prevIqTag;
         end if;
@@ -210,18 +326,18 @@ begin
     outSigs <=   (
             sending => sends,
             sentKilled => sentKilled,
-            trialPrev1 => sentTrial1,
+            trialPrev1 => '0',--sentTrial1,
                           --  TMP_trial1,
-            trialPrev2 => sentTrial2
+            trialPrev2 => '0'--sentTrial2
                           --  TMP_trial2
             );
     outputSignals <= outSigs;
-            ch0 <= '0';
+         --   ch0 <= '0';
 
     COUNTERS_SYNCHRONOUS: process(clk)
     begin
         if rising_edge(clk) then                
-            if events.lateEvent = '1' or events.execEvent = '1' then
+            if events.lateCausing.full = '1' or events.execCausing.full = '1' then
                 recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
             elsif isNonzero(recoveryCounter) = '1' then
                 recoveryCounter <= addIntTrunc(recoveryCounter, -1, 1);
@@ -231,39 +347,177 @@ begin
 
     -- pragma synthesis off
     DEBUG_HANDLING: if DB_ENABLE generate
+        use work.IqViewing.all;
 
-        DB_DATA: block
-            use work.IqViewing.all;
-
-            signal prevKillMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
-            signal currentStates, prevStates: IqStateArray(0 to IQ_SIZE-1) := (others => empty);
-            signal queueContentPrev: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
-            signal lastEvents: IqEventArray(0 to IQ_SIZE-1) := (others => none);
+        signal prevKillMask: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
+        signal currentStates, prevStates: IqStateArray(0 to IQ_SIZE-1) := (others => empty);
+        signal queueContentPrev: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
+        signal lastEvents: IqEventArray(0 to IQ_SIZE-1) := (others => none);
+        
+        type EntryState is (empty, suspended, active, issued);
+        type EntryStateArray is array(0 to IQ_SIZE-1) of EntryState;
+        
+        signal states: EntryStateArray := (others => empty);
+        
+        procedure stateError(msg: string; oldVal: EntryState; ind: natural) is
         begin
-            currentStates <= getCurrentStates(queueContent);
+            report msg & "; at (" & natural'image(ind) & ") = " &  EntryState'image(oldVal) severity failure;
+        end procedure;
+       
+        procedure writeEntry(signal table: inout EntryStateArray; ind: natural) is
+            variable oldVal, newVal: EntryState := table(ind);
+        begin
+            case oldVal is
+                when empty => newVal := active; -- TODO: suspended if applicable
+                when suspended | active | issued => stateError("WRITE: ", oldVal, ind);
+            end case;
+            table(ind) <= newVal;
+        end procedure;
 
-            process (clk)
-            begin
-                if rising_edge(clk) then
-                    prevKillMask <= killMask;
-                    prevStates <= currentStates;
-                    queueContentPrev <= queueContent;
+        procedure issueEntry(signal table: inout EntryStateArray; ind: natural) is
+            variable oldVal, newVal: EntryState := table(ind);
+        begin
+            case oldVal is
+                when empty | suspended | issued => stateError("ISSUE: ", oldVal, ind);
+                when active => newVal := issued;
+            end case;
+            table(ind) <= newVal;
+        end procedure;
 
-                    DB_reportEvents(queueContentNext, lastEvents);
+        procedure pullbackEntry(signal table: inout EntryStateArray; ind: natural) is
+            variable oldVal, newVal: EntryState := table(ind);
+        begin
+            case oldVal is
+                when issued => newVal := active; -- TODO: or suspended
+                when others => stateError("PULLBACK: ", oldVal, ind);
+            end case;
+            table(ind) <= newVal;
+        end procedure;
 
-                    if DB_LOG_EVENTS then
-                        if dbState.dbSignal = '1' then
-                            report "IQ reporting ";
-                            printContent(NAME, queueContent);
-                        end if;
+        procedure freeEntry(signal table: inout EntryStateArray; ind: natural) is
+            variable oldVal, newVal: EntryState := table(ind);
+        begin
+            case oldVal is
+                when issued => newVal := empty; -- TODO: or suspended
+                when others => stateError("FREE: ", oldVal, ind);
+            end case;
+            table(ind) <= newVal;
+        end procedure;
+
+        procedure killEntry(signal table: inout EntryStateArray; ind: natural) is
+            variable oldVal, newVal: EntryState := table(ind);
+        begin
+            case oldVal is
+                when others => newVal := empty;
+            end case;
+            table(ind) <= newVal;
+        end procedure;
+
+
+        procedure DB_writeStates(signal table: inout EntryStateArray; locs: slv2D) is
+        begin
+            for s in 0 to PIPE_WIDTH-1 loop
+                for i in 0 to IQ_SIZE-1 loop
+                    if locs(i, s) = '1' then
+                        --table(i) <= active;
+                        writeEntry(table, i);
+                    end if;
+                end loop;
+            end loop;
+        end procedure;
+
+        procedure DB_issueStates(signal table: inout EntryStateArray; mask: std_logic_vector) is
+        begin
+            --table(slv2u(loc)) <= issued;
+            for i in 0 to IQ_SIZE-1 loop
+                if mask(i) = '1' then
+                    issueEntry(table, i);
+                end if;
+            end loop;
+        end procedure;
+
+        procedure DB_freeStates(signal table: inout EntryStateArray; mask: std_logic_vector) is
+        begin
+            for i in 0 to IQ_SIZE-1 loop
+                if mask(i) = '1' then
+                    freeEntry(table, i);
+                    --table(i) <= empty;
+                end if;
+            end loop;
+        end procedure;
+
+        procedure DB_retractStates(signal table: inout EntryStateArray; pullbackMask, retractMask0, retractMask1: std_logic_vector) is
+        begin
+            for i in 0 to IQ_SIZE-1 loop
+                if pullbackMask(i) = '1' then
+                    pullbackEntry(table, i);
+                    --table(i) <= active;
+                end if;
+            end loop;
+        end procedure;
+
+        procedure DB_killStates(signal table: inout EntryStateArray; lateEvent: std_logic; trialMask: std_logic_vector) is
+        begin
+            if lateEvent = '1' then
+                for i in 0 to IQ_SIZE-1 loop
+                    killEntry(table, i);
+                    --table(i) <= empty;
+                end loop;
+            end if;
+            
+            for i in 0 to IQ_SIZE-1 loop
+                if trialMask(i) = '1' then
+                    --table(i) <= empty;
+                    killEntry(table, i);
+                end if;
+            end loop;
+        end procedure;
+
+    begin
+        currentStates <= getCurrentStates(queueContent);
+
+        process (clk)
+        begin
+            if rising_edge(clk) then
+                prevKillMask <= killMask;
+                prevStates <= currentStates;
+                queueContentPrev <= queueContent;
+
+                DB_reportEvents(queueContentNext, lastEvents);
+
+                
+                if prevSendingOK = '1' then
+                    DB_writeStates(states, insertionLocs);
+                end if;
+                
+                if sends = '1' then
+                    DB_issueStates(states, --getIssueTag('0', selMask));
+                                           selMask);
+                end if;
+                
+                -- Retractions:
+                DB_retractStates(states, pullbackMask, retractMask0, retractMask1);
+                                         --   pullbackMask_N, retractMask0_N, retractMask1_N);
+                DB_freeStates(states, freeingMask);
+
+                if (events.execCausing.full or events.lateCausing.full) = '1' then
+                    DB_killStates(states, events.lateCausing.full, --trialMask);
+                                                                    killMask);
+                end if;
+
+
+                if DB_LOG_EVENTS then
+                    if dbState.dbSignal = '1' then
+                        report "IQ reporting ";
+                        printContent(NAME, queueContent);
                     end if;
                 end if;
-            end process;
+            end if;
+        end process;
 
-            ALT_LAST_EVENTS: for i in 0 to IQ_SIZE-1 generate
-                lastEvents(i) <= TMP_lastEvent(queueContent(i), queueContentPrev(i), prevKillMask(i));
-            end generate;
-        end block;
+        ALT_LAST_EVENTS: for i in 0 to IQ_SIZE-1 generate
+            lastEvents(i) <= TMP_lastEvent(queueContent(i), queueContentPrev(i), prevKillMask(i));
+        end generate;
 
     end generate;
     -- pragma synthesis on

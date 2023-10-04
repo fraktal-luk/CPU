@@ -43,9 +43,10 @@ entity UnitSequencer is
         commitAccepting: out std_logic;
         
         robData: in ControlPacketArray(0 to PIPE_WIDTH-1);
-        robSpecial: in SpecificOp;
+        robCtrl: in ControlPacket;
         
-        sendingFromROB: in std_logic;
+--        robSpecial: in SpecificOp;
+--        sendingFromROB: in std_logic;
         
         bqTargetData: in ExecResult;
         
@@ -70,6 +71,9 @@ end UnitSequencer;
 
 
 architecture Behavioral of UnitSequencer is
+    alias robSpecial is robCtrl.op;
+    alias sendingFromROB is robCtrl.full;
+        
     signal pcDataSig: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal pcNew, pcCurrent, pcInc: Mword := (others => '0');        
@@ -95,6 +99,13 @@ architecture Behavioral of UnitSequencer is
     alias jumpWatchAdr is sysRegArray(31);
 
     alias lateCausingState is lateCausingOut.nip;
+
+    function suppress(cp: ControlPacket; sup: std_logic) return ControlPacket is
+        variable res: ControlPacket := cp;
+    begin
+        
+        return res;
+    end function; 
 
     signal  ch0, ch1, ch2, ch3, ch4, ch5: std_logic := '0';
 begin
@@ -292,6 +303,7 @@ begin
                     lateCausingOut.full <= '0';
                     lateCausingOut.controlInfo.c_full <= '0';
                     lateCausingOut.controlInfo.newEvent <= '0';
+                    --lateCausingOut <= suppress(lateCausingOut, not sendingToLateCausing);
                 end if;
             end if;
         end process;

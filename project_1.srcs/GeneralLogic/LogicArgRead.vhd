@@ -72,7 +72,9 @@ package body LogicArgRead is
         res.full := ctSigs.sending;
         res := TMP_clearDestIfEmpty(res);
 
-        if events.lateEvent = '1' then
+            res.poison := advancePoison(res.poison);
+
+        if events.lateCausing.full = '1' then
             res.full := '0';
         end if;
         return res;
@@ -81,7 +83,10 @@ package body LogicArgRead is
 
     function updateIssueStage(ss: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState is
         variable res: SchedulerState := ss;
+        variable squashPoisoned: std_logic := '0';
     begin
+        squashPoisoned := events.memFail and ss.poison.isOn and ss.poison.degrees(2);
+
             res.st.operation := TMP_restoreOperation(res.st.operation);
     
         res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
@@ -96,7 +101,7 @@ package body LogicArgRead is
         end if;
 
             res.maybeFull := res.full;
-        res.full := res.full and not (events.memFail or ctSigs.sentKilled or killFollower(ctSigs.trialPrev1, events));
+        res.full := res.full and not (squashOnMemFail(events.memFail) or ctSigs.sentKilled or killFollower(ctSigs.trialPrev1, events)) and not squashPoisoned;
         return res;
     end function;
 
@@ -133,6 +138,7 @@ package body LogicArgRead is
     begin
         res.full := prevSending;
         res := TMP_clearDestIfEmpty(res);
+            res.poison := advancePoison(res.poison);
 
         if REGS_ONLY then
             return res;    
@@ -168,7 +174,7 @@ package body LogicArgRead is
             res.argValues(1) := (others => '0');
         end if;
 
-        if events.lateEvent = '1' then
+        if events.lateCausing.full = '1' then
             res.full := '0';
         end if;
 
@@ -186,7 +192,8 @@ package body LogicArgRead is
         begin
             res.full := prevSending;
             res := TMP_clearDestIfEmpty(res);
-    
+                res.poison := advancePoison(res.poison);
+
             if REGS_ONLY then
                 return res;    
             end if;
@@ -225,7 +232,7 @@ package body LogicArgRead is
                 res := mqInput;
             end if;
 
-            if events.lateEvent = '1' then
+            if events.lateCausing.full = '1' then
                 res.full := '0';
             end if;
     
@@ -249,7 +256,12 @@ package body LogicArgRead is
     function updateRegReadStage(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
     return SchedulerState is
         variable res: SchedulerState := st;
+        variable squashPoisoned: std_logic := '0';
     begin
+        squashPoisoned := events.memFail and st.poison.isOn and st.poison.degrees(2);
+    
+        res.full := res.full and not killFollower(ctSigs.trialPrev2, events) and not squashPoisoned;
+
         if REGS_ONLY then
             res.argValues(0) := regValues(0);
             res.argValues(1) := regValues(1);
@@ -269,8 +281,6 @@ package body LogicArgRead is
         else
             res.argValues(1) := res.argValues(1) or regValues(1);
         end if;
-
-        res.full := res.full and not killFollower(ctSigs.trialPrev2, events);
 
         return res;
     end function;
