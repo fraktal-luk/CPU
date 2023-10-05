@@ -35,6 +35,7 @@ entity IssueQueue is
 		reset: in std_logic;
 		en: in std_logic;
 
+		events_T: in EventState;
 		events: in EventState;
 
 		prevSendingOK: in std_logic;
@@ -86,13 +87,13 @@ architecture Behavioral of IssueQueue is
 
     signal inTags: SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
 
-    signal recoveryCounter: SmallNumber := (others => '0');
+    signal prevIqTag, prevPrevIqTag: SmallNumber := (others => '0');
 
-    signal selectedSlot, selectedSlot_Slow: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
-    signal selectedIqTag, prevIqTag, prevPrevIqTag: SmallNumber := (others => '0');
-
-    signal schedulerOutSig, issuedFastState, issuedFastStateU, issuedSlowState: SchedulerState := DEFAULT_SCHED_STATE;
+    signal issuedFastState, issuedFast, issuedFastStateU, issuedSlowState: SchedulerState := DEFAULT_SCHED_STATE;
     signal outSigs: IssueQueueSignals := (others => '0');
+
+    signal selectedEP: ExecPacket := DEFAULT_EXEC_PACKET;
+
 
     alias memFail is bypass.memFail;
 
@@ -105,7 +106,7 @@ begin
         QUEUE_SIZE => 12, BANK_SIZE => 3
     )
     port map(
-        clk => clk, evt => events,
+        clk => clk, evt => events_T,
 
         inReady => inReady,
         inMask => inMask,
@@ -191,13 +192,12 @@ begin
         end function;
 
 
-
         function getPullbackMask0_N(content: SchedulerInfoArray; memFail: std_logic; config: SchedulerUpdateConfig) return std_logic_vector is
             variable res: std_logic_vector(content'range) := (others => '0');
             variable depends: std_logic := '0';       
         begin
             for i in res'range loop
-                depends := content(i).dynamic.argStates(0).poison.isOn and content(i).dynamic.argStates(0).poison.degrees(2);
+                depends := resolving(content(i).dynamic.argStates(0).poison);
                 res(i) := depends and memFail and not bool2std(config.ignoreMemFail);
             end loop;
             return res;
@@ -208,7 +208,7 @@ begin
             variable depends: std_logic := '0';       
         begin
             for i in res'range loop
-                depends := content(i).dynamic.argStates(1).poison.isOn and content(i).dynamic.argStates(1).poison.degrees(2);
+                depends := resolving(content(i).dynamic.argStates(1).poison);
                 res(i) := depends and memFail and not bool2std(config.ignoreMemFail);
             end loop;
             return res;
@@ -228,7 +228,7 @@ begin
             freeingMask <= getFreedMask_N(queueContentUpdated_2);
 
 
-        trialMask <= getTrialMask(queueContent, events);
+        trialMask <= getTrialMask(queueContent, events_T);
 
         retractMask0 <= getPullbackMask0(queueContent, memFail, CFG_WAIT);
         retractMask1 <= getPullbackMask1(queueContent, memFail, CFG_WAIT);
@@ -249,8 +249,8 @@ begin
 
         trialUpdatedMask <= getTrialUpdatedMask(queueContent);
 
-        killMask <= (others => '1') when events.lateCausing.full = '1' 
-               else trialUpdatedMask when events.execCausing.full = '1'
+        killMask <= (others => '1') when events_T.lateCausing.full = '1' 
+               else trialUpdatedMask when events_T.execCausing.full = '1'
                else (others => '0');
 
 
@@ -266,16 +266,14 @@ begin
                                                 memFail, unlockDiv);
 
         sendingTrial <= isNonzero(selMask and trialUpdatedMask);
-        sendingKilled <= killFollower(sendingTrial, events);
+        sendingKilled <= killFollower(sendingTrial, events_T);
 
-        sentTrial1 <= --isNonzero(selMask1 and trialUpdatedMask);
-                        TMP_slowSelect(trialUpdatedMask, prevIqTag);
-        sentTrial2 <= --isNonzero(selMask2 and trialUpdatedMask);
-                        TMP_slowSelect(trialUpdatedMask, prevPrevIqTag);
+        sentTrial1 <= TMP_slowSelect(trialUpdatedMask, prevIqTag);
+        sentTrial2 <= TMP_slowSelect(trialUpdatedMask, prevPrevIqTag);
     end block;
 
     insertionLocs <= getNewLocs(fullMask, inTags, newArr);
-    queueContentNext <= storeInput(queueContentUpdated_2, newArr, prevSendingOK, events.execCausing.full or events.lateCausing.full, insertionLocs);
+    queueContentNext <= storeInput(queueContentUpdated_2, newArr, prevSendingOK, events_T.execCausing.full or events_T.lateCausing.full, insertionLocs);
 
     readyMask <= getReadyMask(queueContentUpdatedSel);
 
@@ -287,18 +285,34 @@ begin
     selMaskH <= getSelMask_H(readyMask, ageMatrix);
     selMask <= selMaskH;
 
-    selectedIqTag <= getIssueTag(sends, selMask);
-    selectedSlot <= queueSelect_N(queueContentUpdatedSel, readyMask, ageMatrix);
-                    --queueSelect(queueContentUpdatedSel, selMask);
 
-    schedulerOutSig <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
+    TMP_ABC: block
+        signal schedulerOutSig: SchedulerState := DEFAULT_SCHED_STATE;
+        signal selectedSlot_Slow: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+        signal selectedSlot: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
+        signal selectedIqTag: SmallNumber := (others => '0');
+    begin
+    
+        -- local
+        selectedIqTag <= getIssueTag(sends, selMask);
+        selectedSlot <= queueSelect_N(queueContentUpdatedSel, readyMask, ageMatrix);
 
-    issuedFastStateU <= updateIssueStage(issuedFastState, outSigs, events);
-    schedulerOut_Fast <= issuedFastStateU;
+        -- local
+        schedulerOutSig <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
+        issuedFast <= getIssueStage(schedulerOutSig, outSigs, events_T);
 
-    selectedSlot_Slow <= TMP_slowSelect(queueContent, prevIqTag);
-    issuedSlowState <= getSchedEntrySlot(selectedSlot_Slow, sent, getIssueTag(sent, selMask1));
+            selectedEP <= makeEP(schedulerOutSig);
+
+        issuedFastStateU <= updateIssueStage(issuedFastState, outSigs, events_T);
+
+        -- local
+        selectedSlot_Slow <= TMP_slowSelect(queueContent, prevIqTag);
+        issuedSlowState <= getSchedEntrySlot(selectedSlot_Slow, sent, getIssueTag(sent, selMask1));
+    end block;
+
+    schedulerOut_Fast <= issuedFastStateU;    
     schedulerOut_Slow <= issuedSlowState;
+
 
     QUEUE_SYNCHRONOUS: process(clk)
     begin
@@ -315,8 +329,8 @@ begin
             TMP_trial1 <= isNonzero(TMP_trialMask1);
             TMP_trial2 <= isNonzero(TMP_trialMask2);
 
-            issuedFastState <= getIssueStage(schedulerOutSig, outSigs, events);
-              --  outEP <= updateEP(, events);
+            issuedFastState <= issuedFast;
+               outEP <= updateEP(selectedEP, events_T);
             
             prevIqTag <= getIssueTag('0', selMask);
             prevPrevIqTag <= prevIqTag;
@@ -326,24 +340,10 @@ begin
     outSigs <=   (
             sending => sends,
             sentKilled => sentKilled,
-            trialPrev1 => '0',--sentTrial1,
-                          --  TMP_trial1,
-            trialPrev2 => '0'--sentTrial2
-                          --  TMP_trial2
+            trialPrev1 => '0',
+            trialPrev2 => '0'
             );
     outputSignals <= outSigs;
-         --   ch0 <= '0';
-
-    COUNTERS_SYNCHRONOUS: process(clk)
-    begin
-        if rising_edge(clk) then                
-            if events.lateCausing.full = '1' or events.execCausing.full = '1' then
-                recoveryCounter <= i2slv(1, SMALL_NUMBER_SIZE);
-            elsif isNonzero(recoveryCounter) = '1' then
-                recoveryCounter <= addIntTrunc(recoveryCounter, -1, 1);
-            end if;
-        end if;
-    end process;
 
     -- pragma synthesis off
     DEBUG_HANDLING: if DB_ENABLE generate
@@ -419,7 +419,6 @@ begin
             for s in 0 to PIPE_WIDTH-1 loop
                 for i in 0 to IQ_SIZE-1 loop
                     if locs(i, s) = '1' then
-                        --table(i) <= active;
                         writeEntry(table, i);
                     end if;
                 end loop;
@@ -428,7 +427,6 @@ begin
 
         procedure DB_issueStates(signal table: inout EntryStateArray; mask: std_logic_vector) is
         begin
-            --table(slv2u(loc)) <= issued;
             for i in 0 to IQ_SIZE-1 loop
                 if mask(i) = '1' then
                     issueEntry(table, i);
@@ -441,7 +439,6 @@ begin
             for i in 0 to IQ_SIZE-1 loop
                 if mask(i) = '1' then
                     freeEntry(table, i);
-                    --table(i) <= empty;
                 end if;
             end loop;
         end procedure;
@@ -451,7 +448,6 @@ begin
             for i in 0 to IQ_SIZE-1 loop
                 if pullbackMask(i) = '1' then
                     pullbackEntry(table, i);
-                    --table(i) <= active;
                 end if;
             end loop;
         end procedure;
@@ -461,13 +457,11 @@ begin
             if lateEvent = '1' then
                 for i in 0 to IQ_SIZE-1 loop
                     killEntry(table, i);
-                    --table(i) <= empty;
                 end loop;
             end if;
             
             for i in 0 to IQ_SIZE-1 loop
                 if trialMask(i) = '1' then
-                    --table(i) <= empty;
                     killEntry(table, i);
                 end if;
             end loop;
@@ -491,8 +485,7 @@ begin
                 end if;
                 
                 if sends = '1' then
-                    DB_issueStates(states, --getIssueTag('0', selMask));
-                                           selMask);
+                    DB_issueStates(states, selMask);
                 end if;
                 
                 -- Retractions:
@@ -500,9 +493,8 @@ begin
                                          --   pullbackMask_N, retractMask0_N, retractMask1_N);
                 DB_freeStates(states, freeingMask);
 
-                if (events.execCausing.full or events.lateCausing.full) = '1' then
-                    DB_killStates(states, events.lateCausing.full, --trialMask);
-                                                                    killMask);
+                if (events_T.execCausing.full or events_T.lateCausing.full) = '1' then
+                    DB_killStates(states, events_T.lateCausing.full, killMask);
                 end if;
 
 

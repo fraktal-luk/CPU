@@ -502,8 +502,8 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                events => --events,
-                            events_T,
+                events => events,
+                events_T => events_T,
 
                 accept => allocAcceptAlu,
 
@@ -530,7 +530,7 @@ begin
             slotIssueI0 <= slotIssueI0_TF;
             slotIssueI0_U <= TMP_mergeStatic(slotIssueI0_TF, slotIssueI0_TS);
 
-                EP_I0_Issue <= updateEP( makeEP(slotIssueI0_U), events_T); 
+                EP_I0_Issue <= updateEP_Async( makeEP(slotIssueI0_U), events_T); 
 
             TMP_ISSUE_I0: block
                 signal argStateRegI0: SchedulerState := DEFAULT_SCHEDULER_STATE;
@@ -655,8 +655,8 @@ begin
                 )
                 port map(
                     clk => clk, reset => '0', en => '0',
-                    events => --events,
-                                events_T,
+                    events => events,
+                    events_T => events_T,
 
                     accept => allocAcceptMul,
 
@@ -684,7 +684,7 @@ begin
                 slotIssueI1 <= slotIssueI1_TF;
                 slotIssueI1_U <= TMP_mergeStatic(slotIssueI1_TF, slotIssueI1_TS);
     
-                    EP_I1_Issue <= updateEP( makeEP(slotIssueI1_U), events_T); 
+                    EP_I1_Issue <= updateEP_Async( makeEP(slotIssueI1_U), events_T); 
 
 
                 TMP_ISSUE_I1: block
@@ -783,8 +783,8 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                events => --events,
-                            events_T,
+                events => events,
+                events_T => events_T,
 
                 accept => allocAcceptMem,
 
@@ -812,7 +812,7 @@ begin
             slotIssueM0 <= slotIssueM0_TF;
             slotIssueM0_U <= TMP_mergeStatic(slotIssueM0_TF, slotIssueM0_TS);
 
-                EP_M0_Issue <= updateEP( makeEP(slotIssueM0_U), events_T); 
+                EP_M0_Issue <= updateEP_Async( makeEP(slotIssueM0_U), events_T); 
 
 
             slotIssueM0mq <= TMP_slotIssueM0mq(mqReexecCtrlIssue, mqReexecResIssue, mqReexecCtrlIssue.controlInfo.c_full);
@@ -821,7 +821,7 @@ begin
                 signal argStateRegM0, argStateR_Merged: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
 
-                EP_M0_IssueMQ <= updateEP( makeEP(slotIssueM0mq), events_T);
+                EP_M0_IssueMQ <= updateEP_Async( makeEP(slotIssueM0mq), events_T);
 
                 process (clk)
                 begin
@@ -960,8 +960,8 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                events => --events,
-                            events_T,
+                events => events,
+                events_T => events_T,
 
                 accept => allocAcceptSVI,
 
@@ -1030,8 +1030,8 @@ begin
                     )
                     port map(
                         clk => clk, reset => '0', en => '0',
-                        events => --events,
-                                    events_T,
+                        events => events,
+                        events_T => events_T,
 
                         accept => allocAcceptSVF,
 
@@ -1108,8 +1108,9 @@ begin
             )
             port map(
                clk => clk, reset => '0', en => '0',
-               events => --events,
-                            events_T,
+               events => events,
+               events_T => events_T,
+
                accept => allocAcceptF0,
 
                inReady => frontGroupSend,
@@ -1134,7 +1135,7 @@ begin
             slotIssueF0 <= slotIssueF0_TF;
             slotIssueF0_U <= TMP_mergeStatic(slotIssueF0_TF, slotIssueF0_TS);
 
-                EP_F0_Issue <=  updateEP( makeEP(slotIssueF0_U), events_T); 
+                EP_F0_Issue <=  updateEP_Async( makeEP(slotIssueF0_U), events_T); 
 
             TMP_ISSUE_F0: block
                signal argStateRegF0: SchedulerState := DEFAULT_SCHEDULER_STATE;

@@ -72,7 +72,7 @@ package body LogicArgRead is
         res.full := ctSigs.sending;
         res := TMP_clearDestIfEmpty(res);
 
-            res.poison := advancePoison(res.poison);
+            res.poison := advancePoison(res.poison, events.memFail);
 
         if events.lateCausing.full = '1' then
             res.full := '0';
@@ -85,7 +85,8 @@ package body LogicArgRead is
         variable res: SchedulerState := ss;
         variable squashPoisoned: std_logic := '0';
     begin
-        squashPoisoned := events.memFail and ss.poison.isOn and ss.poison.degrees(2);
+        squashPoisoned := events.memFail and --ss.poison.isOn and ss.poison.degrees(2);
+                                             resolving(ss.poison);
 
             res.st.operation := TMP_restoreOperation(res.st.operation);
     
@@ -138,7 +139,7 @@ package body LogicArgRead is
     begin
         res.full := prevSending;
         res := TMP_clearDestIfEmpty(res);
-            res.poison := advancePoison(res.poison);
+            res.poison := advancePoison(res.poison, events.memFail);
 
         if REGS_ONLY then
             return res;    
@@ -192,7 +193,7 @@ package body LogicArgRead is
         begin
             res.full := prevSending;
             res := TMP_clearDestIfEmpty(res);
-                res.poison := advancePoison(res.poison);
+                res.poison := advancePoison(res.poison, events.memFail);
 
             if REGS_ONLY then
                 return res;    
@@ -258,7 +259,8 @@ package body LogicArgRead is
         variable res: SchedulerState := st;
         variable squashPoisoned: std_logic := '0';
     begin
-        squashPoisoned := events.memFail and st.poison.isOn and st.poison.degrees(2);
+        squashPoisoned := events.memFail and --st.poison.isOn and st.poison.degrees(2);
+                                            resolving(st.poison);
     
         res.full := res.full and not killFollower(ctSigs.trialPrev2, events) and not squashPoisoned;
 

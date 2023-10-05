@@ -186,31 +186,41 @@ end record;
 
 type ControlPacketArray is array(integer range <>) of ControlPacket;
 
+type PoisonInfo is record
+    isOn: std_logic;
+    degrees: std_logic_vector(0 to 4);
+    yes: std_logic;
+    no: std_logic;
+end record;
 
 type ExecPacket is record
     full: std_logic;
     killed: std_logic;
     fail: std_logic;
     tag: InsTag;
+        poison: PoisonInfo;
 end record;
 
 type ExecPacketArray is array(natural range <>) of ExecPacket;
+
+
+
+
+
+
+constant DEFAULT_POISON: PoisonInfo := (isOn => '0',
+                                        degrees => (others => '0'),
+                                        yes => '0',
+                                        no => '0'
+                                        );
 
 constant DEFAULT_EXEC_PACKET: ExecPacket := (
     full => '0',
     killed => '0',
     fail => '0',
-    tag => (others => '0')
+    tag => (others => '0'),
+        poison => DEFAULT_POISON
 );
-
-
-type PoisonInfo is record
-    isOn: std_logic;
-    degrees: std_logic_vector(0 to 4);
-end record;
-
-constant DEFAULT_POISON: PoisonInfo := ('0', (others => '0'));
-
 
 -- DB stuff
 type DbDependency is record

@@ -225,6 +225,8 @@ function getNumFull(pStart, pEnd: SmallNumber; constant QUEUE_PTR_SIZE: natural)
 
 function unfoldOp(op: SpecificOp) return SpecificOp;
 
+function resolving(p: PoisonInfo) return std_logic;
+
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult;
 function updateMemDest(er: ExecResult; used: std_logic) return ExecResult;
 
@@ -279,8 +281,10 @@ function std2int(s: std_logic) return integer;
     function convertExecStoreValue(sx: SchedulerState) return ExecResult;
 
     function advancePoison(p: PoisonInfo) return PoisonInfo;
+        function advancePoison(p: PoisonInfo; memFail: std_logic) return PoisonInfo;
 
     function makeEP(ss: SchedulerState) return ExecPacket;
+    function updateEP_Async(ep: ExecPacket; evt: EventState) return ExecPacket;
     function updateEP(ep: ExecPacket; evt: EventState) return ExecPacket;
     function mergeEP(epA, epB: ExecPacket) return ExecPacket;
     function applyFail(ep: ExecPacket; fail: std_logic) return ExecPacket;
@@ -888,6 +892,10 @@ begin
     return val and bool2std(SQUASH_ON_MEM_FAIL);
 end function;
 
+function resolving(p: PoisonInfo) return std_logic is
+begin
+    return p.isOn and p.degrees(2);
+end function;
 
 function setMemFail(er: ExecResult; fail: std_logic; memResult: Mword) return ExecResult is
     variable res: ExecResult := er;
@@ -1303,6 +1311,10 @@ end function;
     function advancePoison(p: PoisonInfo) return PoisonInfo is
         variable res: PoisonInfo := p;
     begin
+        if resolving(p) = '1' then
+            res.yes := '1'; -- TMP!
+            res.no := '1';  -- TMP!
+        end if;
         
         res.degrees := '0' & p.degrees(0 to 3);
         if isNonzero(res.degrees) /= '1' then
@@ -1311,6 +1323,22 @@ end function;
         return res;
     end function;
 
+        function advancePoison(p: PoisonInfo; memFail: std_logic) return PoisonInfo is
+            variable res: PoisonInfo := p;
+        begin
+            if resolving(p) = '1' then
+                res.yes := res.yes or memFail; -- TMP!
+                res.no := --res.no and not memFail;  -- TMP!
+                          not res.yes;
+            end if;
+
+            res.degrees := '0' & p.degrees(0 to 3);
+            if isNonzero(res.degrees) /= '1' then
+                res.isOn := '0';
+            end if;
+            return res;
+        end function;
+
 
     function makeEP(ss: SchedulerState) return ExecPacket is
         variable res: ExecPacket := DEFAULT_EXEC_PACKET; 
@@ -1318,6 +1346,17 @@ end function;
         res.full := ss.full;
         
         res.tag := ss.st.tags.renameIndex;
+            
+            res.poison := ss.poison;
+        return res;
+    end function;
+
+    function updateEP_Async(ep: ExecPacket; evt: EventState) return ExecPacket is
+        variable res: ExecPacket := ep; 
+    begin
+        if ep.full = '1' and (evt.lateCausing.full = '1' or (evt.execCausing.full and compareTagBefore(evt.execCausing.tag, ep.tag)) = '1') then
+            res.killed := '1';
+        end if;
 
         return res;
     end function;
@@ -1325,6 +1364,7 @@ end function;
     function updateEP(ep: ExecPacket; evt: EventState) return ExecPacket is
         variable res: ExecPacket := ep; 
     begin
+            res.poison := advancePoison(ep.poison, evt.memFail);
         if ep.full = '1' and (evt.lateCausing.full = '1' or (evt.execCausing.full and compareTagBefore(evt.execCausing.tag, ep.tag)) = '1') then
             res.killed := '1';
         end if;
