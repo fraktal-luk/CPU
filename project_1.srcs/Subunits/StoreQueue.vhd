@@ -96,10 +96,6 @@ architecture Behavioral of StoreQueue is
 
     signal selectedDataResultSig: ExecResult := DEFAULT_EXEC_RESULT;
 
-	--alias storeValuePtr is storeValueResult.dest;
-                    -- events.execTags.lqPointer ; if IS_LQ    
-                    -- events.execTags.sqPointer ; if not IS_LQ    
-    
     alias adrValueEarly is compareAddressEarlyInput.value;
     alias adrValue is compareAddressInput.value;
 
@@ -109,14 +105,8 @@ architecture Behavioral of StoreQueue is
 
     signal ch0, ch1, ch2, ch3, chi, chii: std_logic := '0';
 begin
-            --ch0 <= bool2std(queueContentShifting = queueContentShifting);
-            ch1 <= '1';
-            ch2 <= '1';
-
-        pFlush <= events.execTags.lqPointer when IS_LOAD_QUEUE
-             else events.execTags.sqPointer;
-
-
+    pFlush <= events.execTags.lqPointer when IS_LOAD_QUEUE
+         else events.execTags.sqPointer;
 
     lookupEarly <= isStoreMemOp(compareAddressEarlyInput_Ctrl.op) when IS_LOAD_QUEUE
               else isLoadMemOp(compareAddressEarlyInput_Ctrl.op);
@@ -210,8 +200,6 @@ begin
             pSelectPrev <= pSelect; -- Only SQ?
 
             pSelectEarlyPrevNS <= pSelectEarlyNS;
-
-               -- pSelect <= pSelectNext;
 
             isSelected <= isSelectedNext;
             sqMissed <= missing;
@@ -387,226 +375,7 @@ begin
     DEBUG_HANDLING: if DB_ENABLE generate
         use work.MemQueueViewing.all;
 
-        type EntryState is (empty, waiting, adr, val, completed, committed);
-        type EntryStateArray is array(0 to QUEUE_SIZE-1) of EntryState;
-        
-        signal states: EntryStateArray := (others => empty);
-
-        procedure stateError(msg: string; oldVal: EntryState; ind: natural) is
-        begin
-            report msg & "; at (" & natural'image(ind) & ") = " &  EntryState'image(oldVal) severity failure;
-        end procedure;
-
-        procedure writeState(signal table: inout EntryStateArray; ind: natural; IS_LQ: boolean) is
-            variable oldVal, newVal: EntryState := table(ind);
-        begin
-            case oldVal is
-                when empty =>
-                    if IS_LQ then 
-                        newVal := val;
-                    else
-                        newVal := waiting;
-                    end if;
-                when others => stateError("WRITE: ", oldVal, ind);
-            end case;
-            table(ind) <= newVal;
-        end procedure;
-
-        procedure commitState(signal table: inout EntryStateArray; ind: natural; IS_LQ: boolean) is
-            variable oldVal, newVal: EntryState := table(ind);
-        begin
-            case oldVal is
-                when completed =>
-                    if IS_LQ then 
-                        newVal := empty;
-                    else
-                        newVal := committed;
-                    end if;
-                when others => stateError("COMMIT: ", oldVal, ind);
-            end case;
-            table(ind) <= newVal;
-        end procedure;
-
-        procedure drainState(signal table: inout EntryStateArray; ind: natural) is
-            variable oldVal, newVal: EntryState := table(ind);
-        begin
-            case oldVal is
-                when committed => newVal := empty;
-                when others => stateError("DRAIN: ", oldVal, ind);
-            end case;
-            table(ind) <= newVal;
-        end procedure;
-
-        procedure updateState(signal table: inout EntryStateArray; ind: natural; a, v: std_logic; IS_LQ: boolean) is
-            variable oldVal, newVal: EntryState := table(ind);
-        begin
-            case oldVal is
-                when waiting =>
-                    if v = '1' then newVal := val; end if;
-
-                    if a = '1' then
-                        if newVal = val then
-                            newVal := completed;
-                        else
-                            newVal := adr;
-                        end if;
-                    end if;
-
-                when val =>
-                    if v = '1' then stateError("UPDATE: ", oldVal, ind); end if;
-                    if a = '1' then newVal := completed; end if;
-                when adr =>
-                    if v = '1' then newVal := completed; end if;
-                    if a = '1' then stateError("UPDATE: ", oldVal, ind); end if; -- We allow multiple replays for loads
-                when completed =>
-                    if not IS_LQ then stateError("UPDATE: ", oldVal, ind); end if;
-                when others => stateError("UPDATE: ", oldVal, ind);
-            end case;
-            table(ind) <= newVal;
-        end procedure;
-
-
-
-        procedure DB_writeStates(signal table: inout EntryStateArray; mask: std_logic_vector; endP: SmallNumber; IS_LQ: boolean) is
-            constant n: natural := countOnes(mask);
-            variable indSN: SmallNumber := endP;
-            variable ind: natural := 0;
-        begin
-            for i in 0 to n-1 loop
-                --table(p2i(addInt(endP, i), QUEUE_SIZE)) <= waiting;
-                writeState(table, p2i(addInt(endP, i), QUEUE_SIZE), IS_LQ);
-            end loop;
-        end procedure;
-
-        procedure DB_commitStates(signal table: inout EntryStateArray; mask: std_logic_vector; startP: SmallNumber;  IS_LQ: boolean) is
-            constant n: natural := countOnes(mask);
-        begin
-            for i in 0 to n-1 loop
---                if IS_LQ then
---                    table(p2i(addInt(startP, i), QUEUE_SIZE)) <= empty;
---                else
---                    table(p2i(addInt(startP, i), QUEUE_SIZE)) <= committed;
---                end if;
-                
-                commitState(table, p2i(addInt(startP, i), QUEUE_SIZE), IS_LQ);
-            end loop;
-        end procedure;
-
-        procedure DB_drainStates(signal table: inout EntryStateArray; drainP: SmallNumber) is
-            constant n: natural := 1;
-        begin
-            for i in 0 to n-1 loop
-                --table(p2i(addInt(drainP, i), QUEUE_SIZE)) <= empty;
-                drainState(table, p2i(drainP, QUEUE_SIZE));
-            end loop;
-        end procedure;
-
-        procedure DB_updateAddress(signal table: inout EntryStateArray; en: std_logic; er: ExecResult; ec: ControlPacket; IS_LQ: boolean) is
-            constant n: natural := 1;
-            variable dest: SmallNumber := sn(0);
-        begin
-            if en /= '1' then
-                return;
-            end if;
-            
-            if IS_LQ then
-                dest := ec.tags.lqPointer;
-            else
-                dest := ec.tags.sqPointer;
-            end if;
-
-            case table(p2i(dest, QUEUE_SIZE)) is
-                when empty => report "Wrong: emp" severity error;
-                when waiting => table(p2i(dest, QUEUE_SIZE)) <= adr;
-                when adr => 
-                    if not IS_LQ then -- Repeated loads are possible. For stores, there should be just 1. 
-                                      --It will change when proper misses are implemented and every adr operation may fail.
-                            report "Wrong: adr" severity error;
-                    end if;
-                when val => table(p2i(dest, QUEUE_SIZE)) <= completed;
-                when completed => report "Wrong: comp" severity error;
-                when committed => report "Wrong: comm" severity error;
-            end case;
-        end procedure;
-
-        procedure DB_updateValue(signal table: inout EntryStateArray; en: std_logic; er: ExecResult--; ec: ControlPacket; IS_LQ: boolean
-        ) is
-            constant n: natural := 1;
-            variable dest: SmallNumber := sn(0);
-        begin
-            if en /= '1' then
-                return;
-            end if;
-            
-            dest := er.dest;
-            
-            case table(p2i(dest, QUEUE_SIZE)) is
-                when empty => report "v Wrong: emp" severity error;
-                when waiting => table(p2i(dest, QUEUE_SIZE)) <= val;
-                when adr => table(p2i(dest, QUEUE_SIZE)) <= completed;
-                when val => report "v Wrong: val" severity error;
-                when completed => report "v Wrong: comp" severity error;
-                when committed => report "v Wrong: comm" severity error;
-            end case;
-        end procedure;
-
-
-        procedure DB_updateStates(signal table: inout EntryStateArray; enA, enV: std_logic; adrCt: ControlPacket; valRes: ExecResult; IS_LQ: boolean) is
-            constant n: natural := 1;
-            variable destA, destV: SmallNumber := sn(0);
-        begin
-            if IS_LQ then
-                destA := adrCt.tags.lqPointer;
-            else
-                destA := adrCt.tags.sqPointer;
-            end if;
-            destV := valRes.dest;
-            
-            
-            if (enA) = '1' then
-                if enV = '1' and p2i(destA, QUEUE_SIZE) = p2i(destV, QUEUE_SIZE) then
-                    updateState(table, p2i(destA, QUEUE_SIZE), '1', '1', IS_LQ);
-                    return;
-                else
-                    updateState(table, p2i(destA, QUEUE_SIZE), '1', '0', IS_LQ);
-                end if;
-            end if;
-
-            if (enV) = '1' then
-                updateState(table, p2i(destV, QUEUE_SIZE), '0', '1', IS_LQ);
-            end if;
-        end procedure;
-
-
-        procedure DB_eventStates(signal table: inout EntryStateArray; evt: EventState; startP, drainP: SmallNumber; IS_LQ: boolean) is
-            variable killInd: natural := 0;
-        begin
-            if evt.lateCausing.full = '1' then
-                table <= (others => empty);
-                return;
-            end if;
-            
-            if evt.execCausing.full /= '1' then
-                return;
-            end if;
-            
-            if IS_LQ then
-                killInd := slv2u(evt.execTags.lqPointer) mod QUEUE_SIZE;
-            else
-                killInd := slv2u(evt.execTags.sqPointer) mod QUEUE_SIZE;
-            end if;
-            
-            -- TODO: handle the case of full queue - the below will probably kill nothing if exec event is outside the bounds of queue content
-            loop
-                if     (killInd = p2i(startP, QUEUE_SIZE) and IS_LOAD_QUEUE)
-                    or (killInd = p2i(drainP, QUEUE_SIZE) and not IS_LOAD_QUEUE) then
-                    exit;
-                end if;
-                table(killInd) <= empty;
-                killInd := (killInd + 1) mod QUEUE_SIZE;
-            end loop;
-
-        end procedure;
+        signal states: EntryStateArray(0 to QUEUE_SIZE-1) := (others => empty);
 
         signal drainReqPre: std_logic := '0';
     begin
@@ -627,15 +396,7 @@ begin
                 if drainReqPre = '1' and not IS_LOAD_QUEUE then
                     DB_drainStates(states, pDrainPrev);
                 end if;
-            
-            
---                if compareAddressInput.full = '1' then
---                    DB_updateAddress(states, updateCompletedA, compareAddressInput, compareAddressCtrl, IS_LOAD_QUEUE);
---                end if;
-                
---                if storeValueResult.full = '1' then
---                    DB_updateValue(states, '1', storeValueResult);
---                end if;
+
                 if (compareAddressInput.full or storeValueResult.full) = '1' then
                    DB_updateStates(states, (updateCompletedA or updateCompletedSysA) and compareAddressInput.full, storeValueResult.full, compareAddressCtrl, storeValueResult, IS_LOAD_QUEUE);
                 end if;

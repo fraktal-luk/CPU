@@ -79,8 +79,7 @@ architecture Behavioral of IssueQueue is
     signal wups, wupsSelection: WakeupStructArray2D(0 to IQ_SIZE-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));  
 
     signal fullMask, trialMask, killMask, freedMask, freedMask_N, freeingMask, readyMask, selMask, selMask1, selMask2, selMaskH,
-              retractMask0, retractMask1, pullbackMask,
-              retractMask0_N, retractMask1_N, pullbackMask_N,
+              retractMask0, retractMask1, pullbackMask, pullbackMask_N,
                 trialMaskAll, TMP_trialMask1, TMP_trialMask2: std_logic_vector(0 to IQ_SIZE-1) := (others => '0');
 
     signal anyReadyFull, sends, sent, sendingKilled, sentKilled, sentTrial1, sentTrial2, TMP_trial1, TMP_trial2: std_logic := '0';
@@ -239,22 +238,17 @@ begin
 
         trialMask <= getTrialMask(queueContent, events_T);
 
-        retractMask0 <= getPullbackMask0(queueContent, memFail, CFG_WAIT);
-        retractMask1 <= getPullbackMask1(queueContent, memFail, CFG_WAIT);
+        retractMask0 <= getPullbackMask0_N(queueContent, memFail, CFG_WAIT);
+        retractMask1 <= getPullbackMask1_N(queueContent, memFail, CFG_WAIT);
+
         pullbackMask <= getPullbackMask(queueContent, memFail, CFG_WAIT);
+        pullbackMask_N <= (retractMask0 or retractMask1) and getIssuedMask(queueContent, memFail, CFG_WAIT);
 
-            retractMask0_N <= getPullbackMask0_N(queueContent, memFail, CFG_WAIT);
-            retractMask1_N <= getPullbackMask1_N(queueContent, memFail, CFG_WAIT);
-            pullbackMask_N <= --getPullbackMask_N(queueContent, memFail, CFG_WAIT);
-                                (retractMask0_N or retractMask1_N) and getIssuedMask(queueContent, memFail, CFG_WAIT);
+                trialMaskAll <= trialMask or not fullMask; -- empty slots are "on trial" because new ops are younger than Exec
+                TMP_trialMask1 <= trialMaskAll and selMask;
+                TMP_trialMask2 <= trialMaskAll and selMask1;
 
-            trialMaskAll <= trialMask or not fullMask; -- empty slots are "on trial" because new ops are younger than Exec
-            TMP_trialMask1 <= trialMaskAll and selMask;
-            TMP_trialMask2 <= trialMaskAll and selMask1;
-
-                ch0 <= bool2std(retractMask0_N = retractMask0);
-                ch1 <= bool2std(retractMask1_N = retractMask1);
-                ch2 <= bool2std(pullbackMask_N = pullbackMask);
+              ch2 <= bool2std(pullbackMask_N = pullbackMask);
 
         trialUpdatedMask <= getTrialUpdatedMask(queueContent);
 
@@ -263,16 +257,15 @@ begin
                else (others => '0');
 
 
-            updates <= getUpdates(queueContent, memFail, CFG_WAIT,
-                                    killMask, trialMask, trialUpdatedMask, readyMask, selMask,
-                                        retractMask0, retractMask1, pullbackMask
-                                        --retractMask0_N, retractMask1_N, pullbackMask_N
-                                    );
+        updates <= getUpdates(queueContent, memFail, CFG_WAIT,
+                              killMask, trialMask, trialUpdatedMask, readyMask, selMask,
+                              retractMask0, retractMask1, pullbackMask
+                                                          --pullbackMask_N
+                              );
 
         queueContentUpdated <= updateQueueArgs(queueContent, wups, updates, memFail, CFG_WAIT);
         queueContentUpdated_2 <= updateQueueState(queueContentUpdated, nextAccepting, sends,
-                                                updates,
-                                                memFail, unlockDiv);
+                                                    updates, memFail, unlockDiv);
 
         sendingTrial <= isNonzero(selMask and trialUpdatedMask);
         sendingKilled <= killFollower(sendingTrial, events_T);
@@ -301,7 +294,6 @@ begin
         signal selectedSlot: SchedulerInfo := DEFAULT_SCHEDULER_INFO;
         signal selectedIqTag: SmallNumber := (others => '0');
     begin
-    
         -- local
         selectedIqTag <= getIssueTag(sends, selMask);
         selectedSlot <= queueSelect_N(queueContentUpdatedSel, readyMask, ageMatrix);
@@ -310,7 +302,7 @@ begin
         schedulerOutSig <= getSchedEntrySlot(selectedSlot, sends, selectedIqTag);
         issuedFast <= getIssueStage(schedulerOutSig, outSigs, events_T);
 
-            selectedEP <= makeEP(schedulerOutSig);
+        selectedEP <= makeEP(schedulerOutSig);
 
         issuedFastStateU <= updateIssueStage(issuedFastState, outSigs, events_T);
 
@@ -335,29 +327,29 @@ begin
             sent <= sends;
             sentKilled <= sendingKilled;
 
-            TMP_trial1 <= isNonzero(TMP_trialMask1);
-            TMP_trial2 <= isNonzero(TMP_trialMask2);
+                TMP_trial1 <= isNonzero(TMP_trialMask1);
+                TMP_trial2 <= isNonzero(TMP_trialMask2);
 
             issuedFastState <= issuedFast;
-               outEPSig <= updateEP(selectedEP, events_T);
-            
-                if squashOnMemFail(events_T.memFail) = '1' then
-                    outEPSig.full <= '0';
-                    outEPSig.killed <= '1';
-                end if;
+ 
+            outEPSig <= updateEP(selectedEP, events_T);
+            if squashOnMemFail(events_T.memFail) = '1' then
+                outEPSig.full <= '0';
+                outEPSig.killed <= '1';
+            end if;
             
             prevIqTag <= getIssueTag('0', selMask);
             prevPrevIqTag <= prevIqTag;
         end if;
     end process;
 
-        outEP <= killIssued(outEPSig, events_T.memFail, sentKilled);
+    outEP <= killIssued(outEPSig, events_T.memFail, sentKilled);
 
     outSigs <=   (
             sending => sends,
             sentKilled => sentKilled,
-            trialPrev1 => '0',
-            trialPrev2 => '0'
+                trialPrev1 => '0',
+                trialPrev2 => '0'
             );
     outputSignals <= outSigs;
 
@@ -369,120 +361,8 @@ begin
         signal currentStates, prevStates: IqStateArray(0 to IQ_SIZE-1) := (others => empty);
         signal queueContentPrev: SchedulerInfoArray(0 to IQ_SIZE-1) := (others => DEFAULT_SCHEDULER_INFO);
         signal lastEvents: IqEventArray(0 to IQ_SIZE-1) := (others => none);
-        
-        type EntryState is (empty, suspended, active, issued);
-        type EntryStateArray is array(0 to IQ_SIZE-1) of EntryState;
-        
-        signal states: EntryStateArray := (others => empty);
-        
-        procedure stateError(msg: string; oldVal: EntryState; ind: natural) is
-        begin
-            report msg & "; at (" & natural'image(ind) & ") = " &  EntryState'image(oldVal) severity failure;
-        end procedure;
-       
-        procedure writeEntry(signal table: inout EntryStateArray; ind: natural) is
-            variable oldVal, newVal: EntryState := table(ind);
-        begin
-            case oldVal is
-                when empty => newVal := active; -- TODO: suspended if applicable
-                when suspended | active | issued => stateError("WRITE: ", oldVal, ind);
-            end case;
-            table(ind) <= newVal;
-        end procedure;
 
-        procedure issueEntry(signal table: inout EntryStateArray; ind: natural) is
-            variable oldVal, newVal: EntryState := table(ind);
-        begin
-            case oldVal is
-                when empty | suspended | issued => stateError("ISSUE: ", oldVal, ind);
-                when active => newVal := issued;
-            end case;
-            table(ind) <= newVal;
-        end procedure;
-
-        procedure pullbackEntry(signal table: inout EntryStateArray; ind: natural) is
-            variable oldVal, newVal: EntryState := table(ind);
-        begin
-            case oldVal is
-                when issued => newVal := active; -- TODO: or suspended
-                when others => stateError("PULLBACK: ", oldVal, ind);
-            end case;
-            table(ind) <= newVal;
-        end procedure;
-
-        procedure freeEntry(signal table: inout EntryStateArray; ind: natural) is
-            variable oldVal, newVal: EntryState := table(ind);
-        begin
-            case oldVal is
-                when issued => newVal := empty; -- TODO: or suspended
-                when others => stateError("FREE: ", oldVal, ind);
-            end case;
-            table(ind) <= newVal;
-        end procedure;
-
-        procedure killEntry(signal table: inout EntryStateArray; ind: natural) is
-            variable oldVal, newVal: EntryState := table(ind);
-        begin
-            case oldVal is
-                when others => newVal := empty;
-            end case;
-            table(ind) <= newVal;
-        end procedure;
-
-
-        procedure DB_writeStates(signal table: inout EntryStateArray; locs: slv2D) is
-        begin
-            for s in 0 to PIPE_WIDTH-1 loop
-                for i in 0 to IQ_SIZE-1 loop
-                    if locs(i, s) = '1' then
-                        writeEntry(table, i);
-                    end if;
-                end loop;
-            end loop;
-        end procedure;
-
-        procedure DB_issueStates(signal table: inout EntryStateArray; mask: std_logic_vector) is
-        begin
-            for i in 0 to IQ_SIZE-1 loop
-                if mask(i) = '1' then
-                    issueEntry(table, i);
-                end if;
-            end loop;
-        end procedure;
-
-        procedure DB_freeStates(signal table: inout EntryStateArray; mask: std_logic_vector) is
-        begin
-            for i in 0 to IQ_SIZE-1 loop
-                if mask(i) = '1' then
-                    freeEntry(table, i);
-                end if;
-            end loop;
-        end procedure;
-
-        procedure DB_retractStates(signal table: inout EntryStateArray; pullbackMask, retractMask0, retractMask1: std_logic_vector) is
-        begin
-            for i in 0 to IQ_SIZE-1 loop
-                if pullbackMask(i) = '1' then
-                    pullbackEntry(table, i);
-                end if;
-            end loop;
-        end procedure;
-
-        procedure DB_killStates(signal table: inout EntryStateArray; lateEvent: std_logic; trialMask: std_logic_vector) is
-        begin
-            if lateEvent = '1' then
-                for i in 0 to IQ_SIZE-1 loop
-                    killEntry(table, i);
-                end loop;
-            end if;
-            
-            for i in 0 to IQ_SIZE-1 loop
-                if trialMask(i) = '1' then
-                    killEntry(table, i);
-                end if;
-            end loop;
-        end procedure;
-
+        signal states: EntryStateArray(0 to IQ_SIZE-1) := (others => empty);
     begin
         currentStates <= getCurrentStates(queueContent);
 
@@ -495,7 +375,7 @@ begin
 
                 DB_reportEvents(queueContentNext, lastEvents);
 
-                
+
                 if (prevSendingOK and not events_T.execCausing.full and not events_T.lateCausing.full) = '1' then
                     DB_writeStates(states, insertionLocs);
                 end if;
@@ -503,16 +383,15 @@ begin
                 if sends = '1' then
                     DB_issueStates(states, selMask);
                 end if;
-                
+
                 -- Retractions:
                 DB_retractStates(states, pullbackMask, retractMask0, retractMask1);
-                                         --   pullbackMask_N, retractMask0_N, retractMask1_N);
+
                 DB_freeStates(states, freeingMask);
 
                 if (events_T.execCausing.full or events_T.lateCausing.full) = '1' then
                     DB_killStates(states, events_T.lateCausing.full, killMask);
                 end if;
-
 
                 if DB_LOG_EVENTS then
                     if dbState.dbSignal = '1' then
