@@ -92,8 +92,17 @@ architecture Behavioral of IssueQueue is
     signal issuedFastState, issuedFast, issuedFastStateU, issuedSlowState: SchedulerState := DEFAULT_SCHED_STATE;
     signal outSigs: IssueQueueSignals := (others => '0');
 
-    signal selectedEP: ExecPacket := DEFAULT_EXEC_PACKET;
+    signal selectedEP, outEPSig: ExecPacket := DEFAULT_EXEC_PACKET;
 
+    function killIssued(ep: ExecPacket; memFail, sentKilled: std_logic) return ExecPacket is
+        variable res: ExecPacket := ep;
+    begin
+        if (squashOnMemFail(memFail) or sentKilled) = '1' then
+            res.full := '0';
+            res.killed := '1';
+        end if;
+        return res;
+    end function;
 
     alias memFail is bypass.memFail;
 
@@ -330,12 +339,19 @@ begin
             TMP_trial2 <= isNonzero(TMP_trialMask2);
 
             issuedFastState <= issuedFast;
-               outEP <= updateEP(selectedEP, events_T);
+               outEPSig <= updateEP(selectedEP, events_T);
+            
+                if squashOnMemFail(events_T.memFail) = '1' then
+                    outEPSig.full <= '0';
+                    outEPSig.killed <= '1';
+                end if;
             
             prevIqTag <= getIssueTag('0', selMask);
             prevPrevIqTag <= prevIqTag;
         end if;
     end process;
+
+        outEP <= killIssued(outEPSig, events_T.memFail, sentKilled);
 
     outSigs <=   (
             sending => sends,

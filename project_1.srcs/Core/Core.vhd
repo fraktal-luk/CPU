@@ -98,7 +98,7 @@ architecture Behavioral of Core is
 
     signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
 
-    signal events, eventsPrev, events_T: EventState := DEFAULT_EVENT_STATE;
+    signal events, eventsPrev, events_T, events_I: EventState := DEFAULT_EVENT_STATE;
     signal dbState: DbCoreState := DEFAULT_DB_STATE;
 
     signal TMP_aluTags, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags,
@@ -504,7 +504,7 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                events => events,--_T,,
+                events => events_I,
                 events_T => events,--_T,
 
                 accept => allocAcceptAlu,
@@ -547,7 +547,7 @@ begin
                         argStateRegI0 <= getRegReadStage_N(slotIssueI0_U, events, valuesInt0, valuesInt1, true, false);
                         unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0_U.st.operation.arith);
                         
-                        EP_I0_RegRead <= updateEP(EP_I0_Issue, events);
+                        EP_I0_RegRead <= updateEP(EP_I0_Issue_N, events);
                         EP_I0_E0 <= updateEP(EP_I0_RegRead, events);
                         EP_I0_D0 <= updateEP(EP_I0_E0, events);
                     end if;
@@ -628,6 +628,8 @@ begin
 
                     --events_T <= (eventsPrev.preExecTags, eventsPrev.execTags, eventsPrev.execCausing, events.lateCausing, memFailSig);
                        events_T <= (eventsPrev.preExecTags, eventsPrev.execTags, eventsPrev.execCausing, eventsPrev.lateCausing, memFailSig);
+                       
+                       events_I <= events;
             end block;
         end block;
 
@@ -658,7 +660,7 @@ begin
                 )
                 port map(
                     clk => clk, reset => '0', en => '0',
-                    events => events,--_T,,
+                    events => events_I,
                     events_T => events,--_T,
 
                     accept => allocAcceptMul,
@@ -700,7 +702,7 @@ begin
                         if rising_edge(clk) then
                             argStateRegI1 <= getRegReadStage_N(slotIssueI1_U, events, valuesInt0, valuesInt1, true, false);
                             
-                            EP_I1_RegRead <= updateEP(EP_I1_Issue, events);
+                            EP_I1_RegRead <= updateEP(EP_I1_Issue_N, events);
 
                             EP_I1_D0 <= updateEP(EP_I1_E2, events);
                             EP_I1_D1 <= updateEP(EP_I1_D0, events);
@@ -787,7 +789,7 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                events => events,--_T,,
+                events => events_I,
                 events_T => events,--_T,
 
                 accept => allocAcceptMem,
@@ -835,7 +837,7 @@ begin
                         argStateR_Merged <= getRegReadStage_Merge(slotIssueM0_U, slotIssueM0_U.full, slotIssueM0mq, events, valuesInt0, valuesInt1, true, false, true);
                         
                         
-                        EP_M0_RegRead <= mergeEP(updateEP(EP_M0_Issue, events),
+                        EP_M0_RegRead <= mergeEP(updateEP(EP_M0_Issue_N, events),
                                                  updateEP(EP_M0_IssueMQ, events)
                                                 );
 
@@ -965,7 +967,7 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                events => events,--_T,,
+                events => events_I,
                 events_T => events,--_T,
 
                 accept => allocAcceptSVI,
@@ -1036,7 +1038,7 @@ begin
                     )
                     port map(
                         clk => clk, reset => '0', en => '0',
-                        events => events,--_T,,
+                        events => events_I,
                         events_T => events,--_T,
 
                         accept => allocAcceptSVF,
@@ -1115,7 +1117,7 @@ begin
             )
             port map(
                clk => clk, reset => '0', en => '0',
-               events => events,--_T,,
+               events => events_I,
                events_T => events,--_T,
 
                accept => allocAcceptF0,
@@ -1147,13 +1149,13 @@ begin
 
             TMP_ISSUE_F0: block
                signal argStateRegF0: SchedulerState := DEFAULT_SCHEDULER_STATE;
-            begin    
+            begin
                process (clk)
                begin
                    if rising_edge(clk) then
                        argStateRegF0 <= getRegReadStage_N(slotIssueF0_U, events, valuesFloat0, valuesFloat1, false, false);
                        
-                       EP_F0_RegRead <= updateEP(EP_F0_Issue, events);
+                       EP_F0_RegRead <= updateEP(EP_F0_Issue_N, events);
                        EP_F0_E0 <= updateEP(EP_F0_RegRead, events);
                        EP_F0_E1 <= updateEP(EP_F0_E0, events);
                        EP_F0_E2 <= updateEP(EP_F0_E1, events);
