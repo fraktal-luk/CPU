@@ -480,7 +480,7 @@ begin
                 DB_reportEvents(queueContentNext, lastEvents);
 
                 
-                if prevSendingOK = '1' then
+                if (prevSendingOK and not events_T.execCausing.full and not events_T.lateCausing.full) = '1' then
                     DB_writeStates(states, insertionLocs);
                 end if;
                 

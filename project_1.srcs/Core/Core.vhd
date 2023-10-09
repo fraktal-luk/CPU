@@ -447,7 +447,9 @@ begin
               subpipeF0_D0,    -- bypass, values
               subpipe_DUMMY: ExecResult := DEFAULT_EXEC_RESULT;
 
-        signal EP_I0_Issue, EP_I0_RegRead, EP_I0_E0, EP_I0_D0, 
+       signal EP_I0_Issue_N, EP_I1_Issue_N, EP_M0_Issue_N, EP_SVI_Issue_N, EP_SVF_Issue_N, EP_F0_Issue_N, 
+
+               EP_I0_Issue, EP_I0_RegRead, EP_I0_E0, EP_I0_D0, 
                EP_I1_Issue, EP_I1_RegRead, EP_I1_E0, EP_I1_E1, EP_I1_E2, EP_I1_D0, EP_I1_D1,
                EP_M0_Issue, EP_M0_RegRead, EP_M0_E0, EP_M0_E1, EP_M0_E2, EP_M0_D0, EP_M0_D1,
                EP_SVI_Issue, EP_SVI_RegRead, EP_SVI_E0, EP_SVI_D0,
@@ -502,8 +504,8 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                events => events,
-                events_T => events_T,
+                events => events,--_T,,
+                events_T => events,--_T,
 
                 accept => allocAcceptAlu,
 
@@ -523,6 +525,7 @@ begin
                 schedulerOut_Fast => slotIssueI0_TF,
                 schedulerOut_Slow => slotIssueI0_TS,
                 outputSignals => outSigsI0,
+                    outEP => EP_I0_Issue_N,
 
                 dbState => dbState
             );
@@ -655,8 +658,8 @@ begin
                 )
                 port map(
                     clk => clk, reset => '0', en => '0',
-                    events => events,
-                    events_T => events_T,
+                    events => events,--_T,,
+                    events_T => events,--_T,
 
                     accept => allocAcceptMul,
 
@@ -677,6 +680,7 @@ begin
                     schedulerOut_Fast => slotIssueI1_TF,
                     schedulerOut_Slow => slotIssueI1_TS,
                     outputSignals => outSigsI1,
+                        outEP => EP_I1_Issue_N,
 
                     dbState => dbState
                 );
@@ -783,8 +787,8 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                events => events,
-                events_T => events_T,
+                events => events,--_T,,
+                events_T => events,--_T,
 
                 accept => allocAcceptMem,
 
@@ -805,6 +809,7 @@ begin
                 schedulerOut_Fast => slotIssueM0_TF,
                 schedulerOut_Slow => slotIssueM0_TS,
                 outputSignals => outSigsM0,
+                    outEP => EP_M0_Issue_N,
 
                 dbState => dbState
             );
@@ -960,8 +965,8 @@ begin
             )
             port map(
                 clk => clk, reset => '0', en => '0',
-                events => events,
-                events_T => events_T,
+                events => events,--_T,,
+                events_T => events,--_T,
 
                 accept => allocAcceptSVI,
 
@@ -981,6 +986,7 @@ begin
                 schedulerOut_Fast => slotIssueSVI_TF,
                 schedulerOut_Slow => slotIssueSVI_TS,
                 outputSignals => outSigsSVI,
+                    outEP => EP_SVI_Issue_N,
 
                 dbState => dbState
             );
@@ -1030,8 +1036,8 @@ begin
                     )
                     port map(
                         clk => clk, reset => '0', en => '0',
-                        events => events,
-                        events_T => events_T,
+                        events => events,--_T,,
+                        events_T => events,--_T,
 
                         accept => allocAcceptSVF,
 
@@ -1051,6 +1057,7 @@ begin
                         schedulerOut_Fast => slotIssueSVF_TF,
                         schedulerOut_Slow => slotIssueSVF_TS,           
                         outputSignals => outSigsSVF,
+                            outEP => EP_SVF_Issue_N,
 
                         dbState => dbState
                     );
@@ -1108,8 +1115,8 @@ begin
             )
             port map(
                clk => clk, reset => '0', en => '0',
-               events => events,
-               events_T => events_T,
+               events => events,--_T,,
+               events_T => events,--_T,
 
                accept => allocAcceptF0,
 
@@ -1128,6 +1135,7 @@ begin
                schedulerOut_Fast => slotIssueF0_TF,
                schedulerOut_Slow => slotIssueF0_TS,
                outputSignals => outSigsF0,
+                    outEP => EP_F0_Issue_N,
 
                dbState => dbState
             );
