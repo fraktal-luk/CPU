@@ -53,10 +53,6 @@ entity StoreQueue is
 		committing: in std_logic;
         commitEffectiveMask: in std_logic_vector(0 to PIPE_WIDTH-1);
 
-		--lateEventSignal: in std_logic;
-		--execEventSignal: in std_logic;
-    	--execCausing: in ExecResult;
-
 		events: in EventState;
 
 		nextAccepting: in std_logic;		

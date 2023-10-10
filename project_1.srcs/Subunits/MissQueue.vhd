@@ -49,6 +49,7 @@ entity MissQueue is
 
         selectedDataOutput: out ControlPacket;
         selectedDataResult: out ExecResult;
+            selectedEP: out ExecPacket;
 
 		committing: in std_logic;
         commitMask: in std_logic_vector(0 to PIPE_WIDTH-1);
@@ -411,10 +412,21 @@ begin
         signal outEntrySig: MQ_Entry := DEFAULT_MQ_ENTRY;
         signal adrOutWord, tagOutWord, renameTagOutWord: Mword := (others => '0');
     begin
-        outEntrySig <= queueContent(p2i(selPtr2, QUEUE_SIZE));
-        adrOutWord <= addresses(p2i(selPtr2, QUEUE_SIZE));
-        tagOutWord <= tags(p2i(selPtr2, QUEUE_SIZE));
-        renameTagOutWord <= renameTags(p2i(selPtr2, QUEUE_SIZE));
+        process (clk)
+        begin
+            if rising_edge(clk) then
+                outEntrySig <= queueContent(p2i(selPtr1, QUEUE_SIZE));
+                adrOutWord <= addresses(p2i(selPtr1, QUEUE_SIZE));
+                tagOutWord <= tags(p2i(selPtr1, QUEUE_SIZE));
+                renameTagOutWord <= renameTags(p2i(selPtr1, QUEUE_SIZE));
+            end if;
+        end process;
+    
+--        outEntrySig <= queueContent(p2i(selPtr2, QUEUE_SIZE));
+--        adrOutWord <= addresses(p2i(selPtr2, QUEUE_SIZE));
+--        tagOutWord <= tags(p2i(selPtr2, QUEUE_SIZE));
+--        renameTagOutWord <= renameTags(p2i(selPtr2, QUEUE_SIZE));
+
 
         selectedDataOutput <= makeOutputData(outEntrySig, adrOutWord, tagOutWord, renameTagOutWord, sending2, lateEventSignal);
         selectedDataResult <= makeOutputResult(outEntrySig, tagOutWord);

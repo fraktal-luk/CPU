@@ -112,6 +112,8 @@ architecture Behavioral of Core is
    
     signal dispMasks_Actual, dispMasks_N, renamedMasks_Actual, renamedMasks_N, commitMasks_Actual, commitMasks_N: DispatchMasks := DEFAULT_DISPATCH_MASKS;
 
+    signal EP_MQ_Issue: ExecPacket := DEFAULT_EXEC_PACKET;
+
     signal EP_A_Main, EP_A_Sec: ExecPacketArray(0 to 3) := (others => DEFAULT_EXEC_PACKET);
 
 
@@ -443,8 +445,7 @@ begin
               subpipeF0_D0,    -- bypass, values
               subpipe_DUMMY: ExecResult := DEFAULT_EXEC_RESULT;
 
-       signal EP_I0_Issue_N, EP_I1_Issue_N, EP_M0_Issue_N, EP_SVI_Issue_N, EP_SVF_Issue_N, EP_F0_Issue_N, 
-
+       signal --EP_I0_Issue_N, EP_I1_Issue_N, EP_M0_Issue_N, EP_SVI_Issue_N, EP_SVF_Issue_N, EP_F0_Issue_N, 
                EP_I0_Issue, EP_I0_RegRead, EP_I0_E0, EP_I0_D0, 
                EP_I1_Issue, EP_I1_RegRead, EP_I1_E0, EP_I1_E1, EP_I1_E2, EP_I1_D0, EP_I1_D1,
                EP_M0_Issue, EP_M0_RegRead, EP_M0_E0, EP_M0_E1, EP_M0_E2, EP_M0_D0, EP_M0_D1,
@@ -520,7 +521,7 @@ begin
                 schedulerOut_Fast => slotIssueI0_TF,
                 schedulerOut_Slow => slotIssueI0_TS,
                 outputSignals => outSigsI0,
-                    outEP => EP_I0_Issue_N,
+                    outEP => EP_I0_Issue,
 
                 dbState => dbState
             );
@@ -528,7 +529,7 @@ begin
             slotIssueI0 <= slotIssueI0_TF;
             slotIssueI0_U <= TMP_mergeStatic(slotIssueI0_TF, slotIssueI0_TS);
 
-                EP_I0_Issue <= updateEP_Async( makeEP(slotIssueI0_U), events_T); 
+           --     EP_I0_Issue <= updateEP_Async( makeEP(slotIssueI0_U), events_T); 
 
             TMP_ISSUE_I0: block
                 signal argStateRegI0: SchedulerState := DEFAULT_SCHEDULER_STATE;
@@ -542,7 +543,7 @@ begin
                         argStateRegI0 <= getRegReadStage_N(slotIssueI0_U, events, valuesInt0, valuesInt1, true, false);
                         unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0_U.st.operation.arith);
                         
-                        EP_I0_RegRead <= updateEP(EP_I0_Issue_N, events);
+                        EP_I0_RegRead <= updateEP(EP_I0_Issue, events);
                         EP_I0_E0 <= updateEP(EP_I0_RegRead, events);
                         EP_I0_D0 <= updateEP(EP_I0_E0, events);
                     end if;
@@ -668,7 +669,7 @@ begin
                     schedulerOut_Fast => slotIssueI1_TF,
                     schedulerOut_Slow => slotIssueI1_TS,
                     outputSignals => outSigsI1,
-                        outEP => EP_I1_Issue_N,
+                        outEP => EP_I1_Issue,
 
                     dbState => dbState
                 );
@@ -676,7 +677,7 @@ begin
                 slotIssueI1 <= slotIssueI1_TF;
                 slotIssueI1_U <= TMP_mergeStatic(slotIssueI1_TF, slotIssueI1_TS);
     
-                    EP_I1_Issue <= updateEP_Async( makeEP(slotIssueI1_U), events_T); 
+                --    EP_I1_Issue <= updateEP_Async( makeEP(slotIssueI1_U), events_T); 
 
                 TMP_ISSUE_I1: block
                     signal argStateRegI1: SchedulerState := DEFAULT_SCHEDULER_STATE;
@@ -687,7 +688,7 @@ begin
                         if rising_edge(clk) then
                             argStateRegI1 <= getRegReadStage_N(slotIssueI1_U, events, valuesInt0, valuesInt1, true, false);
                             
-                            EP_I1_RegRead <= updateEP(EP_I1_Issue_N, events);
+                            EP_I1_RegRead <= updateEP(EP_I1_Issue, events);
 
                             EP_I1_D0 <= updateEP(EP_I1_E2, events);
                             EP_I1_D1 <= updateEP(EP_I1_D0, events);
@@ -784,7 +785,7 @@ begin
                 schedulerOut_Fast => slotIssueM0_TF,
                 schedulerOut_Slow => slotIssueM0_TS,
                 outputSignals => outSigsM0,
-                    outEP => EP_M0_Issue_N,
+                    outEP => EP_M0_Issue,
 
                 dbState => dbState
             );
@@ -792,7 +793,7 @@ begin
             slotIssueM0 <= slotIssueM0_TF;
             slotIssueM0_U <= TMP_mergeStatic(slotIssueM0_TF, slotIssueM0_TS);
 
-                EP_M0_Issue <= updateEP_Async( makeEP(slotIssueM0_U), events_T); 
+            --    EP_M0_Issue <= updateEP_Async( makeEP(slotIssueM0_U), events_T); 
 
             slotIssueM0mq <= TMP_slotIssueM0mq(mqReexecCtrlIssue, mqReexecResIssue, mqReexecCtrlIssue.controlInfo.c_full);
 
@@ -807,7 +808,7 @@ begin
                         argStateRegM0 <= getRegReadStage_N(slotIssueM0_U, events, valuesInt0, valuesInt1, true, false, true);
                         argStateR_Merged <= getRegReadStage_Merge(slotIssueM0_U, slotIssueM0_U.full, slotIssueM0mq, events, valuesInt0, valuesInt1, true, false, true);
 
-                        EP_M0_RegRead <= mergeEP(updateEP(EP_M0_Issue_N, events),
+                        EP_M0_RegRead <= mergeEP(updateEP(EP_M0_Issue, events),
                                                  updateEP(EP_M0_IssueMQ, events)
                                                 );
 
@@ -956,7 +957,7 @@ begin
                 schedulerOut_Fast => slotIssueSVI_TF,
                 schedulerOut_Slow => slotIssueSVI_TS,
                 outputSignals => outSigsSVI,
-                    outEP => EP_SVI_Issue_N,
+                    outEP => EP_SVI_Issue,
 
                 dbState => dbState
             );
@@ -1025,7 +1026,7 @@ begin
                     schedulerOut_Fast => slotIssueSVF_TF,
                     schedulerOut_Slow => slotIssueSVF_TS,           
                     outputSignals => outSigsSVF,
-                        outEP => EP_SVF_Issue_N,
+                        outEP => EP_SVF_Issue,
 
                     dbState => dbState
                 );
@@ -1102,7 +1103,7 @@ begin
                schedulerOut_Fast => slotIssueF0_TF,
                schedulerOut_Slow => slotIssueF0_TS,
                outputSignals => outSigsF0,
-                    outEP => EP_F0_Issue_N,
+                    outEP => EP_F0_Issue,
 
                dbState => dbState
             );
@@ -1110,7 +1111,7 @@ begin
             slotIssueF0 <= slotIssueF0_TF;
             slotIssueF0_U <= TMP_mergeStatic(slotIssueF0_TF, slotIssueF0_TS);
 
-                EP_F0_Issue <=  updateEP_Async( makeEP(slotIssueF0_U), events_T); 
+            --    EP_F0_Issue <=  updateEP_Async( makeEP(slotIssueF0_U), events_T); 
 
             TMP_ISSUE_F0: block
                signal argStateRegF0: SchedulerState := DEFAULT_SCHEDULER_STATE;
@@ -1120,7 +1121,7 @@ begin
                    if rising_edge(clk) then
                        argStateRegF0 <= getRegReadStage_N(slotIssueF0_U, events, valuesFloat0, valuesFloat1, false, false);
                        
-                       EP_F0_RegRead <= updateEP(EP_F0_Issue_N, events);
+                       EP_F0_RegRead <= updateEP(EP_F0_Issue, events);
                        EP_F0_E0 <= updateEP(EP_F0_RegRead, events);
                        EP_F0_E1 <= updateEP(EP_F0_E0, events);
                        EP_F0_E2 <= updateEP(EP_F0_E1, events);
@@ -1575,6 +1576,7 @@ begin
 
             selectedDataOutput => mqReexecCtrlIssue,
             selectedDataResult => mqReexecResIssue,
+                selectedEP => EP_MQ_Issue,
 
             storeValueResult => sqValueResultE2,
 
