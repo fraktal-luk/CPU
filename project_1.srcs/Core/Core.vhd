@@ -112,7 +112,7 @@ architecture Behavioral of Core is
    
     signal dispMasks_Actual, dispMasks_N, renamedMasks_Actual, renamedMasks_N, commitMasks_Actual, commitMasks_N: DispatchMasks := DEFAULT_DISPATCH_MASKS;
 
-    signal EP_MQ_Issue: ExecPacket := DEFAULT_EXEC_PACKET;
+    signal EP_MQ_Issue, EP_M0_RegRead_copy, EP_M0_E0_copy, EP_M0_E1_copy, EP_M0_E2_copy: ExecPacket := DEFAULT_EXEC_PACKET;
 
     signal EP_A_Main, EP_A_Sec: ExecPacketArray(0 to 3) := (others => DEFAULT_EXEC_PACKET);
 
@@ -158,7 +158,8 @@ begin
         intSignal <= int0 or int1;
         intType <= (int0, int1);
     
-        dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.c_full and isStoreSysOp(ctOutSB.op), '0', DEFAULT_POISON, InsTag'(others => '0'), zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
+        --dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.c_full and isStoreSysOp(ctOutSB.op), '0', DEFAULT_POISON, InsTag'(others => '0'), zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
+        dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.full and isStoreSysOp(ctOutSB.op), '0', DEFAULT_POISON, InsTag'(others => '0'), zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
 
         SEQUENCER: entity work.UnitSequencer(Behavioral)
         port map (
@@ -171,7 +172,7 @@ begin
             ---
             bqTargetData => bqTargetData,
 
-            sbSending => ctOutSB.full,
+            --sbSending => ctOutSB.full,
             dataFromSB => dataFromSB,
             sbEmpty => sbEmpty,
 
@@ -571,8 +572,9 @@ begin
             JUMPS: block
                 signal dataToBranch, branchResultE0, branchResultE1: ControlPacket := DEFAULT_CONTROL_PACKET;
                 signal suppressNext1, suppressNext2, lateEventPre: std_logic := '0';
-                signal branchPoisoned: std_logic := '0';
-                signal brPoison: PoisonInfo := DEFAULT_POISON;
+                signal --branchPoisoned, 
+                        branch0BeforeRR, branch1BeforeRR: std_logic := '0';
+                --signal brPoison: PoisonInfo := DEFAULT_POISON;
             begin
 
                 dataToBranch <= basicBranch(slotRegReadI0.full and slotRegReadI0.st.branchIns and not suppressNext1 and not suppressNext2,
@@ -582,28 +584,26 @@ begin
                     use work.LogicLogging.all;
                 begin
                     if rising_edge(clk) then
-                        if dataToBranch.controlInfo.c_full = '1' then
+                        if dataToBranch.--controlInfo.c_full = '1' then
+                                        full = '1' then
                             DB_reportBranchEvent(dataToBranch);
                         end if;
 
                         branchResultE0 <= dataToBranch;
-                            brPoison <= slotRegReadI0.poison;
-                        
-                        if dataToBranch.full = '1' and memFail = '1' and slotRegReadI0.poison.isOn = '1' then
-                            branchPoisoned <= '1';
-                        else
-                            branchPoisoned <= '0';
-                        end if;
-                        
                         branchResultE1 <= branchResultE0;
-                        lateEventPre <= events.lateCausing.full;
+
+                        --brPoison <= slotRegReadI0.poison;
+                        --branchPoisoned <= dataToBranch.full and memFail and slotRegReadI0.poison.isOn;
                         
+                        lateEventPre <= events.lateCausing.full;
                         eventsPrev <= events;
                     end if;
                 end process;
 
-                suppressNext1 <= (compareTagBefore(branchResultE0.tags.renameIndex, slotRegReadI0.st.tags.renameIndex) and branchResultE0.controlInfo.newEvent) or events.lateCausing.full;
-                suppressNext2 <= (compareTagBefore(branchResultE0.tags.renameIndex, slotRegReadI0.st.tags.renameIndex) and branchResultE1.controlInfo.newEvent) or lateEventPre;
+                branch0BeforeRR <= compareTagBefore(branchResultE0.tags.renameIndex, slotRegReadI0.st.tags.renameIndex);
+                branch1BeforeRR <= compareTagBefore(branchResultE1.tags.renameIndex, slotRegReadI0.st.tags.renameIndex);
+                suppressNext1 <= (branch0BeforeRR and branchResultE0.controlInfo.newEvent) or events.lateCausing.full;
+                suppressNext2 <= (branch1BeforeRR and branchResultE1.controlInfo.newEvent) or lateEventPre;
 
                 execEvent <= (DEFAULT_DEBUG_INFO, branchResultE0.controlInfo.newEvent, '0', DEFAULT_POISON, branchResultE0.tags.renameIndex, branchResultE0.tags.bqPointerSeq, branchResultE0.target);
 
@@ -820,6 +820,11 @@ begin
                     end if;
                 end process;
 
+                    EP_M0_RegRead_copy <= EP_M0_RegRead;
+                    EP_M0_E0_copy <= EP_M0_E0;
+                    EP_M0_E1_copy <= EP_M0_E1;
+                    EP_M0_E2_copy <= EP_M0_E2;
+
                 slotRegReadM0iq <= updateRegReadStage(argStateRegM0, outSigsM0, events, valuesInt0, regValsM0, false, true);
                 slotRegReadM0_Merged <= updateRegReadStage(argStateR_Merged, outSigsM0, events, valuesInt0, regValsM0, false, true);
 
@@ -833,7 +838,8 @@ begin
             resultToM0_E0 <= calcEffectiveAddress(slotRegReadM0.full, slotRegReadM0, mqReexecCtrlRR.controlInfo.c_full);
             resultToM0_E0i <= updateMemDest(resultToM0_E0, slotRegReadM0.intDestSel);
             resultToM0_E0f <= updateMemDest(resultToM0_E0, slotRegReadM0.floatDestSel);
-
+            
+            controlToM0_E0.full <= slotRegReadM0.full;
             controlToM0_E0.controlInfo.c_full <= slotRegReadM0.full;
             controlToM0_E0.op <= slotRegReadM0.st.operation;
             controlToM0_E0.tags <= slotRegReadM0.st.tags;
@@ -861,6 +867,8 @@ begin
                                                       memLoadReady, memLoadValue,
                                                       sysRegReadOut.full, sysRegReadOut.value,
                                                       ctOutSQ, ctOutLQ).value;
+                                                      
+                ctrlE1u.full <= ctrlE1.full;
                 ctrlE1u.tags <= ctrlE1.tags;
                 ctrlE1u.op <= ctrlE1.op;
                 ctrlE1u.controlInfo <= getLSResultData(ctrlE1.op,
@@ -1454,15 +1462,17 @@ begin
 
         compareAddressEarlyInput => memAddressInputEarly,
         compareAddressEarlyInput_Ctrl => memCtrlRR,
+            compareAddressEarlyEP => EP_M0_RegRead_copy,
 
         compareAddressInput => memAddressInput,
         compareAddressCtrl => memCtrlE0,
+            compareAddressEP => EP_M0_E0_copy,
 
         selectedDataOutput => ctOutSQ,
         selectedDataResult => resOutSQ,
 
         storeValueResult => sqValueResultRR,
-
+            storeValueEP => DEFAULT_EXEC_PACKET,
 
 		nextAccepting => commitAccepting, -- UNUSED
 
@@ -1501,14 +1511,16 @@ begin
 
 		compareAddressEarlyInput => memAddressInputEarly,
         compareAddressEarlyInput_Ctrl => memCtrlRR,
+            compareAddressEarlyEP => EP_M0_RegRead_copy,
 
 		compareAddressInput => memAddressInput,
         compareAddressCtrl => memCtrlE0,
+            compareAddressEP => EP_M0_E0_copy,
 
         selectedDataOutput => ctOutLQ,
 
         storeValueResult => DEFAULT_EXEC_RESULT,
-
+            storeValueEP => DEFAULT_EXEC_PACKET,
 
 		committing => robSending,
         commitEffectiveMask => commitEffectiveMaskLQ,
@@ -1566,13 +1578,13 @@ begin
             inputMask => zerosMask,
             systemMask => zerosMask,
 
-            compareAddressEarlyInput => defaultExecRes,--DEFAULT_EXEC_RESULT,
+            compareAddressEarlyInput => memAddressInputEarly,--DEFAULT_EXEC_RESULT,
             compareAddressEarlyInput_Ctrl => memCtrlRR, -- only 'tag' and 'full'
                 earlyInput => DEFAULT_EXEC_PACKET,
                 
             compareAddressInput => missedMemResultE2,
             compareAddressCtrl => missedMemCtrlE2,
-                lateInput => missedMemE2_EP,
+                lateInput => EP_M0_E2_copy,
 
             selectedDataOutput => mqReexecCtrlIssue,
             selectedDataResult => mqReexecResIssue,

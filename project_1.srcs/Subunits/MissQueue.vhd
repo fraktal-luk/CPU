@@ -133,6 +133,9 @@ architecture DefaultMQ of MissQueue is
 
     signal adrInWord, tagInWord: Mword := (others => '0');
 
+    signal selectedEPSig: ExecPacket := DEFAULT_EXEC_PACKET;
+
+
         function makeOutputData(entry: MQ_Entry; adr, tagWord, renameTagWord: Mword; sending2, lateEventSignal: std_logic) return ControlPacket is
             variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
         begin
@@ -251,7 +254,8 @@ begin
         ch0 <= bool2std(fullMask_T /= fullMask);
 
 
-    prevSendingEarly <= compareAddressEarlyInput_Ctrl.controlInfo.c_full;
+    prevSendingEarly <= compareAddressEarlyInput_Ctrl.--controlInfo.c_full;
+                                                      full;
 
     canSend <= '1';
 
@@ -419,6 +423,8 @@ begin
                 adrOutWord <= addresses(p2i(selPtr1, QUEUE_SIZE));
                 tagOutWord <= tags(p2i(selPtr1, QUEUE_SIZE));
                 renameTagOutWord <= renameTags(p2i(selPtr1, QUEUE_SIZE));
+                
+                --selectedEPSig <= 
             end if;
         end process;
     
@@ -430,6 +436,8 @@ begin
 
         selectedDataOutput <= makeOutputData(outEntrySig, adrOutWord, tagOutWord, renameTagOutWord, sending2, lateEventSignal);
         selectedDataResult <= makeOutputResult(outEntrySig, tagOutWord);
+
+        selectedEP <= selectedEPSig;
     end block;
 
     committedSending <= sending1; -- Indication to block normal mem issue

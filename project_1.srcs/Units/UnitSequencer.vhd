@@ -44,16 +44,12 @@ entity UnitSequencer is
         
         robData: in ControlPacketArray(0 to PIPE_WIDTH-1);
         robCtrl: in ControlPacket;
-        
---        robSpecial: in SpecificOp;
---        sendingFromROB: in std_logic;
-        
+
         bqTargetData: in ExecResult;
         
         dataFromSB: in ExecResult;
-        
+        --sbSending: in std_logic;
         sbEmpty: in std_logic;
-        sbSending: in std_logic;       
         
         -- Counter outputs
         commitGroupCtrOut: out InsTag;

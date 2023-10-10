@@ -41,11 +41,14 @@ entity StoreQueue is
 
 		compareAddressEarlyInput: in ExecResult;
         compareAddressEarlyInput_Ctrl: in ControlPacket;
+            compareAddressEarlyEP: in ExecPacket;
 
 		compareAddressInput: in ExecResult;
 		compareAddressCtrl: in ControlPacket;
+            compareAddressEP: in ExecPacket;
 
 		storeValueResult: in ExecResult;
+            storeValueEP: in ExecPacket;
 
         selectedDataOutput: out ControlPacket;
         selectedDataResult: out ExecResult;
@@ -393,7 +396,7 @@ begin
                     DB_drainStates(states, pDrainPrev);
                 end if;
 
-                if (compareAddressInput.full or storeValueResult.full) = '1' then
+                if ((compareAddressInput.full and not compareAddressEP.killed) or storeValueResult.full) = '1' then
                    DB_updateStates(states, (updateCompletedA or updateCompletedSysA) and compareAddressInput.full, storeValueResult.full, compareAddressCtrl, storeValueResult, IS_LOAD_QUEUE);
                 end if;
 
