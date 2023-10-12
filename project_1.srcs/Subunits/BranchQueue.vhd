@@ -30,7 +30,7 @@ entity BranchQueue is
 		acceptingOut: out std_logic;		
 		acceptingBr: out std_logic;
 
-		prevSendingBr: in std_logic;
+		--prevSendingBr: in std_logic;
         dataInBr: in ControlPacketArray(0 to PIPE_WIDTH-1);
         ctrlInBr: in ControlPacket;
         
@@ -89,11 +89,13 @@ architecture Behavioral of BranchQueue is
     alias pSelect is compareAddressQuickInput.dest;
     alias pFlushSeq is events.execCausing.dest; -- TODO: incorrect?
 
-    signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0'; 
+    --alias prevSendingBr is ctrlInBr.full;
+
+    signal ch0, ch1, ch2, ch3, ch4, ch5, ch6, ch7: std_logic := '0';
 begin
-    earlyInputSending <= prevSendingBr and dataInBr(0).controlInfo.firstBr;
-    lateInputSending <= renamedSending and --dataIn(0).ins.controlInfo.firstBr_T;
-                                        renamedCtrl.controlInfo.firstBr;
+    earlyInputSending <= ctrlInBr.full and dataInBr(0).controlInfo.firstBr;
+    lateInputSending <= --renamedSending and renamedCtrl.controlInfo.firstBr;
+                        renamedCtrl.full and renamedCtrl.controlInfo.firstBr;
 
     RW: block
        signal earlySerialInput, earlySerialSelected:  std_logic_vector(EARLY_INFO_SIZE-1 downto 0) := (others => '0');

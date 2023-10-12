@@ -22,18 +22,10 @@ port(
     clk: in std_logic;
     
     renameAccepting: out std_logic;
-    frontSendingIn: in std_logic;
+    --frontSendingIn: in std_logic;
     frontData: in BufferEntryArray;
     frontCtrl: in ControlPacket;
 
-    renamedArgsInt: out RenameInfoArray(0 to PIPE_WIDTH-1);
-    renamedArgsFloat: out RenameInfoArray(0 to PIPE_WIDTH-1);
-    
-    renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
-
-    renamedSending: out std_logic;
-
-    nextAccepting: in std_logic;
 
     bqPointer: in SmallNumber;
     sqPointer: in SmallNumber;
@@ -41,9 +33,18 @@ port(
     bqPointerSeq: in SmallNumber;
 
 
+    nextAccepting: in std_logic;
+
+    renamedArgsInt: out RenameInfoArray(0 to PIPE_WIDTH-1);
+    renamedArgsFloat: out RenameInfoArray(0 to PIPE_WIDTH-1);
+    
+    renamedDataLiving: out InstructionSlotArray(0 to PIPE_WIDTH-1);
     renamedCtrl: out ControlPacket;
 
-    sendingFromROB: in std_logic;
+    --renamedSending: out std_logic;
+
+
+    --sendingFromROB: in std_logic;
     robData: in ControlPacketArray(0 to PIPE_WIDTH-1);
     robCtrl: in ControlPacket;
 
@@ -98,6 +99,8 @@ architecture Behavioral of UnitRegManager is
     -- DEBUG
     signal newProducersInt, newProducersFloat, zeroProducers: InsTagArray(0 to 3*PIPE_WIDTH-1) := (others => (others => 'U'));
 
+    alias frontSendingIn is frontCtrl.full;
+    alias sendingFromROB is robCtrl.full;
 
     function getSpecialActionSlot(insVec: InstructionSlotArray; frontData: BufferEntryArray) return SpecificOp is
        variable res: SpecificOp := frontData(0).specificOperation;
@@ -512,7 +515,7 @@ begin
     renameAccepting <= not renameLockState;
 
     renamedCtrl <= makeOutputCtrl(ctrl, renamedDataLivingPre, renamedSendingSig, hasBranch);
-    renamedSending <= renamedSendingSig;   
+    --renamedSending <= renamedSendingSig;   
 
     renameGroupCtrNextOut <= renameGroupCtrNext;
     

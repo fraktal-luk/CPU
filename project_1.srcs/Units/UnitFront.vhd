@@ -27,7 +27,7 @@ entity UnitFront is
 		frontAccepting: out std_logic;
 
 		bqAccepting: in std_logic;
-		bpSending: out std_logic;
+		--bpSending: out std_logic;
         bpData: out ControlPacketArray(0 to FETCH_WIDTH-1);
         bpCtrl: out ControlPacket;
 
@@ -35,13 +35,10 @@ entity UnitFront is
 		renameAccepting: in std_logic;		
 		dataOut: out BufferEntryArray;
 		ctrlOut: out ControlPacket;
-		lastSending: out std_logic;
+		--lastSending: out std_logic;
 		-------
 		
 		frontCausing: out ExecResult;
-
---		execCausing: in ExecResult;
---		lateCausing: in ExecResult;
 
 		events: in EventState;
 
@@ -176,14 +173,18 @@ begin
 
     -- Pipeline F2    
     bpData <= bqDataSig;
-    bpSending <= sendingToBQ;
-        bpCtrl.full <= sendingToBQ;
+    --bpSending <= sendingToBQ;
+    
+    bpCtrl.full <= sendingToBQ;
 
 
     -- Pipeline (F2) (may be delayed any number of cycles)
-	lastSending <= sendingOutBuffer;
+	--lastSending <= sendingOutBuffer;
+
     dataOut <= ibufDataOut;
-        ctrlOut.full <= sendingOutBuffer;
+    
+    ctrlOut.full <= sendingOutBuffer;
+        ctrlOut.controlInfo.firstBr <= ibufDataOut(0).firstBr;
         
     -- Events
     frontCausing.full <= earlyBranchOut.controlInfo.newEvent;

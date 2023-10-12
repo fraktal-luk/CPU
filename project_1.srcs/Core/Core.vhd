@@ -59,8 +59,10 @@ end Core;
 
 architecture Behavioral of Core is
 
-    signal frontAccepting, bpSending, renameAllow, frontGroupSend, frontSendAllow, canSendRename, robSending, renameSendingBr, renamedSending, commitAccepting, bqAccepting,
-           allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
+    signal frontAccepting,
+            bqAccepting, renameAllow, frontSendAllow, frontGroupSend, frontSendingBr,
+            allocAcceptAlu, allocAcceptMul, allocAcceptMem, allocAcceptSVI, allocAcceptSVF, allocAcceptF0, allocAcceptSQ, allocAcceptLQ, allocAcceptROB, acceptingMQ, almostFullMQ,
+            canSendRename, renamedSending, commitAccepting, robSending,
            mqReady, sbEmpty
            : std_logic := '0';
 
@@ -69,52 +71,62 @@ architecture Behavioral of Core is
                         commitEffectiveMaskSQ, commitEffectiveMaskLQ, branchCommitMask
            : std_logic_vector(0 to PIPE_WIDTH-1) := (others => '0');
 
+    signal bpData: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
+
     signal frontGroupOut: BufferEntryArray := (others => DEFAULT_BUFFER_ENTRY);
+
+    signal bqPointer, bqPointerSeq, lqPointer, sqPointer: SmallNumber := (others => '0');
 
     signal renamedData, renamedDataMerged: InstructionSlotArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_INSTRUCTION_SLOT);
 
     signal renamedArgsInt, renamedArgsFloat, renamedArgsMerged, renamedArgsIntROB, renamedArgsFloatROB: RenameInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_RENAME_INFO);
 
-    signal bqPointer, bqPointerSeq, lqPointer, sqPointer: SmallNumber := (others => '0');
+    signal TMP_renamedDests: SmallNumberArray(0 to RENAME_W-1) := (others => (others => '0'));
+    signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
+
+    signal TMP_aluTags, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags,
+            TMP_aluTagsPre,  TMP_mulTagsPre, TMP_memTagsPre, TMP_sviTagsPre, TMP_svfTagsPre, TMP_fpTagsPre
+            : SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
 
     signal renameGroupCtrNext, commitGroupCtr, commitGroupCtrNext: InsTag := (others => '0');
 
     signal execOutMain, execOutSec: ExecResultArray(0 to 3) := (others => DEFAULT_EXEC_RESULT);
 
-    signal pcData, bpCtrl, frontCtrl, bqSelected, mqReexecCtrlIssue, mqReexecCtrlRR, renamedCtrl, branchCtrl, memoryCtrlE2, ctrlOutROB,
-           memCtrlRR, memCtrlE0, missedMemCtrlE1, missedMemCtrlE2, ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
+    signal pcData, bpCtrl, frontCtrl, renamedCtrl, ctrlOutROB,
+           bqSelected, branchCtrl,       
+           mqReexecCtrlIssue, mqReexecCtrlRR,   
+           memCtrlRR, memCtrlE0, memoryCtrlE2, missedMemCtrlE1, missedMemCtrlE2,
+           ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
 
-    signal bqCompareEarly, bqUpdate, sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2, memAddressInput, memAddressInputEarly,
-           frontEvent, execEvent, lateEvent,
-           bqTargetData, resOutSQ, missedMemResultE1, missedMemResultE2, mqReexecResIssue, mqReexecResRR, memoryRead, sysRegReadIn, sysRegReadOut, defaultExecRes
+    signal frontEvent, execEvent, lateEvent,
+           bqCompareEarly, bqUpdate,
+           mqReexecResIssue, mqReexecResRR,
+           memoryRead, sysRegReadIn, sysRegReadOut,
+           memAddressInputEarly, memAddressInput,
+           sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
+           resOutSQ,
+           missedMemResultE1, missedMemResultE2,
+           bqTargetData,
+           defaultExecRes
            : ExecResult := DEFAULT_EXEC_RESULT;
 
-        signal missedMemE0_EP, missedMemE1_EP, missedMemE2_EP: ExecPacket := DEFAULT_EXEC_PACKET;
-
-    signal bpData: ControlPacketArray(0 to FETCH_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
     signal robOut: ControlPacketArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_CONTROL_PACKET);
 
-    signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
+    signal dispMasks_Actual, dispMasks_N, renamedMasks_Actual, renamedMasks_N, commitMasks_Actual, commitMasks_N: DispatchMasks := DEFAULT_DISPATCH_MASKS;
+
 
     signal events, eventsPrev, events_T, events_I: EventState := DEFAULT_EVENT_STATE;
     signal dbState: DbCoreState := DEFAULT_DB_STATE;
 
-    signal TMP_aluTags, TMP_mulTags, TMP_memTags, TMP_sviTags, TMP_svfTags, TMP_fpTags,
-            TMP_aluTagsPre,  TMP_mulTagsPre, TMP_memTagsPre, TMP_sviTagsPre, TMP_svfTagsPre, TMP_fpTagsPre,
 
-            TMP_aluTagsT, TMP_mulTagsT, TMP_memTagsT, TMP_sviTagsT, TMP_svfTagsT, TMP_fpTagsT,
-            TMP_aluTagsPreT, TMP_mulTagsPreT, TMP_memTagsPreT, TMP_sviTagsPreT, TMP_svfTagsPreT, TMP_fpTagsPreT
-            : SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
+    signal lockIssueI0_NoMemFail, dividerSending: std_logic := '0';   
 
-    signal TMP_renamedDests: SmallNumberArray(0 to RENAME_W-1) := (others => (others => '0'));
-    signal TMP_renamedSources: SmallNumberArray(0 to 3*RENAME_W-1) := (others => (others => '0'));
-    signal lockIssueI0_NoMemFail, dividerSending: std_logic := '0';
-   
-    signal dispMasks_Actual, dispMasks_N, renamedMasks_Actual, renamedMasks_N, commitMasks_Actual, commitMasks_N: DispatchMasks := DEFAULT_DISPATCH_MASKS;
-
+    signal missedMemE0_EP, missedMemE1_EP, missedMemE2_EP: ExecPacket := DEFAULT_EXEC_PACKET;
     signal EP_MQ_Issue, EP_M0_RegRead_copy, EP_M0_E0_copy, EP_M0_E1_copy, EP_M0_E2_copy: ExecPacket := DEFAULT_EXEC_PACKET;
 
     signal EP_A_Main, EP_A_Sec: ExecPacketArray(0 to 3) := (others => DEFAULT_EXEC_PACKET);
+
+    signal ch0, ch1, ch2, ch3, ch4: std_logic := '0';
 
 
     function reorderMemRRF(flags: std_logic_vector) return std_logic_vector is
@@ -158,7 +170,6 @@ begin
         intSignal <= int0 or int1;
         intType <= (int0, int1);
     
-        --dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.controlInfo.c_full and isStoreSysOp(ctOutSB.op), '0', DEFAULT_POISON, InsTag'(others => '0'), zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
         dataFromSB <= (DEFAULT_DEBUG_INFO, ctOutSB.full and isStoreSysOp(ctOutSB.op), '0', DEFAULT_POISON, InsTag'(others => '0'), zeroExtend(ctOutSB.target(4 downto 0), SMALL_NUMBER_SIZE), ctOutSB.nip);
 
         SEQUENCER: entity work.UnitSequencer(Behavioral)
@@ -172,7 +183,6 @@ begin
             ---
             bqTargetData => bqTargetData,
 
-            --sbSending => ctOutSB.full,
             dataFromSB => dataFromSB,
             sbEmpty => sbEmpty,
 
@@ -221,13 +231,11 @@ begin
         iin => iin,
 
         bqAccepting => bqAccepting,
-        bpSending => bpSending,
         bpData => bpData,
         bpCtrl => bpCtrl, -- TODO: control packet
 
         renameAccepting => frontSendAllow,
 
-        lastSending => frontGroupSend,
         dataOut => frontGroupOut,
         ctrlOut => frontCtrl, -- TODO: control packet
 
@@ -236,6 +244,8 @@ begin
 
         dbState => dbState
     );
+
+    frontGroupSend <= frontCtrl.full;
 
     frontSendAllow <=   renameAllow 
                     and allocAcceptAlu and allocAcceptMul and allocAcceptMem
@@ -248,10 +258,8 @@ begin
         events => events, events_T => events_T,
 
         renameAccepting => renameAllow,
-        frontSendingIn => frontGroupSend,
         frontData => frontGroupOut,
         frontCtrl => frontCtrl,
-
 
         bqPointer => bqPointer,
         sqPointer => sqPointer,
@@ -260,25 +268,24 @@ begin
 
         nextAccepting => canSendRename,
 
-        renamedSending => renamedSending,
         renamedDataLiving => renamedData,
         renamedCtrl => renamedCtrl,
 
         renamedArgsInt => renamedArgsInt,
         renamedArgsFloat => renamedArgsFloat,
 
-        sendingFromROB => robSending,
         robData => robOut,  -- TODO: send only commitMasks
         robCtrl => ctrlOutROB,
 
         commitArgInfoI => renamedArgsIntROB,
         commitArgInfoF => renamedArgsFloatROB,
 
-
         renameGroupCtrNextOut => renameGroupCtrNext,
 
         dbState => dbState
     );
+
+        renamedSending <= renamedCtrl.full;
 
             dispMasks_Actual <= (
                 alu => aluMaskRe,
@@ -309,52 +316,59 @@ begin
     renamedArgsMerged <= mergeRenameInfoFP(renamedArgsInt, renamedArgsFloat);
     renamedDataMerged <= replaceDests(renamedData, renamedArgsMerged);
 
-    TMP_aluTagsT <= iqInds2tags(TMP_aluTags);
-    TMP_mulTagsT <= iqInds2tags(TMP_mulTags);
-    TMP_memTagsT <= iqInds2tags(TMP_memTags);
-    TMP_sviTagsT <= iqInds2tags(TMP_sviTags);
-    TMP_svfTagsT <= iqInds2tags(TMP_svfTags);
-    TMP_fpTagsT <= iqInds2tags(TMP_fpTags);
 
-    TMP_aluTagsPreT <= iqInds2tags(TMP_aluTagsPre);
-    TMP_mulTagsPreT <= iqInds2tags(TMP_mulTagsPre);
-    TMP_memTagsPreT <= iqInds2tags(TMP_memTagsPre);
-    TMP_sviTagsPreT <= iqInds2tags(TMP_sviTagsPre);
-    TMP_svfTagsPreT <= iqInds2tags(TMP_svfTagsPre);
-    TMP_fpTagsPreT <= iqInds2tags(TMP_fpTagsPre);
-
-    RENAMER: entity work.Renamer
-    port map(
-        clk => clk, evt => events,
-
-        prevSending => frontGroupSend,
-
-        frontData => frontGroupOut,
-
-        maskAlu => aluMaskRe,
-        maskMul => mulMaskRe,
-        maskMem => memMaskRe,
-
-        TMP_tagsAlu => TMP_aluTagsPreT,
-        TMP_tagsMul => TMP_mulTagsPreT,
-        TMP_tagsMem => TMP_memTagsPreT,
-
-        renameSending => renamedSending, -- CAREFUL, it's an input
-
-        TMP_destsOut => TMP_renamedDests,
-        TMP_sourcesOut => TMP_renamedSources,
-
-        renameGroupCtrNext => renameGroupCtrNext,
-
-        commitGroupCtr => commitGroupCtr,
-        commitGroupCtrNext => commitGroupCtrNext,
-
-        robSending => robSending,
-        commitArgInfoI => renamedArgsIntROB,
-
-        dummy => open -- TODO: remove
-    );
-
+    DEV_NEW_RENAMER: block
+        signal 
+            TMP_aluTagsT, TMP_mulTagsT, TMP_memTagsT, TMP_sviTagsT, TMP_svfTagsT, TMP_fpTagsT,
+            TMP_aluTagsPreT, TMP_mulTagsPreT, TMP_memTagsPreT, TMP_sviTagsPreT, TMP_svfTagsPreT, TMP_fpTagsPreT
+            : SmallNumberArray(0 to RENAME_W-1) := (others => sn(0));
+    begin
+        TMP_aluTagsT <= iqInds2tags(TMP_aluTags);
+        TMP_mulTagsT <= iqInds2tags(TMP_mulTags);
+        TMP_memTagsT <= iqInds2tags(TMP_memTags);
+        TMP_sviTagsT <= iqInds2tags(TMP_sviTags);
+        TMP_svfTagsT <= iqInds2tags(TMP_svfTags);
+        TMP_fpTagsT <= iqInds2tags(TMP_fpTags);
+    
+        TMP_aluTagsPreT <= iqInds2tags(TMP_aluTagsPre);
+        TMP_mulTagsPreT <= iqInds2tags(TMP_mulTagsPre);
+        TMP_memTagsPreT <= iqInds2tags(TMP_memTagsPre);
+        TMP_sviTagsPreT <= iqInds2tags(TMP_sviTagsPre);
+        TMP_svfTagsPreT <= iqInds2tags(TMP_svfTagsPre);
+        TMP_fpTagsPreT <= iqInds2tags(TMP_fpTagsPre);
+    
+        RENAMER: entity work.Renamer
+        port map(
+            clk => clk, evt => events,
+    
+            prevSending => frontGroupSend,
+    
+            frontData => frontGroupOut,
+    
+            maskAlu => aluMaskRe,
+            maskMul => mulMaskRe,
+            maskMem => memMaskRe,
+    
+            TMP_tagsAlu => TMP_aluTagsPreT,
+            TMP_tagsMul => TMP_mulTagsPreT,
+            TMP_tagsMem => TMP_memTagsPreT,
+    
+            renameSending => renamedSending, -- CAREFUL, it's an input
+    
+            TMP_destsOut => TMP_renamedDests,
+            TMP_sourcesOut => TMP_renamedSources,
+    
+            renameGroupCtrNext => renameGroupCtrNext,
+    
+            commitGroupCtr => commitGroupCtr,
+            commitGroupCtrNext => commitGroupCtrNext,
+    
+            robSending => robSending,
+            commitArgInfoI => renamedArgsIntROB,
+    
+            dummy => open -- TODO: remove
+        );
+    end block;
 
 	REORDER_BUFFER: entity work.ReorderBuffer(Behavioral)
 	port map(
@@ -379,7 +393,7 @@ begin
 
 		nextAccepting => commitAccepting,
 
-		sendingOut => robSending, 
+		sendingOut => open,--robSending, 
         robOut => robOut,
         outputCtrl => ctrlOutROB,
         
@@ -388,7 +402,8 @@ begin
 
 		dbState => dbState	
 	);     
-
+    
+    robSending <= ctrlOutROB.full;
 
     ALLOC_MUL_STUB: if not ENABLE_MUL_DIV generate
         allocAcceptMul <= '1';
@@ -446,7 +461,7 @@ begin
               subpipeF0_D0,    -- bypass, values
               subpipe_DUMMY: ExecResult := DEFAULT_EXEC_RESULT;
 
-       signal --EP_I0_Issue_N, EP_I1_Issue_N, EP_M0_Issue_N, EP_SVI_Issue_N, EP_SVF_Issue_N, EP_F0_Issue_N, 
+       signal
                EP_I0_Issue, EP_I0_RegRead, EP_I0_E0, EP_I0_D0, 
                EP_I1_Issue, EP_I1_RegRead, EP_I1_E0, EP_I1_E1, EP_I1_E2, EP_I1_D0, EP_I1_D1,
                EP_M0_Issue, EP_M0_RegRead, EP_M0_E0, EP_M0_E1, EP_M0_E2, EP_M0_D0, EP_M0_D1,
@@ -529,8 +544,6 @@ begin
  
             slotIssueI0 <= slotIssueI0_TF;
             slotIssueI0_U <= TMP_mergeStatic(slotIssueI0_TF, slotIssueI0_TS);
-
-           --     EP_I0_Issue <= updateEP_Async( makeEP(slotIssueI0_U), events_T); 
 
             TMP_ISSUE_I0: block
                 signal argStateRegI0: SchedulerState := DEFAULT_SCHEDULER_STATE;
@@ -1395,7 +1408,8 @@ begin
             );
     end block;
 
-    renameSendingBr <= frontGroupSend and frontGroupOut(0).firstBr;
+    frontSendingBr <= --frontGroupSend and frontGroupOut(0).firstBr;
+                         frontCtrl.full and frontCtrl.controlInfo.firstBr;
 
     BRANCH_QUEUE: entity work.BranchQueue
 	generic map(
@@ -1406,7 +1420,7 @@ begin
 		events => events,
 
 		acceptingBr => bqAccepting,
-		prevSendingBr => bpSending,
+		--prevSendingBr => bpSending,
         dataInBr => bpData,
         ctrlInBr => bpCtrl,
 
@@ -1414,8 +1428,8 @@ begin
         
         renamedPtr => bqPointerSeq,
 	    bqPtrOut => bqPointer,
-	    
-	    frontSending => renameSendingBr,
+
+	    frontSending => frontSendingBr,
 	    branchMaskFront => branchMaskRe,
 
 		renamedSending => renamedSending,
