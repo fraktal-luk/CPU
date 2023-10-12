@@ -33,10 +33,10 @@ package LogicExec is
 
     function getAluControl(op: ArithOp) return AluControl;
 
-	function basicBranch(sending: std_logic; ss: SchedulerState; bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
+	function basicBranch(sending: std_logic; ss_static, ss_dynamic: SchedulerState; bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
 	return ControlPacket;
 
-	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword; ac: AluControl)
+	function executeAlu(full: std_logic; ss_static, ss_dynamic: SchedulerState; link: Mword; ac: AluControl)
 	return ExecResult;
 
 	function prepareMultiply(full: std_logic; st: SchedulerState) return ExecResult;
@@ -75,59 +75,58 @@ package body LogicExec is
 		return ac.jumpType(1) or (ac.jumpType(0) xor isZero);
 	end function;
 
-	function basicBranch(sending: std_logic; ss: SchedulerState; bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
+	function basicBranch(sending: std_logic; ss_static, ss_dynamic: SchedulerState; bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
 	return ControlPacket is
 		variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
-		variable branchTaken, targetMatch, targetEqual: std_logic := '0';
-		variable storedTarget, storedReturn, trueTarget: Mword := (others => '0');
-		--variable : std_logic := '0';
+		variable branchTaken, targetMatch, targetEqual, newEvent: std_logic := '0';
+		variable trueTarget: Mword := (others => '0');
 		constant ctrl: InstructionControlInfo := bqControl.controlInfo;
 		constant target: Mword := bqControl.target;
 		constant result: Mword := bqControl.nip;
+		constant argValues: MwordArray(0 to 2) := ss_dynamic.argValues;
+		constant static: StaticInfo := ss_static.st;
 	begin
-	    res.dbInfo := ss.st.dbInfo;
-	    
-        res.tags := ss.st.tags;
-
-        res.full := sending;
-        res.controlInfo.c_full := sending;
 		-- Cases to handle
 		-- jr taken		: if not taken goto return, if taken and not equal goto reg, if taken and equal ok 
 		-- jr not taken: if not taken ok, if taken goto reg
 		-- j taken		: if not taken goto return, if taken equal
 		-- j not taken : if not taken ok, if taken goto dest
 
-        targetMatch := bool2std(target = ss.argValues(1));
-		branchTaken := resolveBranchCondition(ss.argValues(0), ss.st.operation.arith, ac);
-
-        res.controlInfo.c_full := sending;
+        targetMatch := bool2std(target = argValues(1));
+		branchTaken := resolveBranchCondition(argValues(0), static.operation.arith, ac);
 
         if false and lateEvent.full = '1' then
                 trueTarget := lateEvent.value;
         elsif branchTaken = '0' then
             trueTarget := result;
-        elsif ss.st.immediate = '1' then
+        elsif static.immediate = '1' then
             trueTarget := target;         
         else
-            trueTarget := ss.argValues(1);
+            trueTarget := argValues(1);
         end if;
         
         if false and lateEvent.full = '1' then
-                res.controlInfo.newEvent := '1';
+                newEvent := '1';
         elsif      (ctrl.frontBranch xor branchTaken) = '1'
-                or  (--ctrl.frontBranch and 
-                                          branchTaken and not ss.st.immediate and not targetMatch) = '1'
+               or  (branchTaken and not static.immediate and not targetMatch) = '1'
         then
-            res.controlInfo.newEvent := sending;         
+            newEvent := sending;
         else
-            res.controlInfo.newEvent := '0';
+            newEvent := '0';
         end if;
 
-        res.controlInfo.confirmedBranch := branchTaken;
+        res.full := sending;
+        res.controlInfo.c_full := sending;
+        
+	    res.dbInfo := static.dbInfo;
 
+        res.controlInfo.newEvent := newEvent;
+        res.controlInfo.confirmedBranch := branchTaken;
 		res.target := trueTarget;
-		-- Return address
+
 		res.nip := result;
+
+        res.tags := static.tags;
 		res.tags.intPointer := bqControl.tags.intPointer;
 		res.tags.floatPointer := bqControl.tags.floatPointer;
     	res.tags.sqPointer := bqControl.tags.sqPointer;
@@ -135,25 +134,24 @@ package body LogicExec is
 		return res;
 	end function;
 
-	function executeAlu(full: std_logic; ss: SchedulerState; link: Mword; ac: AluControl)
-	return ExecResult is
-		variable res: ExecResult := DEFAULT_EXEC_RESULT;
+
+	function calculateAlu(args: MwordArray; link: Mword; ac: AluControl)
+	return Mword is
+		variable res: --ExecResult := DEFAULT_EXEC_RESULT;
+		              Mword := (others => '0');
 		variable result: Mword := (others => '0');
 		variable arg0, arg1, arg2: Mword := (others => '0');
 		variable argAddSub: Mword := (others => '0');
 		variable carryIn: std_logic := '0';
-		variable resultExt: std_logic_vector(MWORD_SIZE downto 0) := (others => '0');
+
 		variable resultExt0, resultExt1: Word := (others => '0');
 		variable ov, carry, cl, cm0, cm1: std_logic := '0';
 	    variable shiftInput, rotated, shiftOutput: Dword := (others => '0');
 	begin
-	    res.dbInfo := ss.st.dbInfo;
-	
-	    res.poison := advancePoison(ss.poison);
-	
-		arg0 := ss.argValues(0);
-		arg1 := ss.argValues(1);
-		arg2 := ss.argValues(2);
+
+		arg0 := args(0);
+		arg1 := args(1);
+		arg2 := args(2);
 
 		if ac.sub = '1' then
 			argAddSub := not arg1;
@@ -180,8 +178,6 @@ package body LogicExec is
 		-- So, for shift left, number is negative, for right is positive
 		-- Most negative byte count is -4, giving -4*8 + 0 = -32
 		-- Most positive byte count is 3, giving 3*8 + 7 = 31
-		
-		resultExt(31 downto 0) := addExtNew(arg0, argAddSub, carryIn);	
 
 		addExtNewP(arg0, argAddSub, carryIn, resultExt0, resultExt1, cl, cm0, cm1);
 
@@ -206,11 +202,25 @@ package body LogicExec is
               end case;
             end if;
 		end if;
-		
+
+		res := result;
+		return res;
+	end function;
+
+
+	function executeAlu(full: std_logic; ss_static, ss_dynamic: SchedulerState; link: Mword; ac: AluControl)
+	return ExecResult is
+		variable res: ExecResult := DEFAULT_EXEC_RESULT;
+		variable result: Mword := (others => '0');
+	begin
+		result := calculateAlu(ss_dynamic.argValues, link, ac);
+
 		res.full := full;
-		res.tag := ss.st.tags.renameIndex;
-		res.dest := --st.argSpec.dest;
-		            ss.dest;
+	    res.dbInfo := ss_static.st.dbInfo;
+	    res.poison := advancePoison(ss_dynamic.poison);
+		res.tag := ss_static.st.tags.renameIndex;
+		res.dest := ss_dynamic.dest;
+
 		res.value := result;
 		return res;
 	end function;

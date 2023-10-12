@@ -152,8 +152,8 @@ architecture Behavioral of Core is
         return res;
     end function;
 begin
-        ch0 <= '1';
-        ch1 <= '0';
+        --ch0 <= '1';
+        --ch1 <= '0';
 
     -- TODO: move closer to mem code
     dread <= memoryRead.full;
@@ -417,7 +417,7 @@ begin
 
     TEMP_EXEC: block
        use work.LogicExec.all;
-        
+
        -- TODO: These 2 are in large scope because issue signal is needed for conflict resolution. Fix it  
        signal outSigsSVI: IssueQueueSignals := (others => '0');
        signal outSigsSVF: IssueQueueSignals := (others => '0');
@@ -491,10 +491,13 @@ begin
             use work.LogicIssue.all;
             use work.LogicArgRead.all;
 
-            signal outSigsI0: IssueQueueSignals := (others => '0');
 
             signal schedInfoA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
             signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
+
+            signal outSigsI0: IssueQueueSignals := (others => '0');
+            signal slotRegReadI0_static: SchedulerState := DEFAULT_SCHEDULER_STATE;
+
             signal dataToAlu: ExecResult := DEFAULT_EXEC_RESULT;           
 
             constant CFG_ALU: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
@@ -542,7 +545,7 @@ begin
                 dbState => dbState
             );
  
-            slotIssueI0 <= slotIssueI0_TF;
+            slotIssueI0 <= slotIssueI0_U;--slotIssueI0_TF;
             slotIssueI0_U <= TMP_mergeStatic(slotIssueI0_TF, slotIssueI0_TS);
 
             TMP_ISSUE_I0: block
@@ -555,25 +558,33 @@ begin
                 begin
                     if rising_edge(clk) then
                         argStateRegI0 <= getRegReadStage_N(slotIssueI0_U, events, valuesInt0, valuesInt1, true, false);
+                            slotRegReadI0_static <= slotIssueI0_U;
+                        
                         unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0_U.st.operation.arith);
                         
                         EP_I0_RegRead <= updateEP(EP_I0_Issue, events);
                         EP_I0_E0 <= updateEP(EP_I0_RegRead, events);
                         EP_I0_D0 <= updateEP(EP_I0_E0, events);
+                        
+                            ch1 <= ch0;
+                            ch2 <= '1';
                     end if;
                 end process;
 
                 slotRegReadI0 <= updateRegReadStage(argStateRegI0, outSigsI0, events, valuesInt0, regValsI0, false);
                 subpipeI0_RegRead <= makeExecResult(slotRegReadI0);
 
-                bqCompareEarly.full <= slotRegReadI0.full and slotRegReadI0.st.branchIns;
-                bqCompareEarly.tag <= slotRegReadI0.st.tags.renameIndex;
-                bqCompareEarly.dest <= slotRegReadI0.st.tags.bqPointer;
+                    ch0 <= bool2std(slotRegReadI0.st = slotRegReadI0_static.st);
+
+                bqCompareEarly.full <= slotRegReadI0.full and slotRegReadI0_static.st.branchIns;
+                bqCompareEarly.tag <= slotRegReadI0_static.st.tags.renameIndex;
+                bqCompareEarly.dest <= slotRegReadI0_static.st.tags.bqPointer;
             end block;
 
-                unfoldedAluOp_T <= work.LogicExec.getAluControl(slotRegReadI0.st.operation.arith);
+                unfoldedAluOp_T <= work.LogicExec.getAluControl(slotRegReadI0_static.st.operation.arith);
 
-            dataToAlu <= executeAlu(slotRegReadI0.full, slotRegReadI0, bqSelected.nip, unfoldedAluOp);
+                                                     -- .st,                  .argValues, .poison, .dest
+            dataToAlu <= executeAlu(slotRegReadI0.full, slotRegReadI0_static, slotRegReadI0, bqSelected.nip, unfoldedAluOp);
             process (clk)
             begin
                 if rising_edge(clk) then
@@ -585,36 +596,31 @@ begin
             JUMPS: block
                 signal dataToBranch, branchResultE0, branchResultE1: ControlPacket := DEFAULT_CONTROL_PACKET;
                 signal suppressNext1, suppressNext2, lateEventPre: std_logic := '0';
-                signal --branchPoisoned, 
-                        branch0BeforeRR, branch1BeforeRR: std_logic := '0';
-                --signal brPoison: PoisonInfo := DEFAULT_POISON;
+                signal branch0BeforeRR, branch1BeforeRR: std_logic := '0';
             begin
 
-                dataToBranch <= basicBranch(slotRegReadI0.full and slotRegReadI0.st.branchIns and not suppressNext1 and not suppressNext2,
-                                    slotRegReadI0, bqSelected, unfoldedAluOp, events.lateCausing);
+                dataToBranch <= basicBranch(slotRegReadI0.full and slotRegReadI0_static.st.branchIns and not suppressNext1 and not suppressNext2,
+                                   -- .st,                .argValues
+                                    slotRegReadI0_static, slotRegReadI0, bqSelected, unfoldedAluOp, events.lateCausing);
 
                 process (clk)
                     use work.LogicLogging.all;
                 begin
                     if rising_edge(clk) then
-                        if dataToBranch.--controlInfo.c_full = '1' then
-                                        full = '1' then
+                        if dataToBranch.full = '1' then
                             DB_reportBranchEvent(dataToBranch);
                         end if;
 
                         branchResultE0 <= dataToBranch;
                         branchResultE1 <= branchResultE0;
 
-                        --brPoison <= slotRegReadI0.poison;
-                        --branchPoisoned <= dataToBranch.full and memFail and slotRegReadI0.poison.isOn;
-                        
                         lateEventPre <= events.lateCausing.full;
                         eventsPrev <= events;
                     end if;
                 end process;
 
-                branch0BeforeRR <= compareTagBefore(branchResultE0.tags.renameIndex, slotRegReadI0.st.tags.renameIndex);
-                branch1BeforeRR <= compareTagBefore(branchResultE1.tags.renameIndex, slotRegReadI0.st.tags.renameIndex);
+                branch0BeforeRR <= compareTagBefore(branchResultE0.tags.renameIndex, slotRegReadI0_static.st.tags.renameIndex);
+                branch1BeforeRR <= compareTagBefore(branchResultE1.tags.renameIndex, slotRegReadI0_static.st.tags.renameIndex);
                 suppressNext1 <= (branch0BeforeRR and branchResultE0.controlInfo.newEvent) or events.lateCausing.full;
                 suppressNext2 <= (branch1BeforeRR and branchResultE1.controlInfo.newEvent) or lateEventPre;
 
@@ -687,7 +693,7 @@ begin
                     dbState => dbState
                 );
 
-                slotIssueI1 <= slotIssueI1_TF;
+                slotIssueI1 <= slotIssueI1_U;--slotIssueI1_TF;
                 slotIssueI1_U <= TMP_mergeStatic(slotIssueI1_TF, slotIssueI1_TS);
     
                 --    EP_I1_Issue <= updateEP_Async( makeEP(slotIssueI1_U), events_T); 
@@ -803,7 +809,7 @@ begin
                 dbState => dbState
             );
 
-            slotIssueM0 <= slotIssueM0_TF;
+            slotIssueM0 <= slotIssueM0_U;--slotIssueM0_TF;
             slotIssueM0_U <= TMP_mergeStatic(slotIssueM0_TF, slotIssueM0_TS);
 
             --    EP_M0_Issue <= updateEP_Async( makeEP(slotIssueM0_U), events_T); 
@@ -983,7 +989,7 @@ begin
                 dbState => dbState
             );
 
-            slotIssueIntSV <= slotIssueSVI_TF;
+            slotIssueIntSV <= slotIssueSVI_U;--slotIssueSVI_TF;
             slotIssueSVI_U <= TMP_mergeStatic(slotIssueSVI_TF, slotIssueSVI_TS);
             issueIntSV <= outSigsSVI.sending;
 
@@ -1053,7 +1059,7 @@ begin
                 );
             end generate;
 
-            slotIssueFloatSV <= slotIssueSVF_TF;
+            slotIssueFloatSV <= slotIssueSVF_U;--slotIssueSVF_TF;
             slotIssueSVF_U <= TMP_mergeStatic(slotIssueSVF_TF, slotIssueSVF_TS);
             issueFloatSV <= outSigsSVF.sending;
 
@@ -1129,7 +1135,7 @@ begin
                dbState => dbState
             );
             
-            slotIssueF0 <= slotIssueF0_TF;
+            slotIssueF0 <= slotIssueF0_U;--slotIssueF0_TF;
             slotIssueF0_U <= TMP_mergeStatic(slotIssueF0_TF, slotIssueF0_TS);
 
             --    EP_F0_Issue <=  updateEP_Async( makeEP(slotIssueF0_U), events_T); 
