@@ -50,7 +50,7 @@ package LogicExec is
     function mergeMemOp(stIQ, stMQ: SchedulerState; mqReady: std_logic) return SchedulerState;
 
 
-    function calcEffectiveAddress(full: std_logic; st: SchedulerState; fromDLQ: std_logic)--; dlqData: ExecResult)
+    function calcEffectiveAddress(full: std_logic; st: SchedulerState; argValues: MwordArray(0 to 2); fromDLQ: std_logic)--; dlqData: ExecResult)
     return ExecResult;
 
     function getLSResultData(op: SpecificOp;
@@ -66,7 +66,10 @@ package LogicExec is
                               memLoadReady: std_logic; memLoadValue: Mword;
                               sysLoadReady: std_logic; sysLoadValue: Mword;
                               ctSQ, ctLQ: ControlPacket
-                             ) return ExecResult;                                               
+                             ) return ExecResult;
+
+    function getBranchCompareEarly(ss: SchedulerState; full: std_logic) return ExecResult;
+                                             
 end LogicExec;
 
 
@@ -331,12 +334,12 @@ package body LogicExec is
     end function;
 
 
-    function calcEffectiveAddress(full: std_logic; st: SchedulerState; fromDLQ: std_logic)--; dlqData: ExecResult)
+    function calcEffectiveAddress(full: std_logic; st: SchedulerState; argValues: MwordArray(0 to 2); fromDLQ: std_logic)--; dlqData: ExecResult)
     return ExecResult is
         variable res: ExecResult := DEFAULT_EXEC_RESULT;
         variable adr: Mword := (others => '0'); 
     begin
-        adr := add(st.argValues(0), st.argValues(1));
+        adr := add(argValues(0), argValues(1));
 
         res.full := full;
         
@@ -423,5 +426,14 @@ package body LogicExec is
 
         return res;
     end function;
+
+    function getBranchCompareEarly(ss: SchedulerState; full: std_logic) return ExecResult is
+        variable res: ExecResult := DEFAULT_EXEC_RESULT;
+    begin
+        res.full := full and ss.st.branchIns;
+        res.tag := ss.st.tags.renameIndex;
+        res.dest := ss.st.tags.bqPointer;
+        return res;
+    end function; 
 
 end LogicExec;

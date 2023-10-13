@@ -152,8 +152,6 @@ architecture Behavioral of Core is
         return res;
     end function;
 begin
-        --ch0 <= '1';
-        --ch1 <= '0';
 
     -- TODO: move closer to mem code
     dread <= memoryRead.full;
@@ -423,7 +421,7 @@ begin
        signal outSigsSVF: IssueQueueSignals := (others => '0');
 
        -- Selection from IQ and state after Issue stage
-       signal slotIssueI0, slotRegReadI0,
+       signal slotIssueI0,-- slotRegReadI0,
               slotIssueI1, slotRegReadI1,
               slotIssueM0, slotRegReadM0,
               slotIssueF0, slotRegReadF0,
@@ -496,10 +494,12 @@ begin
             signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
 
             signal outSigsI0: IssueQueueSignals := (others => '0');
-            signal slotRegReadI0_static: SchedulerState := DEFAULT_SCHEDULER_STATE;
+            signal slotRegReadI0_static, slotE0_static, slotD0_static: SchedulerState := DEFAULT_SCHEDULER_STATE;
             signal liveRR: std_logic := '0';
 
-            signal dataToAlu: ExecResult := DEFAULT_EXEC_RESULT;           
+            signal dataToAlu, dataE0: ExecResult := DEFAULT_EXEC_RESULT;           
+
+            signal argValuesInitial, argValueSupdated: MwordArray(0 to 2) := (others => (others => '0'));
 
             constant CFG_ALU: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
             constant CFG_ALU_WAIT: SchedulerUpdateConfig := (false, false, false, FORWARDING_MODES_INT_D, false); -- UNUSED
@@ -550,7 +550,6 @@ begin
             slotIssueI0_U <= TMP_mergeStatic(slotIssueI0_TF, slotIssueI0_TS);
 
             TMP_ISSUE_I0: block
-                signal argStateRegI0: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
                 subpipeI0_Issue <= makeExecResult(slotIssueI0);
                 issueTagI0 <= slotIssueI0.destTag;
@@ -558,40 +557,54 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateRegI0 <= getRegReadStage_O(slotIssueI0_U.full, slotIssueI0_U, events, valuesInt0, valuesInt1, true, false);
-                            slotRegReadI0_static <= advanceControlRR(slotIssueI0_U, slotIssueI0_U.full, events);
+                        slotRegReadI0_static <= advanceControlRR(slotIssueI0_U, slotIssueI0_U.full, events);
+                        argValuesInitial <= getArgValuesRR(slotIssueI0_U, valuesInt0, valuesInt1, true, false);
 
                         unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0_U.st.operation.arith);
-                        
+
+
+                        slotE0_static <= advanceControlRR(slotRegReadI0_static, slotRegReadI0_static.full, events);
+                        slotD0_static <= advanceControlRR(slotE0_static, slotE0_static.full, events);
+
                         EP_I0_RegRead <= updateEP(EP_I0_Issue, events);
                         EP_I0_E0 <= updateEP(EP_I0_RegRead, events);
                         EP_I0_D0 <= updateEP(EP_I0_E0, events);
-                        
-                            ch1 <= '1';
-                            ch2 <= '1';
+
                     end if;
                 end process;
 
-                slotRegReadI0 <= updateRegReadStage_N(argStateRegI0, outSigsI0, events, valuesInt0, regValsI0, false);
+                argValuesUpdated <= updateArgsRR(slotRegReadI0_static, argValuesInitial, valuesInt0, regValsI0, false);   
+
+                --    ch0 <= '0';
+                
                 subpipeI0_RegRead <= makeExecResult(slotRegReadI0_static);
 
                 liveRR <= updateControlRR(slotRegReadI0_static, outSigsI0, events).full;
 
-                bqCompareEarly.full <= liveRR and slotRegReadI0_static.st.branchIns;
-                bqCompareEarly.tag <= slotRegReadI0_static.st.tags.renameIndex;
-                bqCompareEarly.dest <= slotRegReadI0_static.st.tags.bqPointer;
+                bqCompareEarly <= getBranchCompareEarly(slotRegReadI0_static, liveRR);
             end block;
 
                 unfoldedAluOp_T <= work.LogicExec.getAluControl(slotRegReadI0_static.st.operation.arith);
 
                                           -- .st, .poison, .dest
-            dataToAlu <= executeAlu(liveRR, slotRegReadI0_static, slotRegReadI0.argValues, bqSelected.nip, unfoldedAluOp);
+            dataToAlu <= executeAlu(liveRR, slotRegReadI0_static, argValuesUpdated, bqSelected.nip, unfoldedAluOp);
             process (clk)
             begin
                 if rising_edge(clk) then
-                    subpipeI0_E0 <= dataToAlu;
+                    dataE0 <= dataToAlu; -- only .value
+                    
                 end if;
             end process;
+
+               --     ch1 <= '1';
+
+                subpipeI0_E0.dbInfo <= slotE0_static.st.dbInfo;
+                subpipeI0_E0.full <= slotE0_static.full;
+                subpipeI0_E0.failed <= '0';
+                subpipeI0_E0.poison <= slotE0_static.poison;
+                subpipeI0_E0.tag <= slotE0_static.st.tags.renameIndex;
+                subpipeI0_E0.dest <= slotE0_static.dest;
+                subpipeI0_E0.value <= dataE0.value;
 
 
             JUMPS: block
@@ -602,7 +615,7 @@ begin
 
                 dataToBranch <= basicBranch(liveRR and slotRegReadI0_static.st.branchIns and not suppressNext1 and not suppressNext2,
                                    -- .st,
-                                    slotRegReadI0_static, slotRegReadI0.argValues, bqSelected, unfoldedAluOp, events.lateCausing);
+                                    slotRegReadI0_static, argValuesUpdated, bqSelected, unfoldedAluOp, events.lateCausing);
 
                 process (clk)
                     use work.LogicLogging.all;
@@ -763,8 +776,11 @@ begin
 
             constant CFG_MEM: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
 
+            signal argValuesInitial, argValuesUpdated: MwordArray(0 to 2) := (others => (others => '0'));
+            signal stageE0, stageE1, stageE2, stageD0, stageD1: SchedulerState := DEFAULT_SCHEDULER_STATE;
+
             signal controlToM0_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
-            signal slotRegReadM0iq, slotRegReadM0_Merged,  slotIssueM0mq: SchedulerState := DEFAULT_SCHED_STATE;
+            signal slotRegReadM0iq, slotRegReadM0_Merged, slotRegReadM0_static, slotIssueM0mq, slotIssueMerged: SchedulerState := DEFAULT_SCHED_STATE;
             signal subpipeM0_E1_u, subpipeM0_E1i_u, subpipeM0_E1f_u, resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
             
             signal EP_M0_IssueMQ: ExecPacket := DEFAULT_EXEC_PACKET;
@@ -817,6 +833,9 @@ begin
 
             slotIssueM0mq <= TMP_slotIssueM0mq(mqReexecCtrlIssue, mqReexecResIssue, mqReexecCtrlIssue.controlInfo.c_full);
 
+            slotIssueMerged <= slotIssueM0mq when slotIssueM0mq.full = '1'
+                        else   slotIssueM0;
+
             TMP_ISSUE_M0: block
                 signal argStateRegM0, argStateR_Merged: SchedulerState := DEFAULT_SCHEDULER_STATE;
             begin
@@ -825,9 +844,18 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateRegM0 <= getRegReadStage_O(slotIssueM0_U.full, slotIssueM0_U, events, valuesInt0, valuesInt1, true, false, true);
-                        argStateR_Merged <= getRegReadStage_Merge(slotIssueM0_U, slotIssueM0_U.full, slotIssueM0mq, events, valuesInt0, valuesInt1, true, false, true);
+                        argStateRegM0 <= --getRegReadStage_O(slotIssueM0_U.full, slotIssueM0_U, events, valuesInt0, valuesInt1, true, false, true);
+                                        advanceControlRR(slotIssueM0_U, slotIssueM0_U.full, events);
 
+                        slotRegReadM0_static <= advanceControlRR(slotIssueMerged, slotIssueMerged.full, events);
+                        argStateR_Merged <= getRegReadStage_Merge(slotIssueM0_U, slotIssueM0_U.full, slotIssueM0mq, events, valuesInt0, valuesInt1, true, false, true);
+                        
+                        if slotIssueM0mq.full = '1' then
+                            argValuesInitial <= slotIssueM0mq.argValues;
+                        else
+                            argValuesInitial <= getArgValuesRR(slotIssueMerged, valuesInt0, valuesInt1, true, false, true);
+                        end if;
+                        
                         EP_M0_RegRead <= mergeEP(updateEP(EP_M0_Issue, events),
                                                  updateEP(EP_M0_IssueMQ, events)
                                                 );
@@ -837,16 +865,28 @@ begin
                         EP_M0_E2 <= applyFail(updateEP(EP_M0_E1, events), memFailSig);
                         EP_M0_D0 <= updateEP(EP_M0_E2, events);
                         EP_M0_D1 <= updateEP(EP_M0_D0, events);
+
+                        stageE0 <= advanceControlRR(slotRegReadM0_static, slotRegReadM0_static.full, events);
+                        stageE1 <= advanceControlRR(stageE0, stageE0.full, events); 
+                        stageE2 <= advanceControlRR(stageE1, stageE1.full, events); 
+                        stageD0 <= advanceControlRR(stageE2, stageE2.full, events); 
+                        stageD1 <= advanceControlRR(stageD0, stageD0.full, events); 
+                        
+                            ch1 <= ch0;
                     end if;
                 end process;
 
+                        ch0 <= bool2std(argValuesUpdated = slotRegReadM0_Merged.argValues);
+                    
                     EP_M0_RegRead_copy <= EP_M0_RegRead;
                     EP_M0_E0_copy <= EP_M0_E0;
                     EP_M0_E1_copy <= EP_M0_E1;
                     EP_M0_E2_copy <= EP_M0_E2;
 
-                slotRegReadM0iq <= updateRegReadStage_N(argStateRegM0, outSigsM0, events, valuesInt0, regValsM0, false, true);
+                slotRegReadM0iq <= updateRegReadStage_N(argStateRegM0, outSigsM0, events, valuesInt0, regValsM0, false, true); -- UNUSED
                 slotRegReadM0_Merged <= updateRegReadStage_N(argStateR_Merged, outSigsM0, events, valuesInt0, regValsM0, false, true);
+
+                argValuesUpdated <= updateArgsRR(slotRegReadM0_static, argValuesInitial, valuesInt0, regValsM0, false, true);
 
                 slotRegReadM0 <= slotRegReadM0_Merged;
                 subpipeM0_RegRead <= makeExecResult(slotRegReadM0);               
@@ -855,7 +895,7 @@ begin
             ---------------------------------------------
             -- RR --
             -- Single packet of information for E0
-            resultToM0_E0 <= calcEffectiveAddress(slotRegReadM0.full, slotRegReadM0, mqReexecCtrlRR.controlInfo.c_full);
+            resultToM0_E0 <= calcEffectiveAddress(slotRegReadM0.full, slotRegReadM0, argValuesUpdated, mqReexecCtrlRR.controlInfo.c_full);
             resultToM0_E0i <= updateMemDest(resultToM0_E0, slotRegReadM0.intDestSel);
             resultToM0_E0f <= updateMemDest(resultToM0_E0, slotRegReadM0.floatDestSel);
             
@@ -1095,7 +1135,9 @@ begin
             signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
             constant CFG_FP0: SchedulerUpdateConfig := (true, true, false, FORWARDING_MODES_FLOAT_D, false);
             
-           signal subpipeF0_RRu: ExecResult := DEFAULT_EXEC_RESULT;
+            signal stageE0, stageE1, stageE2, stageD0, stageD1: SchedulerState := DEFAULT_SCHEDULER_STATE;
+            
+            signal subpipeF0_RRu: ExecResult := DEFAULT_EXEC_RESULT;
         begin
             wups <= getInitWakeups(schedInfoA, bypassFloat, CFG_FP0);
 

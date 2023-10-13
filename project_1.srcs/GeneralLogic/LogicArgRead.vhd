@@ -48,7 +48,7 @@ package LogicArgRead is
                                      USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
     return SchedulerState;
 
-    function updateArgsRR(ss: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false) return MwordArray;
+    function updateArgsRR(ss: SchedulerState; argValues: MwordArray; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false) return MwordArray;
     function updateControlRR(ss: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
     
     function updateRegReadStage_N(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
@@ -214,43 +214,16 @@ package body LogicArgRead is
         return SchedulerState is
             variable res: SchedulerState := input;
         begin
-            res.full := prevSending;
-            res := TMP_clearDestIfEmpty(res);
-                res.poison := advancePoison(res.poison, events.memFail);
+--            res.full := prevSending;
+--            res := TMP_clearDestIfEmpty(res);
+--                res.poison := advancePoison(res.poison, events.memFail);
+            res := advanceControlRR(input, prevSending, events);
 
-            if REGS_ONLY then
-                return res;    
-            end if;
-    
-            if res.st.zero(0) = '1' then
-                res.argValues(0) := (others => '0');
-            elsif res.argSrc(0)(1 downto 0) = "00" then
-                res.argValues(0) := vals0(slv2u(res.argLocsPipe(0)(1 downto 0)));
-            elsif res.argSrc(0)(1 downto 0) = "01" then
-                res.argValues(0) := vals1(slv2u(res.argLocsPipe(0)(1 downto 0)));
-            else
-                res.argValues(0) := (others => '0');           
-            end if;
-        
-            if IMM_ONLY_1 or res.st.zero(1) = '1' then
-                if USE_IMM or IMM_ONLY_1 then
-                    res.argValues(1)(31 downto 16) := (others => res.st.immValue(15));
-                    res.argValues(1)(15 downto 0) := res.st.immValue;
-                    
-                    if res.st.operation.arith = opAddH then
-                        res.argValues(1)(31 downto 16) := res.st.immValue;
-                        res.argValues(1)(15 downto 0) := (others => '0');
-                    end if;
-                else
-                    res.argValues(1) := (others => '0');
-                end if;
-            elsif res.argSrc(1)(1 downto 0) = "00" then
-                res.argValues(1) := vals0(slv2u(res.argLocsPipe(1)(1 downto 0)));
-            elsif res.argSrc(1)(1 downto 0) = "01" then
-                res.argValues(1) := vals1(slv2u(res.argLocsPipe(1)(1 downto 0)));
-            else
-                res.argValues(1) := (others => '0');
-            end if;
+--            if events.lateCausing.full = '1' then
+--                res.full := '0';
+--            end if;
+
+            res.argValues := getArgValuesRR(input, vals0, vals1, USE_IMM, REGS_ONLY, IMM_ONLY_1);
 
             if mqInput.full = '1' then
                 res := mqInput;
@@ -259,7 +232,7 @@ package body LogicArgRead is
             if events.lateCausing.full = '1' then
                 res.full := '0';
             end if;
-    
+
             return res;
         end function;
 
@@ -275,8 +248,8 @@ package body LogicArgRead is
     end function;
 
 
-    function updateArgsRR(ss: SchedulerState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false) return MwordArray is
-        variable res: MwordArray(0 to 2) := ss.argValues;
+    function updateArgsRR(ss: SchedulerState; argValues: MwordArray; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false) return MwordArray is
+        variable res: MwordArray(0 to 2) := argValues;--ss.argValues;
     begin
         if REGS_ONLY then
             res(0) := regValues(0);
@@ -318,33 +291,8 @@ package body LogicArgRead is
         variable res: SchedulerState := st;
         variable squashPoisoned: std_logic := '0';
     begin
---        squashPoisoned := events.memFail and resolving(st.poison);
-
---        res.full := res.full and not killFollower(ctSigs.trialPrev2, events) and not squashPoisoned;
-
         res := updateControlRR(st, ctSigs, events);
-
---        if REGS_ONLY then
---            res.argValues(0) := regValues(0);
---            res.argValues(1) := regValues(1);
---            return res;
---        end if;
-
---        if res.readNew(0) = '1' then
---            res.argValues(0) := vals(slv2u(res.argLocsPipe(0)(1 downto 0)));
---        else
---            res.argValues(0) := res.argValues(0) or regValues(0);
---        end if;
-
---        if IMM_ONLY_1 then
---            null; -- don't read FN or registers
---        elsif res.readNew(1) = '1' then
---            res.argValues(1) := vals(slv2u(res.argLocsPipe(1)(1 downto 0)));
---        else
---            res.argValues(1) := res.argValues(1) or regValues(1);
---        end if;
-
-        res.argValues := updateArgsRR(st, vals, regValues, REGS_ONLY, IMM_ONLY_1);
+        res.argValues := updateArgsRR(st, st.argValues, vals, regValues, REGS_ONLY, IMM_ONLY_1);
 
         return res;
     end function;
