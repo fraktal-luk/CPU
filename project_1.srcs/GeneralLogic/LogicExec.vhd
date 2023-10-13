@@ -33,10 +33,13 @@ package LogicExec is
 
     function getAluControl(op: ArithOp) return AluControl;
 
-	function basicBranch(sending: std_logic; ss_static, ss_dynamic: SchedulerState; bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
+	function basicBranch(sending: std_logic; ss_static: SchedulerState; args: MwordArray;
+	                                                   bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
 	return ControlPacket;
 
-	function executeAlu(full: std_logic; ss_static, ss_dynamic: SchedulerState; link: Mword; ac: AluControl)
+	function executeAlu(full: std_logic; ss_static: SchedulerState;
+	                                               args: MwordArray;
+	                                               link: Mword; ac: AluControl)
 	return ExecResult;
 
 	function prepareMultiply(full: std_logic; st: SchedulerState) return ExecResult;
@@ -75,7 +78,8 @@ package body LogicExec is
 		return ac.jumpType(1) or (ac.jumpType(0) xor isZero);
 	end function;
 
-	function basicBranch(sending: std_logic; ss_static, ss_dynamic: SchedulerState; bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
+	function basicBranch(sending: std_logic; ss_static: SchedulerState; args: MwordArray;
+	                                                   bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
 	return ControlPacket is
 		variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 		variable branchTaken, targetMatch, targetEqual, newEvent: std_logic := '0';
@@ -83,7 +87,8 @@ package body LogicExec is
 		constant ctrl: InstructionControlInfo := bqControl.controlInfo;
 		constant target: Mword := bqControl.target;
 		constant result: Mword := bqControl.nip;
-		constant argValues: MwordArray(0 to 2) := ss_dynamic.argValues;
+		constant argValues: MwordArray(0 to 2) := --ss_dynamic.argValues;
+		                                          args;
 		constant static: StaticInfo := ss_static.st;
 	begin
 		-- Cases to handle
@@ -208,18 +213,21 @@ package body LogicExec is
 	end function;
 
 
-	function executeAlu(full: std_logic; ss_static, ss_dynamic: SchedulerState; link: Mword; ac: AluControl)
+	function executeAlu(full: std_logic; ss_static: SchedulerState;
+	                                               args: MwordArray;
+	                                               link: Mword; ac: AluControl)
 	return ExecResult is
 		variable res: ExecResult := DEFAULT_EXEC_RESULT;
 		variable result: Mword := (others => '0');
 	begin
-		result := calculateAlu(ss_dynamic.argValues, link, ac);
+		result := calculateAlu(--ss_dynamic.argValues, link, ac);
+		                       args, link, ac);
 
 		res.full := full;
 	    res.dbInfo := ss_static.st.dbInfo;
-	    res.poison := advancePoison(ss_dynamic.poison);
+	    res.poison := advancePoison(ss_static.poison);
 		res.tag := ss_static.st.tags.renameIndex;
-		res.dest := ss_dynamic.dest;
+		res.dest := ss_static.dest;
 
 		res.value := result;
 		return res;

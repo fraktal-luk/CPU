@@ -567,16 +567,15 @@ begin
                         EP_I0_E0 <= updateEP(EP_I0_RegRead, events);
                         EP_I0_D0 <= updateEP(EP_I0_E0, events);
                         
-                            ch1 <= ch0;
+                            ch1 <= '1';
                             ch2 <= '1';
                     end if;
                 end process;
 
                 slotRegReadI0 <= updateRegReadStage_N(argStateRegI0, outSigsI0, events, valuesInt0, regValsI0, false);
-                subpipeI0_RegRead <= makeExecResult(slotRegReadI0);
+                subpipeI0_RegRead <= makeExecResult(slotRegReadI0_static);
 
-                liveRR <= --slotRegReadI0.full;
-                          updateControlRR(argStateRegI0, outSigsI0, events).full;
+                liveRR <= updateControlRR(slotRegReadI0_static, outSigsI0, events).full;
 
                 bqCompareEarly.full <= liveRR and slotRegReadI0_static.st.branchIns;
                 bqCompareEarly.tag <= slotRegReadI0_static.st.tags.renameIndex;
@@ -585,8 +584,8 @@ begin
 
                 unfoldedAluOp_T <= work.LogicExec.getAluControl(slotRegReadI0_static.st.operation.arith);
 
-                                            -- .st,                .argValues, .poison, .dest
-            dataToAlu <= executeAlu(liveRR, slotRegReadI0_static, slotRegReadI0, bqSelected.nip, unfoldedAluOp);
+                                          -- .st, .poison, .dest
+            dataToAlu <= executeAlu(liveRR, slotRegReadI0_static, slotRegReadI0.argValues, bqSelected.nip, unfoldedAluOp);
             process (clk)
             begin
                 if rising_edge(clk) then
@@ -602,8 +601,8 @@ begin
             begin
 
                 dataToBranch <= basicBranch(liveRR and slotRegReadI0_static.st.branchIns and not suppressNext1 and not suppressNext2,
-                                   -- .st,                .argValues
-                                    slotRegReadI0_static, slotRegReadI0, bqSelected, unfoldedAluOp, events.lateCausing);
+                                   -- .st,
+                                    slotRegReadI0_static, slotRegReadI0.argValues, bqSelected, unfoldedAluOp, events.lateCausing);
 
                 process (clk)
                     use work.LogicLogging.all;
