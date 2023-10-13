@@ -497,6 +497,7 @@ begin
 
             signal outSigsI0: IssueQueueSignals := (others => '0');
             signal slotRegReadI0_static: SchedulerState := DEFAULT_SCHEDULER_STATE;
+            signal liveRR: std_logic := '0';
 
             signal dataToAlu: ExecResult := DEFAULT_EXEC_RESULT;           
 
@@ -557,9 +558,9 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateRegI0 <= getRegReadStage_N(slotIssueI0_U, events, valuesInt0, valuesInt1, true, false);
-                            slotRegReadI0_static <= slotIssueI0_U;
-                        
+                        argStateRegI0 <= getRegReadStage_O(slotIssueI0_U.full, slotIssueI0_U, events, valuesInt0, valuesInt1, true, false);
+                            slotRegReadI0_static <= advanceControlRR(slotIssueI0_U, slotIssueI0_U.full, events);
+
                         unfoldedAluOp <= work.LogicExec.getAluControl(slotIssueI0_U.st.operation.arith);
                         
                         EP_I0_RegRead <= updateEP(EP_I0_Issue, events);
@@ -571,20 +572,21 @@ begin
                     end if;
                 end process;
 
-                slotRegReadI0 <= updateRegReadStage(argStateRegI0, outSigsI0, events, valuesInt0, regValsI0, false);
+                slotRegReadI0 <= updateRegReadStage_N(argStateRegI0, outSigsI0, events, valuesInt0, regValsI0, false);
                 subpipeI0_RegRead <= makeExecResult(slotRegReadI0);
 
-                    ch0 <= bool2std(slotRegReadI0.st = slotRegReadI0_static.st);
+                liveRR <= --slotRegReadI0.full;
+                          updateControlRR(argStateRegI0, outSigsI0, events).full;
 
-                bqCompareEarly.full <= slotRegReadI0.full and slotRegReadI0_static.st.branchIns;
+                bqCompareEarly.full <= liveRR and slotRegReadI0_static.st.branchIns;
                 bqCompareEarly.tag <= slotRegReadI0_static.st.tags.renameIndex;
                 bqCompareEarly.dest <= slotRegReadI0_static.st.tags.bqPointer;
             end block;
 
                 unfoldedAluOp_T <= work.LogicExec.getAluControl(slotRegReadI0_static.st.operation.arith);
 
-                                                     -- .st,                  .argValues, .poison, .dest
-            dataToAlu <= executeAlu(slotRegReadI0.full, slotRegReadI0_static, slotRegReadI0, bqSelected.nip, unfoldedAluOp);
+                                            -- .st,                .argValues, .poison, .dest
+            dataToAlu <= executeAlu(liveRR, slotRegReadI0_static, slotRegReadI0, bqSelected.nip, unfoldedAluOp);
             process (clk)
             begin
                 if rising_edge(clk) then
@@ -599,7 +601,7 @@ begin
                 signal branch0BeforeRR, branch1BeforeRR: std_logic := '0';
             begin
 
-                dataToBranch <= basicBranch(slotRegReadI0.full and slotRegReadI0_static.st.branchIns and not suppressNext1 and not suppressNext2,
+                dataToBranch <= basicBranch(liveRR and slotRegReadI0_static.st.branchIns and not suppressNext1 and not suppressNext2,
                                    -- .st,                .argValues
                                     slotRegReadI0_static, slotRegReadI0, bqSelected, unfoldedAluOp, events.lateCausing);
 
@@ -705,7 +707,7 @@ begin
                     process (clk)
                     begin
                         if rising_edge(clk) then
-                            argStateRegI1 <= getRegReadStage_N(slotIssueI1_U, events, valuesInt0, valuesInt1, true, false);
+                            argStateRegI1 <= getRegReadStage_O(slotIssueI1_U.full, slotIssueI1_U, events, valuesInt0, valuesInt1, true, false);
                             
                             EP_I1_RegRead <= updateEP(EP_I1_Issue, events);
 
@@ -714,7 +716,7 @@ begin
                         end if;
                     end process;
 
-                    slotRegReadI1 <= updateRegReadStage(argStateRegI1, outSigsI1, events, valuesInt0, regValsI1, false);
+                    slotRegReadI1 <= updateRegReadStage_N(argStateRegI1, outSigsI1, events, valuesInt0, regValsI1, false);
                 end block;
                 
                 killFollowerNextI1 <= killFollower(outSigsI1.trialPrev1, events);
@@ -824,7 +826,7 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateRegM0 <= getRegReadStage_N(slotIssueM0_U, events, valuesInt0, valuesInt1, true, false, true);
+                        argStateRegM0 <= getRegReadStage_O(slotIssueM0_U.full, slotIssueM0_U, events, valuesInt0, valuesInt1, true, false, true);
                         argStateR_Merged <= getRegReadStage_Merge(slotIssueM0_U, slotIssueM0_U.full, slotIssueM0mq, events, valuesInt0, valuesInt1, true, false, true);
 
                         EP_M0_RegRead <= mergeEP(updateEP(EP_M0_Issue, events),
@@ -844,8 +846,8 @@ begin
                     EP_M0_E1_copy <= EP_M0_E1;
                     EP_M0_E2_copy <= EP_M0_E2;
 
-                slotRegReadM0iq <= updateRegReadStage(argStateRegM0, outSigsM0, events, valuesInt0, regValsM0, false, true);
-                slotRegReadM0_Merged <= updateRegReadStage(argStateR_Merged, outSigsM0, events, valuesInt0, regValsM0, false, true);
+                slotRegReadM0iq <= updateRegReadStage_N(argStateRegM0, outSigsM0, events, valuesInt0, regValsM0, false, true);
+                slotRegReadM0_Merged <= updateRegReadStage_N(argStateR_Merged, outSigsM0, events, valuesInt0, regValsM0, false, true);
 
                 slotRegReadM0 <= slotRegReadM0_Merged;
                 subpipeM0_RegRead <= makeExecResult(slotRegReadM0);               
@@ -999,12 +1001,12 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateR <= getRegReadStage_N(slotIssueSVI_U, events, valuesInt0, valuesInt1, false, true);              
+                        argStateR <= getRegReadStage_O(slotIssueSVI_U.full, slotIssueSVI_U, events, valuesInt0, valuesInt1, false, true);              
                         slotRegReadIntSV_Delay <= slotRegReadIntSV;
                     end if;
                 end process;
 
-                slotRegReadIntSV <= updateRegReadStage(argStateR, outSigsSVI, events, valuesInt0, regValsS0, true);
+                slotRegReadIntSV <= updateRegReadStage_N(argStateR, outSigsSVI, events, valuesInt0, regValsS0, true);
             end block;
         end block;
 
@@ -1069,11 +1071,11 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        argStateR <= getRegReadStage_N(slotIssueSVF_U, events, valuesFloat0, valuesFloat1, false, true);
+                        argStateR <= getRegReadStage_O(slotIssueSVF_U.full, slotIssueSVF_U, events, valuesFloat0, valuesFloat1, false, true);
                     end if;
                 end process;
                 
-                slotRegReadFloatSV <= updateRegReadStage(argStateR, outSigsSVF, events, valuesFloat0, regValsFS0, true);
+                slotRegReadFloatSV <= updateRegReadStage_N(argStateR, outSigsSVF, events, valuesFloat0, regValsFS0, true);
             end block;
         end block;
 
@@ -1146,7 +1148,7 @@ begin
                process (clk)
                begin
                    if rising_edge(clk) then
-                       argStateRegF0 <= getRegReadStage_N(slotIssueF0_U, events, valuesFloat0, valuesFloat1, false, false);
+                       argStateRegF0 <= getRegReadStage_O(slotIssueF0_U.full, slotIssueF0_U, events, valuesFloat0, valuesFloat1, false, false);
                        
                        EP_F0_RegRead <= updateEP(EP_F0_Issue, events);
                        EP_F0_E0 <= updateEP(EP_F0_RegRead, events);
@@ -1157,7 +1159,7 @@ begin
                    end if;
                end process;
 
-               slotRegReadF0 <= updateRegReadStage(argStateRegF0, outSigsF0, events, valuesFloat0, regValsF0, false);
+               slotRegReadF0 <= updateRegReadStage_N(argStateRegF0, outSigsF0, events, valuesFloat0, regValsF0, false);
                subpipeF0_RegRead <= makeExecResult(slotRegReadF0);
             end block;
 
