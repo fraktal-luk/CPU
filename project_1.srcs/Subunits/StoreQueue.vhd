@@ -58,7 +58,7 @@ entity StoreQueue is
 
 		events: in EventState;
 
-		nextAccepting: in std_logic;		
+		--nextAccepting: in std_logic;		
 
 		committedEmpty: out std_logic;
 		committedDataOut: out ControlPacket;

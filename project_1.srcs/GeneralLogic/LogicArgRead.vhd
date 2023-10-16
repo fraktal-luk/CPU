@@ -20,39 +20,12 @@ package LogicArgRead is
     -- Issue stage
     function getIssueStage(input: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
     function updateIssueStage(ss: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
-    
-            function updateIssueStage_Merge(ss, stMQ: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
 
     function getArgValuesRR(ss: SchedulerState; vals0, vals1: MwordArray; USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false) return MwordArray;
     function advanceControlRR(input: SchedulerState; prevSending: std_logic; events: EventState) return SchedulerState;
- 
-    -- Reg read stage
-    function getRegReadStage_O(prevSending: std_logic;
-                                input: SchedulerState;
-                                     events: EventState;
-                                     vals0, vals1: MwordArray;
-                                     USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
-    return SchedulerState;
-
-        function getRegReadStage_Merge(input: SchedulerState;
-                                         prevSending: std_logic;
-                                         mqInput: SchedulerState;
-                                         events: EventState;
-                                         vals0, vals1: MwordArray;
-                                         USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
-        return SchedulerState;
-
-    function getRegReadStage_N(input: SchedulerState;
-                                     events: EventState;
-                                     vals0, vals1: MwordArray;
-                                     USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
-    return SchedulerState;
 
     function updateArgsRR(ss: SchedulerState; argValues: MwordArray; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false) return MwordArray;
     function updateControlRR(ss: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState;
-    
-    function updateRegReadStage_N(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
-    return SchedulerState;
 
 end LogicArgRead;
 
@@ -77,7 +50,7 @@ package body LogicArgRead is
         res.full := ctSigs.sending;
         res := TMP_clearDestIfEmpty(res);
 
-            res.poison := advancePoison(res.poison, events.memFail);
+        res.poison := advancePoison(res.poison, events.memFail);
 
         if events.lateCausing.full = '1' then
             res.full := '0';
@@ -90,10 +63,9 @@ package body LogicArgRead is
         variable res: SchedulerState := ss;
         variable squashPoisoned: std_logic := '0';
     begin
-        squashPoisoned := events.memFail and --ss.poison.isOn and ss.poison.degrees(2);
-                                             resolving(ss.poison);
+        squashPoisoned := events.memFail and resolving(ss.poison);
 
-            res.st.operation := TMP_restoreOperation(res.st.operation);
+        res.st.operation := TMP_restoreOperation(res.st.operation);
     
         res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
         res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
@@ -112,28 +84,6 @@ package body LogicArgRead is
     end function;
 
 
-        function updateIssueStage_Merge(ss, stMQ: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState is
-            variable res: SchedulerState := ss;
-        begin
-                res.st.operation := TMP_restoreOperation(res.st.operation);
-        
-            res.readNew(0) := bool2std(res.argSrc(0)(1 downto 0) = "11");
-            res.readNew(1) := bool2std(res.argSrc(1)(1 downto 0) = "11");
-        
-            if res.argSrc(0)(1) /= '1' then
-                res.args(0) := (others => '0');
-            end if;
-        
-            if res.argSrc(1)(1) /= '1' or res.st.zero(1) = '1' then
-                res.args(1) := (others => '0');
-            end if;
-    
-                res.maybeFull := res.full;
-            res.full := res.full and not (events.memFail or ctSigs.sentKilled or killFollower(ctSigs.trialPrev1, events));
-            return res;
-        end function;
-
-
     function getArgValuesRR(ss: SchedulerState; vals0, vals1: MwordArray; USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
     return MwordArray is
         variable res: MwordArray(0 to 2) := ss.argValues;
@@ -142,7 +92,6 @@ package body LogicArgRead is
         if REGS_ONLY then
             return res;
         end if;
-
 
         if ss.st.zero(0) = '1' then
             res(0) := (others => '0');
@@ -191,65 +140,21 @@ package body LogicArgRead is
         return res;
     end function;
 
-    function getRegReadStage_O(prevSending: std_logic;
-                                input: SchedulerState;
-                                     events: EventState;
-                                     vals0, vals1: MwordArray;
-                                     USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
-    return SchedulerState is
-        variable res: SchedulerState := input;
+
+    function updateControlRR(ss: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState is
+        variable res: SchedulerState := ss;
+        variable squashPoisoned: std_logic := '0';
     begin
-        res := advanceControlRR(input, prevSending, events);
-        res.argValues := getArgValuesRR(input, vals0, vals1, USE_IMM, REGS_ONLY, IMM_ONLY_1);
+        squashPoisoned := events.memFail and resolving(ss.poison);
 
-        return res;
-    end function;
+        res.full := res.full and not killFollower(ctSigs.trialPrev2, events) and not squashPoisoned;
 
-        function getRegReadStage_Merge(input: SchedulerState;
-                                         prevSending: std_logic;
-                                         mqInput: SchedulerState;
-                                         events: EventState;
-                                         vals0, vals1: MwordArray;
-                                         USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
-        return SchedulerState is
-            variable res: SchedulerState := input;
-        begin
---            res.full := prevSending;
---            res := TMP_clearDestIfEmpty(res);
---                res.poison := advancePoison(res.poison, events.memFail);
-            res := advanceControlRR(input, prevSending, events);
-
---            if events.lateCausing.full = '1' then
---                res.full := '0';
---            end if;
-
-            res.argValues := getArgValuesRR(input, vals0, vals1, USE_IMM, REGS_ONLY, IMM_ONLY_1);
-
-            if mqInput.full = '1' then
-                res := mqInput;
-            end if;
-
-            if events.lateCausing.full = '1' then
-                res.full := '0';
-            end if;
-
-            return res;
-        end function;
-
-    function getRegReadStage_N(input: SchedulerState;
-                                     events: EventState;
-                                     vals0, vals1: MwordArray;
-                                     USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
-    return SchedulerState is
-        variable res: SchedulerState := input;
-    begin
-        res := getRegReadStage_O(res.full, res, events, vals0, vals1, USE_IMM, REGS_ONLY, IMM_ONLY_1);
         return res;
     end function;
 
 
     function updateArgsRR(ss: SchedulerState; argValues: MwordArray; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false) return MwordArray is
-        variable res: MwordArray(0 to 2) := argValues;--ss.argValues;
+        variable res: MwordArray(0 to 2) := argValues;
     begin
         if REGS_ONLY then
             res(0) := regValues(0);
@@ -273,29 +178,5 @@ package body LogicArgRead is
 
         return res;
     end function;
-
-
-    function updateControlRR(ss: SchedulerState; ctSigs: IssueQueueSignals; events: EventState) return SchedulerState is
-        variable res: SchedulerState := ss;
-        variable squashPoisoned: std_logic := '0';
-    begin
-        squashPoisoned := events.memFail and resolving(ss.poison);
-
-        res.full := res.full and not killFollower(ctSigs.trialPrev2, events) and not squashPoisoned;
-
-        return res;
-    end function;
-
-    function updateRegReadStage_N(st: SchedulerState; ctSigs: IssueQueueSignals; events: EventState; vals: MwordArray; regValues: MwordArray; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
-    return SchedulerState is
-        variable res: SchedulerState := st;
-        variable squashPoisoned: std_logic := '0';
-    begin
-        res := updateControlRR(st, ctSigs, events);
-        res.argValues := updateArgsRR(st, st.argValues, vals, regValues, REGS_ONLY, IMM_ONLY_1);
-
-        return res;
-    end function;
-
 
 end LogicArgRead;

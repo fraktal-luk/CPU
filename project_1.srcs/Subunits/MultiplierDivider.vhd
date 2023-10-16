@@ -20,6 +20,7 @@ entity MultiplierDivider is
         prevSending: in std_logic;
         preInput: in SchedulerState;
         input: in SchedulerState;
+            inputArgs: in MwordArray(0 to 2);
             inputEP: in ExecPacket;
 
         allowIssueI1: in std_logic;
@@ -62,7 +63,10 @@ architecture Behavioral of MultiplierDivider is
     signal divQuot_New, divRem_New: Word := (others => '0');
 
         signal divEP, EP_I1_E0, EP_I1_E1, EP_I1_E2: ExecPacket := DEFAULT_EXEC_PACKET;
-
+    
+    alias argValues is --input.argValues;
+                        inputArgs;
+    
     signal ch0, ch1, ch2, ch3: std_logic := '0';
 begin
             outE0 <= EP_I1_E0;
@@ -105,11 +109,11 @@ begin
             -- stage E0
             isLowE0 <= bool2std(input.st.operation.arith = opMul);
 
-            arg0 <= input.argValues(0);
-            arg1 <= input.argValues(1);
+            arg0 <= argValues(0);
+            arg1 <= argValues(1);
 
-            sg0 <= input.argValues(0)(31) and bool2std(input.st.operation.arith = opMulHS);
-            sg1 <= input.argValues(1)(31) and bool2std(input.st.operation.arith = opMulHS);
+            sg0 <= argValues(0)(31) and bool2std(input.st.operation.arith = opMulHS);
+            sg1 <= argValues(1)(31) and bool2std(input.st.operation.arith = opMulHS);
 
             -- stage E1
             if divReady = '1' then
@@ -252,11 +256,11 @@ begin
                      else sub(sum_T, arg1t);
                 new_T <= cmpGeU(sum_TE, divisor_TE);
 
-            a0e <= signExtend(input.argValues(0), 64);
-            a1e <= '1' & input.argValues(1) & "000" & X"0000000";
+            a0e <= signExtend(argValues(0), 64);
+            a1e <= '1' & argValues(1) & "000" & X"0000000";
 
-            ma0 <= minus(input.argValues(0));
-            ma1 <= minus(input.argValues(1));
+            ma0 <= minus(argValues(0));
+            ma1 <= minus(argValues(1));
 
             opUnsigned <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opRemU);
 
@@ -270,30 +274,30 @@ begin
                     end if;
 
                     if sendingDivRR = '1' then
-                        arg0 <= input.argValues(0);
-                        arg1 <= input.argValues(1);
+                        arg0 <= argValues(0);
+                        arg1 <= argValues(1);
 
                         isUnsigned <= opUnsigned;
-                        signSel0 <= input.argValues(0)(31) and not opUnsigned;
-                        signSel1 <= input.argValues(1)(31) and not opUnsigned;
+                        signSel0 <= argValues(0)(31) and not opUnsigned;
+                        signSel1 <= argValues(1)(31) and not opUnsigned;
 
                         result00 <= (others => '0');
 
-                        arg0t <= input.argValues(0);
-                        arg1t <= input.argValues(1);
+                        arg0t <= argValues(0);
+                        arg1t <= argValues(1);
 
-                        if input.argValues(1)(31) = '1' and opUnsigned /= '1' then
+                        if argValues(1)(31) = '1' and opUnsigned /= '1' then
                             sum00 <= minus(a0e);
                             divisorS <= minus(a1e);
 
                             arg0t <= ma0;
                             arg1t <= ma1;
                         elsif opUnsigned = '1' then
-                            sum00 <= zeroExtend(input.argValues(0), 64);
-                            divisorS <= '0' & input.argValues(1) & "000" & X"0000000";
+                            sum00 <= zeroExtend(argValues(0), 64);
+                            divisorS <= '0' & argValues(1) & "000" & X"0000000";
                         else
-                            sum00 <= signExtend(input.argValues(0), 64);
-                            divisorS <= '0' & input.argValues(1) & "000" & X"0000000";
+                            sum00 <= signExtend(argValues(0), 64);
+                            divisorS <= '0' & argValues(1) & "000" & X"0000000";
                         end if;
                     else
                         result00 <= result00(30 downto 0) & new00;
@@ -307,23 +311,23 @@ begin
 
 
                     if sendingDivRR = '1' then
-                        if input.argValues(1)(31) = '1' and opUnsigned /= '1' then
+                        if argValues(1)(31) = '1' and opUnsigned /= '1' then
                             sum_TE <= (others => ma0(31));
                             sum_T <= (others => ma0(31));
                             sum_L <= ma0(30 downto 0) & '0';
                             divisor_TE <= zeroExtend(ma1, 64);
                         elsif opUnsigned = '1' then
                             sum_U <= (others => '0');
-                            sum_TE <= (0 => input.argValues(0)(31), others => '0');
-                            sum_T <= (0 => input.argValues(0)(31), others => '0');
-                            sum_L <= input.argValues(0)(30 downto 0) & '0';
-                            divisor_TE <= zeroExtend(input.argValues(1), 64);
+                            sum_TE <= (0 => argValues(0)(31), others => '0');
+                            sum_T <= (0 => argValues(0)(31), others => '0');
+                            sum_L <= argValues(0)(30 downto 0) & '0';
+                            divisor_TE <= zeroExtend(argValues(1), 64);
                         else
-                            sum_U <= (others => input.argValues(0)(31));
-                            sum_TE <= (others => input.argValues(0)(31));
-                            sum_T <= (others => input.argValues(0)(31));
-                            sum_L <= input.argValues(0)(30 downto 0) & '0';
-                            divisor_TE <= zeroExtend(input.argValues(1), 64);
+                            sum_U <= (others => argValues(0)(31));
+                            sum_TE <= (others => argValues(0)(31));
+                            sum_T <= (others => argValues(0)(31));
+                            sum_L <= argValues(0)(30 downto 0) & '0';
+                            divisor_TE <= zeroExtend(argValues(1), 64);
                         end if;
                     else
                         result_T <= result_T(30 downto 0) & new_T; 

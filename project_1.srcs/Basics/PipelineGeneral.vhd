@@ -232,7 +232,6 @@ function updateMemDest(er: ExecResult; used: std_logic) return ExecResult;
 
 
 function TMP_slotIssueM0mq(mqReexecCtrlIs: ControlPacket; mqReexecResIS: ExecResult; mqIssueSending: std_logic) return SchedulerState;
-function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState;
 
 function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult;
 function TMP_missedMemResultEP(ep: ExecPacket; memoryMissed: std_logic; memResult: Mword) return ExecPacket;
@@ -278,7 +277,7 @@ function std2int(s: std_logic) return integer;
     function getDispatchMasks(fd: BufferEntryArray) return DispatchMasks;
     function getDispatchMasks(cpa: ControlPacketArray) return DispatchMasks;
 
-    function convertExecStoreValue(sx: SchedulerState) return ExecResult;
+    function convertExecStoreValue(sx: SchedulerState; args: MwordArray(0 to 2)) return ExecResult;
 
     function advancePoison(p: PoisonInfo) return PoisonInfo;
         function advancePoison(p: PoisonInfo; memFail: std_logic) return PoisonInfo;
@@ -949,24 +948,6 @@ begin
 end function;
 
 
-function TMP_slotRegReadM0mq(mqReexecCtrlRR: ControlPacket; mqReexecResRR: ExecResult; mqRegReadSending: std_logic) return SchedulerState is
-    variable res: SchedulerState := DEFAULT_SCHED_STATE;
-begin
-    res.full := mqRegReadSending;
-    res.st.dbInfo := mqReexecCtrlRR.dbInfo;
-    
-    res.st.operation := mqReexecCtrlRR.op;
-    res.st.tags := mqReexecCtrlRR.tags;
-    
-    -- adr
-    res.argValues(1) := mqReexecCtrlRR.target;
-
-    res.dest := mqReexecResRR.dest;
-    res.intDestSel := not mqReexecCtrlRR.classInfo.useFP and isNonzero(mqReexecResRR.dest);
-    res.floatDestSel := mqReexecCtrlRR.classInfo.useFP;
-
-    return res;
-end function;
 
 function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult is
     variable res: ExecResult := er;
@@ -1298,13 +1279,14 @@ end function;
             return res;
         end function;
 
-    function convertExecStoreValue(sx: SchedulerState) return ExecResult is
+    function convertExecStoreValue(sx: SchedulerState; args: MwordArray(0 to 2)) return ExecResult is
         variable res: ExecResult := DEFAULT_EXEC_RESULT;
     begin
         res.full := sx.full;
         res.tag := sx.st.tags.renameIndex;
         res.dest := sx.st.tags.sqPointer;
-        res.value := sx.argValues(0);
+        res.value := --sx.argValues(0);
+                     args(0);
         return res;
     end function;
 

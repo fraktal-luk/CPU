@@ -44,8 +44,8 @@ package LogicExec is
 
 	function prepareMultiply(full: std_logic; st: SchedulerState) return ExecResult;
 	
-	function executeFpu(st: SchedulerState) return Mword;     
-    function TMP_fp(full: std_logic; ss: SchedulerState) return ExecResult;
+	function executeFpu(st: SchedulerState; argValues: MwordArray(0 to 2)) return Mword;     
+    function TMP_fp(full: std_logic; ss: SchedulerState; argValues: MwordArray(0 to 2)) return ExecResult;
 
     function mergeMemOp(stIQ, stMQ: SchedulerState; mqReady: std_logic) return SchedulerState;
 
@@ -296,13 +296,14 @@ package body LogicExec is
 	end function;
 
 
-	function executeFpu(st: SchedulerState) return Mword is
+	function executeFpu(st: SchedulerState; argValues: MwordArray(0 to 2)) return Mword is
        variable res: Mword := (others => '0');
 	begin
         if st.st.operation.float = opOr then 
-           res := st.argValues(0) or st.argValues(1);
+           res := argValues(0) or argValues(1);
         elsif st.st.operation.float = opMove then
-           res := st.argValues(0);
+           res := --st.argValues(0);
+                    argValues(0);
         else
            
 		end if;
@@ -311,14 +312,14 @@ package body LogicExec is
 	end function;
 
 
-    function TMP_fp(full: std_logic; ss: SchedulerState) return ExecResult is
+    function TMP_fp(full: std_logic; ss: SchedulerState; argValues: MwordArray(0 to 2)) return ExecResult is
         variable res: ExecResult := DEFAULT_EXEC_RESULT;
     begin
         res.full := full;
         res.tag := ss.st.tags.renameIndex;
         res.dest := --ss.argSpec.dest;
                     ss.dest;
-        res.value := executeFpu(ss);
+        res.value := executeFpu(ss, argValues);
         return res;
     end function;
 
