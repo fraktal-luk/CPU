@@ -79,14 +79,15 @@ package body LogicArgRead is
         end if;
 
             res.maybeFull := res.full;
-        res.full := res.full and not (squashOnMemFail(events.memFail) or ctSigs.sentKilled or killFollower(ctSigs.trialPrev1, events)) and not squashPoisoned;
+        res.full := res.full and not (squashOnMemFail(events.memFail) or ctSigs.sentKilled or killFollower('0', events)) and not squashPoisoned;
         return res;
     end function;
 
 
     function getArgValuesRR(ss: SchedulerState; vals0, vals1: MwordArray; USE_IMM: boolean; REGS_ONLY: boolean; IMM_ONLY_1: boolean := false)
     return MwordArray is
-        variable res: MwordArray(0 to 2) := ss.argValues;
+        variable res: MwordArray(0 to 2) := --ss.argValues;
+                                            (others => (others => '0'));
     begin
 
         if REGS_ONLY then
@@ -147,7 +148,7 @@ package body LogicArgRead is
     begin
         squashPoisoned := events.memFail and resolving(ss.poison);
 
-        res.full := res.full and not killFollower(ctSigs.trialPrev2, events) and not squashPoisoned;
+        res.full := res.full and not killFollower('0', events) and not squashPoisoned;
 
         return res;
     end function;

@@ -354,7 +354,7 @@ type SchedulerState is record
 
     readNew: std_logic_vector(0 to 2);  -- not in dynamic but derivable
 
-    argValues: MwordArray(0 to 2);   -- not in dynamic
+    --argValues: MwordArray(0 to 2);   -- not in dynamic
 end record;
 
 
@@ -547,7 +547,7 @@ constant DEFAULT_SCHEDULER_STATE: SchedulerState := (
       poison => DEFAULT_POISON,
 
       readNew => (others => '0'),
-      argValues => (others => (others=>'0')),
+      --argValues => (others => (others=>'0')),
       argLocsPipe => (others => (others => '0')),
       argSrc => (others => (others => '0'))
       );

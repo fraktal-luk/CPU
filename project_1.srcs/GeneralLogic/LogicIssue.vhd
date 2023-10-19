@@ -56,22 +56,6 @@ end record;
 type WakeupInfoArray is array(natural range <>) of WakeupInfo;
 
 
--- CONFIG
-type SchedulerUpdateConfig is record
-    dynamic: boolean;
-    fp: boolean;
-    ignoreMemFail: boolean;
-    fwModes: ForwardingModeArray(0 to 2);
-    matchIQ: boolean;
-end record;
-
-constant DEFUALT_SCHEDULER_UPDATE_CONFIG: SchedulerUpdateConfig := (
-    dynamic => false,
-    fp => false,
-    ignoreMemFail => false,
-    fwModes => FORWARDING_MODES_NONE,
-    matchIQ => false
-);
 
 
 type WakeupStructArray2D is array(natural range <>, natural range <>) of WakeupStruct;

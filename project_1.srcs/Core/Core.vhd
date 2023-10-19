@@ -414,11 +414,15 @@ begin
 
 
     TEMP_EXEC: block
+       use work.LogicIssue.all;
+       use work.LogicArgRead.all;
        use work.LogicExec.all;
 
+
+
        -- TODO: These 2 are in large scope because issue signal is needed for conflict resolution. Fix it  
-       signal outSigsSVI: IssueQueueSignals := (others => '0');
-       signal outSigsSVF: IssueQueueSignals := (others => '0');
+       --signal outSigsSVI: IssueQueueSignals := (others => '0');
+       --signal outSigsSVF: IssueQueueSignals := (others => '0');
 
        -- Selection from IQ and state after Issue stage
        signal slotIssueI0,-- slotRegReadI0,
@@ -443,7 +447,7 @@ begin
        signal lockIssueSVI, lockIssueSVF, allowIssueStoreDataInt, allowIssueStoreDataFP, lockIssueI0, allowIssueI0,
               lockIssueI1, allowIssueI1, lockIssueM0, allowIssueM0, lockIssueF0, allowIssueF0,
               issuedIntSV, issuedFloatSV,
-              intWriteConflict, storeValueCollision1, storeValueCollision2, storeValueCollision3, memDepFail, prevMemDepFail: std_logic := '0';
+              intWriteConflict, storeValueCollisionIssue, storeValueCollisionRR, storeValueCollisionE0, memDepFail, prevMemDepFail: std_logic := '0';
 
         signal  subpipeI0_Issue, subpipeI0_RegRead, subpipeI0_E0,                                    subpipeI0_D0,
                 --subpipeI1_Issue, subpipeI1_RegRead, 
@@ -487,13 +491,12 @@ begin
         memFail <= events.memFail;
 
         SUBPIPE_ALU: block
-            use work.LogicIssue.all;
-            use work.LogicArgRead.all;
+
 
             signal schedInfoA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
             signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
 
-            signal outSigsI0: IssueQueueSignals := (others => '0');
+            --signal outSigsI0: IssueQueueSignals := (others => '0');
             signal slotRegReadI0_static, slotE0_static, slotD0_static: SchedulerState := DEFAULT_SCHEDULER_STATE;
             signal liveRR: std_logic := '0';
 
@@ -501,9 +504,6 @@ begin
 
             signal argValuesInitial, argValueSupdated: MwordArray(0 to 2) := (others => (others => '0'));
 
-            constant CFG_ALU: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
-            constant CFG_ALU_WAIT: SchedulerUpdateConfig := (false, false, false, FORWARDING_MODES_INT_D, false); -- UNUSED
-            constant CFG_ALU_SEL: SchedulerUpdateConfig :=  (false, false, false, FORWARDING_MODES_INT, false);   -- UNUSED
         begin
             schedInfoA <= getIssueInfoArray(renamedData, true, renamedArgsInt, readyRegFlagsInt_Early, TMP_renamedDests, TMP_renamedSources, I0);
 
@@ -540,7 +540,7 @@ begin
                 nextAccepting => allowIssueI0,
                 schedulerOut_Fast => slotIssueI0_TF,
                 schedulerOut_Slow => slotIssueI0_TS,
-                outputSignals => outSigsI0,
+                --outputSignals => outSigsI0,
                     outEP => EP_I0_Issue,
 
                 dbState => dbState
@@ -575,19 +575,20 @@ begin
             
             subpipeI0_RegRead <= makeExecResult(slotRegReadI0_static);
 
-            liveRR <= updateControlRR(slotRegReadI0_static, outSigsI0, events).full;
+            liveRR <= updateControlRR(slotRegReadI0_static, --outSigsI0, events).full;
+                                                            (others => '0'), events).full;
 
             bqCompareEarly <= getBranchCompareEarly(slotRegReadI0_static, liveRR);
 
                 unfoldedAluOp_T <= work.LogicExec.getAluControl(slotRegReadI0_static.st.operation.arith);
 
                                           -- .st, .poison, .dest
-            dataToAlu <= executeAlu(liveRR, slotRegReadI0_static, argValuesUpdated, bqSelected.nip, unfoldedAluOp);
+            --dataToAlu <= executeAlu(liveRR, slotRegReadI0_static, argValuesUpdated, bqSelected.nip, unfoldedAluOp);
             process (clk)
             begin
                 if rising_edge(clk) then
-                    dataE0 <= dataToAlu; -- only .value
-                    
+                    --dataE0 <= dataToAlu; -- only .value
+                    dataE0.value <= executeAlu(liveRR, slotRegReadI0_static, argValuesUpdated, bqSelected.nip, unfoldedAluOp).value;
                 end if;
             end process;
 
@@ -647,138 +648,138 @@ begin
         end block;
 
         MUL_BLOCK: if ENABLE_MUL_DIV generate
-            SUBPIPE_MUL: block
-               use work.LogicIssue.all;
-               use work.LogicArgRead.all;
+        --    SUBPIPE_MUL: block
+           --use work.LogicIssue.all;
+           --use work.LogicArgRead.all;
 
-               signal outSigsI1: IssueQueueSignals := (others => '0');
+           --signal outSigsI1: IssueQueueSignals := (others => '0');
 
-               signal schedInfoA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
-               signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
+           signal schedInfoA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
+           signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
 
 
-               signal argValuesInitial, argValuesUpdated: MwordArray(0 to 2) := (others => (others => '0'));
-               signal stageE0, stageE1, stageE2, stageD0, stageD1: SchedulerState := DEFAULT_SCHEDULER_STATE;
+           signal argValuesInitial, argValuesUpdated: MwordArray(0 to 2) := (others => (others => '0'));
+           signal stageE0, stageE1, stageE2, stageD0, stageD1: SchedulerState := DEFAULT_SCHEDULER_STATE;
 
-               signal divUnlock, killFollowerNextI1: std_logic := '0';
-               constant CFG_MUL: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
+           signal divUnlock --, killFollowerNextI1
+                : std_logic := '0';
+        begin
+            schedInfoA <= getIssueInfoArray(renamedData, true, renamedArgsInt, readyRegFlagsInt_Early, TMP_renamedDests, TMP_renamedSources, I1);
+
+            wups <= getInitWakeups(schedInfoA, bypassInt, CFG_MUL);
+            schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, memFail, CFG_MUL);
+
+            IQUEUE_I1: entity work.IssueQueue(Behavioral)
+            generic map(
+                NAME => "I1",
+                IQ_SIZE => IQ_SIZE_I0,
+                FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
+                FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
+            )
+            port map(
+                clk => clk, reset => '0', en => '0',
+                events => events_I,
+                events_T => events,--_T,
+
+                accept => allocAcceptMul,
+
+                inReady => frontGroupSend,
+                inMask => mulMaskRe,
+                
+                TMP_outTags => TMP_mulTags,
+                TMP_outTagsPre => TMP_mulTagsPre,
+
+                prevSendingOK => renamedSending,
+                newArr => schedInfoUpdatedU,
+                
+                bypass => bypassInt,
+                unlockDiv => divUnlock,
+
+                nextAccepting => allowIssueI1,
+
+                schedulerOut_Fast => slotIssueI1_TF,
+                schedulerOut_Slow => slotIssueI1_TS,
+                --outputSignals => outSigsI1,
+                    outEP => EP_I1_Issue,
+
+                dbState => dbState
+            );
+
+            slotIssueI1 <= slotIssueI1_U;--slotIssueI1_TF;
+            slotIssueI1_U <= TMP_mergeStatic(slotIssueI1_TF, slotIssueI1_TS);
+
+            process (clk)
             begin
-                schedInfoA <= getIssueInfoArray(renamedData, true, renamedArgsInt, readyRegFlagsInt_Early, TMP_renamedDests, TMP_renamedSources, I1);
-
-                wups <= getInitWakeups(schedInfoA, bypassInt, CFG_MUL);
-                schedInfoUpdatedU <= updateOnDispatch(schedInfoA, wups, memFail, CFG_MUL);
-
-                IQUEUE_I1: entity work.IssueQueue(Behavioral)
-                generic map(
-                    NAME => "I1",
-                    IQ_SIZE => IQ_SIZE_I0,
-                    FORWARDING(0 to 2) => FORWARDING_MODES_INT(0 to 2),
-                    FORWARDING_D(0 to 2) => FORWARDING_MODES_INT_D(0 to 2)
-                )
-                port map(
-                    clk => clk, reset => '0', en => '0',
-                    events => events_I,
-                    events_T => events,--_T,
-
-                    accept => allocAcceptMul,
-
-                    inReady => frontGroupSend,
-                    inMask => mulMaskRe,
+                if rising_edge(clk) then                            
+                    slotRegReadI1 <= advanceControlRR(slotIssueI1_U, slotIssueI1_U.full, events);
+                    argValuesInitial <= getArgValuesRR(slotIssueI1, valuesInt0, valuesInt1, false, false, false);
                     
-                    TMP_outTags => TMP_mulTags,
-                    TMP_outTagsPre => TMP_mulTagsPre,
+                    EP_I1_RegRead <= updateEP(EP_I1_Issue, events);
 
-                    prevSendingOK => renamedSending,
-                    newArr => schedInfoUpdatedU,
+                    EP_I1_D0 <= updateEP(EP_I1_E2, events);
+                    EP_I1_D1 <= updateEP(EP_I1_D0, events);
                     
-                    bypass => bypassInt,
-                    unlockDiv => divUnlock,
-
-                    nextAccepting => allowIssueI1,
-
-                    schedulerOut_Fast => slotIssueI1_TF,
-                    schedulerOut_Slow => slotIssueI1_TS,
-                    outputSignals => outSigsI1,
-                        outEP => EP_I1_Issue,
-
-                    dbState => dbState
-                );
-
-                slotIssueI1 <= slotIssueI1_U;--slotIssueI1_TF;
-                slotIssueI1_U <= TMP_mergeStatic(slotIssueI1_TF, slotIssueI1_TS);
-
-                process (clk)
-                begin
-                    if rising_edge(clk) then                            
-                        slotRegReadI1 <= advanceControlRR(slotIssueI1_U, slotIssueI1_U.full, events);
-                        argValuesInitial <= getArgValuesRR(slotIssueI1, valuesInt0, valuesInt1, false, false, false);
-                        
-                        EP_I1_RegRead <= updateEP(EP_I1_Issue, events);
-
-                        EP_I1_D0 <= updateEP(EP_I1_E2, events);
-                        EP_I1_D1 <= updateEP(EP_I1_D0, events);
-                        
 --                            stageE0 <= advanceControlRR(slotRegReadI1, slotRegReadI1.full, events);
 --                            stageE1 <= advanceControlRR(stageE0, stageE0.full, events);
 --                            stageE2 <= advanceControlRR(stageE1, stageE1.full, events);
 --                            stageD0 <= advanceControlRR(stageE2, stageE2.full, events);
 --                            stageD1 <= advanceControlRR(stageD0, stageD0.full, events);
-                    end if;
-                end process;
+                end if;
+            end process;
+            
+            argValuesUpdated <= updateArgsRR(slotRegReadI1, argValuesInitial, valuesInt0, regValsI1, false, false);
+            
+            --killFollowerNextI1 <= '0';--killFollower(outSigsI1.trialPrev1, events);
+
+            MUL_DIV: entity work.MultiplierDivider
+            port map (
+                clk => clk,
+
+                prevSending => slotRegReadI1.full,
+                preInput => slotIssueI1,
+                input => slotRegReadI1,
+                    inputArgs => argValuesUpdated,
+                    inputEP => EP_I1_RegRead,
+
+                allowIssueI1 => allowIssueI1,
+                killFollowerNext => --killFollowerNextI1,
+                                    '0',
+
+                events => events,
                 
-                argValuesUpdated <= updateArgsRR(slotRegReadI1, argValuesInitial, valuesInt0, regValsI1, false, false);
+                lockIssueI1Out => lockIssueI1,
+                divUnlockOut => divUnlock,
                 
-                killFollowerNextI1 <= '0';--killFollower(outSigsI1.trialPrev1, events);
-
-                MUL_DIV: entity work.MultiplierDivider
-                port map (
-                    clk => clk,
-
-                    prevSending => slotRegReadI1.full,
-                    preInput => slotIssueI1,
-                    input => slotRegReadI1,
-                        inputArgs => argValuesUpdated,
-                        inputEP => EP_I1_RegRead,
-
-                    allowIssueI1 => allowIssueI1,
-                    killFollowerNext => killFollowerNextI1,
-
-                    events => events,
-                    
-                    lockIssueI1Out => lockIssueI1,
-                    divUnlockOut => divUnlock,
-                    
-                    sending => dividerSending,
-                        outE0 => EP_I1_E0,
-                        outE1 => EP_I1_E1,
-                        outE2 => EP_I1_E2,
-                    outStage0 => subpipeI1_E0,
-                    outStage1 => subpipeI1_E1,
-                    output => subpipeI1_E2
-                );
+                sending => dividerSending,
+                    outE0 => EP_I1_E0,
+                    outE1 => EP_I1_E1,
+                    outE2 => EP_I1_E2,
+                outStage0 => subpipeI1_E0,
+                outStage1 => subpipeI1_E1,
+                output => subpipeI1_E2
+            );
     
-            end block;
+        --    end block;
         end generate;
 
 
         readyRegFlagsInt_Early_Mem <= reorderMemRRF(readyRegFlagsInt_Early);
 
         SUBPIPE_MEM: block
-            use work.LogicIssue.all;
-            use work.LogicArgRead.all;
+            --use work.LogicIssue.all;
+            --use work.LogicArgRead.all;
 
-            signal outSigsM0: IssueQueueSignals := (others => '0');
+            --signal outSigsM0: IssueQueueSignals := (others => '0');
 
             signal schedInfoA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
             signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => DEFAULT_WAKEUP_STRUCT));
-
-            constant CFG_MEM: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
 
             signal argValuesInitial, argValuesUpdated: MwordArray(0 to 2) := (others => (others => '0'));
             signal stageE0, stageE1, stageE2, stageD0, stageD1: SchedulerState := DEFAULT_SCHEDULER_STATE;
 
             signal controlToM0_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
-            signal slotRegReadM0iq, slotRegReadM0_Merged, slotIssueM0mq, slotIssueMerged: SchedulerState := DEFAULT_SCHED_STATE;
+            signal --slotRegReadM0iq, slotRegReadM0_Merged, 
+                        slotIssueM0mq, slotIssueMerged: SchedulerState := DEFAULT_SCHED_STATE;
             signal subpipeM0_E1_u, subpipeM0_E1i_u, subpipeM0_E1f_u, resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
             
             signal EP_M0_IssueMQ: ExecPacket := DEFAULT_EXEC_PACKET;
@@ -818,7 +819,7 @@ begin
 
                 schedulerOut_Fast => slotIssueM0_TF,
                 schedulerOut_Slow => slotIssueM0_TS,
-                outputSignals => outSigsM0,
+                --outputSignals => outSigsM0,
                     outEP => EP_M0_Issue,
 
                 dbState => dbState
@@ -841,7 +842,8 @@ begin
                     slotRegReadM0 <= advanceControlRR(slotIssueMerged, slotIssueMerged.full, events);
                     
                     if slotIssueM0mq.full = '1' then
-                        argValuesInitial <= slotIssueM0mq.argValues;
+                        argValuesInitial <= --slotIssueM0mq.argValues;
+                                            (mqReexecCtrlIssue.target, (others => '0'), (others => '0'));
                     else
                         argValuesInitial <= getArgValuesRR(slotIssueMerged, valuesInt0, valuesInt1, true, false, true);
                     end if;
@@ -963,11 +965,10 @@ begin
         ------------------------
 
         SUBPIPES_STORE_VALUE: block
-            use work.LogicIssue.all;
-            use work.LogicArgRead.all;
+            --use work.LogicIssue.all;
+            --use work.LogicArgRead.all;
 
             signal schedInfoIntA, schedInfoUpdatedIntU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
-            constant CFG_SVI: SchedulerUpdateConfig := (true, false, true, FORWARDING_MODES_SV_INT_D, false);
             signal wupsInt: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
             
         begin
@@ -1007,7 +1008,7 @@ begin
 
                 schedulerOut_Fast => slotIssueSVI_TF,
                 schedulerOut_Slow => slotIssueSVI_TS,
-                outputSignals => outSigsSVI,
+                --outputSignals => outSigsSVI,
                     outEP => EP_SVI_Issue,
 
                 dbState => dbState
@@ -1037,12 +1038,12 @@ begin
         end block;
 
 
-        STORE_VALUE_FLOAT: block
-            use work.LogicIssue.all;
-            use work.LogicArgRead.all;
+        STORE_VALUE_FLOAT: --block
+        if ENABLE_FP generate
+            --use work.LogicIssue.all;
+            --use work.LogicArgRead.all;
 
             signal schedInfoFloatA, schedInfoUpdatedFloatU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
-            constant CFG_SVF: SchedulerUpdateConfig := (true, true, true, FORWARDING_MODES_SV_FLOAT_D, false);
             signal wupsFloat: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
         begin
             readyRegFlagsFloatSV <= reorderSV(readyRegFlagsFloat_Early);
@@ -1051,7 +1052,7 @@ begin
             schedInfoFloatA <= getIssueInfoArray(renamedData, false, renamedArgsFloat, readyRegFlagsFloatSV, TMP_renamedDests, TMP_renamedSources, SVF);
             schedInfoUpdatedFloatU <= updateOnDispatch(schedInfoFloatA, wupsFloat, memFail, CFG_SVF);
 
-            FP_STORE_IQ: if ENABLE_FP generate
+            --FP_STORE_IQ: if ENABLE_FP generate
                 IQUEUE_FLOAT_SV: entity work.IssueQueue(Behavioral)
                 generic map(
                     NAME => "SVF",
@@ -1081,12 +1082,12 @@ begin
 
                     schedulerOut_Fast => slotIssueSVF_TF,
                     schedulerOut_Slow => slotIssueSVF_TS,           
-                    outputSignals => outSigsSVF,
+                    --outputSignals => outSigsSVF,
                         outEP => EP_SVF_Issue,
 
                     dbState => dbState
                 );
-            end generate;
+            --end generate;
 
             slotIssueFloatSV <= slotIssueSVF_U;--slotIssueSVF_TF;
             slotIssueSVF_U <= TMP_mergeStatic(slotIssueSVF_TF, slotIssueSVF_TS);
@@ -1101,13 +1102,14 @@ begin
             end process;
 
             argValuesFloatSV <= regValsFS0;
-        end block;
+        --end block;
+        end generate;
 
-        stateExecStoreValue <= slotRegReadIntSV_Delay when storeValueCollision3 = '1'
+        stateExecStoreValue <= slotRegReadIntSV_Delay when storeValueCollisionE0 = '1'
                           else slotRegReadFloatSV when slotRegReadFloatSV.full = '1'
                           else slotRegReadIntSV;
 
-        argValuesSV <= argValuesIntDelaySV when storeValueCollision3 = '1'
+        argValuesSV <= argValuesIntDelaySV when storeValueCollisionE0 = '1'
                   else argValuesFloatSV when slotRegReadFloatSV.full = '1'
                   else argValuesIntSV;
 
@@ -1115,13 +1117,12 @@ begin
 
 
         SUBPIPE_FP0: if ENABLE_FP generate
-            use work.LogicIssue.all;
-            use work.LogicArgRead.all;
+           -- use work.LogicIssue.all;
+           -- use work.LogicArgRead.all;
 
-            signal outSigsF0: IssueQueueSignals := (others => '0');
+            --signal outSigsF0: IssueQueueSignals := (others => '0');
             signal schedInfoA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
             signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
-            constant CFG_FP0: SchedulerUpdateConfig := (true, true, false, FORWARDING_MODES_FLOAT_D, false);
             
             signal stageE0, stageE1, stageE2, stageD0, stageD1: SchedulerState := DEFAULT_SCHEDULER_STATE;
             signal argValuesInitial, argValuesUpdated: MwordArray(0 to 2) := (others => (others => '0'));
@@ -1161,7 +1162,7 @@ begin
 
                schedulerOut_Fast => slotIssueF0_TF,
                schedulerOut_Slow => slotIssueF0_TS,
-               outputSignals => outSigsF0,
+               --outputSignals => outSigsF0,
                     outEP => EP_F0_Issue,
 
                dbState => dbState
@@ -1235,16 +1236,16 @@ begin
         begin
            if rising_edge(clk) then
                --storeValueCollision1 <= issueIntSV and issueFloatSV;
-               storeValueCollision2 <= --storeValueCollision1;
+               storeValueCollisionRR <= --storeValueCollision1;
                                         issuedIntSV and issuedFloatSV;
-               storeValueCollision3 <= storeValueCollision2;
+               storeValueCollisionE0 <= storeValueCollisionRR;
 
                lockIssueI0_NoMemFail <= slotIssueM0.maybeFull or mqReexecCtrlIssue.controlInfo.c_full or slotRegReadI1.maybeFull or dividerSending;
            end if;
         end process;
 
-        lockIssueSVI <= storeValueCollision1 or memFail;
-        lockIssueSVF <= storeValueCollision1 or memFail;
+        lockIssueSVI <= storeValueCollisionIssue or memFail;
+        lockIssueSVF <= storeValueCollisionIssue or memFail;
 
         lockIssueI0 <= lockIssueI0_NoMemFail or memFail;
 

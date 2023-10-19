@@ -220,6 +220,24 @@ constant FORWARDING_MODES_SV_FLOAT_D: ForwardingModeArray(0 to 2) := (
 );
 
 
+-- CONFIG
+type SchedulerUpdateConfig is record
+    dynamic: boolean;
+    fp: boolean;
+    ignoreMemFail: boolean;
+    fwModes: ForwardingModeArray(0 to 2);
+    matchIQ: boolean;
+end record;
+
+constant DEFUALT_SCHEDULER_UPDATE_CONFIG: SchedulerUpdateConfig := (
+    dynamic => false,
+    fp => false,
+    ignoreMemFail => false,
+    fwModes => FORWARDING_MODES_NONE,
+    matchIQ => false
+);
+
+
 --            constant CFG_ALU: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_INT_D); (-2, -2, -3)
 --            constant CFG_MUL: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_INT_D); (-2, -2, -3)
 --            constant CFG_MEM: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, false, FORWARDING_MODES_INT_D);  (-2, -2, -3)  [[-2,-1], [-2,-1], [-3,-1]]
@@ -227,6 +245,12 @@ constant FORWARDING_MODES_SV_FLOAT_D: ForwardingModeArray(0 to 2) := (
 --            constant CFG_SVI: work.LogicIssue.SchedulerUpdateConfig := (true, false, false, true, FORWARDING_MODES_SV_INT_D);   (0, 0, 0)     [[0, 1 ],  [0, 1], [0, 1]]
 --            constant CFG_SVF: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, true, FORWARDING_MODES_SV_FLOAT_D); (0, -, 0)     [[0, 1 ]   [-- ],  [0, 1]]
 --            constant CFG_FP0: work.LogicIssue.SchedulerUpdateConfig := (true, false, true, false, FORWARDING_MODES_FLOAT_D);  (-3, --, -1)  [[-3, -1], [ --],  [-1 ] ]
+constant CFG_ALU: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
+constant CFG_MUL: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
+constant CFG_MEM: SchedulerUpdateConfig := (true, false, false, FORWARDING_MODES_INT_D, false);
+constant CFG_SVI: SchedulerUpdateConfig := (true, false, true, FORWARDING_MODES_SV_INT_D, false);
+constant CFG_SVF: SchedulerUpdateConfig := (true, true, true, FORWARDING_MODES_SV_FLOAT_D, false);
+constant CFG_FP0: SchedulerUpdateConfig := (true, true, false, FORWARDING_MODES_FLOAT_D, false);
 
 
 
