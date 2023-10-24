@@ -903,7 +903,7 @@ begin
     res.failed := er.full and fail;
 
     if fail = '1' then
-        res.dest := (others => '0');
+        --res.dest := (others => '0');
     end if;
 
     res.value := memResult;

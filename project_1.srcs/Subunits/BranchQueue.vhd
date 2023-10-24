@@ -250,11 +250,11 @@ begin
             end procedure;
             
             
-            procedure DB_killStates(signal table: inout EntryRowArray; startP: SmallNumber; tag: InsTag; lateEvent, execEvent: std_logic) is
+            procedure DB_killStates(signal table: inout EntryRowArray; startP: SmallNumber; bqp: SmallNumber; tag: InsTag; lateEvent, execEvent: std_logic) is
                 variable row, col: natural := 0;
                 variable tagHigh, tagHighTrunc: SmallNumber;
             begin
-                if lateEvent /= '1' then
+                if lateEvent = '1' then
                     table <= (others => (others => empty));
                     return;
                 end if;
@@ -264,7 +264,8 @@ begin
                 end if;
 
                 tagHigh := getTagHighSN(tag);
-                tagHighTrunc := tagHigh and PTR_MASK_SN;
+                tagHighTrunc := --tagHigh and PTR_MASK_SN;
+                                bqp and PTR_MASK_SN;
                 row := slv2u(tagHighTrunc);
                 col := slv2u(getTagLow(tag));
 
@@ -277,7 +278,7 @@ begin
                 end loop;
                 
                 loop
-                    row := row + 1;
+                    row := (row + 1) mod QUEUE_SIZE;
                     if row = p2i(startP, QUEUE_SIZE) then
                         exit;
                     end if;
@@ -306,7 +307,7 @@ begin
 
 
                 if (events.execCausing.full or events.lateCausing.full) = '1' then
-                    DB_killStates(states, pStart, events.execCausing.tag, events.lateCausing.full, events.execCausing.full);
+                    DB_killStates(states, pStart, events.execTags.bqPointer, events.execCausing.tag, events.lateCausing.full, events.execCausing.full);
                 end if;
 
 
