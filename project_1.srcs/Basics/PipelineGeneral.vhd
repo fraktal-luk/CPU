@@ -288,6 +288,8 @@ function std2int(s: std_logic) return integer;
     function mergeEP(epA, epB: ExecPacket) return ExecPacket;
     function applyFail(ep: ExecPacket; fail: std_logic) return ExecPacket;
 
+    function makeMemResult(stage: SchedulerState; hit, fail: std_logic; dest: PhysName; value: Mword) return ExecResult;
+
 end package;
 
 
@@ -1347,6 +1349,11 @@ end function;
         variable res: ExecPacket := ep; 
     begin
             res.poison := advancePoison(ep.poison, evt.memFail);
+        
+        if ep.killed = '1' then
+            res.full := '0';
+        end if;
+
         if ep.full = '1' and (evt.lateCausing.full = '1' or (evt.execCausing.full and compareTagBefore(evt.execCausing.tag, ep.tag)) = '1') then
             res.killed := '1';
         end if;
@@ -1372,6 +1379,20 @@ end function;
             res.fail := '1';
         end if;
 
+        return res;
+    end function;
+
+
+    function makeMemResult(stage: SchedulerState; hit, fail: std_logic; dest: PhysName; value: Mword) return ExecResult is
+        variable res: ExecResult := DEFAULT_EXEC_RESULT;
+    begin
+        res.full := hit;
+        res.dbInfo := stage.st.dbInfo;
+        res.failed := fail;
+        res.poison := stage.poison;
+        res.tag  := stage.st.tags.renameIndex;
+        res.dest := dest;
+        res.value := value;
         return res;
     end function;
 

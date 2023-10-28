@@ -54,7 +54,7 @@ package LogicExec is
     return ExecResult;
 
     function getLSResultData(op: SpecificOp;
-                             result: Mword;
+                             --result: Mword;
                              tlbReady: std_logic;
                              memLoadReady: std_logic;
                              sysLoadReady: std_logic;
@@ -356,7 +356,7 @@ package body LogicExec is
     end function;
 
     function getLSResultData( op: SpecificOp;
-                              result: Mword;
+                              --result: Mword;
                               tlbReady: std_logic;  
                               memLoadReady: std_logic;
                               sysLoadReady: std_logic;

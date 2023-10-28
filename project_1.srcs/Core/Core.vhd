@@ -753,6 +753,9 @@ begin
             signal subpipeM0_E1_u, subpipeM0_E1i_u, subpipeM0_E1f_u, resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
             
             signal EP_M0_IssueMQ: ExecPacket := DEFAULT_EXEC_PACKET;
+            
+            signal hitInt, hitFloat, failInt, failFloat: std_logic := '0';
+            signal loadValueE2: Mword := (others => '0');
         begin
             schedInfoA <= getIssueInfoArray(renamedData, true, renamedArgsMerged, readyRegFlagsInt_Early_Mem, TMP_renamedDests, TMP_renamedSources, M0);         
 
@@ -932,7 +935,6 @@ begin
                 ctrlE1u.tags <= ctrlE1.tags;
                 ctrlE1u.op <= ctrlE1.op;
                 ctrlE1u.controlInfo <= getLSResultData(ctrlE1.op,
-                                                       subpipeM0_E1.value,
                                                        '1', memLoadReady, sysRegReadOut.full,
                                                        ctOutSQ, ctOutLQ);
 
@@ -947,6 +949,21 @@ begin
                 missedMemE1_EP <= TMP_missedMemResultEP(EP_M0_E1, memoryMissed, memResult);
                 missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1, memoryMissed, memResult);    -- for MQ             
                 missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f, ctrlE1, ctrlE1u, resOutSQ); -- MQ
+                
+                
+                process (clk)
+                begin
+                    if rising_edge(clk) then
+                        
+                        hitInt <= EP_M0_E1.full and stageE1.intDestSel and not memoryMissed;
+                        failInt <= EP_M0_E1.full and stageE1.intDestSel and memoryMissed;
+
+                        hitFloat <= EP_M0_E1.full and stageE1.floatDestSel and not memoryMissed;
+                        failFloat <= EP_M0_E1.full and stageE1.floatDestSel and memoryMissed;
+                        
+                        loadValueE2 <= memResult;
+                    end if;
+                end process;
             end block;
 
 
@@ -972,6 +989,9 @@ begin
                     memResultE2 <= subpipeM0_E1_u.value;
                     memResultD0 <= memResultE2;
                     memResultD1 <= memResultD0;
+                    
+                        ch2 <= --ch0 and ch1;
+                                ch3 and ch4;
                 end if;
             end process;
 
@@ -980,41 +1000,42 @@ begin
     
             memoryCtrlE2 <= ctrlE2; -- for ROB
 
-
+                -- E0
                 resE0i.dest <= destE0i;
                 resE0f.dest <= destE0f;
 
-                resE1i.dest <= destE1i;
-                resE1f.dest <= destE1f;
-                
-                resE2i.dest <= destE2i;
-                resE2f.dest <= destE2f;
-                
-                resD0i.dest <= destD0i;
-                resD0f.dest <= destD0f;
-                
-                resD1i.dest <= destD1i;
-                resD1f.dest <= destD1f;
-                
-                
                 resE0i.value <= memResultE0;
                 resE0f.value <= memResultE0;
+
+                -- E1
+                resE1i <= makeMemResult(stageE1, stageE1.full and stageE1.intDestSel, '0', destE1i, (others => '0'));
+                resE1f <= makeMemResult(stageE1, stageE1.full and stageE1.floatDestSel, '0', destE1f, (others => '0'));
+
+                -- E2
+                resE2i <= makeMemResult(stageE2, hitInt,   failInt,   destE2i, loadValueE2);                
+                resE2f <= makeMemResult(stageE2, hitFloat, failFloat, destE2f, loadValueE2);
                 
-                resE1i.value <= memResultE1;
-                resE1f.value <= memResultE1;
-                
-                resE2i.value <= memResultE2;
-                resE2f.value <= memResultE2;
-                
+                -- D0
+                resD0i.dest <= destD0i;
+                resD0f.dest <= destD0f;
+           
                 resD0i.value <= memResultD0;
                 resD0f.value <= memResultD0;
+
+                -- D1
+                resD1i.dest <= destD1i;
+                resD1f.dest <= destD1f;
                 
                 resD1i.value <= memResultD1;
                 resD1f.value <= memResultD1;
                 
-                ch0 <= bool2std(resE2i.dest = subpipeM0_E2i.dest) and bool2std(resE2f.dest = subpipeM0_E2f.dest);            
-                ch1 <= bool2std(resD0i.dest = subpipeM0_D0i.dest) and bool2std(resD0f.dest = subpipeM0_D0f.dest);            
-                ch2 <=  bool2std(resD1f.dest = subpipeM0_D1f.dest);            
+                
+                ch0 <= bool2std(resE2i = subpipeM0_E2i);-- and bool2std(resE2f.dest = subpipeM0_E2f.dest);            
+                ch1 <= bool2std(resE2f = subpipeM0_E2f);-- and bool2std(resE2f.dest = subpipeM0_E2f.dest);
+
+                    ch3 <= bool2std(resE2i.full = subpipeM0_E2i.full);-- and bool2std(resE2f.dest = subpipeM0_E2f.dest);            
+                    ch4 <= bool2std(resE2i.value = subpipeM0_E2i.value);-- and bool2std(resE2f.dest = subpipeM0_E2f.dest);            
+
         end block;
 
         ------------------------
