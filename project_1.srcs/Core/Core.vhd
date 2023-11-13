@@ -750,7 +750,8 @@ begin
 
             signal controlToM0_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
             signal slotIssueM0mq, slotIssueMerged: SchedulerState := DEFAULT_SCHED_STATE;
-            signal subpipeM0_E1_u, subpipeM0_E1i_u, subpipeM0_E1f_u, resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
+            signal --subpipeM0_E1_u, -- subpipeM0_E1i_u, subpipeM0_E1f_u, 
+                        resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
             
             signal EP_M0_IssueMQ: ExecPacket := DEFAULT_EXEC_PACKET;
             
@@ -930,7 +931,9 @@ begin
                                                       memLoadReady, memLoadValue,
                                                       sysRegReadOut.full, sysRegReadOut.value,
                                                       ctOutSQ, ctOutLQ).value;
-                                                      
+                
+                    memResultE1 <= memResult;
+                
                 ctrlE1u.full <= ctrlE1.full;
                 ctrlE1u.tags <= ctrlE1.tags;
                 ctrlE1u.op <= ctrlE1.op;
@@ -940,12 +943,12 @@ begin
 
                 memoryMissed <= ctrlE1u.controlInfo.dataMiss or ctrlE1u.controlInfo.sqMiss;
     
-                subpipeM0_E1_u <= setMemFail(subpipeM0_E1, memoryMissed and bool2std(ENABLE_MQ), memResult);     
-                subpipeM0_E1i_u <= setMemFail(subpipeM0_E1i, memoryMissed and bool2std(ENABLE_MQ), memResult);
-                subpipeM0_E1f_u <= setMemFail(subpipeM0_E1f, memoryMissed and bool2std(ENABLE_MQ), memResult);
+                --subpipeM0_E1_u <= setMemFail(subpipeM0_E1, memoryMissed and bool2std(ENABLE_MQ), memResult);     
+                --subpipeM0_E1i_u <= setMemFail(subpipeM0_E1i, memoryMissed and bool2std(ENABLE_MQ), memResult);
+               -- subpipeM0_E1f_u <= setMemFail(subpipeM0_E1f, memoryMissed and bool2std(ENABLE_MQ), memResult);
 
-                memFailSig <= subpipeM0_E1_u.failed;
-
+                memFailSig <= --subpipeM0_E1_u.failed;
+                                (memoryMissed and subpipeM0_E1.full);
                 missedMemE1_EP <= TMP_missedMemResultEP(EP_M0_E1, memoryMissed, memResult);
                 missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1, memoryMissed, memResult);    -- for MQ             
                 missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f, ctrlE1, ctrlE1u, resOutSQ); -- MQ
@@ -954,7 +957,7 @@ begin
                 process (clk)
                 begin
                     if rising_edge(clk) then
-                        
+                                                
                         hitInt <= EP_M0_E1.full and stageE1.intDestSel and not memoryMissed;
                         failInt <= EP_M0_E1.full and stageE1.intDestSel and memoryMissed;
 
@@ -968,6 +971,15 @@ begin
 
 
             process (clk)
+                function TMP_ZZZ(er: ExecResult; memMissed: std_logic) return ExecResult is
+                    variable res: ExecResult := setMemFail(er, memMissed and bool2std(ENABLE_MQ), er.value);
+                begin
+                    
+                    res.dest := (others => '0');
+                    res.value := (others => '1');
+                    
+                    return res;
+                end function;
             begin
                 if rising_edge(clk) then                
                     ctrlE0 <= controlToM0_E0;
@@ -980,20 +992,26 @@ begin
                     subpipeM0_E1i <= subpipeM0_E0i;
                     subpipeM0_E1f <= subpipeM0_E0f;
 
+
                     -- Here we integrate mem read result
                     ctrlE2 <= ctrlE1u;
-                    subpipeM0_E2 <= subpipeM0_E1_u;         -- injection of mem miss to 'full'
-                    subpipeM0_E2i <= subpipeM0_E1i_u;
-                    subpipeM0_E2f <= subpipeM0_E1f_u;
+                    subpipeM0_E2 <= --TMP_ZZZ( subpipeM0_E1_u, memFailSig );         -- injection of mem miss to 'full'
+                                    TMP_ZZZ( subpipeM0_E1, memFailSig );         -- injection of mem miss to 'full'
+                    --subpipeM0_E2i <= subpipeM0_E1i_u;
+                    --subpipeM0_E2f <= subpipeM0_E1f_u;
 
-                    memResultE2 <= subpipeM0_E1_u.value;
+                    memResultE2 <= --subpipeM0_E1_u.value;
+                                   memResultE1;
                     memResultD0 <= memResultE2;
                     memResultD1 <= memResultD0;
                     
-                        ch2 <= --ch0 and ch1;
-                                ch3 and ch4;
+                      --  ch2 <= --ch0 and ch1;
+                      --          ch3 and ch4;
                 end if;
             end process;
+
+                        subpipeM0_E2i <= resE2i;
+                        subpipeM0_E2f <= resE2f;
 
             memCtrlE0 <= ctrlE0; -- Interface
             memoryRead <= subpipeM0_E0; -- Out
@@ -1027,14 +1045,7 @@ begin
                 resD1f.dest <= destD1f;
                 
                 resD1i.value <= memResultD1;
-                resD1f.value <= memResultD1;
-                
-                
-                ch0 <= bool2std(resE2i = subpipeM0_E2i);-- and bool2std(resE2f.dest = subpipeM0_E2f.dest);            
-                ch1 <= bool2std(resE2f = subpipeM0_E2f);-- and bool2std(resE2f.dest = subpipeM0_E2f.dest);
-
-                    ch3 <= bool2std(resE2i.full = subpipeM0_E2i.full);-- and bool2std(resE2f.dest = subpipeM0_E2f.dest);            
-                    ch4 <= bool2std(resE2i.value = subpipeM0_E2i.value);-- and bool2std(resE2f.dest = subpipeM0_E2f.dest);            
+                resD1f.value <= memResultD1;         
 
         end block;
 
