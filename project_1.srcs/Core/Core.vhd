@@ -424,9 +424,8 @@ begin
               slotIssueM0, slotRegReadM0,
               slotIssueF0, slotRegReadF0,
 
-                slotIssueI0_TF, slotIssueI1_TF, slotIssueM0_TF, slotIssueSVI_TF, slotIssueSVF_TF, slotIssueF0_TF,
-                slotIssueI0_TS, slotIssueI1_TS, slotIssueM0_TS, slotIssueSVI_TS, slotIssueSVF_TS, slotIssueF0_TS,
-                --    slotIssueI0_U, slotIssueI1_U, slotIssueM0_U, slotIssueSVI_U, slotIssueSVF_U, slotIssueF0_U,
+              slotIssueI0_TF, slotIssueI1_TF, slotIssueM0_TF, slotIssueSVI_TF, slotIssueSVF_TF, slotIssueF0_TF,
+              slotIssueI0_TS, slotIssueI1_TS, slotIssueM0_TS, slotIssueSVI_TS, slotIssueSVF_TS, slotIssueF0_TS,
 
               slotSel4, slotIssue4, slotSel5, slotIssue5, slotSel6, slotIssue6,
 
@@ -534,7 +533,6 @@ begin
                 dbState => dbState
             );
  
-            --slotIssueI0 <= slotIssueI0_U;--slotIssueI0_TF;
             slotIssueI0 <= TMP_mergeStatic(slotIssueI0_TF, slotIssueI0_TS);
 
             subpipeI0_Issue <= makeExecResult(slotIssueI0);
@@ -679,7 +677,6 @@ begin
                 dbState => dbState
             );
 
-            --slotIssueI1 <= slotIssueI1_U;--slotIssueI1_TF;
             slotIssueI1 <= TMP_mergeStatic(slotIssueI1_TF, slotIssueI1_TS);
 
             process (clk)
@@ -687,12 +684,12 @@ begin
                 if rising_edge(clk) then                            
                     slotRegReadI1 <= advanceControlRR(slotIssueI1, slotIssueI1.full, events);
                     argValuesInitial <= getArgValuesRR(slotIssueI1, valuesInt0, valuesInt1, false, false, false);
-                    
+
                     EP_I1_RegRead <= updateEP(EP_I1_Issue, events);
 
                     EP_I1_D0 <= updateEP(EP_I1_E2, events);
                     EP_I1_D1 <= updateEP(EP_I1_D0, events);
-                    
+
 --                            stageE0 <= advanceControlRR(slotRegReadI1, slotRegReadI1.full, events);
 --                            stageE1 <= advanceControlRR(stageE0, stageE0.full, events);
 --                            stageE2 <= advanceControlRR(stageE1, stageE1.full, events);
@@ -717,10 +714,10 @@ begin
                 killFollowerNext => '0',
 
                 events => events,
-                
+
                 lockIssueI1Out => lockIssueI1,
                 divUnlockOut => divUnlock,
-                
+
                 sending => dividerSending,
                     outE0 => EP_I1_E0,
                     outE1 => EP_I1_E1,
@@ -729,8 +726,7 @@ begin
                 outStage1 => subpipeI1_E1,
                 output => subpipeI1_E2
             );
-    
-        --    end block;
+
         end generate;
 
 
@@ -750,11 +746,10 @@ begin
 
             signal controlToM0_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
             signal slotIssueM0mq, slotIssueMerged: SchedulerState := DEFAULT_SCHED_STATE;
-            signal --subpipeM0_E1_u, -- subpipeM0_E1i_u, subpipeM0_E1f_u, 
-                        resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
-            
+            signal resultToM0_E0, resultToM0_E0i, resultToM0_E0f: ExecResult := DEFAULT_EXEC_RESULT;
+
             signal EP_M0_IssueMQ: ExecPacket := DEFAULT_EXEC_PACKET;
-            
+
             signal hitInt, hitFloat, failInt, failFloat: std_logic := '0';
             signal loadValueE2: Mword := (others => '0');
         begin
@@ -798,7 +793,6 @@ begin
                 dbState => dbState
             );
 
-            --slotIssueM0 <= slotIssueM0_U;--slotIssueM0_TF;
             slotIssueM0 <= TMP_mergeStatic(slotIssueM0_TF, slotIssueM0_TS);
 
             slotIssueM0mq <= TMP_slotIssueM0mq(mqReexecCtrlIssue, mqReexecResIssue, mqReexecCtrlIssue.controlInfo.c_full);
@@ -812,13 +806,13 @@ begin
             begin
                 if rising_edge(clk) then
                     slotRegReadM0 <= advanceControlRR(slotIssueMerged, slotIssueMerged.full, events);
-                    
+
                     if slotIssueM0mq.full = '1' then
                         argValuesInitial <= (mqReexecCtrlIssue.target, (others => '0'), (others => '0'));
                     else
                         argValuesInitial <= getArgValuesRR(slotIssueMerged, valuesInt0, valuesInt1, true, false, true);
                     end if;
-                    
+
                     EP_M0_RegRead <= mergeEP(updateEP(EP_M0_Issue, events),
                                              updateEP(EP_M0_IssueMQ, events)
                                             );
@@ -841,7 +835,7 @@ begin
                         else
                             destE0i <= (others => '0');               
                         end if;
-                        
+
                         if slotRegReadM0.floatDestSel = '1' then
                             destE0f <= resultToM0_E0.dest;
                         else
@@ -851,7 +845,7 @@ begin
                         destE0i <= (others => '0');
                         destE0f <= (others => '0');           
                     end if;
-                    
+
                     if stageE0.full = '1' then
                         destE1i <= destE0i;
                         destE1f <= destE0f;
@@ -902,7 +896,7 @@ begin
             resultToM0_E0 <= calcEffectiveAddress(slotRegReadM0.full, slotRegReadM0, argValuesUpdated, mqReexecCtrlRR.controlInfo.c_full);
             resultToM0_E0i <= updateMemDest(resultToM0_E0, slotRegReadM0.intDestSel);
             resultToM0_E0f <= updateMemDest(resultToM0_E0, slotRegReadM0.floatDestSel);
-            
+
             controlToM0_E0.full <= slotRegReadM0.full;
             controlToM0_E0.controlInfo.c_full <= slotRegReadM0.full;
             controlToM0_E0.op <= slotRegReadM0.st.operation;
@@ -919,21 +913,19 @@ begin
 
             --------------------------------------------------------
             -- E1 --
-            
+
             MEM_RESULTS: block
                 signal memLoadReady, memoryMissed: std_logic := '0';
-                signal memLoadValue, memResult: Mword := (others => '0');
+                signal memLoadValue: Mword := (others => '0');
             begin
                 memLoadReady <= dvalid; -- In
                 memLoadValue <= din;    -- In
-            
-                memResult <= getLSResultData_result(  ctrlE1.op,
+
+                memResultE1 <= getLSResultData_result(  ctrlE1.op,
                                                       memLoadReady, memLoadValue,
                                                       sysRegReadOut.full, sysRegReadOut.value,
                                                       ctOutSQ, ctOutLQ).value;
-                
-                    memResultE1 <= memResult;
-                
+
                 ctrlE1u.full <= ctrlE1.full;
                 ctrlE1u.tags <= ctrlE1.tags;
                 ctrlE1u.op <= ctrlE1.op;
@@ -942,29 +934,22 @@ begin
                                                        ctOutSQ, ctOutLQ);
 
                 memoryMissed <= ctrlE1u.controlInfo.dataMiss or ctrlE1u.controlInfo.sqMiss;
-    
-                --subpipeM0_E1_u <= setMemFail(subpipeM0_E1, memoryMissed and bool2std(ENABLE_MQ), memResult);     
-                --subpipeM0_E1i_u <= setMemFail(subpipeM0_E1i, memoryMissed and bool2std(ENABLE_MQ), memResult);
-               -- subpipeM0_E1f_u <= setMemFail(subpipeM0_E1f, memoryMissed and bool2std(ENABLE_MQ), memResult);
 
-                memFailSig <= --subpipeM0_E1_u.failed;
-                                (memoryMissed and subpipeM0_E1.full);
-                missedMemE1_EP <= TMP_missedMemResultEP(EP_M0_E1, memoryMissed, memResult);
-                missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1, memoryMissed, memResult);    -- for MQ             
+                memFailSig <= (memoryMissed and subpipeM0_E1.full);
+                missedMemE1_EP <= TMP_missedMemResultEP(EP_M0_E1, memoryMissed, memResultE1);
+                missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1, memoryMissed, memResultE1);    -- for MQ             
                 missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f, ctrlE1, ctrlE1u, resOutSQ); -- MQ
-                
-                
+
                 process (clk)
                 begin
-                    if rising_edge(clk) then
-                                                
+                    if rising_edge(clk) then              
                         hitInt <= EP_M0_E1.full and stageE1.intDestSel and not memoryMissed;
                         failInt <= EP_M0_E1.full and stageE1.intDestSel and memoryMissed;
 
                         hitFloat <= EP_M0_E1.full and stageE1.floatDestSel and not memoryMissed;
                         failFloat <= EP_M0_E1.full and stageE1.floatDestSel and memoryMissed;
-                        
-                        loadValueE2 <= memResult;
+
+                        loadValueE2 <= memResultE1;
                     end if;
                 end process;
             end block;
@@ -974,10 +959,8 @@ begin
                 function TMP_ZZZ(er: ExecResult; memMissed: std_logic) return ExecResult is
                     variable res: ExecResult := setMemFail(er, memMissed and bool2std(ENABLE_MQ), er.value);
                 begin
-                    
                     res.dest := (others => '0');
-                    res.value := (others => '1');
-                    
+                    res.value := (others => '0');
                     return res;
                 end function;
             begin
@@ -992,21 +975,13 @@ begin
                     subpipeM0_E1i <= subpipeM0_E0i;
                     subpipeM0_E1f <= subpipeM0_E0f;
 
-
                     -- Here we integrate mem read result
                     ctrlE2 <= ctrlE1u;
-                    subpipeM0_E2 <= --TMP_ZZZ( subpipeM0_E1_u, memFailSig );         -- injection of mem miss to 'full'
-                                    TMP_ZZZ( subpipeM0_E1, memFailSig );         -- injection of mem miss to 'full'
-                    --subpipeM0_E2i <= subpipeM0_E1i_u;
-                    --subpipeM0_E2f <= subpipeM0_E1f_u;
+                    subpipeM0_E2 <= TMP_ZZZ( subpipeM0_E1, memFailSig );         -- injection of mem miss to 'full'
 
-                    memResultE2 <= --subpipeM0_E1_u.value;
-                                   memResultE1;
+                    memResultE2 <= memResultE1;
                     memResultD0 <= memResultE2;
                     memResultD1 <= memResultD0;
-                    
-                      --  ch2 <= --ch0 and ch1;
-                      --          ch3 and ch4;
                 end if;
             end process;
 
@@ -1096,7 +1071,6 @@ begin
                 dbState => dbState
             );
 
-            --slotIssueIntSV <= slotIssueSVI_U;--slotIssueSVI_TF;
             slotIssueIntSV <= TMP_mergeStatic(slotIssueSVI_TF, slotIssueSVI_TS);
             issuedIntSV <= slotIssueIntSV.maybeFull;
 
@@ -1248,14 +1222,12 @@ begin
                    stageD0 <= advanceControlRR(stageE2, stageE2.full, events);
                    stageD1 <= advanceControlRR(stageD0, stageD0.full, events);
 
-
                    EP_F0_RegRead <= updateEP(EP_F0_Issue, events);
                    EP_F0_E0 <= updateEP(EP_F0_RegRead, events);
                    EP_F0_E1 <= updateEP(EP_F0_E0, events);
                    EP_F0_E2 <= updateEP(EP_F0_E1, events);
                    EP_F0_D0 <= updateEP(EP_F0_E2, events);
                    --EP_F0_D1 <= updateEP(EP_F0_D0, events);
-
                end if;
             end process;
 
