@@ -1272,18 +1272,26 @@ begin
 
 
         TMP_EXEC_D0: process (clk)
+            function TMP_clearDestOnFail(er: ExecResult) return ExecResult is
+                variable res: ExecResult := er;
+            begin
+                if (not res.full or res.failed) = '1' then
+                    res.dest := (others => '0');
+                end if;
+                return res;
+            end function; 
         begin
             if rising_edge(clk) then
-                subpipeI0_D0 <= subpipeI0_E0;
+                subpipeI0_D0 <= TMP_clearDestOnFail(subpipeI0_E0);
                 
-                subpipeI1_D0 <= subpipeI1_E2;
-                subpipeI1_D1 <= subpipeI1_D0;
+                subpipeI1_D0 <= TMP_clearDestOnFail(subpipeI1_E2);
+                subpipeI1_D1 <= TMP_clearDestOnFail(subpipeI1_D0);
                 
-                subpipeM0_D0i <= subpipeM0_E2i;
-                subpipeM0_D0f <= subpipeM0_E2f;
-                subpipeM0_D1f <= subpipeM0_D0f;
+                subpipeM0_D0i <= TMP_clearDestOnFail(subpipeM0_E2i);
+                subpipeM0_D0f <= TMP_clearDestOnFail(subpipeM0_E2f);
+                subpipeM0_D1f <= TMP_clearDestOnFail(subpipeM0_D0f);
                 
-                subpipeF0_D0 <= subpipeF0_E2;
+                subpipeF0_D0 <= TMP_clearDestOnFail(subpipeF0_E2);
             end if;
         end process;
 
@@ -1670,8 +1678,8 @@ begin
             )
         port map(
             clk => clk, reset => '0', en => '0',
-            events => --events,
-                        events_T,
+            events => events,
+                      --  events_T,
 
             acceptAlloc => open,
 
