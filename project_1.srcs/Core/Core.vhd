@@ -421,7 +421,7 @@ begin
        -- Selection from IQ and state after Issue stage
        signal slotIssueI0,-- slotRegReadI0,
               slotIssueI1, slotRegReadI1,
-              slotIssueM0, slotRegReadM0,
+              slotIssueM0, slotRegReadM0, slotRegReadM0i, slotRegReadM0f,
               slotIssueF0, slotRegReadF0,
 
               slotIssueI0_TF, slotIssueI1_TF, slotIssueM0_TF, slotIssueSVI_TF, slotIssueSVF_TF, slotIssueF0_TF,
@@ -446,8 +446,8 @@ begin
                 --subpipeI1_Issue, subpipeI1_RegRead, 
                                                     subpipeI1_E0,  subpipeI1_E1,    subpipeI1_E2,    subpipeI1_D0,  subpipeI1_D1,
                                  subpipeM0_RegRead, subpipeM0_E0,  subpipeM0_E1,    subpipeM0_E2,
-                                                    subpipeM0_E0i, subpipeM0_E1i,   subpipeM0_E2i,   subpipeM0_D0i,
-                                                    subpipeM0_E0f, subpipeM0_E1f,   subpipeM0_E2f,   subpipeM0_D0f, subpipeM0_D1f,
+                                 subpipeM0_RegReadInt, subpipeM0_E0i, subpipeM0_E1i,   subpipeM0_E2i,   subpipeM0_D0i,
+                                 subpipeM0_RegReadFloat, subpipeM0_E0f, subpipeM0_E1f,   subpipeM0_E2f,   subpipeM0_D0f, subpipeM0_D1f,
 
               subpipeF0_RegRead, -- bypass
               subpipeF0_E0,    -- ready reg, bypass?
@@ -803,9 +803,29 @@ begin
             EP_M0_IssueMQ <= updateEP_Async( makeEP(slotIssueM0mq), events_T);
 
             process (clk)
+                function TMP_clearDestForInt(ss: SchedulerState) return SchedulerState is
+                    variable res: SchedulerState := ss;
+                begin
+                    if res.intDestSel /= '1' then
+                        res.dest := (others => '0');
+                    end if;
+                    return res;
+                end function;
+                
+                function TMP_clearDestForFloat(ss: SchedulerState) return SchedulerState is
+                    variable res: SchedulerState := ss;
+                begin
+                    if res.floatDestSel /= '1' then
+                        res.dest := (others => '0');
+                    end if;
+                    return res;
+                end function;
             begin
                 if rising_edge(clk) then
                     slotRegReadM0 <= advanceControlRR(slotIssueMerged, slotIssueMerged.full, events);
+                        slotRegReadM0i <= TMP_clearDestForInt(advanceControlRR(slotIssueMerged, slotIssueMerged.full, events));
+                        slotRegReadM0f <= TMP_clearDestForFloat(advanceControlRR(slotIssueMerged, slotIssueMerged.full, events));
+
 
                     if slotIssueM0mq.full = '1' then
                         argValuesInitial <= (mqReexecCtrlIssue.target, (others => '0'), (others => '0'));
@@ -889,6 +909,8 @@ begin
             argValuesUpdated <= updateArgsRR(slotRegReadM0, argValuesInitial, valuesInt0, regValsM0, false, true);
 
             subpipeM0_RegRead <= makeExecResult(slotRegReadM0);               
+                subpipeM0_RegReadInt <= makeExecResult(slotRegReadM0i);               
+                subpipeM0_RegReadFloat <= makeExecResult(slotRegReadM0f);               
 
             ---------------------------------------------
             -- RR --
@@ -1311,7 +1333,7 @@ begin
         EP_A_Sec <=  (DEFAULT_EXEC_PACKET, DEFAULT_EXEC_PACKET, DEFAULT_EXEC_PACKET, DEFAULT_EXEC_PACKET);
 
 
-        bypassInt <= makeBypassInt((subpipeI0_Issue, subpipeI1_E1, subpipeM0_RegRead),
+        bypassInt <= makeBypassInt((subpipeI0_Issue, subpipeI1_E1, subpipeM0_RegReadInt),
                                    (subpipeI0_RegRead, subpipeI1_E2, subpipeM0_E0i) ,
                                    (DEFAULT_EXEC_RESULT, DEFAULT_EXEC_RESULT, subpipeM0_E1i),
                                     issueTagI0, memFail);
