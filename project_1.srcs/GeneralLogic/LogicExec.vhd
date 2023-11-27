@@ -283,15 +283,14 @@ package body LogicExec is
 	begin 
         if (full and not isDivOp(st.st.operation)) = '1' then
             res.dbInfo := st.st.dbInfo; 
+            res.full := full;
 
             res.poison := st.poison;
 
-            res.full := full;-- and not isDivOp(st.st.operation);
             res.tag := st.st.tags.renameIndex;
-            res.dest := --st.argSpec.dest;
-                        st.dest;
+            res.dest := st.dest;
         end if;
-        
+
 		return res;
 	end function;
 

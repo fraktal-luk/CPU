@@ -346,6 +346,7 @@ begin
             maskAlu => aluMaskRe,
             maskMul => mulMaskRe,
             maskMem => memMaskRe,
+            -- dispMasks
     
             TMP_tagsAlu => TMP_aluTagsPreT,
             TMP_tagsMul => TMP_mulTagsPreT,
@@ -479,7 +480,22 @@ begin
         signal argValuesIntSV, argValuesIntDelaySV, argValuesFloatSV, argValuesSV: MwordArray(0 to 2) := (others => (others => '0')); 
 
         signal memFail, memFailSig: std_logic := '0';
-            signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';          
+            signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';
+        
+        function slot2er(ss: SchedulerState; result: Mword) return ExecResult is
+            variable res: ExecResult := DEFAULT_EXEC_RESULT;
+        begin
+            res.dbInfo := ss.st.dbInfo;
+            res.full := ss.full;
+            res.failed := '0';
+            res.poison := ss.poison;
+            res.tag := ss.st.tags.renameIndex;
+            res.dest := ss.dest;
+            res.value := result;
+            
+            return res;
+        end function;
+  
     begin
         memFail <= events.memFail;
 
@@ -512,20 +528,21 @@ begin
                 events_T => events,--_T,
 
                 accept => allocAcceptAlu,
+                TMP_outTags => TMP_aluTags,
+                TMP_outTagsPre => TMP_aluTagsPre,
 
                 inReady => frontGroupSend,
                 inMask => aluMaskRe,
-
-                TMP_outTags => TMP_aluTags,
-                TMP_outTagsPre => TMP_aluTagsPre,
 
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedU,
                 
                 bypass => bypassInt,
+                
                 unlockDiv => '0',
 
                 nextAccepting => allowIssueI0,
+
                 schedulerOut_Fast => slotIssueI0_TF,
                 schedulerOut_Slow => slotIssueI0_TS,
                     outEP => EP_I0_Issue,
@@ -566,31 +583,35 @@ begin
 
                 unfoldedAluOp_T <= work.LogicExec.getAluControl(slotRegReadI0_static.st.operation.arith);
 
+                    ch0 <= '0';
+
             process (clk)
             begin
                 if rising_edge(clk) then
-                    aluResult <= executeAlu(liveRR, slotRegReadI0_static, argValuesUpdated, bqSelected.nip, unfoldedAluOp).value;
+                    aluResult <= executeAlu('0', slotRegReadI0_static, argValuesUpdated, bqSelected.nip, unfoldedAluOp).value;
                 end if;
             end process;
 
-                subpipeI0_E0.dbInfo <= slotE0_static.st.dbInfo;
-                subpipeI0_E0.full <= slotE0_static.full;
-                subpipeI0_E0.failed <= '0';
-                subpipeI0_E0.poison <= slotE0_static.poison;
-                subpipeI0_E0.tag <= slotE0_static.st.tags.renameIndex;
-                subpipeI0_E0.dest <= slotE0_static.dest;
-                subpipeI0_E0.value <= aluResult;
+            subpipeI0_E0 <= slot2er(slotE0_static, aluResult);
 
 
             JUMPS: block
                 signal dataToBranch, branchResultE0, branchResultE1: ControlPacket := DEFAULT_CONTROL_PACKET;
                 signal suppressNext1, suppressNext2, lateEventPre: std_logic := '0';
                 signal branch0BeforeRR, branch1BeforeRR: std_logic := '0';
+                
+                function getBqUpdate(cp: ControlPacket) return ExecResult is
+                    variable res: ExecResult := DEFAULT_EXEC_RESULT;
+                begin
+                    res.full := cp.controlInfo.c_full;
+                    res.tag := cp.tags.renameIndex;
+                    res.value := cp.target;
+                    return res;
+                end function;
             begin
 
                 dataToBranch <= basicBranch(liveRR and slotRegReadI0_static.st.branchIns and not suppressNext1 and not suppressNext2,
-                                   -- .st,
-                                    slotRegReadI0_static, argValuesUpdated, bqSelected, unfoldedAluOp, events.lateCausing);
+                                            slotRegReadI0_static, argValuesUpdated, bqSelected, unfoldedAluOp, events.lateCausing);
 
                 process (clk)
                     use work.LogicLogging.all;
@@ -617,9 +638,11 @@ begin
 
                 branchCtrl <= branchResultE0;
 
-                bqUpdate.full <= branchResultE0.controlInfo.c_full;
-                bqUpdate.tag <= branchResultE0.tags.renameIndex;
-                bqUpdate.value <= branchResultE0.target;
+--                bqUpdate.full <= branchResultE0.controlInfo.c_full;
+--                bqUpdate.tag <= branchResultE0.tags.renameIndex;
+--                bqUpdate.value <= branchResultE0.target;
+
+                bqUpdate <= getBqUpdate(branchResultE0);
 
                 events <= (dataToBranch.tags, branchResultE0.tags, execEvent, lateEvent, memFailSig);
 
@@ -656,11 +679,11 @@ begin
 
                 accept => allocAcceptMul,
 
-                inReady => frontGroupSend,
-                inMask => mulMaskRe,
-                
                 TMP_outTags => TMP_mulTags,
                 TMP_outTagsPre => TMP_mulTagsPre,
+
+                inReady => frontGroupSend,
+                inMask => mulMaskRe,
 
                 prevSendingOK => renamedSending,
                 newArr => schedInfoUpdatedU,
@@ -724,7 +747,8 @@ begin
                     outE2 => EP_I1_E2,
                 outStage0 => subpipeI1_E0,
                 outStage1 => subpipeI1_E1,
-                output => subpipeI1_E2
+                output => subpipeI1_E2,
+                    outputValue => open
             );
 
         end generate;
@@ -800,7 +824,8 @@ begin
             slotIssueMerged <= slotIssueM0mq when slotIssueM0mq.full = '1'
                         else   slotIssueM0;
 
-            EP_M0_IssueMQ <= updateEP_Async( makeEP(slotIssueM0mq), events_T);
+            EP_M0_IssueMQ <= updateEP_Async( makeEP(slotIssueM0mq), --events_T);
+                                                                    events);
 
             process (clk)
                 function TMP_clearDestForInt(ss: SchedulerState) return SchedulerState is
@@ -1567,8 +1592,8 @@ begin
 	)
 	port map(
 		clk => clk, reset => '0', en => '0',
-		events => --events,
-		              events_T,
+		events => events,
+		            --  events_T,
 
 		acceptAlloc => allocAcceptSQ,
 
@@ -1614,8 +1639,8 @@ begin
 	)
 	port map(
 		clk => clk, reset => '0', en => '0',
-		events => --events,
-		              events_T,
+		events => events,
+		            --  events_T,
 
 		acceptAlloc => allocAcceptLQ,
 

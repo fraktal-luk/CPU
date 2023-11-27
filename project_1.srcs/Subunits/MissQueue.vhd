@@ -415,6 +415,7 @@ begin
     OUTPUTS: block
         signal outEntrySig: MQ_Entry := DEFAULT_MQ_ENTRY;
         signal adrOutWord, tagOutWord, renameTagOutWord: Mword := (others => '0');
+        signal full3: std_logic := '0';
     begin
         process (clk)
         begin
@@ -433,8 +434,9 @@ begin
 --        tagOutWord <= tags(p2i(selPtr2, QUEUE_SIZE));
 --        renameTagOutWord <= renameTags(p2i(selPtr2, QUEUE_SIZE));
 
+        full3 <= queueContent(p2i(selPtr2, QUEUE_SIZE)).full;
 
-        selectedDataOutput <= makeOutputData(outEntrySig, adrOutWord, tagOutWord, renameTagOutWord, sending2, lateEventSignal);
+        selectedDataOutput <= makeOutputData(outEntrySig, adrOutWord, tagOutWord, renameTagOutWord, sending2 and full3, lateEventSignal);
         selectedDataResult <= makeOutputResult(outEntrySig, tagOutWord);
 
         selectedEP <= selectedEPSig;
