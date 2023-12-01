@@ -48,12 +48,10 @@ end MultiplierDivider;
 
 
 architecture Behavioral of MultiplierDivider is
-    signal dataToMul --, divSlot
-            : ExecResult := DEFAULT_EXEC_RESULT;
-    signal dataToMul_C, dataMulE0_C, dataMulE1_C, dataMulE2_C, divSlot_C: ExecResult := DEFAULT_EXEC_RESULT;
-    signal divAllowed, sendingDivIssued, divRR, --divFull,
+    signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
+    signal divAllowed, sendingDivIssued, divRR,
             divAllowed_Pre, divRR_Pre, divPrepareSend_Pre,
-            divUnlock,-- divUnlock_Alt,
+            divUnlock,
             divUnlock_AltP,
             divPrepareSend, divResultSending, divResultSendingNK,
             divPrepareSend_N, divResultSending_N,
@@ -85,36 +83,28 @@ begin
     sendingDivRR <= prevSending and usesDivider(input);
 
     -- This must mux issued multiply with div result
-    --dataToMul <= divSlot when divResultSending = '1'
-    dataToMul <= divSlot_C when divResultSending = '1'
+    dataToMul <= divSlot when divResultSending = '1'
             else prepareMultiply(prevSending, input);
 
-        dataMulE0_C <= makeExecResult(stageE0);
-        dataMulE1_C <= makeExecResult(stageE1);
-        dataMulE2_C <= makeExecResult(stageE2);
-        divSlot_C <= makeExecResult(stageDiv);
-
-         --   ch1 <= bool2std(dataMulE1_C = dataMulE1);
-         --   ch2 <= bool2std(dataMulE2_C = dataMulE2);
-         --   ch3 <= bool2std(divSlot_C = divSlot);
+    dataMulE0 <= makeExecResult(stageE0);
+    dataMulE1 <= makeExecResult(stageE1);
+    dataMulE2 <= makeExecResult(stageE2);
+    divSlot <= makeExecResult(stageDiv);
 
     process (clk)
     begin
         if rising_edge(clk) then
-          --  dataMulE0 <= dataToMul;
-          --  dataMulE1 <= dataMulE0;
-          ---  dataMulE2 <= dataMulE1;
+            if divResultSending = '1' then
+                stageE0 <= stageDiv;
+            elsif sendingDivRR /= '1' then
+                stageE0 <= work.LogicArgRead.advanceControlRR(input, input.full, events);
+            else 
+                stageE0 <= DEFAULT_SCHED_STATE;
+            end if;
             
-                if divResultSending = '1' then
-                    stageE0 <= stageDiv;
-                elsif sendingDivRR /= '1' then
-                    stageE0 <= work.LogicArgRead.advanceControlRR(input, input.full, events);
-                else 
-                    stageE0 <= DEFAULT_SCHED_STATE;
-                end if;
-                
-                stageE1 <= work.LogicArgRead.advanceControlRR(stageE0, stageE0.full, events);
-                stageE2 <= work.LogicArgRead.advanceControlRR(stageE1, stageE1.full, events);
+            stageE1 <= work.LogicArgRead.advanceControlRR(stageE0, stageE0.full, events);
+            stageE2 <= work.LogicArgRead.advanceControlRR(stageE1, stageE1.full, events);
+
 
             divResultSent <= divResultSending;
             divResultSent2 <= divResultSent;
@@ -169,29 +159,21 @@ begin
         end if;
     end process;
 
-    --divUnlock <= divUnlock_Alt;
     divUnlock <= divUnlock_AltP and not preInput.maybeFull;
 
     DIVISION: block
-        signal usingDiv, usingRem,-- trialled,
-                trialled_C, kill, kill_C, opUnsigned: std_logic := '0';
+        signal usingDiv, usingRem, trialled, kill, opUnsigned: std_logic := '0';
         signal divTime: SmallNumber := sn(0);
     begin
-    
-                ch0 <= bool2std(kill_C = kill);
-              --  ch3 <= '1';
-    
-            divAllowed_Pre <= divUnlock;
-            divPrepareSend_Pre <= divFull and bool2std(slv2u(divTime) = 29);
-            divRR_Pre <= sendingDivIssued and not killFollowerNext;
+        divAllowed_Pre <= divUnlock;
+        divPrepareSend_Pre <= divFull and bool2std(slv2u(divTime) = 29);
+        divRR_Pre <= sendingDivIssued and not killFollowerNext;
 
         divFullNext_T <= '0' when (divResultSending = '1' or kill = '1')
                     else '1' when sendingDivRR = '1'
                     else divFull;
 
-        kill <= --(trialled and events.execCausing.full) or events.lateCausing.full; -- move to division
-                kill_C;
-        kill_C <= (trialled_C and events.execCausing.full) or events.lateCausing.full; -- move to division
+        kill <= (trialled and events.execCausing.full) or events.lateCausing.full; -- move to division
 
         divPrepareSend <= divPrepareSend_N;
         divResultSending <= divResultSending_N;
@@ -202,7 +184,6 @@ begin
             if rising_edge(clk) then
                 divUnlock_AltP <= not (divAllowed_Pre and not divPrepareSend_Pre) and not divRR_Pre and not divFullNext_T;
 
-            
                 divPrepareSend_N <= divFull and bool2std(slv2u(divTime) = 29); -- TMP value
                 divResultSendingNK <= divFull and bool2std(slv2u(divTime) = 31); -- TMP value
 
@@ -215,8 +196,7 @@ begin
 
                 divRR <= sendingDivIssued and not killFollowerNext;
 
-                --trialled <= compareTagBefore(events.preExecTags.renameIndex, divSlot.tag);
-                trialled_C <= compareTagBefore(events.preExecTags.renameIndex, divSlot_C.tag) and divSlot_C.full;
+                trialled <= compareTagBefore(events.preExecTags.renameIndex, divSlot.tag) and divSlot.full;
 
                 if divResultSending = '1' then
                     assert sendingDivIssued /= '1' report "Division overwrite!";
@@ -224,21 +204,17 @@ begin
                 end if;
 
                 if divResultSending = '1' or kill = '1' then
-                    --divFull <= '0';
-                    --divSlot.dbInfo <= DEFAULT_DEBUG_INFO;
                     divEP <= DEFAULT_EXEC_PACKET;
-                        stageDiv <= DEFAULT_SCHED_STATE;
+                    stageDiv <= DEFAULT_SCHED_STATE;
                         
                     usingDiv <= '0';
                     usingRem <= '0';
                 elsif sendingDivRR = '1' then
-                    --divSlot <= makeExecResult(input);
                     divEP <= updateEP(inputEP, events);
-                        stageDiv <= work.LogicArgRead.advanceControlRR(input, input.full, events);
+                    stageDiv <= work.LogicArgRead.advanceControlRR(input, input.full, events);
 
                     usingDiv <= bool2std(input.st.operation.arith = opDivU or input.st.operation.arith = opDivS);
                     usingRem <= bool2std(input.st.operation.arith = opRemU or input.st.operation.arith = opRemS);
-                    --divFull <= '1';
                     divTime <= sn(0);
                 else
                     divEP <= updateEP(divEP, events);
@@ -387,12 +363,9 @@ begin
     lockIssueI1Out <= divPrepareSend;
     divUnlockOut <= divUnlock;
 
---    outStage0 <= dataMulE0;
---    outStage1 <= dataMulE1;  -- signals result tag
---    output <= setMemFail(dataMulE2, '0', mulResult);
-    outStage0 <= dataMulE0_C;
-    outStage1 <= dataMulE1_C;  -- signals result tag
-    output <= setMemFail(dataMulE2_C, '0', mulResult);
+    outStage0 <= dataMulE0;
+    outStage1 <= dataMulE1;  -- signals result tag
+    output <= setMemFail(dataMulE2, '0', mulResult);
         outputValue <= mulResult;
 
     sending <= divResultSending;
