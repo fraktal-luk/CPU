@@ -41,6 +41,8 @@ entity MultiplierDivider is
         outStage1: out ExecResult;
 
         output: out ExecResult;
+        
+            last: out SchedulerState;
         outputValue: out Mword
     );
 end MultiplierDivider;
@@ -48,7 +50,7 @@ end MultiplierDivider;
 
 
 architecture Behavioral of MultiplierDivider is
-    signal dataToMul, dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
+    signal dataMulE0, dataMulE1, dataMulE2, divSlot: ExecResult := DEFAULT_EXEC_RESULT;
     signal divAllowed, sendingDivIssued, divRR,
             divAllowed_Pre, divRR_Pre, divPrepareSend_Pre,
             divUnlock,
@@ -82,9 +84,6 @@ begin
     sendingDivIssued <= preInput.full and usesDivider(preInput); -- Speculative because it doesn't take into account kill signals?
     sendingDivRR <= prevSending and usesDivider(input);
 
-    -- This must mux issued multiply with div result
-    dataToMul <= divSlot when divResultSending = '1'
-            else prepareMultiply(prevSending, input);
 
     dataMulE0 <= makeExecResult(stageE0);
     dataMulE1 <= makeExecResult(stageE1);
@@ -366,7 +365,9 @@ begin
     outStage0 <= dataMulE0;
     outStage1 <= dataMulE1;  -- signals result tag
     output <= setMemFail(dataMulE2, '0', mulResult);
-        outputValue <= mulResult;
+
+        last <= stageE2;
+    outputValue <= mulResult;
 
     sending <= divResultSending;
 
