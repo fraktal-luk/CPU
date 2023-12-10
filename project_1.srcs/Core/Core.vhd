@@ -94,8 +94,8 @@ architecture Behavioral of Core is
     signal pcData, bpCtrl, frontCtrl, renamedCtrl, ctrlOutROB,
            bqSelected, branchCtrl,       
            mqReexecCtrlIssue, mqReexecCtrlRR,   
-           memAddressControlEarly, memCtrlE0, missedMemCtrlE1,-- missedMemCtrlE1_Alt, 
-           memoryCtrlE2, missedMemCtrlE2,-- missedMemCtrlE2_Alt,
+           memAddressControlEarly, memCtrlE0, missedMemCtrlE1,
+           memoryCtrlE2, missedMemCtrlE2,
            ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal frontEvent, execEvent, lateEvent,
@@ -438,14 +438,11 @@ begin
               intWriteConflict, storeValueCollisionIssue, storeValueCollisionRR, storeValueCollisionE0, memDepFail, prevMemDepFail: std_logic := '0';
 
         signal subpipeI0_Issue,  subpipeI0_RegRead,      subpipeI0_E0,                                    subpipeI0_D0,
-                --subpipeI1_Issue, subpipeI1_RegRead, 
                                                          subpipeI1_E0,  subpipeI1_E1,    subpipeI1_E2,    subpipeI1_D0,  subpipeI1_D1,
-                                                         subpipeM0_E0,  --subpipeM0_E1,    
-                                                                                         subpipeM0_E2,
-                                                                        subpipeM0_E1_Alt, subpipeM0_E2_Alt,
+                                                                        subpipeM0_E1,    subpipeM0_E2,                                                                       
                                  subpipeM0_RegReadInt,   subpipeM0_E0i, subpipeM0_E1i,   subpipeM0_E2i,   subpipeM0_D0i,
                                  subpipeM0_RegReadFloat, subpipeM0_E0f, subpipeM0_E1f,   subpipeM0_E2f,   subpipeM0_D0f, subpipeM0_D1f,
-
+                                                                
                                  -- bypass               -- RR, bypass? -- bypass?     -- byp., vals, cpl -- byp, vals
                                  subpipeF0_RegRead,      subpipeF0_E0,  subpipeF0_E1,    subpipeF0_E2,    subpipeF0_D0,
               subpipe_DUMMY: ExecResult := DEFAULT_EXEC_RESULT;
@@ -745,7 +742,6 @@ begin
 
             signal stageE0, stageE1, stageE2, stageD0, stageD1: SchedulerState := DEFAULT_SCHEDULER_STATE;
             signal destE0i, destE0f, destE1i, destE1f, destE2i, destE2f, destD0i, destD0f, destD1i, destD1f: PhysName := (others => '0');
-            signal resE0i, resE0f, resE1i, resE1f, resE2i, resE2f, resD0i, resD0f, resD1i, resD1f: ExecResult := DEFAULT_EXEC_RESULT;
 
             signal memResultE0, memResultE1, memResultE2, memResultD0, memResultD1, adrE0, adrE1: Mword := (others => '0');
 
@@ -755,7 +751,8 @@ begin
 
             signal EP_M0_IssueMQ: ExecPacket := DEFAULT_EXEC_PACKET;
 
-            signal hitInt, hitFloat, failInt, failFloat: std_logic := '0';
+            signal hitIntE2, hitFloatE2, failIntE2, failFloatE2, hitIntD0, hitFloatD0, failIntD0, failFloatD0, hitIntD1, hitFloatD1, failIntD1, failFloatD1
+                 : std_logic := '0';
             signal loadValueE2: Mword := (others => '0');
 
                 function TMP_getControlToM0(srr: SchedulerState) return ControlPacket is
@@ -769,6 +766,8 @@ begin
 
                     return res;
                 end function;
+                
+                signal fullE0: std_logic := '0';
         begin
             schedInfoA <= getIssueInfoArray(renamedData, true, renamedArgsMerged, readyRegFlagsInt_Early_Mem, TMP_renamedDests, TMP_renamedSources, M0);         
 
@@ -940,12 +939,13 @@ begin
 
             ------------------------------------------------
             -- E0 -- 
-            memAddressInput.full <= subpipeM0_E0.full;  -- Interface LSQ (full, value)
-            memAddressInput.value <= subpipeM0_E0.value;  -- Interface LSQ (full, value)
+            memAddressInput.full <= fullE0;
+            memAddressInput.value <= adrE0;
             
             memCtrlE0 <= ctrlE0; -- Interface
-            memoryRead.full <= subpipeM0_E0.full; -- Out (full, value)
-            memoryRead.value <= subpipeM0_E0.value; -- Out (full, value)
+            
+            memoryRead.full <= fullE0;
+            memoryRead.value <= adrE0;
 
             --------------------------------------------------------
             -- E1 --
@@ -957,7 +957,7 @@ begin
                 memLoadReady <= dvalid; -- In
                 memLoadValue <= din;    -- In
 
-                memResultE1 <= getLSResultData_result(  ctrlE1.op,
+                memResultE1 <= getLSResultData_result(ctrlE1.op,
                                                       memLoadReady, memLoadValue,
                                                       sysRegReadOut.full, sysRegReadOut.value,
                                                       ctOutSQ, ctOutLQ).value;
@@ -968,41 +968,47 @@ begin
 
                 memoryMissed <= ctrlE1u.controlInfo.dataMiss or ctrlE1u.controlInfo.sqMiss;
 
-                memFailSig <= (memoryMissed and subpipeM0_E1_Alt.full);
+                memFailSig <= (memoryMissed and subpipeM0_E1.full);
                 
                 missedMemE1_EP <= TMP_missedMemResultEP(EP_M0_E1, memoryMissed, memResultE1);
-                missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1_Alt, memoryMissed, memResultE1);    -- for MQ            
-                missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1_Alt, subpipeM0_E1f, ctrlE1, ctrlE1u, resOutSQ); -- MQ
+                missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1, memoryMissed, memResultE1);    -- for MQ            
+                missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f, ctrlE1, ctrlE1u, resOutSQ); -- MQ
 
                 process (clk)
                 begin
-                    if rising_edge(clk) then              
-                        hitInt <= EP_M0_E1.full and stageE1.intDestSel and not memoryMissed;
-                        failInt <= EP_M0_E1.full and stageE1.intDestSel and memoryMissed;
+                    if rising_edge(clk) then
+                        hitIntE2 <= EP_M0_E1.full and stageE1.intDestSel and not memoryMissed;
+                        failIntE2 <= EP_M0_E1.full and stageE1.intDestSel and memoryMissed;
+                        hitFloatE2 <= EP_M0_E1.full and stageE1.floatDestSel and not memoryMissed;
+                        failFloatE2 <= EP_M0_E1.full and stageE1.floatDestSel and memoryMissed;
+                        
+                        hitIntD0 <= hitIntE2 and EP_M0_E2.full;
+                        hitFloatD0 <= hitFloatE2 and EP_M0_E2.full;
+                        hitIntD1 <= hitIntD0 and EP_M0_D0.full;
+                        hitFloatD1 <= hitFloatD0 and EP_M0_D0.full;
 
-                        hitFloat <= EP_M0_E1.full and stageE1.floatDestSel and not memoryMissed;
-                        failFloat <= EP_M0_E1.full and stageE1.floatDestSel and memoryMissed;
+                        failIntD0 <= failIntE2 and EP_M0_E2.full;
+                        failFloatD0 <= failFloatE2 and EP_M0_E2.full;
+                        failIntD1 <= failIntD0 and EP_M0_D0.full;
+                        failFloatD1 <= failFloatD0 and EP_M0_D0.full;
 
                         loadValueE2 <= memResultE1;
                     end if;
                 end process;
             end block;
 
+            fullE0 <= stageE0.full;
+                
             process (clk)
             begin
                 if rising_edge(clk) then
-                            ch0 <= '1';
- 
+                        ch0 <= '1';
+--                            ch0 <= bool2std(subpipeM0_D0i_Alt = subpipeM0_D0i);
                     ctrlE0 <= controlToM0_E0;
-                        adrE0 <= resultToM0_E0.value;
-                    subpipeM0_E0 <= resultToM0_E0;  -- mem out interface
-                    subpipeM0_E0i <= resultToM0_E0i; -- common: tag, value; different: full, dest
-                    subpipeM0_E0f <= resultToM0_E0f; -- common: tag, value; different: full, dest
+                    adrE0 <= resultToM0_E0.value;
 
                     ctrlE1 <= ctrlE0;
-                        adrE1 <= subpipeM0_E0.value;
-                    subpipeM0_E1i <= subpipeM0_E0i;
-                    subpipeM0_E1f <= subpipeM0_E0f;
+                    adrE1 <= adrE0;
 
                     -- Here we integrate mem read result
                     ctrlE2 <= ctrlE1u;
@@ -1013,53 +1019,40 @@ begin
                 end if;
             end process;
 
-                subpipeM0_E1_Alt.full <= EP_M0_E1.full;
-                subpipeM0_E1_Alt.failed <= EP_M0_E1.fail;
-                subpipeM0_E1_Alt.tag <= EP_M0_E1.tag;
-                subpipeM0_E1_Alt.dest <= stageE1.dest; 
-                subpipeM0_E1_Alt.value <= adrE1;
-                subpipeM0_E1_Alt.poison <= EP_M0_E1.poison;
+            subpipeM0_E1.full <= EP_M0_E1.full;
+            subpipeM0_E1.failed <= EP_M0_E1.fail;
+            subpipeM0_E1.tag <= EP_M0_E1.tag;
+            subpipeM0_E1.dest <= stageE1.dest; 
+            subpipeM0_E1.value <= adrE1;
+            subpipeM0_E1.poison <= EP_M0_E1.poison;
 
 
-                subpipeM0_E2_Alt.full <= EP_M0_E2.full;
-                subpipeM0_E2_Alt.failed <= EP_M0_E2.fail;
-                subpipeM0_E2_Alt.tag <= EP_M0_E2.tag;
-                subpipeM0_E2_Alt.poison <= EP_M0_E2.poison;
-                
-                    subpipeM0_E2 <= subpipeM0_E2_Alt;
+            subpipeM0_E2.full <= EP_M0_E2.full;
+            subpipeM0_E2.failed <= EP_M0_E2.fail;
+            subpipeM0_E2.tag <= EP_M0_E2.tag;
+            subpipeM0_E2.poison <= EP_M0_E2.poison;
 
             memoryCtrlE2 <= ctrlE2; -- for ROB
 
             -- E0
-            resE0i.dest <= destE0i;
-            resE0i.value <= memResultE0;
-
-            resE0f.dest <= destE0f;
-            resE0f.value <= memResultE0;
+            subpipeM0_E0i <= makeMemResult(stageE0, stageE0.full and stageE0.intDestSel, '0', destE0i, adrE0);
+            subpipeM0_E0f <= makeMemResult(stageE0, stageE0.full and stageE0.floatDestSel, '0', destE0f, adrE0);
 
             -- E1
-            resE1i <= makeMemResult(stageE1, stageE1.full and stageE1.intDestSel, '0', destE1i, (others => '0'));
-            resE1f <= makeMemResult(stageE1, stageE1.full and stageE1.floatDestSel, '0', destE1f, (others => '0'));
+            subpipeM0_E1i <= makeMemResult(stageE1, stageE1.full and stageE1.intDestSel, '0', destE1i, adrE1);
+            subpipeM0_E1f <= makeMemResult(stageE1, stageE1.full and stageE1.floatDestSel, '0', destE1f, adrE1);
 
             -- E2
-            resE2i <= makeMemResult(stageE2, hitInt,   failInt,   destE2i, loadValueE2);                
-            resE2f <= makeMemResult(stageE2, hitFloat, failFloat, destE2f, loadValueE2);
-                subpipeM0_E2i <= resE2i;
-                subpipeM0_E2f <= resE2f;
+            subpipeM0_E2i <= makeMemResult(stageE2, hitIntE2,   failIntE2,   destE2i, loadValueE2);                
+            subpipeM0_E2f <= makeMemResult(stageE2, hitFloatE2, failFloatE2, destE2f, loadValueE2);
 
             -- D0
-            resD0i.dest <= destD0i;
-            resD0i.value <= memResultD0;
-
-            resD0f.dest <= destD0f;
-            resD0f.value <= memResultD0;
+           subpipeM0_D0i <= makeMemResult(stageD0, hitIntD0, failIntD0, destD0i, memResultD0);
+           subpipeM0_D0f <= makeMemResult(stageD0, hitFloatD0, failFloatD0, destD0f, memResultD0);
 
             -- D1
-            resD1i.dest <= destD1i;
-            resD1i.value <= memResultD1;
-
-            resD1f.dest <= destD1f;
-            resD1f.value <= memResultD1;
+           --resD1i <= makeMemResult(stageD1, hitIntD1, failIntD1, destD1i, memResultD1);
+           subpipeM0_D1f <= makeMemResult(stageD1, hitFloatD1, failFloatD1, destD1f, memResultD1);
 
         end block;
 
@@ -1301,10 +1294,6 @@ begin
 
                 subpipeI1_D0 <= TMP_clearDestOnFail(subpipeI1_E2);
                 subpipeI1_D1 <= TMP_clearDestOnFail(subpipeI1_D0);
-
-                subpipeM0_D0i <= TMP_clearDestOnFail(subpipeM0_E2i);
-                subpipeM0_D0f <= TMP_clearDestOnFail(subpipeM0_E2f);
-                subpipeM0_D1f <= TMP_clearDestOnFail(subpipeM0_D0f);
 
                 subpipeF0_D0 <= TMP_clearDestOnFail(subpipeF0_E2);
             end if;
@@ -1670,10 +1659,9 @@ begin
             sqValueResultE2 <= sqValueResultE1;
 
             -- MQ inputs
-                missedMemE2_EP <= updateEP(missedMemE1_EP, events);
+            missedMemE2_EP <= updateEP(missedMemE1_EP, events);
             missedMemResultE2 <= missedMemResultE1;
             missedMemCtrlE2 <= missedMemCtrlE1;
-            --missedMemCtrlE2_Alt <= missedMemCtrlE1_Alt;
 
             -- MQ outputs
             mqReexecCtrlRR <= mqReexecCtrlIssue;
