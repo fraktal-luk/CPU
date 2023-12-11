@@ -103,9 +103,11 @@ architecture Behavioral of Core is
            mqReexecResIssue, mqReexecResRR,
            memoryRead, sysRegReadIn, sysRegReadOut,
            memAddressInputEarly, memAddressInput,
-           sqValueResultRR, sqValueResultE0, sqValueResultE1, sqValueResultE2,
+           sqValueResultRR,
+           subpipeSV_E0, subpipeSV_E1, subpipeSV_E2,
            resOutSQ,
-           missedMemResultE1, missedMemResultE2,
+           --missedMemResultE1, 
+           missedMemResultE2,
            bqTargetData,
            defaultExecRes
            : ExecResult := DEFAULT_EXEC_RESULT;
@@ -119,7 +121,6 @@ architecture Behavioral of Core is
 
     signal lockIssueI0_NoMemFail, dividerSending: std_logic := '0';   
 
-    signal missedMemE0_EP, missedMemE1_EP, missedMemE2_EP: ExecPacket := DEFAULT_EXEC_PACKET;
     signal EP_MQ_Issue, EP_M0_RegRead_copy, EP_M0_E0_copy, EP_M0_E1_copy, EP_M0_E2_copy: ExecPacket := DEFAULT_EXEC_PACKET;
 
     signal EP_A_Main, EP_A_Sec: ExecPacketArray(0 to 3) := (others => DEFAULT_EXEC_PACKET);
@@ -226,12 +227,12 @@ begin
 
         bqAccepting => bqAccepting,
         bpData => bpData,
-        bpCtrl => bpCtrl, -- TODO: control packet
+        bpCtrl => bpCtrl,
 
         renameAccepting => frontSendAllow,
 
         dataOut => frontGroupOut,
-        ctrlOut => frontCtrl, -- TODO: control packet
+        ctrlOut => frontCtrl,
 
         -- Event out
         frontCausing => frontEvent,
@@ -281,29 +282,29 @@ begin
 
         renamedSending <= renamedCtrl.full;
 
-            dispMasks_Actual <= (
-                alu => aluMaskRe,
-                mul => mulMaskRe,
-                mem => memMaskRe,
-                branch => branchMaskRe,
-                load => loadMaskRe,
-                store => storeMaskRe,
-                intStore => intStoreMaskRe,
-                floatStore => floatStoreMaskRe,
-                fp => fpMaskRe
-            );
+        dispMasks_Actual <= (
+            alu => aluMaskRe,
+            mul => mulMaskRe,
+            mem => memMaskRe,
+            branch => branchMaskRe,
+            load => loadMaskRe,
+            store => storeMaskRe,
+            intStore => intStoreMaskRe,
+            floatStore => floatStoreMaskRe,
+            fp => fpMaskRe
+        );
 
-            dispMasks_N <= getDispatchMasks(frontGroupOut);
+        dispMasks_N <= getDispatchMasks(frontGroupOut);
 
-                aluMaskRe <= dispMasks_N.alu;
-                mulMaskRe <= dispMasks_N.mul;
-                memMaskRe <= dispMasks_N.mem;
-                branchMaskRe <= dispMasks_N.branch;
-                loadMaskRe <= dispMasks_N.load;
-                storeMaskRe <= dispMasks_N.store;
-                intStoreMaskRe <= dispMasks_N.intStore;
-                floatStoreMaskRe <= dispMasks_N.floatStore;
-                fpMaskRe <= dispMasks_N.fp;
+            aluMaskRe <= dispMasks_N.alu;
+            mulMaskRe <= dispMasks_N.mul;
+            memMaskRe <= dispMasks_N.mem;
+            branchMaskRe <= dispMasks_N.branch;
+            loadMaskRe <= dispMasks_N.load;
+            storeMaskRe <= dispMasks_N.store;
+            intStoreMaskRe <= dispMasks_N.intStore;
+            floatStoreMaskRe <= dispMasks_N.floatStore;
+            fpMaskRe <= dispMasks_N.fp;
 
     canSendRename <= '1';
 
@@ -429,7 +430,7 @@ begin
               slotIssueFloatSV, slotRegReadFloatSV
                         : SchedulerState := DEFAULT_SCHED_STATE;
 
-       signal stateExecStoreValue: SchedulerState := DEFAULT_SCHED_STATE;
+       signal stateExecStoreValue, stageSV_E0, stageSV_E1, stageSV_E2: SchedulerState := DEFAULT_SCHED_STATE;
 
        -- Issue control 
        signal lockIssueSVI, lockIssueSVF, allowIssueStoreDataInt, allowIssueStoreDataFP, lockIssueI0, allowIssueI0,
@@ -468,6 +469,8 @@ begin
               : std_logic_vector(0 to 3*PIPE_WIDTH-1) := (others => '0');
 
         signal argValuesIntSV, argValuesIntDelaySV, argValuesFloatSV, argValuesSV: MwordArray(0 to 2) := (others => (others => '0')); 
+        
+        signal storeDataE0, storeDataE1, storeDataE2: Mword := (others => '0');
 
         signal memFail, memFailSig: std_logic := '0';
             signal ch_a, ch_m, ch_si, ch_sf, ch_f: std_logic := '0';
@@ -481,6 +484,20 @@ begin
             res.poison := ss.poison;
             res.tag := ss.st.tags.renameIndex;
             res.dest := ss.dest;
+            res.value := result;
+
+            return res;
+        end function;
+
+        function slot2erSV(ss: SchedulerState; result: Mword) return ExecResult is
+            variable res: ExecResult := DEFAULT_EXEC_RESULT;
+        begin
+            res.dbInfo := ss.st.dbInfo;
+            res.full := ss.full;
+            res.failed := '0';
+            res.poison := ss.poison;
+            res.tag := ss.st.tags.renameIndex;
+            res.dest := ss.st.tags.sqPointer;
             res.value := result;
 
             return res;
@@ -694,8 +711,8 @@ begin
                     EP_I1_D0 <= updateEP(EP_I1_E2, events);
                     EP_I1_D1 <= updateEP(EP_I1_D0, events);
 
-                        stageD0 <= advanceControlRR(stageE2, stageE2.full, events);
-                        stageD1 <= advanceControlRR(stageD0, stageD0.full, events);
+                    stageD0 <= advanceControlRR(stageE2, stageE2.full, events);
+                    stageD1 <= advanceControlRR(stageD0, stageD0.full, events);
                 end if;
             end process;
 
@@ -751,9 +768,9 @@ begin
 
             signal EP_M0_IssueMQ: ExecPacket := DEFAULT_EXEC_PACKET;
 
-            signal hitIntE2, hitFloatE2, failIntE2, failFloatE2, hitIntD0, hitFloatD0, failIntD0, failFloatD0, hitIntD1, hitFloatD1, failIntD1, failFloatD1
+            signal hitIntE2, hitFloatE2, failIntE2, failFloatE2, hitIntD0, hitFloatD0, failIntD0, failFloatD0, hitIntD1, hitFloatD1, failIntD1, failFloatD1,
+                   hitE2, failE2, hitD0, failD0, hitD1, failD1 
                  : std_logic := '0';
-            signal loadValueE2: Mword := (others => '0');
 
                 function TMP_getControlToM0(srr: SchedulerState) return ControlPacket is
                     variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
@@ -957,26 +974,24 @@ begin
                 memLoadReady <= dvalid; -- In
                 memLoadValue <= din;    -- In
 
-                memResultE1 <= getLSResultData_result(ctrlE1.op,
-                                                      memLoadReady, memLoadValue,
-                                                      sysRegReadOut.full, sysRegReadOut.value,
-                                                      ctOutSQ, ctOutLQ).value;
+                memResultE1 <= getLSResultData_result(ctrlE1.op, memLoadValue, sysRegReadOut.value, ctOutSQ).value;
+
                 ctrlE1u.full <= ctrlE1.full;
                 ctrlE1u.tags <= ctrlE1.tags;
                 ctrlE1u.op <= ctrlE1.op;
-                ctrlE1u.controlInfo <= getLSResultData(ctrlE1.op, '1', memLoadReady, sysRegReadOut.full, ctOutSQ, ctOutLQ);
+                ctrlE1u.controlInfo <= getLSResultData(ctrlE1.op, '1', memLoadReady, ctOutSQ, ctOutLQ);
 
                 memoryMissed <= ctrlE1u.controlInfo.dataMiss or ctrlE1u.controlInfo.sqMiss;
-
                 memFailSig <= (memoryMissed and subpipeM0_E1.full);
                 
-                missedMemE1_EP <= TMP_missedMemResultEP(EP_M0_E1, memoryMissed, memResultE1);
-                missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1, memoryMissed, memResultE1);    -- for MQ            
-                missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1, subpipeM0_E1f, ctrlE1, ctrlE1u, resOutSQ); -- MQ
+                --missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1, memoryMissed, memResultE1);    -- for MQ            
+                missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1f, ctrlE1u, resOutSQ); -- MQ
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
+                        hitE2 <= EP_M0_E1.full and not memoryMissed;
+                        failE2 <= EP_M0_E1.full and memoryMissed; 
                         hitIntE2 <= EP_M0_E1.full and stageE1.intDestSel and not memoryMissed;
                         failIntE2 <= EP_M0_E1.full and stageE1.intDestSel and memoryMissed;
                         hitFloatE2 <= EP_M0_E1.full and stageE1.floatDestSel and not memoryMissed;
@@ -984,26 +999,31 @@ begin
                         
                         hitIntD0 <= hitIntE2 and EP_M0_E2.full;
                         hitFloatD0 <= hitFloatE2 and EP_M0_E2.full;
+                        hitD0 <= hitE2 and EP_M0_E2.full;
+                        
                         hitIntD1 <= hitIntD0 and EP_M0_D0.full;
                         hitFloatD1 <= hitFloatD0 and EP_M0_D0.full;
-
+                        hitD1 <= hitD0 and EP_M0_D0.full;
+                        
                         failIntD0 <= failIntE2 and EP_M0_E2.full;
                         failFloatD0 <= failFloatE2 and EP_M0_E2.full;
+                        failD0 <= failE2 and EP_M0_E2.full;
+
                         failIntD1 <= failIntD0 and EP_M0_D0.full;
                         failFloatD1 <= failFloatD0 and EP_M0_D0.full;
-
-                        loadValueE2 <= memResultE1;
+                        failD1 <= failD0 and EP_M0_D0.full;
                     end if;
                 end process;
             end block;
 
             fullE0 <= stageE0.full;
-                
+
             process (clk)
             begin
                 if rising_edge(clk) then
                         ch0 <= '1';
---                            ch0 <= bool2std(subpipeM0_D0i_Alt = subpipeM0_D0i);
+                         --   ch0 <= bool2std(subpipeSV_E2 = sqValueResultE2);
+
                     ctrlE0 <= controlToM0_E0;
                     adrE0 <= resultToM0_E0.value;
 
@@ -1030,7 +1050,9 @@ begin
             subpipeM0_E2.full <= EP_M0_E2.full;
             subpipeM0_E2.failed <= EP_M0_E2.fail;
             subpipeM0_E2.tag <= EP_M0_E2.tag;
+            subpipeM0_E2.dest <= stageE2.dest;
             subpipeM0_E2.poison <= EP_M0_E2.poison;
+            subpipeM0_E2.value <= memResultE2;
 
             memoryCtrlE2 <= ctrlE2; -- for ROB
 
@@ -1043,8 +1065,8 @@ begin
             subpipeM0_E1f <= makeMemResult(stageE1, stageE1.full and stageE1.floatDestSel, '0', destE1f, adrE1);
 
             -- E2
-            subpipeM0_E2i <= makeMemResult(stageE2, hitIntE2,   failIntE2,   destE2i, loadValueE2);                
-            subpipeM0_E2f <= makeMemResult(stageE2, hitFloatE2, failFloatE2, destE2f, loadValueE2);
+            subpipeM0_E2i <= makeMemResult(stageE2, hitIntE2,   failIntE2,   destE2i, memResultE2);                
+            subpipeM0_E2f <= makeMemResult(stageE2, hitFloatE2, failFloatE2, destE2f, memResultE2);
 
             -- D0
            subpipeM0_D0i <= makeMemResult(stageD0, hitIntD0, failIntD0, destD0i, memResultD0);
@@ -1054,11 +1076,17 @@ begin
            --resD1i <= makeMemResult(stageD1, hitIntD1, failIntD1, destD1i, memResultD1);
            subpipeM0_D1f <= makeMemResult(stageD1, hitFloatD1, failFloatD1, destD1f, memResultD1);
 
+                missedMemResultE2.full <= subpipeM0_E2.failed;
+                missedMemResultE2.tag <= subpipeM0_E2.tag;
+                missedMemResultE2.dest <= subpipeM0_E2.dest;
+                missedMemResultE2.value <= subpipeM0_E2.value;
+                missedMemResultE2.poison <= subpipeM0_E2.poison;
+
         end block;
 
         ------------------------
 
-        SUBPIPES_STORE_VALUE: block
+        STORE_VALUE_INT: block
             signal schedInfoIntA, schedInfoUpdatedIntU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
             signal wupsInt: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
         begin
@@ -1192,6 +1220,24 @@ begin
 
         sqValueResultRR <= convertExecStoreValue(stateExecStoreValue, argValuesSV);
 
+        SV_STAGES: process (clk)
+        begin
+            if rising_edge(clk) then
+                stageSV_E0 <= advanceControlRR(stateExecStoreValue, stateExecStoreValue.full, events);
+                stageSV_E1 <= advanceControlRR(stageSV_E0, stageSV_E0.full, events);
+                stageSV_E2 <= advanceControlRR(stageSV_E1, stageSV_E1.full, events);
+
+                storeDataE0 <= argValuesSV(0);
+                storeDataE1 <= storeDataE0;
+                storeDataE2 <= storeDataE1;
+            end if;
+        end process;
+        
+        subpipeSV_E0 <= slot2erSV(stageSV_E0, storeDataE0);
+        subpipeSV_E1 <= slot2erSV(stageSV_E1, storeDataE1);
+        subpipeSV_E2 <= slot2erSV(stageSV_E2, storeDataE2);
+        
+
         SUBPIPE_FP0: if ENABLE_FP generate
             signal schedInfoA, schedInfoUpdatedU: SchedulerInfoArray(0 to PIPE_WIDTH-1) := (others => DEFAULT_SCHEDULER_INFO);
             signal wups: WakeupStructArray2D(0 to PIPE_WIDTH-1, 0 to 1) := (others => (others => work.LogicIssue.DEFAULT_WAKEUP_STRUCT));
@@ -1306,7 +1352,7 @@ begin
         process (clk)
         begin
            if rising_edge(clk) then
-               storeValueCollisionRR <= storeValueCollisionIssue; --issuedIntSV and issuedFloatSV;
+               storeValueCollisionRR <= storeValueCollisionIssue;
                storeValueCollisionE0 <= storeValueCollisionRR;
 
                lockIssueI0_NoMemFail <= slotIssueM0.maybeFull or mqReexecCtrlIssue.controlInfo.c_full or slotRegReadI1.maybeFull or dividerSending;
@@ -1653,14 +1699,7 @@ begin
     process (clk)
     begin
         if rising_edge(clk) then
-            -- delayed Store Data op
-            sqValueResultE0 <= sqValueResultRR;
-            sqValueResultE1 <= sqValueResultE0;
-            sqValueResultE2 <= sqValueResultE1;
-
             -- MQ inputs
-            missedMemE2_EP <= updateEP(missedMemE1_EP, events);
-            missedMemResultE2 <= missedMemResultE1;
             missedMemCtrlE2 <= missedMemCtrlE1;
 
             -- MQ outputs
@@ -1668,6 +1707,8 @@ begin
             mqReexecResRR <= mqReexecResIssue;
         end if;
     end process;
+
+--    missedMemResultE2 <= missedMemResultE2_Alt;
 
     MQ_BLOCK: if ENABLE_MQ generate 
         LOAD_MISS_QUEUE: entity work.MissQueue(DefaultMQ)
@@ -1705,7 +1746,7 @@ begin
             selectedDataResult => mqReexecResIssue,
                 selectedEP => EP_MQ_Issue,
 
-            storeValueResult => sqValueResultE2,
+            storeValueResult => subpipeSV_E2,
 
             nextAccepting => '0',
 

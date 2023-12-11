@@ -1,7 +1,5 @@
 --
 
---
-
 library IEEE;
 use IEEE.STD_LOGIC_1164.all;
 
@@ -33,14 +31,10 @@ package LogicExec is
 
     function getAluControl(op: ArithOp) return AluControl;
 
-	function basicBranch(sending: std_logic; ss_static: SchedulerState; args: MwordArray;
-	                                                   bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
+	function basicBranch(sending: std_logic; ss_static: SchedulerState; args: MwordArray; bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
 	return ControlPacket;
 
-	function executeAlu(full: std_logic; ss_static: SchedulerState;
-	                                               args: MwordArray;
-	                                               link: Mword; ac: AluControl)
-	return ExecResult;
+	function executeAlu(full: std_logic; ss_static: SchedulerState; args: MwordArray; link: Mword; ac: AluControl) return ExecResult;
 
 	function prepareMultiply(full: std_logic; st: SchedulerState) return ExecResult;
 	
@@ -49,25 +43,10 @@ package LogicExec is
 
     function mergeMemOp(stIQ, stMQ: SchedulerState; mqReady: std_logic) return SchedulerState;
 
+    function calcEffectiveAddress(full: std_logic; st: SchedulerState; argValues: MwordArray(0 to 2); fromDLQ: std_logic) return ExecResult;
 
-    function calcEffectiveAddress(full: std_logic; st: SchedulerState; argValues: MwordArray(0 to 2); fromDLQ: std_logic)--; dlqData: ExecResult)
-    return ExecResult;
-
-    function getLSResultData(op: SpecificOp;
-                             --result: Mword;
-                             tlbReady: std_logic;
-                             memLoadReady: std_logic;
-                             sysLoadReady: std_logic;
-                             ctSQ, ctLQ: ControlPacket
-                             ) return InstructionControlInfo;
-
-
-    function getLSResultData_result(op: SpecificOp;
-                              memLoadReady: std_logic; memLoadValue: Mword;
-                              sysLoadReady: std_logic; sysLoadValue: Mword;
-                              ctSQ, ctLQ: ControlPacket
-                             ) return ExecResult;
-
+    function getLSResultData(op: SpecificOp; tlbReady: std_logic; memLoadReady: std_logic; ctSQ, ctLQ: ControlPacket) return InstructionControlInfo;
+    function getLSResultData_result(op: SpecificOp; memLoadValue, sysLoadValue: Mword; ctSQ: ControlPacket) return ExecResult;
     function getBranchCompareEarly(ss: SchedulerState; full: std_logic) return ExecResult;
                                              
 end LogicExec;
@@ -81,8 +60,7 @@ package body LogicExec is
 		return ac.jumpType(1) or (ac.jumpType(0) xor isZero);
 	end function;
 
-	function basicBranch(sending: std_logic; ss_static: SchedulerState; args: MwordArray;
-	                                                   bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
+	function basicBranch(sending: std_logic; ss_static: SchedulerState; args: MwordArray; bqControl: ControlPacket; ac: AluControl; lateEvent: ExecResult)
 	return ControlPacket is
 		variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 		variable branchTaken, targetMatch, targetEqual, newEvent: std_logic := '0';
@@ -90,8 +68,7 @@ package body LogicExec is
 		constant ctrl: InstructionControlInfo := bqControl.controlInfo;
 		constant target: Mword := bqControl.target;
 		constant result: Mword := bqControl.nip;
-		constant argValues: MwordArray(0 to 2) := --ss_dynamic.argValues;
-		                                          args;
+		constant argValues: MwordArray(0 to 2) := args;
 		constant static: StaticInfo := ss_static.st;
 	begin
 		-- Cases to handle
@@ -145,8 +122,7 @@ package body LogicExec is
 
 	function calculateAlu(args: MwordArray; link: Mword; ac: AluControl)
 	return Mword is
-		variable res: --ExecResult := DEFAULT_EXEC_RESULT;
-		              Mword := (others => '0');
+		variable res: Mword := (others => '0');
 		variable result: Mword := (others => '0');
 		variable arg0, arg1, arg2: Mword := (others => '0');
 		variable argAddSub: Mword := (others => '0');
@@ -216,23 +192,16 @@ package body LogicExec is
 	end function;
 
 
-	function executeAlu(full: std_logic; ss_static: SchedulerState;
-	                                               args: MwordArray;
-	                                               link: Mword; ac: AluControl)
-	return ExecResult is
+	function executeAlu(full: std_logic; ss_static: SchedulerState; args: MwordArray; link: Mword; ac: AluControl) return ExecResult is
 		variable res: ExecResult := DEFAULT_EXEC_RESULT;
-		variable result: Mword := (others => '0');
 	begin
-		result := calculateAlu(--ss_dynamic.argValues, link, ac);
-		                       args, link, ac);
-
 		res.full := full;
 	    res.dbInfo := ss_static.st.dbInfo;
 	    res.poison := advancePoison(ss_static.poison);
 		res.tag := ss_static.st.tags.renameIndex;
 		res.dest := ss_static.dest;
 
-		res.value := result;
+		res.value := calculateAlu(args, link, ac);
 		return res;
 	end function;
 
@@ -301,10 +270,7 @@ package body LogicExec is
         if st.st.operation.float = opOr then 
            res := argValues(0) or argValues(1);
         elsif st.st.operation.float = opMove then
-           res := --st.argValues(0);
-                    argValues(0);
-        else
-           
+           res := argValues(0);
 		end if;
 
 		return res;
@@ -316,8 +282,7 @@ package body LogicExec is
     begin
         res.full := full;
         res.tag := ss.st.tags.renameIndex;
-        res.dest := --ss.argSpec.dest;
-                    ss.dest;
+        res.dest := ss.dest;
         res.value := executeFpu(ss, argValues);
         return res;
     end function;
@@ -334,33 +299,21 @@ package body LogicExec is
     end function;
 
 
-    function calcEffectiveAddress(full: std_logic; st: SchedulerState; argValues: MwordArray(0 to 2); fromDLQ: std_logic)--; dlqData: ExecResult)
-    return ExecResult is
+    function calcEffectiveAddress(full: std_logic; st: SchedulerState; argValues: MwordArray(0 to 2); fromDLQ: std_logic) return ExecResult is
         variable res: ExecResult := DEFAULT_EXEC_RESULT;
-        variable adr: Mword := (others => '0'); 
     begin
-        adr := add(argValues(0), argValues(1));
-
         res.full := full;
         
         res.poison := advancePoison(st.poison);
-
         res.dbInfo := st.st.dbInfo;
         res.tag := st.st.tags.renameIndex;
-        res.dest := --st.argSpec.dest;        
-                    st.dest;        
-        res.value := adr;
+        res.dest := st.dest;        
+        res.value := add(argValues(0), argValues(1));
 
         return res;
     end function;
 
-    function getLSResultData( op: SpecificOp;
-                              --result: Mword;
-                              tlbReady: std_logic;  
-                              memLoadReady: std_logic;
-                              sysLoadReady: std_logic;
-                              ctSQ, ctLQ: ControlPacket
-                             ) return InstructionControlInfo is
+    function getLSResultData(op: SpecificOp; tlbReady: std_logic; memLoadReady: std_logic; ctSQ, ctLQ: ControlPacket) return InstructionControlInfo is
         variable res: InstructionControlInfo := DEFAULT_CONTROL_INFO;
         constant sysOp: boolean := (isLoadSysOp(op) or isStoreSysOp(op)) = '1';
         constant memForwarded: boolean := std2bool(ctSQ.controlInfo.c_full);
@@ -393,8 +346,8 @@ package body LogicExec is
             null;
          end if;
 
-            res.dataMiss := bool2std(memFail);
-            res.sqMiss := ctSQ.controlInfo.sqMiss;
+        res.dataMiss := bool2std(memFail);
+        res.sqMiss := ctSQ.controlInfo.sqMiss;
 
          -- CAREFUL: store when newer load has been done - violation resolution when reissue is used
          if isStoreMemOp(op) = '1' and ctLQ.controlInfo.c_full = '1' then
@@ -406,15 +359,10 @@ package body LogicExec is
         return res;
     end function;
 
-    function getLSResultData_result(op: SpecificOp;
-                                  memLoadReady: std_logic; memLoadValue: Mword;
-                                  sysLoadReady: std_logic; sysLoadValue: Mword;
-                                  ctSQ, ctLQ: ControlPacket
-                                 ) return ExecResult is
+    function getLSResultData_result(op: SpecificOp; memLoadValue, sysLoadValue: Mword; ctSQ: ControlPacket) return ExecResult is
         variable res: ExecResult := DEFAULT_EXEC_RESULT;
         constant sysOp: boolean := (isLoadSysOp(op) or isStoreSysOp(op)) = '1';
         constant memForwarded: boolean := std2bool(ctSQ.controlInfo.c_full);
-        constant memFail: boolean := std2bool(not memLoadReady);
     begin
          if sysOp then
             res.value := sysLoadValue;
