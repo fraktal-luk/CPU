@@ -94,8 +94,8 @@ architecture Behavioral of Core is
     signal pcData, bpCtrl, frontCtrl, renamedCtrl, ctrlOutROB,
            bqSelected, branchCtrl,       
            mqReexecCtrlIssue, mqReexecCtrlRR,   
-           memAddressControlEarly, memCtrlE0, missedMemCtrlE1,
-           memoryCtrlE2, missedMemCtrlE2,
+           memAddressControlEarly, memCtrlE0, missedMemCtrlE1, missedMemCtrlE2, missedMemCtrlE2_Alt,
+           memoryCtrlE2,
            ctOutLQ, ctOutSQ, ctOutSB: ControlPacket := DEFAULT_CONTROL_PACKET;
 
     signal frontEvent, execEvent, lateEvent,
@@ -105,7 +105,7 @@ architecture Behavioral of Core is
            memAddressInputEarly, memAddressInput,
            sqValueResultRR,
            subpipeSV_E0, subpipeSV_E1, subpipeSV_E2,
-           resOutSQ,
+           resOutSQ, resOutSQ_Prev, 
            --missedMemResultE1, 
            missedMemResultE2,
            bqTargetData,
@@ -760,7 +760,7 @@ begin
             signal stageE0, stageE1, stageE2, stageD0, stageD1: SchedulerState := DEFAULT_SCHEDULER_STATE;
             signal destE0i, destE0f, destE1i, destE1f, destE2i, destE2f, destD0i, destD0f, destD1i, destD1f: PhysName := (others => '0');
 
-            signal memResultE0, memResultE1, memResultE2, memResultD0, memResultD1, adrE0, adrE1: Mword := (others => '0');
+            signal memResultE0, memResultE1, memResultE2, memResultD0, memResultD1, adrE0, adrE1, adrE2: Mword := (others => '0');
 
             signal controlToM0_E0, ctrlE0, ctrlE1, ctrlE1u, ctrlE2: ControlPacket := DEFAULT_CONTROL_PACKET;
             signal slotIssueM0mq, slotIssueMerged: SchedulerState := DEFAULT_SCHED_STATE;
@@ -784,7 +784,7 @@ begin
                     return res;
                 end function;
                 
-                signal fullE0: std_logic := '0';
+             --   signal fullE0: std_logic := '0';
         begin
             schedInfoA <= getIssueInfoArray(renamedData, true, renamedArgsMerged, readyRegFlagsInt_Early_Mem, TMP_renamedDests, TMP_renamedSources, M0);         
 
@@ -956,13 +956,17 @@ begin
 
             ------------------------------------------------
             -- E0 -- 
-            memAddressInput.full <= fullE0;
+            memAddressInput.full <= stageE0.full;
             memAddressInput.value <= adrE0;
             
             memCtrlE0 <= ctrlE0; -- Interface
             
-            memoryRead.full <= fullE0;
+            memoryRead.full <= stageE0.full;
             memoryRead.value <= adrE0;
+
+                 --   fullE0 <= stageE0.full;
+
+
 
             --------------------------------------------------------
             -- E1 --
@@ -984,12 +988,15 @@ begin
                 memoryMissed <= ctrlE1u.controlInfo.dataMiss or ctrlE1u.controlInfo.sqMiss;
                 memFailSig <= (memoryMissed and subpipeM0_E1.full);
                 
-                --missedMemResultE1 <= TMP_missedMemResult(subpipeM0_E1, memoryMissed, memResultE1);    -- for MQ            
-                missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1f, ctrlE1u, resOutSQ); -- MQ
+                missedMemCtrlE1 <= TMP_missedMemCtrl(subpipeM0_E1f, ctrlE1u, resOutSQ, adrE1, stageE1.full and stageE1.floatDestSel); -- MQ
+                missedMemCtrlE2 <= TMP_missedMemCtrl(subpipeM0_E2f, ctrlE2, resOutSQ_Prev, adrE2, stageE2.full and stageE2.floatDestSel); -- MQ
+                                                                                                      --stageE2.full); -- MQ
 
                 process (clk)
                 begin
                     if rising_edge(clk) then
+                        resOutSQ_Prev <= resOutSQ;
+                    
                         hitE2 <= EP_M0_E1.full and not memoryMissed;
                         failE2 <= EP_M0_E1.full and memoryMissed; 
                         hitIntE2 <= EP_M0_E1.full and stageE1.intDestSel and not memoryMissed;
@@ -1016,13 +1023,13 @@ begin
                 end process;
             end block;
 
-            fullE0 <= stageE0.full;
 
             process (clk)
             begin
                 if rising_edge(clk) then
-                        ch0 <= '1';
-                         --   ch0 <= bool2std(subpipeSV_E2 = sqValueResultE2);
+                        ch0 <= 'X';
+                        --    ch0 <= bool2std(missedMemCtrlE2 = missedMemCtrlE2_Alt);
+
 
                     ctrlE0 <= controlToM0_E0;
                     adrE0 <= resultToM0_E0.value;
@@ -1030,8 +1037,8 @@ begin
                     ctrlE1 <= ctrlE0;
                     adrE1 <= adrE0;
 
-                    -- Here we integrate mem read result
                     ctrlE2 <= ctrlE1u;
+                    adrE2 <= adrE1;
 
                     memResultE2 <= memResultE1;
                     memResultD0 <= memResultE2;
@@ -1043,8 +1050,8 @@ begin
             subpipeM0_E1.failed <= EP_M0_E1.fail;
             subpipeM0_E1.tag <= EP_M0_E1.tag;
             subpipeM0_E1.dest <= stageE1.dest; 
-            subpipeM0_E1.value <= adrE1;
             subpipeM0_E1.poison <= EP_M0_E1.poison;
+            subpipeM0_E1.value <= adrE1;
 
 
             subpipeM0_E2.full <= EP_M0_E2.full;
@@ -1076,11 +1083,7 @@ begin
            --resD1i <= makeMemResult(stageD1, hitIntD1, failIntD1, destD1i, memResultD1);
            subpipeM0_D1f <= makeMemResult(stageD1, hitFloatD1, failFloatD1, destD1f, memResultD1);
 
-                missedMemResultE2.full <= subpipeM0_E2.failed;
-                missedMemResultE2.tag <= subpipeM0_E2.tag;
-                missedMemResultE2.dest <= subpipeM0_E2.dest;
-                missedMemResultE2.value <= subpipeM0_E2.value;
-                missedMemResultE2.poison <= subpipeM0_E2.poison;
+                missedMemResultE2 <= subpipeM0_E2;
 
         end block;
 
@@ -1696,19 +1699,18 @@ begin
         dbState => dbState
 	);
 
+
     process (clk)
     begin
         if rising_edge(clk) then
             -- MQ inputs
-            missedMemCtrlE2 <= missedMemCtrlE1;
+            --missedMemCtrlE2 <= missedMemCtrlE1;
 
             -- MQ outputs
             mqReexecCtrlRR <= mqReexecCtrlIssue;
             mqReexecResRR <= mqReexecResIssue;
         end if;
     end process;
-
---    missedMemResultE2 <= missedMemResultE2_Alt;
 
     MQ_BLOCK: if ENABLE_MQ generate 
         LOAD_MISS_QUEUE: entity work.MissQueue(DefaultMQ)

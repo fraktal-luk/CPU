@@ -254,12 +254,12 @@ begin
         ch0 <= bool2std(fullMask_T /= fullMask);
 
 
-    prevSendingEarly <= compareAddressEarlyInput_Ctrl.--controlInfo.c_full;
-                                                      full;
+    prevSendingEarly <= compareAddressEarlyInput_Ctrl.full;
 
     canSend <= '1';
 
-    lateSending <= compareAddressInput.full;
+    lateSending <= compareAddressInput.--full;
+                                        failed;
 
     writePtr <= i2slv(TMP_getNewIndex(fullMask), SMALL_NUMBER_SIZE);
     killMask <= getKillMask(queueContent, execEventSignal, lateEventSignal, events.execCausing.tag);
@@ -298,20 +298,25 @@ begin
             content(ind).dbInfo <= ctl.dbInfo;
         end procedure;
 
-        procedure updateLate(signal content: inout MQ_EntryArray; ind: natural; ctl: ControlPacket; res: ExecResult) is
+        procedure updateLate(signal content: inout MQ_EntryArray; ind: natural; ctl: ControlPacket --; res: ExecResult
+        )
+         is
         begin
             content(ind).active <= '1';
+            
+
             content(ind).adr <= compareAddressCtrl.ip;
             content(ind).sqTag <= compareAddressCtrl.target(SMALL_NUMBER_SIZE-1 downto 0);
+            content(ind).fp <= compareAddressCtrl.classInfo.useFP;
 
             content(ind).dest <= compareAddressInput.dest;
+
 
             content(ind).lqPointer <= compareAddressCtrl.tags.lqPointer;
             content(ind).sqPointer <= compareAddressCtrl.tags.sqPointer;
 
             content(ind).op <= compareAddressCtrl.op;
 
-            content(ind).fp <= compareAddressCtrl.classInfo.useFP;
             content(ind).tlbMiss <= compareAddressCtrl.controlInfo.tlbMiss;
             content(ind).dataMiss <= compareAddressCtrl.controlInfo.dataMiss;
             content(ind).sqMiss <= compareAddressCtrl.controlInfo.sqMiss;
@@ -375,7 +380,7 @@ begin
                 -- Update late part of slot or free it if no miss
                 if isFillTime(queueContent(i)) = '1' then
                     if lateSending = '1' then
-                        updateLate(queueContent, i, compareAddressCtrl, compareAddressInput);
+                        updateLate(queueContent, i, compareAddressCtrl);
 
                         addresses(i) <= compareAddressCtrl.ip;
                         tags(i) <= tagInWord; -- CAREFUL: tag duplicated. Impact on efficiency not known (redundant memory but don't need output mux for FF data) 

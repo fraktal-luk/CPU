@@ -221,11 +221,8 @@ package PipelineGeneral is
         
     
     function TMP_slotIssueM0mq(mqReexecCtrlIs: ControlPacket; mqReexecResIS: ExecResult; mqIssueSending: std_logic) return SchedulerState;
-    
-    function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult;
-    function TMP_missedMemResultEP(ep: ExecPacket; memoryMissed: std_logic; memResult: Mword) return ExecPacket;
-    
-    function TMP_missedMemCtrl(subpipeM0_E1f: ExecResult; ctrlE1u: ControlPacket; resOutSQ: ExecResult) return ControlPacket;
+
+    function TMP_missedMemCtrl(subpipeM0_E1f: ExecResult; ctrlE1u: ControlPacket; resOutSQ: ExecResult; adr: Mword; fp: std_logic) return ControlPacket;
         
     function selectOrdered(ar: ExecResultArray) return ExecResult;
     
@@ -880,32 +877,24 @@ package body PipelineGeneral is
         return res;
     end function;
 
-    function TMP_missedMemResult(er: ExecResult; memoryMissed: std_logic; memResult: Mword) return ExecResult is
-        variable res: ExecResult := er;
-    begin
-        res.full := res.full and memoryMissed;
-        res.value := memResult;
-        return res;
-    end function;
 
-    function TMP_missedMemResultEP(ep: ExecPacket; memoryMissed: std_logic; memResult: Mword) return ExecPacket is
-        variable res: ExecPacket := ep;
-    begin
-        res.full := res.full and memoryMissed;
-        return res;
-    end function;
-
-    function TMP_missedMemCtrl(subpipeM0_E1f: ExecResult; ctrlE1u: ControlPacket; resOutSQ: ExecResult) return ControlPacket is
+    function TMP_missedMemCtrl(subpipeM0_E1f: ExecResult; ctrlE1u: ControlPacket; resOutSQ: ExecResult; adr: Mword; fp: std_logic) return ControlPacket is
         variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
     begin
-        res.ip := subpipeM0_E1f.value;
+        
         res.op := ctrlE1u.op;
         res.tags := ctrlE1u.tags;
-        res.target(SMALL_NUMBER_SIZE-1 downto 0) := resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
-        res.classInfo.useFP := subpipeM0_E1f.full;
+        
         res.controlInfo.tlbMiss := ctrlE1u.controlInfo.tlbMiss;
         res.controlInfo.dataMiss := ctrlE1u.controlInfo.dataMiss;
-        res.controlInfo.sqMiss := ctrlE1u.controlInfo.sqMiss;                    
+        res.controlInfo.sqMiss := ctrlE1u.controlInfo.sqMiss;
+        
+        res.ip := --subpipeM0_E1f.value;
+                    adr;
+        res.target(SMALL_NUMBER_SIZE-1 downto 0) := resOutSQ.dest; -- TMP: SQ tag for data forwarding; valid if forwarded or SQ miss
+        res.classInfo.useFP := --subpipeM0_E1f.full;
+                                fp;
+                   
         return res;
     end function;
 
