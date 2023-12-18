@@ -159,6 +159,7 @@ function getNewEffective(sendingToCommit: std_logic;
                          bqTarget, lastEffectiveTarget: Mword)
 return ControlPacket is
 	 variable ct_O: InstructionControlInfo := DEFAULT_CONTROL_INFO;
+	 variable tags_O: InstructionTags := DEFAULT_INSTRUCTION_TAGS;
 	 variable target_O: Mword := (others => '0');
 	 variable res: ControlPacket := DEFAULT_CONTROL_PACKET;
 	 variable targetInc: Mword := (others => '0');
@@ -178,10 +179,12 @@ begin
     end loop;
 
     ct_O := robData(0).controlInfo;
+    tags_O := robData(0).tags;
 
     for i in PIPE_WIDTH-1 downto 0 loop
         if robData(i).controlInfo.c_full = '1' then
            ct_O := robData(i).controlInfo;
+           tags_O := robData(i).tags;
            ct_O.newEvent := hasSyncEvent(robData(i).controlInfo);
            exit;
         end if;
@@ -194,6 +197,7 @@ begin
     end if;
 
     res.controlInfo := ct_O;
+    res.tags := tags_O;
     res.target := target_O;
     
 	return res;

@@ -27,19 +27,20 @@ entity UnitFront is
 		frontAccepting: out std_logic;
 
 		bqAccepting: in std_logic;
-		bpSending: out std_logic;
+		--bpSending: out std_logic;
         bpData: out ControlPacketArray(0 to FETCH_WIDTH-1);
+        bpCtrl: out ControlPacket;
 
 		-- Interface front to renaming
 		renameAccepting: in std_logic;		
-		dataOut: out BufferEntryArray; 
-		lastSending: out std_logic;
+		dataOut: out BufferEntryArray;
+		ctrlOut: out ControlPacket;
+		--lastSending: out std_logic;
 		-------
 		
 		frontCausing: out ExecResult;
 
-		execCausing: in ExecResult;
-		lateCausing: in ExecResult;
+		events: in EventState;
 
 		dbState: in DbCoreState		
 	);
@@ -47,6 +48,9 @@ end UnitFront;
 
 
 architecture Behavioral of UnitFront is
+	alias execCausing is events.execCausing;
+	alias lateCausing is events.lateCausing;
+
 	signal fetchedLine0, fetchedLine1, fetchedLineShifted0, fetchedLineShifted1, fetchedLineShifted1_Alt: WordArray(0 to FETCH_WIDTH-1) := (others => (others => '0'));
 
 	signal bufferAccepting, queuesAccepting, fullBt, sendingToBuffer, killAll, killAllOrFront, sendingOutBuffer, sendingToBQ,
@@ -150,14 +154,14 @@ begin
 	SUBUNIT_IBUFFER: entity work.InstructionBuffer(Implem)
 	port map(
 		clk => clk, reset => '0', en => '0',
-		
+
 		prevSending => sendingToBuffer,
 		nextAccepting => renameAccepting,
 		stageDataIn => dataToIbuffer,
 		acceptingOut => bufferAccepting,
 		sendingOut => sendingOutBuffer,
 		stageDataOut => ibufDataOut,
-		
+
 		execEventSignal => killAll
 	);
 
@@ -167,14 +171,21 @@ begin
 
     -- Outputs 
 
-    -- Pipeline (F2) (may be delayed any number of cycles)
-	lastSending <= sendingOutBuffer;
-    dataOut <= ibufDataOut;
-    
     -- Pipeline F2    
     bpData <= bqDataSig;
-    bpSending <= sendingToBQ;
+    --bpSending <= sendingToBQ;
+    
+    bpCtrl.full <= sendingToBQ;
 
+
+    -- Pipeline (F2) (may be delayed any number of cycles)
+	--lastSending <= sendingOutBuffer;
+
+    dataOut <= ibufDataOut;
+    
+    ctrlOut.full <= sendingOutBuffer;
+        ctrlOut.controlInfo.firstBr <= ibufDataOut(0).firstBr;
+        
     -- Events
     frontCausing.full <= earlyBranchOut.controlInfo.newEvent;
     frontCausing.value <= earlyBranchOut.target;

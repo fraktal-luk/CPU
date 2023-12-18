@@ -78,7 +78,10 @@ function serializeEntry(elem: BufferEntry) return Dword is
     variable argSpecWord: Word := (others => '0');
 begin
     -- 8b
-    controlByte := elem.classInfo.branchIns & elem.frontBranch & elem.confirmedBranch & elem.specialAction
+    controlByte := elem.classInfo.branchIns & --elem.frontBranch & elem.confirmedBranch 
+                                              '0' & '0'
+                                                                                        & elem.--specialAction
+                                                                                            classInfo.useSpecial
                 &  elem.classInfo.useFP  & elem.classInfo.mainCluster & elem.classInfo.secCluster & elem.classInfo.useLQ;
     -- 8b (probably 2 unused)
     opByte(7 downto 6) := i2slv(SubpipeType'pos(elem.specificOperation.subpipe), 2);
@@ -122,6 +125,7 @@ begin
     res.classInfo.mainCluster := controlByte(2);
     res.classInfo.secCluster := controlByte(1);
     res.classInfo.useLQ := controlByte(0);
+    res.classInfo.useSpecial := controlByte(4);
 
     res.specificOperation.subpipe := SubpipeType'val(slv2u(opByte(7 downto 6)));
     res.specificOperation.bits := opByte(OP_VALUE_BITS-1 downto 0);

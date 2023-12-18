@@ -117,7 +117,7 @@ begin
                 end loop;
             end if;
             
-            if (evt.execEvent or evt.lateEvent) = '1' then
+            if (evt.execCausing.full or evt.lateCausing.full) = '1' then
                 iqTagTable <= (others => X"ff");
             end if;
             
@@ -230,9 +230,9 @@ begin
                     end if;
     
                     -- Rewind front pointer on event 
-                    if evt.lateEvent = '1' then -- Flush to persistent state (persistent map can't be updated when lateEvent is signalled - Commit is locked)
+                    if evt.lateCausing.full = '1' then -- Flush to persistent state (persistent map can't be updated when lateEvent is signalled - Commit is locked)
                         listPtrTake <= listPtrTakeStableVar;
-                    elsif evt.execEvent = '1' then -- Partial flush (persistent map can be updated in this cycle and directly following ones!)
+                    elsif evt.execCausing.full = '1' then -- Partial flush (persistent map can be updated in this cycle and directly following ones!)
                         -- Rewind free list ptr to 1 after last active mapping. If none exists, use committed state
                         lastUsedMappingVar := findLastMappingByTag(abstractMapList, evt.execCausing.tag, startPtr);
                         if lastUsedMappingVar.used = '1' then
@@ -255,7 +255,7 @@ begin
     
     
                     -- mapping list
-                    if evt.lateEvent = '1' then
+                    if evt.lateCausing.full = '1' then
                         abstractMapList <= (others => DEFAULT_MAP_ROW);
         
                         --abstractChangedTable <= scanChangedMappings(abstractMapList, evtD.execCausing.tag, startPtr, endPtr);
@@ -263,7 +263,7 @@ begin
                         
                         -- Table - update latest on event
                         abstractLatestTable <= stableProxyVar;
-                    elsif evt.execEvent = '1' then
+                    elsif evt.execCausing.full = '1' then
                         abstractMapList <= clearAbstractMappingsPartial(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
     
                         --abstractChangedTable <= scanChangedMappings(abstractMapList, evt.execCausing.tag, startPtr, endPtr);
@@ -289,13 +289,13 @@ begin
             startPtrNext <= addIntTrunc(startPtr, 1, ROB_PTR_SIZE+1) when robSending = '1'
                        else startPtr;
         
-            endPtrNext <= startPtrNext when evt.lateEvent = '1'
-                        else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when evt.execEvent = '1'
+            endPtrNext <= startPtrNext when evt.lateCausing.full = '1'
+                        else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when evt.execCausing.full = '1'
                         else  addIntTrunc(endPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
                         else  endPtr;
         
-            renamedPtrNext <= startPtrNext when evt.lateEvent = '1'
-                        else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when evt.execEvent = '1'
+            renamedPtrNext <= startPtrNext when evt.lateCausing.full = '1'
+                        else  addIntTrunc(causingPtr, 1, ROB_PTR_SIZE+1) when evt.execCausing.full = '1'
                         else  addIntTrunc(renamedPtr, 1, ROB_PTR_SIZE+1) when prevSending = '1'
                         else  renamedPtr;
     
@@ -448,13 +448,13 @@ begin
                         persistentSubindexTableVar := (others => -1);
                         persistentRowTableVar := (others => -1);
                     
-                    if evt.lateEvent = '1' then
+                    if evt.lateCausing.full = '1' then
                         mappingList <= flushAll(mappingList); --(others => DEFAULT_MAP_ROW);
     
                         latestTagTable <= persistentTagTable;
                         latestSubindexTable <= persistentSubindexTable;
     
-                    elsif evt.execEvent = '1' then
+                    elsif evt.execCausing.full = '1' then
                         mappingList <= flushRows(mappingList, evt.execCausing.tag);
                         mappingList(causingIndex) <= flushPartial(mappingList(causingIndex), causingSubindex);
     

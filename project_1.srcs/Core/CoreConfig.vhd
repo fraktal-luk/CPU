@@ -9,10 +9,10 @@ package CoreConfig is
 
 --function checkSynthesis return boolean;
 
-constant DB_ENABLE: boolean := false;
+constant DB_ENABLE: boolean := true; --true;
 constant DB_LOG_EVENTS: boolean := false;-- false;
 
-constant DEBUG_LOG_COMMITTED: boolean := false;
+--constant DEBUG_LOG_COMMITTED: boolean := false;
 
 constant DB_OP_TRACKING: boolean := false;
 constant DB_TRACKED_SEQ_NUM: Word := X"0000032a";
@@ -35,6 +35,10 @@ constant ENABLE_DIV: boolean := true;
 constant ENABLE_FP: boolean := true;
 constant ENABLE_FAST_WAKEUP: boolean := true;
 constant ENABLE_MQ: boolean := true;
+
+constant SQUASH_ON_MEM_FAIL: boolean := true;
+                                        --false;
+
 
 constant USE_LINE_PREDICTOR: boolean := true;
 
