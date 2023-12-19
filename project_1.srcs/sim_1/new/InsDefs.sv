@@ -14,9 +14,12 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
             undef,
         
 
-            and_i, and_r,
-            or_i, or_r,
-            xor_i, xor_r,
+            //and_i,
+            and_r,
+            //or_i, 
+            or_r,
+            //xor_i, 
+            xor_r,
             
             add_i,
             add_h,
@@ -60,89 +63,7 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
             
         } Mnemonic;
     endclass;
-    
-    class OpcodeClass;
-        typedef enum {
-            andI,
-            orI,
-            
-            addI,
-            subI,
-            
-            jz,
-            jnz,
-            
-            j,
-            jl,
-            
-            ld,
-            st,
-            
-            ldf,
-            stf,
-            
-            ext0, //-- E format: opcont is present and defines exact operation  
-            ext1,
-            ext2,
-            fop, //-- Float operations
-            
-            undef
-	   } Opcode;
-	endclass
 
-    class OpcontClass;
-        typedef enum {
-            none,
-            
-            //-- ext0:
-            andR,
-            orR,
-            
-            shlC,
-            //--shrlC,
-            shaC,
-            
-            addR,
-            subR,
-            
-            muls,
-            mulu,
-            
-            divs,
-            divu,
-            
-            //-- ext1:
-            //--mem
-            store,
-            load,
-                
-            storeFP,
-            loadFP,
-            //--
-            jzR, //-- jumping with adr in register
-            jnzR,	
-            
-            //-- ext2: 
-            //-- system jumps
-            retE,
-            retI,
-            halt,
-            sync,
-            replay,
-            error,
-            call,
-            send,
-            
-            mfc,
-            mtc,
-            
-            fmov,
-            forr,
-            
-            undef
-	   } Opcont;						
-
-    endclass
 
     typedef enum {
         none,
@@ -178,18 +99,28 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
             "add_r": int2R,
             "sub_r": int2R,
             
-            /*
-            shl_i, shl_r, //-- direction defined by shift value, not opcode 
-            sha_i, sha_r, //--   
-            rot_i, rot_r,
             
-            mult, 
-            mulh_s, mulh_u,
-            div_s, div_u,
-            rem_s, rem_u,
+            "shl_i": intImm10, 
             
-            mov_f, or_f,   // -- Float operations
-            */
+            "shl_r": int2R, //-- direction defined by shift value, not opcode 
+            
+            "sha_i": intImm10,
+            "sha_r": int2R, //--   
+            
+            "rot_i": intImm10, 
+            "rot_r": int2R,
+            
+            "mult": int2R, 
+            "mulh_s": int2R,
+            "mulh_u": int2R,
+            "div_s": int2R,
+            "div_u": int2R,
+            "rem_s": int2R,
+            "rem_u": int2R,
+            
+            "mov_f": float1R,
+            "or_f": float2R,   // -- Float operations
+            
             "ldi_i": intImm16,
             //ldi_r, //-- int
             "sti_i": intStore16,
@@ -200,11 +131,11 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
             "stf_i": floatStore16,
             //stf_r, 
             
-            /*
-            lds, //-- load sys
             
-            sts, //-- store sys
-            */
+            "lds": sysLoad, //-- load sys
+            
+            "sts": sysStore, //-- store sys
+            
             "jz_i": jumpCond,
             "jz_r": int2R,
             "jnz_i": jumpCond,
@@ -212,30 +143,30 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
             "ja": jumpLong,
             "jl": jumpLink, //-- jump always, jump link
             /**/
-            "sys": noRegs //-- system operation
+            //"sys": noRegs //-- system operation
             
-            /*
-            sys_retE,
-            sys_retI,
-            sys_halt,
-            sys_sync,
-            sys_replay,
-            sys_error,
-            sys_call,
-            sys_send
-            */
+            
+            "sys_retE": noRegs,
+            "sys_retI": noRegs,
+            "sys_halt": noRegs,
+            "sys_sync": noRegs,
+            "sys_replay": noRegs,
+            "sys_error": noRegs,
+            "sys_call": noRegs,
+            "sys_send": noRegs
+            
         };
 
-        function automatic string getFormatName(input string s);
-            typedef MnemonicClass::Mnemonic Mnem;
-            Mnem m;
-            for (Mnem mi = m.first(); 1; mi = mi.next()) begin
+//        function automatic string getFormatName(input string s);
+//            typedef MnemonicClass::Mnemonic Mnem;
+//            Mnem m;
+//            for (Mnem mi = m.first(); 1; mi = mi.next()) begin
                 
-                if (s == mi.name()) return formatMap[s].name();
+//                if (s == mi.name()) return formatMap[s].name();
                 
-                if (mi == mi.last()) return "";
-            end  
-        endfunction
+//                if (mi == mi.last()) return "";
+//            end  
+//        endfunction
 
     function automatic InstructionFormat getFormat(input string s);
         typedef MnemonicClass::Mnemonic Mnem;
@@ -247,6 +178,7 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
             if (mi == mi.last()) return none;
         end  
     endfunction
+
 
     typedef string string3[3];
 
@@ -293,5 +225,215 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
         InstructionFormat fmt = getFormat(s);
         $display("%s: %s ->  '%s', '%s', '%s'", s, fmt.name(), parsingMap[fmt][0], parsingMap[fmt][1], parsingMap[fmt][2]);
     endfunction;
+
+
+
+   // class Opcodes;
+        typedef enum {
+            P_none,
+            P_ja,
+            P_jl,
+            P_jz,
+            P_jnz,
+            P_intAlu,
+            P_floatOp,
+            P_intMem,
+            P_floatMem,
+            P_intAluImm,
+            P_addI,
+            P_addH, 
+            
+            P_intLoadW16,
+            P_intStoreW16,
+            P_floatLoadW16,
+            P_floatStoreW16,
+            
+            P_sysMem,
+            
+            P_sysControl
+        } Primary;
     
+        typedef enum {
+            S_none,
+            
+            // P_intAlu          
+            S_intLogic, S_intArith, S_jumpReg, S_intMul,
+             
+            // P_intAluImm
+            S_intShiftLogical, S_intShiftArith, S_intRotate,
+             
+            // P_floatOp
+            S_floatMove,
+             
+            // P_intMem
+            S_intLoadW, S_intStoreW,
+             
+            // P_floatMem
+            S_floatLoadW, S_floatStoreW,
+             
+            // P_sysMem
+            S_sysLoad, S_sysStore,
+             
+            // P_sysControl                 
+            S_sysUndef,
+            S_sysError,
+            S_sysCall,
+            S_sysRetE,
+            S_sysRetI,
+            S_sysHalt,
+            S_sysSync,
+            S_sysReplay,
+            S_sysSend                 
+         } Secondary;
+
+        typedef enum {
+            T_none, 
+
+            T_intAnd, _TintOr, T_intXor,
+        
+            T_intAdd, T_intSub,  
+        
+            T_intMul, T_intMulHU, T_intMulHS,
+            T_intDivU, T_intDivS,
+            T_intRemU, T_intRemS,
+        
+            T_floatMove,
+          
+            T_jumpRegZ, T_jumpRegNZ
+        } Ternary;
+
+    //endclass;
+    
+        typedef enum {
+            O_undef,
+            O_call,
+            O_sync,
+            O_retE,
+            O_retI,
+            O_replay,
+            O_halt,
+            O_send,
+            
+            O_jump,
+            
+            O_intAnd, O_intOr, O_intXor,
+            O_intAdd, O_intSub,
+            O_intAddH,
+            O_intMul, O_intMulHU, O_intMulHS,
+            O_intDivU, O_intDivS,
+            O_intRemU, O_intRemS,
+            
+            O_intShiftLogical, O_intShiftArith, O_intRotate,
+            
+            O_floatMove,
+            
+            O_intLoadW, O_intLoadD,
+            
+            O_intStoreW, O_intStoreD,
+            
+            O_floatLoadW, O_floatStoreW,
+            
+            O_sysLoad, O_sysStore
+            
+        } Operation;
+
+    typedef struct {
+        
+        Primary p;
+        Secondary s;
+        Ternary t;
+        Operation o;
+    } InstructionDef;
+
+
+        typedef InstructionDef DefMap[string];
+        
+        const DefMap defMap = '{
+            "undef": '{P_none, S_none, T_none, O_undef},
+        
+            //and_i: ,
+//            "and_r": int2R,
+            
+            
+//            //or_i,
+//            "or_r": int2R,
+//            //xor_i,
+//            "xor_r": int2R,
+            
+//            "add_i": intImm16,
+//            "add_h": intImm16,
+//            "add_r": int2R,
+//            "sub_r": int2R,
+            
+            
+//            "shl_i": intImm10, 
+            
+//            "shl_r": int2R, //-- direction defined by shift value, not opcode 
+            
+//            "sha_i": intImm10,
+//            "sha_r": int2R, //--   
+            
+//            "rot_i": intImm10, 
+//            "rot_r": int2R,
+            
+//            "mult": int2R, 
+//            "mulh_s": int2R,
+//            "mulh_u": int2R,
+//            "div_s": int2R,
+//            "div_u": int2R,
+//            "rem_s": int2R,
+//            "rem_u": int2R,
+            
+//            "mov_f": float1R,
+//            "or_f": float2R,   // -- Float operations
+            
+//            "ldi_i": intImm16,
+//            //ldi_r, //-- int
+//            "sti_i": intStore16,
+//            //sti_r,
+            
+//            "ldf_i": floatLoad16,
+//            //ldf_r, //-- float
+//            "stf_i": floatStore16,
+//            //stf_r, 
+            
+            
+//            "lds": sysLoad, //-- load sys
+            
+//            "sts": sysStore, //-- store sys
+            
+//            "jz_i": jumpCond,
+//            "jz_r": int2R,
+//            "jnz_i": jumpCond,
+//            "jnz_r": int2R,
+//            "ja": jumpLong,
+//            "jl": jumpLink, //-- jump always, jump link
+//            /**/
+//            //"sys": noRegs //-- system operation
+            
+            
+//            "sys_retE": noRegs,
+//            "sys_retI": noRegs,
+//            "sys_halt": noRegs,
+//            "sys_sync": noRegs,
+//            "sys_replay": noRegs,
+//            "sys_error": noRegs,
+//            "sys_call": noRegs,
+            "sys_send": '{P_sysControl, S_sysSend, T_none, O_send}
+            
+        }; 
+
+
+
+    function automatic InstructionDef getDef(input string s);
+        typedef MnemonicClass::Mnemonic Mnem;
+        Mnem m;
+        for (Mnem mi = m.first(); 1; mi = mi.next()) begin
+            
+            if (s == mi.name()) return defMap[s];
+            
+            if (mi == mi.last()) return '{P_none, S_none, T_none, O_undef};
+        end  
+    endfunction
+
 endpackage
