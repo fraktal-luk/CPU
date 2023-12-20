@@ -102,10 +102,10 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
             
             "shl_i": intImm10, 
             
-            "shl_r": int2R, //-- direction defined by shift value, not opcode 
+            //"shl_r": int2R, //-- direction defined by shift value, not opcode 
             
             "sha_i": intImm10,
-            "sha_r": int2R, //--   
+            //"sha_r": int2R, //--   
             
             "rot_i": intImm10, 
             "rot_r": int2R,
@@ -224,9 +224,16 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
     function automatic void getParsing(input string s);
         InstructionFormat fmt = getFormat(s);
         $display("%s: %s ->  '%s', '%s', '%s'", s, fmt.name(), parsingMap[fmt][0], parsingMap[fmt][1], parsingMap[fmt][2]);
+
     endfunction;
 
-
+    function automatic void TMP_showArgs(input string parts[]);
+        InstructionFormat fmt = getFormat(parts[0]);
+        
+        string out[] = orderArgs(parts[1:3], parsingMap[fmt]);
+        
+        $display("%s %s %s %s", out[0], out[1], out[2], out[3]);
+    endfunction;
 
    // class Opcodes;
         typedef enum {
@@ -289,7 +296,7 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
         typedef enum {
             T_none, 
 
-            T_intAnd, _TintOr, T_intXor,
+            T_intAnd, T_intOr, T_intXor,
         
             T_intAdd, T_intSub,  
         
@@ -352,73 +359,64 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
             "undef": '{P_none, S_none, T_none, O_undef},
         
             //and_i: ,
-//            "and_r": int2R,
+            "and_r":  '{P_intAlu, S_intLogic, T_intAnd, O_intAnd}, //int2R,
+            "or_r":   '{P_intAlu, S_intLogic, T_intOr, O_intOr}, //int2R,
+            "xor_r":  '{P_intAlu, S_intLogic, T_intXor, O_intXor}, //int2R,
             
+            "add_i": '{P_addI, S_none, T_none, O_intAdd},//intImm16,
+            "add_h": '{P_addH, S_none, T_none, O_intAddH},//intImm16,
+            "add_r": '{P_intAlu, S_intArith, T_intAdd, O_intAdd},//int2R,
+            "sub_r": '{P_intAlu, S_intArith, T_intSub, O_intSub},//int2R,
             
-//            //or_i,
-//            "or_r": int2R,
-//            //xor_i,
-//            "xor_r": int2R,
+            "shl_i": '{P_intAluImm, S_intShiftLogical, T_none, O_intShiftLogical},//intImm10, 
+            "sha_i": '{P_intAluImm, S_intShiftArith, T_none, O_intShiftArith},//intImm10, 
+            "rot_i": '{P_intAluImm, S_intRotate, T_none, O_intRotate},//intImm10, 
             
-//            "add_i": intImm16,
-//            "add_h": intImm16,
-//            "add_r": int2R,
-//            "sub_r": int2R,
+            "mult":   '{P_intAlu, S_intMul, T_intMul, O_intMul},//int2R, 
+            "mulh_s": '{P_intAlu, S_intMul, T_intMulHU, O_intMulHU},//int2R, 
+            "mulh_u": '{P_intAlu, S_intMul, T_intMulHS, O_intMulHS},//int2R, 
+            "div_s":  '{P_intAlu, S_intMul, T_intDivS, O_intDivS},//int2R, 
+            "div_u":  '{P_intAlu, S_intMul, T_intDivU, O_intDivU},//int2R, 
+            "rem_s":  '{P_intAlu, S_intMul, T_intRemS, O_intRemS},//int2R, 
+            "rem_u":  '{P_intAlu, S_intMul, T_intRemU, O_intRemU},//int2R, 
             
-            
-//            "shl_i": intImm10, 
-            
-//            "shl_r": int2R, //-- direction defined by shift value, not opcode 
-            
-//            "sha_i": intImm10,
-//            "sha_r": int2R, //--   
-            
-//            "rot_i": intImm10, 
-//            "rot_r": int2R,
-            
-//            "mult": int2R, 
-//            "mulh_s": int2R,
-//            "mulh_u": int2R,
-//            "div_s": int2R,
-//            "div_u": int2R,
-//            "rem_s": int2R,
-//            "rem_u": int2R,
-            
-//            "mov_f": float1R,
+            "mov_f":  '{P_floatOp, S_floatMove, T_floatMove, O_floatMove},//float1R,
 //            "or_f": float2R,   // -- Float operations
             
-//            "ldi_i": intImm16,
-//            //ldi_r, //-- int
-//            "sti_i": intStore16,
-//            //sti_r,
             
-//            "ldf_i": floatLoad16,
-//            //ldf_r, //-- float
-//            "stf_i": floatStore16,
+//                        P_intLoadW16,
+//            P_intStoreW16,
+//            P_floatLoadW16,
+//            P_floatStoreW16,
+            
+            "ldi_i": '{P_intLoadW16,  S_none, T_none, O_intLoadW},//intImm16,
+            "sti_i": '{P_intStoreW16, S_none, T_none, O_intStoreW},//intStore16,
+            
+            "ldf_i": '{P_floatLoadW16,  S_none, T_none, O_floatLoadW},//floatLoad16,
+            "stf_i": '{P_floatStoreW16,  S_none, T_none, O_floatStoreW},//floatStore16,
 //            //stf_r, 
             
             
-//            "lds": sysLoad, //-- load sys
+            "lds": '{P_sysMem,  S_sysLoad, T_none, O_sysLoad},//sysLoad, //-- load sys
             
-//            "sts": sysStore, //-- store sys
+            "sts": '{P_sysMem,  S_sysStore, T_none, O_sysStore},//sysStore, //-- store sys
             
-//            "jz_i": jumpCond,
-//            "jz_r": int2R,
-//            "jnz_i": jumpCond,
-//            "jnz_r": int2R,
-//            "ja": jumpLong,
-//            "jl": jumpLink, //-- jump always, jump link
-//            /**/
+            "jz_i": '{P_jz, S_none, T_none, O_jump},//jumpCond,
+            "jz_r": '{P_intAlu, S_jumpReg, T_jumpRegZ, O_jump},//int2R,
+            "jnz_i": '{P_jnz, S_none, T_none, O_jump},//jumpCond,
+            "jnz_r": '{P_intAlu, S_jumpReg, T_jumpRegNZ, O_jump},//int2R,
+            "ja": '{P_ja, S_none, T_none, O_jump},//,//jumpLong,
+            "jl": '{P_jl, S_none, T_none, O_jump},//jumpLink, //-- jump always, jump link
+
 //            //"sys": noRegs //-- system operation
             
-            
-//            "sys_retE": noRegs,
-//            "sys_retI": noRegs,
-//            "sys_halt": noRegs,
-//            "sys_sync": noRegs,
-//            "sys_replay": noRegs,
-//            "sys_error": noRegs,
-//            "sys_call": noRegs,
+            "sys_retE": '{P_sysControl, S_sysRetE, T_none, O_send},
+            "sys_retI": '{P_sysControl, S_sysRetI, T_none, O_send},
+            "sys_halt": '{P_sysControl, S_sysHalt, T_none, O_send},
+            "sys_sync": '{P_sysControl, S_sysSync, T_none, O_send},
+            "sys_replay": '{P_sysControl, S_sysReplay, T_none, O_send},
+            "sys_error": '{P_sysControl, S_sysError, T_none, O_send},
+            "sys_call": '{P_sysControl, S_sysCall, T_none, O_send},
             "sys_send": '{P_sysControl, S_sysSend, T_none, O_send}
             
         }; 
@@ -434,6 +432,33 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
             
             if (mi == mi.last()) return '{P_none, S_none, T_none, O_undef};
         end  
+    endfunction
+
+    typedef string string4[4];
+    
+    function automatic string4 orderArgs(input string args[], input string3 parsingMap);
+        // d 0 1 2   a0 a1 a2 a3
+        string4 out;
+        int index;
+        string spec = parsingMap[0];
+        
+        foreach (spec[i]) begin
+            case (spec[i])
+                "d": index = 0;
+                "0": index = 1;
+                "1": index = 2;
+                "2": index = 3;
+                " ": continue;
+                default: $fatal("Wrong format definition");
+            endcase
+            out[index] = args[i];
+        end
+        
+        return out;
+    endfunction
+
+    function automatic bit checkArgs(input string4 args, input string3 parsingMap);
+        
     endfunction
 
 endpackage

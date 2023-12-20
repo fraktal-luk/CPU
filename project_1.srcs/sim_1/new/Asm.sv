@@ -117,6 +117,7 @@ package Asm;
     function automatic CodeLine analyzeCodeLine(input int line, input squeue parts);
         CodeLine res;
         string mnemonic = parts[0];
+        string partsExt[4];
  
         res.line = line;
         res.parts = parts;
@@ -128,14 +129,22 @@ package Asm;
             res.error = SOME;
             return res;
         end
-        
+
+      foreach(partsExt[i])
+        if (i < parts.size())
+            partsExt[i] = parts[i];
+
         // TODO: get rid of this hack, define sys instructions like sys_call etc?
-        if (mnemonic == "sys")
+        if (mnemonic == "sys") begin
             mnemonic = {mnemonic,"_", parts[1]};
+            partsExt[0] = mnemonic;
+            partsExt[1] = "";
+        end
 
           //  $display(getFormatName(mnemonic));
           getParsing(mnemonic);
             
+          TMP_showArgs(partsExt);
         // get expected format 
         
         // check args conformance to format
