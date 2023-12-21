@@ -534,7 +534,7 @@ package InsDefs;
                 "$", "@": value = 'x;
                 "f":      value = args[i].substr(1, args[i].len()-1).atoi();
                 "r":      value = args[i].substr(1, args[i].len()-1).atoi();
-                "-":      value = args[i].substr(1, args[i].len()-1).atoi();
+                "-":      value = args[i].substr(0, args[i].len()-1).atoi();
                 "0", "1", "2", "3", "4", "5", "6", "7", "8", "9": 
                           value = args[i].atoi();
                 default: $fatal("Wrong arg");

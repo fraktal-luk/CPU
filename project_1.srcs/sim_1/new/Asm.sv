@@ -80,28 +80,6 @@ package Asm;
         return elems;
     endfunction
 
-    function automatic void processLines(input squeue lines);
-    
-        squeue labels = '{};
-        squeue errors = '{};
-    
-        int nInstructionLines = 0;
-    
-        foreach (lines[i]) begin
-            squeue parts = breakLine({lines[i], 8'h0});
-            if (parts.size() == 0)
-                continue;
-            else if (parts[0][0] == "$") begin
-                labels.push_back(parts[0]);
-                errors.push_back($sformatf("%d: Something after label", i));
-            end
-            else begin
-                analyzeCodeLine(i, nInstructionLines, parts);
-                nInstructionLines++;
-            end
-        end
-        
-    endfunction
 
     typedef enum {
         NONE, SOME
@@ -116,6 +94,54 @@ package Asm;
         Word ins;
         CodeRef codeRef;
     } CodeLine;
+
+    function automatic void processLines(input squeue lines);
+    
+        squeue labels = '{};
+        int labelMap[string];
+        squeue errors = '{};
+        CodeLine instructions[$];
+    
+        int nInstructionLines = 0;
+    
+        foreach (lines[i]) begin
+            squeue parts = breakLine({lines[i], 8'h0});
+            if (parts.size() == 0)
+                continue;
+            else if (parts[0][0] == "$") begin
+                labels.push_back(parts[0]);
+                labelMap[parts[0]] = nInstructionLines + 1;
+                errors.push_back($sformatf("%d: Something after label", i));
+            end
+            else begin
+                instructions.push_back(analyzeCodeLine(i, nInstructionLines, parts));
+                nInstructionLines++;
+            end
+        end
+        
+        // Resolve labels
+        foreach(instructions[i]) begin
+            CodeLine ins = instructions[i];
+            if (ins.codeRef.label.len() != 0) begin
+                if (labelMap.exists(ins.codeRef.label)) begin
+                    int cline = labelMap[ins.codeRef.label];
+                    int targetAdr = 4*cline;
+                    int usingAdr = 4*ins.codeLine;
+                    Word newWord = ins.ins;
+                    $display("Resolving ref: %s -> ins %d", ins.codeRef.label, cline);
+                    
+                    if (ins.codeRef.ref26 == 1) newWord[25:0] = (targetAdr - usingAdr);
+                    else if (ins.codeRef.ref21 == 1) newWord[20:0] = (targetAdr - usingAdr);
+                    
+                    $display("%h", newWord);
+                end
+                else
+                    $display("Unresolved reference: %d: %s", ins.line, ins.codeRef.label);                
+            end
+        end
+        
+    endfunction
+
 
     function automatic CodeLine analyzeCodeLine(input int line, input int codeLine, input squeue parts);
         CodeLine res;
