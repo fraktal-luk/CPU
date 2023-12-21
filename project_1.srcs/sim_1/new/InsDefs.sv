@@ -4,9 +4,6 @@ package InsDefs;
     typedef logic[31:0] Word;
 
 
-/*
-type ProcMnemonic is ( -- one word instruction names, distinguishing different arg combinations
-*/
     class MnemonicClass;
         typedef 
         enum {
@@ -70,123 +67,118 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
         noRegs,
             jumpLong, jumpLink, jumpCond,
             intImm16, intImm10,
-
         intStore16, intStore10, floatLoad10, floatLoad16, floatStore10, floatStore16,
         sysLoad, sysStore,
-        
             int1R, int2R, int3R, 
             float1R, float2R, float3R,
-            
             floatToInt, intToFloat
     } InstructionFormat;
 
-        typedef enum {
-            P_none,
-            P_ja,
-            P_jl,
-            P_jz,
-            P_jnz,
-            P_intAlu,
-            P_floatOp,
-            P_intMem,
-            P_floatMem,
-            P_intAluImm,
-            P_addI,
-            P_addH, 
-            
-            P_intLoadW16,
-            P_intStoreW16,
-            P_floatLoadW16,
-            P_floatStoreW16,
-            
-            P_sysMem,
-            
-            P_sysControl
-        } Primary;
+    typedef enum {
+        P_none,
+        P_ja,
+        P_jl,
+        P_jz,
+        P_jnz,
+        P_intAlu,
+        P_floatOp,
+        P_intMem,
+        P_floatMem,
+        P_intAluImm,
+        P_addI,
+        P_addH, 
+        
+        P_intLoadW16,
+        P_intStoreW16,
+        P_floatLoadW16,
+        P_floatStoreW16,
+        
+        P_sysMem,
+        
+        P_sysControl
+    } Primary;
+
+    typedef enum {
+        S_none,
+        
+        // P_intAlu          
+        S_intLogic, S_intArith, S_jumpReg, S_intMul,
+         
+        // P_intAluImm
+        S_intShiftLogical, S_intShiftArith, S_intRotate,
+         
+        // P_floatOp
+        S_floatMove,
+         
+        // P_intMem
+        S_intLoadW, S_intStoreW,
+         
+        // P_floatMem
+        S_floatLoadW, S_floatStoreW,
+         
+        // P_sysMem
+        S_sysLoad, S_sysStore,
+         
+        // P_sysControl                 
+        S_sysUndef,
+        S_sysError,
+        S_sysCall,
+        S_sysRetE,
+        S_sysRetI,
+        S_sysHalt,
+        S_sysSync,
+        S_sysReplay,
+        S_sysSend                 
+     } Secondary;
+
+    typedef enum {
+        T_none, 
+
+        T_intAnd, T_intOr, T_intXor,
     
-        typedef enum {
-            S_none,
-            
-            // P_intAlu          
-            S_intLogic, S_intArith, S_jumpReg, S_intMul,
-             
-            // P_intAluImm
-            S_intShiftLogical, S_intShiftArith, S_intRotate,
-             
-            // P_floatOp
-            S_floatMove,
-             
-            // P_intMem
-            S_intLoadW, S_intStoreW,
-             
-            // P_floatMem
-            S_floatLoadW, S_floatStoreW,
-             
-            // P_sysMem
-            S_sysLoad, S_sysStore,
-             
-            // P_sysControl                 
-            S_sysUndef,
-            S_sysError,
-            S_sysCall,
-            S_sysRetE,
-            S_sysRetI,
-            S_sysHalt,
-            S_sysSync,
-            S_sysReplay,
-            S_sysSend                 
-         } Secondary;
-
-        typedef enum {
-            T_none, 
-
-            T_intAnd, T_intOr, T_intXor,
-        
-            T_intAdd, T_intSub,  
-        
-            T_intMul, T_intMulHU, T_intMulHS,
-            T_intDivU, T_intDivS,
-            T_intRemU, T_intRemS,
-        
-            T_floatMove,
-          
-            T_jumpRegZ, T_jumpRegNZ
-        } Ternary;
-
-    //endclass;
+        T_intAdd, T_intSub,  
     
-        typedef enum {
-            O_undef,
-            O_call,
-            O_sync,
-            O_retE,
-            O_retI,
-            O_replay,
-            O_halt,
-            O_send,
-            
-            O_jump,
-            
-            O_intAnd, O_intOr, O_intXor,
-            O_intAdd, O_intSub,
-            O_intAddH,
-            O_intMul, O_intMulHU, O_intMulHS,
-            O_intDivU, O_intDivS,
-            O_intRemU, O_intRemS,
-            
-            O_intShiftLogical, O_intShiftArith, O_intRotate,
-            
-            O_floatMove,
-            
-            O_intLoadW, O_intLoadD,
-            
-            O_intStoreW, O_intStoreD,
-            
-            O_floatLoadW, O_floatStoreW,
-            
-            O_sysLoad, O_sysStore
-            
-        } Operation;
+        T_intMul, T_intMulHU, T_intMulHS,
+        T_intDivU, T_intDivS,
+        T_intRemU, T_intRemS,
+    
+        T_floatMove,
+      
+        T_jumpRegZ, T_jumpRegNZ
+    } Ternary;
+
+    typedef enum {
+        O_undef,
+        O_call,
+        O_sync,
+        O_retE,
+        O_retI,
+        O_replay,
+        O_halt,
+        O_send,
+        
+        O_jump,
+        
+        O_intAnd, O_intOr, O_intXor,
+        O_intAdd, O_intSub,
+        O_intAddH,
+        O_intMul, O_intMulHU, O_intMulHS,
+        O_intDivU, O_intDivS,
+        O_intRemU, O_intRemS,
+        
+        O_intShiftLogical, O_intShiftArith, O_intRotate,
+        
+        O_floatMove,
+        
+        O_intLoadW, O_intLoadD,
+        
+        O_intStoreW, O_intStoreD,
+        
+        O_floatLoadW, O_floatStoreW,
+        
+        O_sysLoad, O_sysStore
+        
+    } Operation;
 
 
 
@@ -199,93 +191,83 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
     } InstructionDef;
 
 
-        typedef InstructionFormat FormatMap[string];
+    typedef InstructionFormat FormatMap[string];
+    
+    const FormatMap formatMap = '{
+        "undef": none,
+    
+        //and_i: ,
+        "and_r": int2R,
         
-        const FormatMap formatMap = '{
-            "undef": none,
         
-            //and_i: ,
-            "and_r": int2R,
-            
-            
-            //or_i,
-            "or_r": int2R,
-            //xor_i,
-            "xor_r": int2R,
-            
-            "add_i": intImm16,
-            "add_h": intImm16,
-            "add_r": int2R,
-            "sub_r": int2R,
-            
-            
-            "shl_i": intImm10, 
-            
-            //"shl_r": int2R, //-- direction defined by shift value, not opcode 
-            
-            "sha_i": intImm10,
-            //"sha_r": int2R, //--   
-            
-            "rot_i": intImm10, 
-            "rot_r": int2R,
-            
-            "mult": int2R, 
-            "mulh_s": int2R,
-            "mulh_u": int2R,
-            "div_s": int2R,
-            "div_u": int2R,
-            "rem_s": int2R,
-            "rem_u": int2R,
-            
-            "mov_f": float1R,
-            "or_f": float2R,   // -- Float operations
-            
-            "ldi_i": intImm16,
-            //ldi_r, //-- int
-            "sti_i": intStore16,
-            //sti_r,
-            
-            "ldf_i": floatLoad16,
-            //ldf_r, //-- float
-            "stf_i": floatStore16,
-            //stf_r, 
-            
-            
-            "lds": sysLoad, //-- load sys
-            
-            "sts": sysStore, //-- store sys
-            
-            "jz_i": jumpCond,
-            "jz_r": int2R,
-            "jnz_i": jumpCond,
-            "jnz_r": int2R,
-            "ja": jumpLong,
-            "jl": jumpLink, //-- jump always, jump link
-            /**/
-            //"sys": noRegs //-- system operation
-            
-            
-            "sys_retE": noRegs,
-            "sys_retI": noRegs,
-            "sys_halt": noRegs,
-            "sys_sync": noRegs,
-            "sys_replay": noRegs,
-            "sys_error": noRegs,
-            "sys_call": noRegs,
-            "sys_send": noRegs
-            
-        };
+        //or_i,
+        "or_r": int2R,
+        //xor_i,
+        "xor_r": int2R,
+        
+        "add_i": intImm16,
+        "add_h": intImm16,
+        "add_r": int2R,
+        "sub_r": int2R,
+        
+        
+        "shl_i": intImm10, 
+        
+        //"shl_r": int2R, //-- direction defined by shift value, not opcode 
+        
+        "sha_i": intImm10,
+        //"sha_r": int2R, //--   
+        
+        "rot_i": intImm10, 
+        "rot_r": int2R,
+        
+        "mult": int2R, 
+        "mulh_s": int2R,
+        "mulh_u": int2R,
+        "div_s": int2R,
+        "div_u": int2R,
+        "rem_s": int2R,
+        "rem_u": int2R,
+        
+        "mov_f": float1R,
+        "or_f": float2R,   // -- Float operations
+        
+        "ldi_i": intImm16,
+        //ldi_r, //-- int
+        "sti_i": intStore16,
+        //sti_r,
+        
+        "ldf_i": floatLoad16,
+        //ldf_r, //-- float
+        "stf_i": floatStore16,
+        //stf_r, 
+        
+        
+        "lds": sysLoad, //-- load sys
+        
+        "sts": sysStore, //-- store sys
+        
+        "jz_i": jumpCond,
+        "jz_r": int2R,
+        "jnz_i": jumpCond,
+        "jnz_r": int2R,
+        "ja": jumpLong,
+        "jl": jumpLink, //-- jump always, jump link
+        /**/
+        //"sys": noRegs //-- system operation
+        
+        
+        "sys_retE": noRegs,
+        "sys_retI": noRegs,
+        "sys_halt": noRegs,
+        "sys_sync": noRegs,
+        "sys_replay": noRegs,
+        "sys_error": noRegs,
+        "sys_call": noRegs,
+        "sys_send": noRegs
+        
+    };
 
-//        function automatic string getFormatName(input string s);
-//            typedef MnemonicClass::Mnemonic Mnem;
-//            Mnem m;
-//            for (Mnem mi = m.first(); 1; mi = mi.next()) begin
-                
-//                if (s == mi.name()) return formatMap[s].name();
-                
-//                if (mi == mi.last()) return "";
-//            end  
-//        endfunction
 
     function automatic InstructionFormat getFormat(input string s);
         typedef MnemonicClass::Mnemonic Mnem;
@@ -343,106 +325,139 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
     typedef string string4[4];
     typedef Word Word4[4];
     
-    function automatic void getParsing(input string s);
-        InstructionFormat fmt = getFormat(s);
-        $display("%s: %s ->  '%s', '%s', '%s'", s, fmt.name(), parsingMap[fmt][0], parsingMap[fmt][1], parsingMap[fmt][2]);
+//    function automatic void getParsing(input string s);
+//        InstructionFormat fmt = getFormat(s);
+//        $display("%s: %s ->  '%s', '%s', '%s'", s, fmt.name(), parsingMap[fmt][0], parsingMap[fmt][1], parsingMap[fmt][2]);
 
-    endfunction;
+//    endfunction;
 
-    function automatic void TMP_showArgs(input string parts[]);
-        InstructionFormat fmt = getFormat(parts[0]);
-        InstructionDef def = getDef(parts[0]);
-        
-        string out[] = orderArgs(parts[1:3], parsingMap[fmt]);
-        Word4 vals;
-        Word res;
-        
-        $display("%s %s %s %s", out[0], out[1], out[2], out[3]);
-        
-        $display("%d", checkArgs(out[0:3], parsingMap[fmt]));// $display("Args error!");
-        
-        vals = parseArgs(out[0:3]);
-        
-        $display("%p", vals);
-        
-        res = fillArgs(vals, parsingMap[fmt], 0);
-        $write("%b ", res);
-        
-        res = fillOp(res, def);
-        $display("%b", res);
-    endfunction;
+    typedef struct {
+        bit ref21 = 0;
+        bit ref26 = 0;
+        string label = "";
+    } CodeRef;
 
-   // class Opcodes;
-
-
-        typedef InstructionDef DefMap[string];
-        
-        const DefMap defMap = '{
-            "undef": '{P_none, S_none, T_none, O_undef},
-        
-            //and_i: ,
-            "and_r":  '{P_intAlu, S_intLogic, T_intAnd, O_intAnd}, //int2R,
-            "or_r":   '{P_intAlu, S_intLogic, T_intOr, O_intOr}, //int2R,
-            "xor_r":  '{P_intAlu, S_intLogic, T_intXor, O_intXor}, //int2R,
+        function automatic void TMP_showArgs(input string parts[]);
+            InstructionFormat fmt = getFormat(parts[0]);
+            InstructionDef def = getDef(parts[0]);
             
-            "add_i": '{P_addI, S_none, T_none, O_intAdd},//intImm16,
-            "add_h": '{P_addH, S_none, T_none, O_intAddH},//intImm16,
-            "add_r": '{P_intAlu, S_intArith, T_intAdd, O_intAdd},//int2R,
-            "sub_r": '{P_intAlu, S_intArith, T_intSub, O_intSub},//int2R,
+            string out[] = orderArgs(parts[1:3], parsingMap[fmt]);
+            Word4 vals;
+            Word res;
             
-            "shl_i": '{P_intAluImm, S_intShiftLogical, T_none, O_intShiftLogical},//intImm10, 
-            "sha_i": '{P_intAluImm, S_intShiftArith, T_none, O_intShiftArith},//intImm10, 
-            "rot_i": '{P_intAluImm, S_intRotate, T_none, O_intRotate},//intImm10, 
+            $display("%s %s %s %s", out[0], out[1], out[2], out[3]);
             
-            "mult":   '{P_intAlu, S_intMul, T_intMul, O_intMul},//int2R, 
-            "mulh_s": '{P_intAlu, S_intMul, T_intMulHU, O_intMulHU},//int2R, 
-            "mulh_u": '{P_intAlu, S_intMul, T_intMulHS, O_intMulHS},//int2R, 
-            "div_s":  '{P_intAlu, S_intMul, T_intDivS, O_intDivS},//int2R, 
-            "div_u":  '{P_intAlu, S_intMul, T_intDivU, O_intDivU},//int2R, 
-            "rem_s":  '{P_intAlu, S_intMul, T_intRemS, O_intRemS},//int2R, 
-            "rem_u":  '{P_intAlu, S_intMul, T_intRemU, O_intRemU},//int2R, 
+            $display("%d", checkArgs(out[0:3], parsingMap[fmt]));// $display("Args error!");
             
-            "mov_f":  '{P_floatOp, S_floatMove, T_floatMove, O_floatMove},//float1R,
+            vals = parseArgs(out[0:3]);
+            
+            $display("%p", vals);
+            
+            res = fillArgs(vals, parsingMap[fmt], 0);
+            $write("%b ", res);
+            
+            res = fillOp(res, def);
+            $display("%b", res);
+        endfunction;
+
+        function automatic Word TMP_getIns(input string parts[]);
+            InstructionFormat fmt = getFormat(parts[0]);
+            InstructionDef def = getDef(parts[0]);
+            
+            string args[] = orderArgs(parts[1:3], parsingMap[fmt]);
+            Word4 vals;
+            Word res;
+            
+            if ( checkArgs(args[0:3], parsingMap[fmt]) != 1) $error("Incorrect args");
+                        
+            vals = parseArgs(args[0:3]);
+           
+            res = fillArgs(vals, parsingMap[fmt], 0);            
+            res = fillOp(res, def);
+            
+            return res;
+        endfunction;
+
+        function automatic CodeRef TMP_getCodeRef(input string parts[]);
+            InstructionFormat fmt = getFormat(parts[0]);
+            InstructionDef def = getDef(parts[0]);
+            
+            string args[] = orderArgs(parts[1:3], parsingMap[fmt]);
+            Word4 vals;
+            CodeRef res;
+
+            res.label = parseLabel(args[0:3], parsingMap[fmt][1]);
+            if (res.label.len() != 0)
+                case (def.p)
+                    P_ja: res.ref26 = 1;
+                    P_jl, P_jz, P_jnz: res.ref21 = 1;
+                    default: ;
+                endcase
+
+            $display("%d", checkArgs(args[0:3], parsingMap[fmt]));// $display("Args error!");
+            
+            return res; 
+        endfunction;
+
+
+    typedef InstructionDef DefMap[string];
+    
+    const DefMap defMap = '{
+        "undef": '{P_none, S_none, T_none, O_undef},
+    
+        "and_r":  '{P_intAlu, S_intLogic, T_intAnd, O_intAnd}, //int2R,
+        "or_r":   '{P_intAlu, S_intLogic, T_intOr, O_intOr}, //int2R,
+        "xor_r":  '{P_intAlu, S_intLogic, T_intXor, O_intXor}, //int2R,
+        
+        "add_i": '{P_addI, S_none, T_none, O_intAdd},//intImm16,
+        "add_h": '{P_addH, S_none, T_none, O_intAddH},//intImm16,
+        "add_r": '{P_intAlu, S_intArith, T_intAdd, O_intAdd},//int2R,
+        "sub_r": '{P_intAlu, S_intArith, T_intSub, O_intSub},//int2R,
+        
+        "shl_i": '{P_intAluImm, S_intShiftLogical, T_none, O_intShiftLogical},//intImm10, 
+        "sha_i": '{P_intAluImm, S_intShiftArith, T_none, O_intShiftArith},//intImm10, 
+        "rot_i": '{P_intAluImm, S_intRotate, T_none, O_intRotate},//intImm10, 
+        
+        "mult":   '{P_intAlu, S_intMul, T_intMul, O_intMul},//int2R, 
+        "mulh_s": '{P_intAlu, S_intMul, T_intMulHU, O_intMulHU},//int2R, 
+        "mulh_u": '{P_intAlu, S_intMul, T_intMulHS, O_intMulHS},//int2R, 
+        "div_s":  '{P_intAlu, S_intMul, T_intDivS, O_intDivS},//int2R, 
+        "div_u":  '{P_intAlu, S_intMul, T_intDivU, O_intDivU},//int2R, 
+        "rem_s":  '{P_intAlu, S_intMul, T_intRemS, O_intRemS},//int2R, 
+        "rem_u":  '{P_intAlu, S_intMul, T_intRemU, O_intRemU},//int2R, 
+        
+        "mov_f":  '{P_floatOp, S_floatMove, T_floatMove, O_floatMove},//float1R,
 //            "or_f": float2R,   // -- Float operations
-            
-            
-//                        P_intLoadW16,
-//            P_intStoreW16,
-//            P_floatLoadW16,
-//            P_floatStoreW16,
-            
-            "ldi_i": '{P_intLoadW16,  S_none, T_none, O_intLoadW},//intImm16,
-            "sti_i": '{P_intStoreW16, S_none, T_none, O_intStoreW},//intStore16,
-            
-            "ldf_i": '{P_floatLoadW16,  S_none, T_none, O_floatLoadW},//floatLoad16,
-            "stf_i": '{P_floatStoreW16,  S_none, T_none, O_floatStoreW},//floatStore16,
+
+        
+        "ldi_i": '{P_intLoadW16,  S_none, T_none, O_intLoadW},//intImm16,
+        "sti_i": '{P_intStoreW16, S_none, T_none, O_intStoreW},//intStore16,
+        
+        "ldf_i": '{P_floatLoadW16,  S_none, T_none, O_floatLoadW},//floatLoad16,
+        "stf_i": '{P_floatStoreW16,  S_none, T_none, O_floatStoreW},//floatStore16,
 //            //stf_r, 
-            
-            
-            "lds": '{P_sysMem,  S_sysLoad, T_none, O_sysLoad},//sysLoad, //-- load sys
-            
-            "sts": '{P_sysMem,  S_sysStore, T_none, O_sysStore},//sysStore, //-- store sys
-            
-            "jz_i": '{P_jz, S_none, T_none, O_jump},//jumpCond,
-            "jz_r": '{P_intAlu, S_jumpReg, T_jumpRegZ, O_jump},//int2R,
-            "jnz_i": '{P_jnz, S_none, T_none, O_jump},//jumpCond,
-            "jnz_r": '{P_intAlu, S_jumpReg, T_jumpRegNZ, O_jump},//int2R,
-            "ja": '{P_ja, S_none, T_none, O_jump},//,//jumpLong,
-            "jl": '{P_jl, S_none, T_none, O_jump},//jumpLink, //-- jump always, jump link
-
-//            //"sys": noRegs //-- system operation
-            
-            "sys_retE": '{P_sysControl, S_sysRetE, T_none, O_send},
-            "sys_retI": '{P_sysControl, S_sysRetI, T_none, O_send},
-            "sys_halt": '{P_sysControl, S_sysHalt, T_none, O_send},
-            "sys_sync": '{P_sysControl, S_sysSync, T_none, O_send},
-            "sys_replay": '{P_sysControl, S_sysReplay, T_none, O_send},
-            "sys_error": '{P_sysControl, S_sysError, T_none, O_send},
-            "sys_call": '{P_sysControl, S_sysCall, T_none, O_send},
-            "sys_send": '{P_sysControl, S_sysSend, T_none, O_send}
-            
-        }; 
-
+        
+        "lds": '{P_sysMem,  S_sysLoad, T_none, O_sysLoad},//sysLoad, //-- load sys
+        
+        "sts": '{P_sysMem,  S_sysStore, T_none, O_sysStore},//sysStore, //-- store sys
+        
+        "jz_i": '{P_jz, S_none, T_none, O_jump},//jumpCond,
+        "jz_r": '{P_intAlu, S_jumpReg, T_jumpRegZ, O_jump},//int2R,
+        "jnz_i": '{P_jnz, S_none, T_none, O_jump},//jumpCond,
+        "jnz_r": '{P_intAlu, S_jumpReg, T_jumpRegNZ, O_jump},//int2R,
+        "ja": '{P_ja, S_none, T_none, O_jump},//,//jumpLong,
+        "jl": '{P_jl, S_none, T_none, O_jump},//jumpLink, //-- jump always, jump link
+        
+        "sys_retE": '{P_sysControl, S_sysRetE, T_none, O_send},
+        "sys_retI": '{P_sysControl, S_sysRetI, T_none, O_send},
+        "sys_halt": '{P_sysControl, S_sysHalt, T_none, O_send},
+        "sys_sync": '{P_sysControl, S_sysSync, T_none, O_send},
+        "sys_replay": '{P_sysControl, S_sysReplay, T_none, O_send},
+        "sys_error": '{P_sysControl, S_sysError, T_none, O_send},
+        "sys_call": '{P_sysControl, S_sysCall, T_none, O_send},
+        "sys_send": '{P_sysControl, S_sysSend, T_none, O_send}
+        
+    }; 
 
 
     function automatic InstructionDef getDef(input string s);
@@ -458,7 +473,6 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
 
 
     function automatic string4 orderArgs(input string args[], input string3 parsingMap);
-        // d 0 1 2   a0 a1 a2 a3
         string4 out;
         int index;
         string spec = parsingMap[0];
@@ -478,27 +492,27 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
         return out;
     endfunction
 
-    function automatic bit checkArgs(input string4 args, input string3 parsingMap);
-        
-//    asmForm: string(1 to 4);
-//    decoding: string(1 to 5);
-//    typeSpec: string(1 to 5);
+    function automatic int checkArgs(input string4 args, input string3 parsingMap);
         string typeSpec = parsingMap[2];    
         string decoding = parsingMap[1];
         
         case (typeSpec[0])
             "i": if (args[0][0] != "r" && decoding[0] != "0") return 2;
             "f": if (args[0][0] != "f" && decoding[0] != "0") return 3;
-            default: if (args[0][0] != " ") return 4
+            default: if (args[0][0] != "") return 4
                         ;
         endcase
 
-        for (int i = 0; i <= 3; i++) begin
+        for (int i = 1; i <= 3; i++) begin
             case (typeSpec[i+1])
                 "i": if (args[i][0] != "r" && decoding[i+1] != "0") return 5 + 10*i;
                 "f": if (args[i][0] != "f" && decoding[i+1] != "0") return 6 + 10*i;
                 "c": ;
-                default: if (args[i][0] != " ") return 7 + 10*i;
+                "0": if (args[i].len() != 0) return 7 + 10*i;
+                default:   begin
+                             $error("arg spec: [%s]", typeSpec[i+1]);
+                            if (args[i][0] != " ") return 8 + 10*i;
+                           end
             endcase
         end
         
@@ -533,6 +547,14 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
     endfunction
 
 
+    function automatic string parseLabel(input string4 args, input string decoding);
+        for (int i = 1; i < 4; i++) begin
+            if (decoding[i+1] inside {"L", "J"}) return args[i];
+        end
+        
+        return "";
+    endfunction
+
     
     function automatic Word fillField(input Word w, input logic[7:0] field, input Word value);
         Word res = w;
@@ -553,131 +575,25 @@ type ProcMnemonic is ( -- one word instruction names, distinguishing different a
     endfunction
 
 
-//-- Insert args into word
-//function TMP_fillArgs(args: IntArray; desc: NEW_FormatDescription; undefOffset: boolean) return Word is
     function automatic Word fillArgs(input Word4 args, input string3 parsingMap, input bit unknownOffset);
         string decoding = parsingMap[1];
         Word res = '0;
-//    variable res: Word := (others => '0');
-//begin
-//    case desc.decoding(1) is
-//        when 'a' =>
-//            res(25 downto 21) := i2slv(args(0), 5);
-//        when 'b' =>
-//            res(20 downto 16) := i2slv(args(0), 5);
-//        when 'c' =>
-//            res(9 downto 5) := i2slv(args(0), 5);
-//        when 'd' =>
-//            res(4 downto 0) := i2slv(args(0), 5);                                                
-//        when others =>
-//    end case;
-       res = fillField(res, decoding[0], args[0]);
-       
-       res = fillField(res, decoding[2], args[1]);
-       res = fillField(res, decoding[3], args[2]);
-       res = fillField(res, decoding[4], args[3]);
-        
-//    case desc.decoding(3) is -- Skip the comma!
-//        when 'a' =>
-//            res(25 downto 21) := i2slv(args(1), 5);
-//        when 'b' =>
-//            res(20 downto 16) := i2slv(args(1), 5);
-//        when 'c' =>
-//            res(9 downto 5) := i2slv(args(1), 5);
-//        when 'd' =>
-//            res(4 downto 0) := i2slv(args(1), 5);
-//        when 'X' =>
-//            res(9 downto 0) := i2slv(args(1), 10);
-//        when 'H' =>
-//            res(15 downto 0) := i2slv(args(1), 16);
-//        when 'J' =>
-//            res(20 downto 0) := i2slv(args(1), 21);
-//        when 'L' =>
-//            res(25 downto 0) := i2slv(args(1), 26);                                                            
-//        when others =>
-//    end case;
-    
-//    case desc.decoding(4) is
-//        when 'a' =>
-//            res(25 downto 21) := i2slv(args(2), 5);
-//        when 'b' =>
-//            res(20 downto 16) := i2slv(args(2), 5);
-//        when 'c' =>
-//            res(9 downto 5) := i2slv(args(2), 5);
-//        when 'd' =>
-//            res(4 downto 0) := i2slv(args(2), 5);
-//        when 'X' =>     
-//            res(9 downto 0) := i2slv(args(2), 10);
-//            if undefOffset then
-//                res(9 downto 0) := (others => 'U');
-//            end if;
-//        when 'H' =>
-//            res(15 downto 0) := i2slv(args(2), 16);
-//            if undefOffset then
-//                res(15 downto 0) := (others => 'U');
-//            end if;
-//        when 'J' =>
-//            res(20 downto 0) := i2slv(args(2), 21);
-//            if undefOffset then
-//                res(20 downto 0) := (others => 'U');
-//            end if;
-//        when 'L' =>
-//            res(25 downto 0) := i2slv(args(2), 26);
-//            if undefOffset then
-//                res(25 downto 0) := (others => 'U');
-//            end if;                                                            
-//        when others =>
-//    end case;
-    
-//    case desc.decoding(5) is
-//        when 'a' =>
-//            res(25 downto 21) := i2slv(args(3), 5);
-//        when 'b' =>
-//            res(20 downto 16) := i2slv(args(3), 5);
-//        when 'c' =>
-//            res(9 downto 5) := i2slv(args(3), 5);
-//        when 'd' =>
-//            res(4 downto 0) := i2slv(args(3), 5);
-//        when 'X' =>
-//            res(9 downto 0) := i2slv(args(3), 10);
-//        when 'H' =>
-//            res(15 downto 0) := i2slv(args(3), 16);
-//        when 'J' =>
-//            res(20 downto 0) := i2slv(args(3), 21);
-//        when 'L' =>
-//            res(25 downto 0) := i2slv(args(3), 26);                                                            
-//        when others =>
-//    end case;   
 
-//    return res;
-//end function;
+        res = fillField(res, decoding[0], args[0]);
+       
+        res = fillField(res, decoding[2], args[1]);
+        res = fillField(res, decoding[3], args[2]);
+        res = fillField(res, decoding[4], args[3]);
+
         return res;
     endfunction
     
-//function TMP_fillOp(w: Word; insDef: InstructionDefinition) return Word is
     function automatic Word fillOp(input Word w, input InstructionDef def);
         Word res = w;
-        
         res[31:26] = def.p.num();
         if (def.s != S_none) res[15:10] = def.s.num();
         if (def.t != T_none) res[4:0] = def.t.num();
-//    variable res: Word := w;
-//begin
-//    res(31 downto 26) := i2slv(insDef.i, 6);
-    
-//    if insDef.j = -1 then return res; end if;
-    
-//    res(15 downto 10) := i2slv(insDef.j, 6);
-
-//    if insDef.k = -1 then return res; end if;
-
-//    res(4 downto 0) := i2slv(insDef.k, 5);
-    
-//    return res;
-//end function;
         return res;
     endfunction;
-
-
 
 endpackage

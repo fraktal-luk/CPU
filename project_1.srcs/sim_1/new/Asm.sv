@@ -96,7 +96,7 @@ package Asm;
                 errors.push_back($sformatf("%d: Something after label", i));
             end
             else begin
-                analyzeCodeLine(nInstructionLines, parts);
+                analyzeCodeLine(i, nInstructionLines, parts);
                 nInstructionLines++;
             end
         end
@@ -107,23 +107,27 @@ package Asm;
         NONE, SOME
     } ParseError;
 
+
     typedef struct {
         int line;
+        int codeLine;
         squeue parts;
         ParseError error = SOME;
-        string label;
+        Word ins;
+        CodeRef codeRef;
     } CodeLine;
 
-    function automatic CodeLine analyzeCodeLine(input int line, input squeue parts);
+    function automatic CodeLine analyzeCodeLine(input int line, input int codeLine, input squeue parts);
         CodeLine res;
         string mnemonic = parts[0];
         string partsExt[4];
  
-        res.line = line;
+        res.line = line + 1;
+        res.codeLine = codeLine + 1;
         res.parts = parts;
         res.error = NONE;
         
-        $display("Code line: %s", parts[0]);
+        //$display("Code line: %s", parts[0]);
         
         if (!isLetter(mnemonic[0])) begin
             res.error = SOME;
@@ -140,11 +144,14 @@ package Asm;
             partsExt[0] = mnemonic;
             partsExt[1] = "";
         end
-
-          //  $display(getFormatName(mnemonic));
-          getParsing(mnemonic);
             
-          TMP_showArgs(partsExt);
+        //  TMP_showArgs(partsExt);
+        
+        res.ins = TMP_getIns(partsExt);
+        
+        res.codeRef = TMP_getCodeRef(partsExt);
+        $display("%p", res);
+        $display("%h", res.ins);
         // get expected format 
         
         // check args conformance to format
