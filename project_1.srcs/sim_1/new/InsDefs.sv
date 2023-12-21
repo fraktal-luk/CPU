@@ -345,19 +345,19 @@ package InsDefs;
             Word4 vals;
             Word res;
             
-            $display("%s %s %s %s", out[0], out[1], out[2], out[3]);
+            //$display("%s %s %s %s", out[0], out[1], out[2], out[3]);
             
-            $display("%d", checkArgs(out[0:3], parsingMap[fmt]));// $display("Args error!");
+            //$display("%d", checkArgs(out[0:3], parsingMap[fmt]));// $display("Args error!");
             
             vals = parseArgs(out[0:3]);
             
-            $display("%p", vals);
+            //$display("%p", vals);
             
             res = fillArgs(vals, parsingMap[fmt], 0);
-            $write("%b ", res);
+            //$write("%b ", res);
             
             res = fillOp(res, def);
-            $display("%b", res);
+            //$display("%b", res);
         endfunction;
 
         function automatic Word TMP_getIns(input string parts[]);
@@ -394,7 +394,7 @@ package InsDefs;
                     default: ;
                 endcase
 
-            $display("%d", checkArgs(args[0:3], parsingMap[fmt]));// $display("Args error!");
+            //$display("%d", checkArgs(args[0:3], parsingMap[fmt]));// $display("Args error!");
             
             return res; 
         endfunction;
@@ -549,7 +549,7 @@ package InsDefs;
 
     function automatic string parseLabel(input string4 args, input string decoding);
         for (int i = 1; i < 4; i++) begin
-            if (decoding[i+1] inside {"L", "J"}) return args[i];
+            if (decoding[i+1] inside {"L", "J"} && args[i][0] == "$") return args[i];
         end
         
         return "";

@@ -95,12 +95,31 @@ package Asm;
         CodeRef codeRef;
     } CodeLine;
 
-    function automatic void processLines(input squeue lines);
-    
+    typedef struct {
+        int codeLine; string label; int size;
+    } ImportRef;
+
+    typedef struct {
+        int codeLine; string label;
+    } ExportRef;
+
+    typedef struct {
+        string desc;
+        Word words[];
+        ImportRef imports[];
+        ExportRef exports[];
+    } Section;
+
+    function automatic Section processLines(input squeue lines);
+        Section res;
         squeue labels = '{};
         int labelMap[string];
+        ImportRef importMap[string];
+        ImportRef imports[$];
+        ExportRef exports[$];
         squeue errors = '{};
         CodeLine instructions[$];
+        Word code[];
     
         int nInstructionLines = 0;
     
@@ -119,6 +138,8 @@ package Asm;
             end
         end
         
+        code = new[nInstructionLines];
+        
         // Resolve labels
         foreach(instructions[i]) begin
             CodeLine ins = instructions[i];
@@ -134,12 +155,31 @@ package Asm;
                     else if (ins.codeRef.ref21 == 1) newWord[20:0] = (targetAdr - usingAdr);
                     
                     $display("%h", newWord);
+                    instructions[i].ins = newWord;
                 end
-                else
-                    $display("Unresolved reference: %d: %s", ins.line, ins.codeRef.label);                
+                else begin
+                    int size = ins.codeRef.ref26 == 1 ? 26 : 21;
+                    $display("Unresolved reference: %d: %s", ins.line, ins.codeRef.label);
+                    
+                    imports.push_back('{ins.codeLine, ins.codeRef.label, size});
+                    //importMap[ins.codeRef.label] = '{ins.codeLine, ins.codeRef.label, size};
+                end             
             end
+            code[i] = instructions[i].ins;
         end
         
+        res.words = code;
+        
+        begin
+            int nImports = imports.size();
+            res.imports = new[nImports](imports[0:$]);
+        //for (importMap[s])
+        //    res.imports = '{};
+        end
+        
+        $display("%p", imports);
+        
+        return res;
     endfunction
 
 
@@ -176,8 +216,8 @@ package Asm;
         res.ins = TMP_getIns(partsExt);
         
         res.codeRef = TMP_getCodeRef(partsExt);
-        $display("%p", res);
-        $display("%h", res.ins);
+        //$display("%p", res);
+        //$display("%h", res.ins);
         // get expected format 
         
         // check args conformance to format
