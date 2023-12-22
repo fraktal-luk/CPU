@@ -8,7 +8,6 @@ package InsDefs;
         typedef 
         enum {
             // set, mov, clr, nop, -- pseudoinstructions
-            undef,
         
 
             //and_i,
@@ -56,7 +55,10 @@ package InsDefs;
             sys_replay,
             sys_error,
             sys_call,
-            sys_send 
+            sys_send,
+            
+            undef
+
             
         } Mnemonic;
     endclass;
@@ -75,7 +77,6 @@ package InsDefs;
     } InstructionFormat;
 
     typedef enum {
-        P_none,
         P_ja,
         P_jl,
         P_jz,
@@ -95,11 +96,13 @@ package InsDefs;
         
         P_sysMem,
         
-        P_sysControl
+        P_sysControl,
+        
+        
+        P_none = 1000
     } Primary;
 
     typedef enum {
-        S_none,
         
         // P_intAlu          
         S_intLogic, S_intArith, S_jumpReg, S_intMul,
@@ -128,11 +131,12 @@ package InsDefs;
         S_sysHalt,
         S_sysSync,
         S_sysReplay,
-        S_sysSend                 
+        S_sysSend,
+        
+        S_none = 1000               
      } Secondary;
 
     typedef enum {
-        T_none, 
 
         T_intAnd, T_intOr, T_intXor,
     
@@ -144,7 +148,10 @@ package InsDefs;
     
         T_floatMove,
       
-        T_jumpRegZ, T_jumpRegNZ
+        T_jumpRegZ, T_jumpRegNZ,
+        
+        T_none = 1000
+
     } Ternary;
 
     typedef enum {
@@ -349,6 +356,7 @@ package InsDefs;
             
             //$display("%d", checkArgs(out[0:3], parsingMap[fmt]));// $display("Args error!");
             
+            
             vals = parseArgs(out[0:3]);
             
             //$display("%p", vals);
@@ -367,7 +375,9 @@ package InsDefs;
             string args[] = orderArgs(parts[1:3], parsingMap[fmt]);
             Word4 vals;
             Word res;
-            
+                   //     $display("%p", parts);
+                  //      $display("def: %p", def);
+
             if ( checkArgs(args[0:3], parsingMap[fmt]) != 1) $error("Incorrect args");
                         
             vals = parseArgs(args[0:3]);
@@ -590,10 +600,259 @@ package InsDefs;
     
     function automatic Word fillOp(input Word w, input InstructionDef def);
         Word res = w;
-        res[31:26] = def.p.num();
-        if (def.s != S_none) res[15:10] = def.s.num();
-        if (def.t != T_none) res[4:0] = def.t.num();
+        res[31:26] = def.p;
+        if (def.s != S_none) res[15:10] = def.s;
+        if (def.t != T_none) res[4:0] = def.t;
+         //   $display("    %b", res);
         return res;
+    endfunction;
+
+
+    
+    function automatic Primary toPrimary(input int n);
+        Primary p;
+        return p.first().next(n);
+    endfunction;
+
+    function automatic Secondary toSecondary(input int n);
+        Secondary s;
+        return s.first().next(n);
+    endfunction;
+    
+    function automatic Ternary toTernary(input int n);
+        Ternary t;
+        return t.first().next(n);
+    endfunction;
+
+    function automatic matchDefinition(input InstructionDef pattern, candidate);
+        return (candidate.p == pattern.p) && (candidate.s inside {S_none, pattern.s}) && (candidate.t inside {T_none, pattern.t});
+    endfunction
+
+    function automatic string decodeMnem(input Word w);
+//        int p = w[31:26];
+//        int s = w[15:10];
+//        int t = w[4:0];
+        
+        Primary p = toPrimary(w[31:26]);
+        Secondary s = toSecondary(w[15:10]);
+        Ternary t = toTernary(w[4:0]);
+        
+        InstructionDef def = '{p, s, t, O_undef};
+        
+        
+        string found[$] = defMap.find_index with(matchDefinition(def, item));
+        string name;
+                   //     $display("  %p", def);
+
+        
+        if (found.size() == 0) return "undef";
+        
+        if (found.size() != 1) $error("No single definition, %d", found.size());
+        
+        name = found[0];
+        
+        return name;               
+    endfunction
+
+//function TMP_disasm(w: Word) return string is
+    function automatic void TMP_disasm(input Word w);
+        string s = decodeMnem(w);
+        InstructionFormat f = getFormat(s);
+        InstructionDef d = getDef(s);
+        
+        string3 fmtSpec = parsingMap[f];
+        
+        string typeSpec = fmtSpec[2];    
+        string decoding = fmtSpec[1];
+        string asmForm = fmtSpec[0];
+
+
+//    constant qa: slv5 := w(25 downto 21);
+//    constant qb: slv5 := w(20 downto 16);
+//    constant qc: slv5 := w(9 downto 5);
+//    constant qd: slv5 := w(4 downto 0);
+        int qa = w[25:21];        
+        int qb = w[20:16];        
+        int qc = w[9:5];        
+        int qd = w[4:0];        
+
+        int dest;
+        int sources[3];
+        string destStr;
+        string sourcesStr[3];
+//    variable d, s0, s1, s2, immValue: integer := 0;
+//    variable sources: IntArray(0 to 2) := (others => 0);
+//    variable lastArg: boolean := false;
+    
+//    variable res: string(1 to 30) := (others => ' ');
+//    variable rd, r0, r1, r2: string(1 to 3);
+//    variable argStrings: ArgArray := (others => (others => ' '));
+//    variable destString, tmpString: string(1 to 10) := (others => ' ');
+    
+//    variable ptr: integer := 0;
+     //   $display("%s: %p,  %p", s, f, d);
+
+//begin
+    
+//    case fmtDesc.decoding(1) is
+//        when 'a' =>
+//            d := slv2u(qa);
+//        when 'b' =>
+//            d := slv2u(qb);
+//        when 'c' =>
+//            d := slv2u(qc);
+//        when 'd' =>
+//            d := slv2u(qd);        
+//        when others =>
+//    end case;
+        case (decoding[0])
+            "a": dest = qa;
+            "b": dest = qb;
+            "c": dest = qc;
+            "d": dest = qd;
+            "0", " ": ;
+            default: $fatal("Wrong dest specifier");
+        endcase
+
+        foreach(sources[i])
+            case (decoding[i+2])
+                "a": sources[i] = qa;
+                "b": sources[i] = qb;
+                "c": sources[i] = qc;
+                "d": sources[i] = qd;
+                "X": sources[i] = $signed(w[9:0]);
+                "H": sources[i] = $signed(w[15:0]);
+                "J": sources[i] = $signed(w[20:0]);
+                "L": sources[i] = $signed(w[25:0]);
+                "0", " ": ;
+                default: $fatal("Wrong source specifier");
+            endcase
+        
+//    for i in 0 to 2 loop
+//        case fmtDesc.decoding(3 + i) is
+//            when 'a' =>
+//                sources(i) := slv2u(qa);
+//            when 'b' =>
+//                sources(i) := slv2u(qb);
+//            when 'c' =>
+//                sources(i) := slv2u(qc);
+//            when 'd' =>
+//                sources(i) := slv2u(qd);        
+//            when 'X' =>
+//                sources(i) := slv2s(w(9 downto 0));
+//            when 'H' =>
+//                sources(i) := slv2s(w(15 downto 0));
+//            when 'J' =>
+//                sources(i) := slv2s(w(20 downto 0));
+//            when 'L' =>
+//                sources(i) := slv2s(w(25 downto 0));                                                                                    
+//            when others =>
+//        end case;        
+//    end loop;
+
+
+//    -- Use fmtDesc.typeSpec to convert nums to strings
+//    case fmtDesc.typeSpec(1) is
+//       when 'i' =>
+//           destString := padLeft(reg2str(d, false), 10);
+//       when 'f' =>
+//           destString := padLeft(reg2str(d, true), 10);
+//       when others =>
+//    end case;    
+    
+//    for i in 0 to 2 loop
+//        case fmtDesc.typeSpec(3 + i) is
+//           when 'i' =>
+//               argStrings(i) := padLeft(reg2str(sources(i), false), 10);
+//           when 'f' =>
+//               argStrings(i) := padLeft(reg2str(sources(i), true), 10);
+//           when 'c' =>
+//               argStrings(i) := padLeft(integer'image(sources(i)), 10);
+//           when others =>
+//        end case;        
+//    end loop;
+
+        case (typeSpec[0])
+            "i": $swrite(destStr, "r%0d", dest);
+            "f": $swrite(destStr, "f%0d", dest);
+            //"c": dest = qc;
+            "0": destStr = "";
+            default: $fatal("Wrong dest specifier");
+        endcase
+
+        foreach(sources[i])
+            case (typeSpec[i+2])
+                "i": $swrite(sourcesStr[i], "r%0d", sources[i]);
+                "f": $swrite(sourcesStr[i], "f%0d", sources[i]);
+                "c": $swrite(sourcesStr[i], "%0d", sources[i]);
+                "0": sourcesStr[i] = "";
+                default: $fatal("Wrong source specifier");
+            endcase
+
+//    -- Use fmtDesc.asmForm to order proper strings
+//    res(1 to 10) := padLeft(ProcMnemonic'image(mnem), 10);
+//    res(11) := ' ';
+//    -- arg: 3
+//    -- ...
+//    ptr := 12;
+//    for i in 0 to 3 loop
+
+        s = {s, "          "};
+        s = s.substr(0,9);
+
+        foreach (asmForm[i]) begin
+      
+//        case fmtDesc.asmForm(1 + i) is
+//            when 'd' =>
+//                tmpString := destString;
+//            when '0' =>
+//                tmpString := argStrings(0);
+//            when '1' =>
+//                tmpString := argStrings(1);
+//            when '2' =>
+//                tmpString := argStrings(2);
+                                    
+//            when others =>
+//        end case;
+    
+          case (asmForm[i])
+              "d": s = {s, " ", destStr};
+              "0": s = {s, " ", sourcesStr[0]};
+              "1": s = {s, " ", sourcesStr[1]};
+              "2": s = {s, " ", sourcesStr[2]};
+              " ": ;
+              default: $fatal("Wrong asm syntax description");
+          endcase;
+          
+          if (i == 3 || asmForm[i+1] == " ")
+              break;
+//        if i = 3 or fmtDesc.asmForm(1 + i + 1) = ' ' then
+//            lastArg := true;
+//        end if;
+
+//        -- copy text before first space, inc ptr by the amount    
+//        for j in 0 to 9 loop
+//            if tmpString(j+1) = ' ' then
+//                exit;
+//            end if;
+//            res(ptr) := tmpString(j+1);
+//            ptr := ptr + 1;
+//        end loop;
+        
+//        if lastArg then
+//            exit;
+//        else
+//            res(ptr to ptr + 1) := ", ";            
+//            ptr := ptr + 2;
+//        end if;
+//    end loop;
+            s = {s, ","};
+            
+       end
+       
+       $display(s);
+//    return res;
+//end function;
     endfunction;
 
 endpackage

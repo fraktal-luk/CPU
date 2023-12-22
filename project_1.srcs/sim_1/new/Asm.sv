@@ -177,7 +177,11 @@ package Asm;
         //    res.imports = '{};
         end
         
-        $display("%p", imports);
+        //$display("%p", imports);
+        
+            foreach (res.words[i]) begin
+                TMP_disasm(res.words[i]);
+            end
         
         return res;
     endfunction
