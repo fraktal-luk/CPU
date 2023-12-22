@@ -76,81 +76,136 @@ package InsDefs;
             floatToInt, intToFloat
     } InstructionFormat;
 
+
     typedef enum {
-        P_ja,
-        P_jl,
-        P_jz,
-        P_jnz,
-        P_intAlu,
-        P_floatOp,
-        P_intMem,
-        P_floatMem,
-        P_intAluImm,
-        P_addI,
-        P_addH, 
+        P_ja = 8,
+        P_jl = 9,
+        P_jz = 10,
+        P_jnz = 11,
         
-        P_intLoadW16,
-        P_intStoreW16,
-        P_floatLoadW16,
-        P_floatStoreW16,
+        P_intAlu = 0,
+        P_floatOp = 1,
+        P_intMem = 2,
+        P_floatMem = 3,
+        P_sysMem = 4,
+        P_intAluImm = 5,
         
-        P_sysMem,
+        P_addI = 16,
+        P_addH = 17, 
         
-        P_sysControl,
+        P_intLoadW16 = 20,
+        P_intStoreW16 = 21,
+        P_floatLoadW16 = 22,
+        P_floatStoreW16 = 23,
         
         
-        P_none = 1000
+        P_sysControl = 7,
+        
+        
+        P_none = -1
     } Primary;
+
+
 
     typedef enum {
         
         // P_intAlu          
-        S_intLogic, S_intArith, S_jumpReg, S_intMul,
+        S_intLogic = 0 + 64*P_intAlu,
+        S_intArith = 1 + 64*P_intAlu,
+        S_jumpReg = 2 + 64*P_intAlu,
+        S_intMul = 3 + 64*P_intAlu,
          
         // P_intAluImm
-        S_intShiftLogical, S_intShiftArith, S_intRotate,
+        S_intShiftLogical = 0 + 64*P_intAluImm,
+        S_intShiftArith   = 1 + 64*P_intAluImm,
+        S_intRotate       = 2 + 64*P_intAluImm, 
          
         // P_floatOp
-        S_floatMove,
+        S_floatMove  = 0 + 64*P_floatOp,
          
         // P_intMem
-        S_intLoadW, S_intStoreW,
+        //S_intLoadW,
+        //S_intStoreW,
          
         // P_floatMem
-        S_floatLoadW, S_floatStoreW,
+        //S_floatLoadW,
+        //S_floatStoreW,
          
         // P_sysMem
-        S_sysLoad, S_sysStore,
+        S_sysLoad   = 0 + 64*P_sysMem,
+        S_sysStore  = 32+ 64*P_sysMem,
          
         // P_sysControl                 
-        S_sysUndef,
-        S_sysError,
-        S_sysCall,
-        S_sysRetE,
-        S_sysRetI,
-        S_sysHalt,
-        S_sysSync,
-        S_sysReplay,
-        S_sysSend,
+        S_sysUndef   = 0 + 64*P_sysControl,
+        S_sysError = 1 + 64*P_sysControl,
+        S_sysCall = 2 + 64*P_sysControl,
+        S_sysSync = 3 + 64*P_sysControl,
+        S_sysReplay = 4 + 64*P_sysControl,
         
-        S_none = 1000               
+        S_sysHalt  = 5 + 64*P_sysControl,
+        S_sysSend = 6 + 64*P_sysControl,
+        S_sysRetE = 7 + 64*P_sysControl,
+        S_sysRetI = 8 + 64*P_sysControl,
+           
+        S_none = -1               
      } Secondary;
+
+
+
+//------------------
+
+//constant TableIntLogic: OpcodeTable2 := (
+//    0 => (intAnd, intAnd, and_r),
+//    1 => (intOr, intOr, or_r),
+
+//constant TableIntArith: OpcodeTable2 := (
+//    0 => (intAdd, intAdd, add_r),
+//    1 => (intSub, intSub, sub_r),
+//);
+
+//constant TableJumpReg: OpcodeTable2 := (
+//    0 => (jumpRegZ, jump, jz_r),
+//    1 => (jumpRegNZ, jump, jnz_r),
+
+//constant TableIntMul: OpcodeTable2 := (
+//    0 => (intMul,   intMul,  mult),
+//    1 => (intMulHU, intMulHU, mulh_u),
+//    2 => (intMulHS, intMulHS,  mulh_s),
+    
+//    8 => (intDivU, intDivU, div_u),
+//    9 => (intDivS, intDivS, div_s),
+//    10 => (intRemU, intRemU, rem_u),
+//    11 => (intRemS, intRemS, rem_s),
+
+//constant TableFloatMove: OpcodeTable2 := (
+//    0 => (floatMove, floatMove, mov_f),
+//);
+
+
 
     typedef enum {
 
-        T_intAnd, T_intOr, T_intXor,
+        T_intAnd = 0 + 32*S_intLogic,
+        T_intOr  = 1 + 32*S_intLogic,
+        T_intXor = 2 + 32*S_intLogic,
     
-        T_intAdd, T_intSub,  
+        T_intAdd = 0 + 32*S_intArith,
+        T_intSub = 1 + 32*S_intArith,  
     
-        T_intMul, T_intMulHU, T_intMulHS,
-        T_intDivU, T_intDivS,
-        T_intRemU, T_intRemS,
+        T_intMul = 0 + 32*S_intMul,
+        T_intMulHU = 1 + 32*S_intMul,
+        T_intMulHS = 2 + 32*S_intMul,
+        T_intDivU = 8 + 32*S_intMul,
+        T_intDivS = 9 + 32*S_intMul,
+        T_intRemU = 10 + 32*S_intMul,
+        T_intRemS = 11 + 32*S_intMul,
     
-        T_floatMove,
+        T_floatMove = 0  + 32*S_floatMove,
       
-        T_jumpRegZ, T_jumpRegNZ,
+        T_jumpRegZ = 0  + 32*S_jumpReg,
+        T_jumpRegNZ = 1  + 32*S_jumpReg,
         
-        T_none = 1000
+        T_none = -1
 
     } Ternary;
 
@@ -611,17 +666,44 @@ package InsDefs;
     
     function automatic Primary toPrimary(input int n);
         Primary p;
-        return p.first().next(n);
+        p = p.first();
+        
+        forever begin
+            if (p == n) return p; 
+            
+            if (p == p.last()) break;
+            p = p.next();
+        end
+        
+        return P_none;
     endfunction;
 
-    function automatic Secondary toSecondary(input int n);
+    function automatic Secondary toSecondary(input int n, input Primary p);
         Secondary s;
-        return s.first().next(n);
-    endfunction;
+        s = s.first();
+        
+        forever begin
+            if (s == 64*p + n) return s; 
+            
+            if (s == s.last()) break;
+            s = s.next();
+        end
+        
+        return S_none;
+     endfunction;
     
-    function automatic Ternary toTernary(input int n);
+    function automatic Ternary toTernary(input int n, input Primary p, input Secondary s);
         Ternary t;
-        return t.first().next(n);
+        t = t.first();
+        
+        forever begin
+            if (t == 64*32*p + 32*s + n) return t;
+            
+            if (t == t.last()) break;
+            t = t.next();
+        end
+        
+        return T_none;
     endfunction;
 
     function automatic matchDefinition(input InstructionDef pattern, candidate);
@@ -634,15 +716,15 @@ package InsDefs;
 //        int t = w[4:0];
         
         Primary p = toPrimary(w[31:26]);
-        Secondary s = toSecondary(w[15:10]);
-        Ternary t = toTernary(w[4:0]);
+        Secondary s = toSecondary(w[15:10], p);
+        Ternary t = toTernary(w[4:0], p, s);
         
         InstructionDef def = '{p, s, t, O_undef};
         
         
         string found[$] = defMap.find_index with(matchDefinition(def, item));
         string name;
-                   //     $display("  %p", def);
+              $display("w: %b / %d, %d, %d", w, p, t, s);
 
         
         if (found.size() == 0) return "undef";
