@@ -19,6 +19,10 @@ module ArchDesc0();
         $display("%p", tests);
         
         #1;
+
+            processLines(readFile("common_asm.txt"));
+        
+        #1;
         
         foreach (tests[i]) begin
             automatic squeue lineParts = breakLine(tests[i]);

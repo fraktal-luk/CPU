@@ -47,7 +47,7 @@ package Asm;
             else if (isWhite(line[i])) begin
                 while (isWhite(line[i])) i++; // Skip spaces
             end
-            else if (line[i] == "$") begin
+            else if (line[i] inside {"$", "@"}) begin
                 int iStart = i;
                 i++;
                 while (isAlpha(line[i])) begin
@@ -96,6 +96,16 @@ package Asm;
     } CodeLine;
 
     typedef struct {
+        int line;
+        int codeLine;
+        squeue parts;
+        ParseError error = SOME;
+        //Word ins;
+        //CodeRef codeRef;
+        string label;
+    } DirectiveLine;
+
+    typedef struct {
         int codeLine; string label; int size;
     } ImportRef;
 
@@ -131,6 +141,11 @@ package Asm;
                 labels.push_back(parts[0]);
                 labelMap[parts[0]] = nInstructionLines + 1;
                 errors.push_back($sformatf("%d: Something after label", i));
+            end
+            else if (parts[0][0] == "@") begin
+                DirectiveLine dl = analyzeDirective(i, nInstructionLines, parts);
+                if (dl.label.len() != 0)
+                    exports.push_back('{nInstructionLines, dl.label});
             end
             else begin
                 instructions.push_back(analyzeCodeLine(i, nInstructionLines, parts));
@@ -177,10 +192,10 @@ package Asm;
         //    res.imports = '{};
         end
         
-        //$display("%p", imports);
+        $display("%p", exports);
         
             foreach (res.words[i]) begin
-                TMP_disasm(res.words[i]);
+            //    TMP_disasm(res.words[i]);
             end
         
         return res;
@@ -228,6 +243,35 @@ package Asm;
         
         // if constant arg is a label, set it
         
+        return res;
+    endfunction
+
+    function automatic DirectiveLine analyzeDirective(input int line, input int codeLine, input squeue parts);
+        DirectiveLine res;
+        
+        res.line = line + 1;
+        res.codeLine = codeLine + 1;
+        res.parts = parts;
+        res.error = NONE;
+        
+        if (parts[0] == "@proc") begin
+            res.label = {"$", parts[1]};
+            if (parts.size() > 2) begin
+                $error("Too many arguments: %d", line + 1);
+                res.error = SOME;
+            end
+        end
+        else if (parts[0] == "@end") begin
+            if (parts.size() > 1) begin
+                $error("Too many arguments: %d", line + 1);
+                res.error = SOME;
+            end
+        end
+        else begin
+            $error("Unknown directive: %d", line + 1);
+            res.error = SOME;
+        end
+
         return res;
     endfunction
 
