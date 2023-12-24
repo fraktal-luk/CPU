@@ -53,8 +53,6 @@ package Asm;
                 while (isAlpha(line[i])) begin
                     i++;
                 end
-                
-                //$display(line.substr(iStart, i-1));
                 elems.push_back(line.substr(iStart, i-1));
             end
             else if (isAlpha(line[i]) || line[i] == "-") begin
@@ -62,9 +60,7 @@ package Asm;
                 i++;
                 while (isAlpha(line[i])) begin
                     i++;
-                end
-                
-                //$display(line.substr(iStart, i-1));
+                end 
                 elems.push_back(line.substr(iStart, i-1));
             end
             else if (line[i] == ",") begin
@@ -164,20 +160,15 @@ package Asm;
                     int targetAdr = 4*cline;
                     int usingAdr = 4*ins.codeLine;
                     Word newWord = ins.ins;
-                    $display("Resolving ref: %s -> ins %d", ins.codeRef.label, cline);
                     
                     if (ins.codeRef.ref26 == 1) newWord[25:0] = (targetAdr - usingAdr);
                     else if (ins.codeRef.ref21 == 1) newWord[20:0] = (targetAdr - usingAdr);
                     
-                    $display("%h", newWord);
                     instructions[i].ins = newWord;
                 end
                 else begin
-                    int size = ins.codeRef.ref26 == 1 ? 26 : 21;
-                    $display("Unresolved reference: %d: %s", ins.line, ins.codeRef.label);
-                    
+                    int size = ins.codeRef.ref26 == 1 ? 26 : 21;                    
                     imports.push_back('{ins.codeLine, ins.codeRef.label, size});
-                    //importMap[ins.codeRef.label] = '{ins.codeLine, ins.codeRef.label, size};
                 end             
             end
             code[i] = instructions[i].ins;
@@ -187,17 +178,11 @@ package Asm;
         
         begin
             int nImports = imports.size();
+            int nExports = exports.size();
             res.imports = new[nImports](imports[0:$]);
-        //for (importMap[s])
-        //    res.imports = '{};
+            res.exports = new[nExports](exports[0:$]);
         end
-        
-        $display("%p", exports);
-        
-            foreach (res.words[i]) begin
-            //    TMP_disasm(res.words[i]);
-            end
-        
+ 
         return res;
     endfunction
 
@@ -211,8 +196,6 @@ package Asm;
         res.codeLine = codeLine + 1;
         res.parts = parts;
         res.error = NONE;
-        
-        //$display("Code line: %s", parts[0]);
         
         if (!isLetter(mnemonic[0])) begin
             res.error = SOME;
@@ -229,20 +212,10 @@ package Asm;
             partsExt[0] = mnemonic;
             partsExt[1] = "";
         end
-            
-        //  TMP_showArgs(partsExt);
         
-        res.ins = TMP_getIns(partsExt);
-        
+        res.ins = TMP_getIns(partsExt);      
         res.codeRef = TMP_getCodeRef(partsExt);
-        //$display("%p", res);
-        //$display("%h", res.ins);
-        // get expected format 
-        
-        // check args conformance to format
-        
-        // if constant arg is a label, set it
-        
+
         return res;
     endfunction
 
