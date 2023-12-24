@@ -20,6 +20,19 @@ package Asm;
         return lines;
     endfunction
 
+    function automatic bit writeFile(input string name, input squeue lines);
+        int file = $fopen(name, "w");
+        //string line;
+        //string lines[$];
+
+        foreach (lines[i])
+            $fdisplay(file, lines[i]);
+            
+        $fclose(file);
+                
+        return 1;
+    endfunction
+
     function bit isLetter(input logic[7:0] char);
         return (char inside {["A":"Z"], ["A":"z"]});            
     endfunction
@@ -174,7 +187,7 @@ package Asm;
             code[i] = instructions[i].ins;
             
                 //TMP_disasm(code[i]);
-                assert(TMP_disasm2(code[i]) == TMP_disasm(code[i])) else $error("NOt eq");
+            //    assert(TMP_disasm2(code[i]) == TMP_disasm(code[i])) else $error("NOt eq");
         end
         
         res.words = code;
@@ -248,6 +261,15 @@ package Asm;
             res.error = SOME;
         end
 
+        return res;
+    endfunction
+
+    function automatic squeue disasmBlock(input Word words[]);
+        squeue res;
+        
+        foreach (words[i])
+            res.push_back(TMP_disasm(words[i]));
+            
         return res;
     endfunction
 

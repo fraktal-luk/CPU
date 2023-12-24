@@ -642,7 +642,6 @@ package InsDefs;
 
     function automatic AbstractInstruction decodeAbstract(input Word w);
         string s = decodeMnem(w);
-        //string s2;
         AbstractInstruction res;
         InstructionFormat f = getFormat(s);
         InstructionDef d = getDef(s);
@@ -660,9 +659,6 @@ package InsDefs;
 
         int dest;
         int sources[3];
-        //string destStr;
-        //string sourcesStr[3];
-        
 
         case (decoding[0])
             "a": dest = qa;
@@ -752,118 +748,8 @@ package InsDefs;
     endfunction
 
     function automatic string TMP_disasm(input Word w);
-        string s = decodeMnem(w);
-        string s2;
-        AbstractInstruction absIns;
-        InstructionFormat f = getFormat(s);
-        InstructionDef d = getDef(s);
-        
-        string3 fmtSpec = parsingMap[f];
-        
-        string typeSpec = fmtSpec[2];    
-        string decoding = fmtSpec[1];
-        string asmForm = fmtSpec[0];
-
-        int qa = w[25:21];        
-        int qb = w[20:16];        
-        int qc = w[9:5];        
-        int qd = w[4:0];        
-
-        int dest;
-        int sources[3];
-        string destStr;
-        string sourcesStr[3];
-        
-
-        case (decoding[0])
-            "a": dest = qa;
-            "b": dest = qb;
-            "c": dest = qc;
-            "d": dest = qd;
-            "0", " ": ;
-            default: $fatal("Wrong dest specifier");
-        endcase
-
-        foreach(sources[i])
-            case (decoding[i+2])
-                "a": sources[i] = qa;
-                "b": sources[i] = qb;
-                "c": sources[i] = qc;
-                "d": sources[i] = qd;
-                "X": sources[i] = $signed(w[9:0]);
-                "H": sources[i] = $signed(w[15:0]);
-                "J": sources[i] = $signed(w[20:0]);
-                "L": sources[i] = $signed(w[25:0]);
-                "0", " ": ;
-                default: $fatal("Wrong source specifier");
-            endcase
-        
-        absIns.mnemonic = s;
-        absIns.encoding = w;
-        absIns.fmt = f;
-        absIns.def = d;
-        absIns.dest = dest;
-        absIns.sources = sources;
-
-
-/*
-        dest = absIns.dest;
-        sources = absIns.sources;
-
-
-        case (typeSpec[0])
-            "i": $swrite(destStr, "r%0d", dest);
-            "f": $swrite(destStr, "f%0d", dest);
-            "0": destStr = "";
-            default: $fatal("Wrong dest specifier");
-        endcase
-
-        foreach(sources[i])
-            case (typeSpec[i+2])
-                "i": $swrite(sourcesStr[i], "r%0d", sources[i]);
-                "f": $swrite(sourcesStr[i], "f%0d", sources[i]);
-                "c": $swrite(sourcesStr[i], "%0d", sources[i]);
-                "0": sourcesStr[i] = "";
-                default: $fatal("Wrong source specifier");
-            endcase
-
-        s = {absIns.mnemonic, "          "};
-        s = s.substr(0,9);
-
-        foreach (asmForm[i]) begin
-            case (asmForm[i])
-                "d": s = {s, " ", destStr};
-                "0": s = {s, " ", sourcesStr[0]};
-                "1": s = {s, " ", sourcesStr[1]};
-                "2": s = {s, " ", sourcesStr[2]};
-                " ": ;
-                default: $fatal("Wrong asm syntax description");
-            endcase;
-          
-            if (i == 3 || asmForm[i+1] == " ") break;
-
-            s = {s, ","};
-        end
-        */
-        
-        s2 = ins2str(absIns);
-        
-        //assert(s2 == s) $display("Same"); else $error("NOt same: %s : %s", s, s2);
-        return s2;
-    endfunction;
-
-
-
-    function automatic string TMP_disasm2(input Word w);
-        //string s = decodeMnem(w);
-        //string s2;
-        AbstractInstruction absIns = decodeAbstract(w);
-
-        //absIns = decodeAbstract(w);
-        
-        string s2 = ins2str(absIns);
-        
-        return s2;
+        AbstractInstruction absIns = decodeAbstract(w);        
+        return ins2str(absIns);
     endfunction;
 
 endpackage
