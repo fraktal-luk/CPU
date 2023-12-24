@@ -172,6 +172,9 @@ package Asm;
                 end             
             end
             code[i] = instructions[i].ins;
+            
+                //TMP_disasm(code[i]);
+                assert(TMP_disasm2(code[i]) == TMP_disasm(code[i])) else $error("NOt eq");
         end
         
         res.words = code;
