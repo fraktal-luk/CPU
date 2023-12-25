@@ -154,7 +154,7 @@ package Asm;
             else if (parts[0][0] == "@") begin
                 DirectiveLine dl = analyzeDirective(i, nInstructionLines, parts);
                 if (dl.label.len() != 0)
-                    exports.push_back('{nInstructionLines, dl.label});
+                    exports.push_back('{nInstructionLines + 1, dl.label});
             end
             else begin
                 instructions.push_back(analyzeCodeLine(i, nInstructionLines, parts));
@@ -202,6 +202,20 @@ package Asm;
         return res;
     endfunction
 
+
+    function automatic Word fillImport(input Word w, input int adrDiff, input ImportRef imp, input ExportRef exp);
+        Word res = w;
+        int offset = adrDiff + 4*(exp.codeLine - imp.codeLine);
+        
+        case (imp.size)
+            21: res[20:0] = offset;
+            26: res[25:0] = offset;
+            default: $fatal("Incorrect offset size");
+        endcase
+        
+        return res;
+    endfunction
+    
 
     function automatic CodeLine analyzeCodeLine(input int line, input int codeLine, input squeue parts);
         CodeLine res;
@@ -266,10 +280,31 @@ package Asm;
 
     function automatic squeue disasmBlock(input Word words[]);
         squeue res;
+        string s;
+        foreach (words[i]) begin
+            $swrite(s, "%h: %h  %s", 4*i , words[i], TMP_disasm(words[i]));
+            res.push_back(s);
+        end
+        return res;
+    endfunction
+
+    function automatic Section fillImports(input Section section, input int startAdr, input Section lib, input int libAdr);
+        Section res = section;
+        int adrDiff = libAdr - startAdr;
+        //int tempLineDiff;
         
-        foreach (words[i])
-            res.push_back(TMP_disasm(words[i]));
+        foreach (section.imports[i]) begin
+            ImportRef imp = section.imports[i];
+            ExportRef exps[$] = lib.exports.find with (item.label == imp.label);
+            if (exps.size() == 0) continue;
             
+            //tempLineDiff = exps[0].codeLine - imp.codeLine;
+            $display("Filling import: %s, %p, %p", exps[0].label, imp, exps[0]);
+            $display("  %b", res.words[imp.codeLine]);
+            res.words[imp.codeLine] = fillImport(res.words[imp.codeLine], adrDiff, imp, exps[0]);
+            $display("  %b", res.words[imp.codeLine]);
+        end 
+        
         return res;
     endfunction
 

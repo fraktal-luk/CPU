@@ -10,8 +10,9 @@ module ArchDesc0();
     MnemonicClass::Mnemonic mnem;
 
     initial begin
-        Section s;
-    
+        Section common;
+        Section current;
+        
         automatic squeue tests = readFile("tests_all.txt");
 
     
@@ -22,9 +23,9 @@ module ArchDesc0();
         
         #1;
 
-            s = processLines(readFile("common_asm.txt"));
-            writeFile("common_disasm_SV.txt", disasmBlock(s.words));
-            $display(s.exports);
+            common = processLines(readFile("common_asm.txt"));
+            writeFile("common_disasm_SV.txt", disasmBlock(common.words));
+            $display(common.exports);
         #1;
         
         foreach (tests[i]) begin
@@ -36,7 +37,8 @@ module ArchDesc0();
             else if (lineParts.size() == 0);
             else begin
                 automatic squeue fileLines = readFile({lineParts[0], ".txt"});
-                processLines(fileLines);
+                current = processLines(fileLines);
+                fillImports(current, 0, common, 0);
             end
             
             #1;
