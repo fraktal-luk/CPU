@@ -8,10 +8,16 @@ package Emulation;
 
     typedef struct {
         int dummy;
+        bit halted;
+        bit error;
+        bit send;
     } CoreStatus;
 
     class Emulator;
         const Word IP_RESET = 0;
+        const Word IP_ERROR = 0;
+        const Word IP_CALL = 0;
+        const Word IP_INT = 0;
         
         const Word SYS_REGS_INITIAL[32] = '{
             0: -1,
@@ -27,8 +33,14 @@ package Emulation;
         Word floatRegs[32];
         Word sysRegs[32];
         
+       //     alias STATE_REG = sysRegs[1];
         
-        typedef int MemoryWrite;
+        
+        typedef struct {
+            bit active;
+            Word adr;
+            Word value;
+        } MemoryWrite;
         
         typedef struct {
             int error;
@@ -40,6 +52,9 @@ package Emulation;
         } ExecResult;
         
         
+        MemoryWrite writeToDo;
+        
+        
         function new();
         
         endfunction
@@ -49,6 +64,9 @@ package Emulation;
             this.ip = IP_RESET;
             this.ipNext = 'x;
             
+            this.status = '{default: 0};
+            this.writeToDo = '{default: 0};
+            
             this.intRegs = '{default: 0};
             this.floatRegs = '{default: 0};
             this.sysRegs = SYS_REGS_INITIAL;
@@ -56,7 +74,7 @@ package Emulation;
         
         
         function automatic void executeStep(ref Word progMem[], ref logic[7:0] dataMem[]);
-            AbstractInstruction absIns = decodeAbstract(progMem[this.ip]);
+            AbstractInstruction absIns = decodeAbstract(progMem[this.ip/4]);
             ExecResult execRes = processInstruction(this.ip, absIns, dataMem);
             
             dataMem[1] = 'h66;
@@ -68,7 +86,12 @@ package Emulation;
         
         endfunction 
         
-        
+        // Clear mem write and signals to send
+        function automatic void drain();
+            this.writeToDo = '{default: 0};
+            this.status.send = 0;
+        endfunction
+              
         
         local function automatic Word getArgValue(input int src, input byte spec);
             case (spec)
@@ -103,13 +126,13 @@ package Emulation;
             
             Word3 args = getArgs(ins.sources, typeSpec);
             
-            $display("%p,  %s, %p: %p", ins,  typeSpec, ins.sources, args);
+            $display("%h: %s, %p: %p", this.ip,  ins.mnemonic, ins.sources, args);
             
             performCalculation(ins, args);
             performLoad(ins, args, dataMem);
             performBranch(ins, args);
-            // performSys     (modify sys regs (including sysStore), set next ip, send signals)
-            // getMemWrite    (create struct specifying write)
+            this.writeToDo = getMemWrite(ins, args);
+            performSys(ins, args);
             
             this.ip = this.ipNext;
             
@@ -228,11 +251,57 @@ package Emulation;
         endfunction 
 
         local function automatic void performSys(input AbstractInstruction ins, input Word3 vals);
-        
+            case (ins.def.o)
+                O_sysStore:
+                    this.sysRegs[vals[1]] = vals[2];
+                O_undef: begin
+                    this.ipNext = IP_ERROR;
+                    this.status.error = 1;
+                end
+                O_call: begin
+                    this.ipNext = IP_CALL;
+                    this.sysRegs[3] = this.sysRegs[1];
+                    this.sysRegs[1] |= 1; // TODO: handle state register correctly
+                    this.sysRegs[2] = this.ip + 4;
+                end
+                O_sync: ;
+                O_retE: begin
+                    this.sysRegs[1] = this.sysRegs[3];
+                    this.ipNext = this.sysRegs[2];
+                end
+                O_retI: begin
+                    this.sysRegs[1] = this.sysRegs[5];
+                    this.ipNext = this.sysRegs[4];
+                end
+                O_replay: this.ipNext = this.ip;
+                O_halt: begin
+                    this.ipNext = this.ip;
+                    this.status.halted = 1;
+                end
+                O_send: begin
+                    this.status.send = 1;
+                end
+                default: return;
+            endcase
         endfunction
         
-        local function automatic void getMemWrite(input AbstractInstruction ins, input Word3 vals);
+        local function automatic MemoryWrite getMemWrite(input AbstractInstruction ins, input Word3 vals);
+            MemoryWrite res = '{0, 0, 0};
+            
+            case (ins.def.o)
+                O_intStoreW, O_intStoreD, O_floatStoreW:
+                     res = '{1, vals[0] + vals[1], vals[2]};
+                default: ; 
+            endcase
+            
+            return res; 
+        endfunction
         
+        function automatic void interrupt();
+            this.ipNext = IP_INT;
+            this.sysRegs[5] = this.sysRegs[1];
+            this.sysRegs[1] |= 2; // TODO: handle state register correctly
+            this.sysRegs[4] = this.ip; // TODO: handle saving correct adr at interrupt
         endfunction
         
     endclass

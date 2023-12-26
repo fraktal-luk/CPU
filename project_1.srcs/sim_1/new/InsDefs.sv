@@ -423,13 +423,13 @@ package InsDefs;
         "ja": '{P_ja, S_none, T_none, O_jump},//,//jumpLong,
         "jl": '{P_jl, S_none, T_none, O_jump},//jumpLink, //-- jump always, jump link
         
-        "sys_retE": '{P_sysControl, S_sysRetE, T_none, O_send},
-        "sys_retI": '{P_sysControl, S_sysRetI, T_none, O_send},
-        "sys_halt": '{P_sysControl, S_sysHalt, T_none, O_send},
-        "sys_sync": '{P_sysControl, S_sysSync, T_none, O_send},
-        "sys_replay": '{P_sysControl, S_sysReplay, T_none, O_send},
-        "sys_error": '{P_sysControl, S_sysError, T_none, O_send},
-        "sys_call": '{P_sysControl, S_sysCall, T_none, O_send},
+        "sys_retE": '{P_sysControl, S_sysRetE, T_none, O_retE},
+        "sys_retI": '{P_sysControl, S_sysRetI, T_none, O_retI},
+        "sys_halt": '{P_sysControl, S_sysHalt, T_none, O_halt},
+        "sys_sync": '{P_sysControl, S_sysSync, T_none, O_sync},
+        "sys_replay": '{P_sysControl, S_sysReplay, T_none, O_replay},
+        "sys_error": '{P_sysControl, S_sysError, T_none, O_undef},
+        "sys_call": '{P_sysControl, S_sysCall, T_none, O_call},
         "sys_send": '{P_sysControl, S_sysSend, T_none, O_send}
         
     }; 

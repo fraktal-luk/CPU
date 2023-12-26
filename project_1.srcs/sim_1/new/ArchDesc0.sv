@@ -62,14 +62,30 @@ module ArchDesc0();
                 current = processLines(fileLines);
                 fillImports(current, 0, common, 0);
                 progMem = current.words;
-            end
                 
                 emul.reset();
-                emul.executeStep(progMem, dataMem);
-                emul.executeStep(progMem, dataMem);
-                emul.executeStep(progMem, dataMem);
                 
+                repeat (10)
+                    begin
+                        emul.executeStep(progMem, dataMem);
+                        if (emul.status.error == 1) begin
+                            $error("Emulation in error state");
+                        end
+                        if (emul.status.send == 1) begin
+                            $display("Signal sent");
+                        end
+                        if (emul.writeToDo.active == 1) begin
+                            dataMem[emul.writeToDo.adr] = emul.writeToDo.value;
+                        end
+                        emul.drain();
+                    end
+                
+
                 emulSig = emul;
+                
+            end
+                
+
             #1;
         end
 
