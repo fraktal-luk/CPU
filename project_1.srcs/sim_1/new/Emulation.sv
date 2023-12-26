@@ -1,0 +1,241 @@
+`timescale 1ns / 1ps
+
+
+
+package Emulation;
+    import InsDefs::*;
+    import Asm::*;
+
+    typedef struct {
+        int dummy;
+    } CoreStatus;
+
+    class Emulator;
+        const Word IP_RESET = 0;
+        
+        const Word SYS_REGS_INITIAL[32] = '{
+            0: -1,
+            default: 0
+        };
+        
+        Word ip;
+        Word ipNext;
+        
+        CoreStatus status;
+        
+        Word intRegs[32];
+        Word floatRegs[32];
+        Word sysRegs[32];
+        
+        
+        typedef int MemoryWrite;
+        
+        typedef struct {
+            int error;
+            
+            //int regWrite;
+            
+            MemoryWrite memWrite;
+            
+        } ExecResult;
+        
+        
+        function new();
+        
+        endfunction
+        
+        
+        function automatic void reset();
+            this.ip = IP_RESET;
+            this.ipNext = 'x;
+            
+            this.intRegs = '{default: 0};
+            this.floatRegs = '{default: 0};
+            this.sysRegs = SYS_REGS_INITIAL;
+        endfunction
+        
+        
+        function automatic void executeStep(ref Word progMem[], ref logic[7:0] dataMem[]);
+            AbstractInstruction absIns = decodeAbstract(progMem[this.ip]);
+            ExecResult execRes = processInstruction(this.ip, absIns, dataMem);
+            
+            dataMem[1] = 'h66;
+            
+        endfunction 
+        
+        
+        function automatic CoreStatus checkStatus();
+        
+        endfunction 
+        
+        
+        
+        local function automatic Word getArgValue(input int src, input byte spec);
+            case (spec)
+               "i": return Word'(this.intRegs[src]);
+               "f": return Word'(this.floatRegs[src]);
+               "c": return Word'(src);
+               "0": return 0;
+               default: $fatal("Wrong arg spec");    
+            endcase;    
+        
+        endfunction
+        
+        
+        local function automatic Word3 getArgs(input int sources[3], input string typeSpec);
+            Word3 res;
+            
+            foreach (sources[i]) begin
+                res[i] = getArgValue(sources[i], typeSpec[i+2]);
+            end
+            
+            return res;
+        endfunction
+        
+        
+        local function automatic ExecResult processInstruction(input Word adr, input AbstractInstruction ins, ref logic[7:0] dataMem[]);
+            ExecResult res;
+            string3 fmtSpec = parsingMap[ins.fmt];
+            
+            string typeSpec = fmtSpec[2];    
+            string decoding = fmtSpec[1];
+            string asmForm = fmtSpec[0];
+            
+            Word3 args = getArgs(ins.sources, typeSpec);
+            
+            $display("%p,  %s, %p: %p", ins,  typeSpec, ins.sources, args);
+            
+            performCalculation(ins, args);
+            performLoad(ins, args, dataMem);
+            performBranch(ins, args);
+            // performSys     (modify sys regs (including sysStore), set next ip, send signals)
+            // getMemWrite    (create struct specifying write)
+            
+            this.ip = this.ipNext;
+            
+            return res;
+        endfunction
+        
+        
+        local static function automatic Word divSigned(input Word a, input Word b);
+            int signed aInt = a;
+            int signed bInt = b;
+            int signed rInt = a/b;
+            int signed rem = aInt - rInt * bInt;
+            
+            if (rem < 0 && bInt > 0) rInt--;
+            if (rem > 0 && bInt < 0) rInt--;
+            
+            return rInt;
+        endfunction
+        
+        local static function automatic Word remSigned(input Word a, input Word b);
+            int signed aInt = a;
+            int signed bInt = b;
+            int signed rInt = a/b;
+            int signed rem = aInt - rInt * bInt;
+            
+            if (rem < 0 && bInt > 0) rem += bInt;
+            if (rem > 0 && bInt < 0) rem += bInt;
+            
+            return rem;
+        endfunction
+        
+        
+        local function automatic void performCalculation(input AbstractInstruction ins, input Word3 vals);
+            Word result;
+            bit float = 0;
+            
+            case (ins.def.o)
+                O_jump: result = this.ip + 4; // link adr
+                
+                O_intAnd:  result = vals[0] & vals[1];
+                O_intOr:   result = vals[0] | vals[1];
+                O_intXor:  result = vals[0] ^ vals[1];
+                
+                O_intAdd:  result = vals[0] + vals[1];
+                O_intSub:  result = vals[0] - vals[1];
+                O_intAddH: result = vals[0] + (vals[1] << 16);
+                
+                O_intMul:   result = vals[0] * vals[1];
+                O_intMulHU: result = ($unsigned(vals[0]) * $unsigned(vals[1])) >> 32;
+                O_intMulHS: result = ($signed(vals[0]) * $signed(vals[1])) >> 32;
+                O_intDivU:  result = $unsigned(vals[0]) / $unsigned(vals[1]);
+                O_intDivS:  result = divSigned(vals[0], vals[1]);
+                O_intRemU:  result = $unsigned(vals[0]) / $unsigned(vals[1]);
+                O_intRemS:  result = remSigned(vals[0], vals[1]);
+                
+                O_intShiftLogical: result = $unsigned(vals[0]) << vals[1];
+                O_intShiftArith:   result = $signed(vals[0]) << vals[1];
+                O_intRotate:       result = {vals[0], vals[0]} << vals[1];
+                
+                O_floatMove: begin
+                    result = vals[0];
+                    float = 1;
+                end
+                
+                default: return;
+            endcase
+            
+            if (float)
+                this.floatRegs[0] = result;
+            else
+                this.intRegs[0] = result;
+            
+            this.intRegs[0] = 0;
+        endfunction
+        
+        local function automatic Word loadWord(input Word adr, ref logic[7:0] mem[]);
+            return {mem[adr], mem[adr+1], mem[adr+2], mem[adr+3]};
+        endfunction
+        
+        local function automatic void performLoad(input AbstractInstruction ins, input Word3 vals, ref logic[7:0] mem[]);
+            Word result;
+            Word adr = vals[0] + vals[1];
+            bit float = 0;
+            
+            case (ins.def.o)
+                O_intLoadW: result = loadWord(adr, mem);
+                O_intLoadD: result = loadWord(adr, mem); // TODO: actual Dword
+                O_floatLoadW: begin
+                    result = loadWord(adr, mem);
+                    float = 1;
+                end
+                O_sysLoad: result = this.sysRegs[vals[1]];
+                default: return;
+            endcase
+
+            if (float)
+                this.floatRegs[0] = result;
+            else
+                this.intRegs[0] = result;
+            
+            this.intRegs[0] = 0;
+        endfunction
+        
+        local function automatic void performBranch(input AbstractInstruction ins, input Word3 vals);
+            
+            case (ins.mnemonic)
+                "ja", "jl": this.ipNext = this.ip + vals[1];
+                "jz_i": this.ipNext = (vals[0] == 0) ? this.ip + vals[1] : this.ip + 4;
+                "jnz_i": this.ipNext = (vals[0] != 0) ? this.ip + vals[1] : this.ip + 4;
+                "jz_r": this.ipNext = (vals[0] == 0) ? this.ip + vals[1] : this.ip + 4;
+                "jnz_r": this.ipNext = (vals[0] != 0) ? this.ip + vals[1] : this.ip + 4;
+                default: this.ipNext = this.ip + 4;
+            endcase
+            
+            
+        endfunction 
+
+        local function automatic void performSys(input AbstractInstruction ins, input Word3 vals);
+        
+        endfunction
+        
+        local function automatic void getMemWrite(input AbstractInstruction ins, input Word3 vals);
+        
+        endfunction
+        
+    endclass
+
+
+endpackage

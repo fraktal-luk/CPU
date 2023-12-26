@@ -1,17 +1,37 @@
 `timescale 1ns / 1ps
 
-import InsDefs::*;
-import Asm::*;
+
 
 module ArchDesc0();
+
+    import InsDefs::*;
+    import Asm::*;
+    import Emulation::*;
 
     Word w0 = 0;
 
     MnemonicClass::Mnemonic mnem;
 
+    Emulator emulSig = new();
+
+
+        Word wt0 = $signed(Word'(-20)) / $signed(Word'(3));
+        Word wt1 =  $signed(Word'(-20)) % $signed(Word'(3));
+        Word wt2 =  $signed(Word'(20)) / $signed(Word'(-3));
+        Word wt3 =  $signed(Word'(20)) % $signed(Word'(-3));
+
+        Word wt4 = $signed(Word'(-20)) / $signed(Word'(-3));
+        Word wt5 =  $signed(Word'(-20)) % $signed(Word'(-3));
+        Word wt6 =  $signed(Word'(20)) / $signed(Word'(3));
+        Word wt7 =  $signed(Word'(20)) % $signed(Word'(3));
+
     initial begin
         Section common;
         Section current;
+        Word progMem[];
+        automatic logic[7:0] dataMem[] = new[4096];
+        automatic Emulator emul = new();
+        
         
         automatic squeue tests = readFile("tests_all.txt");
 
@@ -21,6 +41,8 @@ module ArchDesc0();
                                           "use_lib0.txt");
         $display("%p", tests);
         
+                emul.reset();
+                emulSig = emul;
         #1;
 
             common = processLines(readFile("common_asm.txt"));
@@ -39,8 +61,15 @@ module ArchDesc0();
                 automatic squeue fileLines = readFile({lineParts[0], ".txt"});
                 current = processLines(fileLines);
                 fillImports(current, 0, common, 0);
+                progMem = current.words;
             end
-            
+                
+                emul.reset();
+                emul.executeStep(progMem, dataMem);
+                emul.executeStep(progMem, dataMem);
+                emul.executeStep(progMem, dataMem);
+                
+                emulSig = emul;
             #1;
         end
 

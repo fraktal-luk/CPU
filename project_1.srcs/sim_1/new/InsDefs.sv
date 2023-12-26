@@ -319,7 +319,9 @@ package InsDefs;
         intToFloat :   '{"d0  ", "a,b00", "f,i00"}
     };
 
+    //typedef string string3[3];
     typedef string string4[4];
+    typedef Word Word3[3];
     typedef Word Word4[4];
 
     typedef struct {
