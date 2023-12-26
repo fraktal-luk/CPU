@@ -243,6 +243,8 @@ package Asm;
             partsExt[1] = "";
         end
         
+          //  $display(">   %p", partsExt);
+        
         res.ins = TMP_getIns(partsExt);      
         res.codeRef = TMP_getCodeRef(partsExt);
 

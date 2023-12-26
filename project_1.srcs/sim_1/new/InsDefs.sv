@@ -42,10 +42,10 @@ package InsDefs;
             jz_i, jz_r, jnz_i, jnz_r,
             ja, jl, //-- jump always, jump link
             
-            sys, //-- system operation
+            //sys, //-- system operation
             
-            sys_retE,
-            sys_retI,
+            sys_rete,
+            sys_reti,
             sys_halt,
             sys_sync,
             sys_replay,
@@ -259,8 +259,8 @@ package InsDefs;
         "ja": jumpLong,
         "jl": jumpLink, //-- jump always, jump link        
         
-        "sys_retE": noRegs,
-        "sys_retI": noRegs,
+        "sys_rete": noRegs,
+        "sys_reti": noRegs,
         "sys_halt": noRegs,
         "sys_sync": noRegs,
         "sys_replay": noRegs,
@@ -423,8 +423,8 @@ package InsDefs;
         "ja": '{P_ja, S_none, T_none, O_jump},//,//jumpLong,
         "jl": '{P_jl, S_none, T_none, O_jump},//jumpLink, //-- jump always, jump link
         
-        "sys_retE": '{P_sysControl, S_sysRetE, T_none, O_retE},
-        "sys_retI": '{P_sysControl, S_sysRetI, T_none, O_retI},
+        "sys_rete": '{P_sysControl, S_sysRetE, T_none, O_retE},
+        "sys_reti": '{P_sysControl, S_sysRetI, T_none, O_retI},
         "sys_halt": '{P_sysControl, S_sysHalt, T_none, O_halt},
         "sys_sync": '{P_sysControl, S_sysSync, T_none, O_sync},
         "sys_replay": '{P_sysControl, S_sysReplay, T_none, O_replay},
@@ -602,7 +602,7 @@ package InsDefs;
         t = t.first();
         
         forever begin
-            if (t == 64*32*p + 32*s + n) return t;
+            if (t == /*64*32*p +*/ 32*s + n) return t;
             
             if (t == t.last()) break;
             t = t.next();
@@ -620,10 +620,14 @@ package InsDefs;
         Secondary s = toSecondary(w[15:10], p);
         Ternary t = toTernary(w[4:0], p, s);
         
+        
         InstructionDef def = '{p, s, t, O_undef};
 
         string found[$] = defMap.find_index with(matchDefinition(def, item));
         string name;
+        
+           //   $display(">>> %d %d %d", p, s, t);
+
         
         if (found.size() == 0) return "undef";        
         if (found.size() != 1) $error("No single definition, %d", found.size());

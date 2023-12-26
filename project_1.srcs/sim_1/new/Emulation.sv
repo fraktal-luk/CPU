@@ -77,7 +77,7 @@ package Emulation;
             AbstractInstruction absIns = decodeAbstract(progMem[this.ip/4]);
             ExecResult execRes = processInstruction(this.ip, absIns, dataMem);
             
-            dataMem[1] = 'h66;
+            //dataMem[1] = 'h66;
             
         endfunction 
         
@@ -126,7 +126,7 @@ package Emulation;
             
             Word3 args = getArgs(ins.sources, typeSpec);
             
-            $display("%h: %s, %p: %p", this.ip,  ins.mnemonic, ins.sources, args);
+            //$display("%h: %h;  %s, %p: %p", this.ip, ins.encoding,  ins.mnemonic, ins.def, args);
             
             performCalculation(ins, args);
             performLoad(ins, args, dataMem);
@@ -201,9 +201,9 @@ package Emulation;
             endcase
             
             if (float)
-                this.floatRegs[0] = result;
+                this.floatRegs[ins.dest] = result;
             else
-                this.intRegs[0] = result;
+                this.intRegs[ins.dest] = result;
             
             this.intRegs[0] = 0;
         endfunction
@@ -229,9 +229,9 @@ package Emulation;
             endcase
 
             if (float)
-                this.floatRegs[0] = result;
+                this.floatRegs[ins.dest] = result;
             else
-                this.intRegs[0] = result;
+                this.intRegs[ins.dest] = result;
             
             this.intRegs[0] = 0;
         endfunction
