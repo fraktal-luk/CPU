@@ -1,7 +1,9 @@
 
 
 package InsDefs;
+
     typedef logic[31:0] Word;
+    typedef logic[63:0] Dword;
 
     class MnemonicClass;
         typedef 
@@ -396,8 +398,8 @@ package InsDefs;
         "rot_i": '{P_intAluImm, S_intRotate, T_none, O_intRotate},//intImm10, 
         
         "mult":   '{P_intAlu, S_intMul, T_intMul, O_intMul},//int2R, 
-        "mulh_s": '{P_intAlu, S_intMul, T_intMulHU, O_intMulHU},//int2R, 
-        "mulh_u": '{P_intAlu, S_intMul, T_intMulHS, O_intMulHS},//int2R, 
+        "mulh_s": '{P_intAlu, S_intMul, T_intMulHU, O_intMulHS},//int2R, 
+        "mulh_u": '{P_intAlu, S_intMul, T_intMulHS, O_intMulHU},//int2R, 
         "div_s":  '{P_intAlu, S_intMul, T_intDivS, O_intDivS},//int2R, 
         "div_u":  '{P_intAlu, S_intMul, T_intDivU, O_intDivU},//int2R, 
         "rem_s":  '{P_intAlu, S_intMul, T_intRemS, O_intRemS},//int2R, 
@@ -536,7 +538,7 @@ package InsDefs;
             "b": res[20:16] = value[4:0];
             "c": res[9:5] = value[4:0];
             "d": res[4:0] = value[4:0];
-            "X": res[4:0] = value[4:0];
+            "X": res[9:0] = value[9:0];
             "H": res[15:0] = value[15:0];
             "J": res[20:0] = value[20:0];
             "L": res[25:0] = value[25:0];

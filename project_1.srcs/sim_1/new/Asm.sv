@@ -303,8 +303,8 @@ package Asm;
             //tempLineDiff = exps[0].codeLine - imp.codeLine;
             $display("Filling import: %s, %p, %p", exps[0].label, imp, exps[0]);
             $display("  %b", res.words[imp.codeLine]);
-            res.words[imp.codeLine] = fillImport(res.words[imp.codeLine], adrDiff, imp, exps[0]);
-            $display("  %b", res.words[imp.codeLine]);
+            res.words[imp.codeLine-1] = fillImport(res.words[imp.codeLine-1], adrDiff, imp, exps[0]);
+            $display("  %b", res.words[imp.codeLine - 1]);
         end 
         
         return res;

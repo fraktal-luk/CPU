@@ -54,7 +54,7 @@ $check_div_u
 	sub_r r12, r10, r3
 	sub_r r13, r11, r4
 
-	jnz_i  r0, $error
+	jnz_i  r12, $error
 	jnz_i  r13, $error
 	jz_r   r0, r0, r31	; return
 	add_r  r0, r0, r0   ; nop
