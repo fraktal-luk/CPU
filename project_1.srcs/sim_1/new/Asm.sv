@@ -22,8 +22,6 @@ package Asm;
 
     function automatic bit writeFile(input string name, input squeue lines);
         int file = $fopen(name, "w");
-        //string line;
-        //string lines[$];
 
         foreach (lines[i])
             $fdisplay(file, lines[i]);
@@ -109,8 +107,6 @@ package Asm;
         int codeLine;
         squeue parts;
         ParseError error = SOME;
-        //Word ins;
-        //CodeRef codeRef;
         string label;
     } DirectiveLine;
 
@@ -185,9 +181,6 @@ package Asm;
                 end             
             end
             code[i] = instructions[i].ins;
-            
-                //TMP_disasm(code[i]);
-            //    assert(TMP_disasm2(code[i]) == TMP_disasm(code[i])) else $error("NOt eq");
         end
         
         res.words = code;
@@ -243,8 +236,6 @@ package Asm;
             partsExt[1] = "";
         end
         
-          //  $display(">   %p", partsExt);
-        
         res.ins = TMP_getIns(partsExt);      
         res.codeRef = TMP_getCodeRef(partsExt);
 
@@ -293,14 +284,12 @@ package Asm;
     function automatic Section fillImports(input Section section, input int startAdr, input Section lib, input int libAdr);
         Section res = section;
         int adrDiff = libAdr - startAdr;
-        //int tempLineDiff;
         
         foreach (section.imports[i]) begin
             ImportRef imp = section.imports[i];
             ExportRef exps[$] = lib.exports.find with (item.label == imp.label);
             if (exps.size() == 0) continue;
             
-            //tempLineDiff = exps[0].codeLine - imp.codeLine;
             $display("Filling import: %s, %p, %p", exps[0].label, imp, exps[0]);
             $display("  %b", res.words[imp.codeLine]);
             res.words[imp.codeLine-1] = fillImport(res.words[imp.codeLine-1], adrDiff, imp, exps[0]);

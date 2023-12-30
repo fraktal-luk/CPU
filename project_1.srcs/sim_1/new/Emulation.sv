@@ -1,7 +1,6 @@
 `timescale 1ns / 1ps
 
 
-
 package Emulation;
     import InsDefs::*;
     import Asm::*;
@@ -36,8 +35,6 @@ package Emulation;
         Word floatRegs[32];
         Word sysRegs[32];
         
-       //     alias STATE_REG = sysRegs[1];
-        
         
         typedef struct {
             bit active;
@@ -46,12 +43,8 @@ package Emulation;
         } MemoryWrite;
         
         typedef struct {
-            int error;
-            
-            //int regWrite;
-            
+            int error;            
             MemoryWrite memWrite;
-            
         } ExecResult;
         
         
@@ -78,10 +71,7 @@ package Emulation;
         
         function automatic void executeStep(input Word progMem[], ref logic[7:0] dataMem[]);
             AbstractInstruction absIns = decodeAbstract(progMem[this.ip/4]);
-            ExecResult execRes = processInstruction(this.ip, absIns, dataMem);
-            
-            //dataMem[1] = 'h66;
-            
+            ExecResult execRes = processInstruction(this.ip, absIns, dataMem);            
         endfunction 
         
         
@@ -129,10 +119,8 @@ package Emulation;
             
             Word3 args = getArgs(ins.sources, typeSpec);
             
-                this.disasm = TMP_disasm(ins.encoding);
-            
-            //$display("%h: %h;  %s, %p: %p", this.ip, ins.encoding,  ins.mnemonic, ins.def, args);
-            
+            this.disasm = TMP_disasm(ins.encoding);
+           
             performCalculation(ins, args);
             performLoad(ins, args, dataMem);
             performBranch(ins, args);
@@ -193,18 +181,13 @@ package Emulation;
                 O_intRemU:  result = $unsigned(vals[0]) % $unsigned(vals[1]);
                 O_intRemS:  result = remSigned(vals[0], vals[1]);
                 
-                O_intShiftLogical: begin
-                
-                    //$display("sh by %b,  %b,  %b", vals[1], $unsigned(vals[1]), $signed(vals[1]));
-                
+                O_intShiftLogical: begin                
                     if ($signed(vals[1]) >= 0)
                         result = $unsigned(vals[0]) << vals[1];
                     else
                         result = $unsigned(vals[0]) >> -vals[1];
                 end
-                O_intShiftArith: begin
-                    //$display("  .....");
-                
+                O_intShiftArith: begin                
                     if ($signed(vals[1]) >= 0)
                         result = $signed(vals[0]) << vals[1];
                     else
@@ -239,11 +222,7 @@ package Emulation;
             res[23:16] = mem[adr+1];
             res[15:8] = mem[adr+2];
             res[7:0] = mem[adr+3];
-            //$display(">>>  %h: %h", adr, mem[adr]);
-           //$display("  >  %h: %h", adr+1, mem[adr+1]);
-            
-            
-            //{mem[adr], mem[adr+1], mem[adr+2], mem[adr+3]};
+
             return res;
         endfunction
         
@@ -277,23 +256,14 @@ package Emulation;
                 "ja", "jl": this.ipNext = this.ip + vals[1];
                 "jz_i": this.ipNext = (vals[0] == 0) ? this.ip + vals[1] : this.ip + 4;
                 "jnz_i": this.ipNext = (vals[0] != 0) ? this.ip + vals[1] : this.ip + 4;
-                "jz_r": begin
-                
-                    //$display("  jz_r: %p", vals);
-                    this.ipNext = (vals[0] == 0) ? vals[1] : this.ip + 4;
-                end
+                "jz_r": this.ipNext = (vals[0] == 0) ? vals[1] : this.ip + 4;
                 "jnz_r": this.ipNext = (vals[0] != 0) ? vals[1] : this.ip + 4;
                 default: this.ipNext = this.ip + 4;
-            endcase
-            
+            endcase  
             
         endfunction 
 
 
-//    alias linkRegExc is sysRegArray(2);
-//    alias linkRegInt is sysRegArray(3);
-//    alias savedStateExc is sysRegArray(4);
-//    alias savedStateInt is sysRegArray(5);
         local function automatic void performSys(input AbstractInstruction ins, input Word3 vals);
             case (ins.def.o)
                 O_sysStore:
@@ -345,7 +315,7 @@ package Emulation;
             this.ipNext = IP_INT;
             this.sysRegs[5] = this.sysRegs[1];
             this.sysRegs[1] |= 2; // TODO: handle state register correctly
-            this.sysRegs[3] = this.ip; // TODO: handle saving correct adr at interrupt
+            this.sysRegs[3] = this.ip + 4;
         endfunction
         
     endclass
