@@ -1,9 +1,320 @@
 
 package Asm;
-
+    import Base::*;
     import InsDefs::*;
 
     typedef string squeue[$];
+
+
+
+
+    typedef struct {
+        bit ref21 = 0;
+        bit ref26 = 0;
+        string label = "";
+    } CodeRef;
+
+
+    function automatic Word TMP_getIns(input string parts[]);
+        InstructionFormat fmt = getFormat(parts[0]);
+        InstructionDef def = getDef(parts[0]);
+        
+        string args[] = orderArgs(parts[1:3], parsingMap[fmt], parsingMap_[fmt]);
+        Word4 vals;
+        Word res;
+
+        if ( checkArgs(args[0:3], parsingMap[fmt], parsingMap_[fmt]) != 1) $error("Incorrect args");
+                    
+        vals = parseArgs(args[0:3]);
+       
+        res = fillArgs(vals, parsingMap[fmt], parsingMap_[fmt], 0);            
+        res = fillOp(res, def);
+        
+        return res;
+    endfunction;
+
+    function automatic CodeRef TMP_getCodeRef(input string parts[]);
+        InstructionFormat fmt = getFormat(parts[0]);
+        InstructionDef def = getDef(parts[0]);
+        
+        string args[] = orderArgs(parts[1:3], parsingMap[fmt], parsingMap_[fmt]);
+        Word4 vals;
+        CodeRef res;
+
+        res.label = parseLabel(args[0:3], parsingMap[fmt][1]);
+        if (res.label.len() != 0)
+            case (def.p)
+                P_ja: res.ref26 = 1;
+                P_jl, P_jz, P_jnz: res.ref21 = 1;
+                default: ;
+            endcase            
+        return res; 
+    endfunction;
+
+
+
+    function automatic string4 orderArgs(input string args[], input string3 parsingMap, input FormatSpec fmtSpec);
+        string4 out;
+        int index;
+        string asmForm = parsingMap[0];
+        
+        foreach (asmForm[i]) begin
+            case (asmForm[i])
+                "d": index = 0;
+                "0": index = 1;
+                "1": index = 2;
+                "2": index = 3;
+                " ": continue;
+                default: $fatal("Wrong format definition");
+            endcase
+            out[index] = args[i];
+        end
+        
+        return out;
+    endfunction
+
+    function automatic int checkArgs(input string4 args, input string3 parsingMap, input FormatSpec fmtSpec);
+        string typeSpec = parsingMap[2];    
+        string decoding = parsingMap[1];
+        
+        case (typeSpec[0])
+            "i": if (args[0][0] != "r" && decoding[0] != "0") return 0;
+            "f": if (args[0][0] != "f" && decoding[0] != "0") return 0;
+            default: if (args[0][0] != "") return 0;
+        endcase
+
+        for (int i = 1; i <= 3; i++) begin
+            case (typeSpec[i+1])
+                "i": if (args[i][0] != "r" && decoding[i+1] != "0") return 0;
+                "f": if (args[i][0] != "f" && decoding[i+1] != "0") return 0;
+                "c": ;
+                "0": if (args[i].len() != 0) return 0;
+                default:   
+                   begin
+                       $error("arg spec: [%s]", typeSpec[i+1]);
+                       if (args[i][0] != " ") return 0;
+                   end
+            endcase
+        end
+        
+        return 1;
+    endfunction
+
+
+    function automatic Word4 parseArgs(input string4 args);
+        Word4 res;
+        integer value = 'x;
+
+        foreach(args[i]) begin
+            if (args[i].len() == 0) begin
+               res[i] = 'x;
+               continue;
+            end
+        
+            case (args[i][0])
+                "$", "@": value = 'x;
+                "f":      value = args[i].substr(1, args[i].len()-1).atoi();
+                "r":      value = args[i].substr(1, args[i].len()-1).atoi();
+                "-":      value = args[i].substr(0, args[i].len()-1).atoi();
+                "0", "1", "2", "3", "4", "5", "6", "7", "8", "9": 
+                          value = args[i].atoi();
+                default: $fatal("Wrong arg");
+            endcase
+            
+            res[i] = value;
+        end
+        
+        return res;
+    endfunction
+
+
+    function automatic string parseLabel(input string4 args, input string decoding);
+        for (int i = 1; i < 4; i++) begin
+            if (decoding[i+1] inside {"L", "J"} && args[i][0] == "$") return args[i];
+        end
+        
+        return "";
+    endfunction
+
+    
+    function automatic Word fillField(input Word w, input logic[7:0] field, input Word value);
+        Word res = w;
+        case (field)
+            "a": res[25:21] = value[4:0];
+            "b": res[20:16] = value[4:0];
+            "c": res[9:5] = value[4:0];
+            "d": res[4:0] = value[4:0];
+            "X": res[9:0] = value[9:0];
+            "H": res[15:0] = value[15:0];
+            "J": res[20:0] = value[20:0];
+            "L": res[25:0] = value[25:0];
+            " ", "0": ;
+            default: $fatal("Invalid field: %s", field);
+        endcase
+        
+        return res;
+    endfunction
+
+
+    function automatic Word fillArgs(input Word4 args, input string3 parsingMap, input FormatSpec fmtSpec, input bit unknownOffset);
+        string decoding = parsingMap[1];
+        Word res = '0;
+
+        res = fillField(res, decoding[0], args[0]);
+       
+        res = fillField(res, decoding[2], args[1]);
+        res = fillField(res, decoding[3], args[2]);
+        res = fillField(res, decoding[4], args[3]);
+
+        return res;
+    endfunction
+    
+    function automatic Word fillOp(input Word w, input InstructionDef def);
+        Word res = w;
+        res[31:26] = def.p;
+        if (def.s != S_none) res[15:10] = def.s;
+        if (def.t != T_none) res[4:0] = def.t;
+        return res;
+    endfunction;
+
+
+
+
+    typedef struct {
+        string mnemonic;
+        Word encoding;
+        InstructionFormat fmt;
+        InstructionDef def;
+        int dest;
+        int sources[3];
+    } AbstractInstruction;
+
+
+    function automatic string decodeMnem(input Word w);
+        Primary p = toPrimary(w[31:26]);
+        Secondary s = toSecondary(w[15:10], p);
+        Ternary t = toTernary(w[4:0], p, s);
+        
+        InstructionDef def = '{p, s, t, O_undef};
+
+        return findMnemonic(def);               
+    endfunction
+
+    function automatic AbstractInstruction decodeAbstract(input Word w);
+        string s = decodeMnem(w);
+        AbstractInstruction res;
+        InstructionFormat f = getFormat(s);
+        InstructionDef d = getDef(s);
+        
+        string3 fmtSpec = parsingMap[f];
+        
+        string typeSpec = fmtSpec[2];    
+        string decoding = fmtSpec[1];
+        string asmForm = fmtSpec[0];
+
+        int qa = w[25:21];        
+        int qb = w[20:16];        
+        int qc = w[9:5];        
+        int qd = w[4:0];        
+
+        int dest;
+        int sources[3];
+
+        case (decoding[0])
+            "a": dest = qa;
+            "b": dest = qb;
+            "c": dest = qc;
+            "d": dest = qd;
+            "0", " ": ;
+            default: $fatal("Wrong dest specifier");
+        endcase
+
+        foreach(sources[i])
+            case (decoding[i+2])
+                "a": sources[i] = qa;
+                "b": sources[i] = qb;
+                "c": sources[i] = qc;
+                "d": sources[i] = qd;
+                "X": sources[i] = $signed(w[9:0]);
+                "H": sources[i] = $signed(w[15:0]);
+                "J": sources[i] = $signed(w[20:0]);
+                "L": sources[i] = $signed(w[25:0]);
+                "0", " ": ;
+                default: $fatal("Wrong source specifier");
+            endcase
+        
+        res.mnemonic = s;
+        res.encoding = w;
+        res.fmt = f;
+        res.def = d;
+        res.dest = dest;
+        res.sources = sources;
+        
+        return res; 
+    endfunction
+
+    
+    function automatic string ins2str(input AbstractInstruction ins);
+        string s;
+        int dest;
+        int sources[3];
+        string destStr;
+        string sourcesStr[3];
+
+        string3 fmtSpec = parsingMap[ins.fmt];
+        
+        string typeSpec = fmtSpec[2];    
+        string decoding = fmtSpec[1];
+        string asmForm = fmtSpec[0];
+
+        dest = ins.dest;
+        sources = ins.sources;
+               
+        case (typeSpec[0])
+            "i": $swrite(destStr, "r%0d", dest);
+            "f": $swrite(destStr, "f%0d", dest);
+            "0": destStr = "";
+            default: $fatal("Wrong dest specifier");
+        endcase
+
+        foreach(sources[i])
+            case (typeSpec[i+2])
+                "i": $swrite(sourcesStr[i], "r%0d", sources[i]);
+                "f": $swrite(sourcesStr[i], "f%0d", sources[i]);
+                "c": $swrite(sourcesStr[i], "%0d", sources[i]);
+                "0": sourcesStr[i] = "";
+                default: $fatal("Wrong source specifier");
+            endcase
+
+        s = {ins.mnemonic, "          "};
+        s = s.substr(0,9);
+
+        foreach (asmForm[i]) begin
+            case (asmForm[i])
+                "d": s = {s, " ", destStr};
+                "0": s = {s, " ", sourcesStr[0]};
+                "1": s = {s, " ", sourcesStr[1]};
+                "2": s = {s, " ", sourcesStr[2]};
+                " ": ;
+                default: $fatal("Wrong asm syntax description");
+            endcase;
+          
+            if (i == 3 || asmForm[i+1] == " ") break;
+
+            s = {s, ","};
+        end
+        
+        return s;
+    endfunction
+
+    function automatic string TMP_disasm(input Word w);
+        AbstractInstruction absIns = decodeAbstract(w);        
+        return ins2str(absIns);
+    endfunction;
+
+
+
+
 
     function automatic squeue readFile(input string name);
         int file = $fopen(name, "r");
@@ -290,7 +601,7 @@ package Asm;
             ExportRef exps[$] = lib.exports.find with (item.label == imp.label);
             if (exps.size() == 0) continue;
             
-            $display("Filling import: %s, %p, %p", exps[0].label, imp, exps[0]);
+            $display(" > Filling import: %s, %p, %p", exps[0].label, imp, exps[0]);
             $display("  %b", res.words[imp.codeLine]);
             res.words[imp.codeLine-1] = fillImport(res.words[imp.codeLine-1], adrDiff, imp, exps[0]);
             $display("  %b", res.words[imp.codeLine - 1]);

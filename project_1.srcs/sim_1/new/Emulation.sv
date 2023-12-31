@@ -2,6 +2,7 @@
 
 
 package Emulation;
+    import Base::*;
     import InsDefs::*;
     import Asm::*;
 
