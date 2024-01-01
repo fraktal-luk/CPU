@@ -316,7 +316,8 @@ package Emulation;
             this.ipNext = IP_INT;
             this.sysRegs[5] = this.sysRegs[1];
             this.sysRegs[1] |= 2; // TODO: handle state register correctly
-            this.sysRegs[3] = this.ip + 4;
+            this.sysRegs[3] = this.ip;
+            this.ip = this.ipNext;
         endfunction
         
     endclass
