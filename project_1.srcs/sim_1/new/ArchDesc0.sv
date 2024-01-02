@@ -1,12 +1,14 @@
 `timescale 1ns / 1ps
 
-
-module ArchDesc0();
-
     import Base::*;
     import InsDefs::*;
     import Asm::*;
     import Emulation::*;
+    import AbstractSim::*;
+    
+module ArchDesc0();
+
+
 
 
     const int ITERATION_LIMIT = 2000;
@@ -21,6 +23,11 @@ module ArchDesc0();
     Word progMem[4096];
     logic[7:0] dataMem[] = new[4096]('{default: 0});
 
+    localparam CYCLE = 10;
+
+    logic clk = 1;
+    
+    always #(CYCLE/2) clk = ~clk; 
 
 
     initial begin
@@ -324,4 +331,56 @@ module ArchDesc0();
     endtask
 
 
+
+    generate
+    
+    
+    
+        //typedef class ProgramMemory;
+        typedef ProgramMemory#(4) ProgMem;
+    
+        ProgMem programMem;// = new();
+        ProgMem::Line icacheOut;
+        
+        Word fetchAdr;
+        
+        logic reset = 0;
+        
+        task runSim();
+            #CYCLE;
+            programMem.setContent(processLines(readFile("loads1.txt")).words);
+            reset <= 1;
+            #CYCLE;
+            reset <= 0;
+            
+            #(20*CYCLE);
+            
+        endtask
+        
+        initial begin
+            programMem = new();
+            programMem.setContent(processLines(readFile("loads1.txt")).words);
+        end
+        
+        always_ff @(posedge clk) icacheOut <= programMem.read(fetchAdr);
+        
+        always runSim();
+        
+        AbstractCore core(
+            .clk(clk),
+            .insReq(), .insAdr(fetchAdr), .insIn(icacheOut),
+            .readReq(), .readAdr(), .readIn(),
+            .writeReq(), .writeAdr(), .writeOut(),
+            
+            .interrupt(1'b0),
+            .reset(reset),
+            .sig()
+        );
+
+    endgenerate  
+
 endmodule
+
+
+
+
