@@ -38,12 +38,13 @@ endpackage
 
 module AbstractCore
 #(
-    parameter FETCH_WIDTH = 4
+    parameter FETCH_WIDTH = 4,
+    parameter LOAD_WIDTH = FETCH_WIDTH
 )
 (
     input logic clk,
     output logic insReq, output Word insAdr, input Word insIn[FETCH_WIDTH],
-    output logic readReq, output Word readAdr, input Word readIn,
+    output logic readReq[LOAD_WIDTH], output Word readAdr[LOAD_WIDTH], input Word readIn[LOAD_WIDTH],
     output logic writeReq, output Word writeAdr, output Word writeOut,
     
     input logic interrupt,
@@ -51,33 +52,131 @@ module AbstractCore
     output logic sig
 );
     
+    typedef struct {
+        logic active;
+        Word baseAdr;
+        logic mask[FETCH_WIDTH];
+        Word words[FETCH_WIDTH];
+    } Stage;
     
+
+    
+    localparam Stage EMPTY_STAGE = '{'0, 'x, '{default: 0}, '{default: 'x}};
+
+    typedef struct {
+        logic active;
+        Word adr;
+        Word bits;
+    } OpSlot;
+    
+    localparam OpSlot EMPTY_SLOT = '{'0, 'x, 'x};
+
     typedef Word FetchGroup[FETCH_WIDTH];
 
+    int fqSize = 0, oqSize = 0;
+
+    logic fetchAllow;// = 0;
     logic resetPrev = 0;
-    Word ip = 0;
+    //Word ip = 0;
     
+    FetchGroup fetchedStage0;//, fetchedStage1;
+    //FetchGroup decoded;
     
-    FetchGroup fetchedStage0, fetchedStage1;
+    Stage ipStage = EMPTY_STAGE, fetchStage0 = EMPTY_STAGE, fetchStage1 = EMPTY_STAGE;
+    Stage fetchQueue[$:8];
+    
+    Stage nextStage = EMPTY_STAGE;
+    OpSlot opQueue[$:24];
+    OpSlot memOp = EMPTY_SLOT;
+    
     
     assign fetchedStage0 = insIn;
     
     always @(posedge clk) begin
         
-        resetPrev = reset;
+        resetPrev <= reset;
         
-        if (resetPrev) begin
-            ip <= 0;
+        if (resetPrev) begin            
+            ipStage <= '{'1, 512 - 512, '{default: '0}, '{default: 'x}};
+            fetchStage0 <= EMPTY_STAGE;
+            fetchStage1 <= EMPTY_STAGE;
+            fetchQueue.delete();
+            
+            nextStage <= EMPTY_STAGE;
+            opQueue.delete();
+            memOp <= EMPTY_SLOT;
         end
         else begin
-            ip <= ip + 4*FETCH_WIDTH;
-            fetchedStage1 <= fetchedStage0;
+            if (fetchAllow) ipStage <= '{'1, ipStage.baseAdr + 4*FETCH_WIDTH, '{default: '0}, '{default: 'x}};
+            
+            fetchStage0 <= setActive(ipStage, ipStage.active & fetchAllow);
+            fetchStage1 <= setWords(fetchStage0, fetchedStage0);
+            
+            if (fetchStage1.active) fetchQueue.push_back(fetchStage1);
+
+            if (fqSize > 0 && oqSize < 24-FETCH_WIDTH) nextStage <= fetchQueue.pop_front();
+            else nextStage <= EMPTY_STAGE;
+            
+            if (nextStage.active) begin
+                foreach (nextStage.words[i])
+                    if (nextStage.mask[i]) opQueue.push_back('{'1, nextStage.baseAdr + 4*i, nextStage.words[i]});
+            end
+            
+            
+            
+            memOp <= EMPTY_SLOT;
+            
+            readReq[0] = 0;
+            readAdr[0] = 'x;
+            // finish executing mem operation from prev cycle
+            if (memOp.active) begin
+                // If load, write to register; if store, nothing to do
+                
+                memOp <= EMPTY_SLOT;
+            end
+            
+            for (int i = 0; i < oqSize; i++) begin
+                // scan until a mem operation
+                automatic OpSlot op = opQueue.pop_front();
+                automatic AbstractInstruction abs = decodeAbstract(op.bits);
+                
+                if (abs.def.o inside {O_intLoadW, O_intLoadD, O_intStoreW, O_intStoreD, O_floatLoadW, O_floatStoreW}) begin
+                    readReq[0] <= '1;
+                    readAdr[0] <= 0;
+                    memOp <= op;
+                    break;
+                end
+            end
+            
+            
+            fqSize <= fetchQueue.size();
+            oqSize <= opQueue.size();
         end
-        //fetchedStage1 <= fetchedStage0;
+        
+        sig <= ipStage.baseAdr == 128 ? 1 : 0;
         
     end
     
-    assign insAdr = ip;
+    function logic fetchQueueAccepts(input int k);
+        return k <= 8 - 3 ? '1 : '0;
+    endfunction
     
+    function automatic Stage setActive(input Stage s, input logic on);
+        Stage res = s;
+        res.active = on;
+        foreach (res.mask[i]) if ((s.baseAdr/4) % FETCH_WIDTH <= i) res.mask[i] = '1;
+        return res;
+    endfunction
+
+    function automatic Stage setWords(input Stage s, input FetchGroup fg);
+        Stage res = s;
+        res.words = fg;
+        return res;
+    endfunction
+
+    assign fetchAllow = fetchQueueAccepts(fqSize);    
+    //assign fqSize = fetchQueue.size();
+
+    assign insAdr = ipStage.baseAdr;
 
 endmodule

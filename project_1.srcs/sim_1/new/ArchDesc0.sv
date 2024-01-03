@@ -344,16 +344,23 @@ module ArchDesc0();
         
         Word fetchAdr;
         
-        logic reset = 0;
+        logic reset = 0, done = 0;
+        
         
         task runSim();
+            forever runTestSim();
+        endtask
+        
+        task runTestSim();
             #CYCLE;
             programMem.setContent(processLines(readFile("loads1.txt")).words);
             reset <= 1;
             #CYCLE;
             reset <= 0;
             
-            #(20*CYCLE);
+            //#(20*CYCLE);
+            wait (done);
+            #CYCLE;
             
         endtask
         
@@ -374,7 +381,7 @@ module ArchDesc0();
             
             .interrupt(1'b0),
             .reset(reset),
-            .sig()
+            .sig(done)
         );
 
     endgenerate  
