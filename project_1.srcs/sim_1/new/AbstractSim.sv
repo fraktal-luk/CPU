@@ -3,6 +3,7 @@
      import Base::*;
      import InsDefs::*;
      import Asm::*;
+     import Emulation::*;
 
 package AbstractSim;
     
@@ -30,7 +31,38 @@ package AbstractSim;
         
     endclass
     
+     class DataMemory #(parameter WIDTH = 4);
+        typedef logic[7:0] Line[4];
+        
+        logic[7:0] content[4096];
+        
+        function void setContent(Word arr[]);
+            foreach (arr[i]) this.content[i] = arr[i];
+        endfunction
+        
+        function void clear();
+            this.content = '{default: 'x};
+        endfunction;
+        
+        function automatic Word read(input Word adr);
+            Word res = 0;
+            
+            for (int i = 0; i < 4; i++) 
+                res = (res << 8) + content[adr + i];
+            
+            return res;
+        endfunction
 
+        function automatic void write(input Word adr, input Word value);
+            Word data = value;
+            
+            for (int i = 0; i < 4; i++) begin
+                content[adr + i] = data[31:24];
+                data <<= 8;
+            end        
+        endfunction    
+        
+    endclass
 
 
 endpackage
@@ -157,7 +189,7 @@ module AbstractCore
                 automatic AbstractInstruction abs = decodeAbstract(op.bits);
                 
                 automatic Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap_[abs.fmt].typeSpec);
-                automatic Word result = calculateResult(abs, args, 'x);
+                automatic Word result = calculateResult(abs, args, op.adr);
                 
                 if (abs.def.o inside {
                     O_jump,
@@ -208,7 +240,7 @@ module AbstractCore
             oqSize <= opQueue.size();
         end
         
-        sig <= ipStage.baseAdr == 128 ? 1 : 0;
+        sig <= ipStage.baseAdr == 128 /* 16*10 */ ? 1 : 0;
         
     end
     

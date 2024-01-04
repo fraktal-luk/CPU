@@ -95,7 +95,7 @@ package Emulation;
                 O_floatMove: begin
                     result = vals[0];
                 end
-                                
+  
                 default: ;
             endcase
             

@@ -338,14 +338,18 @@ module ArchDesc0();
     
         //typedef class ProgramMemory;
         typedef ProgramMemory#(4) ProgMem;
+        typedef DataMemory#(4) DataMem;
     
         ProgMem programMem;// = new();
+        DataMem dmem;
         ProgMem::Line icacheOut;
         
         Word fetchAdr;
         
-        logic reset = 0, 0;
+        logic reset = 0, done;
         
+        logic readEns[4], writeEn;
+        Word writeAdr, readAdrs[4], readValues[4], writeValue;
         
         task runSim();
             forever runTestSim();
@@ -367,17 +371,28 @@ module ArchDesc0();
         initial begin
             programMem = new();
             programMem.setContent(processLines(readFile("loads1.txt")).words);
+            
+            dmem = new();
+            dmem.clear();
         end
         
         always_ff @(posedge clk) icacheOut <= programMem.read(fetchAdr);
+        
+        always @(posedge clk) begin
+        
+            if (readEns[0]) readValues[0] <= dmem.read(readAdrs[0]);
+            if (writeEn) dmem.write(writeAdr, writeValue);
+            
+            if (reset) dmem.clear();
+        end
         
         always runSim();
         
         AbstractCore core(
             .clk(clk),
             .insReq(), .insAdr(fetchAdr), .insIn(icacheOut),
-            .readReq(), .readAdr(), .readIn(),
-            .writeReq(), .writeAdr(), .writeOut(),
+            .readReq(readEns), .readAdr(readAdrs), .readIn(readValues),
+            .writeReq(writeEn), .writeAdr(writeAdr), .writeOut(writeValue),
             
             .interrupt(1'b0),
             .reset(reset),
