@@ -6,6 +6,104 @@ package Emulation;
     import InsDefs::*;
     import Asm::*;
 
+
+        function automatic Word getArgValue(input Word intRegs[32], input Word floatRegs[32], input int src, input byte spec);
+            case (spec)
+               "i": return Word'(intRegs[src]);
+               "f": return Word'(floatRegs[src]);
+               "c": return Word'(src);
+               "0": return 0;
+               default: $fatal("Wrong arg spec");    
+            endcase;    
+        
+        endfunction
+
+    function automatic Word3 getArgs(input Word intRegs[32], input Word floatRegs[32], input int sources[3], input string typeSpec);
+        Word3 res;
+        
+        foreach (sources[i]) begin
+            res[i] = getArgValue(intRegs, floatRegs, sources[i], typeSpec[i+2]);
+        end
+        
+        return res;
+    endfunction
+
+        function automatic Word divSigned(input Word a, input Word b);
+            Word aInt = a;
+            Word bInt = b;
+            Word rInt = $signed(a)/$signed(b);
+            Word rem = aInt - rInt * bInt;
+            
+            if ($signed(rem) < 0 && $signed(bInt) > 0) rInt--;
+            if ($signed(rem) > 0 && $signed(bInt) < 0) rInt--;
+            
+            return rInt;
+        endfunction
+        
+        function automatic Word remSigned(input Word a, input Word b);
+            Word aInt = a;
+            Word bInt = b;
+            Word rInt = $signed(a)/$signed(b);
+            Word rem = aInt - rInt * bInt;
+            
+            if ($signed(rem) < 0 && $signed(bInt) > 0) rem += bInt;
+            if ($signed(rem) > 0 && $signed(bInt) < 0) rem += bInt;
+            
+            return rem;
+        endfunction
+
+       function automatic Word calculateResult(input AbstractInstruction ins, input Word3 vals, input Word ip);
+            Word result;
+            case (ins.def.o)
+                O_jump: result = ip + 4; // link adr
+                
+                O_intAnd:  result = vals[0] & vals[1];
+                O_intOr:   result = vals[0] | vals[1];
+                O_intXor:  result = vals[0] ^ vals[1];
+                
+                O_intAdd:  result = vals[0] + vals[1];
+                O_intSub:  result = vals[0] - vals[1];
+                O_intAddH: result = vals[0] + (vals[1] << 16);
+                
+                O_intMul:   result = vals[0] * vals[1];
+                O_intMulHU: result = (Dword'($unsigned(vals[0])) * Dword'($unsigned(vals[1]))) >> 32;
+                O_intMulHS: result = (Dword'($signed(vals[0])) * Dword'($signed(vals[1]))) >> 32;
+                O_intDivU:  result = $unsigned(vals[0]) / $unsigned(vals[1]);
+                O_intDivS:  result = divSigned(vals[0], vals[1]);
+                O_intRemU:  result = $unsigned(vals[0]) % $unsigned(vals[1]);
+                O_intRemS:  result = remSigned(vals[0], vals[1]);
+                
+                O_intShiftLogical: begin                
+                    if ($signed(vals[1]) >= 0)
+                        result = $unsigned(vals[0]) << vals[1];
+                    else
+                        result = $unsigned(vals[0]) >> -vals[1];
+                end
+                O_intShiftArith: begin                
+                    if ($signed(vals[1]) >= 0)
+                        result = $signed(vals[0]) << vals[1];
+                    else
+                        result = $signed(vals[0]) >> -vals[1];
+                end
+                O_intRotate: begin
+                    if ($signed(vals[1]) >= 0)
+                        result = {vals[0], vals[0]} << vals[1];
+                    else
+                        result = {vals[0], vals[0]} >> -vals[1];
+                end
+                
+                O_floatMove: begin
+                    result = vals[0];
+                end
+                                
+                default: ;
+            endcase
+            
+            return result;
+        endfunction
+        
+
+
     typedef struct {
         int dummy;
         bit halted;
@@ -87,23 +185,14 @@ package Emulation;
         endfunction
               
         
-        local function automatic Word getArgValue(input int src, input byte spec);
-            case (spec)
-               "i": return Word'(this.intRegs[src]);
-               "f": return Word'(this.floatRegs[src]);
-               "c": return Word'(src);
-               "0": return 0;
-               default: $fatal("Wrong arg spec");    
-            endcase;    
-        
-        endfunction
+
         
         
         local function automatic Word3 getArgs(input int sources[3], input string typeSpec);
             Word3 res;
             
             foreach (sources[i]) begin
-                res[i] = getArgValue(sources[i], typeSpec[i+2]);
+                res[i] = getArgValue(this.intRegs, this.floatRegs, sources[i], typeSpec[i+2]);
             end
             
             return res;
@@ -112,11 +201,15 @@ package Emulation;
         
         local function automatic ExecResult processInstruction(input Word adr, input AbstractInstruction ins, ref logic[7:0] dataMem[]);
             ExecResult res;
-            string3 fmtSpec = parsingMap[ins.fmt];
+            //string3 fmtSpec = parsingMap[ins.fmt];
+            FormatSpec fmtSpec_ = parsingMap_[ins.fmt];
             
-            string typeSpec = fmtSpec[2];    
-            string decoding = fmtSpec[1];
-            string asmForm = fmtSpec[0];
+            string typeSpec = //fmtSpec[2];
+                                fmtSpec_.typeSpec;
+            string decoding = //fmtSpec[1];
+                                fmtSpec_.decoding;
+            string asmForm = //fmtSpec[0];
+                                fmtSpec_.asmForm;
             
             Word3 args = getArgs(ins.sources, typeSpec);
             
@@ -134,84 +227,88 @@ package Emulation;
         endfunction
         
         
-        local static function automatic Word divSigned(input Word a, input Word b);
-            Word aInt = a;
-            Word bInt = b;
-            Word rInt = $signed(a)/$signed(b);
-            Word rem = aInt - rInt * bInt;
-            
-            if ($signed(rem) < 0 && $signed(bInt) > 0) rInt--;
-            if ($signed(rem) > 0 && $signed(bInt) < 0) rInt--;
-            
-            return rInt;
-        endfunction
-        
-        local static function automatic Word remSigned(input Word a, input Word b);
-            Word aInt = a;
-            Word bInt = b;
-            Word rInt = $signed(a)/$signed(b);
-            Word rem = aInt - rInt * bInt;
-            
-            if ($signed(rem) < 0 && $signed(bInt) > 0) rem += bInt;
-            if ($signed(rem) > 0 && $signed(bInt) < 0) rem += bInt;
-            
-            return rem;
-        endfunction
-        
-        
+
         local function automatic void performCalculation(input AbstractInstruction ins, input Word3 vals);
             Word result;
-            bit float = 0;
+            bit writeInt, writeFloat = 0;
             
-            case (ins.def.o)
-                O_jump: result = this.ip + 4; // link adr
+//            case (ins.def.o)
+//                O_jump: result = this.ip + 4; // link adr
                 
-                O_intAnd:  result = vals[0] & vals[1];
-                O_intOr:   result = vals[0] | vals[1];
-                O_intXor:  result = vals[0] ^ vals[1];
+//                O_intAnd:  result = vals[0] & vals[1];
+//                O_intOr:   result = vals[0] | vals[1];
+//                O_intXor:  result = vals[0] ^ vals[1];
                 
-                O_intAdd:  result = vals[0] + vals[1];
-                O_intSub:  result = vals[0] - vals[1];
-                O_intAddH: result = vals[0] + (vals[1] << 16);
+//                O_intAdd:  result = vals[0] + vals[1];
+//                O_intSub:  result = vals[0] - vals[1];
+//                O_intAddH: result = vals[0] + (vals[1] << 16);
                 
-                O_intMul:   result = vals[0] * vals[1];
-                O_intMulHU: result = (Dword'($unsigned(vals[0])) * Dword'($unsigned(vals[1]))) >> 32;
-                O_intMulHS: result = (Dword'($signed(vals[0])) * Dword'($signed(vals[1]))) >> 32;
-                O_intDivU:  result = $unsigned(vals[0]) / $unsigned(vals[1]);
-                O_intDivS:  result = divSigned(vals[0], vals[1]);
-                O_intRemU:  result = $unsigned(vals[0]) % $unsigned(vals[1]);
-                O_intRemS:  result = remSigned(vals[0], vals[1]);
+//                O_intMul:   result = vals[0] * vals[1];
+//                O_intMulHU: result = (Dword'($unsigned(vals[0])) * Dword'($unsigned(vals[1]))) >> 32;
+//                O_intMulHS: result = (Dword'($signed(vals[0])) * Dword'($signed(vals[1]))) >> 32;
+//                O_intDivU:  result = $unsigned(vals[0]) / $unsigned(vals[1]);
+//                O_intDivS:  result = divSigned(vals[0], vals[1]);
+//                O_intRemU:  result = $unsigned(vals[0]) % $unsigned(vals[1]);
+//                O_intRemS:  result = remSigned(vals[0], vals[1]);
                 
-                O_intShiftLogical: begin                
-                    if ($signed(vals[1]) >= 0)
-                        result = $unsigned(vals[0]) << vals[1];
-                    else
-                        result = $unsigned(vals[0]) >> -vals[1];
-                end
-                O_intShiftArith: begin                
-                    if ($signed(vals[1]) >= 0)
-                        result = $signed(vals[0]) << vals[1];
-                    else
-                        result = $signed(vals[0]) >> -vals[1];
-                end
-                O_intRotate: begin
-                    if ($signed(vals[1]) >= 0)
-                        result = {vals[0], vals[0]} << vals[1];
-                    else
-                        result = {vals[0], vals[0]} >> -vals[1];
-                end
+//                O_intShiftLogical: begin                
+//                    if ($signed(vals[1]) >= 0)
+//                        result = $unsigned(vals[0]) << vals[1];
+//                    else
+//                        result = $unsigned(vals[0]) >> -vals[1];
+//                end
+//                O_intShiftArith: begin                
+//                    if ($signed(vals[1]) >= 0)
+//                        result = $signed(vals[0]) << vals[1];
+//                    else
+//                        result = $signed(vals[0]) >> -vals[1];
+//                end
+//                O_intRotate: begin
+//                    if ($signed(vals[1]) >= 0)
+//                        result = {vals[0], vals[0]} << vals[1];
+//                    else
+//                        result = {vals[0], vals[0]} >> -vals[1];
+//                end
                 
-                O_floatMove: begin
-                    result = vals[0];
-                    float = 1;
-                end
-                
-                default: return;
-            endcase
+//                O_floatMove: begin
+//                    result = vals[0];
+//                end
+                                
+//                default: return;
+//            endcase
+            result = calculateResult(ins, vals, this.ip);
             
-            if (float)
+
+            if (ins.def.o inside {
+                O_jump,
+                
+                O_intAnd,
+                O_intOr,
+                O_intXor,
+                
+                O_intAdd,
+                O_intSub,
+                O_intAddH,
+                
+                O_intMul,
+                O_intMulHU,
+                O_intMulHS,
+                O_intDivU,
+                O_intDivS,
+                O_intRemU,
+                O_intRemS,
+                
+                O_intShiftLogical,
+                O_intShiftArith,
+                O_intRotate
+            }) writeInt = 1;
+            
+            if (ins.def.o inside {O_floatMove}) writeFloat = 1;
+
+            
+            if (writeFloat)
                 this.floatRegs[ins.dest] = result;
-            else
+            else if (writeInt)
                 this.intRegs[ins.dest] = result;
             
             this.intRegs[0] = 0;

@@ -19,15 +19,15 @@ package Asm;
         InstructionFormat fmt = getFormat(parts[0]);
         InstructionDef def = getDef(parts[0]);
         
-        string args[] = orderArgs(parts[1:3], parsingMap[fmt], parsingMap_[fmt]);
+        string args[] = orderArgs(parts[1:3], /*parsingMap[fmt],*/ parsingMap_[fmt]);
         Word4 vals;
         Word res;
 
-        if ( checkArgs(args[0:3], parsingMap[fmt], parsingMap_[fmt]) != 1) $error("Incorrect args");
+        if ( checkArgs(args[0:3], /*parsingMap[fmt],*/ parsingMap_[fmt]) != 1) $error("Incorrect args");
                     
         vals = parseArgs(args[0:3]);
        
-        res = fillArgs(vals, parsingMap[fmt], parsingMap_[fmt], 0);            
+        res = fillArgs(vals, /*parsingMap[fmt],*/ parsingMap_[fmt], 0);            
         res = fillOp(res, def);
         
         return res;
@@ -37,11 +37,11 @@ package Asm;
         InstructionFormat fmt = getFormat(parts[0]);
         InstructionDef def = getDef(parts[0]);
         
-        string args[] = orderArgs(parts[1:3], parsingMap[fmt], parsingMap_[fmt]);
+        string args[] = orderArgs(parts[1:3], /*parsingMap[fmt],*/ parsingMap_[fmt]);
         Word4 vals;
         CodeRef res;
 
-        res.label = parseLabel(args[0:3], parsingMap[fmt][1]);
+        res.label = parseLabel(args[0:3], /*parsingMap[fmt][1]*/ parsingMap_[fmt].decoding);
         if (res.label.len() != 0)
             case (def.p)
                 P_ja: res.ref26 = 1;
@@ -53,10 +53,11 @@ package Asm;
 
 
 
-    function automatic string4 orderArgs(input string args[], input string3 parsingMap, input FormatSpec fmtSpec);
+    function automatic string4 orderArgs(input string args[], /*input string3 parsingMap,*/ input FormatSpec fmtSpec);
         string4 out;
         int index;
-        string asmForm = parsingMap[0];
+        string asmForm = //parsingMap[0];
+                         fmtSpec.asmForm;
         
         foreach (asmForm[i]) begin
             case (asmForm[i])
@@ -73,9 +74,11 @@ package Asm;
         return out;
     endfunction
 
-    function automatic int checkArgs(input string4 args, input string3 parsingMap, input FormatSpec fmtSpec);
-        string typeSpec = parsingMap[2];    
-        string decoding = parsingMap[1];
+    function automatic int checkArgs(input string4 args, /*input string3 parsingMap,*/ input FormatSpec fmtSpec);
+        string typeSpec = //parsingMap[2];
+                          fmtSpec.typeSpec;
+        string decoding = //parsingMap[1];
+                          fmtSpec.decoding;
         
         case (typeSpec[0])
             "i": if (args[0][0] != "r" && decoding[0] != "0") return 0;
@@ -156,8 +159,9 @@ package Asm;
     endfunction
 
 
-    function automatic Word fillArgs(input Word4 args, input string3 parsingMap, input FormatSpec fmtSpec, input bit unknownOffset);
-        string decoding = parsingMap[1];
+    function automatic Word fillArgs(input Word4 args, /*input string3 parsingMap,*/ input FormatSpec fmtSpec, input bit unknownOffset);
+        string decoding = //parsingMap[1];
+                          fmtSpec.decoding;
         Word res = '0;
 
         res = fillField(res, decoding[0], args[0]);
@@ -206,11 +210,15 @@ package Asm;
         InstructionFormat f = getFormat(s);
         InstructionDef d = getDef(s);
         
-        string3 fmtSpec = parsingMap[f];
+        //string3 fmtSpec = parsingMap[f];
+        FormatSpec fmtSpec_ = parsingMap_[f];
         
-        string typeSpec = fmtSpec[2];    
-        string decoding = fmtSpec[1];
-        string asmForm = fmtSpec[0];
+        string typeSpec = //fmtSpec[2];
+                            fmtSpec_.typeSpec;
+        string decoding = //fmtSpec[1];
+                            fmtSpec_.decoding;
+        string asmForm = //fmtSpec[0];
+                            fmtSpec_.asmForm;
 
         int qa = w[25:21];        
         int qb = w[20:16];        
@@ -261,11 +269,15 @@ package Asm;
         string destStr;
         string sourcesStr[3];
 
-        string3 fmtSpec = parsingMap[ins.fmt];
+        //string3 fmtSpec = parsingMap[ins.fmt];
+        FormatSpec fmtSpec_ = parsingMap_[ins.fmt];
         
-        string typeSpec = fmtSpec[2];    
-        string decoding = fmtSpec[1];
-        string asmForm = fmtSpec[0];
+        string typeSpec = //fmtSpec[2];
+                            fmtSpec_.typeSpec;  
+        string decoding = //fmtSpec[1];
+                            fmtSpec_.decoding;
+        string asmForm = //fmtSpec[0];
+                            fmtSpec_.asmForm;
 
         dest = ins.dest;
         sources = ins.sources;

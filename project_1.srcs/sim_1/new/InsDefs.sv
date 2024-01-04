@@ -390,42 +390,42 @@ package InsDefs;
     } FormatSpec; 
 
     
-    const string3 parsingMap[InstructionFormat] = '{
-        none:          '{"    ", "0,000", "0,000"},
+//    const string3 parsingMap[InstructionFormat] = '{
+//        none:          '{"    ", "0,000", "0,000"},
     
-        noRegs :       '{"    ", "0,000", "0,000"},
+//        noRegs :       '{"    ", "0,000", "0,000"},
     
-        jumpLong :     '{"1   ", "0,0L0", "i,ic0"},
-        jumpLink :     '{"d1  ", "a,0J0", "i,ic0"},
-        jumpCond :     '{"01  ", "0,aJ0", "i,ic0"},
+//        jumpLong :     '{"1   ", "0,0L0", "i,ic0"},
+//        jumpLink :     '{"d1  ", "a,0J0", "i,ic0"},
+//        jumpCond :     '{"01  ", "0,aJ0", "i,ic0"},
         
-        intImm16 :     '{"d01 ", "a,bH0", "i,ic0"},
-        intImm10 :     '{"d01 ", "a,bX0", "i,ic0"},
+//        intImm16 :     '{"d01 ", "a,bH0", "i,ic0"},
+//        intImm10 :     '{"d01 ", "a,bX0", "i,ic0"},
         
-        intStore16 :   '{"201 ", "0,bHa", "i,ici"},
-        intStore10 :   '{"201 ", "0,bXa", "i,ici"},
+//        intStore16 :   '{"201 ", "0,bHa", "i,ici"},
+//        intStore10 :   '{"201 ", "0,bXa", "i,ici"},
         
-        floatLoad16 :  '{"d01 ", "a,bH0", "f,ic0"},
-        floatLoad10 :  '{"d01 ", "a,bX0", "f,ic0"},
+//        floatLoad16 :  '{"d01 ", "a,bH0", "f,ic0"},
+//        floatLoad10 :  '{"d01 ", "a,bX0", "f,ic0"},
         
-        floatStore16 : '{"201 ", "0,bHa", "i,icf"},
-        floatStore10 : '{"201 ", "0,bXa", "i,icf"},
+//        floatStore16 : '{"201 ", "0,bHa", "i,icf"},
+//        floatStore10 : '{"201 ", "0,bXa", "i,icf"},
     
-        sysLoad :      '{"d01 ", "a,bX0", "i,ic0"},
+//        sysLoad :      '{"d01 ", "a,bX0", "i,ic0"},
 
-        sysStore :     '{"201 ", "0,bXa", "0,ici"},
+//        sysStore :     '{"201 ", "0,bXa", "0,ici"},
     
-        int3R :        '{"d012", "a,bcd", "i,iii"},
-        int2R :        '{"d01 ", "a,bc0", "i,ii0"},
-        int1R :        '{"d0  ", "a,b00", "i,i00"},
+//        int3R :        '{"d012", "a,bcd", "i,iii"},
+//        int2R :        '{"d01 ", "a,bc0", "i,ii0"},
+//        int1R :        '{"d0  ", "a,b00", "i,i00"},
     
-        float3R :      '{"d012", "a,bcd", "f,fff"},
-        float2R :      '{"d01 ", "a,bc0", "f,ff0"},
-        float1R :      '{"d0  ", "a,b00", "f,f00"},
+//        float3R :      '{"d012", "a,bcd", "f,fff"},
+//        float2R :      '{"d01 ", "a,bc0", "f,ff0"},
+//        float1R :      '{"d0  ", "a,b00", "f,f00"},
         
-        floatToInt :   '{"d0  ", "a,b00", "i,f00"},
-        intToFloat :   '{"d0  ", "a,b00", "f,i00"}
-    };
+//        floatToInt :   '{"d0  ", "a,b00", "i,f00"},
+//        intToFloat :   '{"d0  ", "a,b00", "f,i00"}
+//    };
 
     
     const FormatSpec parsingMap_[InstructionFormat] = '{

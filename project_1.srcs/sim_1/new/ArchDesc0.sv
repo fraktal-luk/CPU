@@ -344,7 +344,7 @@ module ArchDesc0();
         
         Word fetchAdr;
         
-        logic reset = 0, done = 0;
+        logic reset = 0, 0;
         
         
         task runSim();
