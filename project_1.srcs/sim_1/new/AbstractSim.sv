@@ -81,7 +81,8 @@ module AbstractCore
     
     input logic interrupt,
     input logic reset,
-    output logic sig
+    output logic sig,
+    output logic wrong
 );
     
     typedef struct {
@@ -119,7 +120,7 @@ module AbstractCore
     
     Stage nextStage = EMPTY_STAGE;
     OpSlot opQueue[$:24];
-    OpSlot memOp = EMPTY_SLOT;
+    OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT;
     
     Word intRegs[32], floatRegs[32];
     
@@ -129,7 +130,8 @@ module AbstractCore
     always @(posedge clk) begin
         
         resetPrev <= reset;
-        
+        sig <= 0;
+
         if (resetPrev) begin            
             ipStage <= '{'1, 512 - 512, '{default: '0}, '{default: 'x}};
             fetchStage0 <= EMPTY_STAGE;
@@ -139,6 +141,7 @@ module AbstractCore
             nextStage <= EMPTY_STAGE;
             opQueue.delete();
             memOp <= EMPTY_SLOT;
+            memOpPrev <= EMPTY_SLOT;
             
             intRegs = '{0: '0, default: 'x};
             floatRegs = '{default: 'x};
@@ -151,7 +154,7 @@ module AbstractCore
             
             if (fetchStage1.active) fetchQueue.push_back(fetchStage1);
 
-            if (fqSize > 0 && oqSize < 24-FETCH_WIDTH) nextStage <= fetchQueue.pop_front();
+            if (fqSize > 0 && oqSize < 24-2*FETCH_WIDTH) nextStage <= fetchQueue.pop_front();
             else nextStage <= EMPTY_STAGE;
             
             if (nextStage.active) begin
@@ -168,10 +171,26 @@ module AbstractCore
             writeReq = 0;
             writeAdr = 'x;
             writeOut = 'x;
+            
+            memOpPrev <= memOp;
+            
             // finish executing mem operation from prev cycle
-            if (memOp.active) begin
+//            if (memOp.active) begin
+//                // If load, write to register; if store, nothing to do
+//                automatic AbstractInstruction memAbs = decodeAbstract(memOp.bits);
+//                if (memAbs.def.o inside {O_intLoadW, O_intLoadD}) begin
+//                    intRegs[memAbs.dest] = readIn[0];
+//                    intRegs[0] = 0;
+//                end
+//                else if (memAbs.def.o inside {O_floatLoadW}) begin
+//                    floatRegs[memAbs.dest] = readIn[0];
+//                end
+                
+//                memOp <= EMPTY_SLOT;
+//            end
+            if (memOpPrev.active) begin
                 // If load, write to register; if store, nothing to do
-                automatic AbstractInstruction memAbs = decodeAbstract(memOp.bits);
+                automatic AbstractInstruction memAbs = decodeAbstract(memOpPrev.bits);
                 if (memAbs.def.o inside {O_intLoadW, O_intLoadD}) begin
                     intRegs[memAbs.dest] = readIn[0];
                     intRegs[0] = 0;
@@ -180,67 +199,70 @@ module AbstractCore
                     floatRegs[memAbs.dest] = readIn[0];
                 end
                 
-                memOp <= EMPTY_SLOT;
+                //memOpPrev <= EMPTY_SLOT;
             end
             
-            for (int i = 0; i < oqSize; i++) begin
-                // scan until a mem operation
-                automatic OpSlot op = opQueue.pop_front();
-                automatic AbstractInstruction abs = decodeAbstract(op.bits);
-                
-                automatic Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap_[abs.fmt].typeSpec);
-                automatic Word result = calculateResult(abs, args, op.adr);
-                
-                if (abs.def.o inside {
-                    O_jump,
+            if (!memOp.active) // If mem is being done, wait for result
+                for (int i = 0; i < oqSize; i++) begin            
+                    // scan until a mem operation
+                    automatic OpSlot op = opQueue.pop_front();
+                    automatic AbstractInstruction abs = decodeAbstract(op.bits);
                     
-                    O_intAnd,
-                    O_intOr,
-                    O_intXor,
+                    automatic Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap_[abs.fmt].typeSpec);
+                    automatic Word result = calculateResult(abs, args, op.adr);
                     
-                    O_intAdd,
-                    O_intSub,
-                    O_intAddH,
+                        if (op.adr == 16*11) sig <= 1;
                     
-                    O_intMul,
-                    O_intMulHU,
-                    O_intMulHS,
-                    O_intDivU,
-                    O_intDivS,
-                    O_intRemU,
-                    O_intRemS,
+                    if (abs.def.o inside {
+                        O_jump,
+                        
+                        O_intAnd,
+                        O_intOr,
+                        O_intXor,
+                        
+                        O_intAdd,
+                        O_intSub,
+                        O_intAddH,
+                        
+                        O_intMul,
+                        O_intMulHU,
+                        O_intMulHS,
+                        O_intDivU,
+                        O_intDivS,
+                        O_intRemU,
+                        O_intRemS,
+                        
+                        O_intShiftLogical,
+                        O_intShiftArith,
+                        O_intRotate
+                    }) intRegs[abs.dest] = result;
+                    intRegs[0] = 0;
                     
-                    O_intShiftLogical,
-                    O_intShiftArith,
-                    O_intRotate
-                }) intRegs[abs.dest] = result;
-                intRegs[0] = 0;
-                
-                if (abs.def.o inside {O_floatMove}) floatRegs[abs.dest] = result;
-    
-                
-                
-                if (abs.def.o inside {O_intLoadW, O_intLoadD, O_intStoreW, O_intStoreD, O_floatLoadW, O_floatStoreW}) begin
-                    readReq[0] <= '1;
-                    readAdr[0] <= args[0] + args[1];
-                    memOp <= op;
+                    if (abs.def.o inside {O_floatMove}) floatRegs[abs.dest] = result;
+        
                     
-                    if (abs.def.o inside {O_intStoreW, O_intStoreD, O_floatStoreW}) begin
-                        writeReq = 1;
-                        writeAdr = args[0] + args[1];
-                        writeOut = args[2];
+                    
+                    if (abs.def.o inside {O_intLoadW, O_intLoadD, O_intStoreW, O_intStoreD, O_floatLoadW, O_floatStoreW}) begin
+                        readReq[0] <= '1;
+                        readAdr[0] <= args[0] + args[1];
+                        memOp <= op;
+                        
+                        if (abs.def.o inside {O_intStoreW, O_intStoreD, O_floatStoreW}) begin
+                            writeReq = 1;
+                            writeAdr = args[0] + args[1];
+                            writeOut = args[2];
+                        end
+                        
+                        break;
                     end
-                    
-                    break;
                 end
-            end
             
             
             fqSize <= fetchQueue.size();
             oqSize <= opQueue.size();
         end
         
-        sig <= ipStage.baseAdr == 128 /* 16*10 */ ? 1 : 0;
+        //sig <= ipStage.baseAdr == 16*11 ? 1 : 0;
         
     end
     

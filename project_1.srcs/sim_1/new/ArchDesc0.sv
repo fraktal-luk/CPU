@@ -346,7 +346,7 @@ module ArchDesc0();
         
         Word fetchAdr;
         
-        logic reset = 0, done;
+        logic reset = 0, done, wrong;
         
         logic readEns[4], writeEn;
         Word writeAdr, readAdrs[4], readValues[4], writeValue;
@@ -396,7 +396,8 @@ module ArchDesc0();
             
             .interrupt(1'b0),
             .reset(reset),
-            .sig(done)
+            .sig(done),
+            .wrong(wrong)
         );
 
     endgenerate  
