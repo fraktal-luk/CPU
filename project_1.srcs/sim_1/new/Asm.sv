@@ -228,6 +228,12 @@ package Asm;
         int dest;
         int sources[3];
 
+        if ($isunknown(w)) begin
+            $warning("Decoding unknown word");
+            res.mnemonic = "unknown";
+            return res;
+        end
+
         case (decoding[0])
             "a": dest = qa;
             "b": dest = qb;
@@ -319,7 +325,7 @@ package Asm;
         return s;
     endfunction
 
-    function automatic string TMP_disasm(input Word w);
+    function automatic string TMP_disasm(input Word w);        
         AbstractInstruction absIns = decodeAbstract(w);        
         return ins2str(absIns);
     endfunction;

@@ -48,7 +48,7 @@ module ArchDesc0();
             if (lineParts.size() > 1) $error("There shuould be 1 test per line");
             else if (lineParts.size() == 0);
             else begin            
-                $display("%s", lineParts[0]);
+                //$display("%s", lineParts[0]);
                 testName = lineParts[0];
 
                 runTest({lineParts[0], ".txt"}, emul);
@@ -357,7 +357,7 @@ module ArchDesc0();
         
         task runTestSim();
             #CYCLE;
-            programMem.setContent(processLines(readFile("loads1.txt")).words);
+            programMem.setContent(processLines(readFile("branches.txt")).words);
             reset <= 1;
             #CYCLE;
             reset <= 0;
@@ -370,7 +370,7 @@ module ArchDesc0();
         
         initial begin
             programMem = new();
-            programMem.setContent(processLines(readFile("loads1.txt")).words);
+            programMem.setContent(processLines(readFile("branches.txt")).words);
             
             dmem = new();
             dmem.clear();
