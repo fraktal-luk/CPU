@@ -1,15 +1,12 @@
 `timescale 1ns / 1ps
 
-    import Base::*;
-    import InsDefs::*;
-    import Asm::*;
-    import Emulation::*;
-    import AbstractSim::*;
+import Base::*;
+import InsDefs::*;
+import Asm::*;
+import Emulation::*;
+import AbstractSim::*;
     
 module ArchDesc0();
-
-
-
 
     const int ITERATION_LIMIT = 2000;
 
@@ -31,9 +28,7 @@ module ArchDesc0();
 
 
     initial begin
-
         automatic Emulator emul = new();
-          
         automatic squeue tests = readFile("tests_all.txt");
         
         common = processLines(readFile("common_asm.txt"));
@@ -45,41 +40,30 @@ module ArchDesc0();
         foreach (tests[i]) begin
             automatic squeue lineParts = breakLine(tests[i]);
 
-            if (lineParts.size() > 1) $error("There shuould be 1 test per line");
+            if (lineParts.size() > 1) $error("There should be 1 test per line");
             else if (lineParts.size() == 0);
             else begin            
-                //$display("%s", lineParts[0]);
                 testName = lineParts[0];
-
                 runTest({lineParts[0], ".txt"}, emul);
-                
                 testName = "";
             end
-            
             #1;
         end
 
-        //$display("err signal");
         testName = "err signal";
         testErrorSignal(emul);
         testName = "";
-
         #1;
         
-        //$display("event");
         testName = "event";
         testEvent(emul);
         testName = "";
-
         #1;
         
-        //$display("event2");
         testName = "event2";
         testInterrupt(emul);
         testName = "";
-        
         #1;
-        
         
         $display(">>> Tests done");
     end
@@ -106,17 +90,13 @@ module ArchDesc0();
         dataMem = '{default: 0};
         progMem = '{default: 'x};
         
-        foreach (testSection.words[i])
-            progMem[i] = testSection.words[i];
-        
-        foreach (common.words[i])
-            progMem[COMMON_ADR/4 + i] = common.words[i];
+        foreach (testSection.words[i]) progMem[i] = testSection.words[i];
+        foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
         
         setBasicHandlers();
         
         emul.reset();
         #1;
-        
         
         for (i = 0; i < ITERATION_LIMIT; i++)
         begin
@@ -152,37 +132,24 @@ module ArchDesc0();
 
     task automatic testErrorSignal(ref Emulator emul);
         int i;
-        //squeue fileLines = readFile(name);
-        //Section testSection = processLines(fileLines);
-    
-        //testSection = fillImports(testSection, 0, common, COMMON_ADR);
-
         dataMem = '{default: 0};
         progMem = '{default: 'x};
-        
-        //foreach (testSection.words[i])
-        //    progMem[i] = testSection.words[i];
+
         progMem[0] = processLines({"undef"}).words[0];
         progMem[1] = processLines({"ja 0"}).words[0];
         
-        foreach (common.words[i])
-            progMem[COMMON_ADR/4 + i] = common.words[i];
+        foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
         
         setBasicHandlers();
         
         emul.reset();
         #1;
         
-        
         for (i = 0; i < ITERATION_LIMIT; i++)
         begin
             emul.executeStep(progMem, dataMem);
             
-            if (emul.status.error == 1) begin
-                //$fatal(">>>> Emulation in error state\n");
-                //$display("   Error signal confirmed");
-                break;
-            end
+            if (emul.status.error == 1) break;
             
             if (emul.writeToDo.active == 1) begin
                 dataMem[emul.writeToDo.adr] = emul.writeToDo.value[31:24];
@@ -203,7 +170,6 @@ module ArchDesc0();
     endtask
 
 
-
     task automatic testEvent(ref Emulator emul);
         int i;
         squeue fileLines = readFile("events.txt");
@@ -214,11 +180,8 @@ module ArchDesc0();
         dataMem = '{default: 0};
         progMem = '{default: 'x};
         
-        foreach (testSection.words[i])
-            progMem[i] = testSection.words[i];
-        
-        foreach (common.words[i])
-            progMem[COMMON_ADR/4 + i] = common.words[i];
+        foreach (testSection.words[i]) progMem[i] = testSection.words[i];
+        foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
         
         setBasicHandlers();
         
@@ -274,11 +237,8 @@ module ArchDesc0();
         dataMem = '{default: 0};
         progMem = '{default: 'x};
         
-        foreach (testSection.words[i])
-            progMem[i] = testSection.words[i];
-        
-        foreach (common.words[i])
-            progMem[COMMON_ADR/4 + i] = common.words[i];
+        foreach (testSection.words[i]) progMem[i] = testSection.words[i];
+        foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
         
         setBasicHandlers();
         
@@ -287,7 +247,7 @@ module ArchDesc0();
         progMem[Emulator::IP_CALL/4 + 1] = processLines({"sys rete"}).words[0];
         progMem[Emulator::IP_CALL/4 + 2] = processLines({"ja 0"}).words[0];
         
-        // Special handler got int 
+        // Special handler for int 
         progMem[Emulator::IP_INT/4] = processLines({"add_i r21, r0, 77"}).words[0];
         progMem[Emulator::IP_INT/4 + 1] = processLines({"sys reti"}).words[0];
         progMem[Emulator::IP_INT/4 + 2] = processLines({"ja 0"}).words[0];
@@ -295,15 +255,13 @@ module ArchDesc0();
         emul.reset();
         #1;
         
-        
         for (i = 0; i < ITERATION_LIMIT; i++)
         begin
             if (i == 3) begin 
                 emul.interrupt;
                 #1;
             end
-        
-        
+
             emul.executeStep(progMem, dataMem);
             
             if (emul.status.error == 1) begin
@@ -334,47 +292,58 @@ module ArchDesc0();
     endtask
 
 
-
     generate
-    
-    
-    
-        //typedef class ProgramMemory;
         typedef ProgramMemory#(4) ProgMem;
         typedef DataMemory#(4) DataMem;
     
-        ProgMem programMem;// = new();
+        ProgMem programMem;
         DataMem dmem;
         ProgMem::Line icacheOut;
         
         Word fetchAdr;
         
-        logic reset = 0, done, wrong;
+        logic reset = 0, int0 = 0, done, wrong;
         
         logic readEns[4], writeEn;
         Word writeAdr, readAdrs[4], readValues[4], writeValue;
         
-        task runSim();
-            forever runTestSim();
+        task automatic runSim();
+            squeue tests = readFile("tests_all.txt");
+            
+            foreach (tests[i]) begin
+                squeue lineParts = breakLine(tests[i]);
+
+                if (lineParts.size() > 1) $error("There shuould be 1 test per line");
+                else if (lineParts.size() == 0) continue;
+                else runTestSim(lineParts[0]);
+            end
+            
+            $finish();
         endtask
         
-        task runTestSim();
+        task automatic runTestSim(input string name);
+            Section common, testProg;
             #CYCLE;
-            programMem.setContent(processLines(readFile("branches.txt")).words);
+                $display("> RUN: %s", name);
+            
+            common = processLines(readFile({"common_asm", ".txt"}));
+            programMem.setContentAt(common.words, COMMON_ADR);
+            
+            testProg = fillImports(processLines(readFile({name, ".txt"})), 0, common, COMMON_ADR);
+            
+            programMem.setContent(testProg.words);
+            programMem.setBasicHandlers();
+
             reset <= 1;
             #CYCLE;
             reset <= 0;
             
-            //#(20*CYCLE);
             wait (done);
             #CYCLE;
-            
         endtask
         
         initial begin
             programMem = new();
-            programMem.setContent(processLines(readFile("branches.txt")).words);
-            
             dmem = new();
             dmem.clear();
         end
@@ -382,10 +351,8 @@ module ArchDesc0();
         always_ff @(posedge clk) icacheOut <= programMem.read(fetchAdr);
         
         always @(posedge clk) begin
-        
             if (readEns[0]) readValues[0] <= dmem.read(readAdrs[0]);
             if (writeEn) dmem.write(writeAdr, writeValue);
-            
             if (reset) dmem.clear();
         end
         
@@ -397,7 +364,7 @@ module ArchDesc0();
             .readReq(readEns), .readAdr(readAdrs), .readIn(readValues),
             .writeReq(writeEn), .writeAdr(writeAdr), .writeOut(writeValue),
             
-            .interrupt(1'b0),
+            .interrupt(int0),
             .reset(reset),
             .sig(done),
             .wrong(wrong)
@@ -406,7 +373,3 @@ module ArchDesc0();
     endgenerate  
 
 endmodule
-
-
-
-
