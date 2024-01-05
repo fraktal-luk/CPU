@@ -59,26 +59,29 @@ module ArchDesc0();
             #1;
         end
 
-        $display("err signal");
+        //$display("err signal");
         testName = "err signal";
         testErrorSignal(emul);
         testName = "";
 
         #1;
         
-        $display("event");
+        //$display("event");
         testName = "event";
         testEvent(emul);
         testName = "";
 
         #1;
         
-        $display("event2");
+        //$display("event2");
         testName = "event2";
         testInterrupt(emul);
         testName = "";
         
         #1;
+        
+        
+        $display(">>> Tests done");
     end
 
     task automatic setBasicHandlers();
@@ -177,7 +180,7 @@ module ArchDesc0();
             
             if (emul.status.error == 1) begin
                 //$fatal(">>>> Emulation in error state\n");
-                $display("   Error signal confirmed");
+                //$display("   Error signal confirmed");
                 break;
             end
             

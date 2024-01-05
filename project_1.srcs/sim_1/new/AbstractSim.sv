@@ -119,8 +119,8 @@ module AbstractCore
     int fqSize = 0, oqSize = 0;
 
     logic fetchAllow;// = 0;
-    logic resetPrev, branchRedirect = 0;
-    Word branchTarget = 'x;
+    logic resetPrev, branchRedirect = 0, eventRedirect = 0;
+    Word branchTarget = 'x, eventTarget = 'x;
     
     FetchGroup fetchedStage0;//, fetchedStage1;
     //FetchGroup decoded;
@@ -132,7 +132,7 @@ module AbstractCore
     OpSlot opQueue[$:24];
     OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT;
     
-    Word intRegs[32], floatRegs[32];
+    Word intRegs[32], floatRegs[32], sysRegs[32];
     
     
     assign fetchedStage0 = insIn;
@@ -141,6 +141,7 @@ module AbstractCore
         
         resetPrev <= reset;
         sig <= 0;
+        wrong <= 0;
 
         readReq[0] = 0;
         readAdr[0] = 'x;
@@ -151,9 +152,14 @@ module AbstractCore
         branchRedirect <= 0;
         branchTarget <= 'x;
 
-        if (resetPrev | branchRedirect) begin            
+        eventRedirect <= 0;
+        eventTarget <= 'x;
+
+        if (resetPrev | branchRedirect | eventRedirect) begin            
             if (resetPrev)
                 ipStage <= '{'1, 512, '{default: '0}, '{default: 'x}};
+            else if (eventRedirect)
+                ipStage <= '{'1, eventTarget, '{default: '0}, '{default: 'x}};
             else if (branchRedirect)
                 ipStage <= '{'1, branchTarget, '{default: '0}, '{default: 'x}};
             else $fatal("Should never get here");
@@ -169,6 +175,7 @@ module AbstractCore
             
             intRegs = '{0: '0, default: 'x};
             floatRegs = '{default: 'x};
+            sysRegs = '{0: -1, 1: 0, default: 'x};
             
             fqSize <= fetchQueue.size();
             oqSize <= opQueue.size();
@@ -219,7 +226,7 @@ module AbstractCore
                     
                         $display("Exec %h: %s", op.adr, TMP_disasm(op.bits));
                     
-                        if (op.adr == 16*11) sig <= 1;
+                      //  if (op.adr == 16*11) sig <= 1;
                     
                     if (abs.def.o inside {
                         O_jump,
@@ -244,6 +251,9 @@ module AbstractCore
                         O_intShiftArith,
                         O_intRotate
                     }) intRegs[abs.dest] = result;
+                    
+                    if (abs.def.o == O_sysLoad) intRegs[abs.dest] = sysRegs[abs.dest];
+                    
                     intRegs[0] = 0;
                     
                     if (abs.def.o inside {O_floatMove}) floatRegs[abs.dest] = result;
@@ -282,6 +292,77 @@ module AbstractCore
                         
                         break;
                     end
+                    
+                    // System ops
+                    case (abs.def.o)
+                        O_sysStore:
+                            sysRegs[args[1]] = args[2];
+                    
+                        O_undef: begin
+                            eventTarget <= Emulator::IP_ERROR;
+                            eventRedirect <= 1;
+                            wrong <= 1;
+
+                            sysRegs[4] = sysRegs[1];
+                            sysRegs[1] |= 1; // TODO: handle state register correctly
+                            sysRegs[2] = op.adr;
+                        end
+                        
+                        O_call: begin
+                            eventTarget <= Emulator::IP_CALL;
+                            eventRedirect <= 1;
+                            
+                            sysRegs[4] = sysRegs[1];
+                            sysRegs[1] |= 1; // TODO: handle state register correctly
+                            sysRegs[2] = op.adr + 4;
+                        end 
+                        
+                        O_sync: begin
+                            eventTarget <= op.adr + 4;
+                            eventRedirect <= 1;
+                        end
+                        
+                        O_retE: begin
+                            eventTarget <= sysRegs[2];
+                            eventRedirect <= 1;
+                            
+                            sysRegs[1] = sysRegs[4];
+                        end 
+                        
+                        O_retI: begin
+                            eventTarget <= sysRegs[3];
+                            eventRedirect <= 1;
+                            
+                            sysRegs[1] = sysRegs[5];
+                        end 
+                        
+                        O_replay: begin
+                            eventTarget <= op.adr;
+                            eventRedirect <= 1;
+                        end 
+                        
+                        O_halt: begin
+                            $error("halt not implemented");
+                        
+                            eventTarget <= op.adr + 4;
+                            eventRedirect <= 1;
+                        end
+                        
+                        O_send: begin
+                            eventTarget <= op.adr + 4;
+                            eventRedirect <= 1;
+                            sig <= 1;
+                        end
+                        
+                        default: ;
+                        
+                        //break;
+                    endcase
+                    
+                    if (abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send})
+                        break;
+                    
+                    
                 end
             
             

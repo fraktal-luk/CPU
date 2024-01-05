@@ -368,6 +368,10 @@ package Emulation;
                     this.sysRegs[vals[1]] = vals[2];
                 O_undef: begin
                     this.ipNext = IP_ERROR;
+                    this.sysRegs[4] = this.sysRegs[1];
+                    this.sysRegs[1] |= 1; // TODO: handle state register correctly
+                    this.sysRegs[2] = this.ip + 4;
+                    
                     this.status.error = 1;
                 end
                 O_call: begin

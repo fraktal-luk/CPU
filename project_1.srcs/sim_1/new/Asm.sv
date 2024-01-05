@@ -619,10 +619,10 @@ package Asm;
             ExportRef exps[$] = lib.exports.find with (item.label == imp.label);
             if (exps.size() == 0) continue;
             
-            $display(" > Filling import: %s, %p, %p", exps[0].label, imp, exps[0]);
-            $display("  %b", res.words[imp.codeLine]);
+            //$display(" > Filling import: %s, %p, %p", exps[0].label, imp, exps[0]);
+            //$display("  %b", res.words[imp.codeLine]);
             res.words[imp.codeLine-1] = fillImport(res.words[imp.codeLine-1], adrDiff, imp, exps[0]);
-            $display("  %b", res.words[imp.codeLine - 1]);
+            //$display("  %b", res.words[imp.codeLine - 1]);
         end 
         
         return res;
