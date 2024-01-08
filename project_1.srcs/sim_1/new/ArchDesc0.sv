@@ -292,6 +292,7 @@ module ArchDesc0();
     endtask
 
 
+
     generate
         typedef ProgramMemory#(4) ProgMem;
         typedef DataMemory#(4) DataMem;
@@ -318,6 +319,10 @@ module ArchDesc0();
                 else runTestSim(lineParts[0]);
             end
             
+            runErrorTestSim();
+            runEventTestSim();
+            runIntTestSim();
+            
             $finish();
         endtask
         
@@ -325,7 +330,9 @@ module ArchDesc0();
             Section common, testProg;
             #CYCLE;
                 $display("> RUN: %s", name);
-            
+
+            programMem.clear();
+ 
             common = processLines(readFile({"common_asm", ".txt"}));
             programMem.setContentAt(common.words, COMMON_ADR);
             
@@ -341,7 +348,98 @@ module ArchDesc0();
             wait (done);
             #CYCLE;
         endtask
-        
+
+
+
+        task automatic runErrorTestSim();
+            Section common, testProg;
+            #CYCLE;
+                $display("> RUN: %s", "err");
+
+            programMem.clear();
+
+            common = processLines(readFile({"common_asm", ".txt"}));
+            programMem.setContentAt(common.words, COMMON_ADR);
+            
+            testProg = processLines({"undef",
+                                     "ja 0"});
+            
+            programMem.setContent(testProg.words);
+            programMem.setBasicHandlers();
+
+            reset <= 1;
+            #CYCLE;
+            reset <= 0;
+            
+            wait (wrong);
+            #CYCLE;
+        endtask
+
+        task automatic runEventTestSim();
+            Section common, testProg;
+            #CYCLE;
+                $display("> RUN: %s", "event");
+
+            programMem.clear();
+
+            common = processLines(readFile({"common_asm", ".txt"}));
+            programMem.setContentAt(common.words, COMMON_ADR);
+            
+            testProg = fillImports(processLines(readFile({"events", ".txt"})), 0, common, COMMON_ADR);
+            
+            programMem.setContent(testProg.words);
+            programMem.setBasicHandlers();
+
+            programMem.setContentAt(processLines({"add_i r20, r0, 55",
+                                                  "sys rete",
+                                                  "ja 0"
+                                                  }).words,
+                                                  Emulator::IP_CALL);
+
+            reset <= 1;
+            #CYCLE;
+            reset <= 0;
+            
+            wait (done);
+            #CYCLE;
+        endtask
+
+        task automatic runIntTestSim();
+            Section common, testProg;
+            #CYCLE;
+                $display("> RUN: %s", "int");
+            
+            programMem.clear();
+            
+            common = processLines(readFile({"common_asm", ".txt"}));
+            programMem.setContentAt(common.words, COMMON_ADR);
+            
+            testProg = fillImports(processLines(readFile({"events2", ".txt"})), 0, common, COMMON_ADR);
+            
+            programMem.setContent(testProg.words);
+            programMem.setBasicHandlers();
+
+            programMem.setContentAt(processLines({"add_i r20, r0, 55",
+                                                  "sys rete",
+                                                  "ja 0"
+                                                  }).words,
+                                                  Emulator::IP_CALL);
+
+            programMem.setContentAt(processLines({"add_i r21, r0, 77",
+                                                  "sys reti",
+                                                  "ja 0"
+                                                  }).words,
+                                                  Emulator::IP_INT);
+
+            reset <= 1;
+            #CYCLE;
+            reset <= 0;
+            
+            wait (done);
+            #CYCLE;
+        endtask
+
+
         initial begin
             programMem = new();
             dmem = new();

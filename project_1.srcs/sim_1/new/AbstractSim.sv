@@ -28,6 +28,9 @@ package AbstractSim;
             this.content[Emulator::IP_CALL/4 + 1] = processLines({"ja 0"}).words[0];
         endfunction
         
+        function void clear();
+            this.content = '{default: 'x};
+        endfunction
         
         function void setContent(input Word arr[]);
             foreach (arr[i]) this.content[i] = arr[i];
@@ -185,9 +188,9 @@ module AbstractCore
             memOpPrev <= EMPTY_SLOT;
             
             if (resetPrev) begin
-                intRegs = '{0: '0, default: 'x};
-                floatRegs = '{default: 'x};
-                sysRegs = '{0: -1, 1: 0, default: 'x};
+                intRegs = '{0: '0, default: '0};
+                floatRegs = '{default: '0};
+                sysRegs = '{0: -1, 1: 0, default: '0};
             end
             
             fqSize <= fetchQueue.size();
