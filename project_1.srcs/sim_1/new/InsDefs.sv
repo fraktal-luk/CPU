@@ -4,6 +4,31 @@ package Base;
     typedef logic[31:0] Word;
     typedef logic[63:0] Dword;
 
+
+    function automatic Word divSigned(input Word a, input Word b);
+        Word aInt = a;
+        Word bInt = b;
+        Word rInt = $signed(a)/$signed(b);
+        Word rem = aInt - rInt * bInt;
+        
+        if ($signed(rem) < 0 && $signed(bInt) > 0) rInt--;
+        if ($signed(rem) > 0 && $signed(bInt) < 0) rInt--;
+        
+        return rInt;
+    endfunction
+    
+    function automatic Word remSigned(input Word a, input Word b);
+        Word aInt = a;
+        Word bInt = b;
+        Word rInt = $signed(a)/$signed(b);
+        Word rem = aInt - rInt * bInt;
+        
+        if ($signed(rem) < 0 && $signed(bInt) > 0) rem += bInt;
+        if ($signed(rem) > 0 && $signed(bInt) < 0) rem += bInt;
+        
+        return rem;
+    endfunction
+
 endpackage
 
 

@@ -112,9 +112,7 @@ module AbstractCore
         logic mask[FETCH_WIDTH];
         Word words[FETCH_WIDTH];
     } Stage;
-    
 
-    
     localparam Stage EMPTY_STAGE = '{'0, 'x, '{default: 0}, '{default: 'x}};
 
     typedef struct {
@@ -122,19 +120,17 @@ module AbstractCore
         Word adr;
         Word bits;
     } OpSlot;
-    
+
     localparam OpSlot EMPTY_SLOT = '{'0, 'x, 'x};
+    
 
     typedef Word FetchGroup[FETCH_WIDTH];
 
     int fqSize = 0, oqSize = 0;
 
-    logic fetchAllow;// = 0;
+    logic fetchAllow;
     logic resetPrev = 0, intPrev = 0, branchRedirect = 0, eventRedirect = 0;
     Word branchTarget = 'x, eventTarget = 'x, storedTarget = 'x;
-    
-    FetchGroup fetchedStage0;//, fetchedStage1;
-    //FetchGroup decoded;
     
     Stage ipStage = EMPTY_STAGE, fetchStage0 = EMPTY_STAGE, fetchStage1 = EMPTY_STAGE;
     Stage fetchQueue[$:8];
@@ -145,8 +141,6 @@ module AbstractCore
     
     Word intRegs[32], floatRegs[32], sysRegs[32];
     
-    
-    assign fetchedStage0 = insIn;
     
     always @(posedge clk) begin
         
@@ -200,7 +194,7 @@ module AbstractCore
             if (fetchAllow) ipStage <= '{'1, (ipStage.baseAdr & ~(4*FETCH_WIDTH-1)) + 4*FETCH_WIDTH, '{default: '0}, '{default: 'x}};
             
             fetchStage0 <= setActive(ipStage, ipStage.active & fetchAllow);
-            fetchStage1 <= setWords(fetchStage0, fetchedStage0);
+            fetchStage1 <= setWords(fetchStage0, insIn);
             
             if (fetchStage1.active) fetchQueue.push_back(fetchStage1);
 
@@ -212,16 +206,12 @@ module AbstractCore
                     if (nextStage.mask[i]) opQueue.push_back('{'1, nextStage.baseAdr + 4*i, nextStage.words[i]});
             end
             
-            
-            
             memOp <= EMPTY_SLOT;
-            
             memOpPrev <= memOp;
             
             if (interrupt) begin
                 eventTarget <= IP_INT;
                 storedTarget <= IP_INT;
-                //eventRedirect <= 1;
                 
                 sysRegs[5] = sysRegs[1];
                 sysRegs[1] |= 1; // TODO: handle state register correctly
@@ -229,9 +219,7 @@ module AbstractCore
             end
             else begin
 
-
-                // finish executing mem operation from prev cycle
-                if (memOpPrev.active) begin
+                if (memOpPrev.active) begin // Finish executing mem operation from prev cycle
                     // If load, write to register; if store, nothing to do
                     automatic AbstractInstruction memAbs = decodeAbstract(memOpPrev.bits);
                     if (memAbs.def.o inside {O_intLoadW, O_intLoadD}) begin
@@ -247,17 +235,15 @@ module AbstractCore
                 
                 if (!memOp.active) // If mem is being done, wait for result
                     for (int i = 0; i < oqSize; i++) begin            
-                        // scan until a mem operation
+                        // scan until a mem, taken branch or system operation
                         automatic OpSlot op = opQueue.pop_front();
                         automatic AbstractInstruction abs = decodeAbstract(op.bits);
                         
                         automatic Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap[abs.fmt].typeSpec);
                         automatic Word result = calculateResult(abs, args, op.adr);
                         
-                            $display("Exec %h: %s", op.adr, TMP_disasm(op.bits));
-                        
-                          //  if (op.adr == 16*11) sig <= 1;
-                        
+                        //$display("Exec %h: %s", op.adr, TMP_disasm(op.bits));
+                                                
                         if (abs.def.o inside {
                             O_jump,
                             
@@ -400,18 +386,14 @@ module AbstractCore
                                 sig <= 1;
                             end
                             
-                            default: ;
-                            
-                            //break;
+                            default: ;                            
                         endcase
                         
                         lastCommitted <= op;
                         
                         if (abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send})
-                            break;
-                        
+                            break; 
                     end
-                
             end
 
             fqSize <= fetchQueue.size();
