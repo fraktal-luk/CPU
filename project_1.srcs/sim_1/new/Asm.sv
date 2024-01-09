@@ -5,9 +5,6 @@ package Asm;
 
     typedef string squeue[$];
 
-
-
-
     typedef struct {
         bit ref21 = 0;
         bit ref26 = 0;
@@ -19,15 +16,15 @@ package Asm;
         InstructionFormat fmt = getFormat(parts[0]);
         InstructionDef def = getDef(parts[0]);
         
-        string args[] = orderArgs(parts[1:3], /*parsingMap[fmt],*/ parsingMap_[fmt]);
+        string args[] = orderArgs(parts[1:3], parsingMap[fmt]);
         Word4 vals;
         Word res;
 
-        if ( checkArgs(args[0:3], /*parsingMap[fmt],*/ parsingMap_[fmt]) != 1) $error("Incorrect args");
+        if ( checkArgs(args[0:3], parsingMap[fmt]) != 1) $error("Incorrect args");
                     
         vals = parseArgs(args[0:3]);
        
-        res = fillArgs(vals, /*parsingMap[fmt],*/ parsingMap_[fmt], 0);            
+        res = fillArgs(vals, parsingMap[fmt], 0);            
         res = fillOp(res, def);
         
         return res;
@@ -37,11 +34,11 @@ package Asm;
         InstructionFormat fmt = getFormat(parts[0]);
         InstructionDef def = getDef(parts[0]);
         
-        string args[] = orderArgs(parts[1:3], /*parsingMap[fmt],*/ parsingMap_[fmt]);
+        string args[] = orderArgs(parts[1:3], parsingMap[fmt]);
         Word4 vals;
         CodeRef res;
 
-        res.label = parseLabel(args[0:3], /*parsingMap[fmt][1]*/ parsingMap_[fmt].decoding);
+        res.label = parseLabel(args[0:3], parsingMap[fmt].decoding);
         if (res.label.len() != 0)
             case (def.p)
                 P_ja: res.ref26 = 1;
@@ -53,11 +50,10 @@ package Asm;
 
 
 
-    function automatic string4 orderArgs(input string args[], /*input string3 parsingMap,*/ input FormatSpec fmtSpec);
+    function automatic string4 orderArgs(input string args[], input FormatSpec fmtSpec);
         string4 out;
         int index;
-        string asmForm = //parsingMap[0];
-                         fmtSpec.asmForm;
+        string asmForm = fmtSpec.asmForm;
         
         foreach (asmForm[i]) begin
             case (asmForm[i])
@@ -74,11 +70,9 @@ package Asm;
         return out;
     endfunction
 
-    function automatic int checkArgs(input string4 args, /*input string3 parsingMap,*/ input FormatSpec fmtSpec);
-        string typeSpec = //parsingMap[2];
-                          fmtSpec.typeSpec;
-        string decoding = //parsingMap[1];
-                          fmtSpec.decoding;
+    function automatic int checkArgs(input string4 args, input FormatSpec fmtSpec);
+        string typeSpec = fmtSpec.typeSpec;
+        string decoding = fmtSpec.decoding;
         
         case (typeSpec[0])
             "i": if (args[0][0] != "r" && decoding[0] != "0") return 0;
@@ -159,13 +153,12 @@ package Asm;
     endfunction
 
 
-    function automatic Word fillArgs(input Word4 args, /*input string3 parsingMap,*/ input FormatSpec fmtSpec, input bit unknownOffset);
-        string decoding = //parsingMap[1];
-                          fmtSpec.decoding;
+    function automatic Word fillArgs(input Word4 args, input FormatSpec fmtSpec, input bit unknownOffset);
+        string decoding = fmtSpec.decoding;
         Word res = '0;
 
         res = fillField(res, decoding[0], args[0]);
-       
+        
         res = fillField(res, decoding[2], args[1]);
         res = fillField(res, decoding[3], args[2]);
         res = fillField(res, decoding[4], args[3]);
@@ -180,8 +173,6 @@ package Asm;
         if (def.t != T_none) res[4:0] = def.t;
         return res;
     endfunction;
-
-
 
 
     typedef struct {
@@ -210,15 +201,7 @@ package Asm;
         InstructionFormat f = getFormat(s);
         InstructionDef d = getDef(s);
         
-        //string3 fmtSpec = parsingMap[f];
-        FormatSpec fmtSpec_ = parsingMap_[f];
-        
-        string typeSpec = //fmtSpec[2];
-                            fmtSpec_.typeSpec;
-        string decoding = //fmtSpec[1];
-                            fmtSpec_.decoding;
-        string asmForm = //fmtSpec[0];
-                            fmtSpec_.asmForm;
+        FormatSpec fmtSpec = parsingMap[f];
 
         int qa = w[25:21];        
         int qb = w[20:16];        
@@ -234,7 +217,7 @@ package Asm;
             return res;
         end
 
-        case (decoding[0])
+        case (fmtSpec.decoding[0])
             "a": dest = qa;
             "b": dest = qb;
             "c": dest = qc;
@@ -244,7 +227,7 @@ package Asm;
         endcase
 
         foreach(sources[i])
-            case (decoding[i+2])
+            case (fmtSpec.decoding[i+2])
                 "a": sources[i] = qa;
                 "b": sources[i] = qb;
                 "c": sources[i] = qc;
@@ -275,20 +258,12 @@ package Asm;
         string destStr;
         string sourcesStr[3];
 
-        //string3 fmtSpec = parsingMap[ins.fmt];
-        FormatSpec fmtSpec_ = parsingMap_[ins.fmt];
-        
-        string typeSpec = //fmtSpec[2];
-                            fmtSpec_.typeSpec;  
-        string decoding = //fmtSpec[1];
-                            fmtSpec_.decoding;
-        string asmForm = //fmtSpec[0];
-                            fmtSpec_.asmForm;
+        FormatSpec fmtSpec = parsingMap[ins.fmt];
 
         dest = ins.dest;
         sources = ins.sources;
                
-        case (typeSpec[0])
+        case (fmtSpec.typeSpec[0])
             "i": $swrite(destStr, "r%0d", dest);
             "f": $swrite(destStr, "f%0d", dest);
             "0": destStr = "";
@@ -296,7 +271,7 @@ package Asm;
         endcase
 
         foreach(sources[i])
-            case (typeSpec[i+2])
+            case (fmtSpec.typeSpec[i+2])
                 "i": $swrite(sourcesStr[i], "r%0d", sources[i]);
                 "f": $swrite(sourcesStr[i], "f%0d", sources[i]);
                 "c": $swrite(sourcesStr[i], "%0d", sources[i]);
@@ -307,8 +282,8 @@ package Asm;
         s = {ins.mnemonic, "          "};
         s = s.substr(0,9);
 
-        foreach (asmForm[i]) begin
-            case (asmForm[i])
+        foreach (fmtSpec.asmForm[i]) begin
+            case (fmtSpec.asmForm[i])
                 "d": s = {s, " ", destStr};
                 "0": s = {s, " ", sourcesStr[0]};
                 "1": s = {s, " ", sourcesStr[1]};
@@ -317,7 +292,7 @@ package Asm;
                 default: $fatal("Wrong asm syntax description");
             endcase;
           
-            if (i == 3 || asmForm[i+1] == " ") break;
+            if (i == 3 || fmtSpec.asmForm[i+1] == " ") break;
 
             s = {s, ","};
         end
@@ -331,9 +306,6 @@ package Asm;
     endfunction;
 
 
-
-
-
     function automatic squeue readFile(input string name);
         int file = $fopen(name, "r");
         string line;
@@ -343,7 +315,6 @@ package Asm;
             $fgets(line, file);
             lines.push_back(line);
         end
-        
         $fclose(file);
                 
         return lines;
@@ -351,12 +322,9 @@ package Asm;
 
     function automatic bit writeFile(input string name, input squeue lines);
         int file = $fopen(name, "w");
-
-        foreach (lines[i])
-            $fdisplay(file, lines[i]);
-            
+        foreach (lines[i]) $fdisplay(file, lines[i]);  
         $fclose(file);
-                
+
         return 1;
     endfunction
 
@@ -618,11 +586,8 @@ package Asm;
             ImportRef imp = section.imports[i];
             ExportRef exps[$] = lib.exports.find with (item.label == imp.label);
             if (exps.size() == 0) continue;
-            
-            //$display(" > Filling import: %s, %p, %p", exps[0].label, imp, exps[0]);
-            //$display("  %b", res.words[imp.codeLine]);
+
             res.words[imp.codeLine-1] = fillImport(res.words[imp.codeLine-1], adrDiff, imp, exps[0]);
-            //$display("  %b", res.words[imp.codeLine - 1]);
         end 
         
         return res;

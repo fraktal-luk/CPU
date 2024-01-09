@@ -69,14 +69,14 @@ module ArchDesc0();
     end
 
     task automatic setBasicHandlers();
-        progMem[Emulator::IP_RESET/4] = processLines({"ja -512"}).words[0];
-        progMem[Emulator::IP_RESET/4 + 1] = processLines({"ja 0"}).words[0];
-        
-        progMem[Emulator::IP_ERROR/4] = processLines({"sys error"}).words[0];
-        progMem[Emulator::IP_ERROR/4 + 1] = processLines({"ja 0"}).words[0];
+        progMem[IP_RESET/4] = processLines({"ja -512"}).words[0];
+        progMem[IP_RESET/4 + 1] = processLines({"ja 0"}).words[0];
+       
+        progMem[IP_ERROR/4] = processLines({"sys error"}).words[0];
+        progMem[IP_ERROR/4 + 1] = processLines({"ja 0"}).words[0];
 
-        progMem[Emulator::IP_CALL/4] = processLines({"sys send"}).words[0];
-        progMem[Emulator::IP_CALL/4 + 1] = processLines({"ja 0"}).words[0];   
+        progMem[IP_CALL/4] = processLines({"sys send"}).words[0];
+        progMem[IP_CALL/4 + 1] = processLines({"ja 0"}).words[0];   
     endtask
 
 
@@ -186,9 +186,9 @@ module ArchDesc0();
         setBasicHandlers();
         
         // Special handler for call
-        progMem[Emulator::IP_CALL/4] = processLines({"add_i r20, r0, 55"}).words[0];
-        progMem[Emulator::IP_CALL/4 + 1] = processLines({"sys rete"}).words[0];
-        progMem[Emulator::IP_CALL/4 + 2] = processLines({"ja 0"}).words[0];
+        progMem[IP_CALL/4] = processLines({"add_i r20, r0, 55"}).words[0];
+        progMem[IP_CALL/4 + 1] = processLines({"sys rete"}).words[0];
+        progMem[IP_CALL/4 + 2] = processLines({"ja 0"}).words[0];
         
         emul.reset();
         #1;
@@ -243,14 +243,14 @@ module ArchDesc0();
         setBasicHandlers();
         
         // Special handler for call
-        progMem[Emulator::IP_CALL/4] = processLines({"add_i r20, r0, 55"}).words[0];
-        progMem[Emulator::IP_CALL/4 + 1] = processLines({"sys rete"}).words[0];
-        progMem[Emulator::IP_CALL/4 + 2] = processLines({"ja 0"}).words[0];
+        progMem[IP_CALL/4] = processLines({"add_i r20, r0, 55"}).words[0];
+        progMem[IP_CALL/4 + 1] = processLines({"sys rete"}).words[0];
+        progMem[IP_CALL/4 + 2] = processLines({"ja 0"}).words[0];
         
         // Special handler for int 
-        progMem[Emulator::IP_INT/4] = processLines({"add_i r21, r0, 77"}).words[0];
-        progMem[Emulator::IP_INT/4 + 1] = processLines({"sys reti"}).words[0];
-        progMem[Emulator::IP_INT/4 + 2] = processLines({"ja 0"}).words[0];
+        progMem[IP_INT/4] = processLines({"add_i r21, r0, 77"}).words[0];
+        progMem[IP_INT/4 + 1] = processLines({"sys reti"}).words[0];
+        progMem[IP_INT/4 + 2] = processLines({"ja 0"}).words[0];
 
         emul.reset();
         #1;
@@ -345,7 +345,10 @@ module ArchDesc0();
             #CYCLE;
             reset <= 0;
             
-            wait (done);
+            wait (done | wrong);
+            
+            if (wrong) $fatal("TEST FAILED: %s", name);
+            
             #CYCLE;
         endtask
 
@@ -394,13 +397,16 @@ module ArchDesc0();
                                                   "sys rete",
                                                   "ja 0"
                                                   }).words,
-                                                  Emulator::IP_CALL);
+                                                  IP_CALL);
 
             reset <= 1;
             #CYCLE;
             reset <= 0;
             
-            wait (done);
+            wait (done | wrong);
+            
+            if (wrong) $fatal("TEST FAILED: %s", "events");
+            
             #CYCLE;
         endtask
 
@@ -423,19 +429,28 @@ module ArchDesc0();
                                                   "sys rete",
                                                   "ja 0"
                                                   }).words,
-                                                  Emulator::IP_CALL);
+                                                  IP_CALL);
 
             programMem.setContentAt(processLines({"add_i r21, r0, 77",
                                                   "sys reti",
                                                   "ja 0"
                                                   }).words,
-                                                  Emulator::IP_INT);
+                                                  IP_INT);
 
             reset <= 1;
             #CYCLE;
             reset <= 0;
+            #CYCLE;
             
-            wait (done);
+            wait (fetchAdr == IP_CALL);
+            #CYCLE;
+            int0 <= 1;
+            #CYCLE;
+            int0 <= 0;
+            
+            wait (done | wrong);
+            
+            if (wrong) $fatal("TEST FAILED: %s", "int");
             #CYCLE;
         endtask
 

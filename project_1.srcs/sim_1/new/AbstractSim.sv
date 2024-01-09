@@ -1,9 +1,9 @@
 `timescale 1ns / 1ps
 
-     import Base::*;
-     import InsDefs::*;
-     import Asm::*;
-     import Emulation::*;
+ import Base::*;
+ import InsDefs::*;
+ import Asm::*;
+ import Emulation::*;
 
 package AbstractSim;
     
@@ -18,14 +18,14 @@ package AbstractSim;
         Word content[1024];
         
         function void setBasicHandlers();
-            this.content[Emulator::IP_RESET/4] = processLines({"ja -512"}).words[0];
-            this.content[Emulator::IP_RESET/4 + 1] = processLines({"ja 0"}).words[0];
+            this.content[IP_RESET/4] = processLines({"ja -512"}).words[0];
+            this.content[IP_RESET/4 + 1] = processLines({"ja 0"}).words[0];
             
-            this.content[Emulator::IP_ERROR/4] = processLines({"sys error"}).words[0];
-            this.content[Emulator::IP_ERROR/4 + 1] = processLines({"ja 0"}).words[0];
+            this.content[IP_ERROR/4] = processLines({"sys error"}).words[0];
+            this.content[IP_ERROR/4 + 1] = processLines({"ja 0"}).words[0];
     
-            this.content[Emulator::IP_CALL/4] = processLines({"sys send"}).words[0];
-            this.content[Emulator::IP_CALL/4 + 1] = processLines({"ja 0"}).words[0];
+            this.content[IP_CALL/4] = processLines({"sys send"}).words[0];
+            this.content[IP_CALL/4 + 1] = processLines({"ja 0"}).words[0];
         endfunction
         
         function void clear();
@@ -219,8 +219,8 @@ module AbstractCore
             memOpPrev <= memOp;
             
             if (interrupt) begin
-                eventTarget <= Emulator::IP_INT;
-                storedTarget <= Emulator::IP_INT;
+                eventTarget <= IP_INT;
+                storedTarget <= IP_INT;
                 //eventRedirect <= 1;
                 
                 sysRegs[5] = sysRegs[1];
@@ -251,7 +251,7 @@ module AbstractCore
                         automatic OpSlot op = opQueue.pop_front();
                         automatic AbstractInstruction abs = decodeAbstract(op.bits);
                         
-                        automatic Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap_[abs.fmt].typeSpec);
+                        automatic Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap[abs.fmt].typeSpec);
                         automatic Word result = calculateResult(abs, args, op.adr);
                         
                             $display("Exec %h: %s", op.adr, TMP_disasm(op.bits));
@@ -337,8 +337,8 @@ module AbstractCore
                                 sysRegs[args[1]] = args[2];
                         
                             O_undef: begin
-                                eventTarget <= Emulator::IP_ERROR;
-                                storedTarget <= Emulator::IP_ERROR;
+                                eventTarget <= IP_ERROR;
+                                storedTarget <= IP_ERROR;
                                 eventRedirect <= 1;
                                 wrong <= 1;
     
@@ -348,8 +348,8 @@ module AbstractCore
                             end
                             
                             O_call: begin
-                                eventTarget <= Emulator::IP_CALL;
-                                storedTarget <= Emulator::IP_CALL;
+                                eventTarget <= IP_CALL;
+                                storedTarget <= IP_CALL;
                                 eventRedirect <= 1;
                                 
                                 sysRegs[4] = sysRegs[1];
@@ -413,8 +413,7 @@ module AbstractCore
                     end
                 
             end
-            
-            
+
             fqSize <= fetchQueue.size();
             oqSize <= opQueue.size();
         end
@@ -439,9 +438,7 @@ module AbstractCore
         return res;
     endfunction
 
-    assign fetchAllow = fetchQueueAccepts(fqSize);    
-    //assign fqSize = fetchQueue.size();
-
+    assign fetchAllow = fetchQueueAccepts(fqSize);
     assign insAdr = ipStage.baseAdr;
 
 endmodule

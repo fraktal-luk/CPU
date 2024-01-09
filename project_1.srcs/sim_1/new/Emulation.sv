@@ -7,101 +7,89 @@ package Emulation;
     import Asm::*;
 
 
-        function automatic Word getArgValue(input Word intRegs[32], input Word floatRegs[32], input int src, input byte spec);
-            case (spec)
-               "i": return Word'(intRegs[src]);
-               "f": return Word'(floatRegs[src]);
-               "c": return Word'(src);
-               "0": return 0;
-               default: $fatal("Wrong arg spec");    
-            endcase;    
-        
-        endfunction
+    function automatic Word getArgValue(input Word intRegs[32], input Word floatRegs[32], input int src, input byte spec);
+        case (spec)
+           "i": return Word'(intRegs[src]);
+           "f": return Word'(floatRegs[src]);
+           "c": return Word'(src);
+           "0": return 0;
+           default: $fatal("Wrong arg spec");    
+        endcase;    
+    
+    endfunction
 
     function automatic Word3 getArgs(input Word intRegs[32], input Word floatRegs[32], input int sources[3], input string typeSpec);
-        Word3 res;
-        
-        foreach (sources[i]) begin
-            res[i] = getArgValue(intRegs, floatRegs, sources[i], typeSpec[i+2]);
-        end
+        Word3 res;        
+        foreach (sources[i]) res[i] = getArgValue(intRegs, floatRegs, sources[i], typeSpec[i+2]);
         
         return res;
     endfunction
 
-        function automatic Word divSigned(input Word a, input Word b);
-            Word aInt = a;
-            Word bInt = b;
-            Word rInt = $signed(a)/$signed(b);
-            Word rem = aInt - rInt * bInt;
-            
-            if ($signed(rem) < 0 && $signed(bInt) > 0) rInt--;
-            if ($signed(rem) > 0 && $signed(bInt) < 0) rInt--;
-            
-            return rInt;
-        endfunction
+    function automatic Word divSigned(input Word a, input Word b);
+        Word aInt = a;
+        Word bInt = b;
+        Word rInt = $signed(a)/$signed(b);
+        Word rem = aInt - rInt * bInt;
         
-        function automatic Word remSigned(input Word a, input Word b);
-            Word aInt = a;
-            Word bInt = b;
-            Word rInt = $signed(a)/$signed(b);
-            Word rem = aInt - rInt * bInt;
-            
-            if ($signed(rem) < 0 && $signed(bInt) > 0) rem += bInt;
-            if ($signed(rem) > 0 && $signed(bInt) < 0) rem += bInt;
-            
-            return rem;
-        endfunction
+        if ($signed(rem) < 0 && $signed(bInt) > 0) rInt--;
+        if ($signed(rem) > 0 && $signed(bInt) < 0) rInt--;
+        
+        return rInt;
+    endfunction
+    
+    function automatic Word remSigned(input Word a, input Word b);
+        Word aInt = a;
+        Word bInt = b;
+        Word rInt = $signed(a)/$signed(b);
+        Word rem = aInt - rInt * bInt;
+        
+        if ($signed(rem) < 0 && $signed(bInt) > 0) rem += bInt;
+        if ($signed(rem) > 0 && $signed(bInt) < 0) rem += bInt;
+        
+        return rem;
+    endfunction
 
-       function automatic Word calculateResult(input AbstractInstruction ins, input Word3 vals, input Word ip);
-            Word result;
-            case (ins.def.o)
-                O_jump: result = ip + 4; // link adr
-                
-                O_intAnd:  result = vals[0] & vals[1];
-                O_intOr:   result = vals[0] | vals[1];
-                O_intXor:  result = vals[0] ^ vals[1];
-                
-                O_intAdd:  result = vals[0] + vals[1];
-                O_intSub:  result = vals[0] - vals[1];
-                O_intAddH: result = vals[0] + (vals[1] << 16);
-                
-                O_intMul:   result = vals[0] * vals[1];
-                O_intMulHU: result = (Dword'($unsigned(vals[0])) * Dword'($unsigned(vals[1]))) >> 32;
-                O_intMulHS: result = (Dword'($signed(vals[0])) * Dword'($signed(vals[1]))) >> 32;
-                O_intDivU:  result = $unsigned(vals[0]) / $unsigned(vals[1]);
-                O_intDivS:  result = divSigned(vals[0], vals[1]);
-                O_intRemU:  result = $unsigned(vals[0]) % $unsigned(vals[1]);
-                O_intRemS:  result = remSigned(vals[0], vals[1]);
-                
-                O_intShiftLogical: begin                
-                    if ($signed(vals[1]) >= 0)
-                        result = $unsigned(vals[0]) << vals[1];
-                    else
-                        result = $unsigned(vals[0]) >> -vals[1];
-                end
-                O_intShiftArith: begin                
-                    if ($signed(vals[1]) >= 0)
-                        result = $signed(vals[0]) << vals[1];
-                    else
-                        result = $signed(vals[0]) >> -vals[1];
-                end
-                O_intRotate: begin
-                    if ($signed(vals[1]) >= 0)
-                        result = {vals[0], vals[0]} << vals[1];
-                    else
-                        result = {vals[0], vals[0]} >> -vals[1];
-                end
-                
-                O_floatMove: begin
-                    result = vals[0];
-                end
-  
-                default: ;
-            endcase
+   function automatic Word calculateResult(input AbstractInstruction ins, input Word3 vals, input Word ip);
+        Word result;
+        case (ins.def.o)
+            O_jump: result = ip + 4; // link adr
             
-            return result;
-        endfunction
+            O_intAnd:  result = vals[0] & vals[1];
+            O_intOr:   result = vals[0] | vals[1];
+            O_intXor:  result = vals[0] ^ vals[1];
+            
+            O_intAdd:  result = vals[0] + vals[1];
+            O_intSub:  result = vals[0] - vals[1];
+            O_intAddH: result = vals[0] + (vals[1] << 16);
+            
+            O_intMul:   result = vals[0] * vals[1];
+            O_intMulHU: result = (Dword'($unsigned(vals[0])) * Dword'($unsigned(vals[1]))) >> 32;
+            O_intMulHS: result = (Dword'($signed(vals[0])) * Dword'($signed(vals[1]))) >> 32;
+            O_intDivU:  result = $unsigned(vals[0]) / $unsigned(vals[1]);
+            O_intDivS:  result = divSigned(vals[0], vals[1]);
+            O_intRemU:  result = $unsigned(vals[0]) % $unsigned(vals[1]);
+            O_intRemS:  result = remSigned(vals[0], vals[1]);
+            
+            O_intShiftLogical: begin                
+                if ($signed(vals[1]) >= 0) result = $unsigned(vals[0]) << vals[1];
+                else                       result = $unsigned(vals[0]) >> -vals[1];
+            end
+            O_intShiftArith: begin                
+                if ($signed(vals[1]) >= 0) result = $signed(vals[0]) << vals[1];
+                else                       result = $signed(vals[0]) >> -vals[1];
+            end
+            O_intRotate: begin
+                if ($signed(vals[1]) >= 0) result = {vals[0], vals[0]} << vals[1];
+                else                       result = {vals[0], vals[0]} >> -vals[1];
+            end
+            
+            O_floatMove: result = vals[0];
+
+            default: ;
+        endcase
         
+        return result;
+    endfunction
 
 
     typedef struct {
@@ -111,13 +99,9 @@ package Emulation;
         bit send;
     } CoreStatus;
 
+
     class Emulator;
 
-        static const Word IP_RESET = 'h00000200;
-        static const Word IP_ERROR = 'h00000100;
-        static const Word IP_CALL = 'h00000180;
-        static const Word IP_INT = 'h00000280;
-        
         const Word SYS_REGS_INITIAL[32] = '{
             0: -1,
             default: 0
@@ -126,35 +110,28 @@ package Emulation;
         Word ip;
         Word ipNext;
         
-            string disasm;
+        string disasm;
         
         CoreStatus status;
         
         Word intRegs[32];
         Word floatRegs[32];
         Word sysRegs[32];
-        
-        
+
         typedef struct {
             bit active;
             Word adr;
             Word value;
         } MemoryWrite;
-        
+
         typedef struct {
             int error;            
             MemoryWrite memWrite;
         } ExecResult;
-        
-        
+
         MemoryWrite writeToDo;
-        
-        
-        function new();
-        
-        endfunction
-        
-        
+
+
         function automatic void reset();
             this.ip = IP_RESET;
             this.ipNext = 'x;
@@ -184,16 +161,10 @@ package Emulation;
             this.status.send = 0;
         endfunction
               
-        
 
-        
-        
         local function automatic Word3 getArgs(input int sources[3], input string typeSpec);
-            Word3 res;
-            
-            foreach (sources[i]) begin
-                res[i] = getArgValue(this.intRegs, this.floatRegs, sources[i], typeSpec[i+2]);
-            end
+            Word3 res;            
+            foreach (sources[i]) res[i] = getArgValue(this.intRegs, this.floatRegs, sources[i], typeSpec[i+2]);
             
             return res;
         endfunction
@@ -201,17 +172,8 @@ package Emulation;
         
         local function automatic ExecResult processInstruction(input Word adr, input AbstractInstruction ins, ref logic[7:0] dataMem[]);
             ExecResult res;
-            //string3 fmtSpec = parsingMap[ins.fmt];
-            FormatSpec fmtSpec_ = parsingMap_[ins.fmt];
-            
-            string typeSpec = //fmtSpec[2];
-                                fmtSpec_.typeSpec;
-            string decoding = //fmtSpec[1];
-                                fmtSpec_.decoding;
-            string asmForm = //fmtSpec[0];
-                                fmtSpec_.asmForm;
-            
-            Word3 args = getArgs(ins.sources, typeSpec);
+            FormatSpec fmtSpec = parsingMap[ins.fmt];
+            Word3 args = getArgs(ins.sources, fmtSpec.typeSpec);
             
             this.disasm = TMP_disasm(ins.encoding);
            
@@ -225,59 +187,13 @@ package Emulation;
             
             return res;
         endfunction
-        
-        
+
 
         local function automatic void performCalculation(input AbstractInstruction ins, input Word3 vals);
             Word result;
             bit writeInt, writeFloat = 0;
-            
-//            case (ins.def.o)
-//                O_jump: result = this.ip + 4; // link adr
-                
-//                O_intAnd:  result = vals[0] & vals[1];
-//                O_intOr:   result = vals[0] | vals[1];
-//                O_intXor:  result = vals[0] ^ vals[1];
-                
-//                O_intAdd:  result = vals[0] + vals[1];
-//                O_intSub:  result = vals[0] - vals[1];
-//                O_intAddH: result = vals[0] + (vals[1] << 16);
-                
-//                O_intMul:   result = vals[0] * vals[1];
-//                O_intMulHU: result = (Dword'($unsigned(vals[0])) * Dword'($unsigned(vals[1]))) >> 32;
-//                O_intMulHS: result = (Dword'($signed(vals[0])) * Dword'($signed(vals[1]))) >> 32;
-//                O_intDivU:  result = $unsigned(vals[0]) / $unsigned(vals[1]);
-//                O_intDivS:  result = divSigned(vals[0], vals[1]);
-//                O_intRemU:  result = $unsigned(vals[0]) % $unsigned(vals[1]);
-//                O_intRemS:  result = remSigned(vals[0], vals[1]);
-                
-//                O_intShiftLogical: begin                
-//                    if ($signed(vals[1]) >= 0)
-//                        result = $unsigned(vals[0]) << vals[1];
-//                    else
-//                        result = $unsigned(vals[0]) >> -vals[1];
-//                end
-//                O_intShiftArith: begin                
-//                    if ($signed(vals[1]) >= 0)
-//                        result = $signed(vals[0]) << vals[1];
-//                    else
-//                        result = $signed(vals[0]) >> -vals[1];
-//                end
-//                O_intRotate: begin
-//                    if ($signed(vals[1]) >= 0)
-//                        result = {vals[0], vals[0]} << vals[1];
-//                    else
-//                        result = {vals[0], vals[0]} >> -vals[1];
-//                end
-                
-//                O_floatMove: begin
-//                    result = vals[0];
-//                end
-                                
-//                default: return;
-//            endcase
-            result = calculateResult(ins, vals, this.ip);
-            
+
+            result = calculateResult(ins, vals, this.ip);            
 
             if (ins.def.o inside {
                 O_jump,
@@ -305,11 +221,8 @@ package Emulation;
             
             if (ins.def.o inside {O_floatMove}) writeFloat = 1;
 
-            
-            if (writeFloat)
-                this.floatRegs[ins.dest] = result;
-            else if (writeInt)
-                this.intRegs[ins.dest] = result;
+            if (writeFloat) this.floatRegs[ins.dest] = result;
+            else if (writeInt) this.intRegs[ins.dest] = result;
             
             this.intRegs[0] = 0;
         endfunction
@@ -340,10 +253,8 @@ package Emulation;
                 default: return;
             endcase
 
-            if (float)
-                this.floatRegs[ins.dest] = result;
-            else
-                this.intRegs[ins.dest] = result;
+            if (float) this.floatRegs[ins.dest] = result;
+            else this.intRegs[ins.dest] = result;
             
             this.intRegs[0] = 0;
         endfunction

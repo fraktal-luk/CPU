@@ -11,6 +11,11 @@ package InsDefs;
 
     import Base::*;
 
+    const Word IP_RESET = 'h00000200;
+    const Word IP_ERROR = 'h00000100;
+    const Word IP_CALL = 'h00000180;
+    const Word IP_INT = 'h00000280;
+
     typedef string string3[3];
     typedef string string4[4];
     typedef Word Word3[3];
@@ -20,7 +25,6 @@ package InsDefs;
         typedef 
         enum {
             // set, mov, clr, nop, -- pseudoinstructions
-        
 
             and_r,
             or_r,
@@ -389,46 +393,8 @@ package InsDefs;
         string typeSpec;
     } FormatSpec; 
 
-    
-//    const string3 parsingMap[InstructionFormat] = '{
-//        none:          '{"    ", "0,000", "0,000"},
-    
-//        noRegs :       '{"    ", "0,000", "0,000"},
-    
-//        jumpLong :     '{"1   ", "0,0L0", "i,ic0"},
-//        jumpLink :     '{"d1  ", "a,0J0", "i,ic0"},
-//        jumpCond :     '{"01  ", "0,aJ0", "i,ic0"},
-        
-//        intImm16 :     '{"d01 ", "a,bH0", "i,ic0"},
-//        intImm10 :     '{"d01 ", "a,bX0", "i,ic0"},
-        
-//        intStore16 :   '{"201 ", "0,bHa", "i,ici"},
-//        intStore10 :   '{"201 ", "0,bXa", "i,ici"},
-        
-//        floatLoad16 :  '{"d01 ", "a,bH0", "f,ic0"},
-//        floatLoad10 :  '{"d01 ", "a,bX0", "f,ic0"},
-        
-//        floatStore16 : '{"201 ", "0,bHa", "i,icf"},
-//        floatStore10 : '{"201 ", "0,bXa", "i,icf"},
-    
-//        sysLoad :      '{"d01 ", "a,bX0", "i,ic0"},
 
-//        sysStore :     '{"201 ", "0,bXa", "0,ici"},
-    
-//        int3R :        '{"d012", "a,bcd", "i,iii"},
-//        int2R :        '{"d01 ", "a,bc0", "i,ii0"},
-//        int1R :        '{"d0  ", "a,b00", "i,i00"},
-    
-//        float3R :      '{"d012", "a,bcd", "f,fff"},
-//        float2R :      '{"d01 ", "a,bc0", "f,ff0"},
-//        float1R :      '{"d0  ", "a,b00", "f,f00"},
-        
-//        floatToInt :   '{"d0  ", "a,b00", "i,f00"},
-//        intToFloat :   '{"d0  ", "a,b00", "f,i00"}
-//    };
-
-    
-    const FormatSpec parsingMap_[InstructionFormat] = '{
+    const FormatSpec parsingMap[InstructionFormat] = '{
         none:          '{"    ", "0,000", "0,000"},
     
         noRegs :       '{"    ", "0,000", "0,000"},
