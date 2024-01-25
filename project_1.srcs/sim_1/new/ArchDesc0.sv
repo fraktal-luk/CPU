@@ -65,7 +65,7 @@ module ArchDesc0();
         testName = "";
         #1;
         
-        $display(">>> Tests done");
+        //$display(">>> Tests done");
     end
 
     task automatic setBasicHandlers();
