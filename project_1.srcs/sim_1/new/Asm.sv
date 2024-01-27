@@ -185,6 +185,10 @@ package Asm;
     } AbstractInstruction;
 
 
+    const AbstractInstruction DEFAULT_ABS_INS = '{"", 'x, none,
+                                '{P_none, S_none, T_none, O_undef},
+                                0, '{default: 0}};
+
     function automatic string decodeMnem(input Word w);
         Primary p = toPrimary(w[31:26]);
         Secondary s = toSecondary(w[15:10], p);

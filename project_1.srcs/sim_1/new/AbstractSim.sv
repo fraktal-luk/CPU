@@ -33,7 +33,6 @@ package AbstractSim;
             case (abs.def.o)
                 O_sysStore: ;
                     //sysRegs[args[1]] = args[2];
-            
                 O_undef: begin
                     res.target = IP_ERROR;
                     res.redirect = 1;
@@ -114,7 +113,7 @@ package AbstractSim;
     endfunction
 
     function automatic logic isSystemOp(input AbstractInstruction abs);
-        return abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send};
+        return abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send,  O_sysStore};
     endfunction
     
         
