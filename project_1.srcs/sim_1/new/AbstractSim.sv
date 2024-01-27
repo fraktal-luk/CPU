@@ -85,6 +85,38 @@ package AbstractSim;
             return res;
         endfunction
         
+
+    function automatic void modifySysRegs(ref Word regs[32], input OpSlot op, input AbstractInstruction abs);
+        case (abs.def.o)
+            O_undef: begin
+                regs[1] |= 1; // TODO: handle state register correctly
+                regs[2] = op.adr;
+                regs[4] = regs[1];
+            end
+            
+            O_call: begin
+                regs[1] |= 1; // TODO: handle state register correctly
+                regs[2] = op.adr + 4;
+                regs[4] = regs[1];
+            end
+            
+            O_retE: begin
+                regs[1] = regs[4];
+            end
+            
+            O_retI: begin
+                regs[1] = regs[5];
+            end
+
+            default: ;
+        endcase
+        
+    endfunction
+
+    function automatic logic isSystemOp(input AbstractInstruction abs);
+        return abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send};
+    endfunction
+    
         
 
 

@@ -33,6 +33,8 @@ module AbstractCore
 
     localparam Stage EMPTY_STAGE = '{'0, 'x, '{default: 0}, '{default: 'x}};
 
+    localparam int FETCH_QUEUE_SIZE = 8;
+    localparam int OP_QUEUE_SIZE = 24;
 
 
     localparam OpSlot EMPTY_SLOT = '{'0, 'x, 'x};
@@ -47,14 +49,16 @@ module AbstractCore
     Word branchTarget = 'x, eventTarget = 'x, storedTarget = 'x;
     
     Stage ipStage = EMPTY_STAGE, fetchStage0 = EMPTY_STAGE, fetchStage1 = EMPTY_STAGE;
-    Stage fetchQueue[$:8];
+    Stage fetchQueue[$:FETCH_QUEUE_SIZE];
     
     Stage nextStage = EMPTY_STAGE;
-    OpSlot opQueue[$:24];
+    OpSlot opQueue[$:OP_QUEUE_SIZE];
     OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT, lastCommitted = EMPTY_SLOT;
+    OpSlot committedGroup[4] = {default: EMPTY_SLOT};
     
     Word intRegs[32], floatRegs[32], sysRegs[32], sysRegs_A[32];
     
+    int lastPerfCount = 0;
     
     always @(posedge clk) begin
         
@@ -74,6 +78,8 @@ module AbstractCore
 
         eventRedirect <= 0;
         eventTarget <= 'x;
+
+        lastPerfCount <= 0; 
 
         if (resetPrev | intPrev | branchRedirect | eventRedirect) begin            
             if (resetPrev)
@@ -101,9 +107,7 @@ module AbstractCore
                 sysRegs = '{0: -1, 1: 0, default: '0};
                 sysRegs_A = '{0: -1, 1: 0, default: '0};
             end
-            
-            fqSize <= fetchQueue.size();
-            oqSize <= opQueue.size();
+
         end
         else begin
             if (fetchAllow) ipStage <= '{'1, (ipStage.baseAdr & ~(4*FETCH_WIDTH-1)) + 4*FETCH_WIDTH, '{default: '0}, '{default: 'x}};
@@ -113,7 +117,7 @@ module AbstractCore
             
             if (fetchStage1.active) fetchQueue.push_back(fetchStage1);
 
-            if (fqSize > 0 && oqSize < 24-2*FETCH_WIDTH) nextStage <= fetchQueue.pop_front();
+            if (fqSize > 0 && oqSize < OP_QUEUE_SIZE - 2*FETCH_WIDTH) nextStage <= fetchQueue.pop_front();
             else nextStage <= EMPTY_STAGE;
             
             if (nextStage.active) begin
@@ -152,7 +156,9 @@ module AbstractCore
                     lastCommitted <= memOpPrev;
                 end
                 
-                if (!memOp.active) // If mem is being done, wait for result
+                if (!memOp.active) begin// If mem is being done, wait for result
+                    automatic int performedCount = 0;
+                    automatic OpSlot performedNow[4] = {default: EMPTY_SLOT};
                     for (int i = 0; i < oqSize; i++) begin            
                         // scan until a mem, taken branch or system operation
                         automatic OpSlot op = opQueue.pop_front();
@@ -164,6 +170,10 @@ module AbstractCore
                         automatic Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap[abs.fmt].typeSpec);
                         automatic Word result = calculateResult(abs, args, op.adr);
                         automatic LateEvent lateEvt;
+                        
+                        performedNow[performedCount] = op;
+                        performedCount++;
+
                         
                         if (abs.def.o == O_sysLoad) result = sysRegs[args[1]];
 
@@ -281,18 +291,24 @@ module AbstractCore
                         lastCommitted <= op;
                         
                         //if (abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send})
-                        if (isSystemOp(abs)) break; 
+                        if (isSystemOp(abs)) break;
+                        
+                        if (performedCount == 4) break; // Limits Exec group size to 4 ops
                     end
+                    lastPerfCount <= performedCount;
+                end
+                
             end
 
-            fqSize <= fetchQueue.size();
-            oqSize <= opQueue.size();
+
         end
         
+        fqSize <= fetchQueue.size();
+        oqSize <= opQueue.size();
     end
     
     function logic fetchQueueAccepts(input int k);
-        return k <= 8 - 3 ? '1 : '0;
+        return k <= FETCH_QUEUE_SIZE - 3 ? '1 : '0;
     endfunction
     
     function automatic Stage setActive(input Stage s, input logic on);
@@ -312,36 +328,6 @@ module AbstractCore
     assign fetchAllow = fetchQueueAccepts(fqSize);
     assign insAdr = ipStage.baseAdr;
 
-    function automatic void modifySysRegs(ref Word regs[32], input OpSlot op, input AbstractInstruction abs);
-        case (abs.def.o)
-            O_undef: begin
-                regs[1] |= 1; // TODO: handle state register correctly
-                regs[2] = op.adr;
-                regs[4] = regs[1];
-            end
-            
-            O_call: begin
-                regs[1] |= 1; // TODO: handle state register correctly
-                regs[2] = op.adr + 4;
-                regs[4] = regs[1];
-            end
-            
-            O_retE: begin
-                regs[1] = regs[4];
-            end
-            
-            O_retI: begin
-                regs[1] = regs[5];
-            end
-
-            default: ;
-        endcase
-        
-    endfunction
-
-    function automatic logic isSystemOp(input AbstractInstruction abs);
-        return abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send};
-    endfunction
 
 //    function automatic logic getSystemOp(input OpSlot op);
 //        return abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send};
