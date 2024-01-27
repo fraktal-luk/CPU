@@ -12,6 +12,82 @@ package AbstractSim;
      import Asm::*;
      import Emulation::*;
 
+     typedef Word Mword;
+
+    typedef struct {
+        logic active;
+        Word adr;
+        Word bits;
+    } OpSlot;
+
+     typedef struct {
+        Mword target;
+        logic redirect;
+        logic sig;
+        logic wrong;
+     } LateEvent;
+
+        function automatic LateEvent getLateEvent(input OpSlot op, input AbstractInstruction abs, input Mword sr2, input Mword sr3);
+            LateEvent res = '{target: 'x, redirect: 0, sig: 0, wrong: 0};
+            //res.target = 
+            case (abs.def.o)
+                O_sysStore: ;
+                    //sysRegs[args[1]] = args[2];
+            
+                O_undef: begin
+                    res.target = IP_ERROR;
+                    res.redirect = 1;
+                    
+                    res.wrong = 1;
+                end
+                
+                O_call: begin
+                    res.target = IP_CALL;
+                    res.redirect = 1;
+                end
+                
+                O_retE: begin
+                    res.target = sr2;
+                    res.redirect = 1;
+                end 
+                
+                O_retI: begin
+                    res.target = sr3;
+                    res.redirect = 1;
+                end 
+                
+                
+                O_sync: begin
+                    res.target = op.adr + 4;
+                    res.redirect = 1;
+                end
+                
+                O_replay: begin
+                    res.target = op.adr;
+                    res.redirect = 1;
+                end 
+                
+                O_halt: begin                
+                    res.target = op.adr + 4;
+                    res.redirect = 1;
+                end
+                
+                O_send: begin
+                    res.target = op.adr + 4;
+                    res.redirect = 1;
+                    
+                    res.sig = 1;
+                end
+                
+                default: ;                            
+            endcase
+
+            return res;
+        endfunction
+        
+        
+
+
      class ProgramMemory #(parameter WIDTH = 4);
         typedef Word Line[4];
         

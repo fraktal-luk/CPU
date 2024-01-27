@@ -6,6 +6,7 @@ import Emulation::*;
 
 import AbstractSim::*;
 
+
 module AbstractCore
 #(
     parameter FETCH_WIDTH = 4,
@@ -32,11 +33,7 @@ module AbstractCore
 
     localparam Stage EMPTY_STAGE = '{'0, 'x, '{default: 0}, '{default: 'x}};
 
-    typedef struct {
-        logic active;
-        Word adr;
-        Word bits;
-    } OpSlot;
+
 
     localparam OpSlot EMPTY_SLOT = '{'0, 'x, 'x};
     
@@ -56,7 +53,7 @@ module AbstractCore
     OpSlot opQueue[$:24];
     OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT, lastCommitted = EMPTY_SLOT;
     
-    Word intRegs[32], floatRegs[32], sysRegs[32];
+    Word intRegs[32], floatRegs[32], sysRegs[32], sysRegs_A[32];
     
     
     always @(posedge clk) begin
@@ -102,6 +99,7 @@ module AbstractCore
                 intRegs = '{0: '0, default: '0};
                 floatRegs = '{default: '0};
                 sysRegs = '{0: -1, 1: 0, default: '0};
+                sysRegs_A = '{0: -1, 1: 0, default: '0};
             end
             
             fqSize <= fetchQueue.size();
@@ -133,6 +131,10 @@ module AbstractCore
                 sysRegs[5] = sysRegs[1];
                 sysRegs[1] |= 1; // TODO: handle state register correctly
                 sysRegs[3] = storedTarget;
+                
+                sysRegs_A[5] = sysRegs_A[1];
+                sysRegs_A[1] |= 1; // TODO: handle state register correctly
+                sysRegs_A[3] = storedTarget;
             end
             else begin
 
@@ -156,10 +158,16 @@ module AbstractCore
                         automatic OpSlot op = opQueue.pop_front();
                         automatic AbstractInstruction abs = decodeAbstract(op.bits);
                         
+                        //automatic OpSlot opSys = getSystemOp(op);
+                        automatic AbstractInstruction absSys;// = decodeAbstract(op.bits);
+                        
                         automatic Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap[abs.fmt].typeSpec);
                         automatic Word result = calculateResult(abs, args, op.adr);
+                        automatic LateEvent lateEvt;
                         
-                        //$display("Exec %h: %s", op.adr, TMP_disasm(op.bits));
+                        if (abs.def.o == O_sysLoad) result = sysRegs[args[1]];
+
+                        //    $display("Exec %h: %s", op.adr, TMP_disasm(op.bits));
                                                 
                         if (abs.def.o inside {
                             O_jump,
@@ -182,10 +190,10 @@ module AbstractCore
                             
                             O_intShiftLogical,
                             O_intShiftArith,
-                            O_intRotate
+                            O_intRotate,
+                            
+                            O_sysLoad
                         }) intRegs[abs.dest] = result;
-                        
-                        if (abs.def.o == O_sysLoad) intRegs[abs.dest] = sysRegs[abs.dest];
                         
                         intRegs[0] = 0;
                         
@@ -193,6 +201,8 @@ module AbstractCore
             
                         lastCommitted <= op;
                         storedTarget <= op.adr + 4;
+                        
+                        
                         
                         // Branches
                         if (abs.def.o == O_jump) begin
@@ -219,6 +229,8 @@ module AbstractCore
                             end
                         end
                         
+                        
+                        
                         // Memory ops
                         if (abs.def.o inside {O_intLoadW, O_intLoadD, O_intStoreW, O_intStoreD, O_floatLoadW, O_floatStoreW}) begin
                             readReq[0] <= '1;
@@ -234,82 +246,42 @@ module AbstractCore
                             break;
                         end
                         
-                        // System ops
-                        case (abs.def.o)
-                            O_sysStore:
-                                sysRegs[args[1]] = args[2];
                         
-                            O_undef: begin
-                                eventTarget <= IP_ERROR;
-                                storedTarget <= IP_ERROR;
-                                eventRedirect <= 1;
-                                wrong <= 1;
-    
-                                sysRegs[4] = sysRegs[1];
-                                sysRegs[1] |= 1; // TODO: handle state register correctly
-                                sysRegs[2] = op.adr;
+                        
+                        
+                        // System ops
+                        absSys = abs;
+                        
+                        lateEvt = getLateEvent(op, abs, sysRegs[2], sysRegs[3]);
+
+                        
+                        case (abs.def.o)
+                            O_sysStore: begin
+                                sysRegs[args[1]] = args[2];
                             end
-                            
-                            O_call: begin
-                                eventTarget <= IP_CALL;
-                                storedTarget <= IP_CALL;
-                                eventRedirect <= 1;
-                                
-                                sysRegs[4] = sysRegs[1];
-                                sysRegs[1] |= 1; // TODO: handle state register correctly
-                                sysRegs[2] = op.adr + 4;
-                            end 
-                            
-                            O_sync: begin
-                                eventTarget <= op.adr + 4;
-                                storedTarget <= op.adr + 4;
-                                eventRedirect <= 1;
-                            end
-                            
-                            O_retE: begin
-                                eventTarget <= sysRegs[2];
-                                storedTarget <= sysRegs[2];
-                                eventRedirect <= 1;
-                                
-                                sysRegs[1] = sysRegs[4];
-                            end 
-                            
-                            O_retI: begin
-                                eventTarget <= sysRegs[3];
-                                storedTarget <= sysRegs[3];
-                                eventRedirect <= 1;
-                                
-                                sysRegs[1] = sysRegs[5];
-                            end 
-                            
-                            O_replay: begin
-                                eventTarget <= op.adr;
-                                storedTarget <= op.adr;
-                                eventRedirect <= 1;
-                            end 
-                            
+                        
                             O_halt: begin
                                 $error("halt not implemented");
-                            
-                                eventTarget <= op.adr + 4;
-                                storedTarget <= op.adr + 4;
-                                eventRedirect <= 1;
                             end
-                            
-                            O_send: begin
-                                eventTarget <= op.adr + 4;
-                                storedTarget <= op.adr + 4;
-                                eventRedirect <= 1;
-                                sig <= 1;
-                            end
-                            
+
                             default: ;                            
                         endcase
                         
+                        modifySysRegs(sysRegs, op, abs);
+                        //    modifySysRegs(sysRegs_A, op, abs);
+                        
+                        
+                        eventTarget <= lateEvt.target;
+                        storedTarget <= lateEvt.target;
+                        eventRedirect <= lateEvt.redirect;
+                    
+                        sig <= lateEvt.sig;
+                        wrong <= lateEvt.wrong;
+                        
                         lastCommitted <= op;
                         
-                        if (abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send})
-                            break; 
+                        //if (abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send})
+                        if (isSystemOp(abs)) break; 
                     end
             end
 
@@ -339,5 +311,41 @@ module AbstractCore
 
     assign fetchAllow = fetchQueueAccepts(fqSize);
     assign insAdr = ipStage.baseAdr;
+
+    function automatic void modifySysRegs(ref Word regs[32], input OpSlot op, input AbstractInstruction abs);
+        case (abs.def.o)
+            O_undef: begin
+                regs[1] |= 1; // TODO: handle state register correctly
+                regs[2] = op.adr;
+                regs[4] = regs[1];
+            end
+            
+            O_call: begin
+                regs[1] |= 1; // TODO: handle state register correctly
+                regs[2] = op.adr + 4;
+                regs[4] = regs[1];
+            end
+            
+            O_retE: begin
+                regs[1] = regs[4];
+            end
+            
+            O_retI: begin
+                regs[1] = regs[5];
+            end
+
+            default: ;
+        endcase
+        
+    endfunction
+
+    function automatic logic isSystemOp(input AbstractInstruction abs);
+        return abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send};
+    endfunction
+
+//    function automatic logic getSystemOp(input OpSlot op);
+//        return abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send};
+//    endfunction
+
 
 endmodule
