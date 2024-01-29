@@ -27,6 +27,18 @@ package AbstractSim;
         logic wrong;
      } LateEvent;
 
+    static Emulator emul = new();
+    static int commitCtr = 0;
+
+    function static void TMP_commit();
+        commitCtr++;    
+    endfunction
+
+    function static int TMP_getCommit();
+        return commitCtr;
+    endfunction
+
+
         function automatic LateEvent getLateEvent(input OpSlot op, input AbstractInstruction abs, input Mword sr2, input Mword sr3);
             LateEvent res = '{target: 'x, redirect: 0, sig: 0, wrong: 0};
             //res.target = 

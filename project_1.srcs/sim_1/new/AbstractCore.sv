@@ -72,6 +72,8 @@ module AbstractCore
     task automatic commitOp(input OpSlot op, input Word trg);
         lastCommitted_A <= op;
         storedTarget_A <= trg;
+            
+            TMP_commit();
     endtask
     
     task automatic performRedirect();

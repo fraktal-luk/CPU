@@ -14,7 +14,7 @@ module ArchDesc0();
     Word w0 = 0;
     string testName;
 
-    Emulator emulSig = new();
+    Emulator emulSig = new(), emulSig_C = new();
 
     Section common;
     Word progMem[4096];
@@ -68,7 +68,60 @@ module ArchDesc0();
         //$display(">>> Tests done");
     end
 
-    task automatic setBasicHandlers();
+
+
+                class EncapsulatedEmulation;
+                    static Emulator emul = new();
+                    static Word progMem[4096];
+                    static logic[7:0] dataMem[] = new[4096]('{default: 0});
+                
+                endclass
+
+                typedef EncapsulatedEmulation EncEmul;
+
+           initial begin
+                //automatic Emulator emul = new();
+                automatic squeue tests = readFile("tests_all.txt");
+                
+                //common = processLines(readFile("common_asm.txt"));
+                
+                EncEmul::emul.reset();
+                emulSig_C = EncEmul::emul;
+                #1;
+        
+                foreach (tests[i]) begin
+                    automatic squeue lineParts = breakLine(tests[i]);
+        
+                    if (lineParts.size() > 1) $error("There should be 1 test per line");
+                    else if (lineParts.size() == 0);
+                    else begin            
+                        //testName = lineParts[0];
+                        runTest_C({lineParts[0], ".txt"}, EncEmul::emul, EncEmul::progMem, EncEmul::dataMem);
+                        //testName = "";
+                    end
+                    #1;
+                end
+        
+//                testName = "err signal";
+//                testErrorSignal(emul);
+//                testName = "";
+//                #1;
+                
+//                testName = "event";
+//                testEvent(emul);
+//                testName = "";
+//                #1;
+                
+//                testName = "event2";
+//                testInterrupt(emul);
+//                testName = "";
+//                #1;
+                
+                //$display(">>> Tests done");
+            end
+
+
+    task automatic setBasicHandlers(ref Word progMem[4096]);
         progMem[IP_RESET/4] = processLines({"ja -512"}).words[0];
         progMem[IP_RESET/4 + 1] = processLines({"ja 0"}).words[0];
        
@@ -93,7 +146,7 @@ module ArchDesc0();
         foreach (testSection.words[i]) progMem[i] = testSection.words[i];
         foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
         
-        setBasicHandlers();
+        setBasicHandlers(progMem);
         
         emul.reset();
         #1;
@@ -130,6 +183,61 @@ module ArchDesc0();
     endtask
 
 
+
+                task automatic runTest_C(input string name, ref Emulator emul, ref Word progMem[4096], ref logic[7:0] dataMem[]);
+                    int i;
+                    squeue fileLines = readFile(name);
+                    Section testSection = processLines(fileLines);
+                
+                    testSection = fillImports(testSection, 0, common, COMMON_ADR);
+            
+                    dataMem = '{default: 0};
+                    progMem = '{default: 'x};
+                    
+                    foreach (testSection.words[i]) progMem[i] = testSection.words[i];
+                    foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
+                    
+                    setBasicHandlers(progMem);
+                    
+                    emul.reset();
+                    #1;
+                    
+                    for (i = 0; i < ITERATION_LIMIT; i++)
+                    begin
+                        emul.executeStep(progMem, dataMem);
+                        
+                        if (emul.status.error == 1) begin
+                            $fatal(">>>> ####### Emulation in error state\n");
+                            break;
+                        end
+                        
+                        if (emul.status.send == 1) begin
+                            break;
+                        end
+                        
+                        if (emul.writeToDo.active == 1) begin
+                            dataMem[emul.writeToDo.adr] = emul.writeToDo.value[31:24];
+                            dataMem[emul.writeToDo.adr+1] = emul.writeToDo.value[23:16];
+                            dataMem[emul.writeToDo.adr+2] = emul.writeToDo.value[15:8];
+                            dataMem[emul.writeToDo.adr+3] = emul.writeToDo.value[7:0];
+                        end
+                        
+                        emul.drain();
+            
+                        emulSig_C = emul;
+            
+                        #1;
+                    end
+                    
+                    if (i >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", name);
+                    
+                endtask
+            
+
+
+
+
+
     task automatic testErrorSignal(ref Emulator emul);
         int i;
         dataMem = '{default: 0};
@@ -140,7 +248,7 @@ module ArchDesc0();
         
         foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
         
-        setBasicHandlers();
+        setBasicHandlers(progMem);
         
         emul.reset();
         #1;
@@ -183,7 +291,7 @@ module ArchDesc0();
         foreach (testSection.words[i]) progMem[i] = testSection.words[i];
         foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
         
-        setBasicHandlers();
+        setBasicHandlers(progMem);
         
         // Special handler for call
         progMem[IP_CALL/4] = processLines({"add_i r20, r0, 55"}).words[0];
@@ -240,7 +348,7 @@ module ArchDesc0();
         foreach (testSection.words[i]) progMem[i] = testSection.words[i];
         foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
         
-        setBasicHandlers();
+        setBasicHandlers(progMem);
         
         // Special handler for call
         progMem[IP_CALL/4] = processLines({"add_i r20, r0, 55"}).words[0];
@@ -330,6 +438,7 @@ module ArchDesc0();
             Section common, testProg;
             #CYCLE;
                 $display("> RUN: %s", name);
+                        $display("committed: %d", TMP_getCommit());
 
             programMem.clear();
  
