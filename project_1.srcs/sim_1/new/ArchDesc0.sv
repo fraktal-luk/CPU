@@ -14,11 +14,15 @@ module ArchDesc0();
     Word w0 = 0;
     string testName;
 
-    Emulator emulSig = new(), emulSig_C = new();
+    Emulator emulSig = new(), emulSig_C = new(), emulSig_A;
 
     Section common;
     Word progMem[4096];
     logic[7:0] dataMem[] = new[4096]('{default: 0});
+
+        Word progMem_C[4096];
+        logic[7:0] dataMem_C[] = new[4096]('{default: 0});
+    
 
     localparam CYCLE = 10;
 
@@ -79,46 +83,46 @@ module ArchDesc0();
 
                 typedef EncapsulatedEmulation EncEmul;
 
-           initial begin
-                //automatic Emulator emul = new();
-                automatic squeue tests = readFile("tests_all.txt");
+//           initial begin
+//                //automatic Emulator emul = new();
+//                automatic squeue tests = readFile("tests_all.txt");
                 
-                //common = processLines(readFile("common_asm.txt"));
+//                //common = processLines(readFile("common_asm.txt"));
                 
-                EncEmul::emul.reset();
-                emulSig_C = EncEmul::emul;
-                #1;
-        
-                foreach (tests[i]) begin
-                    automatic squeue lineParts = breakLine(tests[i]);
-        
-                    if (lineParts.size() > 1) $error("There should be 1 test per line");
-                    else if (lineParts.size() == 0);
-                    else begin            
-                        //testName = lineParts[0];
-                        runTest_C({lineParts[0], ".txt"}, EncEmul::emul, EncEmul::progMem, EncEmul::dataMem);
-                        //testName = "";
-                    end
-                    #1;
-                end
-        
-//                testName = "err signal";
-//                testErrorSignal(emul);
-//                testName = "";
+//                EncEmul::emul.reset();
+//                emulSig_C = EncEmul::emul;
 //                #1;
+        
+//                foreach (tests[i]) begin
+//                    automatic squeue lineParts = breakLine(tests[i]);
+        
+//                    if (lineParts.size() > 1) $error("There should be 1 test per line");
+//                    else if (lineParts.size() == 0);
+//                    else begin            
+//                        //testName = lineParts[0];
+//                        //runTest_C({lineParts[0], ".txt"}, EncEmul::emul, EncEmul::progMem, EncEmul::dataMem);
+//                        //testName = "";
+//                    end
+//                    #1;
+//                end
+        
+////                testName = "err signal";
+////                testErrorSignal(emul);
+////                testName = "";
+////                #1;
                 
-//                testName = "event";
-//                testEvent(emul);
-//                testName = "";
-//                #1;
+////                testName = "event";
+////                testEvent(emul);
+////                testName = "";
+////                #1;
                 
-//                testName = "event2";
-//                testInterrupt(emul);
-//                testName = "";
-//                #1;
+////                testName = "event2";
+////                testInterrupt(emul);
+////                testName = "";
+////                #1;
                 
-                //$display(">>> Tests done");
-            end
+//                //$display(">>> Tests done");
+//            end
 
 
     task automatic setBasicHandlers(ref Word progMem[4096]);
@@ -135,6 +139,7 @@ module ArchDesc0();
 
     task automatic runTest(input string name, ref Emulator emul);
         int i;
+        EmulationWithMems ewm = new();
         squeue fileLines = readFile(name);
         Section testSection = processLines(fileLines);
     
@@ -149,11 +154,14 @@ module ArchDesc0();
         setBasicHandlers(progMem);
         
         emul.reset();
+            ewm.prepareTest(name, COMMON_ADR);
         #1;
         
         for (i = 0; i < ITERATION_LIMIT; i++)
         begin
             emul.executeStep(progMem, dataMem);
+            
+                ewm.step();
             
             if (emul.status.error == 1) begin
                 $fatal(">>>> Emulation in error state\n");
@@ -172,9 +180,11 @@ module ArchDesc0();
             end
             
             emul.drain();
-
+                
+                ewm.writeAndDrain();
+                
             emulSig = emul;
-
+                emulSig_A = ewm.emul;
             #1;
         end
         
@@ -224,7 +234,7 @@ module ArchDesc0();
                         
                         emul.drain();
             
-                        emulSig_C = emul;
+                        //emulSig_C = emul;
             
                         #1;
                     end
@@ -424,7 +434,13 @@ module ArchDesc0();
 
                 if (lineParts.size() > 1) $error("There shuould be 1 test per line");
                 else if (lineParts.size() == 0) continue;
-                else runTestSim(lineParts[0]);
+                
+                TMP_setTest(lineParts[0]);
+                    emulSig_C = TMP_getEmul();
+                    progMem_C = TMP_getEmulWithMems().progMem;
+                    dataMem_C = TMP_getEmulWithMems().dataMem;
+                runTestSim(lineParts[0]);
+                    emulSig_C = TMP_getEmul();
             end
             
             runErrorTestSim();

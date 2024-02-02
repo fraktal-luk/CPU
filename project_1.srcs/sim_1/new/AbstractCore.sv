@@ -73,14 +73,18 @@ module AbstractCore
         lastCommitted_A <= op;
         storedTarget_A <= trg;
             
-            TMP_commit();
+            TMP_commit(op);
     endtask
     
     task automatic performRedirect();
-        if (resetPrev)
+        if (resetPrev) begin
             ipStage <= '{'1, 512, '{default: '0}, '{default: 'x}};
-        else if (intPrev)
+                TMP_reset();
+        end
+        else if (intPrev) begin
             ipStage <= '{'1, eventTarget, '{default: '0}, '{default: 'x}};
+                TMP_interrupt();
+        end
         else if (eventRedirect)
             ipStage <= '{'1, eventTarget, '{default: '0}, '{default: 'x}};
         else if (branchRedirect)
@@ -329,7 +333,8 @@ module AbstractCore
                         if (abs.def.o == O_jump) begin
                             automatic logic redirected = 0;
                             performBranch(op, abs, args, redirected);
-                            if (redirected) break;
+                            //if (redirected) break;
+                            break;
                         end
 
                         // Memory ops

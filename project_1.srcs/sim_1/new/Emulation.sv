@@ -312,6 +312,87 @@ package Emulation;
     endclass
 
 
+
+    class EmulationWithMems;
+        Emulator emul;
+        Word progMem[4096];
+        logic[7:0] dataMem[] = new[4096]('{default: 0});//[4096];
+ 
+        function new();
+            this.emul = new();
+            this.reset();
+        endfunction
+
+
+        function void reset();
+            this.emul.reset();
+            this.dataMem = '{default: 0};
+            this.progMem = '{default: 'x}; 
+        endfunction
+        
+    
+    
+        //    foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
+            
+        function void writeProgram(input Word prog[], input int adr);
+            foreach (prog[i]) this.progMem[adr/4 + i] = prog[i];
+        endfunction
+        
+        function void writeData();
+            
+        endfunction
+        
+
+        function void setBasicHandlers();
+            this.progMem[IP_RESET/4] = processLines({"ja -512"}).words[0];
+            this.progMem[IP_RESET/4 + 1] = processLines({"ja 0"}).words[0];
+           
+            this.progMem[IP_ERROR/4] = processLines({"sys error"}).words[0];
+            this.progMem[IP_ERROR/4 + 1] = processLines({"ja 0"}).words[0];
+    
+            this.progMem[IP_CALL/4] = processLines({"sys send"}).words[0];
+            this.progMem[IP_CALL/4 + 1] = processLines({"ja 0"}).words[0];        
+        endfunction
+        
+        function automatic void prepareTest(input string name, input int commonAdr);
+            //this.writePogram
+            squeue fileLines = readFile(name);
+            Section common = processLines(readFile("common_asm.txt"));
+            Section testSection = processLines(fileLines);
+            testSection = fillImports(testSection, 0, common, commonAdr);
+            
+            this.writeProgram(testSection.words, 0);
+            this.writeProgram(common.words, commonAdr);
+            
+            this.setBasicHandlers();
+            
+            this.emul.reset();
+        endfunction
+ 
+ 
+        function automatic void step();
+            this.emul.executeStep(this.progMem, this.dataMem);
+        endfunction
+        
+        function automatic void writeAndDrain();
+            if (this.emul.writeToDo.active == 1) begin
+                this.dataMem[emul.writeToDo.adr] = this.emul.writeToDo.value[31:24];
+                this.dataMem[emul.writeToDo.adr+1] = this.emul.writeToDo.value[23:16];
+                this.dataMem[emul.writeToDo.adr+2] = this.emul.writeToDo.value[15:8];
+                this.dataMem[emul.writeToDo.adr+3] = this.emul.writeToDo.value[7:0];
+            end
+            
+            this.emul.drain();
+        endfunction 
+        
+        function automatic void interrupt();
+            this.emul.interrupt();
+        endfunction
+        
+    endclass    
+    
+
+
 endpackage
 
 

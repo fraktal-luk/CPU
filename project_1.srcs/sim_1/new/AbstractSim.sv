@@ -27,17 +27,48 @@ package AbstractSim;
         logic wrong;
      } LateEvent;
 
-    static Emulator emul = new();
+    static EmulationWithMems emul = new();
     static int commitCtr = 0;
+    static string testName;
 
-    function static void TMP_commit();
-        commitCtr++;    
+    function static void TMP_setTest(input string str);
+        testName = str;
+            emul.prepareTest({str, ".txt"}, 1024);
+            
+            $display("word0: %h, %h", emul.progMem[0], emul.progMem[0]);
+    endfunction
+
+    function static void TMP_reset();
+        //commitCtr++;
+        commitCtr = 0;
+          //  emul.reset();
+    endfunction
+
+    function static void TMP_commit(input OpSlot op);
+        automatic Word theIp = emul.emul.ip;
+        commitCtr++;
+            emul.step();
+            emul.writeAndDrain();
+            
+            $display("--> %d: %s;  %d: %s", theIp, emul.emul.disasm, op.adr, TMP_disasm(op.bits));
     endfunction
 
     function static int TMP_getCommit();
         return commitCtr;
     endfunction
 
+
+    function static void TMP_interrupt();
+        //emul.interrupt();
+    endfunction
+
+    function static Emulator TMP_getEmul();
+        return emul.emul;
+    endfunction
+
+    function static EmulationWithMems TMP_getEmulWithMems();
+        return emul;
+    endfunction
 
         function automatic LateEvent getLateEvent(input OpSlot op, input AbstractInstruction abs, input Mword sr2, input Mword sr3);
             LateEvent res = '{target: 'x, redirect: 0, sig: 0, wrong: 0};
