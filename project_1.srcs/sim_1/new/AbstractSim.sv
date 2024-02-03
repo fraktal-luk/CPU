@@ -35,13 +35,28 @@ package AbstractSim;
         testName = str;
             emul.prepareTest({str, ".txt"}, 1024);
             
-            $display("word0: %h, %h", emul.progMem[0], emul.progMem[0]);
+            //$display("word0: %h, %h", emul.progMem[0], emul.progMem[0]);
     endfunction
 
+    function static void TMP_prepareErrorTest();
+        //testName = str;
+            emul.prepareErrorTest(1024);            
+    endfunction
+
+    function static void TMP_prepareEventTest();
+        //testName = str;
+            emul.prepareEventTest(1024);            
+    endfunction
+    
+    function static void TMP_prepareIntTest();
+        //testName = str;
+            emul.prepareIntTest(1024);            
+    endfunction
+
+
     function static void TMP_reset();
-        //commitCtr++;
         commitCtr = 0;
-          //  emul.reset();
+            emul.resetCpu();
     endfunction
 
     function static void TMP_commit(input OpSlot op);
@@ -50,7 +65,9 @@ package AbstractSim;
             emul.step();
             emul.writeAndDrain();
             
-            $display("--> %d: %s;  %d: %s", theIp, emul.emul.disasm, op.adr, TMP_disasm(op.bits));
+            //$display("--> %d: %s;  %d: %s", theIp, emul.emul.disasm, op.adr, TMP_disasm(op.bits));
+            
+            if (theIp != op.adr || emul.emul.disasm != TMP_disasm(op.bits)) $display("Mismatched commit: %d: %s;  %d: %s", theIp, emul.emul.disasm, op.adr, TMP_disasm(op.bits));
     endfunction
 
     function static int TMP_getCommit();
@@ -59,7 +76,7 @@ package AbstractSim;
 
 
     function static void TMP_interrupt();
-        //emul.interrupt();
+        emul.interrupt();
     endfunction
 
     function static Emulator TMP_getEmul();

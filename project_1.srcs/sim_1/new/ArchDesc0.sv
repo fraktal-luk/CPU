@@ -194,54 +194,54 @@ module ArchDesc0();
 
 
 
-                task automatic runTest_C(input string name, ref Emulator emul, ref Word progMem[4096], ref logic[7:0] dataMem[]);
-                    int i;
-                    squeue fileLines = readFile(name);
-                    Section testSection = processLines(fileLines);
+//                task automatic runTest_C(input string name, ref Emulator emul, ref Word progMem[4096], ref logic[7:0] dataMem[]);
+//                    int i;
+//                    squeue fileLines = readFile(name);
+//                    Section testSection = processLines(fileLines);
                 
-                    testSection = fillImports(testSection, 0, common, COMMON_ADR);
+//                    testSection = fillImports(testSection, 0, common, COMMON_ADR);
             
-                    dataMem = '{default: 0};
-                    progMem = '{default: 'x};
+//                    dataMem = '{default: 0};
+//                    progMem = '{default: 'x};
                     
-                    foreach (testSection.words[i]) progMem[i] = testSection.words[i];
-                    foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
+//                    foreach (testSection.words[i]) progMem[i] = testSection.words[i];
+//                    foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
                     
-                    setBasicHandlers(progMem);
+//                    setBasicHandlers(progMem);
                     
-                    emul.reset();
-                    #1;
+//                    emul.reset();
+//                    #1;
                     
-                    for (i = 0; i < ITERATION_LIMIT; i++)
-                    begin
-                        emul.executeStep(progMem, dataMem);
+//                    for (i = 0; i < ITERATION_LIMIT; i++)
+//                    begin
+//                        emul.executeStep(progMem, dataMem);
                         
-                        if (emul.status.error == 1) begin
-                            $fatal(">>>> ####### Emulation in error state\n");
-                            break;
-                        end
+//                        if (emul.status.error == 1) begin
+//                            $fatal(">>>> ####### Emulation in error state\n");
+//                            break;
+//                        end
                         
-                        if (emul.status.send == 1) begin
-                            break;
-                        end
+//                        if (emul.status.send == 1) begin
+//                            break;
+//                        end
                         
-                        if (emul.writeToDo.active == 1) begin
-                            dataMem[emul.writeToDo.adr] = emul.writeToDo.value[31:24];
-                            dataMem[emul.writeToDo.adr+1] = emul.writeToDo.value[23:16];
-                            dataMem[emul.writeToDo.adr+2] = emul.writeToDo.value[15:8];
-                            dataMem[emul.writeToDo.adr+3] = emul.writeToDo.value[7:0];
-                        end
+//                        if (emul.writeToDo.active == 1) begin
+//                            dataMem[emul.writeToDo.adr] = emul.writeToDo.value[31:24];
+//                            dataMem[emul.writeToDo.adr+1] = emul.writeToDo.value[23:16];
+//                            dataMem[emul.writeToDo.adr+2] = emul.writeToDo.value[15:8];
+//                            dataMem[emul.writeToDo.adr+3] = emul.writeToDo.value[7:0];
+//                        end
                         
-                        emul.drain();
+//                        emul.drain();
             
-                        //emulSig_C = emul;
+//                        //emulSig_C = emul;
             
-                        #1;
-                    end
+//                        #1;
+//                    end
                     
-                    if (i >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", name);
+//                    if (i >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", name);
                     
-                endtask
+//                endtask
             
 
 
@@ -250,6 +250,8 @@ module ArchDesc0();
 
     task automatic testErrorSignal(ref Emulator emul);
         int i;
+                EmulationWithMems ewm = new();
+
         dataMem = '{default: 0};
         progMem = '{default: 'x};
 
@@ -261,11 +263,13 @@ module ArchDesc0();
         setBasicHandlers(progMem);
         
         emul.reset();
+                ewm.prepareErrorTest(COMMON_ADR);
         #1;
         
         for (i = 0; i < ITERATION_LIMIT; i++)
         begin
             emul.executeStep(progMem, dataMem);
+                    ewm.step();
             
             if (emul.status.error == 1) break;
             
@@ -277,7 +281,7 @@ module ArchDesc0();
             end
             
             emul.drain();
-
+                ewm.writeAndDrain();
             emulSig = emul;
 
             #1;
@@ -290,6 +294,8 @@ module ArchDesc0();
 
     task automatic testEvent(ref Emulator emul);
         int i;
+                EmulationWithMems ewm = new();
+
         squeue fileLines = readFile("events.txt");
         Section testSection = processLines(fileLines);
     
@@ -309,12 +315,14 @@ module ArchDesc0();
         progMem[IP_CALL/4 + 2] = processLines({"ja 0"}).words[0];
         
         emul.reset();
+                ewm.prepareEventTest(COMMON_ADR);
         #1;
         
         
         for (i = 0; i < ITERATION_LIMIT; i++)
         begin
             emul.executeStep(progMem, dataMem);
+                ewm.step();
             
             if (emul.status.error == 1) begin
                 $fatal(">>>> Emulation in error state\n");
@@ -333,7 +341,8 @@ module ArchDesc0();
             end
             
             emul.drain();
-
+                ewm.writeAndDrain();
+                
             emulSig = emul;
 
             #1;
@@ -347,6 +356,8 @@ module ArchDesc0();
 
     task automatic testInterrupt(ref Emulator emul);
         int i;
+                EmulationWithMems ewm = new();
+
         squeue fileLines = readFile("events2.txt");
         Section testSection = processLines(fileLines);
     
@@ -371,6 +382,7 @@ module ArchDesc0();
         progMem[IP_INT/4 + 2] = processLines({"ja 0"}).words[0];
 
         emul.reset();
+            ewm.prepareIntTest(COMMON_ADR);
         #1;
         
         for (i = 0; i < ITERATION_LIMIT; i++)
@@ -399,7 +411,7 @@ module ArchDesc0();
             end
             
             emul.drain();
-
+                ewm.writeAndDrain();
             emulSig = emul;
 
             #1;
@@ -442,9 +454,12 @@ module ArchDesc0();
                 runTestSim(lineParts[0]);
                     emulSig_C = TMP_getEmul();
             end
-            
+                
+                TMP_prepareErrorTest();
             runErrorTestSim();
+                TMP_prepareEventTest();
             runEventTestSim();
+                TMP_prepareIntTest();
             runIntTestSim();
             
             $finish();
@@ -454,7 +469,7 @@ module ArchDesc0();
             Section common, testProg;
             #CYCLE;
                 $display("> RUN: %s", name);
-                        $display("committed: %d", TMP_getCommit());
+                     //   $display("committed: %d", TMP_getCommit());
 
             programMem.clear();
  
