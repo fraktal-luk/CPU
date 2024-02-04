@@ -316,7 +316,7 @@ package Emulation;
     class EmulationWithMems;
         Emulator emul;
         Word progMem[4096];
-        logic[7:0] dataMem[] = new[4096]('{default: 0});//[4096];
+        logic[7:0] dataMem[] = new[4096]('{default: 0});
  
         function new();
             this.emul = new();
@@ -333,12 +333,11 @@ package Emulation;
         function void resetCpu();
             this.emul.reset();
         endfunction  
-    
-        //    foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
-            
+                
         function void writeProgram(input Word prog[], input int adr);
             foreach (prog[i]) this.progMem[adr/4 + i] = prog[i];
         endfunction
+        
         
         function void writeData();
             
@@ -357,7 +356,6 @@ package Emulation;
         endfunction
         
         function automatic void prepareTest(input string name, input int commonAdr);
-            //this.writePogram
             squeue fileLines = readFile(name);
             Section common = processLines(readFile("common_asm.txt"));
             Section testSection = processLines(fileLines);
@@ -372,9 +370,7 @@ package Emulation;
         endfunction
  
          function automatic void prepareErrorTest(input int commonAdr);
-            //this.writePogram
-            squeue fileLines = //readFile(name);
-                                {"undef", "ja 0"};
+            squeue fileLines = {"undef", "ja 0"};
             Section common = processLines(readFile("common_asm.txt"));
             Section testSection = processLines(fileLines);
             testSection = fillImports(testSection, 0, common, commonAdr);
@@ -388,9 +384,7 @@ package Emulation;
         endfunction
 
          function automatic void prepareEventTest(input int commonAdr);
-            //this.writePogram
             squeue fileLines = readFile("events.txt");
-                               // {"undef", "ja 0"};
             Section common = processLines(readFile("common_asm.txt"));
             Section testSection = processLines(fileLines);
             testSection = fillImports(testSection, 0, common, commonAdr);
@@ -400,20 +394,14 @@ package Emulation;
             
             this.setBasicHandlers();
             
-//                    progMem[IP_CALL/4] = processLines({"add_i r20, r0, 55"}).words[0];
-//                    progMem[IP_CALL/4 + 1] = processLines({"sys rete"}).words[0];
-//                    progMem[IP_CALL/4 + 2] = processLines({"ja 0"}).words[0];
             this.writeProgram(processLines({"add_i r20, r0, 55", "sys rete", "ja 0"}).words, IP_CALL);        
-            
-            
+
             this.emul.reset();
         endfunction
 
  
-          function automatic void prepareIntTest(input int commonAdr);
-            //this.writePogram
+        function automatic void prepareIntTest(input int commonAdr);
             squeue fileLines = readFile("events2.txt");
-                               // {"undef", "ja 0"};
             Section common = processLines(readFile("common_asm.txt"));
             Section testSection = processLines(fileLines);
             testSection = fillImports(testSection, 0, common, commonAdr);
@@ -423,22 +411,9 @@ package Emulation;
             
             this.setBasicHandlers();
 
-//                progMem[IP_CALL/4] = processLines({"add_i r20, r0, 55"}).words[0];
-//                progMem[IP_CALL/4 + 1] = processLines({"sys rete"}).words[0];
-//                progMem[IP_CALL/4 + 2] = processLines({"ja 0"}).words[0];
-                
-//                // Special handler for int 
-//                progMem[IP_INT/4] = processLines({"add_i r21, r0, 77"}).words[0];
-//                progMem[IP_INT/4 + 1] = processLines({"sys reti"}).words[0];
-//                progMem[IP_INT/4 + 2] = processLines({"ja 0"}).words[0];
-        
-//                    progMem[IP_CALL/4] = processLines({"add_i r20, r0, 55"}).words[0];
-//                    progMem[IP_CALL/4 + 1] = processLines({"sys rete"}).words[0];
-//                    progMem[IP_CALL/4 + 2] = processLines({"ja 0"}).words[0];
             this.writeProgram(processLines({"add_i r20, r0, 55", "sys rete", "ja 0"}).words, IP_CALL);        
             this.writeProgram(processLines({"add_i r21, r0, 77", "sys reti", "ja 0"}).words, IP_INT);        
-            
-            
+              
             this.emul.reset();
         endfunction
  

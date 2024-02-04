@@ -35,55 +35,54 @@ module AbstractCore
 
     localparam int FETCH_QUEUE_SIZE = 8;
     localparam int OP_QUEUE_SIZE = 24;
-
+    localparam int OOO_QUEUE_SIZE = 40;
 
     localparam OpSlot EMPTY_SLOT = '{'0, 'x, 'x};
     
 
     typedef Word FetchGroup[FETCH_WIDTH];
 
-    int fqSize = 0, oqSize = 0;
+    int fqSize = 0, oqSize = 0, oooqSize;
 
     logic fetchAllow;
     logic resetPrev = 0, intPrev = 0, branchRedirect = 0, eventRedirect = 0;
-    Word branchTarget = 'x, eventTarget = 'x, storedTarget = 'x, storedTarget_A = 'x;
+    Word branchTarget = 'x, eventTarget = 'x, storedTarget = 'x;
     
     Stage ipStage = EMPTY_STAGE, fetchStage0 = EMPTY_STAGE, fetchStage1 = EMPTY_STAGE;
     Stage fetchQueue[$:FETCH_QUEUE_SIZE];
     
     Stage nextStage = EMPTY_STAGE;
     OpSlot opQueue[$:OP_QUEUE_SIZE];
-    OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT, lastCommitted = EMPTY_SLOT, lastCommitted_A = EMPTY_SLOT;
+    OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT, lastCommitted = EMPTY_SLOT;
     OpSlot committedGroup[4] = '{default: EMPTY_SLOT};
     
-    Word intRegs[32], floatRegs[32], sysRegs[32], sysRegs_A[32];
+    
+    OpSlot oooQueue[$:OOO_QUEUE_SIZE];
+    
+    
+    Word intRegs[32], floatRegs[32], sysRegs[32];
     
     int lastPerfCount = 0;
     logic cmp0, cmp1, dummy = 'x;
-    string lastCommittedStr, lastCommittedStr_A;
-    
-        assign cmp0 = (storedTarget_A == storedTarget);
-        assign cmp1 = (lastCommitted_A == lastCommitted);
+    string lastCommittedStr;
 
-        assign lastCommittedStr = TMP_disasm(lastCommitted.bits);
-        assign lastCommittedStr_A = TMP_disasm(lastCommitted_A.bits);
-
+    assign lastCommittedStr = TMP_disasm(lastCommitted.bits);
 
     task automatic commitOp(input OpSlot op, input Word trg);
-        lastCommitted_A <= op;
-        storedTarget_A <= trg;
+        lastCommitted <= op;
+        storedTarget <= trg;
             
-            TMP_commit(op);
+        TMP_commit(op);
     endtask
     
     task automatic performRedirect();
         if (resetPrev) begin
             ipStage <= '{'1, 512, '{default: '0}, '{default: 'x}};
-                TMP_reset();
+            TMP_reset();
         end
         else if (intPrev) begin
             ipStage <= '{'1, eventTarget, '{default: '0}, '{default: 'x}};
-                TMP_interrupt();
+            TMP_interrupt();
         end
         else if (eventRedirect)
             ipStage <= '{'1, eventTarget, '{default: '0}, '{default: 'x}};
@@ -104,7 +103,6 @@ module AbstractCore
             intRegs = '{0: '0, default: '0};
             floatRegs = '{default: '0};
             sysRegs = '{0: -1, 1: 0, default: '0};
-            sysRegs_A = '{0: -1, 1: 0, default: '0};
         end
     endtask
 
@@ -122,24 +120,23 @@ module AbstractCore
     endtask
 
     task automatic performInterrupt();
+            $display(">> Interrupt !!!");
+    
         eventTarget <= IP_INT;
         storedTarget <= IP_INT;
-        storedTarget_A <= IP_INT;
         
         sysRegs[5] = sysRegs[1];
         sysRegs[1] |= 1; // TODO: handle state register correctly
         sysRegs[3] = storedTarget;
-        
-        sysRegs_A[5] = sysRegs_A[1];
-        sysRegs_A[1] |= 1; // TODO: handle state register correctly
-        sysRegs_A[3] = storedTarget;
     endtask
 
-    task automatic performBranch(input OpSlot op, input AbstractInstruction abs, input Word3 args, output logic redirected);
+    task automatic performBranch(input OpSlot op, input AbstractInstruction abs, input Word3 args);//, output logic redirected);
         // Resolve condition
         bit redirect = 0;
         Word brTarget;
         Word trg;
+
+            Word result = calculateResult(abs, args, op.adr);
 
         case (abs.mnemonic)
             "ja", "jl": redirect = 1;
@@ -149,20 +146,18 @@ module AbstractCore
             "jnz_r": redirect = (args[0] != 0);
             default: $fatal("Wrong kind of branch");
         endcase
-        
+
+            intRegs[abs.dest] = result;
+            intRegs[0] = 0;
+
         brTarget = (abs.mnemonic inside {"jz_r", "jnz_r"}) ? args[1] : op.adr + args[1];
         
         branchTarget <= brTarget;
         branchRedirect <= redirect;
         
-            trg = redirect ? brTarget : op.adr + 4;
+        trg = redirect ? brTarget : op.adr + 4;
         
-            commitOp(op, trg);
-        
-        if (redirect) begin
-            storedTarget <= brTarget;
-            redirected = redirect; 
-        end
+        commitOp(op, trg);
     endtask
     
     task automatic performMemFirst(input OpSlot op, input AbstractInstruction abs, input Word3 args);
@@ -175,6 +170,19 @@ module AbstractCore
             writeAdr = args[0] + args[1];
             writeOut = args[2];
         end                            
+    endtask
+
+    task automatic performMemLater(input OpSlot op, input AbstractInstruction abs);
+        // If load, write to register; if store, nothing to do
+        if (abs.def.o inside {O_intLoadW, O_intLoadD}) begin
+            intRegs[abs.dest] = readIn[0];
+            intRegs[0] = 0;
+        end
+        else if (abs.def.o inside {O_floatLoadW}) begin
+            floatRegs[abs.dest] = readIn[0];
+        end
+
+        commitOp(op, memOpPrev.adr + 4);                           
     endtask
 
 
@@ -193,16 +201,13 @@ module AbstractCore
 
             default: ;                            
         endcase
-        
+
         modifySysRegs(sysRegs, op, abs);
-        //    modifySysRegs(sysRegs_A, op, abs);
-        
         
         eventTarget <= lateEvt.target;
-        storedTarget <= abs.def.o == O_sysStore ? op.adr + 4 : lateEvt.target;
         eventRedirect <= lateEvt.redirect;
     
-                commitOp(op, trg);
+        commitOp(op, trg);
     
         sig <= lateEvt.sig;
         wrong <= lateEvt.wrong;
@@ -290,22 +295,8 @@ module AbstractCore
             else begin
 
                 if (memOpPrev.active) begin // Finish executing mem operation from prev cycle
-                    //    $display("Exec %h: %s", memOpPrev.adr, TMP_disasm(memOpPrev.bits));
-
-                    // If load, write to register; if store, nothing to do
                     automatic AbstractInstruction memAbs = decodeAbstract(memOpPrev.bits);
-                    if (memAbs.def.o inside {O_intLoadW, O_intLoadD}) begin
-                        intRegs[memAbs.dest] = readIn[0];
-                        intRegs[0] = 0;
-                    end
-                    else if (memAbs.def.o inside {O_floatLoadW}) begin
-                        floatRegs[memAbs.dest] = readIn[0];
-                    end
-                    
-                        storedTarget <= memOpPrev.adr + 4;
-                    lastCommitted <= memOpPrev;
-                    
-                    commitOp(memOpPrev, memOpPrev.adr + 4);
+                    performMemLater(memOpPrev, memAbs);
                 end
                 else if (!memOp.active) begin// If mem is being done, wait for result
                     automatic int performedCount = 0;
@@ -315,25 +306,16 @@ module AbstractCore
                         automatic OpSlot op = opQueue.pop_front();
                         automatic AbstractInstruction abs = decodeAbstract(op.bits);
                         automatic Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap[abs.fmt].typeSpec);
-                        //    $display("Exec %h: %s", op.adr, TMP_disasm(op.bits));
 
-
-
-                        performRegularOp(op, abs, args);
+                        //performRegularOp(op, abs, args);
 
                         performedNow[performedCount] = op;
                         performedCount++;
 
-                        lastCommitted <= op;
-                        storedTarget <= op.adr + 4;
-
-                        //commitOp(op, op.adr + 4);
-
                         // Branches
                         if (abs.def.o == O_jump) begin
-                            automatic logic redirected = 0;
-                            performBranch(op, abs, args, redirected);
-                            //if (redirected) break;
+                            //automatic logic redirected = 0;
+                            performBranch(op, abs, args);//, redirected);
                             break;
                         end
 
@@ -346,10 +328,10 @@ module AbstractCore
                         // System ops                        
                         if (isSystemOp(abs)) begin 
                             performSys(op, abs, args);
-                            //if (isSystemOp(abs))
-                            
                             break;
                         end
+                        
+                        performRegularOp(op, abs, args);
                         
                         commitOp(op, op.adr + 4);
                         
@@ -365,6 +347,7 @@ module AbstractCore
         
         fqSize <= fetchQueue.size();
         oqSize <= opQueue.size();
+        oooqSize <= oooQueue.size();
     end
     
     function logic fetchQueueAccepts(input int k);
@@ -387,11 +370,5 @@ module AbstractCore
 
     assign fetchAllow = fetchQueueAccepts(fqSize);
     assign insAdr = ipStage.baseAdr;
-
-
-//    function automatic logic getSystemOp(input OpSlot op);
-//        return abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send};
-//    endfunction
-
 
 endmodule
