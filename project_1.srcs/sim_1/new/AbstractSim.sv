@@ -16,6 +16,7 @@ package AbstractSim;
 
     typedef struct {
         logic active;
+        int id;
         Word adr;
         Word bits;
     } OpSlot;

@@ -61,8 +61,8 @@
     <Option Name="IPUserFilesDir" Val="$PIPUSERFILESDIR"/>
     <Option Name="IPStaticSourceDir" Val="$PIPUSERFILESDIR/ipstatic"/>
     <Option Name="EnableBDX" Val="FALSE"/>
-    <Option Name="WTXSimLaunchSim" Val="16415"/>
-    <Option Name="WTModelSimLaunchSim" Val="538"/>
+    <Option Name="WTXSimLaunchSim" Val="16417"/>
+    <Option Name="WTModelSimLaunchSim" Val="557"/>
     <Option Name="WTQuestaLaunchSim" Val="0"/>
     <Option Name="WTIesLaunchSim" Val="0"/>
     <Option Name="WTVcsLaunchSim" Val="0"/>
@@ -574,8 +574,8 @@
         <StratHandle Name="Flow_AreaOptimized_medium" Flow="Vivado Synthesis 2018"/>
         <Step Id="synth_design">
           <Option Id="ControlSetOptThreshold">1</Option>
-          <Option Id="ReTiming">1</Option>
           <Option Id="Directive">2</Option>
+          <Option Id="ReTiming">1</Option>
         </Step>
       </Strategy>
       <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
@@ -588,8 +588,8 @@
         <StratHandle Name="Flow_AreaOptimized_medium" Flow="Vivado Synthesis 2018"/>
         <Step Id="synth_design">
           <Option Id="ControlSetOptThreshold">1</Option>
-          <Option Id="ReTiming">1</Option>
           <Option Id="Directive">2</Option>
+          <Option Id="ReTiming">1</Option>
         </Step>
       </Strategy>
       <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
@@ -602,12 +602,12 @@
         <StratHandle Name="Flow_PerfOptimized_high" Flow="Vivado Synthesis 2018"/>
         <Step Id="synth_design">
           <Option Id="ResourceSharing">2</Option>
-          <Option Id="ShregMinSize">5</Option>
-          <Option Id="ReTiming">1</Option>
-          <Option Id="RepFanoutThreshold">400</Option>
-          <Option Id="NoCombineLuts">1</Option>
-          <Option Id="KeepEquivalentRegisters">1</Option>
           <Option Id="FsmExtraction">1</Option>
+          <Option Id="ShregMinSize">5</Option>
+          <Option Id="KeepEquivalentRegisters">1</Option>
+          <Option Id="RepFanoutThreshold">400</Option>
+          <Option Id="ReTiming">1</Option>
+          <Option Id="NoCombineLuts">1</Option>
         </Step>
       </Strategy>
       <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
