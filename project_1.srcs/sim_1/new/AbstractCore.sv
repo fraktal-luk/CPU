@@ -55,7 +55,7 @@ module AbstractCore
     
     Stage nextStage = EMPTY_STAGE;
     OpSlot opQueue[$:OP_QUEUE_SIZE];
-    OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT, lastCommitted = EMPTY_SLOT;
+    OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT, sysOp = EMPTY_SLOT, sysOpPrev = EMPTY_SLOT, lastCommitted = EMPTY_SLOT;
     OpSlot committedGroup[4] = '{default: EMPTY_SLOT};
     
     
@@ -81,6 +81,151 @@ module AbstractCore
     string lastCommittedStr, oooqStr;
 
     assign lastCommittedStr = TMP_disasm(lastCommitted.bits);
+
+    always @(posedge clk) begin
+        
+        resetPrev <= reset;
+        intPrev <= interrupt;
+        sig <= 0;
+        wrong <= 0;
+
+        readReq[0] = 0;
+        readAdr[0] = 'x;
+        writeReq = 0;
+        writeAdr = 'x;
+        writeOut = 'x;
+        
+        branchRedirect <= 0;
+        branchTarget <= 'x;
+
+        eventRedirect <= 0;
+        eventTarget <= 'x;
+
+        lastPerfCount <= 0; 
+
+
+            advanceOOOQ();
+
+        if (resetPrev | intPrev | branchRedirect | eventRedirect) begin
+            performRedirect();
+        end
+        else begin
+            fetchAndEnqueue();
+
+                writeToOpQ(nextStage);
+
+                writeToOOOQ(nextStage);
+            
+            memOp <= EMPTY_SLOT;
+            memOpPrev <= memOp;
+            
+                sysOp <= EMPTY_SLOT;
+                if (!sysOpPrev.active) sysOpPrev <= sysOp;
+            
+            
+            if (interrupt) begin
+                performInterrupt();
+            end
+            else begin
+
+                if (memOpPrev.active) begin // Finish executing mem operation from prev cycle
+                    automatic AbstractInstruction memAbs = decodeAbstract(memOpPrev.bits);
+                    performMemLater(memOpPrev, memAbs);
+                end
+                    if (sysOpPrev.active) begin // Finish executing mem operation from prev cycle
+                        automatic AbstractInstruction sysAbs = decodeAbstract(sysOpPrev.bits);
+                        performSysLater(sysOpPrev, sysAbs);
+                            sysOpPrev <= EMPTY_SLOT;
+                    end
+                else if (memOp.active) begin
+                end
+                else if (sysOp.active) begin
+                end
+                else //if (!memOp.active)
+                             begin// If mem is being done, wait for result
+                    automatic int performedCount = 0;
+                    automatic OpSlot performedNow[4] = '{default: EMPTY_SLOT};
+                    for (int i = 0; i < oqSize; i++) begin            
+                        // scan until a mem, taken branch or system operation
+                        automatic OpSlot op = opQueue.pop_front();
+                        automatic AbstractInstruction abs = decodeAbstract(op.bits);
+                        automatic Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap[abs.fmt].typeSpec);
+
+                        //performRegularOp(op, abs, args);
+
+                        performedNow[performedCount] = op;
+                        performedCount++;
+
+                        // Branches
+                        if (abs.def.o == O_jump) begin
+                            //automatic logic redirected = 0;
+                            performBranch(op, abs, args);//, redirected);
+                            break;
+                        end
+
+                        // Memory ops
+                        if (abs.def.o inside {O_intLoadW, O_intLoadD, O_intStoreW, O_intStoreD, O_floatLoadW, O_floatStoreW}) begin
+                            performMemFirst(op, abs, args);
+                            break;
+                        end
+
+                        // System ops                        
+                        if (isSystemOp(abs)) begin
+                            performSysFirst(op); 
+                            //performSys(op);//, abs, args);
+                            break;
+                        end
+                        
+                        performRegularOp(op, abs, args);
+                        
+                        commitOp(op, op.adr + 4);
+                        
+                        if (performedCount == 4) break; // Limits Exec group size to 4 ops
+                    end
+                    lastPerfCount <= performedCount;
+                end
+                
+            end
+
+
+        end
+        
+        fqSize <= fetchQueue.size();
+        oqSize <= opQueue.size();
+        oooqSize <= oooQueue.size();
+        
+            //oooqStr <= $
+            $swrite(oooqStr, "%p", oooQueue);
+    end
+
+
+
+    assign fetchAllow = fetchQueueAccepts(fqSize);
+    assign insAdr = ipStage.baseAdr;
+
+
+
+    function logic fetchQueueAccepts(input int k);
+        return k <= FETCH_QUEUE_SIZE - 3 ? '1 : '0;
+    endfunction
+    
+    function automatic Stage setActive(input Stage s, input logic on, input int ctr);
+        Stage res = s;
+        res.active = on;
+        res.ctr = ctr;
+        res.baseAdr = s.baseAdr & ~(4*FETCH_WIDTH-1);
+        foreach (res.mask[i]) if ((s.baseAdr/4) % FETCH_WIDTH <= i) res.mask[i] = '1;
+        return res;
+    endfunction
+
+    function automatic Stage setWords(input Stage s, input FetchGroup fg);
+        Stage res = s;
+        res.words = fg;
+        return res;
+    endfunction
+
+
+
 
     task automatic commitOp(input OpSlot op, input Word trg);
         lastCommitted <= op;
@@ -114,7 +259,9 @@ module AbstractCore
         oooQueue.delete();
         memOp <= EMPTY_SLOT;
         memOpPrev <= EMPTY_SLOT;
-        
+        sysOp <= EMPTY_SLOT;
+        sysOpPrev <= EMPTY_SLOT;
+          
         if (resetPrev) begin
             intRegs = '{0: '0, default: '0};
             floatRegs = '{default: '0};
@@ -188,8 +335,12 @@ module AbstractCore
             writeReq = 1;
             writeAdr = args[0] + args[1];
             writeOut = args[2];
-        end                            
+        end
     endtask
+
+        task automatic performSysFirst(input OpSlot op);
+            sysOp <= op;
+        endtask
 
     task automatic performMemLater(input OpSlot op, input AbstractInstruction abs);
         // If load, write to register; if store, nothing to do
@@ -201,11 +352,20 @@ module AbstractCore
             floatRegs[abs.dest] = readIn[0];
         end
 
-        commitOp(op, memOpPrev.adr + 4);                           
+        commitOp(op, //memOpPrev.adr + 4);
+                     op.adr + 4);
     endtask
 
+        task automatic performSysLater(input OpSlot op, input AbstractInstruction abs);
+            performSys(op);
+        endtask
 
-    task automatic performSys(input OpSlot op, input AbstractInstruction abs, input Word3 args);
+
+    task automatic performSys(input OpSlot op);//, input AbstractInstruction abs, input Word3 args);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap[abs.fmt].typeSpec);
+
+    
         LateEvent lateEvt = getLateEvent(op, abs, sysRegs[2], sysRegs[3]);
         Word trg = lateEvt.redirect ? lateEvt.target : op.adr + 4;
 
@@ -302,131 +462,6 @@ module AbstractCore
                     end
                 endtask
 
-    always @(posedge clk) begin
-        
-        resetPrev <= reset;
-        intPrev <= interrupt;
-        sig <= 0;
-        wrong <= 0;
 
-        readReq[0] = 0;
-        readAdr[0] = 'x;
-        writeReq = 0;
-        writeAdr = 'x;
-        writeOut = 'x;
-        
-        branchRedirect <= 0;
-        branchTarget <= 'x;
-
-        eventRedirect <= 0;
-        eventTarget <= 'x;
-
-        lastPerfCount <= 0; 
-
-
-            advanceOOOQ();
-
-        if (resetPrev | intPrev | branchRedirect | eventRedirect) begin
-            performRedirect();
-        end
-        else begin
-            fetchAndEnqueue();
-
-                writeToOpQ(nextStage);
-
-//                if (nextStage.active) begin
-//                    foreach (nextStage.words[i])
-//                        if (nextStage.mask[i]) opQueue.push_back('{'1, nextStage.ctr + i, nextStage.baseAdr + 4*i, nextStage.words[i]});
-//                end
-                writeToOOOQ(nextStage);
-            
-            memOp <= EMPTY_SLOT;
-            memOpPrev <= memOp;
-            
-            if (interrupt) begin
-                performInterrupt();
-            end
-            else begin
-
-                if (memOpPrev.active) begin // Finish executing mem operation from prev cycle
-                    automatic AbstractInstruction memAbs = decodeAbstract(memOpPrev.bits);
-                    performMemLater(memOpPrev, memAbs);
-                end
-                else if (!memOp.active) begin// If mem is being done, wait for result
-                    automatic int performedCount = 0;
-                    automatic OpSlot performedNow[4] = '{default: EMPTY_SLOT};
-                    for (int i = 0; i < oqSize; i++) begin            
-                        // scan until a mem, taken branch or system operation
-                        automatic OpSlot op = opQueue.pop_front();
-                        automatic AbstractInstruction abs = decodeAbstract(op.bits);
-                        automatic Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap[abs.fmt].typeSpec);
-
-                        //performRegularOp(op, abs, args);
-
-                        performedNow[performedCount] = op;
-                        performedCount++;
-
-                        // Branches
-                        if (abs.def.o == O_jump) begin
-                            //automatic logic redirected = 0;
-                            performBranch(op, abs, args);//, redirected);
-                            break;
-                        end
-
-                        // Memory ops
-                        if (abs.def.o inside {O_intLoadW, O_intLoadD, O_intStoreW, O_intStoreD, O_floatLoadW, O_floatStoreW}) begin
-                            performMemFirst(op, abs, args);
-                            break;
-                        end
-
-                        // System ops                        
-                        if (isSystemOp(abs)) begin 
-                            performSys(op, abs, args);
-                            break;
-                        end
-                        
-                        performRegularOp(op, abs, args);
-                        
-                        commitOp(op, op.adr + 4);
-                        
-                        if (performedCount == 4) break; // Limits Exec group size to 4 ops
-                    end
-                    lastPerfCount <= performedCount;
-                end
-                
-            end
-
-
-        end
-        
-        fqSize <= fetchQueue.size();
-        oqSize <= opQueue.size();
-        oooqSize <= oooQueue.size();
-        
-            //oooqStr <= $
-            $swrite(oooqStr, "%p", oooQueue);
-    end
-    
-    function logic fetchQueueAccepts(input int k);
-        return k <= FETCH_QUEUE_SIZE - 3 ? '1 : '0;
-    endfunction
-    
-    function automatic Stage setActive(input Stage s, input logic on, input int ctr);
-        Stage res = s;
-        res.active = on;
-        res.ctr = ctr;
-        res.baseAdr = s.baseAdr & ~(4*FETCH_WIDTH-1);
-        foreach (res.mask[i]) if ((s.baseAdr/4) % FETCH_WIDTH <= i) res.mask[i] = '1;
-        return res;
-    endfunction
-
-    function automatic Stage setWords(input Stage s, input FetchGroup fg);
-        Stage res = s;
-        res.words = fg;
-        return res;
-    endfunction
-
-    assign fetchAllow = fetchQueueAccepts(fqSize);
-    assign insAdr = ipStage.baseAdr;
 
 endmodule
