@@ -490,6 +490,7 @@ module ArchDesc0();
             if (wrong) $fatal("TEST FAILED: %s", name);
             
             #CYCLE;
+            #CYCLE;
         endtask
 
 
@@ -515,6 +516,7 @@ module ArchDesc0();
             reset <= 0;
             
             wait (wrong);
+            #CYCLE;
             #CYCLE;
         endtask
 
@@ -547,6 +549,7 @@ module ArchDesc0();
             
             if (wrong) $fatal("TEST FAILED: %s", "events");
             
+            #CYCLE;
             #CYCLE;
         endtask
 
@@ -591,6 +594,7 @@ module ArchDesc0();
             wait (done | wrong);
             
             if (wrong) $fatal("TEST FAILED: %s", "int");
+            #CYCLE;
             #CYCLE;
         endtask
 

@@ -24,11 +24,34 @@ module AbstractCore
     output logic wrong
 );
     
-    logic dummy = 'x;
+    logic dummy = '1;
+    
+    typedef struct {
+        int id;
+        Word adr;
+        Word bits;
+        Word target;
+    } InstructionInfo;
+    
+    function automatic InstructionInfo makeInsInfo(input OpSlot op);
+        InstructionInfo res;
+        res.id = op.id;
+        res.adr = op.adr;
+        res.bits = op.bits;
+        
+        return res;
+    endfunction
+    
     
     OpSlot insMap[int]; // structure holding all instructions in flight (beginning at Fetch), and possibly some more, as a database
+    InstructionInfo insMap_[int]; // structure holding all instructions in flight (beginning at Fetch), and possibly some more, as a database
     int insMapSize = 0, nCommitted = 0, nRetired = 0;
     
+    function automatic void setTarget(input int id, input Word trg);
+        insMap_[id].target = trg;
+    endfunction
+
+
     typedef struct {
         logic active;
         int ctr;
@@ -63,14 +86,14 @@ module AbstractCore
 
     logic fetchAllow;
     logic resetPrev = 0, intPrev = 0, branchRedirect = 0, eventRedirect = 0;
-    Word branchTarget = 'x, eventTarget = 'x, storedTarget = 'x;
+    Word branchTarget = 'x, eventTarget = 'x, storedTarget = 'x, committedTarget = 'x, retiredTarget = 'x;
     
     Stage ipStage = EMPTY_STAGE, fetchStage0 = EMPTY_STAGE, fetchStage1 = EMPTY_STAGE;
     Stage fetchQueue[$:FETCH_QUEUE_SIZE];
     
     Stage nextStage = EMPTY_STAGE;
     OpSlot opQueue[$:OP_QUEUE_SIZE];
-    OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT, sysOp = EMPTY_SLOT, sysOpPrev = EMPTY_SLOT, lastCommitted = EMPTY_SLOT;
+    OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT, sysOp = EMPTY_SLOT, sysOpPrev = EMPTY_SLOT, lastCommitted = EMPTY_SLOT, lastRetired = EMPTY_SLOT;
     IssueGroup issuedSt0 = DEFAULT_ISSUE_GROUP, issuedSt0_C = DEFAULT_ISSUE_GROUP, issuedSt1 = DEFAULT_ISSUE_GROUP, issuedSt1_C = DEFAULT_ISSUE_GROUP;
     
     OpSlot committedGroup[4] = '{default: EMPTY_SLOT};
@@ -94,12 +117,13 @@ module AbstractCore
     Word intRegs[32], floatRegs[32], sysRegs[32];
     
     int lastPerfCount = 0;
-    string lastCommittedStr, oooqStr;
+    string lastCommittedStr, lastRetiredStr, oooqStr;
     logic cmp0, cmp1;
 
         
 
     assign lastCommittedStr = TMP_disasm(lastCommitted.bits);
+    assign lastRetiredStr = TMP_disasm(lastRetired.bits);
 
     always @(posedge clk) begin
         resetPrev <= reset;
@@ -222,7 +246,10 @@ module AbstractCore
         
         if (st.active) begin
             foreach (st.words[i])
-                if (st.mask[i]) insMap[st.ctr + i] = '{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]};
+                if (st.mask[i]) begin
+                    insMap[st.ctr + i] = '{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]};
+                    insMap_[st.ctr + i] = makeInsInfo('{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]});
+                end
         end
     endtask
 
@@ -231,7 +258,10 @@ module AbstractCore
         
         if (st.active) begin
             foreach (st.words[i])
-                if (st.mask[i]) insMap[st.ctr + i].bits = s.words[i];
+                if (st.mask[i]) begin
+                    insMap[st.ctr + i].bits = s.words[i];
+                    insMap_[st.ctr + i].bits = s.words[i];
+                end
         end
     endtask
     
@@ -271,9 +301,10 @@ module AbstractCore
     task automatic commitOp(input OpSlot op, input Word trg);
         lastCommitted <= op;
         storedTarget <= trg;
+        committedTarget <= trg;
             
         updateOOOQ(op);
-        TMP_commit(op);
+          //TMP_commit(op); // 
         nCommitted++;
     endtask
     
@@ -335,10 +366,12 @@ module AbstractCore
     
         eventTarget <= IP_INT;
         storedTarget <= IP_INT;
+        committedTarget <= IP_INT;
         
         sysRegs[5] = sysRegs[1];
         sysRegs[1] |= 1; // TODO: handle state register correctly
-        sysRegs[3] = storedTarget;
+        sysRegs[3] = //storedTarget;
+                     committedTarget;
     endtask
 
     task automatic performBranch(input OpSlot op);
@@ -371,6 +404,7 @@ module AbstractCore
         
         trg = redirect ? brTarget : op.adr + 4;
         
+        setTarget(op.id, trg);
         commitOp(op, trg);
     endtask
     
@@ -404,6 +438,7 @@ module AbstractCore
             floatRegs[abs.dest] = readIn[0];
         end
 
+        setTarget(op.id, op.adr + 4);
         commitOp(op, op.adr + 4);
     endtask
 
@@ -435,7 +470,8 @@ module AbstractCore
         
         eventTarget <= lateEvt.target;
         eventRedirect <= lateEvt.redirect;
-    
+        
+        setTarget(op.id, trg);
         commitOp(op, trg);
     
         sig <= lateEvt.sig;
@@ -482,7 +518,8 @@ module AbstractCore
         
         if (abs.def.o inside {O_floatMove}) floatRegs[abs.dest] = result;
         
-         commitOp(op, op.adr + 4);
+        setTarget(op.id, op.adr + 4);
+        commitOp(op, op.adr + 4);
     endtask        
 
         task automatic writeToOpQ(input Stage st);
@@ -512,12 +549,16 @@ module AbstractCore
         task automatic advanceOOOQ();
             while (oooQueue.size() > 0 && oooQueue[0].done == 1) begin
                 OpStatus opSt = oooQueue.pop_front();
-                OpSlot op = insMap[opSt.id];
+                InstructionInfo insInfo = insMap_[opSt.id];
+                OpSlot op = //insMap[opSt.id];
+                            '{1, insInfo.id, insInfo.adr, insInfo.bits};
                 assert (op.id == opSt.id) //$display("%p", op); 
                                     else $error("wrong retirement: %p / %p", opSt, op);
                 
-                   // TMP_commit(op);
-                
+                    TMP_commit(op);
+            
+                lastRetired <= op;
+                retiredTarget <= insInfo.target; 
                 nRetired++;
             end
         endtask
