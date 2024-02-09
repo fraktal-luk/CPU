@@ -216,7 +216,7 @@ package Asm;
         int sources[3];
 
         if ($isunknown(w)) begin
-            $warning("Decoding unknown word");
+            //$warning("Decoding unknown word");
             res.mnemonic = "unknown";
             return res;
         end
@@ -316,7 +316,7 @@ package Asm;
         string lines[$];
 
         while (!$feof(file)) begin
-            $fgets(line, file);
+            int dummy = $fgets(line, file);
             lines.push_back(line);
         end
         $fclose(file);
@@ -351,7 +351,7 @@ package Asm;
     function automatic squeue breakLine(input string line);
         squeue elems;
 
-        for (int i = 0; i < line.len(); ) begin
+        for (int i = 0; i < line.len(); i = i) begin
             
             if (line[i] inside {0, ";", "\n"}) begin
                 break;
