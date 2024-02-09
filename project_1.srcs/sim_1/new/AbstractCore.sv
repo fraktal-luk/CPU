@@ -282,21 +282,6 @@ module AbstractCore
         return res;
     endfunction
 
-    function automatic logic isBranchOp(input OpSlot op);
-        AbstractInstruction abs = decodeAbstract(op.bits);
-        return abs.def.o inside {O_jump};
-    endfunction
-    
-    function automatic logic isMemOp(input OpSlot op);
-        AbstractInstruction abs = decodeAbstract(op.bits);
-        return abs.def.o inside {O_intLoadW, O_intLoadD, O_intStoreW, O_intStoreD, O_floatLoadW, O_floatStoreW};
-    endfunction
-    
-    function automatic logic isSysOp(input OpSlot op);
-        AbstractInstruction abs = decodeAbstract(op.bits);
-        return abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send,  O_sysStore};
-    endfunction
-
 
     task automatic commitOp(input OpSlot op, input Word trg);
         lastCommitted <= op;
@@ -353,7 +338,7 @@ module AbstractCore
         
         updateInsEncodings(setWords(fetchStage0, insIn));
         fetchStage1 <= setWords(fetchStage0, insIn);
-        
+
         if (fetchStage1.active) fetchQueue.push_back(fetchStage1);
 
         if (fqSize > 0 && oqSize < OP_QUEUE_SIZE - 2*FETCH_WIDTH) nextStage <= fetchQueue.pop_front();
@@ -370,8 +355,7 @@ module AbstractCore
         
         sysRegs[5] = sysRegs[1];
         sysRegs[1] |= 1; // TODO: handle state register correctly
-        sysRegs[3] = //storedTarget;
-                     committedTarget;
+        sysRegs[3] = committedTarget;
     endtask
 
     task automatic performBranch(input OpSlot op);
@@ -408,6 +392,9 @@ module AbstractCore
         commitOp(op, trg);
     endtask
     
+    
+
+    
     task automatic performMemFirst(input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
         Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap[abs.fmt].typeSpec);
@@ -416,7 +403,7 @@ module AbstractCore
         readAdr[0] <= args[0] + args[1];
         memOp <= op;
         
-        if (abs.def.o inside {O_intStoreW, O_intStoreD, O_floatStoreW}) begin
+        if (isStoreNonSys(op)) begin// (abs.def.o inside {O_intStoreW, O_intStoreD, O_floatStoreW}) begin
             writeReq = 1;
             writeAdr = args[0] + args[1];
             writeOut = args[2];
@@ -429,169 +416,204 @@ module AbstractCore
 
     task automatic performMemLater(input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
-        // If load, write to register; if store, nothing to do
-        if (abs.def.o inside {O_intLoadW, O_intLoadD}) begin
-            intRegs[abs.dest] = readIn[0];
-            intRegs[0] = 0;
-        end
-        else if (abs.def.o inside {O_floatLoadW}) begin
-            floatRegs[abs.dest] = readIn[0];
-        end
+
+        if (abs.def.o inside {O_intLoadW, O_intLoadD})
+            writeIntReg(abs.dest, readIn[0]);
+        else if (abs.def.o inside {O_floatLoadW})
+            writeFloatReg(abs.dest, readIn[0]);
 
         setTarget(op.id, op.adr + 4);
         commitOp(op, op.adr + 4);
     endtask
 
-        task automatic performSysLater(input OpSlot op);
-            performSys(op);
-        endtask
+    task automatic performSysLater(input OpSlot op);
+        performSys(op);
+    endtask
 
+    task automatic writeIntReg(input Word regNum, input Word value);
+        if (regNum == 0) return;
+        intRegs[regNum] = value;
+    endtask
+
+    task automatic writeFloatReg(input Word regNum, input Word value);
+        floatRegs[regNum] = value;
+    endtask
+
+    task automatic writeSysReg(input Word regNum, input Word value);
+        sysRegs[regNum] = value;
+    endtask
+
+    task automatic setLateEvent(input LateEvent evt);
+        eventTarget <= evt.target;
+        eventRedirect <= evt.redirect;
+        sig <= evt.sig;
+        wrong <= evt.wrong;
+    endtask
 
     task automatic performSys(input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
-        Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap[abs.fmt].typeSpec);
+        Word3 args = getArgs(intRegs, floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
     
         LateEvent lateEvt = getLateEvent(op, abs, sysRegs[2], sysRegs[3]);
         Word trg = lateEvt.redirect ? lateEvt.target : op.adr + 4;
 
         case (abs.def.o)
-            O_sysStore: begin
-                sysRegs[args[1]] = args[2];
-            end
-        
-            O_halt: begin
-                $error("halt not implemented");
-            end
-
+            O_sysStore: writeSysReg(args[1], args[2]);
+            O_halt: $error("halt not implemented");
             default: ;                            
         endcase
 
         modifySysRegs(sysRegs, op, abs);
-        
-        eventTarget <= lateEvt.target;
-        eventRedirect <= lateEvt.redirect;
+        setLateEvent(lateEvt);
         
         setTarget(op.id, trg);
+        
         commitOp(op, trg);
-    
-        sig <= lateEvt.sig;
-        wrong <= lateEvt.wrong;
     endtask
 
 
     task automatic performRegularOp(input OpSlot op);//, input AbstractInstruction abs, input Word3 args);
         AbstractInstruction abs = decodeAbstract(op.bits);
-        Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap[abs.fmt].typeSpec);
+        Word3 args = getArgs(intRegs, floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
 
         Word result = calculateResult(abs, args, op.adr);
         if (abs.def.o == O_sysLoad) result = sysRegs[args[1]];
 
-        //    $display("Exec %h: %s", op.adr, TMP_disasm(op.bits));
-                                
-        if (abs.def.o inside {
-            O_jump,
-            
-            O_intAnd,
-            O_intOr,
-            O_intXor,
-            
-            O_intAdd,
-            O_intSub,
-            O_intAddH,
-            
-            O_intMul,
-            O_intMulHU,
-            O_intMulHS,
-            O_intDivU,
-            O_intDivS,
-            O_intRemU,
-            O_intRemS,
-            
-            O_intShiftLogical,
-            O_intShiftArith,
-            O_intRotate,
-            
-            O_sysLoad
-        }) intRegs[abs.dest] = result;
-        
-        intRegs[0] = 0;
-        
-        if (abs.def.o inside {O_floatMove}) floatRegs[abs.dest] = result;
+        if (writesIntReg(op)) writeIntReg(abs.dest, result);// intRegs[abs.dest] = result;        
+        if (writesFloatReg(op)) writeFloatReg(abs.dest, result);
         
         setTarget(op.id, op.adr + 4);
         commitOp(op, op.adr + 4);
     endtask        
 
-        task automatic writeToOpQ(input Stage st);
-            if (st.active) begin
-                foreach (st.words[i])
-                    if (st.mask[i]) opQueue.push_back('{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]});
-            end
-        endtask
+    task automatic writeToOpQ(input Stage st);
+        if (st.active) begin
+            foreach (st.words[i]) if (st.mask[i]) opQueue.push_back('{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]});
+        end
+    endtask
 
-        task automatic writeToOOOQ(input Stage st);
-            if (st.active) begin
-                foreach (st.words[i])
-                    if (st.mask[i]) oooQueue.push_back('{st.ctr + i, '0})
-                    ;
-            end
-        endtask
+    task automatic writeToOOOQ(input Stage st);
+        if (st.active) begin
+            foreach (st.words[i]) if (st.mask[i]) oooQueue.push_back('{st.ctr + i, '0});
+        end
+    endtask
 
-        task automatic updateOOOQ(input OpSlot op);
-            const int ind[$] = oooQueue.find_index with (item.id == op.id);
-            assert (ind.size() > 0)
-                oooQueue[ind[0]].done = '1;
-            else
-                $error("No such id in OOOQ: %d", op.id);
-            
-        endtask
-
-        task automatic advanceOOOQ();
-            while (oooQueue.size() > 0 && oooQueue[0].done == 1) begin
-                OpStatus opSt = oooQueue.pop_front();
-                InstructionInfo insInfo = insMap_[opSt.id];
-                OpSlot op = //insMap[opSt.id];
-                            '{1, insInfo.id, insInfo.adr, insInfo.bits};
-                assert (op.id == opSt.id) //$display("%p", op); 
-                                    else $error("wrong retirement: %p / %p", opSt, op);
-                
-                    TMP_commit(op);
-            
-                lastRetired <= op;
-                retiredTarget <= insInfo.target; 
-                nRetired++;
-            end
-        endtask
-
-
-        function automatic IssueGroup issueFromOpQ(ref OpSlot queue[$:OP_QUEUE_SIZE], input int size);
-            OpSlot q[$:OP_QUEUE_SIZE] = queue;
-            int remainingSize = size;
+    task automatic updateOOOQ(input OpSlot op);
+        const int ind[$] = oooQueue.find_index with (item.id == op.id);
+        assert (ind.size() > 0)
+            oooQueue[ind[0]].done = '1;
+        else
+            $error("No such id in OOOQ: %d", op.id);
         
-            IssueGroup res = DEFAULT_ISSUE_GROUP;
-            for (int i = 0; i < 4; i++) begin
-                if (remainingSize > 0) begin
-                    OpSlot op = q.pop_front();
-                    remainingSize--;
-                    
-                    if (isBranchOp(op)) begin
-                        res.branch = op;
-                        break;
-                    end
-                    else if (isMemOp(op)) begin
-                        res.mem = op;
-                        break;
-                    end
-                    else if (isSysOp(op)) begin
-                        res.sys = op;
-                        break;
-                    end
-                    
-                    res.regular[i] = op;
-                end
-            end
+    endtask
+
+    task automatic advanceOOOQ();
+        while (oooQueue.size() > 0 && oooQueue[0].done == 1) begin
+            OpStatus opSt = oooQueue.pop_front();
+            InstructionInfo insInfo = insMap_[opSt.id];
+            OpSlot op = '{1, insInfo.id, insInfo.adr, insInfo.bits};
+            assert (op.id == opSt.id) //$display("%p", op); 
+                                else $error("wrong retirement: %p / %p", opSt, op);
             
-            return res;
-        endfunction
+                TMP_commit(op);
+        
+            lastRetired <= op;
+            retiredTarget <= insInfo.target; 
+            nRetired++;
+        end
+    endtask
+
+
+    function automatic IssueGroup issueFromOpQ(ref OpSlot queue[$:OP_QUEUE_SIZE], input int size);
+        OpSlot q[$:OP_QUEUE_SIZE] = queue;
+        int remainingSize = size;
+    
+        IssueGroup res = DEFAULT_ISSUE_GROUP;
+        for (int i = 0; i < 4; i++) begin
+            if (remainingSize > 0) begin
+                OpSlot op = q.pop_front();
+                remainingSize--;
+                
+                if (isBranchOp(op)) begin
+                    res.branch = op;
+                    break;
+                end
+                else if (isMemOp(op)) begin
+                    res.mem = op;
+                    break;
+                end
+                else if (isSysOp(op)) begin
+                    res.sys = op;
+                    break;
+                end
+                
+                res.regular[i] = op;
+            end
+        end
+        
+        return res;
+    endfunction
+
+
+
+
+
+    function automatic logic writesIntReg(input OpSlot op);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        return abs.def.o inside {
+                                    O_jump,
+                                    
+                                    O_intAnd,
+                                    O_intOr,
+                                    O_intXor,
+                                    
+                                    O_intAdd,
+                                    O_intSub,
+                                    O_intAddH,
+                                    
+                                    O_intMul,
+                                    O_intMulHU,
+                                    O_intMulHS,
+                                    O_intDivU,
+                                    O_intDivS,
+                                    O_intRemU,
+                                    O_intRemS,
+                                    
+                                    O_intShiftLogical,
+                                    O_intShiftArith,
+                                    O_intRotate,
+                                    
+                                    O_sysLoad
+        };
+    endfunction
+
+    function automatic logic writesFloatReg(input OpSlot op);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        return abs.def.o inside {
+                                 O_floatMove,
+                                 O_floatLoadW};
+    endfunction
+
+    function automatic logic isStoreNonSys(input OpSlot op);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        return abs.def.o inside {O_intStoreW, O_intStoreD, O_floatStoreW};
+    endfunction
+
+
+    function automatic logic isBranchOp(input OpSlot op);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        return abs.def.o inside {O_jump};
+    endfunction
+    
+    function automatic logic isMemOp(input OpSlot op);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        return abs.def.o inside {O_intLoadW, O_intLoadD, O_intStoreW, O_intStoreD, O_floatLoadW, O_floatStoreW};
+    endfunction
+    
+    function automatic logic isSysOp(input OpSlot op);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        return abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send,  O_sysStore};
+    endfunction
+
 
 endmodule
