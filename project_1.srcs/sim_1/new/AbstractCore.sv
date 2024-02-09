@@ -24,6 +24,11 @@ module AbstractCore
     output logic wrong
 );
     
+    logic dummy = 'x;
+    
+    OpSlot insMap[int]; // structure holding all instructions in flight (beginning at Fetch), and possibly some more, as a database
+    int insMapSize = 0, nCommitted = 0, nRetired = 0;
+    
     typedef struct {
         logic active;
         int ctr;
@@ -40,11 +45,21 @@ module AbstractCore
 
     localparam OpSlot EMPTY_SLOT = '{'0, -1, 'x, 'x}; // TODO: move as const to package
     
+    typedef OpSlot OpSlot4[4];
+
+    typedef struct {
+        OpSlot regular[4];
+        OpSlot branch;
+        OpSlot mem;
+        OpSlot sys;
+    } IssueGroup;
+    
+    const IssueGroup DEFAULT_ISSUE_GROUP = '{regular: '{default: EMPTY_SLOT}, branch: EMPTY_SLOT, mem: EMPTY_SLOT, sys: EMPTY_SLOT};
 
     typedef Word FetchGroup[FETCH_WIDTH];
     
     int fetchCtr = 0;
-    int fqSize = 0, oqSize = 0, oooqSize;
+    int fqSize = 0, oqSize = 0, oooqSize = 0, committedNum = 0;
 
     logic fetchAllow;
     logic resetPrev = 0, intPrev = 0, branchRedirect = 0, eventRedirect = 0;
@@ -56,6 +71,8 @@ module AbstractCore
     Stage nextStage = EMPTY_STAGE;
     OpSlot opQueue[$:OP_QUEUE_SIZE];
     OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT, sysOp = EMPTY_SLOT, sysOpPrev = EMPTY_SLOT, lastCommitted = EMPTY_SLOT;
+    IssueGroup issuedSt0 = DEFAULT_ISSUE_GROUP, issuedSt0_C = DEFAULT_ISSUE_GROUP, issuedSt1 = DEFAULT_ISSUE_GROUP, issuedSt1_C = DEFAULT_ISSUE_GROUP;
+    
     OpSlot committedGroup[4] = '{default: EMPTY_SLOT};
     
     
@@ -78,9 +95,9 @@ module AbstractCore
     
     int lastPerfCount = 0;
     string lastCommittedStr, oooqStr;
-    logic cmp0, cmp1, dummy = '1;
+    logic cmp0, cmp1;
 
-
+        
 
     assign lastCommittedStr = TMP_disasm(lastCommitted.bits);
 
@@ -105,6 +122,9 @@ module AbstractCore
         lastPerfCount <= 0; 
 
         advanceOOOQ();
+                
+            issuedSt0 <= DEFAULT_ISSUE_GROUP;
+            issuedSt1 <= issuedSt0;
 
         if (resetPrev | intPrev | branchRedirect | eventRedirect) begin
             performRedirect();
@@ -128,7 +148,7 @@ module AbstractCore
                 if (memOpPrev.active) begin // Finish executing mem operation from prev cycle
                     performMemLater(memOpPrev);
                 end
-                if (sysOpPrev.active) begin // Finish executing sys operation from prev cycle
+                else if (sysOpPrev.active) begin // Finish executing sys operation from prev cycle
                     performSysLater(sysOpPrev);
                     sysOpPrev <= EMPTY_SLOT;
                 end
@@ -138,6 +158,11 @@ module AbstractCore
                 end
                 else begin
                     automatic int performedCount = 0;
+                    
+                    automatic IssueGroup ig = issueFromOpQ(opQueue, oqSize);
+                    
+                    issuedSt0 <= ig;
+                    
                     for (int i = 0; i < oqSize; i++) begin            
                         // scan until a mem, taken branch or system operation
                         automatic OpSlot op = opQueue.pop_front();
@@ -169,6 +194,14 @@ module AbstractCore
         fqSize <= fetchQueue.size();
         oqSize <= opQueue.size();
         oooqSize <= oooQueue.size();
+        begin
+            automatic OpStatus oooqDone[$] = (oooQueue.find with (item.done == 1));
+            committedNum <= oooqDone.size();
+            
+                assert (oooqDone.size() <= 4) else $error("How 5?");
+        end
+        
+        insMapSize = insMap.size();
         
             //oooqStr <= $
             $swrite(oooqStr, "%p", oooQueue);
@@ -182,6 +215,27 @@ module AbstractCore
     function logic fetchQueueAccepts(input int k);
         return k <= FETCH_QUEUE_SIZE - 3 ? '1 : '0;
     endfunction
+
+
+    task automatic addToInsBase(input Stage s, input logic on, input int ctr);
+        Stage st = setActive(s, on, ctr);
+        
+        if (st.active) begin
+            foreach (st.words[i])
+                if (st.mask[i]) insMap[st.ctr + i] = '{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]};
+        end
+    endtask
+
+    task automatic updateInsEncodings(input Stage s);
+        Stage st = s;
+        
+        if (st.active) begin
+            foreach (st.words[i])
+                if (st.mask[i]) insMap[st.ctr + i].bits = s.words[i];
+        end
+    endtask
+    
+        
     
     function automatic Stage setActive(input Stage s, input logic on, input int ctr);
         Stage res = s;
@@ -220,6 +274,7 @@ module AbstractCore
             
         updateOOOQ(op);
         TMP_commit(op);
+        nCommitted++;
     endtask
     
     task automatic performRedirect();
@@ -262,7 +317,10 @@ module AbstractCore
             fetchCtr <= fetchCtr + FETCH_WIDTH;
         end
         
+        addToInsBase(ipStage, ipStage.active & fetchAllow, fetchCtr);
         fetchStage0 <= setActive(ipStage, ipStage.active & fetchAllow, fetchCtr);
+        
+        updateInsEncodings(setWords(fetchStage0, insIn));
         fetchStage1 <= setWords(fetchStage0, insIn);
         
         if (fetchStage1.active) fetchQueue.push_back(fetchStage1);
@@ -453,8 +511,46 @@ module AbstractCore
 
         task automatic advanceOOOQ();
             while (oooQueue.size() > 0 && oooQueue[0].done == 1) begin
-                oooQueue.pop_front();
+                OpStatus opSt = oooQueue.pop_front();
+                OpSlot op = insMap[opSt.id];
+                assert (op.id == opSt.id) //$display("%p", op); 
+                                    else $error("wrong retirement: %p / %p", opSt, op);
+                
+                   // TMP_commit(op);
+                
+                nRetired++;
             end
         endtask
+
+
+        function automatic IssueGroup issueFromOpQ(ref OpSlot queue[$:OP_QUEUE_SIZE], input int size);
+            OpSlot q[$:OP_QUEUE_SIZE] = queue;
+            int remainingSize = size;
+        
+            IssueGroup res = DEFAULT_ISSUE_GROUP;
+            for (int i = 0; i < 4; i++) begin
+                if (remainingSize > 0) begin
+                    OpSlot op = q.pop_front();
+                    remainingSize--;
+                    
+                    if (isBranchOp(op)) begin
+                        res.branch = op;
+                        break;
+                    end
+                    else if (isMemOp(op)) begin
+                        res.mem = op;
+                        break;
+                    end
+                    else if (isSysOp(op)) begin
+                        res.sys = op;
+                        break;
+                    end
+                    
+                    res.regular[i] = op;
+                end
+            end
+            
+            return res;
+        endfunction
 
 endmodule
