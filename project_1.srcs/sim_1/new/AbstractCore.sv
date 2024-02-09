@@ -24,7 +24,7 @@ module AbstractCore
     output logic wrong
 );
     
-    logic dummy = '1;
+    logic dummy = 'z;
     
     typedef struct {
         int id;
@@ -71,13 +71,14 @@ module AbstractCore
     typedef OpSlot OpSlot4[4];
 
     typedef struct {
+        int num;
         OpSlot regular[4];
         OpSlot branch;
         OpSlot mem;
         OpSlot sys;
     } IssueGroup;
     
-    const IssueGroup DEFAULT_ISSUE_GROUP = '{regular: '{default: EMPTY_SLOT}, branch: EMPTY_SLOT, mem: EMPTY_SLOT, sys: EMPTY_SLOT};
+    const IssueGroup DEFAULT_ISSUE_GROUP = '{num: 0, regular: '{default: EMPTY_SLOT}, branch: EMPTY_SLOT, mem: EMPTY_SLOT, sys: EMPTY_SLOT};
 
     typedef Word FetchGroup[FETCH_WIDTH];
     
@@ -182,32 +183,62 @@ module AbstractCore
                 end
                 else begin
                     automatic int performedCount = 0;
-                    
+                    automatic logic hasBr = 0, hasMem = 0, hasSys = 0;
                     automatic IssueGroup ig = issueFromOpQ(opQueue, oqSize);
                     
                     issuedSt0 <= ig;
                     
-                    for (int i = 0; i < oqSize; i++) begin            
-                        // scan until a mem, taken branch or system operation
-                        automatic OpSlot op = opQueue.pop_front();
-                        performedCount++;
-
-                        if (isBranchOp(op)) begin
-                            performBranch(op);
-                            break;
+                    if (1) begin ///
+                        foreach (ig.regular[i]) begin
+                            if (ig.regular[i].active) performRegularOp(ig.regular[i]);
                         end
-                        if (isMemOp(op)) begin
-                            performMemFirst(op);
-                            break;
-                        end
-                        if (isSysOp(op)) begin
-                            performSysFirst(op); 
-                            break;
-                        end
-                        performRegularOp(op);
+                    
+                        if (ig.branch.active) performBranch(ig.branch);
+                        else if (ig.mem.active) performMemFirst(ig.mem);
+                        else if (ig.sys.active) performSysFirst(ig.sys);
+                    
+                        performedCount = ig.num;
                         
-                        if (performedCount == 4) break; // Limits Exec group size to 4 ops
-                    end
+                        repeat (ig.num) opQueue.pop_front();
+                        
+                     end ///
+                     else begin ///   
+                        for (int i = 0; i < oqSize; i++) begin            
+                            // scan until a mem, taken branch or system operation
+                            automatic OpSlot op = opQueue.pop_front();
+                            performedCount++;
+    
+                            if (isBranchOp(op)) begin
+                                    assert (op == ig.branch) else $error("no br!!");
+    
+                                performBranch(op);
+                                hasBr = 1;
+                                break;
+                            end
+                            if (isMemOp(op)) begin
+                                    assert (op == ig.mem) else $error("no me!!");
+    
+                                performMemFirst(op);
+                                hasMem = 1;
+                                break;
+                            end
+                            if (isSysOp(op)) begin
+                                    assert (op == ig.sys) else $error("no sys!!");
+                                performSysFirst(op); 
+                                hasSys = 1;
+                                break;
+                            end
+                            
+                                assert (op == ig.regular[performedCount-1]) else $error("no!!");
+                            
+                            performRegularOp(op);
+                            
+                            if (performedCount == 4) break; // Limits Exec group size to 4 ops
+                        end
+                    end ///
+                            //assert (performedCount == ig.num) else $warning("not same");
+                            //assert (hasBr == ig.branch.active && hasMem == ig.mem.active && hasSys == ig.sys.active) else $error("Not same1!");
+                    
                     lastPerfCount <= performedCount;
                 end
                 
@@ -533,6 +564,7 @@ module AbstractCore
             if (remainingSize > 0) begin
                 OpSlot op = q.pop_front();
                 remainingSize--;
+                res.num++;
                 
                 if (isBranchOp(op)) begin
                     res.branch = op;
