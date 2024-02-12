@@ -48,9 +48,7 @@ module AbstractCore
     InstructionInfo insMap[int]; // structure holding all instructions in flight (beginning at Fetch), and possibly some more, as a database
     int insMapSize = 0, nCommitted = 0, nRetired = 0;
     
-    InsId intWritersR[32] = '{default: -1}, floatWritersR[32] = '{default: -1};
-    InsId intWritersC[32] = '{default: -1}, floatWritersC[32] = '{default: -1};
-    
+
 //    InsId reg1r, reg1c;
     
 //        assign re1r = intWritersR[1];
@@ -124,8 +122,21 @@ module AbstractCore
 
     OpStatus oooQueue[$:OOO_QUEUE_SIZE];
     
+    typedef struct {
+        Word intRegs[32], floatRegs[32];
+        InsId lastIns = -1;
+        Word target;
+    } CpuState;
     
-    Word intRegs[32], floatRegs[32], sysRegs[32];
+    CpuState renamedState, execState, retiredState;
+    
+    
+    Word //intRegs[32], floatRegs[32],
+             sysRegs[32];
+    InsId intWritersR[32] = '{default: -1}, floatWritersR[32] = '{default: -1};
+    InsId intWritersC[32] = '{default: -1}, floatWritersC[32] = '{default: -1};
+    
+
     
     string lastCommittedStr, lastRetiredStr, oooqStr;
     logic cmp0, cmp1;
@@ -180,10 +191,10 @@ module AbstractCore
                 automatic IssueGroup igIssue = DEFAULT_ISSUE_GROUP, igExec = DEFAULT_ISSUE_GROUP;// = issuedSt0;
             
                 if (memOpPrev.active) begin // Finish executing mem operation from prev cycle
-                    performMemLater(memOpPrev);
+                    execMemLater(memOpPrev);
                 end
                 else if (sysOpPrev.active) begin // Finish executing sys operation from prev cycle
-                    performSysLater(sysOpPrev);
+                    execSysLater(sysOpPrev);
                     sysOpPrev <= EMPTY_SLOT;
                 end
                 else if (memOp.active || issuedSt0.mem.active || issuedSt1.mem.active
@@ -200,12 +211,12 @@ module AbstractCore
                     issuedSt0 <= igIssue;
  
                     foreach (igExec.regular[i]) begin
-                        if (igExec.regular[i].active) performRegularOp(igExec.regular[i]);
+                        if (igExec.regular[i].active) execRegular(igExec.regular[i]);
                     end
                 
-                    if (igExec.branch.active) performBranch(igExec.branch);
-                    else if (igExec.mem.active) performMemFirst(igExec.mem);
-                    else if (igExec.sys.active) performSysFirst(igExec.sys);
+                    if (igExec.branch.active)execBranch(igExec.branch);
+                    else if (igExec.mem.active) execMemFirst(igExec.mem);
+                    else if (igExec.sys.active) execSysFirst(igExec.sys);
                 //end
                 
             end
@@ -320,8 +331,8 @@ module AbstractCore
         sysOpPrev <= EMPTY_SLOT;
           
         if (resetPrev) begin
-            intRegs = '{0: '0, default: '0};
-            floatRegs = '{default: '0};
+            execState.intRegs = '{0: '0, default: '0};
+            execState.floatRegs = '{default: '0};
             sysRegs = '{0: -1, 1: 0, default: '0};
         end
     endtask
@@ -391,9 +402,14 @@ module AbstractCore
         sysRegs[3] = committedTarget;
     endtask
 
-    task automatic performBranch(input OpSlot op);
+
+    task automatic execBranch(input OpSlot op);
+        performBranch(execState, op);
+    endtask
+
+    task automatic performBranch(ref CpuState state, input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
-        Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap[abs.fmt].typeSpec);
+        Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
 
         bit redirect = 0;
         Word brTarget;
@@ -411,7 +427,7 @@ module AbstractCore
             default: $fatal("Wrong kind of branch");
         endcase
 
-        writeIntReg(abs.dest, result);
+        writeIntReg(state, abs.dest, result);
 //        intRegs[abs.dest] = result;
 //        intRegs[0] = 0;
 
@@ -427,9 +443,13 @@ module AbstractCore
     endtask
     
     
-    task automatic performMemFirst(input OpSlot op);
+    task automatic execMemFirst(input OpSlot op);
+        performMemFirst(execState, op);
+    endtask
+    
+    task automatic performMemFirst(ref CpuState state, input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
-        Word3 args = getArgs(intRegs, '{default: 'x}, abs.sources, parsingMap[abs.fmt].typeSpec);
+        Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
 
         readReq[0] <= '1;
         readAdr[0] <= args[0] + args[1];
@@ -442,33 +462,42 @@ module AbstractCore
         end
     endtask
 
-    task automatic performSysFirst(input OpSlot op);
+    task automatic execSysFirst(input OpSlot op);
         sysOp <= op;
     endtask
 
-    task automatic performMemLater(input OpSlot op);
+
+    task automatic execMemLater(input OpSlot op);
+        performMemLater(execState, op);
+    endtask
+
+    task automatic performMemLater(ref CpuState state, input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
 
         if (abs.def.o inside {O_intLoadW, O_intLoadD})
-            writeIntReg(abs.dest, readIn[0]);
+            writeIntReg(state, abs.dest, readIn[0]);
         else if (abs.def.o inside {O_floatLoadW})
-            writeFloatReg(abs.dest, readIn[0]);
+            writeFloatReg(state, abs.dest, readIn[0]);
 
         setTarget(op.id, op.adr + 4);
         commitOp(op, op.adr + 4);
     endtask
 
-    task automatic performSysLater(input OpSlot op);
-        performSys(op);
+    task automatic execSysLater(input OpSlot op);
+        performSys(execState, op);
     endtask
 
-    task automatic writeIntReg(input Word regNum, input Word value);
+//    task automatic performSysLater(ref CpuState state, input OpSlot op);
+//        performSys(state, op);
+//    endtask
+
+    task automatic writeIntReg(ref CpuState state, input Word regNum, input Word value);
         if (regNum == 0) return;
-        intRegs[regNum] = value;
+        state.intRegs[regNum] = value;
     endtask
 
-    task automatic writeFloatReg(input Word regNum, input Word value);
-        floatRegs[regNum] = value;
+    task automatic writeFloatReg(ref CpuState state, input Word regNum, input Word value);
+        state.floatRegs[regNum] = value;
     endtask
 
     task automatic writeSysReg(input Word regNum, input Word value);
@@ -482,9 +511,9 @@ module AbstractCore
         wrong <= evt.wrong;
     endtask
 
-    task automatic performSys(input OpSlot op);
+    task automatic performSys(ref CpuState state, input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
-        Word3 args = getArgs(intRegs, floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
+        Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
     
         LateEvent lateEvt = getLateEvent(op, abs, sysRegs[2], sysRegs[3]);
         Word trg = lateEvt.redirect ? lateEvt.target : op.adr + 4;
@@ -495,27 +524,42 @@ module AbstractCore
             default: ;                            
         endcase
 
-        setTarget(op.id, trg);
-        commitOp(op, trg);
-
         modifySysRegs(sysRegs, op, abs);
         setLateEvent(lateEvt);
+
+        setTarget(op.id, trg);
+        commitOp(op, trg);
     endtask
 
 
-    task automatic performRegularOp(input OpSlot op);
+    task automatic execRegular(input OpSlot op);
+        performRegularOp(execState, op);
+    endtask
+
+    task automatic performRegularOp(ref CpuState state, input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
-        Word3 args = getArgs(intRegs, floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
+        Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
 
         Word result = calculateResult(abs, args, op.adr);
         if (abs.def.o == O_sysLoad) result = sysRegs[args[1]];
 
-        if (writesIntReg(op)) writeIntReg(abs.dest, result);
-        if (writesFloatReg(op)) writeFloatReg(abs.dest, result);
+        if (writesIntReg(op)) writeIntReg(state, abs.dest, result);
+        if (writesFloatReg(op)) writeFloatReg(state, abs.dest, result);
         
         setTarget(op.id, op.adr + 4);
         commitOp(op, op.adr + 4);
     endtask        
+
+
+    task automatic performAtRename(input OpSlot op);
+    
+    endtask
+
+    task automatic performAtRetire(input OpSlot op);
+    
+    endtask
+    
+    
 
     task automatic writeToOpQ(input Stage st);
         if (st.active) begin
