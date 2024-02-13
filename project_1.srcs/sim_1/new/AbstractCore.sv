@@ -33,6 +33,7 @@ module AbstractCore
         Word adr;
         Word bits;
         Word target;
+        Word result;
     } InstructionInfo;
     
     function automatic InstructionInfo makeInsInfo(input OpSlot op);
@@ -57,6 +58,10 @@ module AbstractCore
     
     function automatic void setTarget(input int id, input Word trg);
         insMap[id].target = trg;
+    endfunction
+
+    function automatic void setResult(input int id, input Word res);
+        insMap[id].result = res;
     endfunction
 
 
@@ -101,7 +106,8 @@ module AbstractCore
 
     logic fetchAllow;
     logic resetPrev = 0, intPrev = 0, branchRedirect = 0, eventRedirect = 0;
-    Word branchTarget = 'x, eventTarget = 'x, storedTarget = 'x, committedTarget = 'x, retiredTarget = 'x;
+    Word branchTarget = 'x, eventTarget = 'x,// storedTarget = 'x, 
+        committedTarget = 'x, retiredTarget = 'x;
     
     Stage ipStage = EMPTY_STAGE, fetchStage0 = EMPTY_STAGE, fetchStage1 = EMPTY_STAGE;
     Stage fetchQueue[$:FETCH_QUEUE_SIZE];
@@ -146,8 +152,9 @@ module AbstractCore
     
     string lastCommittedStr, lastRetiredStr, oooqStr;
     logic cmp0, cmp1;
+    Word cmpw0, cmpw1;
 
-        assign cmp0 = (intWritersR[1] == intWritersC[1]);
+        //assign cmp0 = (intWritersR[1] == intWritersC[1]);
 
     assign lastCommittedStr = TMP_disasm(lastCommitted.bits);
     assign lastRetiredStr = TMP_disasm(lastRetired.bits);
@@ -244,8 +251,22 @@ module AbstractCore
         insMapSize = insMap.size();
         
             $swrite(oooqStr, "%p", oooQueue);
+            
+        
+        //cmp  
+            cmpw0 <= cmpRegs(execState.intRegs, retiredState.intRegs);
     end
 
+
+
+            
+            function automatic Word cmpRegs(input Word arr0[32], input Word arr1[32]);
+                Word res;
+                foreach (arr0[i])
+                    res = (res << 1) | (arr0[31-i] == arr1[31-i]);
+                return res; 
+            endfunction
+            
 
     assign fetchAllow = fetchQueueAccepts(fqSize);
     assign insAdr = ipStage.baseAdr;
@@ -297,7 +318,7 @@ module AbstractCore
 
     task automatic commitOp(input OpSlot op, input Word trg);
         lastCommitted <= op;
-        storedTarget <= trg;
+        //storedTarget <= trg;
         committedTarget <= trg;
             
         updateOOOQ(op);
@@ -340,6 +361,9 @@ module AbstractCore
             execState.intRegs = '{0: '0, default: '0};
             execState.floatRegs = '{default: '0};
             sysRegs = '{0: -1, 1: 0, default: '0};
+            
+            retiredState.intRegs = '{0: '0, default: '0};
+            retiredState.floatRegs = '{default: '0};
         end
     endtask
 
@@ -400,18 +424,18 @@ module AbstractCore
             $display(">> Interrupt !!!");
     
         eventTarget <= IP_INT;
-        storedTarget <= IP_INT;
+        //storedTarget <= IP_INT;
         committedTarget <= IP_INT;
+            retiredTarget <= IP_INT;
         
         sysRegs[5] = sysRegs[1];
         sysRegs[1] |= 1; // TODO: handle state register correctly
-        sysRegs[3] = committedTarget;
+        sysRegs[3] = //committedTarget;
+                        retiredTarget;
     endtask
 
 
-    task automatic execBranch(input OpSlot op);
-        performBranch(execState, op);
-    endtask
+
 
     task automatic performLink(ref CpuState state, input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
@@ -428,15 +452,24 @@ module AbstractCore
         branchRedirect <= evt.redirect;
     endtask
 
-    task automatic performBranch(ref CpuState state, input OpSlot op);
-        ExecEvent evt = resolveBranch(state, op);
+    task automatic execBranch(input OpSlot op);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        Word3 args = getArgs(execState.intRegs, execState.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
+        Word result = calculateResult(abs, args, op.adr);
+        
+        ExecEvent evt = resolveBranch(execState, op);
         Word trg = evt.redirect ? evt.target : op.adr + 4;
 
-        performLink(state, op);
-        setBranch(state, op);
+        performBranch(execState, op);
         
+        setResult(op.id, result);
         setTarget(op.id, trg);
         commitOp(op, trg);
+    endtask
+
+    task automatic performBranch(ref CpuState state, input OpSlot op);
+        performLink(state, op);
+        setBranch(state, op);
     endtask
     
     
@@ -466,6 +499,10 @@ module AbstractCore
 
     task automatic execMemLater(input OpSlot op);
         performMemLater(execState, op);
+        
+        setResult(op.id, readIn[0]);
+        setTarget(op.id, op.adr + 4);
+        commitOp(op, op.adr + 4);
     endtask
 
     task automatic performMemLater(ref CpuState state, input OpSlot op);
@@ -475,62 +512,53 @@ module AbstractCore
             writeIntReg(state, abs.dest, readIn[0]);
         else if (abs.def.o inside {O_floatLoadW})
             writeFloatReg(state, abs.dest, readIn[0]);
-
-        setTarget(op.id, op.adr + 4);
-        commitOp(op, op.adr + 4);
     endtask
+
+
+    task automatic performSysStore(ref CpuState state, input OpSlot op);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
+
+        writeSysReg(args[1], args[2]);
+    endtask
+    
 
     task automatic execSysLater(input OpSlot op);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        LateEvent lateEvt = getLateEvent(op, abs, sysRegs[2], sysRegs[3]);
+        Word trg = lateEvt.redirect ? lateEvt.target : op.adr + 4;
+
         performSys(execState, op);
-    endtask
-
-//    task automatic performSysLater(ref CpuState state, input OpSlot op);
-//        performSys(state, op);
-//    endtask
-
-    task automatic writeIntReg(ref CpuState state, input Word regNum, input Word value);
-        if (regNum == 0) return;
-        state.intRegs[regNum] = value;
-    endtask
-
-    task automatic writeFloatReg(ref CpuState state, input Word regNum, input Word value);
-        state.floatRegs[regNum] = value;
-    endtask
-
-    task automatic writeSysReg(input Word regNum, input Word value);
-        sysRegs[regNum] = value;
-    endtask
-
-    task automatic setLateEvent(input LateEvent evt);
-        eventTarget <= evt.target;
-        eventRedirect <= evt.redirect;
-        sig <= evt.sig;
-        wrong <= evt.wrong;
+                
+        setTarget(op.id, trg);
+        commitOp(op, trg);
     endtask
 
     task automatic performSys(ref CpuState state, input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
-        Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
-    
-        LateEvent lateEvt = getLateEvent(op, abs, sysRegs[2], sysRegs[3]);
-        Word trg = lateEvt.redirect ? lateEvt.target : op.adr + 4;
 
         case (abs.def.o)
-            O_sysStore: writeSysReg(args[1], args[2]);
+            O_sysStore: performSysStore(state, op);
             O_halt: $error("halt not implemented");
             default: ;                            
         endcase
 
         modifySysRegs(sysRegs, op, abs);
-        setLateEvent(lateEvt);
-
-        setTarget(op.id, trg);
-        commitOp(op, trg);
+        setLateEvent(getLateEvent(op, abs, sysRegs[2], sysRegs[3]));
     endtask
 
 
     task automatic execRegular(input OpSlot op);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        Word3 args = getArgs(execState.intRegs, execState.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
+        Word result = calculateResult(abs, args, op.adr);
+        if (abs.def.o == O_sysLoad) result = sysRegs[args[1]];
+    
         performRegularOp(execState, op);
+        
+        setResult(op.id, result);
+        setTarget(op.id, op.adr + 4);
+        commitOp(op, op.adr + 4);
     endtask
 
     task automatic performRegularOp(ref CpuState state, input OpSlot op);
@@ -542,10 +570,8 @@ module AbstractCore
 
         if (writesIntReg(op)) writeIntReg(state, abs.dest, result);
         if (writesFloatReg(op)) writeFloatReg(state, abs.dest, result);
-        
-        setTarget(op.id, op.adr + 4);
-        commitOp(op, op.adr + 4);
     endtask        
+
 
 
     task automatic performAtRename(input OpSlot op);
@@ -553,7 +579,19 @@ module AbstractCore
     endtask
 
     task automatic performAtRetire(input OpSlot op);
+        // TODO
     
+        if (isBranchOp(op)) begin
+            //performBranch(retiredState, op);
+        end
+        else if (isMemOp(op)) begin
+            //performMemLater(retiredState, op);
+        end
+        else if (isSysOp(op)) begin
+            //performSys(retiredState, op);
+        end
+        else
+            performRegularOp(retiredState, op);
     endtask
     
     
@@ -584,8 +622,13 @@ module AbstractCore
             OpStatus opSt = oooQueue.pop_front();
             InstructionInfo insInfo = insMap[opSt.id];
             OpSlot op = '{1, insInfo.id, insInfo.adr, insInfo.bits};
+            AbstractInstruction abs = decodeAbstract(op.bits);
             assert (op.id == opSt.id) //$display("%p", op); 
                                 else $error("wrong retirement: %p / %p", opSt, op);
+                                
+            if (writesIntReg(op)) writeIntReg(retiredState, abs.dest, insInfo.result);
+            if (writesFloatReg(op)) writeFloatReg(retiredState, abs.dest, insInfo.result);
+
             mapOpAtCommit(op);
                 TMP_commit(op);
         
@@ -635,6 +678,26 @@ module AbstractCore
             end
             return oooQueue.size();
         endfunction
+
+    task automatic writeIntReg(ref CpuState state, input Word regNum, input Word value);
+        if (regNum == 0) return;
+        state.intRegs[regNum] = value;
+    endtask
+
+    task automatic writeFloatReg(ref CpuState state, input Word regNum, input Word value);
+        state.floatRegs[regNum] = value;
+    endtask
+
+    task automatic writeSysReg(input Word regNum, input Word value);
+        sysRegs[regNum] = value;
+    endtask
+
+    task automatic setLateEvent(input LateEvent evt);
+        eventTarget <= evt.target;
+        eventRedirect <= evt.redirect;
+        sig <= evt.sig;
+        wrong <= evt.wrong;
+    endtask
 
 
     function automatic ExecEvent resolveBranch(input CpuState state, input OpSlot op);
