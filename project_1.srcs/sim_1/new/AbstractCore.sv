@@ -84,10 +84,10 @@ module AbstractCore
     typedef OpSlot OpSlot4[4];
 
 
-     typedef struct {
-        Mword target;
-        logic redirect;
-     } ExecEvent;
+//     typedef struct {
+//        Mword target;
+//        logic redirect;
+//     } ExecEvent;
 
     typedef struct {
         int num;
@@ -134,11 +134,11 @@ module AbstractCore
 
     OpStatus oooQueue[$:OOO_QUEUE_SIZE];
     
-    typedef struct {
-        Word intRegs[32], floatRegs[32];
-        InsId lastIns = -1;
-        Word target;
-    } CpuState;
+//    typedef struct {
+//        Word intRegs[32], floatRegs[32];
+//        //InsId lastIns = -1;
+//        Word target;
+//    } CpuState;
     
     CpuState renamedState, execState, retiredState;
     
@@ -446,7 +446,8 @@ module AbstractCore
 
 
     task automatic setBranch(ref CpuState state, input OpSlot op);
-        ExecEvent evt = resolveBranch(state, op);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        ExecEvent evt = resolveBranch(state, abs, op.adr);
 
         branchTarget <= evt.target;
         branchRedirect <= evt.redirect;
@@ -457,7 +458,7 @@ module AbstractCore
         Word3 args = getArgs(execState.intRegs, execState.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
         Word result = calculateResult(abs, args, op.adr);
         
-        ExecEvent evt = resolveBranch(execState, op);
+        ExecEvent evt = resolveBranch(execState, abs, op.adr);
         Word trg = evt.redirect ? evt.target : op.adr + 4;
 
         performBranch(execState, op);
@@ -519,7 +520,7 @@ module AbstractCore
         AbstractInstruction abs = decodeAbstract(op.bits);
         Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
 
-        writeSysReg(args[1], args[2]);
+        writeSysReg_(args[1], args[2]);
     endtask
     
 
@@ -679,16 +680,16 @@ module AbstractCore
             return oooQueue.size();
         endfunction
 
-    task automatic writeIntReg(ref CpuState state, input Word regNum, input Word value);
-        if (regNum == 0) return;
-        state.intRegs[regNum] = value;
-    endtask
+//    task automatic writeIntReg(ref CpuState state, input Word regNum, input Word value);
+//        if (regNum == 0) return;
+//        state.intRegs[regNum] = value;
+//    endtask
 
-    task automatic writeFloatReg(ref CpuState state, input Word regNum, input Word value);
-        state.floatRegs[regNum] = value;
-    endtask
+//    task automatic writeFloatReg(ref CpuState state, input Word regNum, input Word value);
+//        state.floatRegs[regNum] = value;
+//    endtask
 
-    task automatic writeSysReg(input Word regNum, input Word value);
+    task automatic writeSysReg_(input Word regNum, input Word value);
         sysRegs[regNum] = value;
     endtask
 
@@ -700,25 +701,25 @@ module AbstractCore
     endtask
 
 
-    function automatic ExecEvent resolveBranch(input CpuState state, input OpSlot op);
-        AbstractInstruction abs = decodeAbstract(op.bits);
-        Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
+//    function automatic ExecEvent resolveBranch(input CpuState state, input OpSlot op);
+//        AbstractInstruction abs = decodeAbstract(op.bits);
+//        Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
 
-        bit redirect = 0;
-        Word brTarget;
+//        bit redirect = 0;
+//        Word brTarget;
 
-        case (abs.mnemonic)
-            "ja", "jl": redirect = 1;
-            "jz_i": redirect = (args[0] == 0);
-            "jnz_i": redirect = (args[0] != 0);
-            "jz_r": redirect = (args[0] == 0);
-            "jnz_r": redirect = (args[0] != 0);
-            default: $fatal("Wrong kind of branch");
-        endcase
+//        case (abs.mnemonic)
+//            "ja", "jl": redirect = 1;
+//            "jz_i": redirect = (args[0] == 0);
+//            "jnz_i": redirect = (args[0] != 0);
+//            "jz_r": redirect = (args[0] == 0);
+//            "jnz_r": redirect = (args[0] != 0);
+//            default: $fatal("Wrong kind of branch");
+//        endcase
 
-        brTarget = (abs.mnemonic inside {"jz_r", "jnz_r"}) ? args[1] : op.adr + args[1];
+//        brTarget = (abs.mnemonic inside {"jz_r", "jnz_r"}) ? args[1] : op.adr + args[1];
 
-        return '{brTarget, redirect};
-    endfunction
+//        return '{brTarget, redirect};
+//    endfunction
 
 endmodule

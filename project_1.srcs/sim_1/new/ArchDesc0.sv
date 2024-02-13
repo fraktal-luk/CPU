@@ -462,7 +462,8 @@ module ArchDesc0();
                 TMP_prepareIntTest();
             runIntTestSim();
             
-            $finish();
+            //$finish();
+            $stop(1);
         endtask
         
         task automatic runTestSim(input string name);

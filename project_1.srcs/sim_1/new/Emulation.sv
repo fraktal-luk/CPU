@@ -7,6 +7,76 @@ package Emulation;
     import Asm::*;
 
 
+    typedef struct {
+        Word intRegs[32], floatRegs[32], sysRegs[32];
+        Word target;
+    } CpuState;
+
+     typedef struct {
+        Word target;
+        logic redirect;
+     } ExecEvent;
+
+
+    function automatic ExecEvent resolveBranch(input CpuState state, input AbstractInstruction abs, input Word adr);//OpSlot op);
+        //AbstractInstruction abs = decodeAbstract(op.bits);
+        Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
+
+//        bit redirect = 0;
+//        Word brTarget;
+
+//        case (abs.mnemonic)
+//            "ja", "jl": redirect = 1;
+//            "jz_i": redirect = (args[0] == 0);
+//            "jnz_i": redirect = (args[0] != 0);
+//            "jz_r": redirect = (args[0] == 0);
+//            "jnz_r": redirect = (args[0] != 0);
+//            default: $fatal("Wrong kind of branch");
+//        endcase
+
+//        brTarget = (abs.mnemonic inside {"jz_r", "jnz_r"}) ? args[1] : adr + args[1];
+
+//        return '{brTarget, redirect};
+        
+            return resolveBranch_Internal(abs, adr, args);
+    endfunction
+
+    function automatic ExecEvent resolveBranch_Internal(input AbstractInstruction abs, input Word adr, input Word3 vals);//OpSlot op);
+        //AbstractInstruction abs = decodeAbstract(op.bits);
+        Word3 args = //getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
+                        vals;
+        bit redirect = 0;
+        Word brTarget;
+
+        case (abs.mnemonic)
+            "ja", "jl": redirect = 1;
+            "jz_i": redirect = (args[0] == 0);
+            "jnz_i": redirect = (args[0] != 0);
+            "jz_r": redirect = (args[0] == 0);
+            "jnz_r": redirect = (args[0] != 0);
+            default: ;//$fatal("Wrong kind of branch");
+        endcase
+
+        brTarget = (abs.mnemonic inside {"jz_r", "jnz_r"}) ? args[1] : adr + args[1];
+
+        return '{brTarget, redirect};
+    endfunction
+
+
+    function automatic void writeIntReg(ref CpuState state, input Word regNum, input Word value);
+        if (regNum == 0) return;
+        state.intRegs[regNum] = value;
+    endfunction
+
+    function automatic void writeFloatReg(ref CpuState state, input Word regNum, input Word value);
+        state.floatRegs[regNum] = value;
+    endfunction
+
+    function automatic void writeSysReg(ref CpuState state, input Word regNum, input Word value);
+        state.sysRegs[regNum] = value;
+    endfunction
+
+
     function automatic Word getArgValue(input Word intRegs[32], input Word floatRegs[32], input int src, input byte spec);
         case (spec)
            "i": return Word'(intRegs[src]);
@@ -90,10 +160,8 @@ package Emulation;
         string str;
         
         CoreStatus status;
-        
-        Word intRegs[32];
-        Word floatRegs[32];
-        Word sysRegs[32];
+
+        CpuState coreState;
 
         typedef struct {
             bit active;
@@ -115,10 +183,10 @@ package Emulation;
             
             this.status = '{default: 0};
             this.writeToDo = '{default: 0};
-            
-            this.intRegs = '{default: 0};
-            this.floatRegs = '{default: 0};
-            this.sysRegs = SYS_REGS_INITIAL;
+
+            this.coreState.intRegs = '{default: 0};
+            this.coreState.floatRegs = '{default: 0};
+            this.coreState.sysRegs = SYS_REGS_INITIAL;
         endfunction
         
         
@@ -139,24 +207,16 @@ package Emulation;
         endfunction
               
 
-        local function automatic Word3 getArgs(input int sources[3], input string typeSpec);
-            Word3 res;            
-            foreach (sources[i]) res[i] = getArgValue(this.intRegs, this.floatRegs, sources[i], typeSpec[i+2]);
-            
-            return res;
-        endfunction
-        
-        
         local function automatic ExecResult processInstruction(input Word adr, input AbstractInstruction ins, ref logic[7:0] dataMem[]);
             ExecResult res;
             FormatSpec fmtSpec = parsingMap[ins.fmt];
-            Word3 args = getArgs(ins.sources, fmtSpec.typeSpec);
-            
+            Word3 args = getArgs(this.coreState.intRegs, this.coreState.floatRegs, ins.sources, fmtSpec.typeSpec);
+                        
             this.str = disasm(ins.encoding);
            
             performCalculation(ins, args);
             performLoad(ins, args, dataMem);
-            performBranch(ins, args);
+            performBranch(ins, this.ip, args);
             this.writeToDo = getMemWrite(ins, args);
             performSys(ins, args);
             
@@ -192,7 +252,9 @@ package Emulation;
                     O_intRotate,
                     
                     O_intLoadW,
-                    O_intLoadD
+                    O_intLoadD,
+                    
+                    O_sysLoad
                 };
             endfunction
 
@@ -208,9 +270,8 @@ package Emulation;
         local function automatic void performCalculation(input AbstractInstruction ins, input Word3 vals);
             Word result = calculateResult(ins, vals, this.ip);
 
-            if (hasFloatDest(ins)) this.floatRegs[ins.dest] = result;
-            if (hasIntDest(ins)) this.intRegs[ins.dest] = result;
-            this.intRegs[0] = 0;
+            if (hasFloatDest(ins)) writeFloatReg(this.coreState, ins.dest, result);
+            if (hasIntDest(ins)) writeIntReg(this.coreState, ins.dest, result);
         endfunction
         
         local function automatic Word loadWord(input Word adr, input logic[7:0] mem[]);
@@ -235,56 +296,66 @@ package Emulation;
                     result = loadWord(adr, mem);
                     float = 1;
                 end
-                O_sysLoad: result = this.sysRegs[vals[1]];
+                O_sysLoad: begin
+                    result = this.coreState.sysRegs[vals[1]];
+                end
                 default: return;
             endcase
 
-            if (float) this.floatRegs[ins.dest] = result;
-            else this.intRegs[ins.dest] = result;
-            
-            this.intRegs[0] = 0;
+            if (hasFloatDest(ins)) writeFloatReg(this.coreState, ins.dest, result);
+            if (hasIntDest(ins)) writeIntReg(this.coreState, ins.dest, result);
         endfunction
         
-        local function automatic void performBranch(input AbstractInstruction ins, input Word3 vals);
+        local function automatic void performBranch(input AbstractInstruction ins, input Word ip, input Word3 vals);
+            //Word trg = ip + 4;
+                ExecEvent evt = resolveBranch_Internal(ins, ip, vals);
+                Word trg_ = evt.redirect ? evt.target : ip + 4;
             
-            case (ins.mnemonic)
-                "ja", "jl": this.ipNext = this.ip + vals[1];
-                "jz_i": this.ipNext = (vals[0] == 0) ? this.ip + vals[1] : this.ip + 4;
-                "jnz_i": this.ipNext = (vals[0] != 0) ? this.ip + vals[1] : this.ip + 4;
-                "jz_r": this.ipNext = (vals[0] == 0) ? vals[1] : this.ip + 4;
-                "jnz_r": this.ipNext = (vals[0] != 0) ? vals[1] : this.ip + 4;
-                default: this.ipNext = this.ip + 4;
-            endcase  
+//            case (ins.mnemonic)
+//                "ja", "jl": trg = ip + vals[1];
+//                "jz_i": trg = (vals[0] == 0) ? ip + vals[1] : ip + 4;
+//                "jnz_i": trg = (vals[0] != 0) ? ip + vals[1] : ip + 4;
+//                "jz_r": trg = (vals[0] == 0) ? vals[1] : ip + 4;
+//                "jnz_r": trg = (vals[0] != 0) ? vals[1] : ip + 4;
+//                default: trg = ip + 4;
+//            endcase  
             
+//                assert (trg_ == trg) else $error("unmatched target! %d %d", trg_, trg);
+            
+            this.ipNext = trg_;
         endfunction 
 
 
         local function automatic void performSys(input AbstractInstruction ins, input Word3 vals);
             case (ins.def.o)
-                O_sysStore:
-                    this.sysRegs[vals[1]] = vals[2];
+                O_sysStore: begin
+                    writeSysReg(this.coreState, vals[1], vals[2]);
+                end
                 O_undef: begin
                     this.ipNext = IP_ERROR;
-                    this.sysRegs[4] = this.sysRegs[1];
-                    this.sysRegs[1] |= 1; // TODO: handle state register correctly
-                    this.sysRegs[2] = this.ip + 4;
-                    
                     this.status.error = 1;
+
+                    this.coreState.sysRegs[4] = this.coreState.sysRegs[1];
+                    this.coreState.sysRegs[1] |= 1; // TODO: handle state register correctly
+                    this.coreState.sysRegs[2] = this.ip + 4;
                 end
                 O_call: begin
                     this.ipNext = IP_CALL;
-                    this.sysRegs[4] = this.sysRegs[1];
-                    this.sysRegs[1] |= 1; // TODO: handle state register correctly
-                    this.sysRegs[2] = this.ip + 4;
+
+                    this.coreState.sysRegs[4] = this.coreState.sysRegs[1];
+                    this.coreState.sysRegs[1] |= 1; // TODO: handle state register correctly
+                    this.coreState.sysRegs[2] = this.ip + 4;
                 end
                 O_sync: ;
                 O_retE: begin
-                    this.sysRegs[1] = this.sysRegs[4];
-                    this.ipNext = this.sysRegs[2];
+                    this.ipNext = this.coreState.sysRegs[2];
+                    
+                    this.coreState.sysRegs[1] = this.coreState.sysRegs[4];
                 end
                 O_retI: begin
-                    this.sysRegs[1] = this.sysRegs[5];
-                    this.ipNext = this.sysRegs[3];
+                    this.ipNext = this.coreState.sysRegs[3];
+                    
+                    this.coreState.sysRegs[1] = this.coreState.sysRegs[5];
                 end
                 O_replay: this.ipNext = this.ip;
                 O_halt: begin
@@ -312,9 +383,11 @@ package Emulation;
         
         function automatic void interrupt();
             this.ipNext = IP_INT;
-            this.sysRegs[5] = this.sysRegs[1];
-            this.sysRegs[1] |= 2; // TODO: handle state register correctly
-            this.sysRegs[3] = this.ip;
+
+            this.coreState.sysRegs[5] = this.coreState.sysRegs[1];
+            this.coreState.sysRegs[1] |= 2; // TODO: handle state register correctly
+            this.coreState.sysRegs[3] = this.ip;
+            
             this.ip = this.ipNext;
         endfunction
         
