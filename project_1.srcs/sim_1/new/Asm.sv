@@ -12,7 +12,7 @@ package Asm;
     } CodeRef;
 
 
-    function automatic Word TMP_getIns(input string parts[]);
+    function automatic Word getIns(input string parts[]);
         InstructionFormat fmt = getFormat(parts[0]);
         InstructionDef def = getDef(parts[0]);
         
@@ -30,7 +30,7 @@ package Asm;
         return res;
     endfunction;
 
-    function automatic CodeRef TMP_getCodeRef(input string parts[]);
+    function automatic CodeRef getCodeRef(input string parts[]);
         InstructionFormat fmt = getFormat(parts[0]);
         InstructionDef def = getDef(parts[0]);
         
@@ -304,7 +304,7 @@ package Asm;
         return s;
     endfunction
 
-    function automatic string TMP_disasm(input Word w);        
+    function automatic string disasm(input Word w);        
         AbstractInstruction absIns = decodeAbstract(w);        
         return ins2str(absIns);
     endfunction;
@@ -324,6 +324,7 @@ package Asm;
         return lines;
     endfunction
 
+    // UNUSED
     function automatic bit writeFile(input string name, input squeue lines);
         int file = $fopen(name, "w");
         foreach (lines[i]) $fdisplay(file, lines[i]);  
@@ -526,9 +527,9 @@ package Asm;
             return res;
         end
 
-      foreach(partsExt[i])
-        if (i < parts.size())
-            partsExt[i] = parts[i];
+        foreach(partsExt[i])
+            if (i < parts.size())
+                partsExt[i] = parts[i];
 
         // TODO: get rid of this hack, define sys instructions like sys_call etc?
         if (mnemonic == "sys") begin
@@ -537,8 +538,8 @@ package Asm;
             partsExt[1] = "";
         end
         
-        res.ins = TMP_getIns(partsExt);      
-        res.codeRef = TMP_getCodeRef(partsExt);
+        res.ins = getIns(partsExt);      
+        res.codeRef = getCodeRef(partsExt);
 
         return res;
     endfunction
@@ -572,11 +573,12 @@ package Asm;
         return res;
     endfunction
 
+    // UNUSED
     function automatic squeue disasmBlock(input Word words[]);
         squeue res;
         string s;
         foreach (words[i]) begin
-            $swrite(s, "%h: %h  %s", 4*i , words[i], TMP_disasm(words[i]));
+            $swrite(s, "%h: %h  %s", 4*i , words[i], disasm(words[i]));
             res.push_back(s);
         end
         return res;

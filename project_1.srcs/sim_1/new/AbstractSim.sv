@@ -61,7 +61,7 @@ package AbstractSim;
         emul.step();
         emul.writeAndDrain();
 
-        if (theIp != op.adr || emul.emul.disasm != TMP_disasm(op.bits)) $display("Mismatched commit: %d: %s;  %d: %s", theIp, emul.emul.disasm, op.adr, TMP_disasm(op.bits));
+        if (theIp != op.adr || emul.emul.str != disasm(op.bits)) $display("Mismatched commit: %d: %s;  %d: %s", theIp, emul.emul.str, op.adr, disasm(op.bits));
     endfunction
 
     function static int TMP_getCommit();

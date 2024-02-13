@@ -87,7 +87,7 @@ package Emulation;
         Word ip;
         Word ipNext;
         
-        string disasm;
+        string str;
         
         CoreStatus status;
         
@@ -152,7 +152,7 @@ package Emulation;
             FormatSpec fmtSpec = parsingMap[ins.fmt];
             Word3 args = getArgs(ins.sources, fmtSpec.typeSpec);
             
-            this.disasm = TMP_disasm(ins.encoding);
+            this.str = disasm(ins.encoding);
            
             performCalculation(ins, args);
             performLoad(ins, args, dataMem);
@@ -165,42 +165,51 @@ package Emulation;
             return res;
         endfunction
 
+//////////////////////////
+////  Move to InsDefs
+            function automatic bit hasIntDest(input AbstractInstruction ins);
+                return ins.def.o inside {
+                    O_jump,
+                    
+                    O_intAnd,
+                    O_intOr,
+                    O_intXor,
+                    
+                    O_intAdd,
+                    O_intSub,
+                    O_intAddH,
+                    
+                    O_intMul,
+                    O_intMulHU,
+                    O_intMulHS,
+                    O_intDivU,
+                    O_intDivS,
+                    O_intRemU,
+                    O_intRemS,
+                    
+                    O_intShiftLogical,
+                    O_intShiftArith,
+                    O_intRotate,
+                    
+                    O_intLoadW,
+                    O_intLoadD
+                };
+            endfunction
+
+            function automatic bit hasFloatDest(input AbstractInstruction ins);
+                return ins.def.o inside {
+                    O_floatMove,
+                    O_floatLoadW
+                };
+            endfunction
+
+//////////////////////////////
 
         local function automatic void performCalculation(input AbstractInstruction ins, input Word3 vals);
-            Word result;
-            bit writeInt, writeFloat = 0;
+            Word result = calculateResult(ins, vals, this.ip);
 
-            result = calculateResult(ins, vals, this.ip);            
-
-            if (ins.def.o inside {
-                O_jump,
-                
-                O_intAnd,
-                O_intOr,
-                O_intXor,
-                
-                O_intAdd,
-                O_intSub,
-                O_intAddH,
-                
-                O_intMul,
-                O_intMulHU,
-                O_intMulHS,
-                O_intDivU,
-                O_intDivS,
-                O_intRemU,
-                O_intRemS,
-                
-                O_intShiftLogical,
-                O_intShiftArith,
-                O_intRotate
-            }) writeInt = 1;
-            
-            if (ins.def.o inside {O_floatMove}) writeFloat = 1;
-
-            if (writeFloat) this.floatRegs[ins.dest] = result;
-            else if (writeInt) this.intRegs[ins.dest] = result;
-            
+            if (hasFloatDest(ins)) this.floatRegs[ins.dest] = result;
+            if (hasIntDest(ins)) this.intRegs[ins.dest] = result;
             this.intRegs[0] = 0;
         endfunction
         

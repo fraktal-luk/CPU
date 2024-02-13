@@ -156,8 +156,8 @@ module AbstractCore
 
         //assign cmp0 = (intWritersR[1] == intWritersC[1]);
 
-    assign lastCommittedStr = TMP_disasm(lastCommitted.bits);
-    assign lastRetiredStr = TMP_disasm(lastRetired.bits);
+    assign lastCommittedStr = disasm(lastCommitted.bits);
+    assign lastRetiredStr = disasm(lastRetired.bits);
 
     always @(posedge clk) begin
         resetPrev <= reset;
