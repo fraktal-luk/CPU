@@ -19,34 +19,14 @@ package Emulation;
 
 
     function automatic ExecEvent resolveBranch(input CpuState state, input AbstractInstruction abs, input Word adr);//OpSlot op);
-        //AbstractInstruction abs = decodeAbstract(op.bits);
         Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
-
-//        bit redirect = 0;
-//        Word brTarget;
-
-//        case (abs.mnemonic)
-//            "ja", "jl": redirect = 1;
-//            "jz_i": redirect = (args[0] == 0);
-//            "jnz_i": redirect = (args[0] != 0);
-//            "jz_r": redirect = (args[0] == 0);
-//            "jnz_r": redirect = (args[0] != 0);
-//            default: $fatal("Wrong kind of branch");
-//        endcase
-
-//        brTarget = (abs.mnemonic inside {"jz_r", "jnz_r"}) ? args[1] : adr + args[1];
-
-//        return '{brTarget, redirect};
-        
-            return resolveBranch_Internal(abs, adr, args);
+        return resolveBranch_Internal(abs, adr, args);
     endfunction
 
     function automatic ExecEvent resolveBranch_Internal(input AbstractInstruction abs, input Word adr, input Word3 vals);//OpSlot op);
-        //AbstractInstruction abs = decodeAbstract(op.bits);
-        Word3 args = //getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
-                        vals;
+        Word3 args = vals;
         bit redirect = 0;
-        Word brTarget;
+        Word brTarget = (abs.mnemonic inside {"jz_r", "jnz_r"}) ? args[1] : adr + args[1];
 
         case (abs.mnemonic)
             "ja", "jl": redirect = 1;
@@ -56,8 +36,6 @@ package Emulation;
             "jnz_r": redirect = (args[0] != 0);
             default: ;//$fatal("Wrong kind of branch");
         endcase
-
-        brTarget = (abs.mnemonic inside {"jz_r", "jnz_r"}) ? args[1] : adr + args[1];
 
         return '{brTarget, redirect};
     endfunction
@@ -146,17 +124,16 @@ package Emulation;
         bit send;
     } CoreStatus;
 
-
-    class Emulator;
-
         const Word SYS_REGS_INITIAL[32] = '{
             0: -1,
             default: 0
         };
-        
+
+
+    class Emulator;
+
         Word ip;
-        Word ipNext;
-        
+
         string str;
         
         CoreStatus status;
@@ -178,11 +155,12 @@ package Emulation;
 
 
         function automatic void reset();
-            this.ip = IP_RESET;
-            this.ipNext = 'x;
+            this.ip = 'x;
             
             this.status = '{default: 0};
             this.writeToDo = '{default: 0};
+
+            this.coreState.target = IP_RESET;
 
             this.coreState.intRegs = '{default: 0};
             this.coreState.floatRegs = '{default: 0};
@@ -191,8 +169,11 @@ package Emulation;
         
         
         function automatic void executeStep(input Word progMem[], ref logic[7:0] dataMem[]);
-            AbstractInstruction absIns = decodeAbstract(progMem[this.ip/4]);
-            ExecResult execRes = processInstruction(this.ip, absIns, dataMem);            
+            AbstractInstruction absIns;
+            ExecResult execRes;  
+            this.ip = this.coreState.target;
+            absIns = decodeAbstract(progMem[this.ip/4]);
+            execRes = processInstruction(this.ip, absIns, dataMem);            
         endfunction 
         
         
@@ -219,9 +200,7 @@ package Emulation;
             performBranch(ins, this.ip, args);
             this.writeToDo = getMemWrite(ins, args);
             performSys(ins, args);
-            
-            this.ip = this.ipNext;
-            
+           
             return res;
         endfunction
 
@@ -287,14 +266,12 @@ package Emulation;
         local function automatic void performLoad(input AbstractInstruction ins, input Word3 vals, ref logic[7:0] mem[]);
             Word result;
             Word adr = vals[0] + vals[1];
-            bit float = 0;
             
             case (ins.def.o)
                 O_intLoadW: result = loadWord(adr, mem);
                 O_intLoadD: result = loadWord(adr, mem); // TODO: actual Dword
                 O_floatLoadW: begin
                     result = loadWord(adr, mem);
-                    float = 1;
                 end
                 O_sysLoad: begin
                     result = this.coreState.sysRegs[vals[1]];
@@ -307,22 +284,10 @@ package Emulation;
         endfunction
         
         local function automatic void performBranch(input AbstractInstruction ins, input Word ip, input Word3 vals);
-            //Word trg = ip + 4;
-                ExecEvent evt = resolveBranch_Internal(ins, ip, vals);
-                Word trg_ = evt.redirect ? evt.target : ip + 4;
-            
-//            case (ins.mnemonic)
-//                "ja", "jl": trg = ip + vals[1];
-//                "jz_i": trg = (vals[0] == 0) ? ip + vals[1] : ip + 4;
-//                "jnz_i": trg = (vals[0] != 0) ? ip + vals[1] : ip + 4;
-//                "jz_r": trg = (vals[0] == 0) ? vals[1] : ip + 4;
-//                "jnz_r": trg = (vals[0] != 0) ? vals[1] : ip + 4;
-//                default: trg = ip + 4;
-//            endcase  
-            
-//                assert (trg_ == trg) else $error("unmatched target! %d %d", trg_, trg);
-            
-            this.ipNext = trg_;
+            ExecEvent evt = resolveBranch_Internal(ins, ip, vals);
+            Word trg = evt.redirect ? evt.target : ip + 4;
+
+            this.coreState.target = trg;
         endfunction 
 
 
@@ -332,15 +297,16 @@ package Emulation;
                     writeSysReg(this.coreState, vals[1], vals[2]);
                 end
                 O_undef: begin
-                    this.ipNext = IP_ERROR;
                     this.status.error = 1;
+
+                    this.coreState.target = IP_ERROR;
 
                     this.coreState.sysRegs[4] = this.coreState.sysRegs[1];
                     this.coreState.sysRegs[1] |= 1; // TODO: handle state register correctly
                     this.coreState.sysRegs[2] = this.ip + 4;
                 end
-                O_call: begin
-                    this.ipNext = IP_CALL;
+                O_call: begin                    
+                    this.coreState.target = IP_CALL;
 
                     this.coreState.sysRegs[4] = this.coreState.sysRegs[1];
                     this.coreState.sysRegs[1] |= 1; // TODO: handle state register correctly
@@ -348,18 +314,20 @@ package Emulation;
                 end
                 O_sync: ;
                 O_retE: begin
-                    this.ipNext = this.coreState.sysRegs[2];
+                    this.coreState.target = this.coreState.sysRegs[2];
                     
                     this.coreState.sysRegs[1] = this.coreState.sysRegs[4];
                 end
                 O_retI: begin
-                    this.ipNext = this.coreState.sysRegs[3];
-                    
+                    this.coreState.target = this.coreState.sysRegs[3];
+
                     this.coreState.sysRegs[1] = this.coreState.sysRegs[5];
                 end
-                O_replay: this.ipNext = this.ip;
+                O_replay: begin
+                    this.coreState.target = this.ip;
+                end
                 O_halt: begin
-                    this.ipNext = this.ip;
+                    this.coreState.target = this.ip;
                     this.status.halted = 1;
                 end
                 O_send: begin
@@ -382,17 +350,14 @@ package Emulation;
         endfunction
         
         function automatic void interrupt();
-            this.ipNext = IP_INT;
-
             this.coreState.sysRegs[5] = this.coreState.sysRegs[1];
             this.coreState.sysRegs[1] |= 2; // TODO: handle state register correctly
-            this.coreState.sysRegs[3] = this.ip;
+            this.coreState.sysRegs[3] = this.coreState.target;
             
-            this.ip = this.ipNext;
+            this.coreState.target = IP_INT;
         endfunction
         
     endclass
-
 
 
     class EmulationWithMems;
@@ -404,7 +369,6 @@ package Emulation;
             this.emul = new();
             this.reset();
         endfunction
-
 
         function void reset();
             this.emul.reset();
@@ -519,9 +483,7 @@ package Emulation;
             this.emul.interrupt();
         endfunction
         
-    endclass    
-    
-
+    endclass
 
 endpackage
 

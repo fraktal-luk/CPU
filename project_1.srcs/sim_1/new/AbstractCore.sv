@@ -24,7 +24,7 @@ module AbstractCore
     output logic wrong
 );
     
-    logic dummy = '1;
+    logic dummy = '0;
 
     typedef int InsId;
 
@@ -50,12 +50,6 @@ module AbstractCore
     int insMapSize = 0, nCommitted = 0, nRetired = 0;
     
 
-//    InsId reg1r, reg1c;
-    
-//        assign re1r = intWritersR[1];
-//        assign re1c = intWritersC[1];
-    
-    
     function automatic void setTarget(input int id, input Word trg);
         insMap[id].target = trg;
     endfunction
@@ -84,11 +78,6 @@ module AbstractCore
     typedef OpSlot OpSlot4[4];
 
 
-//     typedef struct {
-//        Mword target;
-//        logic redirect;
-//     } ExecEvent;
-
     typedef struct {
         int num;
         OpSlot regular[4];
@@ -106,8 +95,7 @@ module AbstractCore
 
     logic fetchAllow;
     logic resetPrev = 0, intPrev = 0, branchRedirect = 0, eventRedirect = 0;
-    Word branchTarget = 'x, eventTarget = 'x,// storedTarget = 'x, 
-        committedTarget = 'x, retiredTarget = 'x;
+    Word branchTarget = 'x, eventTarget = 'x, committedTarget = 'x, retiredTarget = 'x;
     
     Stage ipStage = EMPTY_STAGE, fetchStage0 = EMPTY_STAGE, fetchStage1 = EMPTY_STAGE;
     Stage fetchQueue[$:FETCH_QUEUE_SIZE];
@@ -119,12 +107,11 @@ module AbstractCore
     
     OpSlot committedGroup[4] = '{default: EMPTY_SLOT};
     
-    
-        typedef struct {
-            OpSlot op;
-            logic done;
-        }
-        OpSlotExt;
+//        typedef struct {
+//            OpSlot op;
+//            logic done;
+//        }
+//        OpSlotExt;
 
     typedef struct {
         int id;
@@ -134,27 +121,16 @@ module AbstractCore
 
     OpStatus oooQueue[$:OOO_QUEUE_SIZE];
     
-//    typedef struct {
-//        Word intRegs[32], floatRegs[32];
-//        //InsId lastIns = -1;
-//        Word target;
-//    } CpuState;
-    
     CpuState renamedState, execState, retiredState;
     
-    
-    Word //intRegs[32], floatRegs[32],
-             sysRegs[32];
     InsId intWritersR[32] = '{default: -1}, floatWritersR[32] = '{default: -1};
     InsId intWritersC[32] = '{default: -1}, floatWritersC[32] = '{default: -1};
     
-
     
     string lastCommittedStr, lastRetiredStr, oooqStr;
     logic cmp0, cmp1;
     Word cmpw0, cmpw1;
 
-        //assign cmp0 = (intWritersR[1] == intWritersC[1]);
 
     assign lastCommittedStr = disasm(lastCommitted.bits);
     assign lastRetiredStr = disasm(lastRetired.bits);
@@ -179,8 +155,8 @@ module AbstractCore
 
         advanceOOOQ();
                 
-            issuedSt0 <= DEFAULT_ISSUE_GROUP;
-            issuedSt1 <= issuedSt0;
+        issuedSt0 <= DEFAULT_ISSUE_GROUP;
+        issuedSt1 <= issuedSt0;
 
         if (resetPrev | intPrev | branchRedirect | eventRedirect) begin
             performRedirect();
@@ -220,18 +196,18 @@ module AbstractCore
                     igIssue = issueFromOpQ(opQueue, oqSize);
                     igExec = igIssue;
                 end
-                        igExec = issuedSt1;
-                    issuedSt0 <= igIssue;
- 
-                    foreach (igExec.regular[i]) begin
-                        if (igExec.regular[i].active) execRegular(igExec.regular[i]);
-                    end
-                
-                    if (igExec.branch.active)execBranch(igExec.branch);
-                    else if (igExec.mem.active) execMemFirst(igExec.mem);
-                    else if (igExec.sys.active) execSysFirst(igExec.sys);
-                //end
-                
+                    
+                igExec = issuedSt1;
+                issuedSt0 <= igIssue;
+
+                foreach (igExec.regular[i]) begin
+                    if (igExec.regular[i].active) execRegular(igExec.regular[i]);
+                end
+            
+                if (igExec.branch.active)execBranch(igExec.branch);
+                else if (igExec.mem.active) execMemFirst(igExec.mem);
+                else if (igExec.sys.active) execSysFirst(igExec.sys);
+            
             end
 
         end
@@ -245,27 +221,24 @@ module AbstractCore
             automatic OpStatus oooqDone[$] = (oooQueue.find with (item.done == 1));
             committedNum <= oooqDone.size();
             
-                assert (oooqDone.size() <= 4) else $error("How 5?");
+            assert (oooqDone.size() <= 4) else $error("How 5?");
         end
         
         insMapSize = insMap.size();
         
             $swrite(oooqStr, "%p", oooQueue);
-            
         
         //cmp  
             cmpw0 <= cmpRegs(execState.intRegs, retiredState.intRegs);
     end
 
-
-
             
-            function automatic Word cmpRegs(input Word arr0[32], input Word arr1[32]);
-                Word res;
-                foreach (arr0[i])
-                    res = (res << 1) | (arr0[31-i] == arr1[31-i]);
-                return res; 
-            endfunction
+        function automatic Word cmpRegs(input Word arr0[32], input Word arr1[32]);
+            Word res;
+            foreach (arr0[i])
+                res = (res << 1) | (arr0[31-i] == arr1[31-i]);
+            return res; 
+        endfunction
             
 
     assign fetchAllow = fetchQueueAccepts(fqSize);
@@ -318,7 +291,6 @@ module AbstractCore
 
     task automatic commitOp(input OpSlot op, input Word trg);
         lastCommitted <= op;
-        //storedTarget <= trg;
         committedTarget <= trg;
             
         updateOOOQ(op);
@@ -349,9 +321,9 @@ module AbstractCore
         opQueue.delete();
         oooQueue.delete();
         
-            issuedSt0 <= DEFAULT_ISSUE_GROUP;
-            issuedSt1 <= DEFAULT_ISSUE_GROUP;
-        
+        issuedSt0 <= DEFAULT_ISSUE_GROUP;
+        issuedSt1 <= DEFAULT_ISSUE_GROUP;
+    
         memOp <= EMPTY_SLOT;
         memOpPrev <= EMPTY_SLOT;
         sysOp <= EMPTY_SLOT;
@@ -360,8 +332,8 @@ module AbstractCore
         if (resetPrev) begin
             execState.intRegs = '{0: '0, default: '0};
             execState.floatRegs = '{default: '0};
-            sysRegs = '{0: -1, 1: 0, default: '0};
-            
+            execState.sysRegs = SYS_REGS_INITIAL;
+
             retiredState.intRegs = '{0: '0, default: '0};
             retiredState.floatRegs = '{default: '0};
         end
@@ -421,20 +393,16 @@ module AbstractCore
 
 
     task automatic performInterrupt();
-            $display(">> Interrupt !!!");
+        $display(">> Interrupt !!!");
     
         eventTarget <= IP_INT;
-        //storedTarget <= IP_INT;
         committedTarget <= IP_INT;
-            retiredTarget <= IP_INT;
-        
-        sysRegs[5] = sysRegs[1];
-        sysRegs[1] |= 1; // TODO: handle state register correctly
-        sysRegs[3] = //committedTarget;
-                        retiredTarget;
+        retiredTarget <= IP_INT;
+
+        execState.sysRegs[5] = execState.sysRegs[1];
+        execState.sysRegs[1] |= 1; // TODO: handle state register correctly
+        execState.sysRegs[3] = retiredTarget;
     endtask
-
-
 
 
     task automatic performLink(ref CpuState state, input OpSlot op);
@@ -520,13 +488,13 @@ module AbstractCore
         AbstractInstruction abs = decodeAbstract(op.bits);
         Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
 
-        writeSysReg_(args[1], args[2]);
+        writeSysReg(execState, args[1], args[2]);
     endtask
     
 
     task automatic execSysLater(input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
-        LateEvent lateEvt = getLateEvent(op, abs, sysRegs[2], sysRegs[3]);
+        LateEvent lateEvt = getLateEvent(op, abs, execState.sysRegs[2], execState.sysRegs[3]);
         Word trg = lateEvt.redirect ? lateEvt.target : op.adr + 4;
 
         performSys(execState, op);
@@ -544,8 +512,9 @@ module AbstractCore
             default: ;                            
         endcase
 
-        modifySysRegs(sysRegs, op, abs);
-        setLateEvent(getLateEvent(op, abs, sysRegs[2], sysRegs[3]));
+        //modifySysRegs(execState, op.adr, abs);
+            modifySysRegs__(execState, op.adr, abs);
+        setLateEvent(getLateEvent(op, abs, state.sysRegs[2], state.sysRegs[3]));
     endtask
 
 
@@ -553,8 +522,7 @@ module AbstractCore
         AbstractInstruction abs = decodeAbstract(op.bits);
         Word3 args = getArgs(execState.intRegs, execState.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
         Word result = calculateResult(abs, args, op.adr);
-        if (abs.def.o == O_sysLoad) result = sysRegs[args[1]];
-    
+        if (abs.def.o == O_sysLoad) result = execState.sysRegs[args[1]];
         performRegularOp(execState, op);
         
         setResult(op.id, result);
@@ -567,17 +535,17 @@ module AbstractCore
         Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
 
         Word result = calculateResult(abs, args, op.adr);
-        if (abs.def.o == O_sysLoad) result = sysRegs[args[1]];
+        if (abs.def.o == O_sysLoad) result = state.sysRegs[args[1]];
 
         if (writesIntReg(op)) writeIntReg(state, abs.dest, result);
         if (writesFloatReg(op)) writeFloatReg(state, abs.dest, result);
     endtask        
 
 
-
     task automatic performAtRename(input OpSlot op);
     
     endtask
+
 
     task automatic performAtRetire(input OpSlot op);
         // TODO
@@ -594,8 +562,7 @@ module AbstractCore
         else
             performRegularOp(retiredState, op);
     endtask
-    
-    
+
 
     task automatic writeToOpQ(input Stage st);
         if (st.active) begin
@@ -671,27 +638,13 @@ module AbstractCore
         return res;
     endfunction
     
-        // How many in front are ready to commit
-        function automatic int countFrontCompleted();
-            //int cnt = 0;
-            foreach (oooQueue[i]) begin
-                if (!oooQueue[i].done) return i;
-            end
-            return oooQueue.size();
-        endfunction
-
-//    task automatic writeIntReg(ref CpuState state, input Word regNum, input Word value);
-//        if (regNum == 0) return;
-//        state.intRegs[regNum] = value;
-//    endtask
-
-//    task automatic writeFloatReg(ref CpuState state, input Word regNum, input Word value);
-//        state.floatRegs[regNum] = value;
-//    endtask
-
-    task automatic writeSysReg_(input Word regNum, input Word value);
-        sysRegs[regNum] = value;
-    endtask
+    // How many in front are ready to commit
+    function automatic int countFrontCompleted();
+        foreach (oooQueue[i]) begin
+            if (!oooQueue[i].done) return i;
+        end
+        return oooQueue.size();
+    endfunction
 
     task automatic setLateEvent(input LateEvent evt);
         eventTarget <= evt.target;
@@ -699,27 +652,5 @@ module AbstractCore
         sig <= evt.sig;
         wrong <= evt.wrong;
     endtask
-
-
-//    function automatic ExecEvent resolveBranch(input CpuState state, input OpSlot op);
-//        AbstractInstruction abs = decodeAbstract(op.bits);
-//        Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
-
-//        bit redirect = 0;
-//        Word brTarget;
-
-//        case (abs.mnemonic)
-//            "ja", "jl": redirect = 1;
-//            "jz_i": redirect = (args[0] == 0);
-//            "jnz_i": redirect = (args[0] != 0);
-//            "jz_r": redirect = (args[0] == 0);
-//            "jnz_r": redirect = (args[0] != 0);
-//            default: $fatal("Wrong kind of branch");
-//        endcase
-
-//        brTarget = (abs.mnemonic inside {"jz_r", "jnz_r"}) ? args[1] : op.adr + args[1];
-
-//        return '{brTarget, redirect};
-//    endfunction
 
 endmodule

@@ -60,6 +60,10 @@ package AbstractSim;
         commitCtr++;
         emul.step();
         emul.writeAndDrain();
+            
+           theIp = emul.emul.ip;
+            
+            //$display("Commit core %d, eul %d", op.adr, emul.emul.ip);
 
         if (theIp != op.adr || emul.emul.str != disasm(op.bits)) $display("Mismatched commit: %d: %s;  %d: %s", theIp, emul.emul.str, op.adr, disasm(op.bits));
     endfunction
@@ -139,26 +143,26 @@ package AbstractSim;
         endfunction
         
 
-    function automatic void modifySysRegs(ref Word regs[32], input OpSlot op, input AbstractInstruction abs);
+    function automatic void modifySysRegs(ref CpuState state, input Word adr, input AbstractInstruction abs);
         case (abs.def.o)
             O_undef: begin
-                regs[1] |= 1; // TODO: handle state register correctly
-                regs[2] = op.adr;
-                regs[4] = regs[1];
+                state.sysRegs[1] |= 1; // TODO: handle state register correctly
+                state.sysRegs[2] = adr;
+                state.sysRegs[4] = state.sysRegs[1];
             end
             
             O_call: begin
-                regs[1] |= 1; // TODO: handle state register correctly
-                regs[2] = op.adr + 4;
-                regs[4] = regs[1];
+                state.sysRegs[1] |= 1; // TODO: handle state register correctly
+                state.sysRegs[2] = adr + 4;
+                state.sysRegs[4] = state.sysRegs[1];
             end
             
             O_retE: begin
-                regs[1] = regs[4];
+                state.sysRegs[1] = state.sysRegs[4];
             end
             
             O_retI: begin
-                regs[1] = regs[5];
+                state.sysRegs[1] = state.sysRegs[5];
             end
 
             default: ;
@@ -166,10 +170,57 @@ package AbstractSim;
         
     endfunction
 
+
+    function automatic void modifySysRegs__(ref CpuState state, input Word adr, input AbstractInstruction abs);
+        case (abs.def.o)
+            O_sysStore: begin
+                //writeSysReg(state, vals[1], vals[2]);
+            end
+            O_undef: begin
+                //this.status.error = 1;
+
+                state.target = IP_ERROR;
+
+                state.sysRegs[4] = state.sysRegs[1];
+                state.sysRegs[1] |= 1; // TODO: handle state register correctly
+                state.sysRegs[2] = adr + 4;
+            end
+            O_call: begin                    
+                state.target = IP_CALL;
+
+                state.sysRegs[4] = state.sysRegs[1];
+                state.sysRegs[1] |= 1; // TODO: handle state register correctly
+                state.sysRegs[2] = adr + 4;
+            end
+            O_sync: ;
+            O_retE: begin
+                state.target = state.sysRegs[2];
+                
+                state.sysRegs[1] = state.sysRegs[4];
+            end
+            O_retI: begin
+                state.target = state.sysRegs[3];
+
+                state.sysRegs[1] = state.sysRegs[5];
+            end
+            O_replay: begin
+                state.target = adr;
+            end
+            O_halt: begin
+                //state.target = this.ip;
+                //this.status.halted = 1;
+            end
+            O_send: begin
+                //this.status.send = 1;
+            end
+            default: return;
+        endcase
+    endfunction
+    
+
     function automatic logic isSystemOp(input AbstractInstruction abs);
         return abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send,  O_sysStore};
     endfunction
-
 
 
     function automatic logic writesIntReg(input OpSlot op);
@@ -230,8 +281,6 @@ package AbstractSim;
     endfunction
 
 
- 
-        
      class ProgramMemory #(parameter WIDTH = 4);
         typedef Word Line[4];
         
