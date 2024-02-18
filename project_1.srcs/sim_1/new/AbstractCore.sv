@@ -416,7 +416,9 @@ module AbstractCore
     task automatic setBranch(ref CpuState state, input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
         ExecEvent evt = resolveBranch(state, abs, op.adr);
-
+        
+        state.target = evt.redirect ? evt.target : op.adr + 4;
+        
         branchTarget <= evt.target;
         branchRedirect <= evt.redirect;
     endtask
@@ -481,6 +483,8 @@ module AbstractCore
             writeIntReg(state, abs.dest, readIn[0]);
         else if (abs.def.o inside {O_floatLoadW})
             writeFloatReg(state, abs.dest, readIn[0]);
+        
+        state.target = op.adr + 4;
     endtask
 
 
@@ -489,6 +493,7 @@ module AbstractCore
         Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
 
         writeSysReg(execState, args[1], args[2]);
+        state.target = op.adr + 4;
     endtask
     
 
@@ -539,6 +544,8 @@ module AbstractCore
 
         if (writesIntReg(op)) writeIntReg(state, abs.dest, result);
         if (writesFloatReg(op)) writeFloatReg(state, abs.dest, result);
+        
+        state.target = op.adr + 4;
     endtask        
 
 

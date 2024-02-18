@@ -18,6 +18,61 @@ package Emulation;
      } ExecEvent;
 
 
+    class SimpleMem;
+        logic [7:0] bytes[4096];
+        
+        function automatic void reset();
+            this.bytes = '{default: 0};
+        endfunction
+        
+        function automatic void copyFrom(input SimpleMem other);
+            this.bytes = other.bytes;
+        endfunction
+        
+        
+        function automatic Word loadB(input Word adr);
+            Word res = 0;
+            res[7:0] = this.bytes[adr];
+        endfunction
+        
+        function automatic Word loadW(input Word adr);
+            Word res = 0;
+            //for (int i = 0; i < 4; i++)
+            logic [7:0] read[4];
+            foreach (read[i])
+                //read[i] = this.bytes[adr+i];
+                res = (res << 8) | this.bytes[adr + i];
+            return res;
+        endfunction
+        
+//        function automatic Word loadD(input Word adr);
+//            Word res = 0;
+//            res[7:0] = this.bytes[adr];
+//        endfunction
+        
+        
+        function automatic void storeB(input Word adr, input Word value);
+            this.bytes[adr] = value[7:0];
+        endfunction
+        
+        function automatic void storeW(input Word adr, input Word value);
+            logic [7:0] read[4];
+            Word write = value;
+            foreach (read[i]) begin
+                //read[i] = this.bytes[adr+i];
+                this.bytes[adr + i] = write[31:24];
+                write <<= 8;
+                
+            end
+        endfunction
+        
+//        function automatic void storeD(input Word adr);
+        
+//        endfunction   
+        
+    endclass
+
+
     function automatic ExecEvent resolveBranch(input CpuState state, input AbstractInstruction abs, input Word adr);//OpSlot op);
         Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
         return resolveBranch_Internal(abs, adr, args);
@@ -140,6 +195,8 @@ package Emulation;
 
         CpuState coreState;
 
+            SimpleMem tmpDataMem = new();
+
         typedef struct {
             bit active;
             Word adr;
@@ -165,6 +222,8 @@ package Emulation;
             this.coreState.intRegs = '{default: 0};
             this.coreState.floatRegs = '{default: 0};
             this.coreState.sysRegs = SYS_REGS_INITIAL;
+            
+            this.tmpDataMem.reset();
         endfunction
         
         
@@ -196,9 +255,14 @@ package Emulation;
             this.str = disasm(ins.encoding);
            
             performCalculation(ins, args);
-            performLoad(ins, args, dataMem);
+              performLoad(ins, args);
+            //performLoad_P(ins, args, dataMem);
             performBranch(ins, this.ip, args);
             this.writeToDo = getMemWrite(ins, args);
+            
+            if (this.writeToDo.active)
+                this.tmpDataMem.storeW(this.writeToDo.adr, this.writeToDo.value);
+            
             performSys(ins, args);
            
             return res;
@@ -263,26 +327,87 @@ package Emulation;
             return res;
         endfunction
         
-        local function automatic void performLoad(input AbstractInstruction ins, input Word3 vals, ref logic[7:0] mem[]);
-            Word result;
+        local function automatic void performLoad_P(input AbstractInstruction ins, input Word3 vals, ref logic[7:0] mem[]);
+            //Word result, result_C;
             Word adr = vals[0] + vals[1];
-            
+            Word result, result_T;// = getLoadValue(ins, adr, mem, this.coreState);
+
+
             case (ins.def.o)
                 O_intLoadW: result = loadWord(adr, mem);
+                                     //mem.loadW(adr);//result_C;
                 O_intLoadD: result = loadWord(adr, mem); // TODO: actual Dword
+                                     //mem.loadD(adr);//result_C;
+                                     //;
                 O_floatLoadW: begin
                     result = loadWord(adr, mem);
+                            //mem.loadW(adr);//result_C;
                 end
                 O_sysLoad: begin
                     result = this.coreState.sysRegs[vals[1]];
                 end
                 default: return;
             endcase
+                
+                result_T = getLoad(ins, vals, this.tmpDataMem);
+                assert (result == result_T) else $display("diff: %d %d", result, result_T);
+
 
             if (hasFloatDest(ins)) writeFloatReg(this.coreState, ins.dest, result);
             if (hasIntDest(ins)) writeIntReg(this.coreState, ins.dest, result);
         endfunction
-        
+
+            local function automatic Word getLoad(input AbstractInstruction ins, input Word3 vals, input SimpleMem mem);
+                //Word result, result_C;
+                Word adr = ins.def.o == O_sysLoad ? vals[1] : vals[0] + vals[1];
+                Word result = getLoadValue(ins, adr, mem, this.coreState);
+    
+                return result;
+    
+                //if (hasFloatDest(ins)) writeFloatReg(this.coreState, ins.dest, result);
+                //if (hasIntDest(ins)) writeIntReg(this.coreState, ins.dest, result);
+            endfunction
+
+        function automatic Word calculateEffectiveAddress(input AbstractInstruction ins, input Word3 vals);
+            return (ins.def.o inside {O_sysLoad, O_sysStore}) ? vals[1] : vals[0] + vals[1];
+        endfunction
+
+        local function automatic void performLoad(input AbstractInstruction ins, input Word3 vals);//, input SimpleMem mem);
+            //Word result, result_C;
+            Word adr = //ins.def.o == O_sysLoad ? vals[1] : vals[0] + vals[1];
+                        calculateEffectiveAddress(ins, vals);
+            Word result = getLoadValue(ins, adr, this.tmpDataMem, this.coreState);
+
+            if (ins.def.o inside {O_intLoadW, O_intLoadD, O_floatLoadW, O_sysLoad});
+            else return;
+
+            if (hasFloatDest(ins)) writeFloatReg(this.coreState, ins.dest, result);
+            if (hasIntDest(ins)) writeIntReg(this.coreState, ins.dest, result);
+        endfunction
+
+        function automatic Word getLoadValue(input AbstractInstruction ins, input Word adr, input SimpleMem mem, inout CpuState state);
+            //Word adr = vals[0] + vals[1];
+            Word result;
+
+            case (ins.def.o)
+                O_intLoadW: result = //loadWord(adr, mem);
+                                     mem.loadW(adr);//result_C;
+                O_intLoadD: //result = //loadWord(adr, mem); // TODO: actual Dword
+                                     //mem.loadD(adr);//result_C;
+                                     ;
+                O_floatLoadW: begin
+                    result = //loadWord(adr, mem);
+                            mem.loadW(adr);//result_C;
+                end
+                O_sysLoad: begin
+                    result = state.sysRegs[adr];
+                end
+                default: return result;
+            endcase
+            
+            return result;
+        endfunction
+
         local function automatic void performBranch(input AbstractInstruction ins, input Word ip, input Word3 vals);
             ExecEvent evt = resolveBranch_Internal(ins, ip, vals);
             Word trg = evt.redirect ? evt.target : ip + 4;
@@ -358,6 +483,8 @@ package Emulation;
         endfunction
         
     endclass
+
+
 
 
     class EmulationWithMems;
