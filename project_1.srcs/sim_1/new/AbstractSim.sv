@@ -171,51 +171,51 @@ package AbstractSim;
     endfunction
 
 
-    function automatic void modifySysRegs__(ref CpuState state, input Word adr, input AbstractInstruction abs);
-        case (abs.def.o)
-            O_sysStore: begin
-                //writeSysReg(state, vals[1], vals[2]);
-            end
-            O_undef: begin
-                //this.status.error = 1;
+//    function automatic void modifySysRegs__(ref CpuState state, input Word adr, input AbstractInstruction abs);
+//        case (abs.def.o)
+//            O_sysStore: begin
+//                //writeSysReg(state, vals[1], vals[2]);
+//            end
+//            O_undef: begin
+//                //this.status.error = 1;
 
-                state.target = IP_ERROR;
+//                state.target = IP_ERROR;
 
-                state.sysRegs[4] = state.sysRegs[1];
-                state.sysRegs[1] |= 1; // TODO: handle state register correctly
-                state.sysRegs[2] = adr + 4;
-            end
-            O_call: begin                    
-                state.target = IP_CALL;
+//                state.sysRegs[4] = state.sysRegs[1];
+//                state.sysRegs[1] |= 1; // TODO: handle state register correctly
+//                state.sysRegs[2] = adr + 4;
+//            end
+//            O_call: begin                    
+//                state.target = IP_CALL;
 
-                state.sysRegs[4] = state.sysRegs[1];
-                state.sysRegs[1] |= 1; // TODO: handle state register correctly
-                state.sysRegs[2] = adr + 4;
-            end
-            O_sync: ;
-            O_retE: begin
-                state.target = state.sysRegs[2];
+//                state.sysRegs[4] = state.sysRegs[1];
+//                state.sysRegs[1] |= 1; // TODO: handle state register correctly
+//                state.sysRegs[2] = adr + 4;
+//            end
+//            O_sync: ;
+//            O_retE: begin
+//                state.target = state.sysRegs[2];
                 
-                state.sysRegs[1] = state.sysRegs[4];
-            end
-            O_retI: begin
-                state.target = state.sysRegs[3];
+//                state.sysRegs[1] = state.sysRegs[4];
+//            end
+//            O_retI: begin
+//                state.target = state.sysRegs[3];
 
-                state.sysRegs[1] = state.sysRegs[5];
-            end
-            O_replay: begin
-                state.target = adr;
-            end
-            O_halt: begin
-                //state.target = this.ip;
-                //this.status.halted = 1;
-            end
-            O_send: begin
-                //this.status.send = 1;
-            end
-            default: return;
-        endcase
-    endfunction
+//                state.sysRegs[1] = state.sysRegs[5];
+//            end
+//            O_replay: begin
+//                state.target = adr;
+//            end
+//            O_halt: begin
+//                //state.target = this.ip;
+//                //this.status.halted = 1;
+//            end
+//            O_send: begin
+//                //this.status.send = 1;
+//            end
+//            default: return;
+//        endcase
+//    endfunction
     
 
     function automatic logic isSystemOp(input AbstractInstruction abs);

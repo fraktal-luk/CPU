@@ -174,7 +174,7 @@ module AbstractCore
             if (!sysOpPrev.active) sysOpPrev <= sysOp;
 
             if (interrupt) begin
-                performInterrupt();
+                execInterrupt();
             end
             else begin
                 automatic IssueGroup igIssue = DEFAULT_ISSUE_GROUP, igExec = DEFAULT_ISSUE_GROUP;// = issuedSt0;
@@ -392,7 +392,7 @@ module AbstractCore
     endtask
 
 
-    task automatic performInterrupt();
+    task automatic execInterrupt();
         $display(">> Interrupt !!!");
     
         eventTarget <= IP_INT;
@@ -408,7 +408,8 @@ module AbstractCore
     task automatic performLink(ref CpuState state, input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
         Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
-        Word result = calculateResult(abs, args, op.adr);
+        Word result = //calculateResult(abs, args, op.adr);
+                      op.adr + 4;
         writeIntReg(state, abs.dest, result);
     endtask
 

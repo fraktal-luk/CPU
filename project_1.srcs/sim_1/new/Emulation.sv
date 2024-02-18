@@ -37,10 +37,8 @@ package Emulation;
         
         function automatic Word loadW(input Word adr);
             Word res = 0;
-            //for (int i = 0; i < 4; i++)
             logic [7:0] read[4];
             foreach (read[i])
-                //read[i] = this.bytes[adr+i];
                 res = (res << 8) | this.bytes[adr + i];
             return res;
         endfunction
@@ -59,10 +57,8 @@ package Emulation;
             logic [7:0] read[4];
             Word write = value;
             foreach (read[i]) begin
-                //read[i] = this.bytes[adr+i];
                 this.bytes[adr + i] = write[31:24];
-                write <<= 8;
-                
+                write <<= 8;                
             end
         endfunction
         
@@ -71,6 +67,45 @@ package Emulation;
 //        endfunction   
         
     endclass
+
+
+    function automatic bit hasIntDest(input AbstractInstruction ins);
+        return ins.def.o inside {
+            O_jump,
+            
+            O_intAnd,
+            O_intOr,
+            O_intXor,
+            
+            O_intAdd,
+            O_intSub,
+            O_intAddH,
+            
+            O_intMul,
+            O_intMulHU,
+            O_intMulHS,
+            O_intDivU,
+            O_intDivS,
+            O_intRemU,
+            O_intRemS,
+            
+            O_intShiftLogical,
+            O_intShiftArith,
+            O_intRotate,
+            
+            O_intLoadW,
+            O_intLoadD,
+            
+            O_sysLoad
+        };
+    endfunction
+
+    function automatic bit hasFloatDest(input AbstractInstruction ins);
+        return ins.def.o inside {
+            O_floatMove,
+            O_floatLoadW
+        };
+    endfunction
 
 
     function automatic ExecEvent resolveBranch(input CpuState state, input AbstractInstruction abs, input Word adr);//OpSlot op);
@@ -132,7 +167,7 @@ package Emulation;
    function automatic Word calculateResult(input AbstractInstruction ins, input Word3 vals, input Word ip);
         Word result;
         case (ins.def.o)
-            O_jump: result = ip + 4; // link adr
+            //O_jump: result = ip + 4; // link adr
             
             O_intAnd:  result = vals[0] & vals[1];
             O_intOr:   result = vals[0] | vals[1];
@@ -171,6 +206,36 @@ package Emulation;
         return result;
     endfunction
 
+    function automatic Word calculateEffectiveAddress(input AbstractInstruction ins, input Word3 vals);
+        return (ins.def.o inside {O_sysLoad, O_sysStore}) ? vals[1] : vals[0] + vals[1];
+    endfunction
+
+    function automatic Word getLoadValue(input AbstractInstruction ins, input Word adr, input SimpleMem mem, inout CpuState state);
+        Word result;
+
+        case (ins.def.o)
+            O_intLoadW: result = mem.loadW(adr);
+            O_intLoadD: ;
+            O_floatLoadW: result = mem.loadW(adr);
+            O_sysLoad: result = state.sysRegs[adr];
+            default: return result;
+        endcase
+        
+        return result;
+    endfunction
+
+    function automatic void performLink(ref CpuState state, input AbstractInstruction ins, input Word adr);
+        writeIntReg(state, ins.dest, adr + 4);
+    endfunction
+
+    function automatic void performInterrupt(ref CpuState state);
+        state.sysRegs[5] = state.sysRegs[1];
+        state.sysRegs[1] |= 2; // TODO: handle state register correctly
+        state.sysRegs[3] = state.target;
+
+        state.target = IP_INT;
+    endfunction
+
 
     typedef struct {
         int dummy;
@@ -179,10 +244,58 @@ package Emulation;
         bit send;
     } CoreStatus;
 
-        const Word SYS_REGS_INITIAL[32] = '{
-            0: -1,
-            default: 0
-        };
+    const Word SYS_REGS_INITIAL[32] = '{
+        0: -1,
+        default: 0
+    };
+
+
+
+    function automatic void modifySysRegs__(ref CpuState state, input Word adr, input AbstractInstruction abs);
+        case (abs.def.o)
+            O_sysStore: begin
+                //writeSysReg(state, vals[1], vals[2]);
+            end
+            O_undef: begin
+                //this.status.error = 1;
+
+                state.target = IP_ERROR;
+
+                state.sysRegs[4] = state.sysRegs[1];
+                state.sysRegs[1] |= 1; // TODO: handle state register correctly
+                state.sysRegs[2] = adr + 4;
+            end
+            O_call: begin                    
+                state.target = IP_CALL;
+
+                state.sysRegs[4] = state.sysRegs[1];
+                state.sysRegs[1] |= 1; // TODO: handle state register correctly
+                state.sysRegs[2] = adr + 4;
+            end
+            O_sync: ;
+            O_retE: begin
+                state.target = state.sysRegs[2];
+                
+                state.sysRegs[1] = state.sysRegs[4];
+            end
+            O_retI: begin
+                state.target = state.sysRegs[3];
+
+                state.sysRegs[1] = state.sysRegs[5];
+            end
+            O_replay: begin
+                state.target = adr;
+            end
+            O_halt: begin
+                //state.target = this.ip;
+                //this.status.halted = 1;
+            end
+            O_send: begin
+                //this.status.send = 1;
+            end
+            default: return;
+        endcase
+    endfunction
 
 
     class Emulator;
@@ -195,7 +308,7 @@ package Emulation;
 
         CpuState coreState;
 
-            SimpleMem tmpDataMem = new();
+        SimpleMem tmpDataMem = new();
 
         typedef struct {
             bit active;
@@ -245,74 +358,33 @@ package Emulation;
             this.writeToDo = '{default: 0};
             this.status.send = 0;
         endfunction
-              
+
 
         local function automatic ExecResult processInstruction(input Word adr, input AbstractInstruction ins, ref logic[7:0] dataMem[]);
             ExecResult res;
             FormatSpec fmtSpec = parsingMap[ins.fmt];
             Word3 args = getArgs(this.coreState.intRegs, this.coreState.floatRegs, ins.sources, fmtSpec.typeSpec);
-                        
+
             this.str = disasm(ins.encoding);
-           
+
+            this.coreState.target = this.ip + 4;
+
             performCalculation(ins, args);
-              performLoad(ins, args);
-            //performLoad_P(ins, args, dataMem);
+            performLoad(ins, args);
             performBranch(ins, this.ip, args);
             this.writeToDo = getMemWrite(ins, args);
-            
+
             if (this.writeToDo.active)
                 this.tmpDataMem.storeW(this.writeToDo.adr, this.writeToDo.value);
-            
+
             performSys(ins, args);
-           
+
             return res;
         endfunction
 
-//////////////////////////
-////  Move to InsDefs
-            function automatic bit hasIntDest(input AbstractInstruction ins);
-                return ins.def.o inside {
-                    O_jump,
-                    
-                    O_intAnd,
-                    O_intOr,
-                    O_intXor,
-                    
-                    O_intAdd,
-                    O_intSub,
-                    O_intAddH,
-                    
-                    O_intMul,
-                    O_intMulHU,
-                    O_intMulHS,
-                    O_intDivU,
-                    O_intDivS,
-                    O_intRemU,
-                    O_intRemS,
-                    
-                    O_intShiftLogical,
-                    O_intShiftArith,
-                    O_intRotate,
-                    
-                    O_intLoadW,
-                    O_intLoadD,
-                    
-                    O_sysLoad
-                };
-            endfunction
-
-            function automatic bit hasFloatDest(input AbstractInstruction ins);
-                return ins.def.o inside {
-                    O_floatMove,
-                    O_floatLoadW
-                };
-            endfunction
-
-//////////////////////////////
 
         local function automatic void performCalculation(input AbstractInstruction ins, input Word3 vals);
             Word result = calculateResult(ins, vals, this.ip);
-
             if (hasFloatDest(ins)) writeFloatReg(this.coreState, ins.dest, result);
             if (hasIntDest(ins)) writeIntReg(this.coreState, ins.dest, result);
         endfunction
@@ -326,56 +398,9 @@ package Emulation;
 
             return res;
         endfunction
-        
-        local function automatic void performLoad_P(input AbstractInstruction ins, input Word3 vals, ref logic[7:0] mem[]);
-            //Word result, result_C;
-            Word adr = vals[0] + vals[1];
-            Word result, result_T;// = getLoadValue(ins, adr, mem, this.coreState);
-
-
-            case (ins.def.o)
-                O_intLoadW: result = loadWord(adr, mem);
-                                     //mem.loadW(adr);//result_C;
-                O_intLoadD: result = loadWord(adr, mem); // TODO: actual Dword
-                                     //mem.loadD(adr);//result_C;
-                                     //;
-                O_floatLoadW: begin
-                    result = loadWord(adr, mem);
-                            //mem.loadW(adr);//result_C;
-                end
-                O_sysLoad: begin
-                    result = this.coreState.sysRegs[vals[1]];
-                end
-                default: return;
-            endcase
-                
-                result_T = getLoad(ins, vals, this.tmpDataMem);
-                assert (result == result_T) else $display("diff: %d %d", result, result_T);
-
-
-            if (hasFloatDest(ins)) writeFloatReg(this.coreState, ins.dest, result);
-            if (hasIntDest(ins)) writeIntReg(this.coreState, ins.dest, result);
-        endfunction
-
-            local function automatic Word getLoad(input AbstractInstruction ins, input Word3 vals, input SimpleMem mem);
-                //Word result, result_C;
-                Word adr = ins.def.o == O_sysLoad ? vals[1] : vals[0] + vals[1];
-                Word result = getLoadValue(ins, adr, mem, this.coreState);
-    
-                return result;
-    
-                //if (hasFloatDest(ins)) writeFloatReg(this.coreState, ins.dest, result);
-                //if (hasIntDest(ins)) writeIntReg(this.coreState, ins.dest, result);
-            endfunction
-
-        function automatic Word calculateEffectiveAddress(input AbstractInstruction ins, input Word3 vals);
-            return (ins.def.o inside {O_sysLoad, O_sysStore}) ? vals[1] : vals[0] + vals[1];
-        endfunction
 
         local function automatic void performLoad(input AbstractInstruction ins, input Word3 vals);//, input SimpleMem mem);
-            //Word result, result_C;
-            Word adr = //ins.def.o == O_sysLoad ? vals[1] : vals[0] + vals[1];
-                        calculateEffectiveAddress(ins, vals);
+            Word adr = calculateEffectiveAddress(ins, vals);
             Word result = getLoadValue(ins, adr, this.tmpDataMem, this.coreState);
 
             if (ins.def.o inside {O_intLoadW, O_intLoadD, O_floatLoadW, O_sysLoad});
@@ -385,33 +410,14 @@ package Emulation;
             if (hasIntDest(ins)) writeIntReg(this.coreState, ins.dest, result);
         endfunction
 
-        function automatic Word getLoadValue(input AbstractInstruction ins, input Word adr, input SimpleMem mem, inout CpuState state);
-            //Word adr = vals[0] + vals[1];
-            Word result;
-
-            case (ins.def.o)
-                O_intLoadW: result = //loadWord(adr, mem);
-                                     mem.loadW(adr);//result_C;
-                O_intLoadD: //result = //loadWord(adr, mem); // TODO: actual Dword
-                                     //mem.loadD(adr);//result_C;
-                                     ;
-                O_floatLoadW: begin
-                    result = //loadWord(adr, mem);
-                            mem.loadW(adr);//result_C;
-                end
-                O_sysLoad: begin
-                    result = state.sysRegs[adr];
-                end
-                default: return result;
-            endcase
-            
-            return result;
-        endfunction
 
         local function automatic void performBranch(input AbstractInstruction ins, input Word ip, input Word3 vals);
             ExecEvent evt = resolveBranch_Internal(ins, ip, vals);
             Word trg = evt.redirect ? evt.target : ip + 4;
+            
+            if (ins.def.o != O_jump) return;
 
+            performLink(this.coreState, ins, ip);
             this.coreState.target = trg;
         endfunction 
 
@@ -419,11 +425,11 @@ package Emulation;
         local function automatic void performSys(input AbstractInstruction ins, input Word3 vals);
             case (ins.def.o)
                 O_sysStore: begin
+                    this.coreState.target = this.ip + 4;
                     writeSysReg(this.coreState, vals[1], vals[2]);
                 end
                 O_undef: begin
                     this.status.error = 1;
-
                     this.coreState.target = IP_ERROR;
 
                     this.coreState.sysRegs[4] = this.coreState.sysRegs[1];
@@ -437,7 +443,9 @@ package Emulation;
                     this.coreState.sysRegs[1] |= 1; // TODO: handle state register correctly
                     this.coreState.sysRegs[2] = this.ip + 4;
                 end
-                O_sync: ;
+                O_sync: begin
+                    this.coreState.target = this.ip + 4;
+                end
                 O_retE: begin
                     this.coreState.target = this.coreState.sysRegs[2];
                     
@@ -456,6 +464,7 @@ package Emulation;
                     this.status.halted = 1;
                 end
                 O_send: begin
+                    this.coreState.target = this.ip + 4;
                     this.status.send = 1;
                 end
                 default: return;
@@ -464,26 +473,24 @@ package Emulation;
         
         local function automatic MemoryWrite getMemWrite(input AbstractInstruction ins, input Word3 vals);
             MemoryWrite res = '{0, 0, 0};
-            
+
             case (ins.def.o)
                 O_intStoreW, O_intStoreD, O_floatStoreW:
-                     res = '{1, vals[0] + vals[1], vals[2]};
+                     //res = '{1, vals[0] + vals[1], vals[2]};
+                     res = '{1, calculateEffectiveAddress(ins, vals), vals[2]};
                 default: ; 
             endcase
-            
-            return res; 
+
+            return res;
         endfunction
-        
+
+
+
         function automatic void interrupt();
-            this.coreState.sysRegs[5] = this.coreState.sysRegs[1];
-            this.coreState.sysRegs[1] |= 2; // TODO: handle state register correctly
-            this.coreState.sysRegs[3] = this.coreState.target;
-            
-            this.coreState.target = IP_INT;
+            performInterrupt(this.coreState);
         endfunction
         
     endclass
-
 
 
 
@@ -515,7 +522,7 @@ package Emulation;
         function void writeData();
             
         endfunction
-        
+
 
         function void setBasicHandlers();
             this.progMem[IP_RESET/4] = processLines({"ja -512"}).words[0];
