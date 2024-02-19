@@ -56,15 +56,14 @@ package AbstractSim;
     endfunction
 
     function static void TMP_commit(input OpSlot op);
-        automatic Word theIp = emul.emul.ip;
+        automatic Word theIp;// = emul.emul.ip;
         commitCtr++;
         emul.step();
         emul.writeAndDrain();
             
-           theIp = emul.emul.ip;
+        theIp = emul.emul.ip;
             
-            //$display("Commit core %d, eul %d", op.adr, emul.emul.ip);
-
+        //$display("Commit core %d, eul %d", op.adr, emul.emul.ip);
         if (theIp != op.adr || emul.emul.str != disasm(op.bits)) $display("Mismatched commit: %d: %s;  %d: %s", theIp, emul.emul.str, op.adr, disasm(op.bits));
     endfunction
 
@@ -85,138 +84,51 @@ package AbstractSim;
         return emul;
     endfunction
 
-        function automatic LateEvent getLateEvent(input OpSlot op, input AbstractInstruction abs, input Mword sr2, input Mword sr3);
-            LateEvent res = '{target: 'x, redirect: 0, sig: 0, wrong: 0};
-            //res.target = 
-            case (abs.def.o)
-                O_sysStore: ;
-                    //sysRegs[args[1]] = args[2];
-                O_undef: begin
-                    res.target = IP_ERROR;
-                    res.redirect = 1;
-                    
-                    res.wrong = 1;
-                end
-                
-                O_call: begin
-                    res.target = IP_CALL;
-                    res.redirect = 1;
-                end
-                
-                O_retE: begin
-                    res.target = sr2;
-                    res.redirect = 1;
-                end 
-                
-                O_retI: begin
-                    res.target = sr3;
-                    res.redirect = 1;
-                end 
-                
-                
-                O_sync: begin
-                    res.target = op.adr + 4;
-                    res.redirect = 1;
-                end
-                
-                O_replay: begin
-                    res.target = op.adr;
-                    res.redirect = 1;
-                end 
-                
-                O_halt: begin                
-                    res.target = op.adr + 4;
-                    res.redirect = 1;
-                end
-                
-                O_send: begin
-                    res.target = op.adr + 4;
-                    res.redirect = 1;
-                    
-                    res.sig = 1;
-                end
-                
-                default: ;                            
-            endcase
-
-            return res;
-        endfunction
-        
-
-    function automatic void modifySysRegs(ref CpuState state, input Word adr, input AbstractInstruction abs);
+    function automatic LateEvent getLateEvent(input OpSlot op, input AbstractInstruction abs, input Mword sr2, input Mword sr3);
+        LateEvent res = '{target: 'x, redirect: 0, sig: 0, wrong: 0};
         case (abs.def.o)
+            O_sysStore: ;
             O_undef: begin
-                state.sysRegs[1] |= 1; // TODO: handle state register correctly
-                state.sysRegs[2] = adr;
-                state.sysRegs[4] = state.sysRegs[1];
+                res.target = IP_ERROR;
+                res.redirect = 1;
+                res.wrong = 1;
             end
-            
             O_call: begin
-                state.sysRegs[1] |= 1; // TODO: handle state register correctly
-                state.sysRegs[2] = adr + 4;
-                state.sysRegs[4] = state.sysRegs[1];
+                res.target = IP_CALL;
+                res.redirect = 1;
             end
-            
             O_retE: begin
-                state.sysRegs[1] = state.sysRegs[4];
+                res.target = sr2;
+                res.redirect = 1;
+            end 
+            O_retI: begin
+                res.target = sr3;
+                res.redirect = 1;
+            end 
+            O_sync: begin
+                res.target = op.adr + 4;
+                res.redirect = 1;
             end
             
-            O_retI: begin
-                state.sysRegs[1] = state.sysRegs[5];
+            O_replay: begin
+                res.target = op.adr;
+                res.redirect = 1;
+            end 
+            O_halt: begin                
+                res.target = op.adr + 4;
+                res.redirect = 1;
             end
-
-            default: ;
+            O_send: begin
+                res.target = op.adr + 4;
+                res.redirect = 1;
+                res.sig = 1;
+            end
+            default: ;                            
         endcase
-        
+
+        return res;
     endfunction
-
-
-//    function automatic void modifySysRegs__(ref CpuState state, input Word adr, input AbstractInstruction abs);
-//        case (abs.def.o)
-//            O_sysStore: begin
-//                //writeSysReg(state, vals[1], vals[2]);
-//            end
-//            O_undef: begin
-//                //this.status.error = 1;
-
-//                state.target = IP_ERROR;
-
-//                state.sysRegs[4] = state.sysRegs[1];
-//                state.sysRegs[1] |= 1; // TODO: handle state register correctly
-//                state.sysRegs[2] = adr + 4;
-//            end
-//            O_call: begin                    
-//                state.target = IP_CALL;
-
-//                state.sysRegs[4] = state.sysRegs[1];
-//                state.sysRegs[1] |= 1; // TODO: handle state register correctly
-//                state.sysRegs[2] = adr + 4;
-//            end
-//            O_sync: ;
-//            O_retE: begin
-//                state.target = state.sysRegs[2];
-                
-//                state.sysRegs[1] = state.sysRegs[4];
-//            end
-//            O_retI: begin
-//                state.target = state.sysRegs[3];
-
-//                state.sysRegs[1] = state.sysRegs[5];
-//            end
-//            O_replay: begin
-//                state.target = adr;
-//            end
-//            O_halt: begin
-//                //state.target = this.ip;
-//                //this.status.halted = 1;
-//            end
-//            O_send: begin
-//                //this.status.send = 1;
-//            end
-//            default: return;
-//        endcase
-//    endfunction
-    
+        
 
     function automatic logic isSystemOp(input AbstractInstruction abs);
         return abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send,  O_sysStore};
@@ -247,6 +159,9 @@ package AbstractSim;
                                     O_intShiftLogical,
                                     O_intShiftArith,
                                     O_intRotate,
+                                    
+                                    O_intLoadW,
+                                    O_intLoadD,
                                     
                                     O_sysLoad
         };
@@ -331,7 +246,7 @@ package AbstractSim;
         endfunction
         
         function void clear();
-            this.content = '{default: 'x};
+            this.content = '{default: '0};
         endfunction;
         
         function automatic Word read(input Word adr);

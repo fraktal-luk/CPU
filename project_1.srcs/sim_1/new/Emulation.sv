@@ -69,6 +69,22 @@ package Emulation;
     endclass
 
 
+        function automatic logic isBranchIns(input AbstractInstruction ins);
+            return ins.def.o inside {O_jump};
+        endfunction
+        
+        function automatic logic isMemIns(input AbstractInstruction ins);
+            return ins.def.o inside {O_intLoadW, O_intLoadD, O_intStoreW, O_intStoreD, O_floatLoadW, O_floatStoreW};
+        endfunction
+        
+        function automatic logic isSysIns(input AbstractInstruction ins);
+            return ins.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send,  O_sysStore};
+        endfunction
+
+        function automatic logic isLoadSysIns(input AbstractInstruction ins);
+            return ins.def.o inside {O_sysLoad};
+        endfunction
+
     function automatic bit hasIntDest(input AbstractInstruction ins);
         return ins.def.o inside {
             O_jump,
@@ -133,14 +149,17 @@ package Emulation;
 
     function automatic void writeIntReg(ref CpuState state, input Word regNum, input Word value);
         if (regNum == 0) return;
+        assert (!$isunknown(value)) else $error("Writing unknown value! reg %d", regNum);
         state.intRegs[regNum] = value;
     endfunction
 
     function automatic void writeFloatReg(ref CpuState state, input Word regNum, input Word value);
+        assert (!$isunknown(value)) else $error("Writing unknown value!");
         state.floatRegs[regNum] = value;
     endfunction
 
     function automatic void writeSysReg(ref CpuState state, input Word regNum, input Word value);
+        assert (!$isunknown(value)) else $error("Writing unknown value!");
         state.sysRegs[regNum] = value;
     endfunction
 
@@ -203,6 +222,9 @@ package Emulation;
             default: ;
         endcase
         
+        // Some operations may have undefined cases but must not cause problems for the CPU
+        if ((ins.def.o inside {O_intDivU, O_intDivS, O_intRemU, O_intRemS}) && $isunknown(result)) result = -1;
+        
         return result;
     endfunction
 
@@ -251,14 +273,12 @@ package Emulation;
 
 
 
-    function automatic void modifySysRegs__(ref CpuState state, input Word adr, input AbstractInstruction abs);
+    function automatic void modifySysRegs(ref CpuState state, input Word adr, input AbstractInstruction abs);
         case (abs.def.o)
             O_sysStore: begin
-                //writeSysReg(state, vals[1], vals[2]);
+                state.target = adr + 4;
             end
             O_undef: begin
-                //this.status.error = 1;
-
                 state.target = IP_ERROR;
 
                 state.sysRegs[4] = state.sysRegs[1];
@@ -287,11 +307,10 @@ package Emulation;
                 state.target = adr;
             end
             O_halt: begin
-                //state.target = this.ip;
-                //this.status.halted = 1;
+                state.target = adr;
             end
             O_send: begin
-                //this.status.send = 1;
+                state.target = adr + 4;
             end
             default: return;
         endcase
@@ -368,16 +387,23 @@ package Emulation;
             this.str = disasm(ins.encoding);
 
             this.coreState.target = this.ip + 4;
-
-            performCalculation(ins, args);
-            performLoad(ins, args);
-            performBranch(ins, this.ip, args);
-            this.writeToDo = getMemWrite(ins, args);
-
+            
+            if (!(isBranchIns(ins) || isMemIns(ins) || isSysIns(ins) || isLoadSysIns(ins)))
+                performCalculation(ins, args);
+            
+            if (isBranchIns(ins))
+                performBranch(ins, this.ip, args);
+            
+            if (isMemIns(ins) || isLoadSysIns(ins)) begin
+                performLoad(ins, args);
+                this.writeToDo = getMemWrite(ins, args);
+            end
+            
             if (this.writeToDo.active)
                 this.tmpDataMem.storeW(this.writeToDo.adr, this.writeToDo.value);
 
-            performSys(ins, args);
+            if (isSysIns(ins))
+                performSys(ins, args);
 
             return res;
         endfunction
@@ -398,6 +424,17 @@ package Emulation;
 
             return res;
         endfunction
+
+            function automatic void performLoad_(input AbstractInstruction ins, input Word3 vals);//, input SimpleMem mem);
+                Word adr = calculateEffectiveAddress(ins, vals);
+                Word result = getLoadValue(ins, adr, this.tmpDataMem, this.coreState);
+    
+                if (ins.def.o inside {O_intLoadW, O_intLoadD, O_floatLoadW, O_sysLoad});
+                else return;
+    
+                if (hasFloatDest(ins)) writeFloatReg(this.coreState, ins.dest, result);
+                if (hasIntDest(ins)) writeIntReg(this.coreState, ins.dest, result);
+            endfunction
 
         local function automatic void performLoad(input AbstractInstruction ins, input Word3 vals);//, input SimpleMem mem);
             Word adr = calculateEffectiveAddress(ins, vals);
@@ -424,51 +461,19 @@ package Emulation;
 
         local function automatic void performSys(input AbstractInstruction ins, input Word3 vals);
             case (ins.def.o)
-                O_sysStore: begin
-                    this.coreState.target = this.ip + 4;
-                    writeSysReg(this.coreState, vals[1], vals[2]);
-                end
-                O_undef: begin
-                    this.status.error = 1;
-                    this.coreState.target = IP_ERROR;
-
-                    this.coreState.sysRegs[4] = this.coreState.sysRegs[1];
-                    this.coreState.sysRegs[1] |= 1; // TODO: handle state register correctly
-                    this.coreState.sysRegs[2] = this.ip + 4;
-                end
-                O_call: begin                    
-                    this.coreState.target = IP_CALL;
-
-                    this.coreState.sysRegs[4] = this.coreState.sysRegs[1];
-                    this.coreState.sysRegs[1] |= 1; // TODO: handle state register correctly
-                    this.coreState.sysRegs[2] = this.ip + 4;
-                end
-                O_sync: begin
-                    this.coreState.target = this.ip + 4;
-                end
-                O_retE: begin
-                    this.coreState.target = this.coreState.sysRegs[2];
-                    
-                    this.coreState.sysRegs[1] = this.coreState.sysRegs[4];
-                end
-                O_retI: begin
-                    this.coreState.target = this.coreState.sysRegs[3];
-
-                    this.coreState.sysRegs[1] = this.coreState.sysRegs[5];
-                end
-                O_replay: begin
-                    this.coreState.target = this.ip;
-                end
-                O_halt: begin
-                    this.coreState.target = this.ip;
-                    this.status.halted = 1;
-                end
-                O_send: begin
-                    this.coreState.target = this.ip + 4;
-                    this.status.send = 1;
-                end
+                O_sysStore: writeSysReg(this.coreState, vals[1], vals[2]);
+                O_undef: this.status.error = 1;
+                O_call: ;
+                O_sync: ;
+                O_retE: ;
+                O_retI: ;
+                O_replay: ;
+                O_halt: this.status.halted = 1;
+                O_send: this.status.send = 1;
                 default: return;
             endcase
+            
+            modifySysRegs(this.coreState, this.ip, ins);
         endfunction
         
         local function automatic MemoryWrite getMemWrite(input AbstractInstruction ins, input Word3 vals);
@@ -476,15 +481,12 @@ package Emulation;
 
             case (ins.def.o)
                 O_intStoreW, O_intStoreD, O_floatStoreW:
-                     //res = '{1, vals[0] + vals[1], vals[2]};
                      res = '{1, calculateEffectiveAddress(ins, vals), vals[2]};
                 default: ; 
             endcase
 
             return res;
         endfunction
-
-
 
         function automatic void interrupt();
             performInterrupt(this.coreState);

@@ -14,7 +14,7 @@ module ArchDesc0();
     Word w0 = 0;
     string testName;
 
-    Emulator emulSig = new(), emulSig_C = new(), emulSig_A;
+    Emulator emulSig = new(), emulSig_C = new(), emulSig_A = new();
 
     Section common;
     Word progMem[4096];
@@ -23,6 +23,7 @@ module ArchDesc0();
         Word progMem_C[4096];
         logic[7:0] dataMem_C[] = new[4096]('{default: 0});
     
+        Word TMP_intRegs[32];
 
     localparam CYCLE = 10;
 
@@ -185,6 +186,7 @@ module ArchDesc0();
                 
             emulSig = emul;
                 emulSig_A = ewm.emul;
+                TMP_intRegs = ewm.emul.coreState.intRegs;
             #1;
         end
         
