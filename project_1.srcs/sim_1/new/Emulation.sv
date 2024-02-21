@@ -12,6 +12,15 @@ package Emulation;
         Word target;
     } CpuState;
 
+    const Word SYS_REGS_INITIAL[32] = '{
+        0: -1,
+        default: 0
+    };
+
+    function automatic CpuState initialState(input Word trg);
+        return '{intRegs: '{default: 0}, floatRegs: '{default: 0}, sysRegs: SYS_REGS_INITIAL, target: trg};
+    endfunction
+
      typedef struct {
         Word target;
         logic redirect;
@@ -69,21 +78,39 @@ package Emulation;
     endclass
 
 
-        function automatic logic isBranchIns(input AbstractInstruction ins);
-            return ins.def.o inside {O_jump};
-        endfunction
-        
-        function automatic logic isMemIns(input AbstractInstruction ins);
-            return ins.def.o inside {O_intLoadW, O_intLoadD, O_intStoreW, O_intStoreD, O_floatLoadW, O_floatStoreW};
-        endfunction
-        
-        function automatic logic isSysIns(input AbstractInstruction ins);
-            return ins.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send,  O_sysStore};
-        endfunction
+    function automatic logic isBranchIns(input AbstractInstruction ins);
+        return ins.def.o inside {O_jump};
+    endfunction
+    
+    function automatic logic isMemIns(input AbstractInstruction ins);
+        return ins.def.o inside {O_intLoadW, O_intLoadD, O_intStoreW, O_intStoreD, O_floatLoadW, O_floatStoreW};
+    endfunction
+    
+    function automatic logic isSysIns(input AbstractInstruction ins); // excluding sys load
+        return ins.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send, O_sysStore};
+    endfunction
 
-        function automatic logic isLoadSysIns(input AbstractInstruction ins);
-            return ins.def.o inside {O_sysLoad};
-        endfunction
+    function automatic logic isLoadIns(input AbstractInstruction ins);
+        return (ins.def.o inside {O_intLoadW, O_intLoadD, O_floatLoadW, O_sysLoad});
+    endfunction
+
+    function automatic logic isLoadSysIns(input AbstractInstruction ins);
+        return (ins.def.o inside {O_sysLoad});
+    endfunction
+
+    function automatic logic isLoadMem(input AbstractInstruction ins);
+        return (ins.def.o inside {O_intLoadW, O_intLoadD, O_floatLoadW});
+    endfunction
+
+    function automatic logic isStoreMemIns(input AbstractInstruction ins);
+        return ins.def.o inside {O_intStoreW, O_intStoreD, O_floatStoreW};
+    endfunction
+
+    function automatic logic isStoreSysIns(input AbstractInstruction ins);
+        return ins.def.o inside {O_sysStore};
+    endfunction
+    
+
 
     function automatic bit hasIntDest(input AbstractInstruction ins);
         return ins.def.o inside {
@@ -250,12 +277,12 @@ package Emulation;
         writeIntReg(state, ins.dest, adr + 4);
     endfunction
 
-    function automatic void performInterrupt(ref CpuState state);
+    function automatic void performAsyncEvent(ref CpuState state, input Word trg);
         state.sysRegs[5] = state.sysRegs[1];
         state.sysRegs[1] |= 2; // TODO: handle state register correctly
         state.sysRegs[3] = state.target;
 
-        state.target = IP_INT;
+        state.target = trg;
     endfunction
 
 
@@ -265,11 +292,6 @@ package Emulation;
         bit error;
         bit send;
     } CoreStatus;
-
-    const Word SYS_REGS_INITIAL[32] = '{
-        0: -1,
-        default: 0
-    };
 
 
 
@@ -292,7 +314,9 @@ package Emulation;
                 state.sysRegs[1] |= 1; // TODO: handle state register correctly
                 state.sysRegs[2] = adr + 4;
             end
-            O_sync: ;
+            O_sync: begin
+                state.target = adr + 4;
+            end
             O_retE: begin
                 state.target = state.sysRegs[2];
                 
@@ -489,7 +513,7 @@ package Emulation;
         endfunction
 
         function automatic void interrupt();
-            performInterrupt(this.coreState);
+            performAsyncEvent(this.coreState, IP_INT);
         endfunction
         
     endclass

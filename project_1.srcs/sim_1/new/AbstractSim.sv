@@ -56,14 +56,13 @@ package AbstractSim;
     endfunction
 
     function static void TMP_commit(input OpSlot op);
-        automatic Word theIp;// = emul.emul.ip;
+        automatic Word theIp;
         commitCtr++;
         emul.step();
         emul.writeAndDrain();
             
         theIp = emul.emul.ip;
             
-        //$display("Commit core %d, eul %d", op.adr, emul.emul.ip);
         if (theIp != op.adr || emul.emul.str != disasm(op.bits)) $display("Mismatched commit: %d: %s;  %d: %s", theIp, emul.emul.str, op.adr, disasm(op.bits));
     endfunction
 
@@ -130,70 +129,48 @@ package AbstractSim;
     endfunction
         
 
-    function automatic logic isSystemOp(input AbstractInstruction abs);
-        return abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send,  O_sysStore};
-    endfunction
-
 
     function automatic logic writesIntReg(input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
-        return abs.def.o inside {
-                                    O_jump,
-                                    
-                                    O_intAnd,
-                                    O_intOr,
-                                    O_intXor,
-                                    
-                                    O_intAdd,
-                                    O_intSub,
-                                    O_intAddH,
-                                    
-                                    O_intMul,
-                                    O_intMulHU,
-                                    O_intMulHS,
-                                    O_intDivU,
-                                    O_intDivS,
-                                    O_intRemU,
-                                    O_intRemS,
-                                    
-                                    O_intShiftLogical,
-                                    O_intShiftArith,
-                                    O_intRotate,
-                                    
-                                    O_intLoadW,
-                                    O_intLoadD,
-                                    
-                                    O_sysLoad
-        };
+        return hasIntDest(abs);
     endfunction
+
 
     function automatic logic writesFloatReg(input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
-        return abs.def.o inside {
-                                 O_floatMove,
-                                 O_floatLoadW};
-    endfunction
-
-    function automatic logic isStoreNonSys(input OpSlot op);
-        AbstractInstruction abs = decodeAbstract(op.bits);
-        return abs.def.o inside {O_intStoreW, O_intStoreD, O_floatStoreW};
+        return hasFloatDest(abs);
     endfunction
 
 
     function automatic logic isBranchOp(input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
-        return abs.def.o inside {O_jump};
+        return isBranchIns(abs);
     endfunction
     
+
+    function automatic logic isStoreMemOp(input OpSlot op);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        return abs.def.o inside {O_intStoreW, O_intStoreD, O_floatStoreW};
+    endfunction
+
+    function automatic logic isLoadOp(input OpSlot op);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        return isLoadIns(abs);
+    endfunction
+    
+ 
     function automatic logic isMemOp(input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
-        return abs.def.o inside {O_intLoadW, O_intLoadD, O_intStoreW, O_intStoreD, O_floatLoadW, O_floatStoreW};
+        return isMemIns(abs);
     endfunction
     
     function automatic logic isSysOp(input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
-        return abs.def.o inside {O_undef, O_call, O_sync, O_retE, O_retI, O_replay, O_halt, O_send,  O_sysStore};
+        return isSysIns(abs);
     endfunction
+
+
+
 
 
      class ProgramMemory #(parameter WIDTH = 4);
