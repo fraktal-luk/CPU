@@ -24,9 +24,7 @@ module AbstractCore
     output logic wrong
 );
     
-    logic dummy = 'z;
-
-        localparam logic LATE_EVENT_EXEC = 1;
+    logic dummy = '0;
 
     typedef int InsId;
 
@@ -49,7 +47,7 @@ module AbstractCore
     
     
     InstructionInfo insMap[int]; // structure holding all instructions in flight (beginning at Fetch), and possibly some more, as a database
-    int insMapSize = 0, nCommitted = 0, nRetired = 0;
+    int insMapSize = 0, nRenamed = 0, nCommitted = 0, nRetired = 0;
     
 
     function automatic void setTarget(input int id, input Word trg);
@@ -77,7 +75,7 @@ module AbstractCore
 
     localparam OpSlot EMPTY_SLOT = '{'0, -1, 'x, 'x}; // TODO: move as const to package
     
-    typedef OpSlot OpSlot4[4];
+    typedef OpSlot OpSlotA[FETCH_WIDTH];
 
 
     typedef struct {
@@ -103,8 +101,9 @@ module AbstractCore
     Stage fetchQueue[$:FETCH_QUEUE_SIZE];
     
     Stage nextStage = EMPTY_STAGE;
+    OpSlotA nextStageA = '{default: EMPTY_SLOT};
     OpSlot opQueue[$:OP_QUEUE_SIZE];
-    OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT, sysOp = EMPTY_SLOT, sysOpPrev = EMPTY_SLOT, lastCommitted = EMPTY_SLOT, lastRetired = EMPTY_SLOT;
+    OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT, sysOp = EMPTY_SLOT, sysOpPrev = EMPTY_SLOT, lastRenamed = EMPTY_SLOT, lastCommitted = EMPTY_SLOT, lastRetired = EMPTY_SLOT;
     IssueGroup issuedSt0 = DEFAULT_ISSUE_GROUP, issuedSt0_C = DEFAULT_ISSUE_GROUP, issuedSt1 = DEFAULT_ISSUE_GROUP, issuedSt1_C = DEFAULT_ISSUE_GROUP;
     
     OpSlot committedGroup[4] = '{default: EMPTY_SLOT};
@@ -125,7 +124,7 @@ module AbstractCore
     InsId intWritersC[32] = '{default: -1}, floatWritersC[32] = '{default: -1};
     
     
-    string lastCommittedStr, lastRetiredStr, oooqStr;
+    string lastRenamedStr, lastCommittedStr, lastRetiredStr, oooqStr;
     logic cmp0, cmp1;
     Word cmpw0, cmpw1, cmpw2, cmpw3;
         
@@ -138,6 +137,7 @@ module AbstractCore
 
 
 
+    assign lastRenamedStr = disasm(lastRenamed.bits);
     assign lastCommittedStr = disasm(lastCommitted.bits);
     assign lastRetiredStr = disasm(lastRetired.bits);
 
@@ -170,7 +170,7 @@ module AbstractCore
         else begin
             fetchAndEnqueue();
 
-            writeToOpQ(nextStage);
+            writeToOpQ(nextStage, nextStageA);
             writeToOOOQ(nextStage);
 
             memOp <= EMPTY_SLOT;
@@ -306,7 +306,6 @@ module AbstractCore
     task automatic performRedirect();
         if (resetPrev) begin
             ipStage <= '{'1, -1, eventTarget, '{default: '0}, '{default: 'x}};
-            //    assert (eventTarget == 512) else $error("Wrog target");
             TMP_reset();
         end
         else if (intPrev) begin
@@ -315,7 +314,6 @@ module AbstractCore
         end
         else if (eventRedirect) begin
             ipStage <= '{'1, -1, eventTarget, '{default: '0}, '{default: 'x}};
-
         end
         else if (branchRedirect) begin
             ipStage <= '{'1, -1, branchTarget, '{default: '0}, '{default: 'x}};
@@ -323,6 +321,7 @@ module AbstractCore
         else $fatal("Should never get here");
             
         if (eventRedirect || intPrev || resetPrev) begin
+            renamedState = retiredState;
             execState = retiredState;
             execMem = retiredMem;
         end
@@ -332,6 +331,7 @@ module AbstractCore
         fetchQueue.delete();
         
         nextStage <= EMPTY_STAGE;
+        nextStageA <= '{default: EMPTY_SLOT};
         opQueue.delete();
         oooQueue.delete();
         
@@ -344,24 +344,14 @@ module AbstractCore
         sysOpPrev <= EMPTY_SLOT;
 
         if (resetPrev) begin
-//            execState.intRegs = '{0: '0, default: '0};
-//            execState.floatRegs = '{default: '0};
-//            execState.sysRegs = SYS_REGS_INITIAL;
-//            execState.target = IP_RESET;
+            renamedState = initialState(IP_RESET);
+            renamedMem.reset();
 
             execState = initialState(IP_RESET);
-
             execMem.reset();
 
-//            retiredState.intRegs = '{0: '0, default: '0};
-//            retiredState.floatRegs = '{default: '0};
-//            retiredState.sysRegs = SYS_REGS_INITIAL;
-//            retiredState.target = IP_RESET;
-            
             retiredState = initialState(IP_RESET);
-
             retiredMem.reset();
-            
         end
     endtask
 
@@ -381,10 +371,24 @@ module AbstractCore
 
         if (fqSize > 0 && oqSize < OP_QUEUE_SIZE - 2*FETCH_WIDTH) begin
             Stage toRename = fetchQueue.pop_front();
+            
             mapStageAtRename(toRename);
+            
+            foreach (toRename.words[i])
+                if (toRename.mask[i]) begin
+                    OpSlot currentOp = makeOp(toRename, i);
+                    performAt(renamedState, renamedMem, currentOp);
+                    lastRenamed <= currentOp;
+                    nRenamed++;
+                end
+                
             nextStage <= toRename;
+            nextStageA <= makeOpA(toRename);
         end
-        else nextStage <= EMPTY_STAGE;
+        else begin
+            nextStage <= EMPTY_STAGE;
+            nextStageA <= '{default: EMPTY_SLOT};
+        end
         
     endtask
 
@@ -422,6 +426,7 @@ module AbstractCore
     task automatic execReset();    
         eventTarget <= IP_RESET;
 
+        performAsyncEvent(renamedState, IP_RESET);
         performAsyncEvent(execState, IP_RESET);
         performAsyncEvent(retiredState, IP_RESET);  
     endtask
@@ -430,6 +435,7 @@ module AbstractCore
         $display(">> Interrupt !!!");
         eventTarget <= IP_INT;
 
+        performAsyncEvent(renamedState, IP_INT);
         performAsyncEvent(execState, IP_INT);
         performAsyncEvent(retiredState, IP_INT);
     endtask
@@ -596,11 +602,6 @@ module AbstractCore
         AbstractInstruction abs = decodeAbstract(op.bits);
         LateEvent lateEvt = getLateEvent(op, abs, execState.sysRegs[2], execState.sysRegs[3]);
         Word trg = lateEvt.redirect ? lateEvt.target : op.adr + 4;
-
-        if (!LATE_EVENT_EXEC) begin
-            setLateEvent__(execState, op);
-            performSys(execState, op);
-        end
         
         setTarget(op.id, trg);
         commitOp(op, trg);
@@ -636,10 +637,35 @@ module AbstractCore
     endtask
 
 
-    task automatic writeToOpQ(input Stage st);
-        if (st.active) begin
-            foreach (st.words[i]) if (st.mask[i]) opQueue.push_back('{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]});
-        end
+        function automatic OpSlot makeOp(input Stage st, input int i);
+            if (!st.active) return EMPTY_SLOT;
+        
+            return '{1, st.ctr + i, st.baseAdr + 4*i, st.words[i]};
+        endfunction
+
+        function automatic OpSlotA makeOpA(input Stage st);
+            OpSlotA res = '{default: EMPTY_SLOT};
+            if (!st.active) return res;
+
+            foreach (st.words[i])
+                if (st.mask[i])
+                    res[i] = makeOp(st, i);
+            return res;
+        endfunction
+
+    task automatic writeToOpQ(input Stage st, input OpSlotA sa);
+        if (st.active)
+            foreach (st.words[i])
+                if (st.mask[i]) begin
+                    assert (makeOp(st, i) === sa[i]) else $error("quuuu! %p %p", makeOp(st, i), sa[i]);
+                    opQueue.push_back(makeOp(st, i));
+                end
+        return;
+        
+            //if (st.active) begin
+                foreach (sa[i]) if (sa[i].active) opQueue.push_back(sa[i]);
+            //end
+        
     endtask
 
     task automatic writeToOOOQ(input Stage st);
@@ -658,7 +684,7 @@ module AbstractCore
     endtask
 
     task automatic advanceOOOQ();
-        if (LATE_EVENT_EXEC && (eventRedirect || interrupt || reset)) return;
+        if (eventRedirect || interrupt || reset) return;
     
         while (oooQueue.size() > 0 && oooQueue[0].done == 1) begin
             OpStatus opSt = oooQueue.pop_front();
@@ -671,7 +697,7 @@ module AbstractCore
             mapOpAtCommit(op);
             TMP_commit(op);
 
-            if (LATE_EVENT_EXEC && isSysOp(op)) begin
+            if (isSysOp(op)) begin
                  setLateEvent__(execState, op);
                  performSys(execState, op);
             end
