@@ -26,6 +26,33 @@ package Emulation;
         logic redirect;
      } ExecEvent;
 
+        typedef struct {
+            bit active;
+            Word adr;
+            Word value;
+        } MemoryWrite;
+
+        const MemoryWrite DEFAULT_MEM_WRITE = '{active: 0, adr: 'x, value: 'x};
+
+        typedef struct {
+            logic wrInt;
+            logic wrFloat;
+            int dest;
+            Word value;
+        } RegisterWrite;
+
+        const RegisterWrite DEFAULT_REG_WRITE = '{wrInt: 0, wrFloat: 0, dest: -1, value: 'x};
+
+        typedef struct {
+            int error;
+            RegisterWrite regWrite;          
+            MemoryWrite memWrite;
+            Word target;
+        } ExecResult;
+
+        const ExecResult DEFAULT_EXEC_RESULT = '{error: 0, regWrite: DEFAULT_REG_WRITE, memWrite: DEFAULT_MEM_WRITE, target: 'x};
+
+
 
     class SimpleMem;
         logic [7:0] bytes[4096];
@@ -352,31 +379,6 @@ package Emulation;
 
         SimpleMem tmpDataMem = new();
 
-        typedef struct {
-            bit active;
-            Word adr;
-            Word value;
-        } MemoryWrite;
-
-        const MemoryWrite DEFAULT_MEM_WRITE = '{active: 0, adr: 'x, value: 'x};
-
-        typedef struct {
-            logic wrInt;
-            logic wrFloat;
-            int dest;
-            Word value;
-        } RegisterWrite;
-
-        const RegisterWrite DEFAULT_REG_WRITE = '{wrInt: 0, wrFloat: 0, dest: -1, value: 'x};
-
-        typedef struct {
-            int error;
-            RegisterWrite regWrite;          
-            MemoryWrite memWrite;
-            Word target;
-        } ExecResult;
-
-        const ExecResult DEFAULT_EXEC_RESULT = '{error: 0, regWrite: DEFAULT_REG_WRITE, memWrite: DEFAULT_MEM_WRITE, target: 'x};
 
         MemoryWrite writeToDo;
 
@@ -452,22 +454,21 @@ package Emulation;
             if (hasIntDest(ins)) writeIntReg(this.coreState, ins.dest, result);
         endfunction
         
-        local function automatic Word loadWord(input Word adr, input logic[7:0] mem[]);
-            Word res;
-            res[31:24] = mem[adr];
-            res[23:16] = mem[adr+1];
-            res[15:8] = mem[adr+2];
-            res[7:0] = mem[adr+3];
+//        local function automatic Word loadWord(input Word adr, input logic[7:0] mem[]);
+//            Word res;
+//            res[31:24] = mem[adr];
+//            res[23:16] = mem[adr+1];
+//            res[15:8] = mem[adr+2];
+//            res[7:0] = mem[adr+3];
 
-            return res;
-        endfunction
+//            return res;
+//        endfunction
 
         local function automatic void performLoad(input AbstractInstruction ins, input Word3 vals, input SimpleMem mem);
             Word adr = calculateEffectiveAddress(ins, vals);
             Word result = getLoadValue(ins, adr, mem, this.coreState);
 
-            if (isLoadIns(ins));
-            else return;
+            if (!isLoadIns(ins)) return;
 
             if (hasFloatDest(ins)) writeFloatReg(this.coreState, ins.dest, result);
             if (hasIntDest(ins)) writeIntReg(this.coreState, ins.dest, result);
@@ -478,7 +479,8 @@ package Emulation;
             ExecEvent evt = resolveBranch_Internal(ins, ip, vals);
             Word trg = evt.redirect ? evt.target : ip + 4;
             
-            if (ins.def.o != O_jump) return;
+            //if (ins.def.o != O_jump) return;
+            if (!isBranchIns(ins)) return;
 
             performLink(this.coreState, ins, ip);
             this.coreState.target = trg;
@@ -487,7 +489,7 @@ package Emulation;
 
         function automatic void modifyStatus(input AbstractInstruction abs);
             case (abs.def.o)
-                O_sysStore: ;// writeSysReg(this.coreState, vals[1], vals[2]);
+                O_sysStore: ;
                 O_undef: this.status.error = 1;
                 O_call: ;
                 O_sync: ;
@@ -502,39 +504,14 @@ package Emulation;
 
         //!!
         local function automatic void performSys(input Word adr, input AbstractInstruction ins, input Word3 vals);
-            
             if (isStoreSysIns(ins)) writeSysReg(this.coreState, vals[1], vals[2]);
-            
-//            case (ins.def.o)
-//                O_sysStore: writeSysReg(this.coreState, vals[1], vals[2]);
-//                O_undef: this.status.error = 1;
-//                O_call: ;
-//                O_sync: ;
-//                O_retE: ;
-//                O_retI: ;
-//                O_replay: ;
-//                O_halt: this.status.halted = 1;
-//                O_send: this.status.send = 1;
-//                default: return;
-//            endcase
-            
             modifyStatus(ins);
-            
             modifySysRegs(this.coreState, adr, ins);
         endfunction
         
         local function automatic MemoryWrite getMemWrite(input AbstractInstruction ins, input Word3 vals);
-            MemoryWrite res = //'{0, 0, 0};
-                              DEFAULT_MEM_WRITE;
-            
+            MemoryWrite res = DEFAULT_MEM_WRITE;
             if (isStoreMemIns(ins)) res = '{1, calculateEffectiveAddress(ins, vals), vals[2]};
-            
-//            case (ins.def.o)
-//                O_intStoreW, O_intStoreD, O_floatStoreW:
-//                     res = '{1, calculateEffectiveAddress(ins, vals), vals[2]};
-//                default: ; 
-//            endcase
-
             return res;
         endfunction
 

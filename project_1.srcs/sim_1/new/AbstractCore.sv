@@ -24,7 +24,7 @@ module AbstractCore
     output logic wrong
 );
     
-    logic dummy = '0;
+    logic dummy = 'z;
 
     typedef int InsId;
 
@@ -47,7 +47,7 @@ module AbstractCore
     
     
     InstructionInfo insMap[int]; // structure holding all instructions in flight (beginning at Fetch), and possibly some more, as a database
-    int insMapSize = 0, nRenamed = 0, nCommitted = 0, nRetired = 0;
+    int insMapSize = 0, nRenamed = 0, nCompleted = 0, nRetired = 0;
     
 
     function automatic void setTarget(input int id, input Word trg);
@@ -91,7 +91,7 @@ module AbstractCore
     typedef Word FetchGroup[FETCH_WIDTH];
     
     int fetchCtr = 0;
-    int fqSize = 0, oqSize = 0, oooqSize = 0, committedNum = 0, frontCompleted = 0;
+    int fqSize = 0, oqSize = 0, oooqSize = 0, completedNum = 0, frontCompleted = 0;
 
     logic fetchAllow;
     logic resetPrev = 0, intPrev = 0, branchRedirect = 0, eventRedirect = 0;
@@ -103,7 +103,7 @@ module AbstractCore
     Stage nextStage = EMPTY_STAGE;
     OpSlotA nextStageA = '{default: EMPTY_SLOT};
     OpSlot opQueue[$:OP_QUEUE_SIZE];
-    OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT, sysOp = EMPTY_SLOT, sysOpPrev = EMPTY_SLOT, lastRenamed = EMPTY_SLOT, lastCommitted = EMPTY_SLOT, lastRetired = EMPTY_SLOT;
+    OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT, sysOp = EMPTY_SLOT, sysOpPrev = EMPTY_SLOT, lastRenamed = EMPTY_SLOT, lastCompleted = EMPTY_SLOT, lastRetired = EMPTY_SLOT;
     IssueGroup issuedSt0 = DEFAULT_ISSUE_GROUP, issuedSt0_C = DEFAULT_ISSUE_GROUP, issuedSt1 = DEFAULT_ISSUE_GROUP, issuedSt1_C = DEFAULT_ISSUE_GROUP;
     
     OpSlot committedGroup[4] = '{default: EMPTY_SLOT};
@@ -124,21 +124,13 @@ module AbstractCore
     InsId intWritersC[32] = '{default: -1}, floatWritersC[32] = '{default: -1};
     
     
-    string lastRenamedStr, lastCommittedStr, lastRetiredStr, oooqStr;
+    string lastRenamedStr, lastCompletedStr, lastRetiredStr, oooqStr;
     logic cmp0, cmp1;
     Word cmpw0, cmpw1, cmpw2, cmpw3;
-        
-            always @(posedge clk) cmp0 = (retiredState.target == branchTarget);
-            always @(posedge clk) cmp1 = (retiredState.target == eventTarget);
-        
-        always @(posedge clk) cmpw1 <= execMem.loadW(32);
-        always @(posedge clk) cmpw2 <= retiredMem.loadW(32);
-        always @(posedge clk) cmpw3 <= execMem.loadW(0);
-
 
 
     assign lastRenamedStr = disasm(lastRenamed.bits);
-    assign lastCommittedStr = disasm(lastCommitted.bits);
+    assign lastCompletedStr = disasm(lastCompleted.bits);
     assign lastRetiredStr = disasm(lastRetired.bits);
 
     always @(posedge clk) begin
@@ -228,7 +220,7 @@ module AbstractCore
         
         begin
             automatic OpStatus oooqDone[$] = (oooQueue.find with (item.done == 1));
-            committedNum <= oooqDone.size();
+            completedNum <= oooqDone.size();
             
             assert (oooqDone.size() <= 4) else $error("How 5?");
         end
@@ -261,23 +253,13 @@ module AbstractCore
     task automatic addToInsBase(input Stage s, input logic on, input int ctr);
         Stage st = setActive(s, on, ctr);
         
-        if (st.active) begin
-            foreach (st.words[i])
-                if (st.mask[i]) begin
-                    insMap[st.ctr + i] = makeInsInfo('{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]});
-                end
-        end
+        if (st.active)
+            foreach (st.words[i]) if (st.mask[i]) insMap[st.ctr + i] = makeInsInfo('{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]});
     endtask
 
-    task automatic updateInsEncodings(input Stage s);
-        Stage st = s;
-        
-        if (st.active) begin
-            foreach (st.words[i])
-                if (st.mask[i]) begin
-                    insMap[st.ctr + i].bits = s.words[i];
-                end
-        end
+    task automatic updateInsEncodings(input Stage st);
+        if (st.active)
+            foreach (st.words[i]) if (st.mask[i]) insMap[st.ctr + i].bits = st.words[i];
     endtask
 
 
@@ -297,29 +279,24 @@ module AbstractCore
     endfunction
 
 
-    task automatic commitOp(input OpSlot op, input Word trg);
-        lastCommitted <= op;            
+    task automatic completeOp(input OpSlot op);
         updateOOOQ(op);
-        nCommitted++;
+        lastCompleted <= op;
+        nCompleted++;
     endtask
     
     task automatic performRedirect();
-        if (resetPrev) begin
-            ipStage <= '{'1, -1, eventTarget, '{default: '0}, '{default: 'x}};
-            TMP_reset();
-        end
-        else if (intPrev) begin
-            ipStage <= '{'1, -1, eventTarget, '{default: '0}, '{default: 'x}};
-            TMP_interrupt();
-        end
-        else if (eventRedirect) begin
+        if (resetPrev) TMP_reset();
+        else if (intPrev) TMP_interrupt();
+
+        if (eventRedirect || intPrev || resetPrev) begin
             ipStage <= '{'1, -1, eventTarget, '{default: '0}, '{default: 'x}};
         end
         else if (branchRedirect) begin
             ipStage <= '{'1, -1, branchTarget, '{default: '0}, '{default: 'x}};
         end
         else $fatal("Should never get here");
-            
+
         if (eventRedirect || intPrev || resetPrev) begin
             renamedState = retiredState;
             execState = retiredState;
@@ -565,17 +542,9 @@ module AbstractCore
 
 
     task automatic execBranch(input OpSlot op);
-        AbstractInstruction abs = decodeAbstract(op.bits);
-        Word result = op.adr + 4;
-        ExecEvent evt = resolveBranch(execState, abs, op.adr);
-        Word trg = evt.redirect ? evt.target : op.adr + 4;
-
         setExecEvent(execState, op);
         performBranch(execState, op);
-
-        setResult(op.id, result);
-        setTarget(op.id, trg);
-        commitOp(op, trg);
+        completeOp(op);
     endtask
 
 
@@ -588,9 +557,7 @@ module AbstractCore
         
         performMemTMP_SIM(execState, op, execMem);
 
-        setResult(op.id, readIn[0]);
-        setTarget(op.id, op.adr + 4);
-        commitOp(op, op.adr + 4);
+        completeOp(op);
     endtask
 
 
@@ -599,25 +566,13 @@ module AbstractCore
     endtask
 
     task automatic execSysLater(input OpSlot op);
-        AbstractInstruction abs = decodeAbstract(op.bits);
-        LateEvent lateEvt = getLateEvent(op, abs, execState.sysRegs[2], execState.sysRegs[3]);
-        Word trg = lateEvt.redirect ? lateEvt.target : op.adr + 4;
-        
-        setTarget(op.id, trg);
-        commitOp(op, trg);
+        completeOp(op);
     endtask
 
 
     task automatic execRegular(input OpSlot op);
-        AbstractInstruction abs = decodeAbstract(op.bits);
-        Word3 args = getArgs(execState.intRegs, execState.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
-        Word result = calculateResult(abs, args, op.adr);
-        if (abs.def.o == O_sysLoad) result = execState.sysRegs[args[1]];
         performRegularOp(execState, op);
-        
-        setResult(op.id, result);
-        setTarget(op.id, op.adr + 4);
-        commitOp(op, op.adr + 4);
+        completeOp(op);
     endtask
 
 
@@ -637,35 +592,24 @@ module AbstractCore
     endtask
 
 
-        function automatic OpSlot makeOp(input Stage st, input int i);
-            if (!st.active) return EMPTY_SLOT;
-        
-            return '{1, st.ctr + i, st.baseAdr + 4*i, st.words[i]};
-        endfunction
+    function automatic OpSlot makeOp(input Stage st, input int i);
+        if (!st.active) return EMPTY_SLOT;
+    
+        return '{1, st.ctr + i, st.baseAdr + 4*i, st.words[i]};
+    endfunction
 
-        function automatic OpSlotA makeOpA(input Stage st);
-            OpSlotA res = '{default: EMPTY_SLOT};
-            if (!st.active) return res;
+    function automatic OpSlotA makeOpA(input Stage st);
+        OpSlotA res = '{default: EMPTY_SLOT};
+        if (!st.active) return res;
 
-            foreach (st.words[i])
-                if (st.mask[i])
-                    res[i] = makeOp(st, i);
-            return res;
-        endfunction
+        foreach (st.words[i])
+            if (st.mask[i])
+                res[i] = makeOp(st, i);
+        return res;
+    endfunction
 
     task automatic writeToOpQ(input Stage st, input OpSlotA sa);
-        if (st.active)
-            foreach (st.words[i])
-                if (st.mask[i]) begin
-                    assert (makeOp(st, i) === sa[i]) else $error("quuuu! %p %p", makeOp(st, i), sa[i]);
-                    opQueue.push_back(makeOp(st, i));
-                end
-        return;
-        
-            //if (st.active) begin
-                foreach (sa[i]) if (sa[i].active) opQueue.push_back(sa[i]);
-            //end
-        
+        foreach (sa[i]) if (sa[i].active) opQueue.push_back(sa[i]);        
     endtask
 
     task automatic writeToOOOQ(input Stage st);
@@ -690,7 +634,6 @@ module AbstractCore
             OpStatus opSt = oooQueue.pop_front();
             InstructionInfo insInfo = insMap[opSt.id];
             OpSlot op = '{1, insInfo.id, insInfo.adr, insInfo.bits};
-            AbstractInstruction abs = decodeAbstract(op.bits);
             assert (op.id == opSt.id) else 
                     $error("wrong retirement: %p / %p", opSt, op);
 
@@ -720,6 +663,7 @@ module AbstractCore
         for (int i = 0; i < 4; i++) begin
             if (remainingSize > 0) begin
                 OpSlot op = queue.pop_front();
+                assert (op.active) else $fatal(2, "Op from queue is empty!");
                 remainingSize--;
                 res.num++;
                 
