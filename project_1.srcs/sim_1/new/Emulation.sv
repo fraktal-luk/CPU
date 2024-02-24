@@ -366,6 +366,24 @@ package Emulation;
         endcase
     endfunction
 
+    function automatic Word computeResult(input CpuState state, input Word adr, input AbstractInstruction ins, input SimpleMem dataMem);
+        //ExecResult res = DEFAULT_EXEC_RESULT;
+        Word res = 'x;
+        FormatSpec fmtSpec = parsingMap[ins.fmt];
+        Word3 args = getArgs(state.intRegs, state.floatRegs, ins.sources, fmtSpec.typeSpec);
+
+        if (!(isBranchIns(ins) || isMemIns(ins) || isSysIns(ins) || isLoadSysIns(ins)))
+            res = calculateResult(ins, args, adr);
+        
+        if (isBranchIns(ins))
+            res = adr + 4;
+        
+        if (isMemIns(ins) || isLoadSysIns(ins)) begin
+            Word adr = calculateEffectiveAddress(ins, args);
+            res = getLoadValue(ins, adr, dataMem, state);
+        end
+    endfunction
+
 
     class Emulator;
 
@@ -447,22 +465,14 @@ package Emulation;
             return res;
         endfunction
 
+
+
         //!!
         local function automatic void performCalculation(input Word adr, input AbstractInstruction ins, input Word3 vals);
             Word result = calculateResult(ins, vals, adr);
             if (hasFloatDest(ins)) writeFloatReg(this.coreState, ins.dest, result);
             if (hasIntDest(ins)) writeIntReg(this.coreState, ins.dest, result);
         endfunction
-        
-//        local function automatic Word loadWord(input Word adr, input logic[7:0] mem[]);
-//            Word res;
-//            res[31:24] = mem[adr];
-//            res[23:16] = mem[adr+1];
-//            res[15:8] = mem[adr+2];
-//            res[7:0] = mem[adr+3];
-
-//            return res;
-//        endfunction
 
         local function automatic void performLoad(input AbstractInstruction ins, input Word3 vals, input SimpleMem mem);
             Word adr = calculateEffectiveAddress(ins, vals);
@@ -479,7 +489,6 @@ package Emulation;
             ExecEvent evt = resolveBranch_Internal(ins, ip, vals);
             Word trg = evt.redirect ? evt.target : ip + 4;
             
-            //if (ins.def.o != O_jump) return;
             if (!isBranchIns(ins)) return;
 
             performLink(this.coreState, ins, ip);

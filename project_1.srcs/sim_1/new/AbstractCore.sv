@@ -24,7 +24,7 @@ module AbstractCore
     output logic wrong
 );
     
-    logic dummy = 'z;
+    logic dummy = '1;
 
     typedef int InsId;
 
@@ -43,19 +43,6 @@ module AbstractCore
         res.bits = op.bits;
         
         return res;
-    endfunction
-    
-    
-    InstructionInfo insMap[int]; // structure holding all instructions in flight (beginning at Fetch), and possibly some more, as a database
-    int insMapSize = 0, nRenamed = 0, nCompleted = 0, nRetired = 0;
-    
-
-    function automatic void setTarget(input int id, input Word trg);
-        insMap[id].target = trg;
-    endfunction
-
-    function automatic void setResult(input int id, input Word res);
-        insMap[id].result = res;
     endfunction
 
 
@@ -76,6 +63,31 @@ module AbstractCore
     localparam OpSlot EMPTY_SLOT = '{'0, -1, 'x, 'x}; // TODO: move as const to package
     
     typedef OpSlot OpSlotA[FETCH_WIDTH];
+
+
+    InstructionInfo insMap[int]; // structure holding all instructions in flight (beginning at Fetch), and possibly some more, as a database
+    int insMapSize = 0, nRenamed = 0, nCompleted = 0, nRetired = 0;
+    
+    task automatic addToInsBase(input Stage s, input logic on, input int ctr);
+        Stage st = setActive(s, on, ctr);
+        
+        if (st.active)
+            foreach (st.words[i]) if (st.mask[i]) insMap[st.ctr + i] = makeInsInfo('{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]});
+    endtask
+
+    task automatic updateInsEncodings(input Stage st);
+        if (st.active)
+            foreach (st.words[i]) if (st.mask[i]) insMap[st.ctr + i].bits = st.words[i];
+    endtask
+
+    function automatic void setTarget(input int id, input Word trg);
+        insMap[id].target = trg;
+    endfunction
+
+    function automatic void setResult(input int id, input Word res);
+        insMap[id].result = res;
+    endfunction
+
 
 
     typedef struct {
@@ -250,18 +262,6 @@ module AbstractCore
     endfunction
 
 
-    task automatic addToInsBase(input Stage s, input logic on, input int ctr);
-        Stage st = setActive(s, on, ctr);
-        
-        if (st.active)
-            foreach (st.words[i]) if (st.mask[i]) insMap[st.ctr + i] = makeInsInfo('{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]});
-    endtask
-
-    task automatic updateInsEncodings(input Stage st);
-        if (st.active)
-            foreach (st.words[i]) if (st.mask[i]) insMap[st.ctr + i].bits = st.words[i];
-    endtask
-
 
     function automatic Stage setActive(input Stage s, input logic on, input int ctr);
         Stage res = s;
@@ -348,19 +348,31 @@ module AbstractCore
 
         if (fqSize > 0 && oqSize < OP_QUEUE_SIZE - 2*FETCH_WIDTH) begin
             Stage toRename = fetchQueue.pop_front();
+            OpSlotA toRenameA = makeOpA(toRename);
             
-            mapStageAtRename(toRename);
+            mapStageAtRename(toRenameA);
             
             foreach (toRename.words[i])
                 if (toRename.mask[i]) begin
                     OpSlot currentOp = makeOp(toRename, i);
+                    AbstractInstruction ins = decodeAbstract(currentOp.bits);
+                    Word result, target;
+                    
+                    result = computeResult(renamedState, currentOp.adr, ins, renamedMem); // Must be before modifying state
+                    
                     performAt(renamedState, renamedMem, currentOp);
+                    
+                    target = renamedState.target;
+                    
                     lastRenamed <= currentOp;
                     nRenamed++;
+                    
+                    setResult(currentOp.id, result);
+                    setTarget(currentOp.id, target);
                 end
                 
             nextStage <= toRename;
-            nextStageA <= makeOpA(toRename);
+            nextStageA <= toRenameA;
         end
         else begin
             nextStage <= EMPTY_STAGE;
@@ -384,14 +396,13 @@ module AbstractCore
         intWritersC[0] = -1;            
     endtask
 
-    task automatic mapStageAtRename(input Stage st);
-        foreach (st.mask[i])
-            if (st.mask[i]) begin
-                OpSlot op = '{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]};
-                mapOpAtRename(op);
-            end 
+    task automatic mapStageAtRename(input OpSlotA stA);
+        foreach (stA[i]) begin
+            if (stA[i].active) begin
+                mapOpAtRename(stA[i]);
+            end
+        end 
     endtask
-
 
     task automatic restoreWriters();
         intWritersR = intWritersC;
@@ -462,16 +473,18 @@ module AbstractCore
     task automatic performMemFirst(ref CpuState state, input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
         Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
+        Word adr = calculateEffectiveAddress(abs, args);
+
 
         // TODO: make struct, unpack a assigment to ports
         readReq[0] <= '1;
-        readAdr[0] <= args[0] + args[1];
+        readAdr[0] <= adr;//args[0] + args[1];
         memOp <= op;
         
         if (isStoreMemOp(op)) begin
             // TODO: make struct, unpack a assigment to ports 
             writeReq = 1;
-            writeAdr = args[0] + args[1];
+            writeAdr = adr;//args[0] + args[1];
             writeOut = args[2];
         end
     endtask
@@ -485,38 +498,20 @@ module AbstractCore
         state.target = op.adr + 4;
     endtask
 
-        task automatic performMemTMP_SIM(ref CpuState state, input OpSlot op, ref SimpleMem mem);
-            AbstractInstruction abs = decodeAbstract(op.bits);
-            Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
+    task automatic performMemAll(ref CpuState state, input OpSlot op, ref SimpleMem mem);
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
 
-            Word adr = calculateEffectiveAddress(abs, args);
-            Word result = getLoadValue(abs, adr, mem, state);
-            
-            if (isLoadOp(op))
-                assert (result == readIn[0]) else $error("Load diff: %d %d // adr %d, in: %p", result, readIn[0], adr, abs);
-            
-            if (isStoreMemOp(op)) mem.storeW(adr, args[2]);
-                
-            //if (writesIntReg(op)) writeIntReg(state, abs.dest, result);
-            //if (writesFloatReg(op)) writeFloatReg(state, abs.dest, result);
-            
-            state.target = op.adr + 4;
-        endtask
+        Word adr = calculateEffectiveAddress(abs, args);
+        Word result = getLoadValue(abs, adr, mem, state);
+        
+        if (isStoreMemOp(op)) mem.storeW(adr, args[2]);
 
-        task automatic performMemAll__(ref CpuState state, input OpSlot op, ref SimpleMem mem);
-            AbstractInstruction abs = decodeAbstract(op.bits);
-            Word3 args = getArgs(state.intRegs, state.floatRegs, abs.sources, parsingMap[abs.fmt].typeSpec);
-
-            Word adr = calculateEffectiveAddress(abs, args);
-            Word result = getLoadValue(abs, adr, mem, state);
-            
-            if (isStoreMemOp(op)) mem.storeW(adr, args[2]);
-                
-            if (writesIntReg(op)) writeIntReg(state, abs.dest, result);
-            if (writesFloatReg(op)) writeFloatReg(state, abs.dest, result);
-            
-            state.target = op.adr + 4;
-        endtask
+        if (writesIntReg(op)) writeIntReg(state, abs.dest, result);
+        if (writesFloatReg(op)) writeFloatReg(state, abs.dest, result);
+        
+        state.target = op.adr + 4;
+    endtask
 
 
 
@@ -554,9 +549,6 @@ module AbstractCore
 
     task automatic execMemLater(input OpSlot op);
         performMemLater(execState, op);
-        
-        performMemTMP_SIM(execState, op, execMem);
-
         completeOp(op);
     endtask
 
@@ -568,7 +560,6 @@ module AbstractCore
     task automatic execSysLater(input OpSlot op);
         completeOp(op);
     endtask
-
 
     task automatic execRegular(input OpSlot op);
         performRegularOp(execState, op);
@@ -582,7 +573,7 @@ module AbstractCore
             performBranch(state, op);
         end
         else if (isMemOp(op)) begin
-            performMemAll__(state, op, mem);
+            performMemAll(state, op, mem);
         end
         else if (isSysOp(op)) begin
             performSys(state, op);
