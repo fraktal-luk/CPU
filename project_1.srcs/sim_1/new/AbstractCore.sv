@@ -24,7 +24,7 @@ module AbstractCore
     output logic wrong
 );
     
-    logic dummy = '0;
+    logic dummy = 'x;
 
     typedef int InsId;
 
@@ -55,11 +55,36 @@ module AbstractCore
         Word words[FETCH_WIDTH];
     } Stage;
 
+    //typedef struct {
+    class BranchCheckpoint;
+    
+        function new(input OpSlot op, input CpuState state, input SimpleMem mem, input int intWr[32], input int floatWr[32]);
+            this.op = op;
+            this.state = state;
+            this.mem = new();
+            this.mem.copyFrom(mem);
+            this.intWriters = intWr;
+            this.floatWriters = floatWr;
+        endfunction
+    
+        OpSlot op;
+        CpuState state;
+        SimpleMem mem;
+        int intWriters[32];
+        int floatWriters[32];
+    endclass
+    //} BranchCheckpoint;
+    
+    
+    
+    
+
     localparam Stage EMPTY_STAGE = '{'0, -1, 'x, '{default: 0}, '{default: 'x}};
 
     localparam int FETCH_QUEUE_SIZE = 8;
     localparam int OP_QUEUE_SIZE = 24;
     localparam int OOO_QUEUE_SIZE = 120;
+    localparam int BC_QUEUE_SIZE = 64;
 
     localparam OpSlot EMPTY_SLOT = '{'0, -1, 'x, 'x}; // TODO: move as const to package
     
@@ -126,12 +151,13 @@ module AbstractCore
     typedef Word FetchGroup[FETCH_WIDTH];
     
     int fetchCtr = 0;
-    int fqSize = 0, oqSize = 0, oooqSize = 0, completedNum = 0, frontCompleted = 0;
+    int fqSize = 0, oqSize = 0, oooqSize = 0, bcqSize = 0, completedNum = 0, frontCompleted = 0;
 
     logic fetchAllow;
     logic resetPrev = 0, intPrev = 0, branchRedirect = 0, eventRedirect = 0;
     Word branchTarget = 'x, eventTarget = 'x;
-    OpSlot branchOp, eventOp;
+    OpSlot branchOp, eventOp,   branchOp_C;
+    BranchCheckpoint branchCP;
     
     Stage ipStage = EMPTY_STAGE, fetchStage0 = EMPTY_STAGE, fetchStage1 = EMPTY_STAGE;
     Stage fetchQueue[$:FETCH_QUEUE_SIZE];
@@ -146,8 +172,10 @@ module AbstractCore
 
     OpStatus oooQueue[$:OOO_QUEUE_SIZE];
     
-    CpuState renamedState, execState, retiredState;
-    SimpleMem renamedMem = new(), execMem = new(), retiredMem = new();
+    BranchCheckpoint branchCheckpointQueue[$:BC_QUEUE_SIZE];
+    
+    CpuState renamedState, execState, retiredState,    loadedState;
+    SimpleMem renamedMem = new(), execMem = new(), retiredMem = new(),    loadedMem;
     
     InsId intWritersR[32] = '{default: -1}, floatWritersR[32] = '{default: -1};
     InsId intWritersC[32] = '{default: -1}, floatWritersC[32] = '{default: -1};
@@ -162,6 +190,14 @@ module AbstractCore
     assign lastCompletedStr = disasm(lastCompleted.bits);
     assign lastRetiredStr = disasm(lastRetired.bits);
 
+
+        string bqStr;
+        always @(posedge clk) begin
+            automatic int ids[$];
+            foreach (branchCheckpointQueue[i]) ids.push_back(branchCheckpointQueue[i].op.id);
+            $swrite(bqStr, "%p", ids);
+        end
+
     always @(posedge clk) begin
         resetPrev <= reset;
         intPrev <= interrupt;
@@ -174,9 +210,12 @@ module AbstractCore
         writeAdr = 'x;
         writeOut = 'x;
         
+        branchOp <= EMPTY_SLOT;
+            branchOp_C <= EMPTY_SLOT;
         branchRedirect <= 0;
         branchTarget <= 'x;
 
+        eventOp <= EMPTY_SLOT;
         eventRedirect <= 0;
         eventTarget <= 'x;
 
@@ -245,6 +284,7 @@ module AbstractCore
         fqSize <= fetchQueue.size();
         oqSize <= opQueue.size();
         oooqSize <= oooQueue.size();
+        bcqSize <= branchCheckpointQueue.size();
         frontCompleted <= countFrontCompleted();
         
         begin
@@ -301,7 +341,20 @@ module AbstractCore
         lastCompleted = op;
         nCompleted++;
     endtask
+
+    task automatic flushAll();
+        opQueue.delete();
+        oooQueue.delete();
+        branchCheckpointQueue.delete();
+    endtask
     
+    task automatic flushPartial(input OpSlot op);
+        while (opQueue.size() > 0 && opQueue[$].id > op.id) opQueue.pop_back();
+        while (oooQueue.size() > 0 && oooQueue[$].id > op.id) oooQueue.pop_back();    
+        while (branchCheckpointQueue.size() > 0 && branchCheckpointQueue[$].op.id > op.id) branchCheckpointQueue.pop_back();    
+    endtask
+
+
     task automatic performRedirect();
         if (resetPrev) TMP_reset();
         else if (intPrev) TMP_interrupt();
@@ -316,17 +369,32 @@ module AbstractCore
 
         if (eventRedirect || intPrev || resetPrev) begin
             renamedState = retiredState;
-            renamedMem = retiredMem;
+            renamedMem.copyFrom(retiredMem);
             execState = retiredState;
-            execMem = retiredMem;
+            execMem.copyFrom(retiredMem);
             
-            restoreWriters();
+            //restoreWriters();
+            intWritersR = intWritersC;
+            floatWritersR = floatWritersC;
             renamedDivergence = 0;
         end
         else if (branchRedirect) begin
-            renamedState = execState;
-            renamedMem = execMem;
+            //BranchCheckpoint found[$] = branchCheckpointQueue.find with (item.op.id == branchOp.id);
             
+            //foreach (branchCheckpointQueue[j]) $display("%p, %d", branchCheckpointQueue[j].op, branchCheckpointQueue[j].state.intRegs[1]);
+            
+                BranchCheckpoint single = branchCP;
+                loadedState <= single.state;
+                loadedMem = single.mem;
+        
+            renamedState = single.state;
+            renamedMem.copyFrom(single.mem);
+            execState = single.state;
+            execMem.copyFrom(single.mem);
+
+            intWritersR = single.intWriters;
+            floatWritersR = single.floatWriters;
+
             renamedDivergence = insMap[branchOp.id].divergence;
         end
 
@@ -336,8 +404,14 @@ module AbstractCore
         
         nextStage <= EMPTY_STAGE;
         nextStageA <= '{default: EMPTY_SLOT};
-        opQueue.delete();
-        oooQueue.delete();
+        
+        if (eventRedirect || intPrev || resetPrev) begin
+            flushAll();
+        end
+        else if (branchRedirect) begin
+            flushPartial(branchOp);      
+        end
+        
         
         issuedSt0 <= DEFAULT_ISSUE_GROUP;
         issuedSt1 <= DEFAULT_ISSUE_GROUP;
@@ -385,15 +459,19 @@ module AbstractCore
                     AbstractInstruction ins = decodeAbstract(currentOp.bits);
                     Word result, target;
                     
+                    
                     result = computeResult(renamedState, currentOp.adr, ins, renamedMem); // Must be before modifying state
                     
                     if (currentOp.adr != renamedState.target) renamedDivergence++;
                     
-                    
                     performAt(renamedState, renamedMem, currentOp);
                     
-                        // TODO: if branch, save state
-                    
+                        if (isBranchOp(currentOp)) begin
+                            //SimpleMem savedMem = new();//renamedMem);
+                            //savedMem.copyFrom(renamedMem);
+                            BranchCheckpoint cp = new(currentOp, renamedState, renamedMem, intWritersR, floatWritersR);
+                            branchCheckpointQueue.push_back(cp);
+                        end
                     target = renamedState.target;
                     
                     lastRenamed = currentOp;
@@ -469,10 +547,10 @@ module AbstractCore
         end 
     endtask
 
-    task automatic restoreWriters();
-        intWritersR = intWritersC;
-        floatWritersR = floatWritersC;
-    endtask
+//    task automatic restoreWriters();
+//        intWritersR = intWritersC;
+//        floatWritersR = floatWritersC;
+//    endtask
 
 
 
@@ -511,6 +589,10 @@ module AbstractCore
         AbstractInstruction abs = decodeAbstract(op.bits);
         ExecEvent evt = resolveBranch(state, abs, op.adr);
         
+        BranchCheckpoint found[$] = branchCheckpointQueue.find with (item.op.id == op.id);
+
+            branchCP = found[0];
+            branchOp_C <= found[0].op;
         branchOp <= op;
         branchTarget <= evt.target;
         branchRedirect <= evt.redirect;
@@ -699,6 +781,11 @@ module AbstractCore
             end
             
             performAt(retiredState, retiredMem, op);
+        
+                if (isBranchOp(op)) begin
+                    //$display("Pop CP: %d", branchCheckpointQueue[0].op.id);
+                    branchCheckpointQueue.pop_front();
+                end
         
             lastRetired = op;
             nRetired++;
