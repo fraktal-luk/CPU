@@ -24,7 +24,7 @@ module AbstractCore
     output logic wrong
 );
     
-    logic dummy = '1;
+    logic dummy = '0;
 
     typedef int InsId;
 
@@ -34,6 +34,7 @@ module AbstractCore
         Word bits;
         Word target;
         Word result;
+        int divergence;
     } InstructionInfo;
     
     function automatic InstructionInfo makeInsInfo(input OpSlot op);
@@ -41,7 +42,7 @@ module AbstractCore
         res.id = op.id;
         res.adr = op.adr;
         res.bits = op.bits;
-        
+        res.divergence = -1;
         return res;
     endfunction
 
@@ -58,21 +59,39 @@ module AbstractCore
 
     localparam int FETCH_QUEUE_SIZE = 8;
     localparam int OP_QUEUE_SIZE = 24;
-    localparam int OOO_QUEUE_SIZE = 240;
+    localparam int OOO_QUEUE_SIZE = 120;
 
     localparam OpSlot EMPTY_SLOT = '{'0, -1, 'x, 'x}; // TODO: move as const to package
     
     typedef OpSlot OpSlotA[FETCH_WIDTH];
 
+    typedef enum { SRC_CONST, SRC_INT, SRC_FLOAT
+    } SourceType;
+    
+    typedef struct {
+        int sources[3];
+        SourceType types[3];
+    } InsDependencies;
+    
+        InsDependencies lastDeps;
+
+    typedef struct {
+        int id;
+        logic done;
+    }
+    OpStatus;
+
+    InstructionInfo latestOOO[20], committedOOO[20];
+
+
 
     InstructionInfo insMap[int]; // structure holding all instructions in flight (beginning at Fetch), and possibly some more, as a database
-    int insMapSize = 0, nRenamed = 0, nCompleted = 0, nRetired = 0;
+    int insMapSize = 0, renamedDivergence = 0, nRenamed = 0, nCompleted = 0, nRetired = 0;
     
     task automatic addToInsBase(input Stage s, input logic on, input int ctr);
         Stage st = setActive(s, on, ctr);
-        
-        if (st.active)
-            foreach (st.words[i]) if (st.mask[i]) insMap[st.ctr + i] = makeInsInfo('{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]});
+        if (!st.active) return;
+        foreach (st.words[i]) if (st.mask[i]) insMap[st.ctr + i] = makeInsInfo('{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]});
     endtask
 
     task automatic updateInsEncodings(input Stage st);
@@ -86,6 +105,10 @@ module AbstractCore
 
     function automatic void setResult(input int id, input Word res);
         insMap[id].result = res;
+    endfunction
+
+    function automatic void setDivergence(input int id, input int divergence);
+        insMap[id].divergence = divergence;
     endfunction
 
 
@@ -108,6 +131,7 @@ module AbstractCore
     logic fetchAllow;
     logic resetPrev = 0, intPrev = 0, branchRedirect = 0, eventRedirect = 0;
     Word branchTarget = 'x, eventTarget = 'x;
+    OpSlot branchOp, eventOp;
     
     Stage ipStage = EMPTY_STAGE, fetchStage0 = EMPTY_STAGE, fetchStage1 = EMPTY_STAGE;
     Stage fetchQueue[$:FETCH_QUEUE_SIZE];
@@ -119,13 +143,6 @@ module AbstractCore
     IssueGroup issuedSt0 = DEFAULT_ISSUE_GROUP, issuedSt0_C = DEFAULT_ISSUE_GROUP, issuedSt1 = DEFAULT_ISSUE_GROUP, issuedSt1_C = DEFAULT_ISSUE_GROUP;
     
     OpSlot committedGroup[4] = '{default: EMPTY_SLOT};
-
-
-    typedef struct {
-        int id;
-        logic done;
-    }
-    OpStatus;
 
     OpStatus oooQueue[$:OOO_QUEUE_SIZE];
     
@@ -281,7 +298,7 @@ module AbstractCore
 
     task automatic completeOp(input OpSlot op);
         updateOOOQ(op);
-        lastCompleted <= op;
+        lastCompleted = op;
         nCompleted++;
     endtask
     
@@ -299,8 +316,18 @@ module AbstractCore
 
         if (eventRedirect || intPrev || resetPrev) begin
             renamedState = retiredState;
+            renamedMem = retiredMem;
             execState = retiredState;
             execMem = retiredMem;
+            
+            restoreWriters();
+            renamedDivergence = 0;
+        end
+        else if (branchRedirect) begin
+            renamedState = execState;
+            renamedMem = execMem;
+            
+            renamedDivergence = insMap[branchOp.id].divergence;
         end
 
         fetchStage0 <= EMPTY_STAGE;
@@ -360,15 +387,23 @@ module AbstractCore
                     
                     result = computeResult(renamedState, currentOp.adr, ins, renamedMem); // Must be before modifying state
                     
+                    if (currentOp.adr != renamedState.target) renamedDivergence++;
+                    
+                    
                     performAt(renamedState, renamedMem, currentOp);
+                    
+                        // TODO: if branch, save state
                     
                     target = renamedState.target;
                     
-                    lastRenamed <= currentOp;
+                    lastRenamed = currentOp;
                     nRenamed++;
                     
+                    setDivergence(currentOp.id, renamedDivergence);
                     setResult(currentOp.id, result);
                     setTarget(currentOp.id, target);
+                    
+                        updateLatestOOO();
                 end
                 
             nextStage <= toRename;
@@ -382,8 +417,34 @@ module AbstractCore
     endtask
 
 
+
+
+    function automatic InsDependencies getArgProducers(input OpSlot op);
+        int sources[3] = '{-1, -1, -1};
+        SourceType types[3] = '{SRC_CONST, SRC_CONST, SRC_CONST}; 
+        
+        AbstractInstruction abs = decodeAbstract(op.bits);
+        string typeSpec = parsingMap[abs.fmt].typeSpec;
+        
+        foreach (sources[i]) begin
+            if (typeSpec[i + 2] == "i") begin
+                sources[i] = intWritersR[abs.sources[i]];
+                types[i] = SRC_INT;
+            end
+            else if (typeSpec[i + 2] == "f") begin
+                sources[i] = floatWritersR[abs.sources[i]];
+                types[i] = SRC_FLOAT;
+            end
+        end
+        
+        return '{sources, types};
+    endfunction
+
     task automatic mapOpAtRename(input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
+        
+           lastDeps <= getArgProducers(op);
+        
         if (writesIntReg(op)) intWritersR[abs.dest] = op.id;
         if (writesFloatReg(op)) floatWritersR[abs.dest] = op.id;
         intWritersR[0] = -1;            
@@ -393,7 +454,11 @@ module AbstractCore
         AbstractInstruction abs = decodeAbstract(op.bits);
         if (writesIntReg(op)) intWritersC[abs.dest] = op.id;
         if (writesFloatReg(op)) floatWritersC[abs.dest] = op.id;
-        intWritersC[0] = -1;            
+        intWritersC[0] = -1;    
+        
+        // Record in Rename tables if they've become stable
+        foreach (intWritersR[i]) if (intWritersR[i] <= op.id) intWritersR[i] = -1;        
+        foreach (floatWritersR[i]) if (floatWritersR[i] <= op.id) floatWritersR[i] = -1;        
     endtask
 
     task automatic mapStageAtRename(input OpSlotA stA);
@@ -446,6 +511,7 @@ module AbstractCore
         AbstractInstruction abs = decodeAbstract(op.bits);
         ExecEvent evt = resolveBranch(state, abs, op.adr);
         
+        branchOp <= op;
         branchTarget <= evt.target;
         branchRedirect <= evt.redirect;
     endtask
@@ -455,6 +521,7 @@ module AbstractCore
         performLink(state, op);
     endtask
 
+    
 
     task automatic performRegularOp(ref CpuState state, input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
@@ -476,13 +543,13 @@ module AbstractCore
         Word adr = calculateEffectiveAddress(abs, args);
 
 
-        // TODO: make struct, unpack a assigment to ports
+        // TODO: make struct, unpack at assigment to ports
         readReq[0] <= '1;
         readAdr[0] <= adr;//args[0] + args[1];
         memOp <= op;
         
         if (isStoreMemOp(op)) begin
-            // TODO: make struct, unpack a assigment to ports 
+            // TODO: make struct, unpack at assigment to ports 
             writeReq = 1;
             writeAdr = adr;//args[0] + args[1];
             writeOut = args[2];
@@ -512,8 +579,6 @@ module AbstractCore
         
         state.target = op.adr + 4;
     endtask
-
-
 
     task automatic performSysStore(ref CpuState state, input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
@@ -561,11 +626,11 @@ module AbstractCore
         completeOp(op);
     endtask
 
+
     task automatic execRegular(input OpSlot op);
         performRegularOp(execState, op);
         completeOp(op);
     endtask
-
 
 
     task automatic performAt(ref CpuState state, ref SimpleMem mem, input OpSlot op);
@@ -585,7 +650,6 @@ module AbstractCore
 
     function automatic OpSlot makeOp(input Stage st, input int i);
         if (!st.active) return EMPTY_SLOT;
-    
         return '{1, st.ctr + i, st.baseAdr + 4*i, st.words[i]};
     endfunction
 
@@ -593,9 +657,7 @@ module AbstractCore
         OpSlotA res = '{default: EMPTY_SLOT};
         if (!st.active) return res;
 
-        foreach (st.words[i])
-            if (st.mask[i])
-                res[i] = makeOp(st, i);
+        foreach (st.words[i]) if (st.mask[i]) res[i] = makeOp(st, i);
         return res;
     endfunction
 
@@ -638,8 +700,10 @@ module AbstractCore
             
             performAt(retiredState, retiredMem, op);
         
-            lastRetired <= op;
+            lastRetired = op;
             nRetired++;
+            
+                updateCommittedOOO();
             
             if (isSysOp(op)) break;
         end
@@ -686,7 +750,8 @@ module AbstractCore
         return oooQueue.size();
     endfunction
 
-    task automatic setLateEvent(ref CpuState state, input LateEvent evt);    
+    task automatic setLateEvent(ref CpuState state, input OpSlot op, input LateEvent evt);    
+        eventOp <= op;
         eventTarget <= evt.target;
         eventRedirect <= evt.redirect;
         sig <= evt.sig;
@@ -697,7 +762,18 @@ module AbstractCore
         AbstractInstruction abs = decodeAbstract(op.bits);
         LateEvent lateEvt = getLateEvent(op, abs, state.sysRegs[2], state.sysRegs[3]);
 
-        setLateEvent(state, lateEvt);
+        setLateEvent(state, op, lateEvt);
     endtask    
+
+
+        task automatic updateLatestOOO();
+            InstructionInfo last = insMap[lastRenamed.id];
+            latestOOO = {latestOOO[1:19], last};
+        endtask
+
+        task automatic updateCommittedOOO();
+            InstructionInfo last = insMap[lastRetired.id];
+            committedOOO = {committedOOO[1:19], last};
+        endtask
 
 endmodule
