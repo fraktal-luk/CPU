@@ -8,28 +8,37 @@ import AbstractSim::*;
     
 module ArchDesc0();
 
-    const int ITERATION_LIMIT = 2000;
-
-    const Word COMMON_ADR = 1024;
-    Word w0 = 0;
-    string testName;
-
-    Emulator emulSig = new(), emulSig_C = new(), emulSig_A = new();
-
-    Section common;
-    Word progMem[4096];
-    logic[7:0] dataMem[] = new[4096]('{default: 0});
-
-        Word progMem_C[4096];
-        logic[7:0] dataMem_C[] = new[4096]('{default: 0});
-    
-        Word TMP_intRegs[32];
-
     localparam CYCLE = 10;
 
     logic clk = 1;
     
     always #(CYCLE/2) clk = ~clk; 
+    
+    
+    const int ITERATION_LIMIT = 2000;
+
+    const Word COMMON_ADR = 1024;
+
+    Emulator emulSig;// = new();
+
+    Section common;
+
+    Word progMem[4096];
+    logic[7:0] dataMem[] = new[4096]('{default: 0});
+
+    string emulTestName, simTestName;
+
+    const string CALL_HANDLER[$] = {"add_i r20, r0, 55",
+                                  "sys rete",
+                                  "ja 0"
+                                  };   
+    const string INT_HANDLER[$] = {"add_i r21, r0, 77",
+                                  "sys reti",
+                                  "ja 0"
+                                  };
+
+
+    initial common = processLines(readFile({"common_asm", ".txt"}));
 
 
     initial begin
@@ -48,29 +57,27 @@ module ArchDesc0();
             if (lineParts.size() > 1) $error("There should be 1 test per line");
             else if (lineParts.size() == 0);
             else begin            
-                testName = lineParts[0];
+                emulTestName = lineParts[0];
                 runTest({lineParts[0], ".txt"}, emul);
-                testName = "";
+                emulTestName = "";
             end
             #1;
         end
 
-        testName = "err signal";
+        emulTestName = "err signal";
         testErrorSignal(emul);
-        testName = "";
+        emulTestName = "";
         #1;
         
-        testName = "event";
+        emulTestName = "event";
         testEvent(emul);
-        testName = "";
+        emulTestName = "";
         #1;
         
-        testName = "event2";
+        emulTestName = "event2";
         testInterrupt(emul);
-        testName = "";
-        #1;
-        
-        //$display(">>> Tests done");
+        emulTestName = "";
+        #1;        
     end
 
 
@@ -86,9 +93,9 @@ module ArchDesc0();
     endtask
 
 
+    // Emul-only run
     task automatic runTest(input string name, ref Emulator emul);
-        int i;
-        EmulationWithMems ewm = new();
+        int iter;
         squeue fileLines = readFile(name);
         Section testSection = processLines(fileLines);
     
@@ -103,49 +110,30 @@ module ArchDesc0();
         setBasicHandlers(progMem);
         
         emul.reset();
-            ewm.prepareTest(name, COMMON_ADR);
         #1;
         
-        for (i = 0; i < ITERATION_LIMIT; i++)
+        for (iter = 0; iter < ITERATION_LIMIT; iter++)
         begin
-            emul.executeStep(progMem, dataMem);
+            emul.executeStep(progMem);
             
-                ewm.step();
+            if (emul.status.error == 1) $fatal(">>>> Emulation in error state\n");
+            if (emul.status.send == 1) break;
             
-            if (emul.status.error == 1) begin
-                $fatal(">>>> Emulation in error state\n");
-                break;
-            end
-            
-            if (emul.status.send == 1) begin
-                break;
-            end
-            
-            if (emul.writeToDo.active == 1) begin
-                dataMem[emul.writeToDo.adr] = emul.writeToDo.value[31:24];
-                dataMem[emul.writeToDo.adr+1] = emul.writeToDo.value[23:16];
-                dataMem[emul.writeToDo.adr+2] = emul.writeToDo.value[15:8];
-                dataMem[emul.writeToDo.adr+3] = emul.writeToDo.value[7:0];
-            end
-            
+            if (emul.writeToDo.active) writeArrayW(dataMem, emul.writeToDo.adr, emul.writeToDo.value);
             emul.drain();
-                
-                ewm.writeAndDrain();
-                
+
             emulSig = emul;
-                emulSig_A = ewm.emul;
-                TMP_intRegs = ewm.emul.coreState.intRegs;
+
             #1;
         end
         
-        if (i >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", name);
+        if (iter >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", name);
         
     endtask
 
 
     task automatic testErrorSignal(ref Emulator emul);
-        int i;
-                EmulationWithMems ewm = new();
+        int iter;
 
         dataMem = '{default: 0};
         progMem = '{default: 'x};
@@ -158,39 +146,29 @@ module ArchDesc0();
         setBasicHandlers(progMem);
         
         emul.reset();
-                ewm.prepareErrorTest(COMMON_ADR);
         #1;
         
-        for (i = 0; i < ITERATION_LIMIT; i++)
+        for (iter = 0; iter < ITERATION_LIMIT; iter++)
         begin
-            emul.executeStep(progMem, dataMem);
-                    ewm.step();
+            emul.executeStep(progMem);
             
             if (emul.status.error == 1) break;
             
-            if (emul.writeToDo.active == 1) begin
-                dataMem[emul.writeToDo.adr] = emul.writeToDo.value[31:24];
-                dataMem[emul.writeToDo.adr+1] = emul.writeToDo.value[23:16];
-                dataMem[emul.writeToDo.adr+2] = emul.writeToDo.value[15:8];
-                dataMem[emul.writeToDo.adr+3] = emul.writeToDo.value[7:0];
-            end
-            
+            if (emul.writeToDo.active) writeArrayW(dataMem, emul.writeToDo.adr, emul.writeToDo.value);            
             emul.drain();
-                ewm.writeAndDrain();
+
             emulSig = emul;
 
             #1;
         end
         
-        if (i >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", "error sig");
+        if (iter >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", "error sig");
         
     endtask
 
 
     task automatic testEvent(ref Emulator emul);
-        int i;
-                EmulationWithMems ewm = new();
-
+        int iter;
         squeue fileLines = readFile("events.txt");
         Section testSection = processLines(fileLines);
     
@@ -209,49 +187,35 @@ module ArchDesc0();
         progMem[IP_CALL/4 + 1] = processLines({"sys rete"}).words[0];
         progMem[IP_CALL/4 + 2] = processLines({"ja 0"}).words[0];
         
+                writeProgram(progMem, IP_CALL, processLines(CALL_HANDLER).words);
+
+        
         emul.reset();
-                ewm.prepareEventTest(COMMON_ADR);
         #1;
         
-        
-        for (i = 0; i < ITERATION_LIMIT; i++)
+        for (iter = 0; iter < ITERATION_LIMIT; iter++)
         begin
-            emul.executeStep(progMem, dataMem);
-                ewm.step();
+            emul.executeStep(progMem);
             
-            if (emul.status.error == 1) begin
-                $fatal(">>>> Emulation in error state\n");
-                break;
-            end
+            if (emul.status.error == 1) $fatal(">>>> Emulation in error state\n");            
+            if (emul.status.send == 1) break;
             
-            if (emul.status.send == 1) begin
-                break;
-            end
-            
-            if (emul.writeToDo.active == 1) begin
-                dataMem[emul.writeToDo.adr] = emul.writeToDo.value[31:24];
-                dataMem[emul.writeToDo.adr+1] = emul.writeToDo.value[23:16];
-                dataMem[emul.writeToDo.adr+2] = emul.writeToDo.value[15:8];
-                dataMem[emul.writeToDo.adr+3] = emul.writeToDo.value[7:0];
-            end
-            
+            if (emul.writeToDo.active) writeArrayW(dataMem, emul.writeToDo.adr, emul.writeToDo.value);
             emul.drain();
-                ewm.writeAndDrain();
                 
             emulSig = emul;
 
             #1;
         end
         
-        if (i >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", "event");
+        if (iter >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", "event");
         
     endtask
 
 
 
     task automatic testInterrupt(ref Emulator emul);
-        int i;
-                EmulationWithMems ewm = new();
+        int iter;
 
         squeue fileLines = readFile("events2.txt");
         Section testSection = processLines(fileLines);
@@ -267,71 +231,66 @@ module ArchDesc0();
         setBasicHandlers(progMem);
         
         // Special handler for call
-        progMem[IP_CALL/4] = processLines({"add_i r20, r0, 55"}).words[0];
-        progMem[IP_CALL/4 + 1] = processLines({"sys rete"}).words[0];
-        progMem[IP_CALL/4 + 2] = processLines({"ja 0"}).words[0];
+//        progMem[IP_CALL/4] = processLines({"add_i r20, r0, 55"}).words[0];
+//        progMem[IP_CALL/4 + 1] = processLines({"sys rete"}).words[0];
+//        progMem[IP_CALL/4 + 2] = processLines({"ja 0"}).words[0];
+        
+        writeProgram(progMem, IP_CALL, '{0, 0, 0, 0});
+        writeProgram(progMem, IP_CALL, processLines(CALL_HANDLER).words);
+
         
         // Special handler for int 
-        progMem[IP_INT/4] = processLines({"add_i r21, r0, 77"}).words[0];
-        progMem[IP_INT/4 + 1] = processLines({"sys reti"}).words[0];
-        progMem[IP_INT/4 + 2] = processLines({"ja 0"}).words[0];
+//        progMem[IP_INT/4] = processLines({"add_i r21, r0, 77"}).words[0];
+//        progMem[IP_INT/4 + 1] = processLines({"sys reti"}).words[0];
+//        progMem[IP_INT/4 + 2] = processLines({"ja 0"}).words[0];
+
+        writeProgram(progMem, IP_INT, processLines(INT_HANDLER).words);
 
         emul.reset();
-            ewm.prepareIntTest(COMMON_ADR);
         #1;
         
-        for (i = 0; i < ITERATION_LIMIT; i++)
+        for (iter = 0; iter < ITERATION_LIMIT; iter++)
         begin
-            if (i == 3) begin 
+            if (iter == 3) begin 
                 emul.interrupt;
                 #1;
             end
 
-            emul.executeStep(progMem, dataMem);
+            emul.executeStep(progMem);
             
-            if (emul.status.error == 1) begin
-                $fatal(">>>> Emulation in error state\n");
-                break;
-            end
+            if (emul.status.error == 1) $fatal(">>>> Emulation in error state\n");
+            if (emul.status.send == 1) break;
             
-            if (emul.status.send == 1) begin
-                break;
-            end
-            
-            if (emul.writeToDo.active == 1) begin
-                dataMem[emul.writeToDo.adr] = emul.writeToDo.value[31:24];
-                dataMem[emul.writeToDo.adr+1] = emul.writeToDo.value[23:16];
-                dataMem[emul.writeToDo.adr+2] = emul.writeToDo.value[15:8];
-                dataMem[emul.writeToDo.adr+3] = emul.writeToDo.value[7:0];
-            end
-            
+            if (emul.writeToDo.active) writeArrayW(dataMem, emul.writeToDo.adr, emul.writeToDo.value);
             emul.drain();
-                ewm.writeAndDrain();
+
             emulSig = emul;
 
             #1;
         end
         
-        if (i >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", "event2");
+        if (iter >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", "event2");
         
     endtask
 
 
 
+    // Core sim
     generate
         typedef ProgramMemory#(4) ProgMem;
         typedef DataMemory#(4) DataMem;
-    
+
         ProgMem programMem;
         DataMem dmem;
         ProgMem::Line icacheOut;
         
         Word fetchAdr;
-        
+
         logic reset = 0, int0 = 0, done, wrong;
         
         logic readEns[4], writeEn;
         Word writeAdr, readAdrs[4], readValues[4], writeValue;
+        
         
         task automatic runSim();
             squeue tests = readFile("tests_all.txt");
@@ -339,15 +298,11 @@ module ArchDesc0();
             foreach (tests[i]) begin
                 squeue lineParts = breakLine(tests[i]);
 
-                if (lineParts.size() > 1) $error("There shuould be 1 test per line");
+                if (lineParts.size() > 1) $error("There should be 1 test per line");
                 else if (lineParts.size() == 0) continue;
                 
-                TMP_setTest(lineParts[0]);
-                    emulSig_C = TMP_getEmul();
-                    progMem_C = TMP_getEmulWithMems().progMem;
-                    dataMem_C = TMP_getEmulWithMems().dataMem;
+                    TMP_setTest(lineParts[0]);
                 runTestSim(lineParts[0]);
-                    emulSig_C = TMP_getEmul();
             end
                 
                 TMP_prepareErrorTest();
@@ -357,144 +312,94 @@ module ArchDesc0();
                 TMP_prepareIntTest();
             runIntTestSim();
             
-            //$finish();
-            $display("All tests done");
+            $display("All tests done;");
             $stop(1);
         endtask
         
-        task automatic runTestSim(input string name);
-            Section common, testProg;
-            #CYCLE;
-                $display("> RUN: %s", name);
-                     //   $display("committed: %d", TMP_getCommit());
-
-            programMem.clear();
- 
-            common = processLines(readFile({"common_asm", ".txt"}));
-            programMem.setContentAt(common.words, COMMON_ADR);
-            
-            testProg = fillImports(processLines(readFile({name, ".txt"})), 0, common, COMMON_ADR);
-            
-            programMem.setContent(testProg.words);
-            programMem.setBasicHandlers();
-
-            reset <= 1;
-            #CYCLE;
-            reset <= 0;
-            
-            wait (done | wrong);
-            
-            if (wrong) $fatal("TEST FAILED: %s", name);
-            
-            #CYCLE;
-            #CYCLE;
+        
+        task announce(input string name);
+            simTestName = name;
+            $display("> RUN: %s", name);
         endtask
 
 
+        task automatic setPrograms(input Section testSec);
+            programMem.clear();
+            programMem.setContentAt(common/*commonSim*/.words, COMMON_ADR);            
+            programMem.setContent(testSec.words);
+            programMem.setBasicHandlers();
+        endtask
+
+        task automatic runTestSim(input string name);
+            Section testProg = fillImports(processLines(readFile({name, ".txt"})), 0, common/*commonSim*/, COMMON_ADR);
+            #CYCLE announce(name);
+
+            setPrograms(testProg);
+
+            #CYCLE pulseReset();
+
+            wait (done | wrong);
+            if (wrong) $fatal("TEST FAILED: %s", name);
+            #CYCLE;
+        endtask
 
         task automatic runErrorTestSim();
-            Section common, testProg;
-            #CYCLE;
-                $display("> RUN: %s", "err");
+            Section testProg = processLines({"undef",
+                                             "ja 0"});
+            #CYCLE announce("err");
 
-            programMem.clear();
+            setPrograms(testProg);
 
-            common = processLines(readFile({"common_asm", ".txt"}));
-            programMem.setContentAt(common.words, COMMON_ADR);
-            
-            testProg = processLines({"undef",
-                                     "ja 0"});
-            
-            programMem.setContent(testProg.words);
-            programMem.setBasicHandlers();
+            #CYCLE pulseReset();
 
-            reset <= 1;
-            #CYCLE;
-            reset <= 0;
-            
             wait (wrong);
-            #CYCLE;
             #CYCLE;
         endtask
 
         task automatic runEventTestSim();
-            Section common, testProg;
-            #CYCLE;
-                $display("> RUN: %s", "event");
+            Section testProg = fillImports(processLines(readFile({"events", ".txt"})), 0, common/*commonSim*/, COMMON_ADR);
+            #CYCLE announce("event");
 
-            programMem.clear();
+            setPrograms(testProg);
+            programMem.setContentAt(processLines(CALL_HANDLER).words, IP_CALL);
 
-            common = processLines(readFile({"common_asm", ".txt"}));
-            programMem.setContentAt(common.words, COMMON_ADR);
-            
-            testProg = fillImports(processLines(readFile({"events", ".txt"})), 0, common, COMMON_ADR);
-            
-            programMem.setContent(testProg.words);
-            programMem.setBasicHandlers();
+            #CYCLE pulseReset();
 
-            programMem.setContentAt(processLines({"add_i r20, r0, 55",
-                                                  "sys rete",
-                                                  "ja 0"
-                                                  }).words,
-                                                  IP_CALL);
-
-            reset <= 1;
-            #CYCLE;
-            reset <= 0;
-            
             wait (done | wrong);
-            
-            if (wrong) $fatal("TEST FAILED: %s", "events");
-            
-            #CYCLE;
+            if (wrong) $fatal("TEST FAILED: %s", "events");      
             #CYCLE;
         endtask
 
+
         task automatic runIntTestSim();
-            Section common, testProg;
-            #CYCLE;
-                $display("> RUN: %s", "int");
+            Section testProg = fillImports(processLines(readFile({"events2", ".txt"})), 0, common/*commonSim*/, COMMON_ADR);
+            #CYCLE announce("int");
             
-            programMem.clear();
-            
-            common = processLines(readFile({"common_asm", ".txt"}));
-            programMem.setContentAt(common.words, COMMON_ADR);
-            
-            testProg = fillImports(processLines(readFile({"events2", ".txt"})), 0, common, COMMON_ADR);
-            
-            programMem.setContent(testProg.words);
-            programMem.setBasicHandlers();
+            setPrograms(testProg);
+            programMem.setContentAt(processLines(CALL_HANDLER).words, IP_CALL);
+            programMem.setContentAt(processLines(INT_HANDLER).words, IP_INT);
 
-            programMem.setContentAt(processLines({"add_i r20, r0, 55",
-                                                  "sys rete",
-                                                  "ja 0"
-                                                  }).words,
-                                                  IP_CALL);
-
-            programMem.setContentAt(processLines({"add_i r21, r0, 77",
-                                                  "sys reti",
-                                                  "ja 0"
-                                                  }).words,
-                                                  IP_INT);
-
-            reset <= 1;
-            #CYCLE;
-            reset <= 0;
-            #CYCLE;
+            #CYCLE pulseReset();
             
             wait (fetchAdr == IP_CALL);
             #CYCLE;
+            
             int0 <= 1;
             #CYCLE;
             int0 <= 0;
-            
-            wait (done | wrong);
-            
-            if (wrong) $fatal("TEST FAILED: %s", "int");
             #CYCLE;
+
+            wait (done | wrong);
+            if (wrong) $fatal("TEST FAILED: %s", "int");
             #CYCLE;
         endtask
 
+        task pulseReset();
+            reset <= 1;
+            #CYCLE;
+            reset <= 0;
+            #CYCLE;
+        endtask
 
         initial begin
             programMem = new();

@@ -7,6 +7,19 @@ package Emulation;
     import Asm::*;
 
 
+    function automatic writeArrayW(ref logic[7:0] mem[], input Word adr, input Word val);
+        mem[adr+0] = val[31:24];
+        mem[adr+1] = val[23:16];
+        mem[adr+2] = val[15:8];
+        mem[adr+3] = val[7:0];
+    endfunction
+
+    function automatic void writeProgram(ref Word mem[4096], input Word adr, input Word prog[]);
+        assert((adr % 4) == 0) else $fatal("Unaligned instruction address not allowed");
+        foreach (prog[i]) mem[adr/4 + i] = prog[i];
+    endfunction
+
+
     typedef struct {
         Word intRegs[32], floatRegs[32], sysRegs[32];
         Word target;
@@ -21,36 +34,36 @@ package Emulation;
         return '{intRegs: '{default: 0}, floatRegs: '{default: 0}, sysRegs: SYS_REGS_INITIAL, target: trg};
     endfunction
 
-     typedef struct {
+    typedef struct {
+       Word target;
+       logic redirect;
+    } ExecEvent;
+
+    typedef struct {
+        bit active;
+        Word adr;
+        Word value;
+    } MemoryWrite;
+
+    const MemoryWrite DEFAULT_MEM_WRITE = '{active: 0, adr: 'x, value: 'x};
+
+    typedef struct {
+        logic wrInt;
+        logic wrFloat;
+        int dest;
+        Word value;
+    } RegisterWrite;
+
+    const RegisterWrite DEFAULT_REG_WRITE = '{wrInt: 0, wrFloat: 0, dest: -1, value: 'x};
+
+    typedef struct {
+        int error;
+        RegisterWrite regWrite;          
+        MemoryWrite memWrite;
         Word target;
-        logic redirect;
-     } ExecEvent;
+    } ExecResult;
 
-        typedef struct {
-            bit active;
-            Word adr;
-            Word value;
-        } MemoryWrite;
-
-        const MemoryWrite DEFAULT_MEM_WRITE = '{active: 0, adr: 'x, value: 'x};
-
-        typedef struct {
-            logic wrInt;
-            logic wrFloat;
-            int dest;
-            Word value;
-        } RegisterWrite;
-
-        const RegisterWrite DEFAULT_REG_WRITE = '{wrInt: 0, wrFloat: 0, dest: -1, value: 'x};
-
-        typedef struct {
-            int error;
-            RegisterWrite regWrite;          
-            MemoryWrite memWrite;
-            Word target;
-        } ExecResult;
-
-        const ExecResult DEFAULT_EXEC_RESULT = '{error: 0, regWrite: DEFAULT_REG_WRITE, memWrite: DEFAULT_MEM_WRITE, target: 'x};
+    const ExecResult DEFAULT_EXEC_RESULT = '{error: 0, regWrite: DEFAULT_REG_WRITE, memWrite: DEFAULT_MEM_WRITE, target: 'x};
 
 
 
@@ -194,7 +207,7 @@ package Emulation;
             "jnz_i": redirect = (args[0] != 0);
             "jz_r": redirect = (args[0] == 0);
             "jnz_r": redirect = (args[0] != 0);
-            default: ;//$fatal("Wrong kind of branch");
+            default: ;
         endcase
 
         return '{brTarget, redirect};
@@ -367,7 +380,6 @@ package Emulation;
     endfunction
 
     function automatic Word computeResult(input CpuState state, input Word adr, input AbstractInstruction ins, input SimpleMem dataMem);
-        //ExecResult res = DEFAULT_EXEC_RESULT;
         Word res = 'x;
         FormatSpec fmtSpec = parsingMap[ins.fmt];
         Word3 args = getArgs(state.intRegs, state.floatRegs, ins.sources, fmtSpec.typeSpec);
@@ -386,18 +398,11 @@ package Emulation;
 
 
     class Emulator;
-
         Word ip;
-
         string str;
-        
         CoreStatus status;
-
         CpuState coreState;
-
         SimpleMem tmpDataMem = new();
-
-
         MemoryWrite writeToDo;
 
 
@@ -417,7 +422,7 @@ package Emulation;
         endfunction
         
         
-        function automatic void executeStep(input Word progMem[], ref logic[7:0] dataMem[]);
+        function automatic void executeStep(input Word progMem[]);
             AbstractInstruction absIns;
             ExecResult execRes;
             this.ip = this.coreState.target;
@@ -437,7 +442,6 @@ package Emulation;
             this.status.send = 0;
         endfunction
 
-        //!!
         local function automatic ExecResult processInstruction(input Word adr, input AbstractInstruction ins, ref SimpleMem dataMem);
             ExecResult res = DEFAULT_EXEC_RESULT;
             FormatSpec fmtSpec = parsingMap[ins.fmt];
@@ -466,8 +470,6 @@ package Emulation;
         endfunction
 
 
-
-        //!!
         local function automatic void performCalculation(input Word adr, input AbstractInstruction ins, input Word3 vals);
             Word result = calculateResult(ins, vals, adr);
             if (hasFloatDest(ins)) writeFloatReg(this.coreState, ins.dest, result);
@@ -507,11 +509,10 @@ package Emulation;
                 O_replay: ;
                 O_halt: this.status.halted = 1;
                 O_send: this.status.send = 1;
-                default: ;//return;
+                default: ;
             endcase
         endfunction
 
-        //!!
         local function automatic void performSys(input Word adr, input AbstractInstruction ins, input Word3 vals);
             if (isStoreSysIns(ins)) writeSysReg(this.coreState, vals[1], vals[2]);
             modifyStatus(ins);
@@ -637,17 +638,11 @@ package Emulation;
  
  
         function automatic void step();
-            this.emul.executeStep(this.progMem, this.dataMem);
+            this.emul.executeStep(this.progMem);
         endfunction
         
         function automatic void writeAndDrain();
-            if (this.emul.writeToDo.active == 1) begin
-                this.dataMem[emul.writeToDo.adr] = this.emul.writeToDo.value[31:24];
-                this.dataMem[emul.writeToDo.adr+1] = this.emul.writeToDo.value[23:16];
-                this.dataMem[emul.writeToDo.adr+2] = this.emul.writeToDo.value[15:8];
-                this.dataMem[emul.writeToDo.adr+3] = this.emul.writeToDo.value[7:0];
-            end
-            
+            if (this.emul.writeToDo.active) writeArrayW(this.dataMem, emul.writeToDo.adr, emul.writeToDo.value);            
             this.emul.drain();
         endfunction 
         
@@ -658,6 +653,3 @@ package Emulation;
     endclass
 
 endpackage
-
-
-
