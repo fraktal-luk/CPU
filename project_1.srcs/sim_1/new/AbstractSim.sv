@@ -21,6 +21,8 @@ package AbstractSim;
         Word bits;
     } OpSlot;
 
+    const OpSlot EMPTY_SLOT = '{'0, -1, 'x, 'x};
+
      typedef struct {
         Mword target;
         logic redirect;
@@ -28,6 +30,8 @@ package AbstractSim;
         logic wrong;
      } LateEvent;
 
+    const LateEvent EMPTY_LATE_EVENT = '{'x, 0, 0, 0};
+    
     static EmulationWithMems emul = new();
     static int commitCtr = 0;
     static string testName;
@@ -245,6 +249,68 @@ package AbstractSim;
         endfunction    
         
     endclass
+
+
+
+
+    typedef int InsId;
+
+    typedef struct {
+        int id;
+        Word adr;
+        Word bits;
+        Word target;
+        Word result;
+        int divergence;
+    } InstructionInfo;
+
+    function automatic InstructionInfo makeInsInfo(input OpSlot op);
+        InstructionInfo res;
+        res.id = op.id;
+        res.adr = op.adr;
+        res.bits = op.bits;
+        res.divergence = -1;
+        return res;
+    endfunction
+
+
+    class InstructionMap;
+        InstructionInfo content[int];
+        
+        function automatic InstructionInfo get(input int id);
+            return content[id];
+        endfunction
+        
+        function automatic int size();
+            return content.size();
+        endfunction
+        
+
+        function automatic void add(input OpSlot op);
+            assert (op.active) else $error("Inactive op added to base");
+            content[op.id] = makeInsInfo(op);
+        endfunction
+
+        function automatic void setEncoding(input OpSlot op);
+            assert (op.active) else $error("encoding set for inactive op");
+            content[op.id].bits = op.bits;
+        endfunction
+    
+        function automatic void setTarget(input int id, input Word trg);
+            content[id].target = trg;
+        endfunction
+    
+        function automatic void setResult(input int id, input Word res);
+            content[id].result = res;
+        endfunction
+    
+        function automatic void setDivergence(input int id, input int divergence);
+            content[id].divergence = divergence;
+        endfunction
+        
+    endclass
+
+
 
 
 endpackage

@@ -24,36 +24,73 @@ module AbstractCore
     output logic wrong
 );
     
-    logic dummy = 'x;
+    logic dummy = '1;
 
-    typedef int InsId;
 
-    typedef struct {
-        int id;
-        Word adr;
-        Word bits;
-        Word target;
-        Word result;
-        int divergence;
-    } InstructionInfo;
+
+    //InstructionInfo insMap[int]; // structure holding all instructions in flight (beginning at Fetch), and possibly some more, as a database
+    InstructionMap insMap_C = new();
+    int insMapSize = 0, renamedDivergence = 0, nRenamed = 0, nCompleted = 0, nRetired = 0;
+
+
+//        function automatic InstructionInfo insMap_get(input int id);
+//            //return insMap[id];
+//            //assert (insMap[id] === insMap_C.get(id)) else $fatal(2, "wrong get");
+            
+//            return insMap_C.get(id);
+//        endfunction
+        
+//        function automatic int insMap_size();
+//            //return insMap.size();
+            
+//            //assert (insMap.size() == insMap_C.size()) else $fatal(2, "nono");
+//            return insMap_C.size();
+//        endfunction
+        
+//        function automatic void addOpToBase(input OpSlot op);
+//            //assert (op.active) else $error("Inactive op added to base");
+//            //insMap[op.id] = makeInsInfo(op);
+//            insMap_C.add(op);
+//        endfunction
+        
+
+//        function automatic void setEncoding(input OpSlot op);
+//            //assert (op.active) else $error("encoding set for inactive op");
+//            //insMap[op.id].bits = op.bits;
+            
+//            insMap_C.setEncoding(op);
+//        endfunction
     
-    function automatic InstructionInfo makeInsInfo(input OpSlot op);
-        InstructionInfo res;
-        res.id = op.id;
-        res.adr = op.adr;
-        res.bits = op.bits;
-        res.divergence = -1;
-        return res;
-    endfunction
+//        function automatic void setTarget(input int id, input Word trg);
+//            //insMap[id].target = trg;
+            
+//            insMap_C.setTarget(id, trg);
+//        endfunction
+    
+//        function automatic void setResult(input int id, input Word res);
+//            //insMap[id].result = res;
+            
+//            insMap_C.setResult(id, res);
+//        endfunction
+    
+//        function automatic void setDivergence(input int id, input int divergence);
+//            //insMap[id].divergence = divergence;
+            
+//            insMap_C.setDivergence(id, divergence);
+//        endfunction
+    
+
+        typedef OpSlot OpSlotA[FETCH_WIDTH];
+
+        typedef struct {
+            logic active;
+            int ctr;
+            Word baseAdr;
+            logic mask[FETCH_WIDTH];
+            Word words[FETCH_WIDTH];
+        } Stage;
 
 
-    typedef struct {
-        logic active;
-        int ctr;
-        Word baseAdr;
-        logic mask[FETCH_WIDTH];
-        Word words[FETCH_WIDTH];
-    } Stage;
 
     //typedef struct {
     class BranchCheckpoint;
@@ -75,20 +112,15 @@ module AbstractCore
     endclass
     //} BranchCheckpoint;
     
+ 
     
-    
-    
-
     localparam Stage EMPTY_STAGE = '{'0, -1, 'x, '{default: 0}, '{default: 'x}};
 
     localparam int FETCH_QUEUE_SIZE = 8;
     localparam int OP_QUEUE_SIZE = 24;
     localparam int OOO_QUEUE_SIZE = 120;
     localparam int BC_QUEUE_SIZE = 64;
-
-    localparam OpSlot EMPTY_SLOT = '{'0, -1, 'x, 'x}; // TODO: move as const to package
     
-    typedef OpSlot OpSlotA[FETCH_WIDTH];
 
     typedef enum { SRC_CONST, SRC_INT, SRC_FLOAT
     } SourceType;
@@ -106,36 +138,7 @@ module AbstractCore
     }
     OpStatus;
 
-    InstructionInfo latestOOO[20], committedOOO[20];
-
-
-
-    InstructionInfo insMap[int]; // structure holding all instructions in flight (beginning at Fetch), and possibly some more, as a database
-    int insMapSize = 0, renamedDivergence = 0, nRenamed = 0, nCompleted = 0, nRetired = 0;
-    
-    task automatic addToInsBase(input Stage s, input logic on, input int ctr);
-        Stage st = setActive(s, on, ctr);
-        if (!st.active) return;
-        foreach (st.words[i]) if (st.mask[i]) insMap[st.ctr + i] = makeInsInfo('{'1, st.ctr + i, st.baseAdr + 4*i, st.words[i]});
-    endtask
-
-    task automatic updateInsEncodings(input Stage st);
-        if (st.active)
-            foreach (st.words[i]) if (st.mask[i]) insMap[st.ctr + i].bits = st.words[i];
-    endtask
-
-    function automatic void setTarget(input int id, input Word trg);
-        insMap[id].target = trg;
-    endfunction
-
-    function automatic void setResult(input int id, input Word res);
-        insMap[id].result = res;
-    endfunction
-
-    function automatic void setDivergence(input int id, input int divergence);
-        insMap[id].divergence = divergence;
-    endfunction
-
+        InstructionInfo latestOOO[20], committedOOO[20];
 
 
     typedef struct {
@@ -154,9 +157,10 @@ module AbstractCore
     int fqSize = 0, oqSize = 0, oooqSize = 0, bcqSize = 0, completedNum = 0, frontCompleted = 0;
 
     logic fetchAllow;
-    logic resetPrev = 0, intPrev = 0, branchRedirect = 0, eventRedirect = 0;
+    logic resetPrev = 0, intPrev = 0;
+    logic branchRedirect = 0, eventRedirect = 0;
     Word branchTarget = 'x, eventTarget = 'x;
-    OpSlot branchOp, eventOp,   branchOp_C;
+    OpSlot branchOp = EMPTY_SLOT, eventOp = EMPTY_SLOT;
     BranchCheckpoint branchCP;
     
     Stage ipStage = EMPTY_STAGE, fetchStage0 = EMPTY_STAGE, fetchStage1 = EMPTY_STAGE;
@@ -168,7 +172,7 @@ module AbstractCore
     OpSlot memOp = EMPTY_SLOT, memOpPrev = EMPTY_SLOT, sysOp = EMPTY_SLOT, sysOpPrev = EMPTY_SLOT, lastRenamed = EMPTY_SLOT, lastCompleted = EMPTY_SLOT, lastRetired = EMPTY_SLOT;
     IssueGroup issuedSt0 = DEFAULT_ISSUE_GROUP, issuedSt0_C = DEFAULT_ISSUE_GROUP, issuedSt1 = DEFAULT_ISSUE_GROUP, issuedSt1_C = DEFAULT_ISSUE_GROUP;
     
-    OpSlot committedGroup[4] = '{default: EMPTY_SLOT};
+   // OpSlot committedGroup[4] = '{default: EMPTY_SLOT};
 
     OpStatus oooQueue[$:OOO_QUEUE_SIZE];
     
@@ -209,9 +213,8 @@ module AbstractCore
         writeReq = 0;
         writeAdr = 'x;
         writeOut = 'x;
-        
+
         branchOp <= EMPTY_SLOT;
-            branchOp_C <= EMPTY_SLOT;
         branchRedirect <= 0;
         branchTarget <= 'x;
 
@@ -220,7 +223,7 @@ module AbstractCore
         eventTarget <= 'x;
 
         advanceOOOQ();
-                
+  
         issuedSt0 <= DEFAULT_ISSUE_GROUP;
         issuedSt1 <= issuedSt0;
 
@@ -290,15 +293,11 @@ module AbstractCore
         begin
             automatic OpStatus oooqDone[$] = (oooQueue.find with (item.done == 1));
             completedNum <= oooqDone.size();
-            
             assert (oooqDone.size() <= 4) else $error("How 5?");
         end
         
-        insMapSize = insMap.size();
-        
-            $swrite(oooqStr, "%p", oooQueue);
-        
-            cmpw0 <= cmpRegs(execState.intRegs, retiredState.intRegs);
+            insMapSize = insMap_C.size();//insMap.size();
+            $swrite(oooqStr, "%p", oooQueue);        
     end
 
             
@@ -318,7 +317,10 @@ module AbstractCore
         return k <= FETCH_QUEUE_SIZE - 3 ? '1 : '0;
     endfunction
 
-
+    function logic bcQueueAccepts(input int k);
+        //return k <= FETCH_QUEUE_SIZE - 3 ? '1 : '0;
+        $fatal(2, "not implemented");
+    endfunction
 
     function automatic Stage setActive(input Stage s, input logic on, input int ctr);
         Stage res = s;
@@ -373,31 +375,29 @@ module AbstractCore
             execState = retiredState;
             execMem.copyFrom(retiredMem);
             
-            //restoreWriters();
-            intWritersR = intWritersC;
-            floatWritersR = floatWritersC;
+            intWritersR = '{default: -1};//intWritersC;    
+            floatWritersR = '{default: -1};//floatWritersC;
             renamedDivergence = 0;
         end
         else if (branchRedirect) begin
-            //BranchCheckpoint found[$] = branchCheckpointQueue.find with (item.op.id == branchOp.id);
-            
-            //foreach (branchCheckpointQueue[j]) $display("%p, %d", branchCheckpointQueue[j].op, branchCheckpointQueue[j].state.intRegs[1]);
-            
-                BranchCheckpoint single = branchCP;
-                loadedState <= single.state;
-                loadedMem = single.mem;
+            BranchCheckpoint single = branchCP;
+            loadedState <= single.state;
+            loadedMem = single.mem;
         
             renamedState = single.state;
             renamedMem.copyFrom(single.mem);
             execState = single.state;
             execMem.copyFrom(single.mem);
-
+            
             intWritersR = single.intWriters;
+            clearStableWriters(intWritersR, lastRetired.id);
             floatWritersR = single.floatWriters;
+            clearStableWriters(floatWritersR, lastRetired.id);
 
-            renamedDivergence = insMap[branchOp.id].divergence;
+            renamedDivergence = insMap_C.get(branchOp.id).divergence; //insMap[branchOp.id].divergence;
         end
 
+        // Clear stages younger than activated redirection
         fetchStage0 <= EMPTY_STAGE;
         fetchStage1 <= EMPTY_STAGE;
         fetchQueue.delete();
@@ -411,8 +411,7 @@ module AbstractCore
         else if (branchRedirect) begin
             flushPartial(branchOp);      
         end
-        
-        
+
         issuedSt0 <= DEFAULT_ISSUE_GROUP;
         issuedSt1 <= DEFAULT_ISSUE_GROUP;
     
@@ -433,17 +432,30 @@ module AbstractCore
         end
     endtask
 
+
+
     task automatic fetchAndEnqueue();
+        OpSlotA ipSlotA, fetchStage0ua;
+        Stage ipStageU, fetchStage0u;
         if (fetchAllow) begin
             ipStage <= '{'1, -1, (ipStage.baseAdr & ~(4*FETCH_WIDTH-1)) + 4*FETCH_WIDTH, '{default: '0}, '{default: 'x}};
             fetchCtr <= fetchCtr + FETCH_WIDTH;
         end
         
-        addToInsBase(ipStage, ipStage.active & fetchAllow, fetchCtr);
-        fetchStage0 <= setActive(ipStage, ipStage.active & fetchAllow, fetchCtr);
+        ipStageU = setActive(ipStage, ipStage.active & fetchAllow, fetchCtr);
+        ipSlotA = makeOpA(ipStageU);
+        //addToInsBase(ipStage, ipStage.active & fetchAllow, fetchCtr);
+        foreach (ipSlotA[i]) if (ipSlotA[i].active) insMap_C.add(ipSlotA[i]);//addOpToBase(ipSlotA[i]);
         
-        updateInsEncodings(setWords(fetchStage0, insIn));
-        fetchStage1 <= setWords(fetchStage0, insIn);
+        fetchStage0 <= ipStageU;//setActive(ipStage, ipStage.active & fetchAllow, fetchCtr);
+        
+        fetchStage0u = setWords(fetchStage0, insIn);
+        fetchStage0ua = makeOpA(fetchStage0u);
+        
+        foreach (fetchStage0ua[i]) 
+            if (fetchStage0ua[i].active)
+                insMap_C.setEncoding(fetchStage0ua[i]);
+        fetchStage1 <= fetchStage0u;//setWords(fetchStage0, insIn);
 
         if (fetchStage1.active) fetchQueue.push_back(fetchStage1);
 
@@ -459,27 +471,22 @@ module AbstractCore
                     AbstractInstruction ins = decodeAbstract(currentOp.bits);
                     Word result, target;
                     
-                    
-                    result = computeResult(renamedState, currentOp.adr, ins, renamedMem); // Must be before modifying state
-                    
                     if (currentOp.adr != renamedState.target) renamedDivergence++;
-                    
+                    result = computeResult(renamedState, currentOp.adr, ins, renamedMem); // Must be before modifying state
                     performAt(renamedState, renamedMem, currentOp);
-                    
-                        if (isBranchOp(currentOp)) begin
-                            //SimpleMem savedMem = new();//renamedMem);
-                            //savedMem.copyFrom(renamedMem);
-                            BranchCheckpoint cp = new(currentOp, renamedState, renamedMem, intWritersR, floatWritersR);
-                            branchCheckpointQueue.push_back(cp);
-                        end
                     target = renamedState.target;
+
+                    if (isBranchOp(currentOp)) begin
+                        BranchCheckpoint cp = new(currentOp, renamedState, renamedMem, intWritersR, floatWritersR);
+                        branchCheckpointQueue.push_back(cp);
+                    end
                     
                     lastRenamed = currentOp;
                     nRenamed++;
                     
-                    setDivergence(currentOp.id, renamedDivergence);
-                    setResult(currentOp.id, result);
-                    setTarget(currentOp.id, target);
+                    insMap_C.setDivergence(currentOp.id, renamedDivergence);
+                    insMap_C.setResult(currentOp.id, result);
+                    insMap_C.setTarget(currentOp.id, target);
                     
                         updateLatestOOO();
                 end
@@ -493,8 +500,6 @@ module AbstractCore
         end
         
     endtask
-
-
 
 
     function automatic InsDependencies getArgProducers(input OpSlot op);
@@ -521,7 +526,7 @@ module AbstractCore
     task automatic mapOpAtRename(input OpSlot op);
         AbstractInstruction abs = decodeAbstract(op.bits);
         
-           lastDeps <= getArgProducers(op);
+        lastDeps <= getArgProducers(op);
         
         if (writesIntReg(op)) intWritersR[abs.dest] = op.id;
         if (writesFloatReg(op)) floatWritersR[abs.dest] = op.id;
@@ -534,9 +539,8 @@ module AbstractCore
         if (writesFloatReg(op)) floatWritersC[abs.dest] = op.id;
         intWritersC[0] = -1;    
         
-        // Record in Rename tables if they've become stable
-        foreach (intWritersR[i]) if (intWritersR[i] <= op.id) intWritersR[i] = -1;        
-        foreach (floatWritersR[i]) if (floatWritersR[i] <= op.id) floatWritersR[i] = -1;        
+        clearStableWriters(intWritersR, op.id);
+        clearStableWriters(floatWritersR, op.id);        
     endtask
 
     task automatic mapStageAtRename(input OpSlotA stA);
@@ -547,10 +551,9 @@ module AbstractCore
         end 
     endtask
 
-//    task automatic restoreWriters();
-//        intWritersR = intWritersC;
-//        floatWritersR = floatWritersC;
-//    endtask
+    function automatic void clearStableWriters(ref int arr[32], input int stable);
+        foreach (arr[i]) if (arr[i] <= stable) arr[i] = -1;
+    endfunction
 
 
 
@@ -592,7 +595,6 @@ module AbstractCore
         BranchCheckpoint found[$] = branchCheckpointQueue.find with (item.op.id == op.id);
 
             branchCP = found[0];
-            branchOp_C <= found[0].op;
         branchOp <= op;
         branchTarget <= evt.target;
         branchRedirect <= evt.redirect;
@@ -731,7 +733,7 @@ module AbstractCore
 
 
     function automatic OpSlot makeOp(input Stage st, input int i);
-        if (!st.active) return EMPTY_SLOT;
+        if (!st.active || !st.mask[i]) return EMPTY_SLOT;
         return '{1, st.ctr + i, st.baseAdr + 4*i, st.words[i]};
     endfunction
 
@@ -755,11 +757,8 @@ module AbstractCore
 
     task automatic updateOOOQ(input OpSlot op);
         const int ind[$] = oooQueue.find_index with (item.id == op.id);
-        assert (ind.size() > 0)
-            oooQueue[ind[0]].done = '1;
-        else
-            $error("No such id in OOOQ: %d", op.id);
-        
+        assert (ind.size() > 0) oooQueue[ind[0]].done = '1;
+        else $error("No such id in OOOQ: %d", op.id); 
     endtask
 
     task automatic advanceOOOQ();
@@ -767,25 +766,24 @@ module AbstractCore
     
         while (oooQueue.size() > 0 && oooQueue[0].done == 1) begin
             OpStatus opSt = oooQueue.pop_front();
-            InstructionInfo insInfo = insMap[opSt.id];
+            InstructionInfo insInfo = insMap_C.get(opSt.id);//insMap[opSt.id];
             OpSlot op = '{1, insInfo.id, insInfo.adr, insInfo.bits};
-            assert (op.id == opSt.id) else 
-                    $error("wrong retirement: %p / %p", opSt, op);
+            assert (op.id == opSt.id) else $error("wrong retirement: %p / %p", opSt, op);
 
             mapOpAtCommit(op);
             TMP_commit(op);
-
+            
+            // Actual execution of ops which must be done after Commit
             if (isSysOp(op)) begin
                  setLateEvent__(execState, op);
                  performSys(execState, op);
             end
-            
+
             performAt(retiredState, retiredMem, op);
         
-                if (isBranchOp(op)) begin
-                    //$display("Pop CP: %d", branchCheckpointQueue[0].op.id);
-                    branchCheckpointQueue.pop_front();
-                end
+            if (isBranchOp(op)) begin
+                branchCheckpointQueue.pop_front();
+            end
         
             lastRetired = op;
             nRetired++;
@@ -854,12 +852,12 @@ module AbstractCore
 
 
         task automatic updateLatestOOO();
-            InstructionInfo last = insMap[lastRenamed.id];
+            InstructionInfo last = insMap_C.get(lastRenamed.id);// insMap[lastRenamed.id];
             latestOOO = {latestOOO[1:19], last};
         endtask
 
         task automatic updateCommittedOOO();
-            InstructionInfo last = insMap[lastRetired.id];
+            InstructionInfo last = insMap_C.get(lastRetired.id);// insMap[lastRetired.id];
             committedOOO = {committedOOO[1:19], last};
         endtask
 
