@@ -14,7 +14,7 @@ $start
 	sti_i r10, r0, 48
 	sti_i r10, r0, 52
 	
-	system sync
+	sys sync
 	ldi_i r6, r0, 48
 	ldi_i r7, r10, -51
 	sub_r r20, r10, r6

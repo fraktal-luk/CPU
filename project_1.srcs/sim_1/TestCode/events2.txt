@@ -3,7 +3,9 @@ $start
 	sys call			; call should set r20 to 55 and return
 	add_i r20, r20, -55
 	jnz_i r20, $error
-	jz_i  r20, $check
+	add_i r21, r21, -77
+	jnz_i r21, $error
+	ja  $check
 	
 $error
 	sys error
