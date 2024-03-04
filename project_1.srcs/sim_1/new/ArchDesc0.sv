@@ -11,16 +11,26 @@ module ArchDesc0();
     localparam CYCLE = 10;
 
     logic clk = 1;
-    
+
     always #(CYCLE/2) clk = ~clk; 
-    
-    
+
+
     const int ITERATION_LIMIT = 2000;
-
     const Word COMMON_ADR = 1024;
+    const string DEFAULT_RESET_HANDLER[$] = {"ja -512", "ja 0"};
+    const string DEFAULT_ERROR_HANDLER[$] = {"sys error", "ja 0"};
+    const string DEFAULT_CALL_HANDLER[$] =  {"sys send", "ja 0"};
 
-    Emulator emulSig;// = new();
+    const string CALL_HANDLER[$] = {"add_i r20, r0, 55",
+                                    "sys rete",
+                                    "ja 0"
+                                   };
+    const string INT_HANDLER[$] = {"add_i r21, r0, 77",
+                                   "sys reti",
+                                   "ja 0"
+                                  };
 
+    Emulator emulSig;
     Section common;
 
     Word progMem[4096];
@@ -28,68 +38,55 @@ module ArchDesc0();
 
     string emulTestName, simTestName;
 
-    const string CALL_HANDLER[$] = {"add_i r20, r0, 55",
-                                  "sys rete",
-                                  "ja 0"
-                                  };   
-    const string INT_HANDLER[$] = {"add_i r21, r0, 77",
-                                  "sys reti",
-                                  "ja 0"
-                                  };
-
 
     initial common = processLines(readFile({"common_asm", ".txt"}));
 
+    initial runEmulTests();
 
-    initial begin
-        automatic Emulator emul = new();
-        automatic squeue tests = readFile("tests_all.txt");
-        
-        common = processLines(readFile("common_asm.txt"));
+    task automatic runEmulTests();
+        Emulator emul = new();
+        squeue tests = readFile("tests_all.txt");
         
         emul.reset();
         emulSig = emul;
         #1;
 
         foreach (tests[i]) begin
-            automatic squeue lineParts = breakLine(tests[i]);
+            squeue lineParts = breakLine(tests[i]);
 
             if (lineParts.size() > 1) $error("There should be 1 test per line");
             else if (lineParts.size() == 0);
             else begin            
                 emulTestName = lineParts[0];
                 runTest({lineParts[0], ".txt"}, emul);
-                emulTestName = "";
+                //emulTestName = "";
             end
             #1;
         end
 
         emulTestName = "err signal";
         testErrorSignal(emul);
-        emulTestName = "";
+        //emulTestName = "";
         #1;
         
         emulTestName = "event";
         testEvent(emul);
-        emulTestName = "";
+        //emulTestName = "";
         #1;
         
         emulTestName = "event2";
         testInterrupt(emul);
-        emulTestName = "";
-        #1;        
-    end
+        //emulTestName = "";
+        #1;
+                
+    endtask
+
 
 
     task automatic setBasicHandlers(ref Word progMem[4096]);
-        progMem[IP_RESET/4] = processLines({"ja -512"}).words[0];
-        progMem[IP_RESET/4 + 1] = processLines({"ja 0"}).words[0];
-       
-        progMem[IP_ERROR/4] = processLines({"sys error"}).words[0];
-        progMem[IP_ERROR/4 + 1] = processLines({"ja 0"}).words[0];
-
-        progMem[IP_CALL/4] = processLines({"sys send"}).words[0];
-        progMem[IP_CALL/4 + 1] = processLines({"ja 0"}).words[0];   
+        writeProgram(progMem, IP_RESET, processLines(DEFAULT_RESET_HANDLER).words);
+        writeProgram(progMem, IP_ERROR, processLines(DEFAULT_ERROR_HANDLER).words);
+        writeProgram(progMem, IP_CALL,  processLines(DEFAULT_CALL_HANDLER).words);
     endtask
 
 
@@ -98,15 +95,13 @@ module ArchDesc0();
         int iter;
         squeue fileLines = readFile(name);
         Section testSection = processLines(fileLines);
-    
         testSection = fillImports(testSection, 0, common, COMMON_ADR);
 
         dataMem = '{default: 0};
         progMem = '{default: 'x};
         
-        foreach (testSection.words[i]) progMem[i] = testSection.words[i];
-        foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
-        
+        writeProgram(progMem, 0, testSection.words);
+        writeProgram(progMem, COMMON_ADR, common.words);
         setBasicHandlers(progMem);
         
         emul.reset();
@@ -123,12 +118,10 @@ module ArchDesc0();
             emul.drain();
 
             emulSig = emul;
-
             #1;
         end
         
         if (iter >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", name);
-        
     endtask
 
 
@@ -141,8 +134,7 @@ module ArchDesc0();
         progMem[0] = processLines({"undef"}).words[0];
         progMem[1] = processLines({"ja 0"}).words[0];
         
-        foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
-        
+        writeProgram(progMem, COMMON_ADR, common.words);
         setBasicHandlers(progMem);
         
         emul.reset();
@@ -158,12 +150,10 @@ module ArchDesc0();
             emul.drain();
 
             emulSig = emul;
-
             #1;
         end
         
         if (iter >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", "error sig");
-        
     endtask
 
 
@@ -171,25 +161,18 @@ module ArchDesc0();
         int iter;
         squeue fileLines = readFile("events.txt");
         Section testSection = processLines(fileLines);
-    
         testSection = fillImports(testSection, 0, common, COMMON_ADR);
 
         dataMem = '{default: 0};
         progMem = '{default: 'x};
         
-        foreach (testSection.words[i]) progMem[i] = testSection.words[i];
-        foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
-        
+        writeProgram(progMem, 0, testSection.words);
+        writeProgram(progMem, COMMON_ADR, common.words);
         setBasicHandlers(progMem);
-        
-        // Special handler for call
-        progMem[IP_CALL/4] = processLines({"add_i r20, r0, 55"}).words[0];
-        progMem[IP_CALL/4 + 1] = processLines({"sys rete"}).words[0];
-        progMem[IP_CALL/4 + 2] = processLines({"ja 0"}).words[0];
-        
-                writeProgram(progMem, IP_CALL, processLines(CALL_HANDLER).words);
 
-        
+        writeProgram(progMem, IP_CALL, '{0, 0, 0, 0});
+        writeProgram(progMem, IP_CALL, processLines(CALL_HANDLER).words);
+
         emul.reset();
         #1;
         
@@ -204,14 +187,11 @@ module ArchDesc0();
             emul.drain();
                 
             emulSig = emul;
-
             #1;
         end
         
         if (iter >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", "event");
-        
     endtask
-
 
 
     task automatic testInterrupt(ref Emulator emul);
@@ -219,31 +199,16 @@ module ArchDesc0();
 
         squeue fileLines = readFile("events2.txt");
         Section testSection = processLines(fileLines);
-    
         testSection = fillImports(testSection, 0, common, COMMON_ADR);
 
         dataMem = '{default: 0};
         progMem = '{default: 'x};
         
-        foreach (testSection.words[i]) progMem[i] = testSection.words[i];
-        foreach (common.words[i]) progMem[COMMON_ADR/4 + i] = common.words[i];
-        
+        writeProgram(progMem, 0, testSection.words);
+        writeProgram(progMem, COMMON_ADR, common.words);
         setBasicHandlers(progMem);
         
-        // Special handler for call
-//        progMem[IP_CALL/4] = processLines({"add_i r20, r0, 55"}).words[0];
-//        progMem[IP_CALL/4 + 1] = processLines({"sys rete"}).words[0];
-//        progMem[IP_CALL/4 + 2] = processLines({"ja 0"}).words[0];
-        
-        writeProgram(progMem, IP_CALL, '{0, 0, 0, 0});
         writeProgram(progMem, IP_CALL, processLines(CALL_HANDLER).words);
-
-        
-        // Special handler for int 
-//        progMem[IP_INT/4] = processLines({"add_i r21, r0, 77"}).words[0];
-//        progMem[IP_INT/4 + 1] = processLines({"sys reti"}).words[0];
-//        progMem[IP_INT/4 + 2] = processLines({"ja 0"}).words[0];
-
         writeProgram(progMem, IP_INT, processLines(INT_HANDLER).words);
 
         emul.reset();
@@ -265,12 +230,10 @@ module ArchDesc0();
             emul.drain();
 
             emulSig = emul;
-
             #1;
         end
         
         if (iter >= ITERATION_LIMIT) $fatal("Exceeded max iterations in test %s", "event2");
-        
     endtask
 
 
@@ -349,7 +312,6 @@ module ArchDesc0();
             #CYCLE announce("err");
 
             setPrograms(testProg);
-
             #CYCLE pulseReset();
 
             wait (wrong);
@@ -362,7 +324,6 @@ module ArchDesc0();
 
             setPrograms(testProg);
             programMem.setContentAt(processLines(CALL_HANDLER).words, IP_CALL);
-
             #CYCLE pulseReset();
 
             wait (done | wrong);
@@ -378,7 +339,6 @@ module ArchDesc0();
             setPrograms(testProg);
             programMem.setContentAt(processLines(CALL_HANDLER).words, IP_CALL);
             programMem.setContentAt(processLines(INT_HANDLER).words, IP_INT);
-
             #CYCLE pulseReset();
             
             wait (fetchAdr == IP_CALL);
@@ -415,7 +375,7 @@ module ArchDesc0();
             if (reset) dmem.clear();
         end
         
-        always runSim();
+        initial runSim();
         
         AbstractCore core(
             .clk(clk),
